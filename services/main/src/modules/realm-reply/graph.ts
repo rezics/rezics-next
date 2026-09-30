@@ -142,7 +142,7 @@ export async function cancelPlacement(env: WorkActivationEnvironment,
 
 export interface PlacementHead {
   placement: string; revisionId: string; reviewDecisionId: string; reply: string;
-  realm: string; rootTarget: string; author: string; preparationId: string;
+  realm: string; rootTarget: string; rootRevision: string; author: string; preparationId: string;
 }
 
 /** One bounded Realm/root probe. The caller filters exact current Content
@@ -150,7 +150,7 @@ export interface PlacementHead {
 export async function readRootPlacementHeads(env: WorkActivationEnvironment,
   realm: string, rootTarget: string): Promise<{ heads: PlacementHead[]; complete: boolean }> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?reply ?placement ?revision ?review ?author ?preparation WHERE {
+    ?reply ?placement ?revision ?review ?author ?preparation ?rootRevision WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmReplySlot ; rv:realm ${iri(realm)} ;
         rv:rootTarget ${iri(rootTarget)} ; rv:reply ?reply ;
@@ -171,10 +171,11 @@ export async function readRootPlacementHeads(env: WorkActivationEnvironment,
     const revision = row.revision?.value ?? '';
     const review = row.review?.value ?? '';
     if (!revision.startsWith(CONTENT_REVISION) || !review.startsWith('urn:rezics:realm-review:')
-      || !row.reply?.value || !row.placement?.value || !row.author?.value || !row.preparation?.value) {
+      || !row.reply?.value || !row.placement?.value || !row.author?.value || !row.preparation?.value
+      || !row.rootRevision?.value) {
       throw new RealmReplyUnavailable('Realm root placement row is malformed');
     }
-    return { realm, rootTarget, reply: row.reply.value, placement: row.placement.value,
+    return { realm, rootTarget, rootRevision: row.rootRevision.value, reply: row.reply.value, placement: row.placement.value,
       revisionId: revision.slice(CONTENT_REVISION.length),
       reviewDecisionId: review.slice('urn:rezics:realm-review:'.length),
       author: row.author.value, preparationId: row.preparation.value };
@@ -186,7 +187,7 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
   realm: string, reply: string): Promise<PlacementHead | null> {
   const slot = replySlotIri(realm, reply);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
-    ?placement ?revision ?review ?root ?author ?preparation WHERE {
+    ?placement ?revision ?review ?root ?author ?preparation ?rootRevision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:replyPlacementHead ?placement . }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(realm)} ;
@@ -206,12 +207,13 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
   if (!review.startsWith('urn:rezics:realm-review:')) {
     throw new RealmReplyUnavailable('placement review identity is invalid');
   }
-  if (!row.revision?.value.startsWith(CONTENT_REVISION) || !row.preparation?.value) {
+  if (!row.revision?.value.startsWith(CONTENT_REVISION) || !row.preparation?.value || !row.rootRevision?.value) {
     throw new RealmReplyUnavailable('placement Content revision is invalid');
   }
   return { placement: row.placement!.value, revisionId: row.revision.value.slice(CONTENT_REVISION.length),
     reviewDecisionId: review.slice('urn:rezics:realm-review:'.length), reply, realm,
-    rootTarget: row.root!.value, author: row.author!.value, preparationId: row.preparation.value };
+    rootTarget: row.root!.value, rootRevision: row.rootRevision.value,
+    author: row.author!.value, preparationId: row.preparation.value };
 }
 
 /** Exact, one-slot graph CAS. A different Realm has a different slot and count. */
@@ -319,9 +321,12 @@ export async function placeReply(env: WorkActivationEnvironment,
           rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(preparation.realm)} a rv:Realm ; rv:realmState rv:Active .
-          ${iri(preparation.rootTarget)} a schema:CreativeWork .
           OPTIONAL { ${iri(slot)} rv:replyPlacementHead ?prior }
         }
+        FILTER(EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(preparation.rootTarget)} ?rootPredicate ?rootValue } }
+          || EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
+            ${iri(preparation.rootTarget)} ?rootPredicate ?rootValue } })
         ${preparation.directPolicyRevision ? `GRAPH ${iri(GRAPHS.current)} {
           ${iri(preparation.realm)} ${preparation.directPolicyRevision.startsWith('urn:rezics:realm-policy:')
             ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} }` : ''}

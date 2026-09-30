@@ -1,0 +1,12 @@
+id: capability-targets-use-resolver
+valid:
+  - "await resolveTargets(session, [resource], 'discussion');"
+  - "await resolveTargets(session, [resource], 'review');"
+  - "await resolveTargets(session, [resource], 'rating');"
+  - "await resolveTargets(session, [resource], 'collection-member');"
+  - "type Authority = Pick<AccessAdmissionRegistry, 'canReadWork'>;"
+invalid:
+  - 'await readWorkBasis(session, resource);'
+  - 'publicWork(iri(resource), main);'
+  - 'await canReadWork(principal, actor, resource);'
+  - 'await access.canReadWork(principal, actor, resource);'

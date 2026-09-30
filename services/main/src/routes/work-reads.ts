@@ -4,6 +4,7 @@ import { authorizedReadProblems } from '../api-responses.ts';
 import { MediaUnavailable } from '../modules/media/store.ts';
 import { ContextCommandUnavailable } from '../modules/context/command.ts';
 import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
+import { TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   workRead } from '../modules/work/read-session.ts';
 import { readWorkHeader } from '../modules/work/read-header.ts';
@@ -18,6 +19,8 @@ import { commandError, problem } from './problems.ts';
 
 export const workReadProblems = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
 export function workReadError(error: unknown): Response {
+  if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
+  if (error instanceof TargetUnavailable) return problem(404, error.code, 'Resource is unavailable');
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_work_read', error.message);
   if (error instanceof WorkReadMissing) return problem(404, 'work_unavailable', 'Resource is unavailable');
   if (error instanceof WorkReadMoved || error instanceof SearchSnapshotMoved) {
@@ -30,6 +33,7 @@ export function workReadError(error: unknown): Response {
   return commandError(error);
 }
 const params = t.Object({ id: readUuid });
+const resourceParams = t.Object({ resource: readUuid });
 const query = t.Object(pageQuery, { additionalProperties: false });
 const headers = { 'cache-control': 'private, no-store' };
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
@@ -40,8 +44,8 @@ export const openApiOperations = {
   '/v1/works/{id}/adoptions': { get: { bearer: false } },
   '/v1/works/{id}/credits': { get: { bearer: false } },
   '/v1/works/{id}/classifications': { get: { bearer: false } },
-  '/v1/works/{id}/ratings': { get: { bearer: false } },
-  '/v1/works/{id}/rating-contexts': { get: { bearer: false } },
+  '/v1/resources/{resource}/ratings': { get: { bearer: false } },
+  '/v1/resources/{resource}/rating-contexts': { get: { bearer: false } },
 } as const;
 
 export function workReadRoutes(work: MainWorkDependencies) {
@@ -85,22 +89,22 @@ export function workReadRoutes(work: MainWorkDependencies) {
         session => readWorkClassifications(session, `https://rezics.com/id/${path.id}`)), { headers }); }
       catch (error) { return workReadError(error); }
     })
-    .get('/v1/works/:id/rating-contexts', { params, detail,
+    .get('/v1/resources/:resource/rating-contexts', { params: resourceParams, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
         language: t.Literal('en'), scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
         scope: readScope, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
-        session => readWorkRatingContexts(session, `https://rezics.com/id/${path.id}`)), { headers }); }
+        session => readWorkRatingContexts(session, `https://rezics.com/id/${path.resource}`)), { headers }); }
       catch (error) { return workReadError(error); }
     })
-    .get('/v1/works/:id/ratings', { params, detail,
+    .get('/v1/resources/:resource/ratings', { params: resourceParams, detail,
       query: t.Object({ ...readQuery, ...scopeQuery, context: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: ratingRead, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,
-        session => readWorkRating(session, `https://rezics.com/id/${path.id}`, options.context)), { headers }); }
+        session => readWorkRating(session, `https://rezics.com/id/${path.resource}`, options.context)), { headers }); }
       catch (error) { return workReadError(error); }
     });
 }

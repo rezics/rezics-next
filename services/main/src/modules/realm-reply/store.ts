@@ -9,7 +9,7 @@ import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavail
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads,
   readReplyGraphReceipt } from './graph.ts';
-import { publicReplyRoot } from './root.ts';
+import { readableReplyRoot, type ReplyRootProof } from './root.ts';
 import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
 
@@ -23,7 +23,8 @@ export function realmReplyDigest(value: unknown): string {
   return createHash('sha256').update(stable(value)).digest('hex');
 }
 
-type RealmReadAuthority = Partial<Pick<AccessAdmissionRegistry, 'realmReadProof'>>;
+type RealmReadAuthority = Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'canReadWork'
+  | 'canReadSemanticResource'>>;
 
 async function realmReplyReadProof(access: RealmReadAuthority, env: WorkActivationEnvironment,
   realm: string, principal?: VerifiedPrincipal, actor?: string): Promise<string | null> {
@@ -37,16 +38,20 @@ async function realmReplyReadProof(access: RealmReadAuthority, env: WorkActivati
 /** The same exact placement, Content review and two-sided Realm fence serve direct reads and notifications. */
 export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'origin' | 'currentReview'>,
   access: RealmReadAuthority, env: WorkActivationEnvironment, realm: string, reply: string,
-  principal?: VerifiedPrincipal, actor?: string) {
+  principal?: VerifiedPrincipal, actor?: string, rootProof?: ReplyRootProof) {
   const before = await realmReplyReadProof(access, env, realm, principal, actor);
   if (!before) return null;
   const origin = await content.origin(reply);
   if (origin?.realm && origin.realm !== realm) return null;
   const placement = await readPlacementHead(env, realm, reply);
   if (!placement) return null;
+  const readable = rootProof ?? ((resource, revision) => readableReplyRoot(env, resource, revision,
+    access, principal ?? null, actor));
+  if (!await readable(placement.rootTarget, placement.rootRevision)) return null;
   if (!await content.currentReview(realm, reply, placement.revisionId,
     placement.reviewDecisionId, placement.preparationId)) return null;
-  return await realmReplyReadProof(access, env, realm, principal, actor) === before ? placement : null;
+  return await realmReplyReadProof(access, env, realm, principal, actor) === before
+    && await readable(placement.rootTarget, placement.rootRevision) ? placement : null;
 }
 
 /** Content owns identities and exact review; Jena owns Realm-local placement. */
@@ -54,7 +59,8 @@ export class RealmReplyStore {
   constructor(private readonly content: RealmReplyContentStore,
     private readonly contentCore: Pick<ContentCore, 'settlePublication'>,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-      & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'>>,
+      & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'
+        | 'canReadWork' | 'canReadSemanticResource'>>,
     private readonly env: WorkActivationEnvironment) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
@@ -207,14 +213,15 @@ export class RealmReplyStore {
       replayed: admission.replayed || prepared.replayed };
   }
 
-  async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string) {
-    return visibleRealmReply(this.content, this.access, this.env, realm, reply, principal, actor);
+  async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string, rootProof?: ReplyRootProof) {
+    return visibleRealmReply(this.content, this.access, this.env, realm, reply, principal, actor, rootProof);
   }
 
   async readPublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const result = await this.content.readCurrent(reply);
-    if (!result || !await publicReplyRoot(this.env.fuseki, result.rootTarget, result.rootRevision)) return null;
+    if (!result || !await readableReplyRoot(this.env, result.rootTarget, result.rootRevision,
+      this.access, principal ?? null, actor)) return null;
     if (result.originRealm) {
       const visible = await this.visible(result.originRealm, reply, principal, actor);
       if (visible?.revisionId !== result.revisionId) return null;
@@ -228,17 +235,18 @@ export class RealmReplyStore {
   async listPublic(rootTarget: string, rootRevision: string, after?: string, realm?: string,
     principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
-    if (!await publicReplyRoot(this.env.fuseki, rootTarget, rootRevision)) return null;
+    if (!await readableReplyRoot(this.env, rootTarget, rootRevision, this.access, principal ?? null, actor)) return null;
     const before = realm ? await realmReplyReadProof(this.access, this.env, realm, principal, actor) : 'public';
     if (!before) return null;
     const page = await this.content.listCurrent(rootTarget, rootRevision, after, realm ?? null);
     if (realm) {
+      const rootProof: ReplyRootProof = async (resource, revision) => resource === rootTarget && revision === rootRevision;
       const visible = await Promise.all(page.items.map(async item =>
-        (await this.visible(realm, item.reply as string, principal, actor))?.revisionId === item.revisionId));
+        (await this.visible(realm, item.reply as string, principal, actor, rootProof))?.revisionId === item.revisionId));
       page.items = page.items.filter((_item, index) => visible[index]);
       if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) return null;
     }
-    if (!await publicReplyRoot(this.env.fuseki, rootTarget, rootRevision)) return null;
+    if (!await readableReplyRoot(this.env, rootTarget, rootRevision, this.access, principal ?? null, actor)) return null;
     return page;
   }
 

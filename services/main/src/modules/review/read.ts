@@ -1,15 +1,21 @@
 import type { WorkReadSession } from '../work/read-session.ts';
-import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable, publicWork } from '../work/read-session.ts';
+import type { TargetReadSession } from '../target/resolve.ts';
+import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { resolveTargets, TargetNotBound } from '../target/resolve.ts';
 import { GLOBAL_RATING_POPULATION_OWNER, GLOBAL_RATING_POPULATION } from '../rating/global.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { standingRatingSlotIri } from '../rating/observation.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import type { RatingLink, ReviewRow } from './store.ts';
 
-export async function reviewTarget(session: Pick<WorkReadSession, 'query'>, context: string, work: string):
+export async function reviewTarget(session: TargetReadSession, context: string, work: string):
   Promise<{ mainVersion: string; realm: string | null }> {
+  const [target] = await resolveTargets(session, [work], 'review');
+  // The existing review inventory is MainVersion-only until a new grain profile owns it.
+  if (target!.base !== 'work') throw new TargetNotBound();
   const rows = await session.query(`SELECT DISTINCT ?main ?realm WHERE {
-    ${publicWork(iri(work), '?main')}
+    GRAPH ${iri(GRAPHS.current)} { ${iri(target!.resource)} rv:mainVersion ?main ;
+      rv:head ${iri(target!.revision)} . ?main a rv:MainVersion ; rv:work ${iri(target!.resource)} . }
     GRAPH ${iri(GRAPHS.current)} {
       { ${iri(context)} a rv:GlobalRatingContext ; rv:contextState rv:Active ;
           rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ;

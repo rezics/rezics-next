@@ -19,12 +19,14 @@ import { InvalidCompositionChange } from './change.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from './tree.ts';
 import { StructureStageConflict } from './stage.ts';
 import { canReadStructureTarget, isCatalogTarget, structureProfileFor,
-  type StructureProfileRegistration }
+  type StructureProfileRegistration, type StructureTargetReader }
   from './profiles.ts';
+import { targetRead } from '../target/resolve.ts';
 import type { RecipeMeasure, StructureProfile } from './format.ts';
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
-type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>;
+type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork'>
+  & Partial<Pick<AccessAdmissionRegistry, 'canReadSemanticResource' | 'realmReadProof'>>;
 
 export interface AdmittedComposition extends CompositionTerminal {
   replayed: boolean;
@@ -115,7 +117,7 @@ export function createAdmittedComposition(env: WorkActivationEnvironment, accoun
 export async function changeAdmittedComposition(env: WorkActivationEnvironment, account: Account,
   access: Access, request: Request, input: { structure: string; expectedHead: string;
     operations: readonly CompositionOperation[]; actingSubject: string; idempotencyKey: string;
-    newWork?: NewChapterWork }) {
+    newWork?: NewChapterWork }, targetReader?: StructureTargetReader) {
   const { header, profile } = await structureOwner(env, input.structure);
   const digest = input.newWork
     ? chapterCreateDigest(input.structure, input.expectedHead, input.operations, input.newWork)
@@ -125,9 +127,10 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
     && !isCatalogTarget(profile, operation.target) ? [operation.target] : []))];
   const principal = await account.verify(request, [profile.editPermission,
     ...(targets.length && profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
+  targetReader ??= operation => targetRead(env, { access, principal, actingSubject: input.actingSubject }, operation);
   for (const target of targets) {
     if (!await canReadStructureTarget(profile, { environment: env, access, principal,
-      actingSubject: input.actingSubject, target })) {
+      actingSubject: input.actingSubject, target, targetReader })) {
       throw new CompositionUnavailable('Structure target is unavailable');
     }
   }
@@ -156,34 +159,36 @@ export async function changeAdmittedStructureMeasures(env: WorkActivationEnviron
 
 export async function sealAdmittedComposition(env: WorkActivationEnvironment, account: Account,
   access: Access, request: Request, input: { structure: string; expectedHead: string;
-    actingSubject: string; idempotencyKey: string }) {
+    actingSubject: string; idempotencyKey: string }, targetReader?: StructureTargetReader) {
   const { header, profile } = await structureOwner(env, input.structure);
   const digest = compositionSealDigest(input.structure, input.expectedHead);
   const principal = await account.verify(request, [profile.editPermission,
     ...(profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
+  targetReader ??= operation => targetRead(env, { access, principal, actingSubject: input.actingSubject }, operation);
   return admitted(env, account, access, request, { owner: header.owner, profile,
     actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
   admission => sealComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead,
     canReadTarget: target => canReadStructureTarget(profile, { environment: env, access, principal,
-      actingSubject: input.actingSubject, target }) }));
+      actingSubject: input.actingSubject, target, targetReader }) }));
 }
 
 export async function restoreAdmittedComposition(env: WorkActivationEnvironment, account: Account,
   access: Access, request: Request, input: { structure: string; expectedHead: string;
-    restoredFrom: string; actingSubject: string; idempotencyKey: string }) {
+    restoredFrom: string; actingSubject: string; idempotencyKey: string }, targetReader?: StructureTargetReader) {
   const { header, profile } = await structureOwner(env, input.structure);
   const digest = compositionRestoreDigest(input.structure, input.expectedHead, input.restoredFrom);
   const principal = await account.verify(request, [profile.editPermission,
     ...(profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
+  targetReader ??= operation => targetRead(env, { access, principal, actingSubject: input.actingSubject }, operation);
   return admitted(env, account, access, request, { owner: header.owner, profile,
     actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
   admission => restoreComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, restoredFrom: input.restoredFrom,
     canReadTarget: target => canReadStructureTarget(profile, { environment: env, access, principal,
-      actingSubject: input.actingSubject, target }) }));
+      actingSubject: input.actingSubject, target, targetReader }) }));
 }
 
 export async function activateAdmittedCompositionStage(env: WorkActivationEnvironment,
@@ -192,12 +197,13 @@ export async function activateAdmittedCompositionStage(env: WorkActivationEnviro
     kind?: 'replace' | 'import' | 'refresh'; sourceRef?: string | null;
     sourceRevision?: string | null; mappingPolicy?: 'source-key' | 'explicit' | null;
     actingSubject: string; idempotencyKey: string; onGraphStart: () => Promise<number>;
-    onProjectionBatch: (previous: number) => Promise<number> }) {
+    onProjectionBatch: (previous: number) => Promise<number> }, targetReader?: StructureTargetReader) {
   const digest = compositionStageDigest(input.structure, input.expectedHead,
     input.stageId, input.manifestDigest);
   const { header, profile } = await structureOwner(env, input.structure);
   const principal = await account.verify(request, [profile.editPermission,
     ...(profile.targetReadPermission ? [profile.targetReadPermission] : [])]);
+  targetReader ??= operation => targetRead(env, { access, principal, actingSubject: input.actingSubject }, operation);
   return admitted(env, account, access, request, { owner: header.owner, profile,
     actingSubject: input.actingSubject,
     idempotencyKey: input.idempotencyKey, digest },
@@ -209,7 +215,7 @@ export async function activateAdmittedCompositionStage(env: WorkActivationEnviro
       manifestDigest: input.manifestDigest, onGraphStart: input.onGraphStart,
       onProjectionBatch: input.onProjectionBatch },
     canReadTarget: target => canReadStructureTarget(profile, { environment: env, access, principal,
-      actingSubject: input.actingSubject, target }) }), true);
+      actingSubject: input.actingSubject, target, targetReader }) }), true);
 }
 
 export type { CompositionConflict };

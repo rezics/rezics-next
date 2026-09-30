@@ -4,6 +4,7 @@ import type { MainClient } from '../discover/types.ts';
 // taken from the typed Eden client so a contract change breaks this build.
 type Main = MainClient;
 type Work = ReturnType<Main['v1']['works']>;
+type Resource = ReturnType<Main['v1']['resources']>;
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 
 export type WorkHeader = Ok<Work['get']>;
@@ -16,7 +17,7 @@ export type WorkVersion = VersionPage['items'][number];
 export type HistoryPage = Ok<Work['history']['get']>;
 export type HistoryEntry = HistoryPage['items'][number];
 export type HistoryKind = HistoryEntry['kind'];
-export type DiscussionPage = Ok<Work['discussion']['get']>;
+export type DiscussionPage = Ok<Resource['discussion']['get']>;
 export type DiscussionItem = DiscussionPage['items'][number];
 export type ContentsPage = Ok<Work['contents']['get']>;
 export type ContentsItem = ContentsPage['items'][number];
@@ -32,15 +33,15 @@ export type CreditPage = Ok<Work['credits']['get']>;
 export type Credit = CreditPage['items'][number];
 export type ClassificationPage = Ok<Work['classifications']['get']>;
 export type Classification = ClassificationPage['items'][number];
-export type RatingContextPage = Ok<Work['rating-contexts']['get']>;
+export type RatingContextPage = Ok<Resource['rating-contexts']['get']>;
 export type RatingContext = RatingContextPage['items'][number];
-export type RatingSummary = Ok<Work['ratings']['get']>;
+export type RatingSummary = Ok<Resource['ratings']['get']>;
 export type RealmHeader = Ok<ReturnType<Main['v1']['realms']>['get']>;
 export type AgentWorksPage = Ok<ReturnType<Main['v1']['agents']>['works']['get']>;
 export type AgentProfile = Ok<ReturnType<Main['v1']['agents']>['get']>;
-export type ReviewPage = Ok<Work['reviews']['get']>;
+export type ReviewPage = Ok<Resource['reviews']['get']>;
 export type Review = ReviewPage['items'][number];
-export type ReviewQuery = NonNullable<Parameters<Work['reviews']['get']>[0]>['query'];
+export type ReviewQuery = NonNullable<Parameters<Resource['reviews']['get']>[0]>['query'];
 export type AlsoEnjoyedPage = Ok<Work['also-enjoyed']['get']>;
 export type AlsoEnjoyedItem = AlsoEnjoyedPage['items'][number];
 /** People reading the Work now and its reviews, counted from public libraries (`work/read-stats.ts`). */

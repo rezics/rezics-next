@@ -4,7 +4,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { publicReplyRoot } from '../realm-reply/root.ts';
+import { readableReplyRoot } from '../realm-reply/root.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { ContentDraftStale, contentDraftReceiptIri, sealContentDraftAdmission } from './draft.ts';
 
@@ -23,7 +23,7 @@ export interface MemberReplyDraft {
 export async function saveMemberReplyDraft(env: WorkActivationEnvironment, content: ContentCore,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'withRealmPolicy'>>,
+    & Partial<Pick<AccessAdmissionRegistry, 'withRealmPolicy' | 'canReadWork' | 'canReadSemanticResource'>>,
   request: Request, input: MemberReplyDraft, key: string, admittedOrigin = false): Promise<{
     reply: string; variantId: string; revisionId: string; predecessor: string | null; deleted: boolean;
     sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }> {
@@ -44,7 +44,8 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       return saveMemberReplyDraft(env, content, account, access, request, input, key, true);
     });
   }
-  if (!await publicReplyRoot(env.fuseki, input.rootTarget, input.rootRevision)) throw new AdmissionDenied('reply root is not public');
+  if (!await readableReplyRoot(env, input.rootTarget, input.rootRevision, access,
+    principal, input.actingSubject)) throw new AdmissionDenied('reply root is unavailable');
   const command: SaveDraftCommand = { operationId: '', variant: { id: input.variantId,
     resourceId: input.reply, language: { kind: 'tag', tag: input.language, originalTag: input.language },
     direction: input.direction }, expectedHead: input.expectedHead, model: 'member-reply-v1',
@@ -71,7 +72,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       }
     }
   }
-  if (!await publicReplyRoot(env.fuseki, input.rootTarget, input.rootRevision)) {
+  if (!await readableReplyRoot(env, input.rootTarget, input.rootRevision, access, principal, input.actingSubject)) {
     await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
     throw new AdmissionDenied('reply root changed');
   }

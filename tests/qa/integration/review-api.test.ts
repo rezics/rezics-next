@@ -84,7 +84,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       idempotencyKey: randomUUID() });
 
     const body = { profile: 'reader-review-command-v1', actingSubject: author,
-      context: context.context, work: work.work, expectedRevision: null,
+      context: context.context, target: work.work, expectedRevision: null,
       language: 'en', text: 'A spoiler about the ending', spoiler: true };
     const key = randomUUID();
     expect((await call('POST', '/v1/reviews', body, a.token, randomUUID(), true)).status).toBe(401);
@@ -93,7 +93,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
       .toMatchObject({ review: first.review, revision: first.revision, replayed: true });
     expect((await call('POST', '/v1/reviews', { ...body, text: 'Another intent' }, a.token, key)).status).toBe(409);
     expect((await call('POST', '/v1/reviews', { ...body, actingSubject: authorSecond }, a.token)).status).toBe(409);
-    const path = `/v1/works/${work.work.slice(-36)}/reviews?context=${encodeURIComponent(context.context)}`;
+    const path = `/v1/resources/${work.work.slice(-36)}/reviews?context=${encodeURIComponent(context.context)}`;
     const publicPage = await json<{ items: Array<{ id: string; text: string | null; spoilerWithheld: boolean;
       startedOn: string | null; finishedOn: string | null; rating: number }> }>(await call('GET', path));
     expect(publicPage.items).toMatchObject([{ id: first.review, text: null, spoilerWithheld: true,

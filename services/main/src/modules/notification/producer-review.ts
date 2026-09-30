@@ -5,7 +5,8 @@ import type { NotificationEvent } from './store.ts';
 import { reviewVisibleSql } from '../review/store.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { reviewTarget } from '../review/read.ts';
-import { READ_PREFIX, WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
+import { publicTargetRead } from '../target/resolve.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const hidden: SubjectResolution = { status: 'undisclosed' };
@@ -30,13 +31,8 @@ async function currentReviewTarget(graph: Pick<FusekiClient, 'query'>,
   row: { context: string; work: string; realm: string | null; main_version: string }): Promise<boolean> {
   if (!native.test(row.work) || !native.test(row.main_version)) return false;
   try { iri(row.context); } catch { return false; }
-  const reader: Pick<WorkReadSession, 'query'> = { async query(body, limit) {
-    const rows = (await graph.query(`${READ_PREFIX}\n${body}`, 16_384)).results?.bindings ?? [];
-    if (rows.length > limit) throw new Error('review target bound exceeded');
-    return rows;
-  } };
   try {
-    const target = await reviewTarget(reader, row.context, row.work);
+    const target = await publicTargetRead(graph, session => reviewTarget(session, row.context, row.work));
     return target.realm === row.realm && target.mainVersion === row.main_version;
   } catch (error) {
     if (error instanceof WorkReadMissing) return false;

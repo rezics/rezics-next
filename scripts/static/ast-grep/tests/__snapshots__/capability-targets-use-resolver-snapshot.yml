@@ -1,0 +1,26 @@
+id: capability-targets-use-resolver
+snapshots:
+  await access.canReadWork(principal, actor, resource);:
+    labels:
+    - source: access.canReadWork(principal, actor, resource)
+      style: primary
+      start: 6
+      end: 52
+  await canReadWork(principal, actor, resource);:
+    labels:
+    - source: canReadWork(principal, actor, resource)
+      style: primary
+      start: 6
+      end: 45
+  await readWorkBasis(session, resource);:
+    labels:
+    - source: readWorkBasis(session, resource)
+      style: primary
+      start: 6
+      end: 38
+  publicWork(iri(resource), main);:
+    labels:
+    - source: publicWork(iri(resource), main)
+      style: primary
+      start: 0
+      end: 31

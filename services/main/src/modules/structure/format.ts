@@ -279,7 +279,8 @@ export function checkStructureSealManifest(bytes: Uint8Array): StructureSealMani
 /** Record-level invariants that JSON Schema alone does not express. */
 export function checkOccurrenceRecord(record: OccurrenceRecord, profile: StructureProfile,
   catalogTargetTypes: readonly string[] = [],
-  selectionRequiredRoles: readonly OccurrenceRole[] = profile === 'book-composition' ? ['chapter'] : []): void {
+  selectionRequiredRoles: readonly OccurrenceRole[] = profile === 'book-composition' ? ['chapter'] : [],
+  selectionOptionalRoles: readonly OccurrenceRole[] = []): void {
   const active = record.state === 'active';
   const positioned = record.segmentKey !== undefined || record.orderKey !== undefined;
   const complete = record.segmentKey !== undefined && record.orderKey !== undefined;
@@ -298,7 +299,8 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
     if (needsSelection && record.selection === undefined) {
       throw new InvalidStructureObject('a content target requires a selection policy');
     }
-    if (!needsSelection && record.selection !== undefined) {
+    if (!needsSelection && record.selection !== undefined
+      && (catalog || !selectionOptionalRoles.includes(record.role))) {
       throw new InvalidStructureObject('this target role does not have a content selection policy');
     }
   }

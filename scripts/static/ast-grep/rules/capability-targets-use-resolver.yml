@@ -1,0 +1,17 @@
+id: capability-targets-use-resolver
+language: TypeScript
+severity: error
+message: Capability targets must resolve their resource grain and authority through resolveTargets.
+note: A Work-only or published-text gate rejects admitted non-Work targets. Keep grain proofs after resolution.
+files:
+  - services/main/src/modules/review/**/*.ts
+  - services/main/src/modules/work-activity/**/*.ts
+  - services/main/src/modules/realm-reply/**/*.ts
+  - services/main/src/modules/collection/**/*.ts
+  - services/main/src/modules/work/read-rating.ts
+rule:
+  any:
+    - pattern: readWorkBasis($$$)
+    - pattern: publicWork($$$)
+    - pattern: canReadWork($$$)
+    - pattern: $ACCESS.canReadWork($$$)

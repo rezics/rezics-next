@@ -13,12 +13,20 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   editScopePrefix: 'collection:edit:',
   editPermission: 'collection:edit',
   targetReadPermission: 'work:read',
-  authorizeTarget: ({ access, principal, actingSubject, target }) =>
-    access.canReadWork(principal, actingSubject, target),
+  authorizeTarget: async ({ targetReader, target }) => {
+    const { WorkReadUnavailable } = await import('../work/read-session.ts');
+    if (!targetReader) throw new WorkReadUnavailable('Collection target reader is unavailable');
+    const { resolveTargets } = await import('../target/resolve.ts');
+    await targetReader(session => resolveTargets(session, [target], 'collection-member'));
+    return true;
+  },
   editAction: 'collection.edit',
   receiptFamily: 'structure-command',
   roles: ['group', 'member'],
   targetRoles: ['member'],
-  selectionRequiredRoles: ['member'],
+  // Membership addresses a resource. Retain existing Work pins when present;
+  // neither Works nor other admitted bases require published Content to be members.
+  selectionRequiredRoles: [],
+  selectionOptionalRoles: ['member'],
   catalogTargetTypes: ['https://schema.org/Book', 'https://schema.org/DigitalDocument'],
 }];

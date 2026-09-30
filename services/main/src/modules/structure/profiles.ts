@@ -9,6 +9,9 @@ import type { ProfileId } from '../../infrastructure/profile.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import { hydrateBookGroup, projectBookGroup, validateBookGroups } from './book-group.ts';
+import type { TargetReadSession } from '../target/resolve.ts';
+
+export type StructureTargetReader = <T>(operation: (session: TargetReadSession) => Promise<T>) => Promise<T>;
 
 export interface StructureTargetAuthority {
   /** Owner policies can distinguish the target's current structural type. */
@@ -18,6 +21,7 @@ export interface StructureTargetAuthority {
   principal: VerifiedPrincipal;
   actingSubject: string;
   target: string;
+  targetReader?: StructureTargetReader;
 }
 
 /** The shared Structure graph and object format; owners declare only their profile-specific policy. */
@@ -61,6 +65,8 @@ export interface StructureProfileRegistration {
   selectionRequiredRoles?: readonly OccurrenceRole[];
   /** Owner shapes replace only Structure/placement checks when extending kernel enums. */
   topologyValidationProfile?: ProfileId;
+  /** These roles may retain a Content pin, but resource membership needs no pin. */
+  selectionOptionalRoles?: readonly OccurrenceRole[];
   /** An owner projects its qualifier node alongside the common placement. */
   projectQualifier?: (state: PlacementState, generation: string) => {
     iri: string; triples: readonly string[] } | null;
@@ -152,15 +158,19 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || !Array.isArray(profile.roles) || !Array.isArray(profile.targetRoles)
         || profile.optionalTargetRoles !== undefined && !Array.isArray(profile.optionalTargetRoles)
         || profile.selectionRequiredRoles !== undefined && !Array.isArray(profile.selectionRequiredRoles)
+        || profile.selectionOptionalRoles !== undefined && !Array.isArray(profile.selectionOptionalRoles)
         || !profile.roles.includes('group') || new Set(profile.roles).size !== profile.roles.length
         || new Set(profile.targetRoles).size !== profile.targetRoles.length
         || new Set(profile.optionalTargetRoles ?? []).size !== (profile.optionalTargetRoles?.length ?? 0)
         || new Set(profile.selectionRequiredRoles ?? []).size !== (profile.selectionRequiredRoles?.length ?? 0)
+        || new Set(profile.selectionOptionalRoles ?? []).size !== (profile.selectionOptionalRoles?.length ?? 0)
         || profile.roles.some(role => !PROFILE_ROLES[profile.id as StructureProfile].includes(role))
         || profile.targetRoles.some(role => !profile.roles?.includes(role))
         || profile.optionalTargetRoles?.some(role => !profile.roles?.includes(role)
           || profile.targetRoles?.includes(role))
         || profile.selectionRequiredRoles?.some(role => !profile.targetRoles?.includes(role))
+        || profile.selectionOptionalRoles?.some(role => !profile.targetRoles?.includes(role)
+          || profile.selectionRequiredRoles?.includes(role))
         || (profile.projectQualifier === undefined) !== (profile.hydrateQualifier === undefined)
         || profile.projectQualifier !== undefined && typeof profile.projectQualifier !== 'function'
         || profile.hydrateQualifier !== undefined && typeof profile.hydrateQualifier !== 'function'
@@ -218,7 +228,13 @@ export async function canReadStructureTarget(profile: StructureProfileRegistrati
   authority: StructureTargetAuthority): Promise<boolean> {
   if (isCatalogTarget(profile, authority.target)) return true;
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(authority.target)) return false;
-  return profile.authorizeTarget
-    ? profile.authorizeTarget(authority)
-    : authority.access.canReadWork(authority.principal, authority.actingSubject, authority.target);
+  try {
+    return profile.authorizeTarget
+      ? await profile.authorizeTarget(authority)
+      : await authority.access.canReadWork(authority.principal, authority.actingSubject, authority.target);
+  } catch (error) {
+    const { WorkReadMissing } = await import('../work/read-session.ts');
+    if (error instanceof WorkReadMissing) return false;
+    throw error;
+  }
 }

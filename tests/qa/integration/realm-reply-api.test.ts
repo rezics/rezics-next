@@ -79,9 +79,9 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       const command: SaveDraftCommand = { operationId: randomUUID(), variant: {
         id: variantId, resourceId: reply,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-      }, expectedHead, model: 'member-reply-v1', sourceRevision: work.mainVersion,
+      }, expectedHead, model: 'member-reply-v1', sourceRevision: work.workRevision,
       provenance: {}, serializedJson: JSON.stringify({ body, deleted: false,
-        rootTarget: work.work, rootRevision: work.mainVersion }) };
+        rootTarget: work.work, rootRevision: work.workRevision }) };
       command.provenance = { kind: 'admitted-original-contribution-v1', author,
         admissionId: randomUUID(), authorityEpoch: '0', scope: `content:draft:${reply}`,
         expectedHead, rightsBasis: 'original-contribution', requestDigest: contentDraftIntentDigest(command, author) };
@@ -132,7 +132,7 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     }
     const identity = { profile: 'realm-reply-identity-v1', reply, variantId,
       revisionId: first.revisionId, author, rootTarget: work.work,
-      rootRevision: work.mainVersion, parentReply: null, parentRevision: null,
+      rootRevision: work.workRevision, parentReply: null, parentRevision: null,
       contextRevision: null };
     const identityKey = randomUUID();
     const created = await post('/v1/realm-replies', identity, identityKey);
@@ -158,7 +158,7 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       revisionId: second.revisionId, revisionDigest: second.revisionDigest,
       reviewDecisionId: approvedOne.body.decisionId, expectedHead: null, actingSubject: author });
     expect(unreviewed.status).toBe(409);
-    expect(await store.visible(realmOne, reply)).toBeNull();
+    expect(await store.visible(realmOne, reply, principal, author)).toBeNull();
     const placementOne = {
       profile: 'realm-reply-placement-v1', realm: realmOne, reply,
       revisionId: first.revisionId, revisionDigest: first.revisionDigest,
@@ -191,7 +191,7 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       SELECT status FROM content.publication_preparation
       WHERE revision_id = $1 AND status = 'rejected'`, [first.revisionId]);
     expect(rejectedPin.rowCount).toBe(1);
-    expect((await store.visible(realmOne, reply))?.revisionId).toBe(first.revisionId);
+    expect((await store.visible(realmOne, reply, principal, author))?.revisionId).toBe(first.revisionId);
     expect((await count(realmOne)).body).toMatchObject({ count: 1, complete: true });
     expect((await count(realmTwo)).body).toMatchObject({ count: 0, complete: true });
     expect((await read(realmOne)).body.revisionId).toBe(first.revisionId);
@@ -204,7 +204,7 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       revisionId: second.revisionId, revisionDigest: second.revisionDigest,
       reviewDecisionId: approvedTwo.body.decisionId, expectedHead: null, actingSubject: author });
     expect(placedTwo.status, JSON.stringify(placedTwo.body)).toBe(201);
-    expect((await store.visible(realmTwo, reply))?.revisionId).toBe(second.revisionId);
+    expect((await store.visible(realmTwo, reply, principal, author))?.revisionId).toBe(second.revisionId);
     expect((await count(realmTwo)).body).toMatchObject({ count: 1, complete: true });
     const graphReferences = await graphContentReferences(env.fuseki);
     const contentRevision = 'https://rezics.com/vocab/contentRevision';
@@ -224,8 +224,8 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       expectedGeneration: '1', supersedes: approvedOne.body.decisionId,
       outcome: 'revoked', reasonReference: 'manager-revocation' });
     expect(revoked.status).toBe(201);
-    expect(await store.visible(realmOne, reply)).toBeNull();
-    expect((await store.visible(realmTwo, reply))?.revisionId).toBe(second.revisionId);
+    expect(await store.visible(realmOne, reply, principal, author)).toBeNull();
+    expect((await store.visible(realmTwo, reply, principal, author))?.revisionId).toBe(second.revisionId);
     expect((await read(realmOne)).status).toBe(404);
     expect((await read(realmTwo)).body.revisionId).toBe(second.revisionId);
     expect((await count(realmOne)).body).toMatchObject({ count: 0, complete: true });

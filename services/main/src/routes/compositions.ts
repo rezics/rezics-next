@@ -22,7 +22,9 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { commandError, problem } from './problems.ts';
+import { problem } from './problems.ts';
+import { resourceTargetReader } from '../modules/target/resolve.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -93,11 +95,8 @@ const pageResult = t.Object({ structure: ref, owner: ref, component: ref, work: 
   occurrences: t.Array(occurrence),
   next: t.Nullable(t.String()), sourcePosition,
   cost: t.Optional(t.Object({ pagesRead: t.Integer(), pagesWritten: t.Integer() })) });
-const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperation,
-  400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
-  404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
-  503: problemResult(503) };
-const readResponses = { 200: pageResult, ...authorizedReadProblems };
+const writeResponses = { 200: writeResult, 201: writeResult, 202: pendingOperation, ...workReadProblems };
+const readResponses = { 200: pageResult, ...authorizedReadProblems, ...workReadProblems };
 function disclosedPage(page: CompositionPage) {
   if (!page.completion) return page;
   // Scan costs depend on hidden membership and stay internal to the read.
@@ -150,7 +149,7 @@ export function compositionError(error: unknown): Response {
     || error instanceof StructureObjectUnavailable || error instanceof ObjectUnavailable
     || error instanceof ObjectIntegrityError) return problem(503, 'composition_unavailable',
     'Composition history is unavailable');
-  return commandError(error);
+  return workReadError(error);
 }
 
 const writeBody = t.Object({ actingSubject: ref }, { additionalProperties: false });
@@ -166,9 +165,7 @@ const stageResult = t.Object({ id: groupUuid, structure: ref, generation: ref,
   projectionBatches: t.Integer(), placementCount: t.Nullable(t.Integer()),
   graphReceipt: t.Nullable(t.String()), graphDataEpoch: t.Nullable(t.String()),
   graphSequence: t.Nullable(t.String()), cost: t.Optional(cost) });
-const stageResponses = { 200: stageResult, 201: stageResult, 400: problemResult(400),
-  401: problemResult(401), 403: problemResult(403), 404: problemResult(404),
-  409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
+const stageResponses = { 200: stageResult, 201: stageResult, ...workReadProblems };
 const refreshConflict = t.Object({ ...problemResult(409).properties,
   conflicts: t.Array(t.Object({ sourceKey: t.String(), reason: t.String() })) });
 const refreshResponses = { ...stageResponses, 409: t.Union([problemResult(409), refreshConflict]) };
@@ -258,7 +255,8 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
         return Response.json(await store().seal({ id: params.stage, principalId: proof.principalId,
           structure, mainVersion: header.mainVersion, holder: body.holder, fence: body.fence,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-            access: work.access, principal, actingSubject: body.actingSubject, target }) }),
+            environment: work.environment, access: work.access, principal, actingSubject: body.actingSubject, target,
+              targetReader: resourceTargetReader(work, request, body.actingSubject) }) }),
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -283,7 +281,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
             actingSubject: body.actingSubject, idempotencyKey: `structure-stage-${stage.id}`,
             onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure),
             onProjectionBatch: previous => store().advanceProjectionBatch(stage.id,
-              proof.principalId, structure, previous) });
+              proof.principalId, structure, previous) }, resourceTargetReader(work, request, body.actingSubject));
         if (result.outcome === 'cancelled') {
           await store().fail(stage.id, proof.principalId, structure, {
             receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
@@ -360,7 +358,8 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
           stage = await store().seal({ id: stage.id, principalId: proof.principalId,
             structure, mainVersion: header.mainVersion, holder: stage.holder!, fence: stage.fence,
             canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-              access: work.access, principal, actingSubject: body.actingSubject, target }) });
+              environment: work.environment, access: work.access, principal, actingSubject: body.actingSubject, target,
+              targetReader: resourceTargetReader(work, request, body.actingSubject) }) });
         }
         if (stage.status !== 'sealed' || !stage.manifest) {
           throw new StructureStageConflict('refresh stage is not sealed');
@@ -373,7 +372,7 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
             idempotencyKey: `structure-stage-${stage.id}`,
             onGraphStart: () => store().beginActivation(stage.id, proof.principalId, structure),
             onProjectionBatch: previous => store().advanceProjectionBatch(stage.id,
-              proof.principalId, structure, previous) });
+              proof.principalId, structure, previous) }, resourceTargetReader(work, request, body.actingSubject));
         if (result.outcome === 'cancelled') {
           await store().fail(stage.id, proof.principalId, structure, {
             receipt: result.receipt, dataEpoch: result.dataEpoch, sequence: result.sequence,
@@ -449,7 +448,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
             operations: body.operations.map(commandOperation), actingSubject: body.actingSubject,
-            idempotencyKey });
+            idempotencyKey }, resourceTargetReader(work, request, body.actingSubject));
         return Response.json({ structure: result.structure, revision: result.revision,
           expectedHead: result.expectedHead, receipt: result.receipt, replayed: result.replayed,
           occurrences: result.occurrences ?? body.operations.flatMap((operation, index) =>
@@ -469,7 +468,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       try {
         const result = await sealAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, idempotencyKey }, resourceTargetReader(work, request, body.actingSubject));
         return Response.json({ structure: result.structure, revision: result.revision,
           expectedHead: result.expectedHead, seal: result.seal, receipt: result.receipt,
           replayed: result.replayed, sourcePosition: { datasetId: 'product',
@@ -488,7 +487,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const result = await restoreAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`,
             expectedHead: body.expectedHead, restoredFrom: body.restoredFrom,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, idempotencyKey }, resourceTargetReader(work, request, body.actingSubject));
         return Response.json({ structure: result.structure, revision: result.revision,
           expectedHead: result.expectedHead, receipt: result.receipt, replayed: result.replayed,
           ...(result.cost ? { cost: result.cost } : {}), sourcePosition: { datasetId: 'product',
@@ -515,7 +514,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-            access: work.access, principal, actingSubject: query.actingSubject, target }) });
+            environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject, target,
+              targetReader: resourceTargetReader(work, request, query.actingSubject) }) });
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -539,7 +539,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-            access: work.access, principal, actingSubject: query.actingSubject, target }) });
+            environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject, target,
+              targetReader: resourceTargetReader(work, request, query.actingSubject) }) });
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -548,7 +549,7 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ actingSubject: ref, after: t.Optional(t.String({ maxLength: 2048 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
       { additionalProperties: false }),
-      response: { 200: sealPageResult, ...authorizedReadProblems },
+      response: { 200: sealPageResult, ...authorizedReadProblems, ...workReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
@@ -562,7 +563,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           seal: `https://rezics.com/id/${params.seal}`,
           ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-            access: work.access, principal, actingSubject: query.actingSubject, target }) });
+            environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject, target,
+              targetReader: resourceTargetReader(work, request, query.actingSubject) }) });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -583,7 +585,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           occurrence: `https://rezics.com/id/${params.occurrence}`,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1,
           canReadTarget: target => canReadStructureTarget(structureProfileFor(header.profile), {
-            access: work.access, principal, actingSubject: query.actingSubject, target }) });
+            environment: work.environment, access: work.access, principal, actingSubject: query.actingSubject, target,
+              targetReader: resourceTargetReader(work, request, query.actingSubject) }) });
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })

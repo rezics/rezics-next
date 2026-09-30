@@ -4,7 +4,7 @@ import { pageFields, pageQuery, readId, readLanguage, readUuid } from '../work/r
 export const REVIEW_COST = { pageSize: 20, quoteSize: 12, textChars: 8000,
   excerptChars: 240, eventBatch: 100, responseBytes: 220_000 } as const;
 export const reviewCommand = t.Object({ profile: t.Literal('reader-review-command-v1'),
-  actingSubject: readId, context: readId, work: readId,
+  actingSubject: readId, context: readId, target: readId,
   expectedRevision: t.Nullable(readUuid), language: readLanguage,
   text: t.String({ minLength: 1, maxLength: REVIEW_COST.textChars }), spoiler: t.Boolean() },
 { additionalProperties: false });

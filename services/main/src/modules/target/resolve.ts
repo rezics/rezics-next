@@ -1,8 +1,9 @@
 import { Value } from 'typebox/value';
+import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryReader } from '../media/summary.ts';
-import { DATASET, GRAPHS, iri } from '../work/activate.ts';
-import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
+import { DATASET, GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
+import { READ_PREFIX, workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { capabilityBases, MAX_TARGET_TYPES, resolvedTarget, targetRef, type Base, type Capability, type ResolvedTarget } from './contract.ts';
 
@@ -24,8 +25,75 @@ export class TargetUnavailable extends WorkReadMissing {
 export type RedirectOf = (resource: string) => string | null | Promise<string | null>;
 /** Report owners cover admitted grains such as Realm profiles and standalone
  * media that do not yet participate in the other capability summaries. */
-export type ReportTargets = (session: WorkReadSession, resources: readonly string[]) =>
+export type ReportTargets = (session: TargetReadSession, resources: readonly string[]) =>
   Promise<ReadonlyMap<string, ResolvedTarget>>;
+
+/** Graph-only baseline proofs have no principal or optional hydration owners. */
+export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' | 'request'
+  | 'options' | 'position' | 'displayLanguages' | 'principal'> & {
+  deps: Pick<WorkReadSession['deps'], 'environment'>
+    & Partial<Pick<WorkReadSession['deps'], 'account' | 'governance'
+      | 'media' | 'mediaAccess' | 'contextSelections'>>
+    & { access?: Partial<Pick<WorkReadSession['deps']['access'], 'realmReadProof'
+      | 'canReadWork' | 'canReadSemanticResource'>> };
+};
+
+/** Four common graph probes per exact target, including the read envelope's
+ * position fences; owner summary probes remain charged to that envelope. */
+export function resourceTargetReader(deps: WorkReadSession['deps'], request: Request, actingSubject: string) {
+  return <T>(operation: (session: TargetReadSession) => Promise<T>) =>
+    workRead(deps, request, { actingSubject }, operation);
+}
+
+/** Owner-internal verified-principal adapter. The caller owns Account verification;
+ * this adapter fences graph positions and leaves all disclosure to the resolver. */
+export async function targetRead<T>(environment: WorkActivationEnvironment,
+  authority: { access?: TargetReadSession['deps']['access']; principal?: TargetReadSession['principal'];
+    actingSubject?: string }, operation: (session: TargetReadSession) => Promise<T>): Promise<T> {
+  const deadline = Date.now() + 10_000;
+  const checkDeadline = () => {
+    if (Date.now() > deadline) throw new WorkReadUnavailable('Target deadline exceeded');
+  };
+  const query: TargetReadSession['query'] = async (body, limit) => {
+    checkDeadline();
+    const rows = (await environment.fuseki.query(`${READ_PREFIX}\n${body}`, 262_144)).results?.bindings ?? [];
+    if (rows.length > limit) throw new WorkReadUnavailable('Target probe exceeds its bound');
+    return rows;
+  };
+  const position = async () => {
+    const rows = await query(`SELECT ?epoch ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    } LIMIT 2`, 2);
+    if (rows.length !== 1 || !rows[0]?.epoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')
+      || environment.lineage.dataEpoch && environment.lineage.dataEpoch !== rows[0].epoch.value) {
+      throw new WorkReadUnavailable('Target graph is unavailable');
+    }
+    return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value };
+  };
+  const before = await position();
+  const session: TargetReadSession = { query, checkDeadline,
+    request: new Request('http://main.local/v1/resources'), options: { actingSubject: authority.actingSubject },
+    position: before, displayLanguages: ['en'], principal: authority.principal ?? null,
+    deps: { access: authority.access, environment: { ...environment,
+      lineage: { ...environment.lineage, dataEpoch: before.dataEpoch } } } };
+  const result = await operation(session);
+  const after = await position();
+  if (before.dataEpoch !== after.dataEpoch || before.sequence !== after.sequence) {
+    throw new WorkReadMoved('Target changed during authorization');
+  }
+  return result;
+}
+
+/** Graph-only public proofs cannot read restricted targets. No Account, media
+ * or object owner is invented; owners needing manifests supply targetRead's environment. */
+export function publicTargetRead<T>(graph: Pick<FusekiClient, 'query'>,
+  operation: (session: TargetReadSession) => Promise<T>) {
+  const fuseki = new FusekiClient('http://graph-only.invalid');
+  fuseki.query = graph.query.bind(graph);
+  return targetRead({ fuseki, objectDirectory: '.temp/target-proofs',
+    lineage: { dataEpoch: '', routingEpoch: '' } }, {}, operation);
+}
 
 /** Ownership, never descriptive type, chooses the exact revision path. */
 const revisionPatterns = {
@@ -47,22 +115,27 @@ const revisionPatterns = {
 const requiresWork = { work: true, realization: true, release: true, occurrence: true,
   resource: false } satisfies Record<Base, boolean>;
 
-export function targetSummaryReader(session: WorkReadSession): SummaryReader {
+export function targetSummaryReader(session: TargetReadSession): SummaryReader {
   const { deps, principal, options } = session;
   const actingSubject = options.actingSubject;
   const reader: SummaryReader = deps.governance?.store ? {
     restrictedTitles: (heads, context) => deps.governance!.store.restrictedTitles(heads, context),
   } : {};
   if (!principal || !actingSubject) return reader;
-  let verifiedContext: ReturnType<typeof deps.account.verify> | undefined;
-  const contextPrincipal = () => verifiedContext ??= deps.account.verify(session.request, ['context:read']);
+  const access = deps.access;
+  if (!access) throw new WorkReadUnavailable('Target authority is unavailable');
+  let verifiedContext: ReturnType<NonNullable<typeof deps.account>['verify']> | undefined;
+  const contextPrincipal = () => {
+    if (!deps.account) throw new WorkReadUnavailable('Context authority is unavailable');
+    return verifiedContext ??= deps.account.verify(session.request, ['context:read']);
+  };
   return { ...reader,
-    realmReadProof: realm => Promise.resolve(deps.access.realmReadProof?.(principal, actingSubject, realm) ?? null),
-    canReadWork: work => deps.access.canReadWork(principal, actingSubject, work),
+    realmReadProof: realm => Promise.resolve(access.realmReadProof?.(principal, actingSubject, realm) ?? null),
+    canReadWork: work => Promise.resolve(access.canReadWork?.(principal, actingSubject, work) ?? false),
     canReadWorks: deps.mediaAccess
       ? works => deps.mediaAccess!.canReadWorks(principal, actingSubject, works) : undefined,
     canReadSemantic: resource => Promise.resolve(
-      deps.access.canReadSemanticResource?.(principal, actingSubject, resource) ?? false),
+      access.canReadSemanticResource?.(principal, actingSubject, resource) ?? false),
     canReadSemantics: deps.mediaAccess
       ? resources => deps.mediaAccess!.canReadSemantics(principal, actingSubject, resources) : undefined,
     canReadPrivateContext: deps.contextSelections
@@ -72,6 +145,13 @@ export function targetSummaryReader(session: WorkReadSession): SummaryReader {
       ? async contexts => deps.mediaAccess!.canReadPrivateContexts(await contextPrincipal(), actingSubject, contexts)
       : undefined,
   };
+}
+
+/** Use the resolver's authority adapter when filtering mixed public inventories. */
+export function targetSummaries(session: TargetReadSession, resources: readonly string[]) {
+  return readResourceSummaries(session.deps.environment, session.deps.media?.store,
+    targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
+      language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });
 }
 
 async function redirected(resource: string, redirectOf: RedirectOf): Promise<string> {
@@ -90,7 +170,7 @@ async function redirected(resource: string, redirectOf: RedirectOf): Promise<str
 /** All targets must be admitted and bound. Results preserve input order and
  * duplicates; a failed batch exposes no partial target metadata. Call inside
  * workRead so its graph-position and current-principal fences cover hydration. */
-export async function resolveTargets(session: WorkReadSession, iris: readonly string[],
+export async function resolveTargets(session: TargetReadSession, iris: readonly string[],
   capability: Capability, redirectOf?: RedirectOf, reportOwners?: ReportTargets): Promise<ResolvedTarget[]> {
   session.checkDeadline();
   if (!iris.length || iris.length > TARGET_RESOLVE_COST.batch
@@ -114,9 +194,7 @@ export async function resolveTargets(session: WorkReadSession, iris: readonly st
       return iris.map(resource => all.get(canonical.get(resource)!)!);
     }
   }
-  const summaries = await readResourceSummaries(session.deps.environment, session.deps.media?.store,
-    targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
-      language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });
+  const summaries = await targetSummaries(session, resources);
   if (summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during target resolution');
   }

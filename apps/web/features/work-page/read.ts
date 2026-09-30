@@ -187,12 +187,12 @@ export const readRatings = cache(async (id: string, scope: WorkScope, contextId:
   Promise<Loaded<RatingRead>> => {
   const { main, actingSubject, failure } = await scopeReader(scope);
   if (failure) return { ok: false, failure };
-  const contexts = await settle<RatingContextPage>(() => main.v1.works({ id })['rating-contexts'].get({
+  const contexts = await settle<RatingContextPage>(() => main.v1.resources({ resource: id })['rating-contexts'].get({
     query: { actingSubject, ...mainScope(scope) } }));
   if (!contexts.ok) return contexts;
   const items = contexts.data.items;
   const context = items.find(item => item.context === (contextId && iriOf(contextId))) ?? items[0] ?? null;
-  const summary = await settle(() => main.v1.works({ id }).ratings.get({
+  const summary = await settle(() => main.v1.resources({ resource: id }).ratings.get({
     query: { actingSubject, ...mainScope(scope), context: context?.context } }));
   return summary.ok ? { ok: true, data: { contexts: items, context, summary: summary.data } } : summary;
 });
@@ -214,7 +214,7 @@ export async function readHistory(id: string, kind: HistoryKind | undefined, cur
 export async function readDiscussion(id: string, realm: string | undefined, cursor: string | undefined):
   Promise<Loaded<DiscussionPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).discussion.get({ query: { actingSubject,
+  return settle(() => main.v1.resources({ resource: id }).discussion.get({ query: { actingSubject,
     realm: realm ? iriOf(realm) : undefined, cursor } }), cursor);
 }
 
@@ -249,7 +249,7 @@ export const readAlsoEnjoyed = cache(async (id: string, _locale: UiLocale): Prom
 /** A page of this Work's reviews for one rating Context; the reader's own comes first on page one. */
 export async function readReviews(id: string, query: Omit<ReviewQuery, 'actingSubject'>): Promise<Loaded<ReviewPage>> {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).reviews.get({ query: { ...query, actingSubject } }), query.cursor);
+  return settle(() => main.v1.resources({ resource: id }).reviews.get({ query: { ...query, actingSubject } }), query.cursor);
 }
 
 /** An Agent's public name and handle, once per request, for reviews and credits Main names by IRI. */

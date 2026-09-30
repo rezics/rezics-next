@@ -102,7 +102,7 @@ export function mainLibraryApi(actingSubject: string, main: () => MainClient = b
 
     async saveReview(work, context, draft, expectedRevision) {
       const written = await settle(() => main().v1.reviews.post({ profile: 'reader-review-command-v1', actingSubject,
-        context, work, expectedRevision, language: draft.language, text: draft.text, spoiler: draft.spoiler }, headers()));
+        context, target: work, expectedRevision, language: draft.language, text: draft.text, spoiler: draft.spoiler }, headers()));
       return written.ok ? { ok: true, data: { review: written.data.review, revision: written.data.revision } } : written;
     },
 

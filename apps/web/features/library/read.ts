@@ -211,7 +211,7 @@ async function readReviews(reader: Reader, rows: readonly LibraryItem[], context
   Promise<Map<string, Loaded<Review | null>>> {
   const read = rows.filter(row => row.status === 'read');
   const answers = await pooled(read, async row => [row.work.id, await settle(() => reader.main.v1
-    .works({ id: row.work.id.slice(-36) }).reviews.get({ query: { context, actingSubject: reader.actingSubject,
+    .resources({ resource: row.work.id.slice(-36) }).reviews.get({ query: { context, actingSubject: reader.actingSubject,
       limit: 1, showSpoilers: true } }))] as const);
   return new Map(answers.map(([work, answer]) => [work, answer.ok
     ? { ok: true, data: answer.data.items.find(review => review.author === reader.actingSubject) ?? null }

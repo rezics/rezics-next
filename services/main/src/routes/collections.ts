@@ -26,11 +26,13 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable }
   from '../modules/work/search-public.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { GRAPHS, hash, iri } from '../modules/work/activate.ts';
-import { problemResult, pendingOperation } from '../api-contract.ts';
+import { pendingOperation } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import type { GraphLayoutDependencies } from './graph-layouts.ts';
-import { commandError, problem } from './problems.ts';
+import { problem } from './problems.ts';
+import { resourceTargetReader } from '../modules/target/resolve.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -57,9 +59,7 @@ const write = t.Object({ collection: ref, structure: ref, revision: ref, receipt
 const read = t.Object({ collection: ref, structure: ref, revision: ref,
   predecessor: t.Nullable(ref), occurrences: t.Array(t.Any()), next: t.Nullable(t.String()),
   sourcePosition });
-const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
-  404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
-  503: problemResult(503) };
+const errors = workReadProblems;
 
 interface DynamicDefinitionBody { definition: string; name: string; language?: string;
   disclosure: 'public' | 'private'; actingSubject: string;
@@ -122,7 +122,7 @@ function routeError(error: unknown): Response {
     || error instanceof StructureObjectUnavailable) {
     return problem(503, 'collection_unavailable', 'Collection history is unavailable');
   }
-  return commandError(error);
+  return workReadError(error);
 }
 
 async function ownerStructure(fuseki: FusekiClient, collection: string): Promise<string | null> {
@@ -157,7 +157,8 @@ async function page(fuseki: FusekiClient, work: MainWorkDependencies, request: R
     limit: input.limit ?? 50, visible: item => item.role !== 'member' || !!item.target,
     canReadTarget: async target => {
       return mayReadTargets && canReadStructureTarget(structureProfileFor(header.profile), {
-        access: work.access, principal: targetPrincipal, actingSubject: input.actingSubject, target });
+        access: work.access, principal: targetPrincipal, actingSubject: input.actingSubject, target,
+        targetReader: resourceTargetReader(work, request, input.actingSubject) });
     } });
   // The shared page retains hidden uses for exact owner history. This projection
   // returns only disclosed members and has no hidden count or timing counters.
@@ -196,7 +197,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
     })
     .get('/v1/collection-definitions/:id', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, revision: t.Optional(ref) },
-        { additionalProperties: false }), response: { 200: t.Any(), ...authorizedReadProblems } },
+        { additionalProperties: false }), response: { 200: t.Any(), ...authorizedReadProblems, ...workReadProblems } },
     async ({ request, params, query }: { request: Request; params: { id: string };
       query: { actingSubject: string; revision?: string } }) => {
       try {
@@ -291,7 +292,8 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
               idempotencyKey: `capture-members:${hash(idempotencyKey)}`,
               operations: snapshot.members.map(member => ({ op: 'insert' as const,
                 parent: captured.structure, position: 'last' as const, role: 'member' as const,
-                target: member.work, selection: { mode: 'follow-context' as const } })) });
+                target: member.work, selection: { mode: 'follow-context' as const } })) },
+            resourceTargetReader(work, request, body.actingSubject));
           if (!inserted.revision) throw new DynamicCollectionUnavailable('capture revision is unavailable');
           revision = inserted.revision;
           receipt = inserted.receipt;
@@ -368,7 +370,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
         if (!structure) throw new CompositionUnavailable('Collection is unavailable');
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure, expectedHead: body.expectedHead, operations: body.operations,
-            actingSubject: body.actingSubject, idempotencyKey });
+            actingSubject: body.actingSubject, idempotencyKey }, resourceTargetReader(work, request, body.actingSubject));
         return Response.json({ collection, structure, revision: result.revision,
           receipt: result.receipt, replayed: result.replayed, occurrences: result.occurrences ?? [],
           ...(result.cost ? { cost: result.cost } : {}), sourcePosition: { datasetId: 'product',
@@ -405,7 +407,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       query: t.Object({ actingSubject: ref, parent: t.Optional(ref),
         after: t.Optional(t.String({ maxLength: 512 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
-      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems } },
+      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems, ...workReadProblems } },
     async ({ request, params, query }) => {
       try { return Response.json(await page(fuseki, work, request,
         `https://rezics.com/id/${params.id}`, query), { headers: { 'cache-control': 'no-store' } }); }
@@ -416,7 +418,7 @@ export function collectionRoutes(fuseki: FusekiClient, work: MainWorkDependencie
       query: t.Object({ actingSubject: ref, parent: t.Optional(ref),
         after: t.Optional(t.String({ maxLength: 512 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) },
-      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems } },
+      { additionalProperties: false }), response: { 200: read, ...authorizedReadProblems, ...workReadProblems } },
     async ({ request, params, query }) => {
       try { return Response.json(await page(fuseki, work, request,
         `https://rezics.com/id/${params.id}`, { ...query,

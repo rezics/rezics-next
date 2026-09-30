@@ -1,11 +1,14 @@
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
-import { problemResult } from '../api-contract.ts';
 import { RealmReplyConflict, RealmReplyDenied, RealmReplyInvalid,
   RealmReplyStale, RealmReplyUnavailable } from '../modules/realm-reply/content-store.ts';
 import { realmReplyDigest } from '../modules/realm-reply/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { commandError, problem } from './problems.ts';
+import { problem } from './problems.ts';
+import { resolveTargets } from '../modules/target/resolve.ts';
+import { replyRoot } from '../modules/realm-reply/root.ts';
+import { workRead, WorkReadMoved } from '../modules/work/read-session.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -57,7 +60,7 @@ function replyError(error: unknown): Response {
   if (error instanceof RealmReplyStale) return problem(409, 'realm_reply_stale', error.message);
   if (error instanceof RealmReplyConflict) return problem(409, 'idempotency_conflict', error.message);
   if (error instanceof RealmReplyUnavailable) return problem(503, 'realm_reply_unavailable', error.message);
-  return commandError(error);
+  return workReadError(error);
 }
 function key(request: Request): string | null {
   const value = request.headers.get('idempotency-key');
@@ -75,13 +78,18 @@ export const openApiOperations = {
 export function realmReplyRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .post('/v1/realm-replies', { body: replyBody,
-      response: { 200: replyResult, 201: replyResult, ...writeProblems } },
+      response: { 200: replyResult, 201: replyResult, ...writeProblems, ...workReadProblems } },
     async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['work:edit']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
         const idempotencyKey = key(request);
         if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        await workRead(work, request, { actingSubject: body.author }, async session => {
+          if (!await replyRoot(session, body.rootTarget, body.rootRevision)) {
+            throw new WorkReadMoved('Reply root revision changed');
+          }
+        });
         const { profile: _profile, ...input } = body;
         const result = await work.realmReplies.create(principal, input, idempotencyKey,
           realmReplyDigest(body));
@@ -122,29 +130,32 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/replies/:reply', {
       params: t.Object({ realm: native, reply: native }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
-      response: { 200: visibleResult, ...authorizedReadProblems, 404: problemResult(404) },
+      response: { 200: visibleResult, ...authorizedReadProblems, ...workReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
         const visible = await work.realmReplies.visible(params.realm, params.reply, principal, query.actingSubject);
-        if (!visible || !await work.access.canReadWork(principal, query.actingSubject,
-          visible.rootTarget)) return problem(404, 'realm_reply_unavailable', 'Reply is unavailable');
+        if (!visible) return problem(404, 'realm_reply_unavailable', 'Reply is unavailable');
+        await workRead(work, request, { actingSubject: query.actingSubject }, session =>
+          resolveTargets(session, [visible.rootTarget], 'discussion'));
         return Response.json({ profile: 'realm-reply-placement-v1', ...visible }, noStore);
       } catch (error) { return replyError(error); }
     })
     .get('/v1/realms/:realm/reply-roots/:rootTarget/count', {
       params: t.Object({ realm: native, rootTarget: native }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
-      response: { 200: countResult, ...authorizedReadProblems, 404: problemResult(404) },
+      response: { 200: countResult, ...authorizedReadProblems, ...workReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
-        if (!await work.access.canReadWork(principal, query.actingSubject, params.rootTarget)) {
-          return problem(404, 'realm_reply_unavailable', 'Reply root is unavailable');
-        }
-        const count = await work.realmReplies.rootCount(params.realm, params.rootTarget, principal, query.actingSubject);
+        const count = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
+          await resolveTargets(session, [params.rootTarget], 'discussion');
+          const result = await work.realmReplies!.rootCount(params.realm, params.rootTarget, principal, query.actingSubject);
+          await resolveTargets(session, [params.rootTarget], 'discussion');
+          return result;
+        });
         return Response.json({ profile: 'realm-reply-root-count-v1', ...count }, noStore);
       } catch (error) { return replyError(error); }
     });

@@ -23,7 +23,7 @@ export const openApiOperations = {
   '/v1/reviews': { post: { bearer: true, idempotencyKey: true } },
   '/v1/reviews/{id}': { get: { bearer: false }, delete: { bearer: true, idempotencyKey: true } },
   '/v1/reviews/{id}/helpful': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/works/{id}/reviews': { get: { bearer: false } },
+  '/v1/resources/{resource}/reviews': { get: { bearer: false } },
   '/v1/review-quotes/realms/{id}': { get: { bearer: false } },
 } as const;
 
@@ -57,13 +57,15 @@ export function reviewRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['rating:submit']);
         const key = request.headers.get('idempotency-key') ?? '';
         const result = await workRead(work, request, { actingSubject: body.actingSubject }, async session => {
+          await reviewTarget(session, body.context, body.target);
           const shelf = work.libraryStatus
-            ? (await work.libraryStatus.batch(body.actingSubject, [body.work]))[0] : null;
+            ? (await work.libraryStatus.batch(body.actingSubject, [body.target]))[0] : null;
           const dates = shelf?.status === 'read'
             ? { startedOn: shelf.startedOn, finishedOn: shelf.finishedOn }
             : { startedOn: null, finishedOn: null };
-          return work.reviews!.write(principal, body, key,
-            (head, principalId) => proveReviewRating(session, principalId, body.context, body.work, head), dates);
+          const { target, ...intent } = body;
+          return work.reviews!.write(principal, { ...intent, work: target }, key,
+            (head, principalId) => proveReviewRating(session, principalId, body.context, target, head), dates);
         });
         return Response.json(result, { status: !result.replayed && body.expectedRevision === null ? 201 : 200,
           headers });
@@ -116,13 +118,13 @@ export function reviewRoutes(work: MainWorkDependencies) {
         return boundedJson(result);
       } catch (error) { return reviewError(error); }
     })
-    .get('/v1/works/:id/reviews', { params: param, query: reviewQuery,
+    .get('/v1/resources/:resource/reviews', { params: t.Object({ resource: readUuid }), query: reviewQuery,
       detail: optionalBearer, response: { 200: reviewPage, ...reviewErrors },
     }, async ({ request, params, query }) => {
       try {
         if (!work.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
         optionalReader(request, query.actingSubject);
-        const workId = `https://rezics.com/id/${params.id}`;
+        const workId = `https://rezics.com/id/${params.resource}`;
         const result = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
           await reviewTarget(session, query.context, workId);
           const owner = session.principal ? await work.access.activePrincipalId(session.principal) : null;
@@ -150,6 +152,7 @@ export function reviewRoutes(work: MainWorkDependencies) {
           if (generation !== await work.reviews!.collectionRevision(query.context, workId)) {
             throw new WorkReadMoved('Reviews changed');
           }
+          await reviewTarget(session, query.context, workId);
           return { profile: 'reader-review-page-v1' as const,
             ...pageResult(session, [...(own ? [reviewItem(own, query.showSpoilers ?? false)] : []),
               ...pageRows.map(row => reviewItem(row, query.showSpoilers ?? false))], nextCursor) };

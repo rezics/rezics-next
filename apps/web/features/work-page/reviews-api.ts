@@ -35,7 +35,7 @@ export function mainReviewApi({ work, context, actingSubject }: {
   return {
     async page(filter, cursor) {
       try {
-        const { data, error } = await main().v1.works({ id: work.slice(-36) }).reviews.get({ query: { context,
+        const { data, error } = await main().v1.resources({ resource: work.slice(-36) }).reviews.get({ query: { context,
           sort: filter.sort, language: filter.language, rating: filter.rating, cursor, limit: 10, ...reader } });
         if (error) return { ok: false, failure: failureOf(error.status) };
         return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
@@ -65,7 +65,7 @@ export function mainReviewApi({ work, context, actingSubject }: {
       if (!actingSubject) return 'denied';
       try {
         const { error } = await main().v1.reviews.post({ profile: 'reader-review-command-v1', actingSubject, context,
-          work, ...input }, key());
+          target: work, ...input }, key());
         if (!error) return 'saved';
         // Main proves the reader's rating in this Context before it keeps a review.
         if (error.status === 404) return 'rate-first';

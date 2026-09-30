@@ -5,6 +5,7 @@ import { memberFixture, nativeId } from '../../../services/main/tests/member-rep
 test('G265: members and pen names author exact contribution comments, edit/delete their own replies, and replay without resurrection', async () => {
   const h = await memberFixture();
   try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
     const input = { profile: 'member-reply-draft-v1', reply: nativeId(), variantId: `urn:rezics:variant:${randomUUID()}`,
       rootTarget: h.work.work, rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr',
       expectedHead: null, body: 'A member comment.', actingSubject: h.pen };
@@ -56,6 +57,7 @@ test('G265: a Content commit followed by lost Access settlement replays one auth
   const h = await memberFixture();
   const settle = h.access.recordGraphOutcome.bind(h.access);
   try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
     const input = { profile: 'member-reply-draft-v1', reply: nativeId(), variantId: `urn:rezics:variant:${randomUUID()}`,
       rootTarget: h.work.work, rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr',
       expectedHead: null, body: 'A recoverable comment.', actingSubject: h.actor };
@@ -74,10 +76,12 @@ test('G265: a Content commit followed by lost Access settlement replays one auth
 test('G265: reply admission rejects private/erased roots, unverified and suspended Accounts; competing edits have one winner', async () => {
   const h = await memberFixture();
   try {
+    expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
     const input = { profile: 'member-reply-draft-v1', reply: nativeId(), variantId: `urn:rezics:variant:${randomUUID()}`,
       rootTarget: h.work.work, rootRevision: h.first.draftRevision, language: 'en', direction: 'ltr',
       expectedHead: null, body: 'Another member comment.', actingSubject: h.actor };
-    expect((await h.post('/v1/member-reply-drafts', { ...input, rootRevision: h.work.workRevision })).status).toBe(403);
+    expect((await h.post('/v1/member-reply-drafts', { ...input, reply: nativeId(),
+      variantId: `urn:rezics:variant:${randomUUID()}`, rootRevision: h.work.workRevision })).status).toBe(201);
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = false WHERE id = $1', [h.user.id]);
     expect((await h.post('/v1/member-reply-drafts', input)).status).toBe(403);
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [h.user.id]);
@@ -93,7 +97,7 @@ test('G265: reply admission rejects private/erased roots, unverified and suspend
     await h.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:revisions> {
       <${input.rootRevision}> a <https://rezics.com/vocab/ErasedRevision> } }`);
     expect((await h.get(`/v1/member-replies/${input.reply.split('/').at(-1)}`)).status).toBe(404);
-    expect((await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edits.find(result => result.status === 201)!.body.revisionId })).status).toBe(403);
+    expect((await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edits.find(result => result.status === 201)!.body.revisionId })).status).toBe(409);
     await h.accountPool.query('UPDATE rezics_account_security SET suspended_at = now(), generation = generation + 1 WHERE user_id = $1', [h.user.id]);
     expect((await h.post('/v1/member-reply-drafts', input)).status).toBe(401);
   } finally { await h.close(); }

@@ -183,10 +183,11 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       && isCatalogTarget(registration, target);
     const needsSelection = Boolean(target) && !catalogTarget && (!registration
       || (registration.selectionRequiredRoles ?? registration.targetRoles).includes(operation.role));
-    if (target && !needsSelection && operation.selection !== undefined) {
+    if (target && !needsSelection && operation.selection !== undefined
+      && (catalogTarget || !registration?.selectionOptionalRoles?.includes(operation.role))) {
       throw new InvalidCompositionChange('this Structure target role has no content selection');
     }
-    if (target && needsSelection) {
+    if (target && (needsSelection || operation.selection !== undefined)) {
       const requested = operation.selection ?? { mode: 'follow-context' };
       if (requested.mode === 'fixed-revision') {
         if (!/^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(requested.revision)) {
@@ -1141,7 +1142,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     if (old && !change.removed.length && !change.added.length) continue;
     const record = placementRecord(state);
     checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
-      profile.selectionRequiredRoles ?? profile.targetRoles);
+      profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles);
     records.set(occurrence, record);
     if (old) {
       changedExisting.push(old);
@@ -1625,7 +1626,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   const orderKeys = new Set(ordered.map(orderTreeKey));
   for (const record of records) {
     try { checkOccurrenceRecord(record, header.profile, registration.catalogTargetTypes,
-      registration.selectionRequiredRoles ?? registration.targetRoles); }
+      registration.selectionRequiredRoles ?? registration.targetRoles, registration.selectionOptionalRoles); }
     catch (error) {
       if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
       throw error;

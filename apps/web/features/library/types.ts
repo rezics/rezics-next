@@ -19,7 +19,7 @@ export type CustomShelf = MyShelves['items'][number];
 export type StatusShelfItem = Ok<ReturnType<Me['shelves']['status']>['works']['get']>['items'][number];
 export type LibraryVisibility = Ok<ReturnType<MainClient['v1']['agents']>['library-visibility']['get']>;
 export type Visibility = LibraryVisibility['visibility'];
-export type Review = Ok<ReturnType<MainClient['v1']['works']>['reviews']['get']>['items'][number];
+export type Review = Ok<ReturnType<MainClient['v1']['resources']>['reviews']['get']>['items'][number];
 /** Authors the reader follows, REZICS Agents and Open Library authors alike, each with their newest Work. */
 export type FollowedAuthors = Ok<Me['follows']['authors']['get']>;
 export type FollowedAuthor = FollowedAuthors['items'][number];

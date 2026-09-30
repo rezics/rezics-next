@@ -27,19 +27,19 @@ const agent = (value: number) => `https://rezics.com/id/00000000-0000-4000-c000-
 const bind = (value: string) => ({ value });
 
 interface Placed { id: number; parent?: number; author: number; minutes?: number; body?: string;
-  approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean }
+  approved?: boolean; graphParent?: number | null; hiddenAuthor?: boolean; rootRevision?: string }
 
 function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
   truncated?: boolean; countsComplete?: boolean; blocked?: number[] } = {}) {
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
   const byId = new Map(placed.map(item => [item.id, item]));
   const node = (item: Placed): ThreadNode => ({ reply: reply(item.id), parent: item.parent ? reply(item.parent) : null,
-    author: agent(item.author), origin: null, rootTarget: work, rootRevision: `${work}-root`,
+    author: agent(item.author), origin: null, rootTarget: work, rootRevision: item.rootRevision ?? reply(900),
     createdAt: new Date(start) });
   const graphRow = (item: Placed) => ({ id: bind(placement(item.id, item.minutes)), reply: bind(reply(item.id)),
     work: bind(work), author: bind(agent(item.author)), revision: bind(`urn:rezics:content:revision:${revision(item.id)}`),
     review: bind(`urn:rezics:realm-review:${review(item.id)}`), preparation: bind(`prep-${item.id}`),
-    rootRevision: bind(`${work}-root`), sequence: bind(String(1000 + item.id)), epochOrder: bind('0'),
+    rootRevision: bind(item.rootRevision ?? reply(900)), sequence: bind(String(1000 + item.id)), epochOrder: bind('0'),
     revisionEpoch: bind('epoch'),
     ...(item.graphParent !== undefined ? item.graphParent === null ? {} : { parent: bind(reply(item.graphParent)) }
       : item.parent ? { parent: bind(reply(item.parent)) } : {}) });
@@ -51,6 +51,7 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
     return out;
   };
   const session = {
+    checkDeadline: () => {}, displayLanguages: ['en'], request: new Request('http://main.test/v1/resources'),
     options: options.blocked ? { actingSubject: agent(9) } : {},
     position: { dataEpoch: 'epoch', sequence: '9' }, principal: options.blocked ? {} : null,
     realm: async () => {
@@ -58,6 +59,11 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
       return { space: realm, realmRevision: 'r1', visibility: 'public', reviewMode: 'open', revision: null };
     },
     query: async (query: string) => {
+      if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
+        return [{ epoch: bind('epoch'), sequence: bind('9'), r: bind(work), revision: bind(reply(900)),
+          type: bind('https://schema.org/CreativeWork') }];
+      }
+      if (query.includes('SELECT ?decision WHERE')) return [];
       if (query.includes('rv:RestoreCutover')) return [];
       if (query.includes('rv:agentKind')) {
         return [...new Set(placed.filter(item => !item.hiddenAuthor).map(item => item.author))].map(id => ({
@@ -74,6 +80,13 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
       name: { value: 'Rainy Night Bookshop', language: 'en', direction: 'ltr', basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'work' } })),
     deps: {
+      access: {},
+      environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
+        objectDirectory: '.temp/thread-unit', fuseki: { query: async () => ({ results: { bindings: [{
+          epoch: bind('epoch'), sequence: bind('9'), r: bind(work), type: bind('work'), work: bind(work),
+          head: bind(reply(900)), public: bind('true'), erased: bind('false'),
+          label: { value: 'Rainy Night Bookshop', 'xml:lang': 'en' },
+        }] } }) } },
       personPreferences: { blockedActors: async (_principal: unknown, _agent: string, actors: string[]) =>
         new Set(actors.filter(actor => options.blocked?.some(id => actor === agent(id)))) },
       profiles: { agentFences: async (ids: string[]) => new Map(ids.map(id => [id, 'fence'])) },
@@ -127,6 +140,12 @@ function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Reco
   return { session, calls };
 }
 
+test('G-650: Realm thread reads hide stale roots that are not published Work drafts', async () => {
+  const f = world([{ id: 1, author: 1, rootRevision: reply(901) }]);
+  expect((await readRealmThreads(f.session, realm, { sort: 'new' })).items).toEqual([]);
+  await expect(readRealmThread(f.session, realm, reply(1))).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
 // 1 opens the thread; 2 and 3 answer it; 4 answers 2; 5 answers 3 but lost its review, so 6 under it is hidden too.
 const thread: Placed[] = [
   { id: 1, author: 1, body: 'Chapter one: the letter\nWho left it?' },
@@ -138,7 +157,7 @@ test('a thread shows its approved replies nested, hides what sits under a withdr
   const { session, calls } = world(thread, { votes: { 2: { score: 3, value: 1 }, 4: { open: false } } });
   const read = await readRealmThread(session, realm, reply(1));
   expect(read).toMatchObject({ profile: 'realm-thread-v1', realm, thread: reply(1), focus: reply(1),
-    work: { id: work, title: { value: 'Rainy Night Bookshop' } }, rootRevision: `${work}-root`, ancestors: [],
+    work: { id: work, title: { value: 'Rainy Night Bookshop' } }, rootRevision: reply(900), ancestors: [],
     complete: true });
   // Depth first: each reply is followed by its own replies, best first.
   expect(read.items.map(item => [item.reply, item.parent])).toEqual([[reply(1), null], [reply(2), reply(1)],

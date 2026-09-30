@@ -157,7 +157,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       .get(input.occurrence);
     if (!record) throw new CompositionUnavailable('occurrence is unavailable');
     try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
-      profile.selectionRequiredRoles ?? profile.targetRoles); }
+      profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles); }
     catch (error) {
       if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
       throw error;
@@ -243,7 +243,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
         throw new StructureObjectCorrupt('composition order and occurrence records differ');
       }
       try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
-        profile.selectionRequiredRoles ?? profile.targetRoles); }
+        profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles); }
       catch (error) {
         if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
         throw error;

@@ -28,7 +28,7 @@ test('Work routes are exposed on the web app MainApp Eden contract', () => {
     const title: string | undefined = header.data?.title.value;
     const list = await client.v1.works.get({ query: { limit: 2 } });
     const next: string | null | undefined = list.data?.nextCursor;
-    const rating = await work.ratings.get({ query: { scope: 'realm', realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002' } });
+    const rating = await client.v1.resources({ resource: '00000000-0000-4000-8000-000000000001' }).ratings.get({ query: { scope: 'realm', realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002' } });
     const count: number | undefined = rating.data?.count;
     return { title, next, count };
   };
@@ -40,7 +40,8 @@ test('Work routes are exposed on the web app MainApp Eden contract', () => {
   const gets = app.routes.filter(route => route.method === 'GET').map(route => route.path);
   expect(gets).toContain('/v1/works');
   expect(gets).toContain('/v1/works/:id');
-  expect(gets).toContain('/v1/works/:id/ratings');
+  expect(gets).toContain('/v1/resources/:resource/ratings');
+  expect(gets).not.toContain('/v1/works/:id/ratings');
   expect(gets).toContain('/v1/works/:id/classifications');
 });
 

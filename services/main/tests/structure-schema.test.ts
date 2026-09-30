@@ -130,7 +130,8 @@ test('COMP01: Zone and Collection own their Structures directly', async () => {
   expect(zone.structurePredicate).toBe('https://rezics.com/vocab/navigation');
   expect(collection.componentPredicate).toBeUndefined();
   expect(collection.structurePredicate).toBe('https://rezics.com/vocab/structure');
-  expect(collection.selectionRequiredRoles).toEqual(['member']);
+  expect(collection.selectionRequiredRoles).toEqual([]);
+  expect(collection.selectionOptionalRoles).toEqual(['member']);
 });
 
 test('BOOK03: an exact composition seal retains its selected Content revision', async () => {

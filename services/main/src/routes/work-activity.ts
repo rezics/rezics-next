@@ -12,19 +12,19 @@ const detail: { security: Record<string, string[]>[] } = { security: [{}, { bear
 const headers = { 'cache-control': 'private, no-store' };
 
 export const openApiOperations = {
-  '/v1/works/{id}/discussion': { get: { bearer: false } },
+  '/v1/resources/{resource}/discussion': { get: { bearer: false } },
   '/v1/works/{id}/history': { get: { bearer: false } },
 } as const;
 
 export function workActivityRoutes(work: MainWorkDependencies) {
   return new Elysia()
-    .get('/v1/works/:id/discussion', { params, detail,
+    .get('/v1/resources/:resource/discussion', { params: t.Object({ resource: readUuid }), detail,
       query: t.Object({ ...pageQuery, realm: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: discussionPage, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try {
         return Response.json(await workRead(work, request, query,
-          session => readWorkDiscussion(session, `https://rezics.com/id/${path.id}`, query.realm)), { headers });
+          session => readWorkDiscussion(session, `https://rezics.com/id/${path.resource}`, query.realm)), { headers });
       } catch (error) {
         return workReadError(error instanceof ContentLimitExceeded
           ? new WorkReadLimit('Discussion body page exceeds its budget') : error);

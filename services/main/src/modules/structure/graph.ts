@@ -202,7 +202,9 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
       && selectionRequiredRoles.includes(state.role);
     if (!role || !state.parent || ((active || tombstone)
       && (!state.segment || !state.orderKey || !state.segmentKey))
-      || (!active && !state.removedBy) || Boolean(state.selection) !== needsSelection
+      || (!active && !state.removedBy) || needsSelection && !state.selection
+      || state.selection && !needsSelection
+        && (catalogTarget || !registration.selectionOptionalRoles?.includes(state.role))
       || (row.label && !labelLanguage)) {
       throw new CompositionCorrupt('Composition placement is incomplete');
     }
