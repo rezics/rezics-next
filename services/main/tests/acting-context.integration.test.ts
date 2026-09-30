@@ -76,13 +76,13 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
     const webClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Acting context browser', application_type: 'native',
         redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create',
+        grant_types: ['authorization_code'], scope: 'openid agent:create work:create',
         skip_consent: true, require_pkce: true } });
     const otherRedirectUri = 'http://localhost:3100/auth/callback';
     const otherProductClient = await auth.api.adminCreateOAuthClient({ headers: adminHeaders,
       body: { client_name: 'Second acting context product', application_type: 'native',
         redirect_uris: [otherRedirectUri], token_endpoint_auth_method: 'none',
-        grant_types: ['authorization_code'], scope: 'openid work:create',
+        grant_types: ['authorization_code'], scope: 'openid agent:create work:create',
         skip_consent: true, require_pkce: true } });
     expect(otherProductClient.client_id).not.toBe(webClient.client_id);
     const first = await signUp('first');
@@ -97,7 +97,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
       for (const [key, value] of Object.entries({ response_type: 'code',
         client_id: clientId, redirect_uri: callback,
-        scope: 'openid work:create', state: randomUUID(), resource,
+        scope: 'openid agent:create work:create', state: randomUUID(), resource,
         code_challenge: createHash('sha256').update(verifier).digest('base64url'),
         code_challenge_method: 'S256',
       })) authorize.searchParams.set(key, value);

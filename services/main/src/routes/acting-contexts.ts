@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { readerLanguages } from '../modules/display-language/select.ts';
+import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
 import { actingContextCheck, actingContextDiscovery, actingContextPreference,
   authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -49,6 +50,12 @@ const choiceWriteHeaders = t.Object({
   'idempotency-key': t.String({ minLength: 1, maxLength: 128 }),
 });
 
+function identityError(error: unknown) {
+  return error instanceof AccountAssertionInsufficientScope
+    ? problem(403, 'insufficient_scope', 'Agent identity permission is required')
+    : commandError(error);
+}
+
 export function actingContextRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/me/agents', {
@@ -57,13 +64,13 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: agentDiscovery, ...authorizedReadProblems },
     }, async ({ request, query }) => {
       try {
-        const principal = await work.account.verify(request, ['openid']);
+        const principal = await work.account.verify(request, ['agent:create']);
         const contexts = work.actingContextDiscovery ?? work.actingContexts;
         if (!contexts) return problem(503, 'acting_context_unavailable', 'Agents are unavailable');
         const result = await contexts.discoverAgents(principal,
           readerLanguages(query.languages, request.headers.get('accept-language')));
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return identityError(error); }
     })
     .get('/v1/me/acting-contexts', {
       query: t.Object({ task: t.Literal('work.create') },
@@ -134,12 +141,12 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: sessionAgentRead, ...authorizedReadProblems },
     }, async ({ request }) => {
       try {
-        const principal = await work.account.verify(request, ['openid']);
+        const principal = await work.account.verify(request, ['agent:create']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Session Agent is unavailable');
         const result = await work.sessionAgents.readSession(principal,
           request.headers.get('x-session-key') ?? '');
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return identityError(error); }
     })
     .put('/v1/me/session-agent', {
       headers: sessionWriteHeaders,
@@ -147,24 +154,24 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: choiceWrite, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['openid']);
+        const principal = await work.account.verify(request, ['agent:create']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Session Agent is unavailable');
         const result = await work.sessionAgents.setSession(principal,
           request.headers.get('x-session-key') ?? '', {
             actingSubject: body.actingSubject, expectedRevision: body.expectedRevision,
             idempotencyKey: request.headers.get('idempotency-key') ?? '' });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return identityError(error); }
     })
     .get('/v1/me/main-agent-preference', {
       response: { 200: mainAgentRead, ...authorizedReadProblems },
     }, async ({ request }) => {
       try {
-        const principal = await work.account.verify(request, ['openid']);
+        const principal = await work.account.verify(request, ['agent:create']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Main Agent is unavailable');
         const result = await work.sessionAgents.readMain(principal);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return identityError(error); }
     })
     .put('/v1/me/main-agent-preference', {
       headers: choiceWriteHeaders,
@@ -172,12 +179,12 @@ export function actingContextRoutes(work: MainWorkDependencies) {
       response: { 200: choiceWrite, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['openid']);
+        const principal = await work.account.verify(request, ['agent:create']);
         if (!work.sessionAgents) return problem(503, 'acting_context_unavailable', 'Main Agent is unavailable');
         const result = await work.sessionAgents.setMain(principal, {
           actingSubject: body.actingSubject, expectedRevision: body.expectedRevision,
           idempotencyKey: request.headers.get('idempotency-key') ?? '' });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) { return identityError(error); }
     });
 }

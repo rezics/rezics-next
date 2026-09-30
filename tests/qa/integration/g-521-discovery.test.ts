@@ -26,8 +26,8 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
       agentProvisioning: new AgentProvisioning(h.accessPool, h.env),
       agentProfiles: new AgentPublicProfiles(h.accessPool, h.env,
         { avatarDelivery: async () => { throw new Error('No avatar in this fixture'); } }) });
-    // Real OAuth token with only the identity scope: no creation, Realm,
-    // moderation or publishing scope can accidentally become a requirement.
+    // A third-party identity token alone must not enumerate or choose Agents.
+    // The acting-identity token has agent:create but no publishing scope.
     const verifier = randomBytes(32).toString('base64url');
     const authorize = new URL(`${h.base}/api/auth/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: h.client.client_id,
@@ -43,7 +43,8 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'authorization_code', client_id: h.client.client_id,
         code, redirect_uri: h.redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
-    const identityToken = (await json<{ access_token: string }>(exchange)).access_token;
+    const openidOnlyToken = (await json<{ access_token: string }>(exchange)).access_token;
+    const identityToken = h.token;
     const sessionKey = randomUUID();
     const call = (method: string, path: string, body?: object, token = identityToken,
       key = randomUUID(), language?: string) => app.handle(new Request(`http://main.local${path}`, {
@@ -51,6 +52,14 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
         ...(language ? { 'accept-language': language } : {}),
         ...(body ? { 'content-type': 'application/json', 'idempotency-key': key } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}) }));
+    for (const [method, path] of [
+      ['GET', '/v1/me/agents'], ['GET', '/v1/me/session-agent'], ['PUT', '/v1/me/session-agent'],
+      ['GET', '/v1/me/main-agent-preference'], ['PUT', '/v1/me/main-agent-preference'],
+    ]) {
+      const denied = await call(method!, path!, method === 'PUT'
+        ? { actingSubject: null, expectedRevision: null } : undefined, openidOnlyToken);
+      expect(await json(denied, 403)).toMatchObject({ code: 'insufficient_scope' });
+    }
     expect(await json(await call('GET', '/v1/me/agents'))).toMatchObject({ items: [], complete: true });
     const org = await json<{ agent: string }>(await call('POST', '/v1/agents', {
       profile: 'agent-provision-v1', kind: 'organization', displayName: 'North Star' }, h.token), 201);
@@ -177,6 +186,29 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
       expect((await work(subject)).status).toBe(403);
     }
     await h.accessPool.query("UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = 'work:create:root'");
+    // The provision remains terminal/active after the creator loses control.
+    // It must never keep that creator in discovery or saved-choice eligibility.
+    await choose(org.agent);
+    const provision = (await h.accessPool.query<{ representation_id: string; state: string }>(
+      'SELECT representation_id, state FROM access.agent_provision WHERE agent_id = $1 AND principal_id = $2',
+      [org.agent, principalId])).rows[0]!;
+    expect(provision.state).toBe('active');
+    await h.accessPool.query('UPDATE access.representation SET active = false, generation = generation + 1 WHERE id = $1',
+      [provision.representation_id]);
+    expect((await h.accessPool.query<{ state: string }>(
+      'SELECT state FROM access.agent_provision WHERE agent_id = $1', [org.agent])).rows[0]!.state).toBe('active');
+    expect((await json<AgentDiscovery>(await call('GET', '/v1/me/agents')))
+      .items.map(item => item.actingSubject)).not.toContain(org.agent);
+    expect(await json(await call('GET', '/v1/me/session-agent'))).toMatchObject({
+      sessionAgent: { actingSubject: org.agent, eligible: false }, mainAgent: { actingSubject: org.agent, eligible: false } });
+    expect(await json(await call('GET', '/v1/me/main-agent-preference'))).toMatchObject({
+      mainAgent: { actingSubject: org.agent, eligible: false } });
+    expect((await call('PUT', '/v1/me/session-agent', { actingSubject: org.agent,
+      expectedRevision: sessionRevision })).status).toBe(403);
+    expect((await call('PUT', '/v1/me/main-agent-preference', { actingSubject: org.agent,
+      expectedRevision: mainRevision })).status).toBe(403);
+    expect((await work(org.agent)).status).toBe(403);
+
     await choose(represented);
     await h.accessPool.query('UPDATE access.representation SET active = false, generation = generation + 1 WHERE id = $1',
       [representationId]);
@@ -248,7 +280,7 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
     const counted = new AccessActingContexts(countedPool);
     const live = await counted.discoverAgents(principal);
     const smallQueries = discoveryQueries;
-    expect(smallQueries).toBeLessThanOrEqual(13);
+    expect(smallQueries).toBeLessThanOrEqual(12);
     const extras = Array.from({ length: 50 - live.items.length }, () => `https://rezics.com/id/${randomUUID()}`);
     await h.accessPool.query(`INSERT INTO access.authority_subject (id, kind)
       SELECT id, 'agent' FROM unnest($1::text[]) AS id`, [extras]);

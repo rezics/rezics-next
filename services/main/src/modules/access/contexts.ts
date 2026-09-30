@@ -154,29 +154,24 @@ export async function actableSubjects(client: PoolClient, principalId: string): 
   if (!row) throw new ActingContextUnavailable('operational bounds profile is not activated');
   const bounds = accessBoundsFromRow(row);
   const represented = await AccessTopology.representedAgents(client, principalId);
-  const other = await client.query<{ subject: string }>(`SELECT DISTINCT candidates.subject FROM (
-    SELECT agent_id AS subject FROM access.agent_provision WHERE principal_id = $1 AND state = 'active'
-    UNION
-    SELECT agent_subject FROM access.principal_agent_attribution WHERE principal_id = $1 AND active
-      AND valid_until > clock_timestamp()
-    ) candidates JOIN access.authority_subject s ON s.id = candidates.subject
-      AND s.kind = 'agent' AND s.active ORDER BY candidates.subject LIMIT $2`,
+  // Provision is a terminal creation receipt, never current authority. Its
+  // Agent appears only while a live mandate (or attribution) still covers it.
+  const other = await client.query<{ subject: string }>(`SELECT DISTINCT a.agent_subject AS subject
+    FROM access.principal_agent_attribution a JOIN access.authority_subject s ON s.id = a.agent_subject
+    WHERE a.principal_id = $1 AND a.active AND a.valid_until > clock_timestamp()
+      AND s.kind = 'agent' AND s.active ORDER BY a.agent_subject LIMIT $2`,
   [principalId, bounds.actingContexts + 1]);
   const subjects = [...new Set([...represented, ...other.rows.map(value => value.subject)])].sort();
   if (subjects.length > bounds.actingContexts) {
     throw new ActingContextUnavailable('Agent discovery exceeds supported limit');
   }
-  // Share locks prevent a revoked attribution/provision or inactive Agent
+  // Share locks prevent a revoked attribution or inactive Agent
   // from racing a saved choice's commit. Recheck after acquiring the locks.
-  const provisions = await client.query<{ agent_id: string }>(`SELECT agent_id FROM access.agent_provision
-    WHERE principal_id = $1 AND state = 'active' AND agent_id = ANY($2::text[]) FOR SHARE`,
-  [principalId, subjects]);
   const attributions = await client.query<{ agent_subject: string }>(`SELECT agent_subject
     FROM access.principal_agent_attribution WHERE principal_id = $1 AND active
       AND valid_until > clock_timestamp() AND agent_subject = ANY($2::text[]) FOR SHARE`,
   [principalId, subjects]);
-  const live = new Set([...represented, ...provisions.rows.map(value => value.agent_id),
-    ...attributions.rows.map(value => value.agent_subject)]);
+  const live = new Set([...represented, ...attributions.rows.map(value => value.agent_subject)]);
   const agents = await client.query<{ id: string }>(`SELECT id FROM access.authority_subject
     WHERE id = ANY($1::text[]) AND kind = 'agent' AND active ORDER BY id FOR SHARE`, [[...live]]);
   return agents.rows.map(value => value.id);

@@ -23,6 +23,8 @@ export interface VerifiedAccountAssertion extends VerifiedPrincipal {
 }
 
 export class AccountAssertionDenied extends Error {}
+/** Authentication succeeded, but the token lacks the operation's scope. */
+export class AccountAssertionInsufficientScope extends AccountAssertionDenied {}
 export class AccountAssertionUnavailable extends Error {}
 
 const DEFAULT_TIMEOUT_MS = 3_000;
@@ -96,7 +98,7 @@ export class AccountAssertionVerifier {
     }
     const granted = typeof current.scope === 'string' ? new Set(current.scope.split(' ')) : new Set();
     if (requiredScopes.some(scope => !granted.has(scope))) {
-      throw new AccountAssertionDenied('Account assertion lacks a required scope');
+      throw new AccountAssertionInsufficientScope('Account assertion lacks a required scope');
     }
     const aud = typeof signed.aud === 'string' ? [signed.aud]
       : Array.isArray(signed.aud) ? signed.aud.filter((value): value is string => typeof value === 'string') : [];
