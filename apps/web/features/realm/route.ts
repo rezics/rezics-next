@@ -59,16 +59,34 @@ export function parseDecision(params: SearchParams): string | null {
   return typeof params.decision === 'string' && uuid.test(params.decision) ? params.decision : null;
 }
 
-/** The tab a pathname shows, for the tab bar's current item. */
-export function tabOf(pathname: string): RealmTab {
+/** The tab a pathname shows, for the tab bar's current item; none on a page of the Zone's own site. */
+export function tabOf(pathname: string): RealmTab | null {
   const part = withoutLocale(pathname).split('/')[3];
-  return realmTabs.find(tab => tab === part) ?? 'home';
+  return part === undefined || part === '' ? 'home' : realmTabs.find(tab => tab === part) ?? null;
 }
 
-/** A Work page address in this Realm's scope, so ratings and classification stay the Realm's. */
-export function realmWorkHref(work: string, realm: string): string {
+/**
+ * A Work page inside the Zone's site, so ratings and classification stay the Zone's Realm's: `/r/{ref}/w/{work}`
+ * for a Work its Realm adopted, or `/r/{ref}/{mount}/{work}` for a member of a mounted Collection. Without a
+ * tab it opens the Work's overview.
+ */
+export function realmWorkHref(ref: string, work: string, mount: string | null = null, tab?: 'discussion'): string {
+  const id = idOf(work) ?? work;
+  return `/r/${encodeURIComponent(ref)}/${mount ? encodeURIComponent(mount) : 'w'}/${id}${tab ? `/${tab}` : ''}`;
+}
+
+/** A Work page in a Realm's scope for a Realm with no Zone site to open it in. */
+export function scopedWorkHref(work: string, realm: string): string {
   const id = idOf(work) ?? work;
   return `/w/${id}?${new URLSearchParams({ scope: 'realm', realm })}`;
+}
+
+/** A page of the Zone's site: a mounted document or Collection (`/r/{ref}/{segment}`), or a page under it. */
+export function siteHref(locale: UiLocale, ref: string, path: readonly string[],
+  query: Record<string, string | undefined> = {}): string {
+  const entries = Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined);
+  const base = `/${locale}/r/${encodeURIComponent(ref)}/${path.map(encodeURIComponent).join('/')}`;
+  return entries.length ? `${base}?${new URLSearchParams(entries)}` : base;
 }
 
 type SearchParams = Record<string, string | string[] | undefined>;

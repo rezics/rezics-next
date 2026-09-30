@@ -7,12 +7,12 @@ import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
 import { zoneContentText } from '../language/untagged.ts';
 import { isoMoment } from '../zones/adapt-cards.ts';
 import { chipHref } from '../zones/browse-state.ts';
-import { type AdaptContext, bannerImage, liveBanners, type ModuleCredit, zoneDecision, zonePeople, zoneText, zoneWork }
-  from './adapt.ts';
+import { type AdaptContext, bannerImage, liveBanners, type ModuleCredit, workLink, zoneDecision, zonePeople, zoneText,
+  zoneWork } from './adapt.ts';
 import { readLatestChapters, readNewAdoptions, readRankings, readRealmWorks, readRecentDecisions,
   readRecentlyCompleted, readRising, readZoneDiscussions, readZoneEditorLists, readZoneGenres,
   readZoneQuotes } from './read.ts';
-import { idOf, realmHref, realmWorkHref } from './route.ts';
+import { idOf, realmHref } from './route.ts';
 import type { Loaded, MainAvatar, MainName, RankingMetric, ZonePresentationRead } from './types.ts';
 
 // Loads each module of a Zone's presentation from Main's Realm module reads.
@@ -23,11 +23,12 @@ const failed = { state: 'failed' } as const;
 const empty = { state: 'empty' } as const;
 const unsupported = { state: 'unsupported' } as const;
 
-function summaryWork(item: { id: string; title: MainName; cover?: MainAvatar }, context: AdaptContext): ZoneWork {
+function summaryWork(item: { id: string; title: MainName; cover?: MainAvatar }, context: AdaptContext,
+  mount: string | null = null): ZoneWork {
   return zoneWork({ id: item.id, title: item.title,
     cover: item.cover ?? { kind: 'fallback', policy: 'zone', key: item.id, resourceType: 'work' },
     types: [], tagline: null, completionStatus: null, chapterCount: null,
-    wordCount: null, lastUpdatedAt: null }, context, null);
+    wordCount: null, lastUpdatedAt: null }, context, null, mount);
 }
 
 /**
@@ -189,7 +190,7 @@ async function quotes(module: PresentationModule, context: AdaptContext): Promis
   const items = page.data.items.slice(0, module.options?.limit ?? 6).map(item => ({
     id: item.id, body: zoneContentText(item.excerpt),
     reader: item.authorName, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
-    href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
+    href: workLink(context, item.work.id, null, 'discussion'),
   }));
   return items.length ? { state: 'ready', data: { quotes: items } } : empty;
 }
@@ -201,7 +202,7 @@ async function discussions(module: PresentationModule, context: AdaptContext):
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 8).map(item => ({
     id: item.id, title: zoneContentText(item.excerpt),
-    href: `${realmWorkHref(item.work.id, context.realm)}#work-discussion`,
+    href: workLink(context, item.work.id, null, 'discussion'),
     replies: null, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
   }));
   return items.length ? { state: 'ready', data: { items } } : empty;
@@ -216,9 +217,13 @@ async function editorLists(module: PresentationModule, context: AdaptContext):
   if (!read.ok) return failed;
   // A list whose Works are all private has nothing to show yet, like an empty module.
   const lists = read.data.lists.filter(list => collections.includes(list.collection) && list.items.length)
-    .slice(0, module.options?.limit ?? 2).map(list => ({ id: list.collection,
-      title: zoneText(list.name), blurb: null, href: null,
-      items: list.items.map(item => withRealmCard(summaryWork(item, context), cards.get(item.id))) }));
+    .slice(0, module.options?.limit ?? 2).map(list => {
+      // A Collection the Zone mounts opens as its own page, and its members open under that mount.
+      const mount = context.mounts?.get(list.collection) ?? null;
+      return { id: list.collection, title: zoneText(list.name), blurb: null,
+        href: mount && !context.unrouted ? `/r/${encodeURIComponent(context.ref)}/${encodeURIComponent(mount)}` : null,
+        items: list.items.map(item => withRealmCard(summaryWork(item, context, mount), cards.get(item.id))) };
+    });
   return lists.length ? { state: 'ready', data: { lists } } : empty;
 }
 

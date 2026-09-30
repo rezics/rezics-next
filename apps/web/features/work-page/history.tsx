@@ -10,7 +10,7 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { formatDate, mintedAt } from './format.ts';
-import { type HistoryFilter, historyKinds, idOf, workHref } from './route.ts';
+import { type HistoryFilter, historyKinds, idOf, type WorkAt, workHref } from './route.ts';
 import type { HistoryKind, HistoryPage, Loaded } from './types.ts';
 
 const kinds = {
@@ -38,7 +38,7 @@ function HistoryHelp({ label, text }: { label: string; text: string }) {
  * which a help tip says.
  */
 export function HistoryRegion({ history, workRef, kind, cursor, locale, messages }: {
-  history: Loaded<HistoryPage>; workRef: string; kind: HistoryFilter | undefined; cursor: string | undefined;
+  history: Loaded<HistoryPage>; workRef: WorkAt; kind: HistoryFilter | undefined; cursor: string | undefined;
   locale: UiLocale; messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });

@@ -68,4 +68,11 @@ export default {
   membersNone: '一覧表示を選んだメンバーはまだいません。',
   featured: '注目',
   createPost: '投稿を作成',
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: 'このコミュニティのページ', breadcrumbs: 'パンくずリスト',
+  pageNotYetTitle: 'このページはまだ表示できません',
+  pageNotYetBody: 'ページは存在しますが、この種類のページはまだ表示できません。',
+  indexEmptyTitle: 'まだ何もありません', indexEmptyBody: 'このページにはまだ何も追加されていません。',
+  pageItem: insert('ページ {{id}}', { id: String }),
+  documentUnavailable: 'このページの本文を読み込めませんでした。しばらくしてからもう一度お試しください。',
 } satisfies Partial<RealmMessages>;

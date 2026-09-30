@@ -3,17 +3,17 @@
 import { cn } from '@rezics/ui/utils';
 import Link from '../shell/localized-link.tsx';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { parseScope, tabOf, workHref, type WorkTab, workTabs } from './route.ts';
+import { scopeAt, tabOf, type WorkAt, workHref, type WorkTab, workTabs } from './route.ts';
 
 /**
  * The Work's views as links, so each has its own URL and history entry. The
  * chosen scope travels with them, so a Realm reader stays in their Realm.
  */
 export function WorkTabs({ workRef, labels, label }: {
-  workRef: string; labels: Record<WorkTab, string>; label: string;
+  workRef: WorkAt; labels: Record<WorkTab, string>; label: string;
 }) {
-  const current = tabOf(usePathname());
-  const scope = parseScope(Object.fromEntries(useSearchParams()));
+  const current = tabOf(usePathname(), workRef);
+  const scope = scopeAt(workRef, Object.fromEntries(useSearchParams()));
   return <nav aria-label={label} className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
     <ul className="flex w-max min-w-full gap-1 border-border/70 border-b">
       {workTabs.map(tab => <li key={tab}>

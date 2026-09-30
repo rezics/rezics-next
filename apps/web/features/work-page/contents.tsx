@@ -15,7 +15,7 @@ import { languageName, numberedTitle, volumeName } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { readContentsGroup } from './contents-actions.ts';
 import { Region, RegionFailure } from './region.tsx';
-import { chapterHref, type ContentsQuery, idOf, textHref, workHref } from './route.ts';
+import { chapterHref, type ContentsQuery, idOf, textHref, type WorkAt, workHref } from './route.ts';
 import type { ContentsPage, Loaded, WorkName } from './types.ts';
 
 type Translated = ReturnType<typeof materializeData<WorkPageMessages>>;
@@ -38,7 +38,7 @@ function groupFacts(item: Item, locale: UiLocale, t: Translated): string {
 
 /** A chapter's entry: its title, or its number when it has none; unavailable ones are listed but not linked. */
 function ChapterEntry({ item, workRef, language, t }: {
-  item: Item; workRef: string; language: string | undefined; t: Translated;
+  item: Item; workRef: WorkAt; language: string | undefined; t: Translated;
 }) {
   const id = idOf(item.occurrence);
   // Main withholds the label of a chapter the reader cannot read; that is not an untitled chapter.
@@ -71,7 +71,7 @@ type GroupPage = { status: 'idle' } | { status: 'loading' } | { status: 'failed'
  * its chapters; another reads its first page from Main when it first opens.
  */
 function ContentsGroup({ item, workRef, query, initial, loadGroup, locale, t }: {
-  item: Item; workRef: string; query: ContentsQuery; initial: ContentsPage | null;
+  item: Item; workRef: WorkAt; query: ContentsQuery; initial: ContentsPage | null;
   loadGroup: (parent: string) => Promise<ContentsPage | null>; locale: UiLocale; t: Translated;
 }) {
   const [open, setOpen] = useState(initial !== null);
@@ -127,7 +127,7 @@ export interface OneText { title: WorkName; book: boolean; language: string }
 
 /** The one entry of a Work read as one text: the whole text, opened in the reader. */
 function OneTextContents({ oneText, workRef, locale, messages }: {
-  oneText: OneText; workRef: string; locale: UiLocale; messages: WorkPageMessages;
+  oneText: OneText; workRef: WorkAt; locale: UiLocale; messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });
   const href = textHref(workRef);
@@ -160,7 +160,7 @@ function OneTextContents({ oneText, workRef, locale, messages }: {
  */
 export function ContentsRegion({ contents, workRef, id, query, oneText = null, opened = null, loadGroup, groupAction,
   locale, messages }: {
-  contents: Loaded<ContentsPage>; workRef: string; query: ContentsQuery;
+  contents: Loaded<ContentsPage>; workRef: WorkAt; query: ContentsQuery;
   /** The Work's ID, for reading a group's chapters when it opens. */
   id?: string;
   /** The text the Work is read as when it has no contents; null when it has none. */

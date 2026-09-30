@@ -9,7 +9,7 @@ import { type AgentRead, failureOf, type FacetList, type Loaded,
   type RealmZoneRead,
   type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZoneEditorLists,
   type ZoneBrowsePage, type ZoneBrowseQuery, type ZoneGenrePage, type ZonePresentationRead, type ZoneReplyPage,
-  type ZoneWorkPage } from './types.ts';
+  type ZoneRouteRead, type ZoneWorkPage } from './types.ts';
 
 // Server reads for Realm pages. Every read is public: Main answers Realm,
 // Zone presentation and Zone module reads the same for everyone, so no
@@ -93,6 +93,13 @@ export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise
 
 export const readPresentation = cache(async (zone: string): Promise<Loaded<ZonePresentationRead>> =>
   settle(() => main().v1.zones({ id: zone }).presentation.get({ query: {} })));
+
+/**
+ * The page Main resolves for a path under a Zone. Like every Realm read it is public and answers the same for
+ * everyone; a non-member, private and unknown path share one `missing`.
+ */
+export const readZoneRoute = cache(async (zone: string, path: string, cursor?: string): Promise<Loaded<ZoneRouteRead>> =>
+  settle(() => main().v1.zones({ id: zone }).routes.get({ query: { path, cursor } }), cursor));
 
 export const readRealmWorks = cache(async (realm: string, _locale: UiLocale, cursor?: string):
   Promise<Loaded<RealmWorksPage>> =>

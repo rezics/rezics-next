@@ -12,7 +12,7 @@ import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import type { ReadStart } from './read.ts';
-import { workHref } from './route.ts';
+import { type WorkAt, workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
 import { WorkTabs } from './work-tabs.tsx';
@@ -38,7 +38,7 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
 export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingLine, readAction,
   signedIn = false, signInHref, actingSubject,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
-  workRef: string; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
+  workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
   /** A credited cover streamed separately from the rest of the frame. */
   cover?: ReactNode;
   /** Where "Read" leads, streamed on its own; a link to Contents when left out. */
@@ -113,7 +113,7 @@ export function WorkFrame({ workRef, work, credits, authors = [], cover, ratingL
  * opens Contents, which explains.
  */
 export function ReadButton({ workRef, start, messages }: {
-  workRef: string; start: ReadStart; messages: WorkPageMessages;
+  workRef: WorkAt; start: ReadStart; messages: WorkPageMessages;
 }) {
   if (!start) return null;
   const href = start.kind === 'contents' ? workHref(workRef, 'contents') : start.href;

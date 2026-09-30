@@ -7,7 +7,7 @@ import { zoneContentText } from '../language/untagged.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
-import { decisionHref, realmWorkHref } from './route.ts';
+import { decisionHref, realmWorkHref, scopedWorkHref } from './route.ts';
 import type { MainAvatar, MainName, RealmDecision, WorkCard, ZonePresentationRead } from './types.ts';
 
 // Main's read shapes to the Zone SDK's public data. Every module and package
@@ -38,23 +38,32 @@ export function bannerImage(banner: PresentationBanner,
 
 export interface AdaptContext {
   locale: UiLocale; ref: string; realm: string;
+  /** A Realm with no Zone has no site to open a Work in; its Works open on their own pages. */
+  unrouted?: boolean;
+  /** The Zone's mounted Collections by their IRI, to the route segment their members open under. */
+  mounts?: ReadonlyMap<string, string>;
   /** `?actingSubject=` for a signed-in reader's media reads, or empty. */
   avatarQuery?: string;
 }
 
+/** Where a Work opens from this Zone: its site, through the mount it came from when it did. */
+export function workLink(context: AdaptContext, work: string, mount: string | null = null, tab?: 'discussion') {
+  return context.unrouted ? scopedWorkHref(work, context.realm) : realmWorkHref(context.ref, work, mount, tab);
+}
+
 /**
  * A Work card in this Zone. `decision` is the public Decision that placed
- * it here (the adoption's selection).
+ * it here (the adoption's selection); `mount` is the mounted Collection it came from, if any.
  */
 export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[] }
   & Parameters<typeof zoneWorkCards>[0],
-  context: AdaptContext, decision: string | null): ZoneWork {
+  context: AdaptContext, decision: string | null, mount: string | null = null): ZoneWork {
   const credit = card.primaryCredits?.find(item => item.displayName);
   const author = credit?.displayName;
   const href = credit?.handle ? authorHref({ kind: 'agent', handle: credit.handle })
     : credit?.provider === 'open-library' && credit.key
       ? authorHref({ kind: 'external', key: credit.key }) : null;
-  return { id: card.id, href: realmWorkHref(card.id, context.realm), title: zoneText(card.title),
+  return { id: card.id, href: workLink(context, card.id, mount), title: zoneText(card.title),
     cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types),
     author: author ? zoneContentText(author) : null,
     authorHref: href,

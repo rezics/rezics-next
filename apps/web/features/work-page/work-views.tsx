@@ -32,8 +32,8 @@ import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readA
   readHubWorkPage, readText } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
-import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkScope, workHref }
-  from './route.ts';
+import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkAt, type WorkScope,
+  workHref, workRefOf } from './route.ts';
 import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
 import { ReviewsSection } from './reviews.tsx';
 import type { WorkHeader as Header, Reviewer } from './types.ts';
@@ -100,7 +100,7 @@ async function RatingLineSlot({ id, locale, messages }: Common & { id: string })
 }
 
 /** A type's primary action, or the next readable chapter for books. */
-async function ReadSlot({ workRef, id, work, locale, messages }: Common & { workRef: string; id: string;
+async function ReadSlot({ workRef, id, work, locale, messages }: Common & { workRef: WorkAt; id: string;
   work: Header }) {
   const kind = workPageKind(work.types);
   if (kind !== 'book') {
@@ -114,7 +114,7 @@ async function ReadSlot({ workRef, id, work, locale, messages }: Common & { work
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
 export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
-  workRef: string; id: string; work: Header; children: ReactNode;
+  workRef: WorkAt; id: string; work: Header; children: ReactNode;
 }) {
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings] = await Promise.all([readingAgent(), browseReader(),
     readReaderState(id), readRatings(id, EVERYONE, undefined)]);
@@ -137,13 +137,13 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
 }
 
 async function ScopeBarSlot({ workRef, id, scope, tab = 'overview', locale, messages }: Common & {
-  workRef: string; id: string; scope: WorkScope | null; tab?: 'overview' | 'discussion';
+  workRef: WorkAt; id: string; scope: WorkScope | null; tab?: 'overview' | 'discussion';
 }) {
   return <ScopeBar workRef={workRef} scope={scope} realms={await scopeRealms(id, scope, locale)} tab={tab}
     locale={locale} messages={messages} />;
 }
 
-type ScopedProps = Common & { workRef: string; id: string; scope: WorkScope };
+type ScopedProps = Common & { workRef: WorkAt; id: string; scope: WorkScope };
 
 async function view({ workRef, id, scope, locale }: ScopedProps): Promise<ScopeView> {
   return { workRef, scope, realms: await scopeRealms(id, scope, locale) };
@@ -160,11 +160,12 @@ async function Ratings(props: ScopedProps & { context: string | undefined }) {
  * Details with a citation: the title, native authors, REZICS and the page's
  * address in this interface language, from the proxy's record of the request.
  */
-async function Record({ id, workRef, work, locale, messages }: Common & { id: string; workRef: string; work: Header }) {
+async function Record({ id, workRef, work, locale, messages }: Common & { id: string; workRef: WorkAt; work: Header }) {
   const [credits, page] = await Promise.all([readAgentCredits(id), headers().then(list => list.get('x-rezics-page-url'))]);
   const authors = credits.ok ? credits.data.items.filter(credit => credit.role === 'author').map(credit => credit.displayName)
     : [];
-  const url = page ? new URL(localizedPath(workHref(workRef), locale), page).toString() : null;
+  // A citation names the Work's own address, never a Zone's frame around it.
+  const url = page ? new URL(localizedPath(workHref(workRefOf(workRef)), locale), page).toString() : null;
   const citation = url ? [work.title.value, authors.join(authorSeparator(authors)), 'REZICS', url]
     .filter(Boolean).join('. ') : undefined;
   return <WorkRecord work={work} citation={citation} locale={locale} messages={messages} />;
@@ -275,7 +276,7 @@ async function TypeExperience({ id, work, locale, messages }: Common & { id: str
 
 /** Overview: each region reads in parallel under its own Suspense boundary. */
 export function WorkOverview({ workRef, id, work, scope, context, locale, messages }: Common & {
-  workRef: string; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
+  workRef: WorkAt; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
 }) {
   const t = messages;
   const loading = t.loadingRegion;
@@ -318,14 +319,14 @@ export function WorkOverview({ workRef, id, work, scope, context, locale, messag
 }
 
 export async function WorkVersions({ workRef, id, query, locale, messages }: Common & {
-  workRef: string; id: string; query: VersionQuery | null;
+  workRef: WorkAt; id: string; query: VersionQuery | null;
 }) {
   const versions = query ? await readVersions(id, locale, query) : null;
   return <VersionsRegion versions={versions} workRef={workRef} query={query ?? {}} locale={locale} messages={messages} />;
 }
 
 export async function WorkHistory({ workRef, id, query, locale, messages }: Common & {
-  workRef: string; id: string; query: { kind?: HistoryFilter; cursor?: string } | null;
+  workRef: WorkAt; id: string; query: { kind?: HistoryFilter; cursor?: string } | null;
 }) {
   const history = query ? await readHistory(id, query.kind, query.cursor) : { ok: false as const, failure: 'invalid' as const };
   return <HistoryRegion history={history} workRef={workRef} kind={query?.kind} cursor={query?.cursor} locale={locale}
@@ -351,7 +352,7 @@ async function Discussion(props: ScopedProps & { cursor: string | undefined }) {
 
 /** Discussion: the scope bar, then reviewed replies from every public Realm or the chosen one. */
 export function WorkDiscussion({ workRef, id, scope, cursor, locale, messages }: Common & {
-  workRef: string; id: string; scope: WorkScope | null; cursor: string | undefined;
+  workRef: WorkAt; id: string; scope: WorkScope | null; cursor: string | undefined;
 }) {
   return <>
     <Suspense fallback={<ScopeBarSkeleton label={messages.loadingRegion} />}>
@@ -365,7 +366,7 @@ export function WorkDiscussion({ workRef, id, scope, cursor, locale, messages }:
 }
 
 export async function WorkContents({ workRef, id, work, query, locale, messages }: Common & {
-  workRef: string; id: string; work: Header; query: ContentsQuery | null;
+  workRef: WorkAt; id: string; work: Header; query: ContentsQuery | null;
 }) {
   const contents = query ? await readContents(id, query) : { ok: false as const, failure: 'invalid' as const };
   const none = contents.ok ? !contents.data.items.length && !query?.parent && !query?.cursor

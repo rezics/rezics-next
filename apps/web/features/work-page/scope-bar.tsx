@@ -7,7 +7,7 @@ import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
-import { neighbourScope, sameScope, shortId, workHref, type WorkScope, type WorkTab } from './route.ts';
+import { neighbourScope, sameScope, shortId, type WorkAt, workHref, type WorkScope, type WorkTab } from './route.ts';
 import type { WorkName } from './types.ts';
 
 /** A Realm the scope bar offers, with its public name when Main gave one. */
@@ -19,7 +19,7 @@ export function realmLabel(realm: ScopeRealm, messages: WorkPageMessages, locale
 }
 
 /** What a scoped region shows and where: the page's scope and the Realms it can offer. */
-export interface ScopeView { workRef: string; scope: WorkScope; realms: readonly ScopeRealm[] }
+export interface ScopeView { workRef: WorkAt; scope: WorkScope; realms: readonly ScopeRealm[] }
 
 /** The scope in words, for headings and empty states ("No ratings in Fantasy Readers yet"). */
 export function scopeName(view: ScopeView, messages: WorkPageMessages, locale: UiLocale): string {
@@ -62,7 +62,7 @@ function ScopeLink({ href, current, icon: Icon, children }: {
  * names the community when one is chosen.
  */
 export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'overview' }: {
-  workRef: string; scope: WorkScope | null; realms: readonly ScopeRealm[]; locale: UiLocale;
+  workRef: WorkAt; scope: WorkScope | null; realms: readonly ScopeRealm[]; locale: UiLocale;
   messages: WorkPageMessages; tab?: WorkTab;
 }) {
   const t = materializeData(messages, { locale });

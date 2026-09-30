@@ -70,4 +70,11 @@ export default {
   membersNone: 'Aucun membre n’a choisi d’apparaître dans la liste pour le moment.',
   featured: 'À la une',
   createPost: "Créer une publication",
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: 'Pages de cette communauté', breadcrumbs: 'Fil d’Ariane',
+  pageNotYetTitle: 'Cette page n’est pas encore disponible',
+  pageNotYetBody: 'Elle existe ici, mais ce type de page ne peut pas encore être affiché.',
+  indexEmptyTitle: 'Rien ici pour l’instant', indexEmptyBody: 'Rien n’a encore été ajouté à cette page.',
+  pageItem: insert('Page {{id}}', { id: String }),
+  documentUnavailable: 'Le texte de cette page n’a pas pu être chargé. Réessayez dans un instant.',
 } satisfies Partial<RealmMessages>;

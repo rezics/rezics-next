@@ -3,8 +3,8 @@ import { bannerImage, liveBanners, mainExecution, zoneDecision, zoneImage, zoneP
   from '../features/realm/adapt.ts';
 import { type JoinPolicy, offerOf } from '../features/realm/membership-state.ts';
 import { chartMetric, withRealmCard } from '../features/realm/modules.ts';
-import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, repeatsTab, tabOf }
-  from '../features/realm/route.ts';
+import { decisionAnchor, decisionHref, idOf, parseCursor, parseRealmRef, realmHref, realmWorkHref, repeatsTab, scopedWorkHref,
+  siteHref, tabOf } from '../features/realm/route.ts';
 import type { RealmDecision, WorkCard, ZonePresentationRead } from '../features/realm/types.ts';
 import { isPublicPagePath, localizedPath } from '../i18n/locale.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
@@ -32,7 +32,8 @@ describe('Realm addresses', () => {
     expect(realmHref('en', 'fiction', 'works', { cursor: 'abc', safe: undefined })).toBe('/en/r/fiction/works?cursor=abc');
     expect(tabOf('/en/r/fiction')).toBe('home');
     expect(tabOf('/zh-Hans/r/fiction/about')).toBe('about');
-    expect(tabOf('/en/r/fiction/unknown')).toBe('home');
+    // A page of the Zone's own site is none of the tabs.
+    expect(tabOf('/en/r/fiction/guide')).toBeNull();
   });
 
   test('Realm pages are a localized page family: an unprefixed address gets the reader’s locale', () => {
@@ -47,8 +48,13 @@ describe('Realm addresses', () => {
     expect(decisionHref('en', 'fiction', iri(decision))).toBe(`/en/r/fiction/decisions?decision=${decision}#decision-${decision}`);
   });
 
-  test('a Work opened from a Realm stays in that Realm’s scope', () => {
-    expect(realmWorkHref(iri(work), realm)).toBe(`/w/${work}?scope=realm&realm=${realm}`);
+  test('a Work opened from a Zone opens inside the Zone, through its mount when it came from one', () => {
+    expect(realmWorkHref('books', iri(work))).toBe(`/r/books/w/${work}`);
+    expect(realmWorkHref('books', work, 'picks')).toBe(`/r/books/picks/${work}`);
+    expect(realmWorkHref(realm, iri(work), null, 'discussion')).toBe(`/r/${realm}/w/${work}/discussion`);
+    expect(siteHref('zh-Hans', 'books', ['picks'], { cursor: 'c', safe: undefined })).toBe('/zh-Hans/r/books/picks?cursor=c');
+    // A Realm with no Zone site keeps the Work's own page in the Realm's scope.
+    expect(scopedWorkHref(iri(work), realm)).toBe(`/w/${work}?scope=realm&realm=${realm}`);
   });
 
   test('a Zone link that only repeats a Realm tab stays out of the tab row', () => {
@@ -85,7 +91,7 @@ const context = { locale: 'en' as const, ref: 'fiction', realm };
 describe('Main reads as Zone data', () => {
   test('a Work card keeps its hook, status and cover, and links its Decision', () => {
     const adapted = zoneWork(card(), context, iri(decision));
-    expect(adapted).toEqual({ id: iri(work), href: `/w/${work}?scope=realm&realm=${realm}`,
+    expect(adapted).toEqual({ id: iri(work), href: `/r/fiction/w/${work}`,
       title: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' },
       cover: { url: '/api/main/v1/media/avatars/s', width: 400, height: 600 }, kind: 'book', author: null,
       authorHref: null,
@@ -158,7 +164,7 @@ describe('Main reads as Zone data', () => {
       dataEpoch: '1', sequence: '9', work: iri(work), subject: iri(work), outcome: null, ...overrides });
     expect(zoneDecision(item({}), context, titled)).toEqual({ id: iri(decision), kind: 'adoption', outcome: null,
       sequence: '9', href: `/en/r/fiction/decisions?decision=${decision}#decision-${decision}`,
-      work: { id: iri(work), href: `/w/${work}?scope=realm&realm=${realm}`,
+      work: { id: iri(work), href: `/r/fiction/w/${work}`,
         title: { value: 'The Cartographer of Tides', lang: 'en', dir: 'ltr' } } });
     expect(zoneDecision(item({ work: iri(realm) }), context, titled).work).toBeNull();
   });

@@ -70,4 +70,11 @@ export default {
   membersNone: 'Noch niemand hat sich für einen Eintrag in der Liste entschieden.',
   featured: 'Empfohlen',
   createPost: "Beitrag erstellen",
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: 'Seiten dieser Community', breadcrumbs: 'Brotkrumennavigation',
+  pageNotYetTitle: 'Diese Seite ist noch nicht verfügbar',
+  pageNotYetBody: 'Sie existiert hier, aber diese Art von Seite kann noch nicht angezeigt werden.',
+  indexEmptyTitle: 'Noch nichts hier', indexEmptyBody: 'Dieser Seite wurde noch nichts hinzugefügt.',
+  pageItem: insert('Seite {{id}}', { id: String }),
+  documentUnavailable: 'Der Text dieser Seite konnte nicht geladen werden. Versuche es gleich noch einmal.',
 } satisfies Partial<RealmMessages>;

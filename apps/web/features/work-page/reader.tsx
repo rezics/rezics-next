@@ -119,7 +119,7 @@ function ReaderPage({ settings, actingSubject, toolbar, t, children, after }: {
 }
 
 /** The text in paragraphs, with the reader's type settings; a note when the reader can't show its format. */
-function ReaderText({ lines, formatNote }: { lines: string[] | null; formatNote: string }) {
+export function ReaderText({ lines, formatNote }: { lines: string[] | null; formatNote: string }) {
   // Latin text reads well at 1.7; Chinese and Japanese, set solid, need 1.8.
   return lines ? <div data-reader-text="" className="grid gap-[0.9em] text-(length:--reader-size) leading-[1.7]
     text-pretty [&:lang(ja)]:leading-[1.8] [&:lang(zh)]:leading-[1.8]

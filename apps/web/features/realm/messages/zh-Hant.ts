@@ -68,4 +68,11 @@ export default {
   membersNone: '目前沒有選擇公開列名的成員。',
   featured: '精選',
   createPost: '建立貼文',
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: '本社群的頁面', breadcrumbs: '麵包屑導覽',
+  pageNotYetTitle: '此頁面暫時無法顯示',
+  pageNotYetBody: '頁面是存在的，但這類頁面暫時還不能在這裡顯示。',
+  indexEmptyTitle: '這裡還沒有內容', indexEmptyBody: '此頁面還沒有新增任何內容。',
+  pageItem: insert('頁面 {{id}}', { id: String }),
+  documentUnavailable: '無法載入此頁面的本文，請稍後再試。',
 } satisfies Partial<RealmMessages>;

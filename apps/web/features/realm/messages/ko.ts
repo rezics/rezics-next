@@ -70,4 +70,11 @@ export default {
   membersNone: '아직 공개 목록에 표시하기로 선택한 회원이 없어요.',
   featured: '추천',
   createPost: '게시물 작성',
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: '이 커뮤니티의 페이지', breadcrumbs: '탐색 경로',
+  pageNotYetTitle: '이 페이지는 아직 사용할 수 없습니다',
+  pageNotYetBody: '페이지는 있지만 이런 종류의 페이지는 아직 표시할 수 없습니다.',
+  indexEmptyTitle: '아직 아무것도 없습니다', indexEmptyBody: '이 페이지에는 아직 추가된 항목이 없습니다.',
+  pageItem: insert('페이지 {{id}}', { id: String }),
+  documentUnavailable: '이 페이지의 본문을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.',
 } satisfies Partial<RealmMessages>;

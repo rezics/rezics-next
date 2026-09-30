@@ -7,6 +7,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import type { Execution } from './execution.ts';
 import type { ZoneMessages } from './messages.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
+import { type SiteCrumb, type SiteLink, ZoneBreadcrumbs, ZoneSiteNavigation } from './site-navigation.tsx';
 import type { ZoneTheme } from './theme.ts';
 
 /**
@@ -60,15 +61,19 @@ export function ExecutionNotice({ execution, showDesignHref, messages }: {
 /**
  * The Zone's scope: its theme variables and, when its package runs, the
  * package stylesheet (scoped to `[data-zone]`) and header and footer slots.
- * Platform navigation (`tabs`) always stays.
+ * Platform navigation (`tabs`) always stays, with the Zone's own pages (`site`) under it and, on one of them,
+ * the way back (`crumbs`).
  */
-export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions, members, tabs, notice, children }: {
+export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions, members, tabs, site, crumbs, notice,
+  children }: {
   zone: ZoneContext;
   /** The value package CSS scopes to: the official slug, or the Realm's id. */
   dataZone: string;
   theme: ZoneTheme; pkg: ZonePackage | null; nonce?: string;
   masthead: ReactNode; actions: ReactNode; members: string | null;
   tabs: ReactNode; notice?: ReactNode; children: ReactNode;
+  site?: { label: string; links: readonly SiteLink[] };
+  crumbs?: { label: string; items: readonly SiteCrumb[] };
 }) {
   const Header = pkg?.slots.header;
   const Footer = pkg?.slots.footer;
@@ -80,7 +85,9 @@ export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions
       <Header zone={zone} fallback={masthead} actions={actions} members={members} Link={LocalizedLink} />
     </SlotBoundary> : masthead}
     {tabs}
+    {site ? <ZoneSiteNavigation links={site.links} label={site.label} /> : null}
     {notice}
+    {crumbs ? <ZoneBreadcrumbs crumbs={crumbs.items} label={crumbs.label} /> : null}
     {children}
     {Footer ? <SlotBoundary slot="footer" fallback={null}>
       <Footer zone={zone} fallback={null} Link={LocalizedLink} /></SlotBoundary> : null}

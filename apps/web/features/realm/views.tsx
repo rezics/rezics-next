@@ -46,7 +46,7 @@ export function ListFailure({ failure, firstPage, messages }: {
 }
 
 /** Cursor paging as links, so every page has its own URL. */
-function Pager({ next, first, messages }: { next: string | null; first: string | null; messages: RealmMessages }) {
+export function Pager({ next, first, messages }: { next: string | null; first: string | null; messages: RealmMessages }) {
   if (!next && !first) return null;
   return <nav className="flex flex-wrap justify-center gap-2">
     {first ? <LocalizedLink href={first} className={buttonVariants({ variant: 'ghost' })}>

@@ -10,11 +10,11 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import { formatDate, languageName, mintedAt } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
-import { type VersionQuery, workHref } from './route.ts';
+import { type VersionQuery, type WorkAt, workHref } from './route.ts';
 import type { Loaded, VersionPage } from './types.ts';
 
 function VersionFilters({ workRef, query, languages, locale, messages }: {
-  workRef: string; query: VersionQuery; languages: readonly string[]; locale: UiLocale; messages: WorkPageMessages;
+  workRef: WorkAt; query: VersionQuery; languages: readonly string[]; locale: UiLocale; messages: WorkPageMessages;
 }) {
   const t = messages;
   const filtered = Boolean(query.kind || query.language);
@@ -48,7 +48,7 @@ function VersionFilters({ workRef, query, languages, locale, messages }: {
  */
 export function VersionsRegion({ versions, workRef, query, locale, messages }: {
   /** Null when the URL's filters are malformed; Main is not asked. */
-  versions: Loaded<VersionPage> | null; workRef: string; query: VersionQuery; locale: UiLocale;
+  versions: Loaded<VersionPage> | null; workRef: WorkAt; query: VersionQuery; locale: UiLocale;
   messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });

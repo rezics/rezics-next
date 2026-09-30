@@ -91,17 +91,48 @@ function withQuery(path: string, query: Record<string, string | undefined>): str
   return entries.length ? `${path}?${new URLSearchParams(entries)}` : path;
 }
 
-/** A Work view's address. Scope is kept across tabs so a Realm reader stays in their Realm. */
-export function workHref(ref: string, tab: WorkTab = 'overview', scope: WorkScope | null = null,
+/**
+ * A Work's pages inside a Zone's site: `path` is the Work's address there (`/r/books/w/{id}`), `realm` the Zone's
+ * default Realm, whose view the pages open with, and `ref` the Work's own reference, for the global reader.
+ */
+export interface ZoneWorkBase { ref: string; path: string; realm: string }
+/** Where a Work's pages are: its global `/w/{ref}`, or inside a Zone's site. */
+export type WorkAt = string | ZoneWorkBase;
+
+export const workRefOf = (at: WorkAt) => typeof at === 'string' ? at : at.ref;
+
+/** The scope a Work's pages open with: Everyone's globally, the Zone's Realm inside a Zone's site. */
+export function defaultScope(at: WorkAt): WorkScope {
+  return typeof at === 'string' ? EVERYONE : { kind: 'realm', realm: at.realm };
+}
+
+/**
+ * The scope in the URL; a Zone's site opens with its Realm's view when the URL names none, and keeps Everyone's
+ * behind an explicit `scope=global`.
+ */
+export function scopeAt(at: WorkAt, params: SearchParams): WorkScope | null {
+  return typeof at !== 'string' && params.scope === undefined && params.realm === undefined
+    ? defaultScope(at) : parseScope(params);
+}
+
+/**
+ * A Work view's address. Scope is kept across tabs so a Realm reader stays in their Realm; inside a Zone's site
+ * the Zone's Realm is the default and adds nothing, and Everyone's view says so.
+ */
+export function workHref(at: WorkAt, tab: WorkTab = 'overview', scope: WorkScope | null = null,
   query: Record<string, string | undefined> = {}): string {
-  const path = `/w/${encodeURIComponent(ref)}${tab === 'overview' ? '' : `/${tab}`}`;
-  return withQuery(path, { ...(scope ? scopeQuery(scope) : {}), ...query });
+  const base = typeof at === 'string' ? `/w/${encodeURIComponent(at)}` : at.path;
+  const path = `${base}${tab === 'overview' ? '' : `/${tab}`}`;
+  const chosen = scope && typeof at !== 'string' && sameScope(scope, defaultScope(at)) ? {}
+    : scope?.kind === 'global' && typeof at !== 'string' ? { scope: 'global' } : scope ? scopeQuery(scope) : {};
+  return withQuery(path, { ...chosen, ...query });
 }
 
 /** The tab a pathname shows, for the tab bar's current item. */
-export function tabOf(pathname: string): WorkTab {
-  // `/{locale}/w/{ref}/{tab}`; the locale prefix is optional.
-  const segment = withoutLocale(pathname).split('/')[3];
+export function tabOf(pathname: string, at?: WorkAt): WorkTab {
+  // `/{locale}/w/{ref}/{tab}`, or `{base}/{tab}` inside a Zone's site; the locale prefix is optional.
+  const path = withoutLocale(pathname);
+  const segment = at && typeof at !== 'string' ? path.slice(at.path.length).split('/')[1] : path.split('/')[3];
   return workTabs.find(tab => tab === segment) ?? 'overview';
 }
 
@@ -156,12 +187,12 @@ export function parseCursor(params: SearchParams): string | undefined {
 }
 
 /** A chapter's reader address. The chapter is its table-of-contents occurrence. */
-export const chapterHref = (ref: string, chapter: string, language?: string) =>
-  withQuery(`/w/${encodeURIComponent(ref)}/read/${chapter}`, { language });
+export const chapterHref = (ref: WorkAt, chapter: string, language?: string) =>
+  withQuery(`/w/${encodeURIComponent(workRefOf(ref))}/read/${chapter}`, { language });
 
 /** The reader of a Work read as one text: its Main Version's selected text, with no contents to choose from. */
-export const textHref = (ref: string, language?: string) =>
-  withQuery(`/w/${encodeURIComponent(ref)}/read`, { language });
+export const textHref = (ref: WorkAt, language?: string) =>
+  withQuery(`/w/${encodeURIComponent(workRefOf(ref))}/read`, { language });
 
 /**
  * Where a chapter Work is read: at its place in its Book's reader, or the Book's Contents when it has no

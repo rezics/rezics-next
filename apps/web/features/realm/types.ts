@@ -29,6 +29,10 @@ export type RankingPage = Ok<Realm['rankings']['get']>;
 export type RankingMetric = RankingPage['metric'];
 export type ZonePresentationRead = Ok<Zone['presentation']['get']>;
 export type RealmZoneRead = Ok<Realm['zone']['get']>;
+/** What Main resolves a path under a Zone to (`GET /v1/zones/{id}/routes`). */
+export type ZoneRouteRead = Ok<Zone['routes']['get']>;
+/** A public mount in the Zone's navigation, in Structure order. */
+export type ZoneMount = ZonePresentationRead['navigation'][number];
 export type RealmDirectoryPage = Ok<MainClient['v1']['realms']['get']>;
 export type OfficialZone = Ok<ReturnType<MainClient['v1']['zones']['by-segment']>['get']>;
 export type RealmRoster = Ok<Realm['roster']['get']>;

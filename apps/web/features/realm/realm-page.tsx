@@ -18,13 +18,14 @@ import { LookMenu } from '../zones/look-menu.tsx';
 import { defaultModuleTitle, type ZoneMessages } from '../zones/messages.ts';
 import { defaultPresentation, type ZonePresentation } from '../zones/presentation.ts';
 import { zoneTheme } from '../zones/theme.ts';
+import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
 import { readPresentation, type RealmResolution, resolveRealm } from './read.ts';
-import type { ZonePresentationRead } from './types.ts';
+import type { ZoneMount, ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { type RealmTab, realmHref } from './route.ts';
 import type { RealmHeader } from './types.ts';
@@ -52,6 +53,8 @@ export interface RealmView {
   lookEnabled: boolean;
   /** Who reads: signed in or not, and the Agent their shelf controls act as. */
   reader: { signedIn: boolean; actingSubject: string | null; avatarQuery: string };
+  /** The Zone's public mounts in its Structure's order; none for a Realm without a Zone site. */
+  mounts: readonly ZoneMount[];
   /** The signed-in reader's membership and follow; null signed out. */
   membership: Membership | null;
   messages: RealmMessages;
@@ -109,6 +112,7 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
     installedDigest: main?.approved && slug ? await installedDigest(slug) : null });
   const { execution, pkg } = await runnablePackage(decided);
   const header = realm.header;
+  const mounts = read?.ok ? read.data.navigation : [];
   const zone: ZoneContext = {
     slug, realm: header.id, name: zoneText(header.name), description: zoneText(header.description),
     icon: zoneImage(header.icon, reader.avatarQuery), hero: zoneImage(header.banner, reader.avatarQuery),
@@ -120,19 +124,31 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   return { kind: 'view', realm, presentation, bannerMedia, execution, pkg, zone, lookEnabled, messages, zoneMessages,
     reader: { signedIn: reader.signedIn, actingSubject: reader.actingSubject ?? null, avatarQuery: reader.avatarQuery },
     membership,
-    context: { locale, ref, realm: realm.realm, avatarQuery: reader.avatarQuery } };
+    mounts,
+    context: { locale, ref, realm: realm.realm, avatarQuery: reader.avatarQuery,
+      ...realm.zone ? { mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) } : { unrouted: true } } };
 }
 
-/** The Zone frame around one Realm tab. */
-export async function RealmFrame({ view, tab, locale, search, children }: {
-  view: RealmView; tab: RealmTab; locale: UiLocale; search: Search; children: ReactNode;
+/** A mounted page's address and its name, as the Zone's navigation and breadcrumbs link to it. */
+export function mountLinks(view: RealmView): SiteLink[] {
+  return view.mounts.map(mount => ({ href: `/r/${encodeURIComponent(view.context.ref)}/${
+    encodeURIComponent(mount.segment)}`, label: zoneText(mount.name) }));
+}
+
+/**
+ * The Zone frame around one Realm tab, or around a page of the Zone's own site, which names its `address`
+ * and the `crumbs` from the Zone's home to it.
+ */
+export async function RealmFrame({ view, tab, locale, search, address, crumbs, children }: {
+  view: RealmView; tab: RealmTab | null; locale: UiLocale; search: Search; children: ReactNode;
+  address?: string; crumbs?: readonly SiteCrumb[];
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, zone, messages, zoneMessages, lookEnabled } = view;
   const theme = zoneTheme(presentation.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value),
     enabled: lookEnabled });
   const members = membersText(realm.header.membership.count, locale, messages);
-  const here = localizedPath(realmHref(locale, realm.ref, tab), locale);
+  const here = localizedPath(address ?? realmHref(locale, realm.ref, tab ?? 'home'), locale);
   // Join or Follow first, as every community page offers; the page style stays beside it.
   const actions = <>
     <RealmMembership realm={realm.header.id} realmName={zone.name.value} initial={view.membership}
@@ -152,6 +168,8 @@ export async function RealmFrame({ view, tab, locale, search, children }: {
       labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
         discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
+    site={view.mounts.length ? { label: messages.siteNavigation, links: mountLinks(view) } : undefined}
+    crumbs={crumbs ? { label: messages.breadcrumbs, items: crumbs } : undefined}
     notice={<ExecutionNotice execution={execution} showDesignHref={showDesign} messages={zoneMessages} />}>
     {/* Shelf controls on every tile; signing in from one returns to this tab. */}
     <ReaderActionsProvider signedIn={view.reader.signedIn} actingSubject={view.reader.actingSubject}

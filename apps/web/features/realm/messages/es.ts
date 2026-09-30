@@ -70,4 +70,11 @@ export default {
   membersNone: 'Aún no hay miembros que hayan elegido aparecer en la lista.',
   featured: 'Destacado',
   createPost: "Crear publicación",
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: 'Páginas de esta comunidad', breadcrumbs: 'Ruta de navegación',
+  pageNotYetTitle: 'Esta página aún no está disponible',
+  pageNotYetBody: 'Existe aquí, pero todavía no se puede mostrar este tipo de página.',
+  indexEmptyTitle: 'Aún no hay nada aquí', indexEmptyBody: 'Todavía no se ha añadido nada a esta página.',
+  pageItem: insert('Página {{id}}', { id: String }),
+  documentUnavailable: 'No se pudo cargar el texto de esta página. Inténtalo de nuevo en un momento.',
 } satisfies Partial<RealmMessages>;

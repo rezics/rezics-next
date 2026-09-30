@@ -69,6 +69,13 @@ export const messages = {
     other: insert('{{count}} members chose to be listed') }, { count: asValue(number()) }),
   membersNone: 'No members have chosen to be listed yet.',
   featured: 'Featured',
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: 'Pages in this community', breadcrumbs: 'Breadcrumb',
+  pageNotYetTitle: 'This page isn’t available yet',
+  pageNotYetBody: 'It exists here, but this kind of page can’t be shown yet.',
+  indexEmptyTitle: 'Nothing here yet', indexEmptyBody: 'Nothing has been added to this page yet.',
+  pageItem: insert('Page {{id}}', { id: String }),
+  documentUnavailable: 'The text of this page couldn’t be loaded. Try again in a moment.',
 };
 
 export type RealmMessages = typeof messages;

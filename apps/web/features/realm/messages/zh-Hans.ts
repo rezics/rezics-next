@@ -64,4 +64,11 @@ export default {
   membersListed: plural({ other: insert('{{count}} 位成员选择公开') }, { count: asValue(number()) }),
   membersNone: '还没有成员选择公开。',
   featured: '推荐',
+  // A Zone's own site: its mounted pages, and the pages this host cannot show yet.
+  siteNavigation: '本社区的页面', breadcrumbs: '面包屑导航',
+  pageNotYetTitle: '此页面暂时无法显示',
+  pageNotYetBody: '页面是存在的，但这类页面暂时还不能在这里显示。',
+  indexEmptyTitle: '这里还没有内容', indexEmptyBody: '此页面还没有添加任何内容。',
+  pageItem: insert('页面 {{id}}', { id: String }),
+  documentUnavailable: '无法加载此页面的正文，请稍后再试。',
 } satisfies Partial<RealmMessages>;
