@@ -5,6 +5,7 @@ message: Backend code does not evaluate strings as code.
 files:
   - services/*/src/**/*.ts
   - packages/model/src/**/*.ts
+  - packages/wiki-toolkit/**/*.ts
 rule:
   any:
     - pattern: eval($$$)

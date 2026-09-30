@@ -11,10 +11,9 @@ const closed = { additionalProperties: false };
 const literal = <T extends string>(value: T) => Type.Literal(value, { maxLength: value.length });
 const choice = <T extends string>(values: readonly T[]) => Type.Union(values.map(literal) as [TLiteral<T>, ...TLiteral<T>[]]);
 export const WikiIriSchema = Type.String({ minLength: 1, maxLength: 2048,
-  pattern: '^https?://[^\\s<>"{}|\\\\^`]+$', 'x-wiki-iri': true });
-export const WikiResourceSchema = Type.String({ maxLength: 128,
-  pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-  'x-wiki-iri': true });
+  pattern: '^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>"{}|\\\\^`]+$', 'x-wiki-iri': true });
+// Hosting services decide which resource identities they admit.
+export const WikiResourceSchema = WikiIriSchema;
 const id = Type.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$' });
 const text = Type.String({ minLength: 1, maxLength: WIKI_EXTRACTION_LIMITS.textCodePoints });
 const language = Type.String({ minLength: 1, maxLength: 200 });

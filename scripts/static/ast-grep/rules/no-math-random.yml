@@ -6,5 +6,6 @@ note: Identifiers, tokens and sampling must be unpredictable or reproducible fro
 files:
   - services/*/src/**/*.ts
   - packages/model/src/**/*.ts
+  - packages/wiki-toolkit/**/*.ts
 rule:
   pattern: Math.random()

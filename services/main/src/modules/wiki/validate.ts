@@ -3,7 +3,7 @@ import { canonicalLanguage } from '../display-language/tag.ts';
 import { semanticPredicateOutcome } from '../semantic/schema.ts';
 import { resolveTargets } from '../target/resolve.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { WikiExtractionSchema, WikiResourceSchema, checkLocator,
+import { WikiExtractionSchema, WikiNativeResourceSchema, checkLocator,
   type WikiExtraction, type WikiClaim, WIKI_EXTRACTION_LIMITS } from './protocol.ts';
 import { WikiRejected } from './errors.ts';
 import { wikiTypes } from './candidates.ts';
@@ -28,6 +28,13 @@ export function checkWikiExtraction(input: unknown): WikiExtraction {
   };
   scan(input);
   if (!Value.Check(WikiExtractionSchema, input)) throw new WikiRejected('invalid_wiki_extraction', 400);
+  const resources = [input.target, input.zone, input.continuity,
+    ...input.units.flatMap(unit => unit.occurrence ? [unit.occurrence] : []),
+    ...input.entities.flatMap(entity => entity.match ? [entity.match] : []),
+    ...input.claims.map(claim => claim.continuity)];
+  if (resources.some(resource => !Value.Check(WikiNativeResourceSchema, resource))) {
+    throw new WikiRejected('invalid_wiki_extraction', 400);
+  }
   return input;
 }
 /** Only current, active property/relation definitions in the shared registry.
@@ -84,7 +91,7 @@ export async function validateWikiExtraction(read: WikiRead, reader: QuotationRe
   const refs = new Set<string>();
   const ref = (value: string) => {
     if (entities.has(value)) return;
-    if (!Value.Check(WikiResourceSchema, value)) throw new WikiRejected('wiki_reference');
+    if (!Value.Check(WikiNativeResourceSchema, value)) throw new WikiRejected('wiki_reference');
     refs.add(value);
   };
   for (const claim of bundle.claims) {

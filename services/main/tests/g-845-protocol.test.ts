@@ -2,18 +2,18 @@ import { expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { Value } from 'typebox/value';
-import { WikiExtractionSchema, WikiCandidatesSchema, wikiRightsBases, type WikiExtraction }
+import { WikiExtractionSchema, WikiCandidatesSchema, WikiResourceSchema, wikiRightsBases, type WikiExtraction }
   from '../src/modules/wiki/protocol.ts';
 import { rightsBases } from '../src/modules/rights/schema.ts';
 import { checkWikiExtraction } from '../src/modules/wiki/validate.ts';
 import { evidenceQuotationUses, extractionQuotationUses, quotationKey, quotationPreview,
   WIKI_QUOTATION_POLICY } from '../src/modules/wiki/quotation.ts';
 import { WikiRejected } from '../src/modules/wiki/errors.ts';
-import { wikiLabel, candidateItems } from '../src/modules/wiki/candidates.ts';
+import { wikiLabel, candidateItems, wikiCandidates, readCandidateNameRecords } from '../src/modules/wiki/candidates.ts';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
-import { wikiRead } from '../src/modules/wiki/read.ts';
+import { wikiRead, type WikiRead } from '../src/modules/wiki/read.ts';
 import { WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -76,6 +76,8 @@ test('G-845: Apache protocol imports stay within its package or TypeBox and mode
       if (file.isDirectory()) { visit(path); continue; }
       if (!file.name.endsWith('.ts')) continue;
       const source = readFileSync(path, 'utf8');
+      expect(source).toStartWith('// SPDX-License-Identifier: Apache-2.0');
+      expect(source).not.toMatch(/ContentCommentTarget|locatorFromComment|urn:rezics:content:revision/);
       for (const match of source.matchAll(/(?:from\s*|import\s*\(|require\s*\(|import\s*)['"]([^'"]+)['"]/g)) {
         const specifier = match[1]!;
         expect(specifier === 'typebox' || specifier.startsWith('typebox/')
@@ -90,6 +92,59 @@ test('G-845: Apache protocol imports stay within its package or TypeBox and mode
   expect(manifest.private).not.toBe(true);
   expect(readFileSync(resolve(protocol, '../LICENSE'), 'utf8')).toContain('Version 2.0, January 2004');
   expect(readFileSync(resolve(root, 'packages/model/src/locator.ts'), 'utf8')).toContain('wiki-toolkit/protocol/locator.ts');
+  for (const rule of ['no-dynamic-code', 'no-math-random']) {
+    expect(readFileSync(resolve(root, `scripts/static/ast-grep/rules/${rule}.yml`), 'utf8'))
+      .toContain('packages/wiki-toolkit/**/*.ts');
+  }
+});
+
+test('G-845: the Apache protocol admits bounded host-independent IRIs while Main requires native identities', async () => {
+  const foreign = 'https://wiki.example/作品/Elizabeth';
+  for (const value of [foreign, 'urn:example:elizabeth', 'did:example:holder']) {
+    expect(Value.Check(WikiResourceSchema, value)).toBe(true);
+  }
+  for (const value of ['relative/path', 'https://wiki.example/a b', `urn:${'x'.repeat(2048)}`]) {
+    expect(Value.Check(WikiResourceSchema, value)).toBe(false);
+  }
+  const variants = [
+    { ...bundle(), target: foreign }, { ...bundle(), zone: foreign }, { ...bundle(), continuity: foreign },
+    { ...bundle(), units: [{ ...bundle().units[0]!, occurrence: foreign }] },
+    { ...bundle(), entities: [{ ...bundle().entities[0]!, match: foreign }] },
+    { ...bundle(), claims: [{ ...bundle().claims[0]!, continuity: foreign }] },
+  ];
+  for (const value of variants) {
+    expect(Value.Check(WikiExtractionSchema, value)).toBe(true);
+    expect(() => checkWikiExtraction(value)).toThrow('invalid_wiki_extraction');
+  }
+  for (const input of [{ target: foreign, zone: id(2) }, { target: id(1), zone: foreign }]) {
+    const request = { ...input, names: [{ value: 'Elizabeth', language: 'fr' }] };
+    expect(Value.Check(WikiCandidatesSchema, request)).toBe(true);
+    await expect(wikiCandidates({} as WikiRead, request)).rejects.toThrow('invalid_wiki_candidates');
+  }
+});
+
+test('G-845: name-record reads use one complete query with total and per-entity bounds', async () => {
+  let queries = 0;
+  const session = { query: async (query: string, limit: number) => {
+    queries++;
+    expect(query).toContain(`VALUES ?resource { <${id(1)}> <${id(2)}> }`);
+    expect(query).toContain('SELECT ?resource ?label');
+    expect(query).toContain('LIMIT 129');
+    expect(limit).toBe(128);
+    return [{ resource: { type: 'uri', value: id(1) }, label: { type: 'literal', value: 'Eliza', 'xml:lang': 'en' } },
+      { resource: { type: 'uri', value: id(2) }, label: { type: 'literal', value: 'Jane', 'xml:lang': 'fr' } }];
+  } };
+  expect(await readCandidateNameRecords(session, [id(1), id(2)]))
+    .toEqual(new Map([[id(1), ['Eliza']], [id(2), ['Jane']]]));
+  expect(queries).toBe(1);
+  expect(await readCandidateNameRecords(session, [])).toEqual(new Map());
+  expect(queries).toBe(1);
+  const skewed = { query: async () => Array.from({ length: 65 }, () => ({
+    resource: { type: 'uri', value: id(1) }, label: { type: 'literal', value: 'Alias' } })) };
+  await expect(readCandidateNameRecords(skewed, [id(1), id(2)])).rejects.toThrow('wiki_query_budget');
+  await expect(readCandidateNameRecords(session, Array.from({ length: 513 }, (_, i) => id(i))))
+    .rejects.toThrow('wiki_query_budget');
+  expect(queries).toBe(1);
 });
 
 test('G-845: 200 Unicode code points pass; direct and fallback overflow receive the typed passage problem', () => {

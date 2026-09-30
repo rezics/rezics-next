@@ -20,20 +20,23 @@
     },
     "target": {
       "type": "string",
-      "maxLength": 128,
-      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
       "x-wiki-iri": true
     },
     "zone": {
       "type": "string",
-      "maxLength": 128,
-      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
       "x-wiki-iri": true
     },
     "continuity": {
       "type": "string",
-      "maxLength": 128,
-      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
       "x-wiki-iri": true
     },
     "source": {
@@ -176,8 +179,9 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 128,
-                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
                 "x-wiki-iri": true
               },
               {
@@ -211,7 +215,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2048,
-            "pattern": "^https?://[^\\s<>\"{}|\\\\^`]+$",
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
             "x-wiki-iri": true
           },
           "names": {
@@ -268,8 +272,9 @@
           },
           "match": {
             "type": "string",
-            "maxLength": 128,
-            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
             "x-wiki-iri": true
           }
         },
@@ -301,8 +306,9 @@
               },
               {
                 "type": "string",
-                "maxLength": 128,
-                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
                 "x-wiki-iri": true
               }
             ]
@@ -311,7 +317,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2048,
-            "pattern": "^https?://[^\\s<>\"{}|\\\\^`]+$",
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
             "x-wiki-iri": true
           },
           "object": {
@@ -338,8 +344,9 @@
                       },
                       {
                         "type": "string",
-                        "maxLength": 128,
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "minLength": 1,
+                        "maxLength": 2048,
+                        "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
                         "x-wiki-iri": true
                       }
                     ]
@@ -400,8 +407,9 @@
           },
           "continuity": {
             "type": "string",
-            "maxLength": 128,
-            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$",
             "x-wiki-iri": true
           },
           "revealedAt": {

@@ -6,7 +6,7 @@ import { authorizedReadProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
-import { WikiCandidatesSchema, WikiExtractionSchema, WikiResourceSchema,
+import { WikiCandidatesSchema, WikiExtractionSchema, WikiNativeResourceSchema,
   WikiEntitySchema, WikiClaimSchema, WikiUnitSchema } from '../modules/wiki/protocol.ts';
 import { wikiCandidates } from '../modules/wiki/candidates.ts';
 import { checkWikiExtraction, validateWikiExtraction } from '../modules/wiki/validate.ts';
@@ -24,22 +24,23 @@ export const capabilities = {
     title: 'Validate a wiki extraction', description: 'Preview entities, facts, alignment and quotation use before submitting an extraction.' } } },
 } as const;
 const closed = { additionalProperties: false };
-const candidatesRequest = t.Object({ actingSubject: WikiResourceSchema, ...WikiCandidatesSchema.properties }, closed);
-const validationRequest = t.Object({ actingSubject: WikiResourceSchema, bundle: WikiExtractionSchema }, closed);
+const candidatesRequest = t.Object({ ...WikiCandidatesSchema.properties, actingSubject: WikiNativeResourceSchema,
+  target: WikiNativeResourceSchema, zone: WikiNativeResourceSchema }, closed);
+const validationRequest = t.Object({ actingSubject: WikiNativeResourceSchema, bundle: WikiExtractionSchema }, closed);
 const problems = { ...authorizedReadProblems, 409: problemResult(409), 422: problemResult(422) };
 const candidateResult = t.Object({ profile: t.Literal('wiki-candidates-v1'),
   items: t.Array(t.Object({ index: t.Integer({ minimum: 0, maximum: 63 }),
     status: t.Union([t.Literal('matched'), t.Literal('new'), t.Literal('ambiguous'), t.Literal('unavailable')]),
-    candidates: t.Array(WikiResourceSchema, { maxItems: 16 }) }, closed), { maxItems: 64 }) }, closed);
+    candidates: t.Array(WikiNativeResourceSchema, { maxItems: 16 }) }, closed), { maxItems: 64 }) }, closed);
 const quoteUse = t.Object({ representationSha256: t.String({ maxLength: 64 }),
   locatorDigest: t.String({ maxLength: 64 }), quoteDigest: t.String({ maxLength: 64 }), codePoints: t.Integer() }, closed);
 const preview = t.Object({ profile: t.Literal('wiki-validation-v1'), status: t.Literal('acceptable'),
-  target: t.Object({ resource: WikiResourceSchema, base: t.Literal('work'), work: WikiResourceSchema,
-    revision: WikiResourceSchema, types: t.Array(t.String({ maxLength: 2048 }), { maxItems: 64 }),
+  target: t.Object({ resource: WikiNativeResourceSchema, base: t.Literal('work'), work: WikiNativeResourceSchema,
+    revision: WikiNativeResourceSchema, types: t.Array(t.String({ maxLength: 2048 }), { maxItems: 64 }),
     disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]) }, closed),
   sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }, closed),
   entities: t.Array(t.Object({ ...WikiEntitySchema.properties, action: t.Union([t.Literal('create'), t.Literal('reuse')]),
-    revision: t.Union([WikiResourceSchema, t.Null()]) }, closed), { maxItems: 128 }),
+    revision: t.Union([WikiNativeResourceSchema, t.Null()]) }, closed), { maxItems: 128 }),
   claims: t.Array(WikiClaimSchema, { maxItems: 256 }), relations: t.Array(WikiClaimSchema, { maxItems: 256 }),
   alignment: t.Array(t.Object({ ...WikiUnitSchema.properties,
     status: t.Union([t.Literal('aligned'), t.Literal('unaligned')]) }, closed), { maxItems: 256 }),

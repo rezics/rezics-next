@@ -6,12 +6,13 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { PROFILES, semanticTypeOutcome } from '../semantic/schema.ts';
 import { CANONICAL_TYPES } from '../semantic/change.ts';
 import { resolveTargets, targetSummaries } from '../target/resolve.ts';
-import { WikiCandidatesSchema, type WikiCandidates, WIKI_EXTRACTION_LIMITS } from './protocol.ts';
+import { WikiCandidatesSchema, WikiNativeResourceSchema, type WikiCandidates, WIKI_EXTRACTION_LIMITS } from './protocol.ts';
 import { WikiRejected } from './errors.ts';
 import { wikiMembers, wikiScope, WIKI_READ_COST, type WikiRead } from './read.ts';
 
 export const WIKI_CANDIDATES_COST = { names: 64, candidatesPerName: 16,
-  nameRecordsPerEntity: 64, normalizedLabels: 512 * 64, comparisons: 64 * 512, ...WIKI_READ_COST } as const;
+  nameRecordQueries: 1, nameRecordsPerEntity: 64, normalizedLabels: 512 * 64,
+  comparisons: 64 * 512 * 64, ...WIKI_READ_COST } as const;
 export const wikiTypes: ReadonlySet<string> = new Set(admittedTypes.filter(entry => entry.base === 'resource'
   && !entry.default && semanticTypeOutcome(entry.type) === 'admitted'
   && !CANONICAL_TYPES.has(entry.type)).map(entry => entry.type));
@@ -29,15 +30,37 @@ export function candidateItems(matches: readonly ReadonlySet<string>[], availabi
   });
 }
 
-/** Exact normalized label/alias equality, never inferred equivalence. */
+/** One complete bounded read, including a per-resource guard against skew. */
+export async function readCandidateNameRecords(session: Pick<WikiRead['session'], 'query'>, resources: readonly string[]) {
+  if (resources.length > WIKI_READ_COST.inventory) throw new WikiRejected('wiki_query_budget');
+  const labels = new Map(resources.map(resource => [resource, [] as string[]]));
+  if (!resources.length) return labels;
+  const limit = resources.length * WIKI_CANDIDATES_COST.nameRecordsPerEntity;
+  const rows = await session.query(`SELECT ?resource ?label WHERE {
+    VALUES ?resource { ${resources.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?resource rv:nameRecord ?name .
+      ?name <http://www.w3.org/2008/05/skos-xl#literalForm> ?label . }
+  } LIMIT ${limit + 1}`, limit);
+  for (const row of rows) {
+    const recorded = row.resource && labels.get(row.resource.value);
+    if (!recorded || !row.label) throw new WikiRejected('wiki_unavailable', 503);
+    recorded.push(row.label.value);
+    if (recorded.length > WIKI_CANDIDATES_COST.nameRecordsPerEntity) throw new WikiRejected('wiki_query_budget');
+  }
+  return labels;
+}
+
+/** Exact normalized label/alias equality across language tags, never inferred equivalence. */
 export async function wikiCandidates(read: WikiRead, input: WikiCandidates) {
-  if (!Value.Check(WikiCandidatesSchema, input)) throw new WikiRejected('invalid_wiki_candidates', 400);
+  if (!Value.Check(WikiCandidatesSchema, input)
+    || !Value.Check(WikiNativeResourceSchema, input.target)
+    || !Value.Check(WikiNativeResourceSchema, input.zone)) throw new WikiRejected('invalid_wiki_candidates', 400);
   const names = input.names.map(name => {
     const language = canonicalLanguage(name.language);
     if (!language) throw new WikiRejected('invalid_language', 400);
     if (!wikiLabel(name.value)) throw new WikiRejected('invalid_wiki_candidates', 400);
     if (name.type && !wikiTypes.has(name.type)) throw new WikiRejected('wiki_entity_type');
-    return { ...name, language, normalized: wikiLabel(name.value) };
+    return { ...name, normalized: wikiLabel(name.value) };
   });
   const scope = await wikiScope(read, input.target, input.zone);
   const members = await wikiMembers(read, scope.collections);
@@ -49,6 +72,7 @@ export async function wikiCandidates(read: WikiRead, input: WikiCandidates) {
   } LIMIT ${WIKI_READ_COST.inventory + 1}`, WIKI_READ_COST.inventory) : [];
   const matches = names.map(() => new Set<string>());
   const seen = new Set<string>();
+  const candidates: Array<{ resource: string; types: string[]; labels: string[] }> = [];
   for (const row of rows) {
     if (!row.resource || !row.manifest || seen.has(row.resource.value)) throw new WikiRejected('wiki_unavailable', 503);
     seen.add(row.resource.value);
@@ -62,19 +86,17 @@ export async function wikiCandidates(read: WikiRead, input: WikiCandidates) {
       ['https://schema.org/name', 'https://schema.org/alternateName',
         'http://www.w3.org/2004/02/skos/core#prefLabel', 'http://www.w3.org/2004/02/skos/core#altLabel'].includes(property.predicate))
       .flatMap(property => property.value.lexical && ['string', 'language-string'].includes(property.value.kind)
-        ? [{ value: property.value.lexical, language: canonicalLanguage(property.value.language ?? 'en') }] : []);
-    const recorded = await read.session.query(`SELECT ?label WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(row.resource.value)} rv:nameRecord ?name .
-      ?name <http://www.w3.org/2008/05/skos-xl#literalForm> ?label .
-    } } LIMIT 65`, 64);
-    labels.push(...recorded.flatMap(item => item.label ? [{ value: item.label.value,
-      language: canonicalLanguage(item.label['xml:lang'] ?? 'en') }] : []));
+        ? [property.value.lexical] : []);
+    candidates.push({ resource: row.resource.value, types, labels });
+  }
+  const recorded = await readCandidateNameRecords(read.session, candidates.map(candidate => candidate.resource));
+  for (const { resource, types, labels } of candidates) {
+    labels.push(...recorded.get(resource)!);
     if (labels.length > WIKI_CANDIDATES_COST.nameRecordsPerEntity) throw new WikiRejected('wiki_query_budget');
-    const normalizedLabels = new Set(labels.filter(label => label.language)
-      .map(label => `${label.language}\0${wikiLabel(label.value)}`));
+    const normalizedLabels = new Set(labels.map(wikiLabel));
     names.forEach((name, index) => {
-      if ((!name.type || types.includes(name.type)) && normalizedLabels.has(`${name.language}\0${name.normalized}`)) {
-        matches[index]!.add(row.resource!.value);
+      if ((!name.type || types.includes(name.type)) && normalizedLabels.has(name.normalized)) {
+        matches[index]!.add(resource);
       }
     });
   }

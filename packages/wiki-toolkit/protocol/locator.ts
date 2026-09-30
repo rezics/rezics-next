@@ -1,4 +1,6 @@
-// Deliberately imports only typebox: M6 can publish this file independently of AGPL services.
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 REZICS contributors
+// Deliberately imports only typebox, independently of service implementations.
 import Type, { type Static } from 'typebox';
 import { Value } from 'typebox/value';
 
@@ -94,27 +96,6 @@ export function checkLocator(value: unknown): value is Locator { return Value.Ch
 export function parseLocator(value: unknown): Locator {
   if (!checkLocator(value)) throw new TypeError('Invalid rezics-locator-v1 locator');
   return value;
-}
-
-/** Content's existing wire target. Its enclosing comment already carries revisionId/byteDigest. */
-export const ContentCommentTargetSchema = Type.Object({
-  type: Type.Literal('SpecificResource'),
-  source: Type.String({ minLength: 1, maxLength: 2048, pattern: '^urn:rezics:content:revision:.+$' }),
-  selector: Type.Object({ type: Type.Literal('TextQuoteSelector'),
-    exact: Type.String({ minLength: 1 }), prefix: Type.String(), suffix: Type.String() }, closed),
-}, closed);
-export type ContentCommentTarget = Static<typeof ContentCommentTargetSchema>;
-
-export function locatorFromComment(comment: {
-  revisionId: string; byteDigest: string; target: ContentCommentTarget;
-}): Locator {
-  if (!Value.Check(ContentCommentTargetSchema, comment.target)
-    || comment.target.source !== `urn:rezics:content:revision:${comment.revisionId}`) {
-    throw new TypeError('Comment target differs from its pinned revision');
-  }
-  return parseLocator({ version: locatorVersion,
-    source: { type: 'hosted', revision: comment.revisionId, digest: comment.byteDigest },
-    selector: comment.target.selector });
 }
 
 // Structural inputs avoid importing the snapshot implementation or a service owner.

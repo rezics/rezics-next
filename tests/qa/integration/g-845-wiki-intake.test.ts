@@ -6,6 +6,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { WikiQuotationStore, extractionQuotationUses } from '../../../services/main/src/modules/wiki/quotation.ts';
 import type { WikiExtraction } from '../../../services/main/src/modules/wiki/protocol.ts';
+import { GRAPHS } from '../../../services/main/src/modules/work/activate.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
 test('G-845: Pride and Prejudice API matches scoped names and previews bounded, aligned holder evidence', async () => {
@@ -18,7 +20,8 @@ test('G-845: Pride and Prejudice API matches scoped names and previews bounded, 
     prefix: 'semantic/structure/' });
   await objects.initialize();
   const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier, access: f.access,
-    structureObjects: objects, wikiQuotations: new WikiQuotationStore(f.pool) });
+    structureObjects: objects, wikiQuotations: new WikiQuotationStore(f.pool),
+    catalogueIntake: new CatalogueIntakeStore(f.accessPool, f.env) });
   const call = (path: string, body: object, token = f.account.tokenA) => app.handle(new Request(`http://main.local${path}`, {
     method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
       'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
@@ -28,8 +31,12 @@ test('G-845: Pride and Prejudice API matches scoped names and previews bounded, 
     return JSON.parse(text) as T;
   }
   const createWork = async (title: string) => {
+    const { candidateReceipt } = await json<{ candidateReceipt: string }>(await call('/v1/catalogue/candidates', {
+      profile: 'catalogue-candidates-v1', originalTitle: { value: title, language: 'en' },
+      aliases: [], romanizations: [], creators: [], dates: [], identifiers: [] }));
     const work = await json<{ work: string; mainVersion: string }>(await call('/v1/works', {
-      profile: 'metadata-only-v1', title, language: 'en', semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
+      profile: 'metadata-only-v1', grain: 'new-creative-scope', candidateReceipt,
+      title, language: 'en', semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
     await f.grant(`work:read:${work.work}`, 'work.read');
     await f.grant(`work:edit:${work.work}`, 'work.edit');
     return work;
@@ -94,14 +101,36 @@ test('G-845: Pride and Prejudice API matches scoped names and previews bounded, 
         target, routeSegment: segment, position: 'last', disclosure: 'public', actingSubject: f.actor }));
     }
     await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [hidden.grant]);
+    // Fixture setup exercises the second stored-name source as well as semantic properties.
+    const record = nativeId();
+    await f.nativeFuseki.update(`INSERT DATA { GRAPH <${GRAPHS.current}> {
+      <${elizabeth.component}> <https://rezics.com/vocab/nameRecord> <${record}> .
+      <${record}> <http://www.w3.org/2008/05/skos-xl#literalForm> "Eliza"@en .
+    } }`);
+    let nameRecordQueries = 0;
+    const graphQuery = f.nativeFuseki.query.bind(f.nativeFuseki);
+    f.nativeFuseki.query = async (query, maxResponseBytes) => {
+      if (query.includes('rv:nameRecord') && query.includes('skos-xl#literalForm')) nameRecordQueries++;
+      return graphQuery(query, maxResponseBytes);
+    };
     const candidateRequest = { target: work.work, zone, actingSubject: f.actor,
-      names: ['Elizabeth', 'Lizzy', 'Miss Bennet', 'Restricted Character', 'Ｅｌｉｚａｂｅｔｈ'].map(value => ({ value, language: 'en' })) };
+      names: [...['Elizabeth', 'Lizzy', 'Miss Bennet', 'Restricted Character', 'Ｅｌｉｚａｂｅｔｈ']
+        .map(value => ({ value, language: 'en' })),
+      { value: 'Elizabeth', language: 'en-GB' }, { value: 'Elizabeth', language: 'fr' },
+      { value: 'Miss Bennet', language: 'fr' }, { value: 'Restricted Character', language: 'fr' },
+      { value: 'Eliza', language: 'fr' }] };
     const candidates = await json<{ items: Array<{ index: number; status: string; candidates: string[] }> }>(
       await call('/v1/wiki/candidates', candidateRequest));
-    expect(candidates.items.map(item => item.status)).toEqual(['matched', 'new', 'ambiguous', 'unavailable', 'matched']);
+    expect(nameRecordQueries).toBe(1);
+    f.nativeFuseki.query = graphQuery;
+    expect(candidates.items.map(item => item.status)).toEqual([
+      'matched', 'new', 'ambiguous', 'unavailable', 'matched', 'matched', 'matched', 'ambiguous', 'unavailable', 'matched']);
     expect(candidates.items[0]!.candidates).toEqual([elizabeth.component]);
     expect(candidates.items[2]!.candidates.sort()).toEqual([elizabeth.component, jane.component].sort());
     expect(candidates.items[3]).toEqual({ index: 3, status: 'unavailable', candidates: [] });
+    for (const index of [5, 6, 9]) expect(candidates.items[index]!.candidates).toEqual([elizabeth.component]);
+    expect(candidates.items[7]!.candidates.sort()).toEqual([elizabeth.component, jane.component].sort());
+    expect(candidates.items[8]).toEqual({ index: 8, status: 'unavailable', candidates: [] });
     expect(JSON.stringify(candidates)).not.toContain('Restricted Character');
     expect(JSON.stringify(candidates)).not.toContain(hidden.component);
     expect(JSON.stringify(candidates)).not.toContain(outside.component);
@@ -151,6 +180,10 @@ test('G-845: Pride and Prejudice API matches scoped names and previews bounded, 
     unknown.claims[0]!.predicate = 'https://example.test/Unregistered';
     await rejected(unknown, 'wiki_predicate');
     await rejected({ ...bundle, body: 'The full source novel' }, 'invalid_wiki_extraction', 400);
+    await rejected({ ...bundle, target: 'https://wiki.example/works/pride-and-prejudice' }, 'invalid_wiki_extraction', 400);
+    const foreignMatch = structuredClone(bundle);
+    foreignMatch.entities[0]!.match = 'urn:example:elizabeth';
+    await rejected(foreignMatch, 'invalid_wiki_extraction', 400);
     await rejected({ ...bundle, target: elsewhere.work }, 'wiki_target_mismatch');
     expect((await call('/v1/wiki/candidates', candidateRequest, f.account.noScope)).status).toBe(401);
     expect((await validate(bundle, f.account.noScope)).status).toBe(401);
