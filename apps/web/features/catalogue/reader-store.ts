@@ -1,5 +1,6 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
+import { mainTrackingApi } from '../tracking/api.ts';
 import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-actions.tsx';
 
 // Main's reader library (`services/main/src/routes/library.ts`): status
@@ -115,6 +116,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     },
     snapshot: () => version,
     available: () => !denied,
+    tracking: mainTrackingApi(actingSubject, main),
     async setStatus(work: string, status: ReadingStatus | null) {
       const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
       const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },
