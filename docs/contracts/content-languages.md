@@ -131,9 +131,13 @@ proper names. Each embedded name keeps its own language and direction and is
 bidi-isolated (`bdi` with `lang` in HTML, Unicode isolates in plain text), so
 Arabic or Hebrew around a Latin or CJK name keeps its order.
 
-Current gaps to fix: [display-language selection](../../services/main/src/modules/display-language/select.ts)
-caps stored labels at twenty and derives direction from the primary language
-subtag, so `az-Arab` gets the wrong direction and fallback can cross scripts;
+Shared [display-language selection](../../services/main/src/modules/display-language/select.ts)
+now follows the recorded or likely script, or the text's first letter when no
+script is known. It marks cross-script fallbacks and prefers the original label;
+stored labels have a UTF-8 byte budget rather than a twenty-label limit.
+
+Current gaps to fix: some adapters still use ad-hoc language-tag parsers and
+selection rules;
 [Zone presentation](../../services/main/src/modules/zone/presentation-format.ts)
 and [Facet labels](../../model/compiler/facet.ts) still accept only the eight
 UI locales.
