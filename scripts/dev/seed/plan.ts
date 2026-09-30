@@ -154,3 +154,17 @@ export function semanticTypes(type: DemoWork['type']): string[] {
 export function firstSeedTypes(type: DemoWork['type']): string[] {
   return semanticTypes(type === 'prompt' || type === 'skill' ? 'document' : type);
 }
+
+/**
+ * The pages each official Zone mounts in its navigation, through the API: a document (a Work whose published text
+ * is the page) and a Collection of every public Work the seed made, so the page has more than one screen.
+ */
+export const zoneSites = {
+  books: {
+    guide: { segment: 'guide', title: 'A reader’s guide to REZICS Books', language: 'en' as const,
+      text: 'Start here\nBooks holds the classics that are free to read. Open a work, read it chapter by chapter, '
+        + 'and rate it as you go; the community’s decisions explain why each one is here.\n'
+        + 'Picks\nThe picks page lists more works than the front page can show. Follow it a page at a time.' },
+    picks: { segment: 'picks', name: 'More to read', limit: 30 },
+  },
+} as const;
