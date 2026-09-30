@@ -4,6 +4,7 @@ import { parse } from 'yaml';
 import { startMediaStack } from './media-support.ts';
 import type { CollectionWork } from '../../../services/main/src/modules/collection/grain.ts';
 import type { ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (ref: string) => ref.slice(-36);
@@ -99,21 +100,37 @@ test('G-892: SAO Collection selects series or volumes, traverses all cursors and
     expect(await traverse('series')).toEqual(series.map(({ work, mainVersion }) => ({ work, mainVersion }))
       .sort((a, b) => a.work.localeCompare(b.work)));
     expect(await traverse('parts')).toEqual([...volumes].sort((a, b) => a.work.localeCompare(b.work)));
+    for (const read of [f.call.bind(null, 'GET'), outsider.read]) {
+      expect((await json<Page>(await read(`${path}/works?grain=series`))).items).toHaveLength(4);
+      expect((await json<Page>(await read(`${path}/works?grain=parts`))).items).toHaveLength(6);
+    }
+    const privateCollection = id();
+    await editor.grant(`collection:edit:${privateCollection}`, 'collection.edit');
+    await editor.grant(`semantic:read:${privateCollection}`, 'semantic.read');
+    await json(await editor.send('POST', '/v1/collections', { collection: privateCollection,
+      name: 'Private franchise', disclosure: 'private', actingSubject: editor.actor }), 201);
+    for (const read of [f.call.bind(null, 'GET'), outsider.read]) {
+      const denied = await read(`/v1/collections/${short(privateCollection)}/works?grain=series`);
+      const absent = await read(`/v1/collections/${short(id())}/works?grain=series`);
+      expect(denied.status).toBe(404);
+      expect(await denied.text()).toBe(await absent.text());
+    }
     const first = await json<Page>(await page('series', '&limit=1'));
     expect((await page('parts', `&cursor=${encodeURIComponent(first.nextCursor!)}`)).status).toBe(400);
     expect((await editor.read(`${path}/works`)).status).toBe(400);
     expect((await page('volumes')).status).toBe(400);
-    expect((await outsider.read(`${path}/works?grain=series`)).status).toBe(404);
     // A member edit moves the graph basis; a stale cursor must fail explicitly.
     await json(await editor.send('POST', `${path}/changes`, { expectedHead: membership.revision,
       actingSubject: editor.actor, operations: [{ op: 'remove', occurrence: membership.occurrences![0] }] }));
     expect((await page('series', `&cursor=${encodeURIComponent(first.nextCursor!)}`)).status).toBe(409);
-    // A closed Work gate suppresses both the series and its public volumes.
-    await f.access.strongCloseScope(`work:read:${bunko.work}`, '0');
+    // Protection suppresses both the series and its public volumes.
+    await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(bunko.work)} rv:protectionHead ${iri(id())} } }`);
     expect((await json<Page>(await page('series'))).items.map(item => item.work)).not.toContain(bunko.work);
     expect((await json<Page>(await page('parts'))).items.map(item => item.work)).toEqual(
       volumes.slice(2).map(volume => volume.work).sort());
-    await f.access.strongCloseScope(`semantic:read:${collection}`, '0');
+    await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} rv:protectionHead ${iri(id())} } }`);
     expect((await page('series')).status).toBe(404);
   } finally { await f.stop(); }
 }, 240_000);

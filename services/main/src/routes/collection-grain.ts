@@ -7,13 +7,14 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 const grain = t.Union([t.Literal('series'), t.Literal('parts')]);
 export const openApiOperations = {
-  '/v1/collections/{id}/works': { get: { bearer: true } },
+  '/v1/collections/{id}/works': { get: { bearer: false } },
 } as const;
 
 export function collectionGrainRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/collections/:id/works', {
     params: t.Object({ id: readUuid }),
-    query: t.Object({ actingSubject: readId, grain,
+    detail: { security: [{}, { bearerAuth: [] }] },
+    query: t.Object({ actingSubject: t.Optional(readId), grain,
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
     response: { 200: t.Object({ collection: readId, grain, structure: readId, revision: readId,

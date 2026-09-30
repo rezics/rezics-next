@@ -23,16 +23,9 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
     || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > COLLECTION_GRAIN_COST.page) {
     throw new WorkReadInvalid('Collection grain or page size is invalid');
   }
-  if (!session.principal || !session.options.actingSubject) {
-    throw new WorkReadMissing('Collection is unavailable');
-  }
-  const principal = await session.deps.account.verify(session.request, ['semantic:read']);
-  const allowed = () => session.deps.access.canReadSemanticResource?.(
-    principal, session.options.actingSubject!, collection);
-  if (!await allowed()) throw new WorkReadMissing('Collection is unavailable');
-  const roots = await session.query(`SELECT ?structure ?revision ?generation WHERE {
+  const roots = await session.query(`SELECT ?structure ?revision ?generation ?disclosure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} a rv:Collection ;
-      rv:collectionState rv:Active ; rv:structure ?structure .
+      rv:collectionState rv:Active ; rv:structure ?structure ; rv:disclosure ?disclosure .
       ?structure a rv:Structure ; rv:structureOf ${iri(collection)} ;
         rv:structureProfile rv:CollectionMembership ; rv:structureHead ?revision ;
         rv:selectedGeneration ?generation . }
@@ -40,12 +33,20 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
   } LIMIT 2`, 2);
   const root = roots[0];
-  if (roots.length !== 1 || !root?.structure || !root.revision || !root.generation) {
+  if (roots.length !== 1 || !root?.structure || !root.revision || !root.generation || !root.disclosure) {
     throw new WorkReadMissing('Collection is unavailable');
   }
+  const publicCollection = root.disclosure.value === 'https://rezics.com/vocab/Public';
+  const allowed = async () => {
+    if (publicCollection) return true;
+    if (!session.principal || !session.options.actingSubject) return false;
+    const principal = await session.deps.account.verify(session.request, ['semantic:read']);
+    return session.deps.access.canReadSemanticResource?.(principal, session.options.actingSubject, collection);
+  };
+  if (!await allowed()) throw new WorkReadMissing('Collection is unavailable');
   const binding = { kind: 'collection-grain-v1', collection, grain: input.grain,
-    actor: session.options.actingSubject, issuer: session.principal.issuer,
-    subject: session.principal.subject };
+    actor: session.options.actingSubject, issuer: session.principal?.issuer,
+    subject: session.principal?.subject };
   const cursor = decodeReadCursor(input.cursor, binding, session.position);
   const afterWork = cursor?.after;
   const readable = new Map<string, boolean>();
@@ -84,8 +85,7 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
       const summaries = await session.summaries(unchecked);
       for (const summary of summaries) {
         readable.set(summary.reference, summary.status === 'available' && summary.type === 'work'
-          && summary.disclosure === 'public' && await session.deps.access.canReadWork(
-            session.principal, session.options.actingSubject, summary.reference));
+          && summary.disclosure === 'public');
       }
     }
     for (const row of rows) {

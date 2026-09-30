@@ -10,7 +10,7 @@ const pair = (work: number, member = work) => ({ work: binding(id(work)),
 
 function fixture(rows: ReturnType<typeof pair>[], hidden = new Set<string>(), denied = new Set<string>()) {
   const queries: string[] = [], batches: string[][] = [];
-  let allowed = true;
+  let allowed = true, publicCollection = true;
   const session = { principal: { issuer: 'https://account.test', subject: 'reader' },
     options: { actingSubject: id(1) }, request: new Request('http://main.local/v1/collections'),
     position: { dataEpoch: 'epoch', sequence: '10' }, checkDeadline: () => {},
@@ -22,11 +22,12 @@ function fixture(rows: ReturnType<typeof pair>[], hidden = new Set<string>(), de
       batches.push(targets);
       expect(targets.length).toBeLessThanOrEqual(COLLECTION_GRAIN_COST.summaryTargets);
       return targets.map(reference => ({ reference, type: 'work', disclosure: 'public',
-        status: hidden.has(reference) ? 'unavailable' : 'available' }));
+        status: hidden.has(reference) || denied.has(reference) ? 'unavailable' : 'available' }));
     },
     query: async (query: string, limit: number) => {
       queries.push(query);
       if (query.startsWith('SELECT ?structure')) return [{ structure: binding(id(2)),
+        disclosure: binding(`https://rezics.com/vocab/${publicCollection ? 'Public' : 'Private'}`),
         revision: binding(id(3)), generation: binding(id(4)) }];
       expect(limit).toBe(COLLECTION_GRAIN_COST.candidatePairs);
       expect(query).toContain(`LIMIT ${COLLECTION_GRAIN_COST.candidatePairs}`);
@@ -41,7 +42,7 @@ function fixture(rows: ReturnType<typeof pair>[], hidden = new Set<string>(), de
         && (!afterPair || `${row.work.value}|${row.member.value}` > afterPair)).slice(0, limit);
     } };
   return { session: session as unknown as WorkReadSession, queries, batches,
-    close: () => { allowed = false; } };
+    close: () => { allowed = false; publicCollection = false; } };
 }
 
 test('G-892: complete sparse traversal skips more than a page of hidden pairs and collapses shared parts', async () => {
@@ -112,4 +113,16 @@ test('G-892: an unavailable owner fails closed instead of declaring a partial in
   f.session.summaries = async () => { throw new WorkReadUnavailable('owner unavailable'); };
   await expect(readCollectionGrain(f.session, id(5), { grain: 'series', limit: 1 }))
     .rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+test('G-892: public Collections need no explicit grant or credential and granted private Works stay hidden', async () => {
+  const f = fixture([pair(100), pair(101)], new Set([id(101)]));
+  f.session.principal = null;
+  f.session.options.actingSubject = undefined;
+  const result = await readCollectionGrain(f.session, id(5), { grain: 'series', limit: 1 });
+  expect(result.items).toEqual([{ work: id(100), mainVersion: id(10_100) }]);
+  expect(result.nextCursor).toBeNull();
+  f.close();
+  await expect(readCollectionGrain(f.session, id(5), { grain: 'series', limit: 1 }))
+    .rejects.toBeInstanceOf(WorkReadMissing);
 });
