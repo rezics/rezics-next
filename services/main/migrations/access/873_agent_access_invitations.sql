@@ -366,3 +366,76 @@ BEGIN
     END IF;
     RETURN NEW;
 END $$;
+
+-- A controller mandate identifies the Person; the accepted edge supplies the
+-- publishing action. Keep these two meanings in the existing path proof rather
+-- than issuing a duplicate work.create mandate. Legacy action-preserving paths
+-- fill their mandate action from the obligation and retain their limits.
+ALTER TABLE access.representation_path_proof ADD COLUMN mandate_action text;
+ALTER TABLE access.representation_path_proof DISABLE TRIGGER representation_path_proof_immutable;
+UPDATE access.representation_path_proof SET mandate_action = action;
+ALTER TABLE access.representation_path_proof ENABLE TRIGGER representation_path_proof_immutable;
+ALTER TABLE access.representation_path_proof ALTER COLUMN mandate_action SET NOT NULL;
+DO $$ DECLARE constraint_name text;
+BEGIN
+    SELECT conname INTO STRICT constraint_name FROM pg_constraint
+        WHERE conrelid = 'access.representation_path_proof'::regclass AND contype = 'f'
+            AND confrelid = 'access.representation'::regclass;
+    EXECUTE format('ALTER TABLE access.representation_path_proof DROP CONSTRAINT %I',constraint_name);
+END $$;
+ALTER TABLE access.representation_path_proof ADD CONSTRAINT path_origin_mandate
+    FOREIGN KEY (representation_id,principal_id,origin_subject,mandate_action)
+        REFERENCES access.representation(id,principal_id,subject_id,action);
+CREATE FUNCTION access.fill_path_mandate_action() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN NEW.mandate_action := coalesce(NEW.mandate_action,NEW.action); RETURN NEW; END $$;
+CREATE TRIGGER representation_path_mandate_action BEFORE INSERT ON access.representation_path_proof
+    FOR EACH ROW EXECUTE FUNCTION access.fill_path_mandate_action();
+
+CREATE OR REPLACE FUNCTION access.check_representation_path() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE proof record; step record; expected smallint := 0; previous text; path uuid;
+BEGIN
+    IF TG_TABLE_NAME = 'representation_path_proof' THEN path := NEW.id;
+    ELSE path := NEW.path_id; END IF;
+    SELECT p.*,r.max_path_edges AS mandate_limit,r.valid_until AS mandate_until
+        INTO proof FROM access.representation_path_proof p
+        JOIN access.representation r ON r.id = p.representation_id WHERE p.id = path;
+    IF NOT FOUND THEN RAISE EXCEPTION 'representation path proof is missing' USING ERRCODE = '23514'; END IF;
+    IF proof.mandate_action <> proof.action THEN
+        IF proof.mandate_action <> 'agent.control' OR proof.action <> 'work.create' OR proof.edge_count <> 1
+            OR NOT EXISTS (SELECT 1 FROM access.agent_provision WHERE agent_id = proof.origin_subject
+                AND agent_kind = 'person' AND state = 'active') THEN
+            RAISE EXCEPTION 'controller path lacks its publishing offer' USING ERRCODE = '23514';
+        END IF;
+        proof.mandate_limit := 1;
+    END IF;
+    IF proof.valid_until > proof.mandate_until
+        OR (proof.edge_count > 0 AND proof.edge_count > proof.mandate_limit) THEN
+        RAISE EXCEPTION 'representation path exceeds its mandate' USING ERRCODE = '23514';
+    END IF;
+    previous := proof.origin_subject;
+    FOR step IN SELECT s.*,e.max_path_edges,e.valid_until,e.resource_subject,e.invitation_id
+        FROM access.representation_path_step s JOIN access.representation_edge e ON e.id = s.edge_id
+        WHERE s.path_id = path ORDER BY s.position
+    LOOP
+        expected := expected + 1;
+        IF step.position <> expected OR step.representative_subject <> previous
+            OR step.action <> proof.action OR step.max_path_edges < proof.edge_count
+            OR step.valid_until < proof.valid_until THEN
+            RAISE EXCEPTION 'representation path is not one bounded chain' USING ERRCODE = '23514';
+        END IF;
+        IF proof.mandate_action <> proof.action AND (step.resource_subject IS NOT NULL
+            OR NOT EXISTS (SELECT 1 FROM access.agent_invitation i
+                JOIN access.agent_invitation_acceptance a ON a.invitation_id = i.id
+                WHERE i.id = step.invitation_id AND i.offer = 'represent'
+                    AND i.scope_id = 'work:create:root' AND proof.action = ANY(i.actions)
+                    AND NOT EXISTS (SELECT 1 FROM access.agent_invitation_revocation v WHERE v.invitation_id = i.id))) THEN
+            RAISE EXCEPTION 'controller path lacks its accepted edge' USING ERRCODE = '23514';
+        END IF;
+        previous := step.represented_subject;
+    END LOOP;
+    IF expected <> proof.edge_count OR previous <> proof.acting_subject THEN
+        RAISE EXCEPTION 'representation path is not one bounded chain' USING ERRCODE = '23514';
+    END IF;
+    RETURN NULL;
+END $$;

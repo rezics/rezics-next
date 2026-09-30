@@ -8,7 +8,8 @@ import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, type RegisteredAdmission }
+  from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
@@ -24,7 +25,7 @@ import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scopes =
-  'agent:create space:create governance:decide work:read openid access:manage access:approve access:grant access:represent ' +
+  'agent:create space:create governance:decide work:read work:edit openid access:manage access:approve access:grant access:represent ' +
   'access:representation-manage access:role work:create';
 
 async function freePort(): Promise<number> {
@@ -177,6 +178,32 @@ export async function startAgentControlHarness(label: string) {
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
     objectDirectory: join(state, 'objects'),
   };
+  const registry = new AccessAdmissionRegistry(accessPool);
+  registry.configureBaseline(fuseki);
+  const accountVerifier = new AccountAssertionVerifier({
+    issuer: `${base}/api/auth`, audience: Bun.env.ACCOUNT_MAIN_RESOURCE,
+    jwksUrl: `${base}/api/auth/jwks`, introspectUrl: `${base}/api/auth/oauth2/introspect`,
+    clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret!,
+  });
+  const admissions = new Map<string, RegisteredAdmission>();
+  const register = registry.register.bind(registry);
+  registry.register = async input => {
+    const admission = await register(input);
+    admissions.set(admission.id, admission);
+    return admission;
+  };
+  const pauses: { phase: 'registered' | 'claimed'; ready: (a: RegisteredAdmission) => void;
+    released: Promise<void> }[] = [];
+  const claim = registry.claim.bind(registry);
+  registry.claim = async (id, digest, principal) => {
+    const admission = admissions.get(id);
+    const pause = admission?.action === 'work.create' ? pauses.shift() : undefined;
+    if (!pause) return claim(id, digest, principal);
+    const claimed = pause.phase === 'claimed' ? await claim(id, digest, principal) : null;
+    pause.ready(admission!);
+    await pause.released;
+    return claimed ?? claim(id, digest, principal);
+  };
   const main = createMainApp(fuseki, {
     environment,
     agentProvisioning: new AgentProvisioning(accessPool, environment),
@@ -184,15 +211,8 @@ export async function startAgentControlHarness(label: string) {
     accessPolicy: new AccessPolicyOwner(accessPool),
     libraryStatus: new ReaderLibraryStatusStore(contentPool),
     profiles: new ProfilesAccess(accessPool),
-    account: new AccountAssertionVerifier({
-      issuer: `${base}/api/auth`,
-      audience: Bun.env.ACCOUNT_MAIN_RESOURCE,
-      jwksUrl: `${base}/api/auth/jwks`,
-      introspectUrl: `${base}/api/auth/oauth2/introspect`,
-      clientId: verifierClient.client_id,
-      clientSecret: verifierClient.client_secret!,
-    }),
-    access: new AccessAdmissionRegistry(accessPool),
+    account: accountVerifier,
+    access: registry,
     actingContexts: new AccessActingContexts(accessPool),
     grants,
     groups: new AccessGroups(accessPool),
@@ -208,6 +228,18 @@ export async function startAgentControlHarness(label: string) {
     grants,
     accountBase: base,
     accountIssuer: `${base}/api/auth`,
+    registry,
+    environment,
+    accountVerifier,
+    /** Pause a real publishing request at a deterministic owner handoff. */
+    pauseWorkClaim(phase: 'registered' | 'claimed') {
+      let ready!: (a: RegisteredAdmission) => void;
+      let resume!: () => void;
+      const entered = new Promise<RegisteredAdmission>(resolve => { ready = resolve; });
+      const released = new Promise<void>(resolve => { resume = resolve; });
+      pauses.push({ phase, ready, released });
+      return { entered, resume };
+    },
     async user(name: string, scope = scopes, admitted = true): Promise<AuthorityUser> {
       const account = await signUp(name);
       await accountPool.query('UPDATE public."user" SET "emailVerified" = true WHERE id = $1', [account.id]);

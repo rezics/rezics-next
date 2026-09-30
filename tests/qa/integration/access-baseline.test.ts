@@ -50,12 +50,20 @@ async function fixture() {
     return h.verifier.verify(bearer(h.token), ['agent:create']);
   }
   const subject = await agent();
+  async function replacementController(agent: string) {
+    // Revoking the caller's mandate preserves the Agent's controller floor.
+    await h.accessPool.query(`WITH replacement AS (
+      INSERT INTO access.principal (id,account_issuer,account_subject)
+      VALUES (gen_random_uuid(),'fixture://replacement',gen_random_uuid()::text) RETURNING id)
+      INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      SELECT gen_random_uuid(),id,$1,'agent.control','infinity' FROM replacement`, [agent]);
+  }
   function work(key = `baseline-work-${randomUUID()}`, token = h.wrongScopeToken) {
     return app.handle(new Request('http://main.local/v1/works', { method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'idempotency-key': key },
       body: JSON.stringify({ profile: 'metadata-only-v1', language: 'en', title: 'Member Work', actingSubject: subject }) }));
   }
-  return { ...h, access, app, subject, agent, verified, work,
+  return { ...h, access, app, subject, agent, verified, work, replacementController,
     close: async () => { await h.close(); await databases.close(); } };
 }
 
@@ -120,8 +128,10 @@ test('baseline: discovery and preflight require verified membership; saved Agent
     expect((await choices.readSession(current, session)).sessionAgent.eligible).toBe(true);
     expect((await choices.readMain(current)).mainAgent.eligible).toBe(true);
     await expect(contexts.check(current, penName, discovery.authorityEpoch)).rejects.toBeInstanceOf(ActingContextDenied);
+    await h.replacementController(penName);
     await h.accessPool.query(`UPDATE access.representation SET active = false, generation = generation + 1
-      WHERE subject_id = $1 AND action = 'agent.control'`, [penName]);
+      WHERE subject_id = $1 AND action = 'agent.control'
+        AND principal_id = (SELECT principal_id FROM access.agent_provision WHERE agent_id = $1)`, [penName]);
     expect((await h.accessPool.query('SELECT state FROM access.agent_provision WHERE agent_id = $1',
       [penName])).rows[0].state).toBe('active');
     expect((await contexts.discoverAgents(current)).items.map(row => row.actingSubject)).not.toContain(penName);
@@ -326,12 +336,16 @@ test('baseline: pinned control, principal and policy generations fence retries a
     const request: AdmissionRequest = { principal, actingSubject: h.subject, scope: 'work:create:root',
       action: 'work.create', idempotencyKey: randomUUID(), requestDigest: digest('pinned') };
     const admission = await h.access.register(request);
+    await h.replacementController(h.subject);
     await h.accessPool.query(`UPDATE access.representation SET active = false, generation = generation + 1
-      WHERE subject_id = $1 AND action = 'agent.control'`, [h.subject]);
+      WHERE subject_id = $1 AND action = 'agent.control'
+        AND principal_id = (SELECT principal_id FROM access.agent_provision WHERE agent_id = $1)`, [h.subject]);
     expect((await h.access.register(request)).dispatchEligible).toBe(false);
     await expect(h.access.claim(admission.id, admission.requestDigest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(h.accessPool.query(`UPDATE access.representation SET active = true, generation = generation + 1
-      WHERE subject_id = $1 AND action = 'agent.control'`, [h.subject])).rejects.toThrow('a revoked controller cannot be restored');
+      WHERE subject_id = $1 AND action = 'agent.control'
+        AND principal_id = (SELECT principal_id FROM access.agent_provision WHERE agent_id = $1)`, [h.subject]))
+      .rejects.toThrow('a revoked controller cannot be restored');
     expect((await h.access.register(request)).dispatchEligible).toBe(false);
     request.actingSubject = await h.agent();
     const next = await h.access.register({ ...request, idempotencyKey: randomUUID() });

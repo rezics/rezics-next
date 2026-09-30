@@ -60,6 +60,7 @@ export const representationPathProofTable = declareTable('representation_path_pr
   principal_epoch: ['int8', 'not null'],
   representation_id: ['uuid', 'not null'],
   representation_generation: ['int8', 'not null'],
+  mandate_action: ['text', 'not null'],
   origin_subject: ['text', 'not null'],
   acting_subject: ['text', 'not null'],
   action: ['text', 'not null'],

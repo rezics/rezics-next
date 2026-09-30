@@ -8,7 +8,8 @@ import { recordRatingAggregateHead, readRatingAggregateInventory,
   checkRatingAggregateFence, readRatingContextPolicyWitness } from './rating-aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
-import { representedWorkProof, selectedRepresentedWorkProof } from './represented-work-proof.ts';
+import { representedWorkProof, selectedRepresentedWorkProof, saveInvitedWorkProof,
+  type RepresentedWorkProof } from './represented-work-proof.ts';
 import { publicCatalogueWork, roleWorkCreateProof, roleWorkProof } from './role-proof.ts';
 import { withWorkEditAuthority, type WorkEditAuthorityProof } from './work-edit-authority.ts';
 import { issueTitleAdmission } from './title-admission.ts';
@@ -766,7 +767,7 @@ export class AccessAdmissionRegistry {
           allowed = !!await directWorkCreateProof(client, identity.id, actingSubject);
         } else {
           const proof = await representedWorkProof(client, identity.id, actingSubject);
-          allowed = !!proof && (!!proof.grantId
+          allowed = !!proof && !proof.path && (!!proof.grantId
             || !!await groupWorkCreateProof(client, actingSubject)
             || !!await roleWorkCreateProof(client, actingSubject));
         }
@@ -936,6 +937,7 @@ export class AccessAdmissionRegistry {
       let roleBindingGeneration: string | null = null;
       let roleFamilyId: string | null = null;
       let roleRevision: string | null = null;
+      let publishingProof: RepresentedWorkProof | null = null;
       await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
       const baseline = !existing ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
       if (baseline) {
@@ -973,6 +975,12 @@ export class AccessAdmissionRegistry {
           const proof = await representedWorkProof(client, principalId, request.actingSubject,
             request.action as 'work.create' | 'work.edit', request.scope);
           if (!proof) throw new AdmissionDenied('representation is not admitted');
+          // Publishing invitations do not delegate administrator-only creation
+          // kinds or imports. Controller/grant/group/role paths retain G-508's policy.
+          if (proof.path && !baselineWorkTypesAllowed(request)) {
+            throw new AdmissionDenied('publishing delegation does not cover administrator Work kinds');
+          }
+          publishingProof = proof;
           representedRepresentationId = proof.representationId;
           representedRepresentationGeneration = proof.representationGeneration;
           representedSubjectGeneration = proof.subjectGeneration;
@@ -1083,6 +1091,8 @@ export class AccessAdmissionRegistry {
         await saveBaselineProof(client, id, baseline);
         if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
       }
+      if (publishingProof?.path) await saveInvitedWorkProof(client, id, principalId,
+        principal.enforcement_epoch, request.actingSubject, publishingProof);
       await client.query(
         `INSERT INTO access.admission_receipt
            (admission_id, principal_id, action, idempotency_key, request_digest, outcome)

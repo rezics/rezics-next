@@ -1,6 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { sealMetadataWorkAdmission } from '../../../services/main/src/modules/work/seal.ts';
+import { readWorkTerminalReceipt } from '../../../services/main/src/modules/work/receipt.ts';
 import {
   startAgentControlHarness,
   type AuthorityHarness,
@@ -247,7 +249,6 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
     const workCeiling = await h.grant(organization, organization, 'work.create');
     // Other owners' installed action and resource fixtures are independent of
     // the invitation. No issuing/accepting/assignment mandate is seeded.
-    const origin = await h.mandate(b.principalId, bPerson, 'work.create', { maxPathEdges: 1 });
     const represented = await offer(h, a, organization, bPerson, 'represent');
     const edgeId = randomUUID();
     expect(
@@ -260,28 +261,50 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
         })
       ).status,
     ).toBe(200);
-    const admissionId = randomUUID();
-    expect(
-      (
-        await h.call('POST', '/v1/me/authority-admissions', b.token, {
-          profile: 'access-compound-admission-v1',
-          admissionId,
-          actingSubject: organization,
-          command: 'work.create',
-          obligations: [
-            {
-              obligation: 'work.create',
-              representationId: origin,
-              edgeIds: [edgeId],
-              grantId: workCeiling,
-            },
-          ],
-        })
-      ).status,
-    ).toBe(200);
-    expect(
-      (await h.call('POST', `/v1/me/authority-admissions/${admissionId}/checks`, b.token)).status,
-    ).toBe(200);
+    const publish = { profile: 'metadata-only-v1', actingSubject: organization,
+      title: 'Delegated Organization Work', language: 'en',
+      semanticTypes: ['https://schema.org/Book'], authoring: 'own-work' };
+    const publishKey = randomUUID();
+    const published = await h.call('POST', '/v1/works', b.token, publish, publishKey);
+    expect(published).toMatchObject({ status: 201, body: { replayed: false } });
+    expect((await h.call('POST', '/v1/works', b.token, publish, publishKey)).body)
+      .toMatchObject({ work: published.body.work, replayed: true });
+    const controllerPublished = await h.call('POST', '/v1/works', a.token,
+      { ...publish, title: 'Controller Organization Work' });
+    expect(controllerPublished.status).toBe(201);
+    const proof = (await h.accessPool.query<{ id: string; edge_id: string; grant_id: string }>(`
+      SELECT a.id,s.edge_id,o.grant_id FROM access.admission a
+      JOIN access.admission_obligation o ON o.admission_id = a.id
+      JOIN access.representation_path_step s ON s.path_id = o.path_id
+      WHERE a.principal_id = $1 AND a.idempotency_key = $2`, [b.principalId,publishKey])).rows[0]!;
+    expect(proof).toMatchObject({ edge_id: edgeId, grant_id: workCeiling });
+    const admissionId = proof.id;
+    expect((await readWorkTerminalReceipt(h.environment.fuseki, admissionId))?.outcome).toBe('succeeded');
+    const credits = await h.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?agent WHERE { GRAPH <urn:rezics:graph:current> {
+        ?credit a rv:NativeAgentCredit ; rv:work <${String(published.body.work)}> ; rv:agent ?agent . } } LIMIT 2`);
+    expect(credits.results?.bindings.map(row => row.agent?.value)).toEqual([organization]);
+    // A Person controller plus an invitation is one publishing hop, never an
+    // unrestricted action-preserving path through other Agents.
+    await expect(h.accessPool.query(`INSERT INTO access.representation_path_proof
+      (id,principal_id,principal_epoch,representation_id,representation_generation,mandate_action,
+        origin_subject,acting_subject,action,edge_count,topology_epoch,valid_until)
+      SELECT gen_random_uuid(),p.principal_id,p.principal_epoch,p.representation_id,
+        p.representation_generation,p.mandate_action,p.origin_subject,p.acting_subject,
+        p.action,2,p.topology_epoch,p.valid_until FROM access.representation_path_proof p
+      JOIN access.admission_obligation o ON o.path_id = p.id WHERE o.admission_id = $1`, [admissionId]))
+      .rejects.toThrow('controller path lacks its publishing offer');
+    for (const type of ['https://rezics.com/vocab/ModPackage','https://schema.org/SoftwareApplication',
+      'https://schema.org/SoftwareSourceCode']) {
+      expect((await h.call('POST', '/v1/works', b.token, { ...publish, semanticTypes: [type] })).status).toBe(403);
+    }
+    const delegate = await h.accountVerifier.verify(new Request('http://main.local',
+      { headers: { authorization: `Bearer ${b.token}` } }), ['work:create']);
+    expect(await h.registry.hasNonBaselineWorkCreateAuthority(delegate, organization)).toBe(false);
+    // Publishing is action-specific and cannot become an exact Work edit grant.
+    expect((await h.call('POST', `/v1/works/${String(published.body.work).slice(-36)}/scalar-value`, b.token,
+      { profile: 'work-scalar-state-v1', actingSubject: organization,
+        expectedHead: published.body.workRevision, scalarValue: { kind: 'unknown' } })).status).toBe(403);
     await h.accessPool.query(
       `INSERT INTO access.scope_gate (id) VALUES ('space:create:root') ON CONFLICT DO NOTHING`,
     );
@@ -333,6 +356,7 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
       settings: { visibility: 'public', reviewRequired: true, whoMaySubmit: 'members', rules: [] },
     });
     expect(change.status).toBe(201);
+    expect((await h.call('POST', '/v1/works', c.token, publish)).status).toBe(403);
     const audit = (
       await h.accessPool.query<{ acting_subject: string }>(
         `SELECT acting_subject FROM access.realm_admin_receipt
@@ -420,39 +444,15 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
     const revocationId = String((revoked.body.revocationIds as string[])[0]);
     const drainPath = `/v1/access/revocations/${revocationId}?issuerSubject=${encodeURIComponent(organization)}`;
     expect((await h.call('GET', drainPath, a.token)).body).toMatchObject({
-      state: 'draining',
-      affectedWork: 1,
-      pending: 1,
+      state: 'completed',
+      affectedWork: 0,
+      pending: 0,
       target: { kind: 'representation_edge', id: edgeId },
     });
     expect(
       (await h.call('POST', `/v1/me/authority-admissions/${admissionId}/checks`, b.token)).status,
     ).toBe(403);
-    await expect(
-      h.accessPool.query(
-        `UPDATE access.revocation SET state = 'completed',completed_at = clock_timestamp()
-      WHERE id = $1`,
-        [revocationId],
-      ),
-    ).rejects.toThrow('revocation still has admitted work pending');
-    // Use the existing owner cancellation/sealing contract to end the drain.
-    const saved = (
-      await h.accessPool.query<{ request_digest: string; authority_epoch: string }>(
-        `SELECT
-      request_digest,authority_epoch FROM access.admission WHERE id = $1`,
-        [admissionId],
-      )
-    ).rows[0]!;
-    await new AccessAdmissionRegistry(h.accessPool).recordGraphOutcome(admissionId, {
-      outcome: 'cancelled',
-      admissionId,
-      requestDigest: saved.request_digest,
-      authorityEpoch: saved.authority_epoch,
-      scope: root,
-      dataEpoch: 'g-523-fixture',
-      sequence: '7',
-      receipt: `urn:rezics:receipt:${createHash('sha256').update(`${admissionId}\0create-metadata-work`).digest('hex')}`,
-    });
+    expect((await h.call('POST', '/v1/works', b.token, publish)).status).toBe(403);
     expect((await h.call('GET', drainPath, a.token)).body).toMatchObject({
       state: 'completed',
       pending: 0,
@@ -482,6 +482,73 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
     await h.close();
   }
 }, 120_000);
+
+test('G-523: edge revocation cancels real registered and running Work commands and drains terminal receipts', async () => {
+  const h = await startAgentControlHarness('g-523-running');
+  const releases: (() => void)[] = [];
+  const running: Promise<unknown>[] = [];
+  try {
+    const a = await h.user('controller');
+    const b = await h.user('delegate');
+    const person = await create(h,b,'person');
+    const organization = await create(h,a,'organization');
+    const other = await create(h,a,'organization');
+    expect((await h.call('POST','/v1/works',a.token,{ profile: 'metadata-only-v1',
+      actingSubject: organization,title: 'No Work ceiling',language: 'en' })).status).toBe(403);
+    await h.grant(organization,organization,'work.create');
+    const invitationId = await offer(h,a,organization,person,'represent');
+    const edgeId = randomUUID();
+    expect((await h.call('POST','/v1/agents/invitation-acceptances',b.token,
+      { profile: acceptProfile,invitationId,edgeId,expectedAuthorityEpoch: await h.epoch() })).status).toBe(200);
+    const body = { profile: 'metadata-only-v1',actingSubject: organization,
+      title: 'Revoked before publishing',language: 'en',semanticTypes: ['https://schema.org/Book'] };
+    expect((await h.call('POST','/v1/works',b.token,{ ...body,actingSubject: other })).status).toBe(403);
+    const idle = h.pauseWorkClaim('registered');
+    releases.push(idle.resume);
+    const idleRequest = h.call('POST','/v1/works',b.token,body);
+    running.push(idleRequest);
+    const idleAdmission = await idle.entered;
+    const active = h.pauseWorkClaim('claimed');
+    releases.push(active.resume);
+    const activeRequest = h.call('POST','/v1/works',b.token,{ ...body,title: 'Running publishing command' });
+    running.push(activeRequest);
+    const activeAdmission = await active.entered;
+    expect((await h.accessPool.query('SELECT state FROM access.admission WHERE id = $1',
+      [activeAdmission.id])).rows[0]?.state).toBe('claimed');
+    const revoke = await h.call('POST','/v1/agents/invitation-revocations',a.token,
+      { profile: 'access-agent-invitation-revocation-v1',invitationId,
+        expectedAuthorityEpoch: await h.epoch() });
+    expect(revoke.status).toBe(200);
+    const revocationId = (revoke.body.revocationIds as string[])[0]!;
+    const drain = `/v1/access/revocations/${revocationId}?issuerSubject=${encodeURIComponent(organization)}`;
+    expect((await h.call('GET',drain,a.token)).body).toMatchObject({
+      state: 'draining',affectedWork: 2,pending: 2,target: { kind: 'representation_edge',id: edgeId } });
+    await expect(h.registry.claim(idleAdmission.id,idleAdmission.requestDigest)).rejects.toThrow('epoch is stale');
+    await expect(h.accessPool.query(`UPDATE access.revocation SET state = 'completed',
+      completed_at = clock_timestamp() WHERE id = $1`,[revocationId]))
+      .rejects.toThrow('revocation still has admitted work pending');
+    expect((await h.call('POST','/v1/works',b.token,body)).status).toBe(403);
+    idle.resume();
+    expect((await idleRequest).status).toBe(409);
+    expect((await readWorkTerminalReceipt(h.environment.fuseki,idleAdmission.id))?.outcome).toBe('cancelled');
+    expect((await h.call('GET',drain,a.token)).body).toMatchObject({ state: 'draining',pending: 1 });
+    // The existing sealer races execution at the same real Jena receipt. A
+    // running command remains in the drain until that terminal fact is durable.
+    const terminal = await sealMetadataWorkAdmission(h.environment,activeAdmission);
+    expect(terminal.outcome).toBe('cancelled');
+    await h.registry.recordGraphOutcome(activeAdmission.id,terminal);
+    active.resume();
+    expect((await activeRequest).status).toBe(409);
+    expect((await readWorkTerminalReceipt(h.environment.fuseki,activeAdmission.id))?.outcome).toBe('cancelled');
+    expect((await h.call('GET',drain,a.token)).body).toMatchObject({ state: 'completed',pending: 0 });
+    expect((await h.accessPool.query(`SELECT state FROM access.admission WHERE id = ANY($1::uuid[])`,
+      [[idleAdmission.id,activeAdmission.id]])).rows.every(row => row.state === 'sealed')).toBe(true);
+  } finally {
+    for (const release of releases) release();
+    await Promise.allSettled(running);
+    await h.close();
+  }
+},120_000);
 
 test('G-523: access and inbox pages preserve all offers and use recipient indexes as unrelated history grows', async () => {
   const h = await startAgentControlHarness('g-523-pages');
@@ -664,7 +731,6 @@ test('G-523: stale, expired, concurrent and recovery-held acceptance has no part
     const p = { issuer: h.accountIssuer, subject: a.accountId };
     const queued = await h.agent();
     await h.mandate(a.principalId, queued, 'agent.control', { until: 'infinity' });
-    await h.mandate(a.principalId, queued, 'work.create');
     await h.grant(queued, queued, 'work.create');
     const mandate = (
       await h.accessPool.query<{ id: string }>(

@@ -289,6 +289,11 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
       'SELECT representation_id FROM access.agent_provision WHERE agent_id = $1', [administrator.subject])).rows[0]!;
     expect(saved.represented_representation_id).toBe(controller.representation_id);
     expect((await h.accountPool.query('SELECT 1 FROM rezics_account_operator WHERE user_id = $1', [h.user.id])).rowCount).toBe(0);
+    // The tested administrator loses its exact mandate; another principal
+    // retains control so this fixture respects the Agent's continuity floor.
+    await h.accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      SELECT gen_random_uuid(),principal_id,$1,'agent.control','infinity' FROM access.agent_provision
+      WHERE agent_id = $2`, [administrator.subject,ordinary.subject]);
     await h.accessPool.query('UPDATE access.representation SET active = false WHERE id = $1', [controller.representation_id]);
     await expect(access.claim(creation.id, creation.requestDigest, adminPrincipal)).rejects.toBeInstanceOf(AdmissionDenied);
     const beforeRevokedImport = fetches;
