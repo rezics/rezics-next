@@ -6,8 +6,8 @@ import { canonicalCandidate, EditorialBlocked, EditorialInvalid, EditorialReceip
 /** Authority results come from a fresh Access read under its decision fence.
  * Reusing the authority observed when a review was submitted is forbidden. */
 export interface CurrentReviewer { reviewer: ResourceRef; reviewerKey: string; eligible: boolean }
-export interface Viewer { agent: ResourceRef; principalKey: string; eligibleReviewer: boolean }
-export type AllowedAction = 'revise' | 'review' | 'apply' | 'reject' | 'withdraw' | 'revert';
+export interface Viewer { agent: ResourceRef; principalKey: string; eligibleReviewer: boolean; ownsProposal?: boolean }
+export type AllowedAction = 'revise' | 'review' | 'apply' | 'approve-and-apply' | 'reject' | 'withdraw' | 'revert' | 'recover';
 export interface ReviewState { state: 'open' | 'changes_requested' | 'approved' | TerminalDecision['outcome'];
   approvalIds: string[]; staleApprovalIds: string[]; blockers: Blocker[]; allowedActions: AllowedAction[] }
 
@@ -62,13 +62,13 @@ export function reviewState(proposal: Proposal, reviews: readonly ProposalReview
   const allowedActions: AllowedAction[] = [];
   if (proposal.decision) {
     blockers.push({ code: 'terminal_decision', outcome: proposal.decision.outcome });
-    if (proposal.decision.outcome === 'applied') allowedActions.push('revert');
+    if (proposal.decision.outcome === 'applied' && viewer.agent) allowedActions.push('revert');
     return { state: proposal.decision.outcome, approvalIds, staleApprovalIds, blockers, allowedActions };
   }
   if (approvalIds.length < required) blockers.push({ code: 'required_approvals', required, received: approvalIds.length });
   const own = viewer.principalKey === proposal.proposerKey || viewer.agent === proposal.proposer;
   if (own) {
-    allowedActions.push('revise', 'withdraw');
+    if (viewer.ownsProposal !== false) allowedActions.push('revise', 'withdraw');
     blockers.push({ code: 'self_review' });
   } else if (viewer.eligibleReviewer) {
     allowedActions.push('review', 'reject');

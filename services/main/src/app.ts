@@ -49,6 +49,7 @@ import { problem } from './routes/problems.ts';
 import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
 import { reportRoutes } from './routes/reports.ts';
+import { editorialProposalRoutes } from './routes/editorial-proposals.ts';
 import { rightsRoutes } from './routes/rights.ts';
 import { graphLayoutRoutes } from './routes/graph-layouts.ts';
 import { graphQueryRoutes } from './routes/graph-queries.ts';
@@ -157,6 +158,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(catalogueCandidateRoutes(work))
     .use(wikiRoutes(fuseki, work))
+    .use(editorialProposalRoutes(work))
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))

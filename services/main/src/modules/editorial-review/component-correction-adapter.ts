@@ -1,21 +1,22 @@
-import { checkedComponentState, checkedStoredState, type ComponentInput } from '../semantic/change.ts';
-import { checkedMetadataState, metadataComponent, type MetadataState } from '../work/metadata-schema.ts';
+import { checkedComponentState, checkedStoredState, semanticChangeDigest, WORK_OWNER_PREDICATES, type ComponentInput } from '../semantic/change.ts';
+import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
+import { checkedMetadataState, metadataComponent, metadataDigest, type MetadataState } from '../work/metadata-schema.ts';
 import { canonicalCandidate, checkedHeads, EditorialBlocked, EditorialInvalid, headsEqual,
   type ApplyInput, type ApplyOutcome, type BaseHead, type EditorialAdapter, type EditorialAdapterModule,
   revisionOperationKey, type EditorialTarget, type Json, type OwnerReceipt, type ValidatedCandidate } from './contract.ts';
 import { assertOwnerReceipt } from './lifecycle.ts';
+import { componentOwners, resolveComponent, type EditorialRuntime } from './runtime.ts';
 
 type Candidate = { command: 'work-metadata'; state: MetadataState }
   | { command: 'semantic-change'; state: ComponentInput };
 interface Snapshot { state: unknown; heads: BaseHead[] }
 
 /** These ports bind the existing work/metadata-command and semantic/admitted
- * commands. A production bridge must add proposal-qualified owner admission:
- * checking a permit outside the effect transaction is insufficient. Deliberately
- * no default bridge to ordinary edit authority while that binding is unavailable. */
+ * commands. The runtime supplies an editorial permit consumed by Access at
+ * registration and claim, while the owner guards its CAS and native receipt. */
 export interface ComponentCorrectionOwners {
   readMetadata(target: EditorialTarget): Promise<Snapshot>;
-  readSemantic(target: EditorialTarget): Promise<Snapshot>;
+  readSemantic(target: EditorialTarget, component: ComponentInput['component']): Promise<Snapshot>;
   commitMetadata(input: ApplyInput, state: MetadataState): Promise<ApplyOutcome>;
   commitSemantic(input: ApplyInput, state: ComponentInput): Promise<ApplyOutcome>;
 }
@@ -61,13 +62,27 @@ function checkedSnapshot(target: EditorialTarget, candidate: Candidate, snapshot
 
 export function componentCorrectionAdapter(owners: ComponentCorrectionOwners): EditorialAdapter {
   const snapshot = (target: EditorialTarget, candidate: Candidate) => candidate.command === 'work-metadata'
-    ? owners.readMetadata(target) : owners.readSemantic(target);
+    ? owners.readMetadata(target) : owners.readSemantic(target,candidate.state.component);
   const validate = async (target: EditorialTarget, raw: unknown, expected: BaseHead[]): Promise<ValidatedCandidate> => {
     const candidate = checkedCandidate(raw);
+    if (candidate.command === 'work-metadata' && candidate.state.kind !== 'header') {
+      throw new EditorialInvalid('This binding corrects the Work header; other components use their owning adapter');
+    }
+    if (target.work === target.resource && candidate.command === 'semantic-change'
+      && (candidate.state.component !== 'resource' || candidate.state.types.some(type => WORK_SEMANTIC_TYPES.some(owned => owned === type))
+        || candidate.state.properties.some(property => WORK_OWNER_PREDICATES.has(property.predicate)))) {
+      throw new EditorialInvalid('Work fields use their owning commands');
+    }
     const { before, heads } = checkedSnapshot(target, candidate, await snapshot(target, candidate));
     if (!headsEqual(expected, heads)) throw new EditorialBlocked({ code: 'stale_base',
       expectedHeads: expected, actualHeads: heads });
-    return { candidate: canonicalCandidate(candidate).candidate, before: canonicalCandidate(before).candidate, baseHeads: heads };
+    const head = heads[0]!.head;
+    return { candidate: canonicalCandidate(candidate).candidate, before: canonicalCandidate(before).candidate, baseHeads: heads,
+      ownerCommand: candidate.command === 'work-metadata'
+        ? { action: 'work.edit', scope: `work:edit:${target.resource}`,
+          digest: metadataDigest({ work: target.resource, expectedHead: head, state: candidate.state }) }
+        : { action: 'semantic.change', scope: `semantic:edit:${target.resource}`,
+          digest: semanticChangeDigest(target.resource, head, candidate.state) } };
   };
   return {
     kind: 'component-correction', requiredApprovals: 1, validate,
@@ -107,5 +122,9 @@ export function componentCorrectionAdapter(owners: ComponentCorrectionOwners): E
   };
 }
 
-export const adapterModule = { kind: 'component-correction', create: componentCorrectionAdapter } satisfies
-  EditorialAdapterModule<ComponentCorrectionOwners>;
+export const adapterModule = { kind: 'component-correction',
+  create(dependencies: ComponentCorrectionOwners | EditorialRuntime): EditorialAdapter {
+    if ('work' in dependencies) return { ...componentCorrectionAdapter(componentOwners(dependencies)),
+      admission: 'access',resolve: input => resolveComponent(dependencies,input) };
+    return componentCorrectionAdapter(dependencies);
+  } } satisfies EditorialAdapterModule<ComponentCorrectionOwners | EditorialRuntime>;

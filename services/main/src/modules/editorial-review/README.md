@@ -1,55 +1,93 @@
-# Shared editorial review seam
+# Shared editorial review
 
-G-865 publishes the adapter contract before the wiki bundle binding. A kind adds
-`<kind>-adapter.ts` exporting `adapterModule`; discovery owns no kind list.
-`contract.ts` names the exact target, immutable candidate/prestate, base heads,
-evidence, private independence keys, current authority, owner permit and receipt.
-`lifecycle.ts` computes current review state and viewer actions and guards a
-decision. It never stores a mutable status or treats an old approval as current.
-The current-candidate rule follows the [protected-review precedent](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-pull-request-reviews-before-merging)
-(reviewed 2026-10-01); that precedent supplies no cross-owner atomicity guarantee.
+Catalogue corrections, future identity merges (G-836) and wiki bundles (G-846)
+share proposal, revision, review and decision identities. Kinds supply candidate
+meaning and an owner commit through `<kind>-adapter.ts`, exporting `adapterModule`.
+Discovery needs no kind registry edit. The owner factory receives the current
+`{ work, request }` runtime. `contract.ts` is the binding interface; the shared
+conformance runner requires each installed kind's `g-865-<kind>-fixture.ts`.
 
-`component-correction-adapter.ts` validates Work metadata and semantic component
-states through their existing owner validators. Its owner ports must call the
-existing in-process commands, with a proposal-qualified admission checked by the
-owner in the effect transaction. No production bridge or HTTP routes are wired.
-Ordinary edit admissions cannot substitute for that missing binding.
+The Access migrations retain immutable proposals, candidate/prestate revisions,
+reviews, application intents, outcomes, command receipts and events. State and
+viewer actions are computed from these rows, with one terminal decision. A new
+revision invalidates all earlier approvals, including when only evidence changes.
+Comments do not replace a review stance. Each operator supplies at most one
+current stance and one counted approval, across their Agents. Current Agent
+control and maintainer, contextual grant or appointed `work.review` role authority
+are checked again for the decision and owner admission. The proposer, their
+original controllers and current controllers cannot independently review it.
+Private independence keys never enter API history, errors or hook events.
 
-The required bridge is blocked at `modules/access/admission.ts`, claimed by
-G-523 at G-865 dispatch. G-508 installed `work.create`/`work.edit` role permissions,
-not the review permission named in the brief. An adapter-side authority preflight
-followed by an ordinary edit would allow authority/revision changes between
-review and effect. The Work-title template already solves its own narrower case
-with a signed title admission; it does not bind metadata or semantic corrections.
-The existing metadata header also has no date field, and the semantic validator
-rejects the canonical Work type as `reserved-owner`. The brief's Work date
-journey therefore needs a separately owned date/metadata command extension;
-an admitted semantic Resource can already correct a temporal assertion.
+The current-candidate rule follows the
+[protected-review precedent](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-pull-request-reviews-before-merging)
+(reviewed 2026-10-01). This precedent supplies no cross-owner atomicity guarantee.
+Here an immutable application intent fences the proposal before dispatch. It binds
+one revision-qualified owner operation key, candidate digest, deciding Agent and
+server-computed owner action/scope/digest. Access consumes this permit at
+registration and claim. Ordinary edit permission cannot substitute for it.
+Authority rows stay locked across owner delivery; the owner atomically guards
+expected heads and native receipt absence. Generic edits still use their own
+admission path.
 
-The next store must append proposal, revision, review, application-intent and
-terminal-decision rows. Serialize each proposal across revision and decision;
-retain the application intent before owner dispatch. Unknown acknowledgement
-keeps it pending until the exact receipt or cancellation resolves it. A new HTTP
-idempotency key must not allocate a second owner operation: use
-`revisionOperationKey(proposal, n)`. Do not revise, withdraw or reject over an
-unresolved application. Successful decisions retain the owner receipt, its exact
-candidate and prestate; `compensate(receipt)` creates the reversal candidate
-without accepting replacement prestate from a caller. Reversal creates a new
-proposal and restores values by compensation.
+An unknown owner acknowledgement stays pending: revision, withdrawal, rejection
+and a new apply cannot overtake it. Reading or explicitly recovering the proposal
+looks up the original admission's receipt, seals it and appends its outcome. This
+needs current target disclosure but no old controller credential and never
+redelivers the owner command. If a process stopped before registration, recovery
+takes the registration lock and appends cancellation; later registration then
+fails. An admitted intent without a terminal receipt remains pending until the
+existing owner admission sealer resolves it. A cancelled or stale attempt requires
+a new revision. API key replay retains the exact receipt or typed blocker, even
+after authority revocation; current target disclosure is checked before replay.
+The pre-registration cancellation proof applies only to adapters declaring
+`admission: 'access'` and using that shared registration lock/mapping. Other owner
+mechanisms resolve their own receipts through `resolve(input)`; absence of a graph
+admission cannot prove their effect absent. Merge/wiki bindings retain this same
+lifecycle rather than treating a foreign owner effect as cancelled.
 
-## Cost and conformance
+`component-correction` calls the existing Work header metadata and semantic
+commands in process. The header corrects existing title/description fields.
+Semantic descriptions attach to the admitted resource IRI; a first Work
+description compares its existing Work head, later descriptions their semantic
+head. Work-owned types and predicates remain reserved. Existing resource and
+definition components retain their owning validators. Reverting an applied
+proposal creates a new proposal from the receipt's retained prestate and after
+heads. Compensation restores values while advancing heads; it never erases or
+mutates the original decision.
 
-Candidates are at most 1 MiB, evidence and component heads at most 32, messages
-at most 4,000 characters and cursor pages at most 50. Candidate canonicalization
-is linear in candidate bytes with a nesting bound of 32. Review reduction is
-linear in supplied stances and the requested history page. The eventual store
-must fetch current stances through an index, not scan an unbounded review log.
-Component corrections read one current component and dispatch one owner command;
-the existing validators retain their tighter metadata/semantic limits.
+## Consumers and operating boundaries
 
-`services/main/tests/g-865-adapter-conformance.test.ts` discovers every adapter
-and its own `g-865-<kind>-fixture.ts`, then runs the same lifecycle guard suite.
-A new kind without a fixture fails the suite. Fixtures exercise the adapter
-through deterministic owner ports; they qualify no production admission, database
-serialization, HTTP journey, recovery fence or workload subcase. Those remain
-pending until the production bridge/store and integration journey are delivered.
+`routes/editorial-proposals.ts` exposes create, revise, review, decide, withdraw,
+reversal, get/list and receipt-only recovery, with discoverable OpenAPI schemas.
+Writes require `Idempotency-Key` and `work:correct` or `work:review`; disclosure
+uses `work:read`. Review application needs no separate ordinary edit capability.
+Public reads/recovery allow an anonymous viewer; private targets and contexts
+still require their owner disclosure proofs. Allowed actions are advisory current
+results, not reusable authority. GUI G-867 consumes these results without creating
+a separate review state machine.
+
+`EditorialReviewStore.eventsAfter(sequence, limit)` is the durable G-866 hook.
+Consumers checkpoint only after their own delivery transaction and recheck
+current disclosure before exposing an event. The global event clock serializes
+commit order so a checkpoint cannot skip an earlier uncommitted event. Events
+carry proposal/revision, kind and actor, with no candidate or operator payload.
+Notifications and UI implementation belong to their respective workers.
+
+## Cost and evidence
+
+Candidates/prestate are at most 1 MiB, evidence and heads at most 32, messages at
+most 4,000 characters and cursor pages at most 50. Candidate canonicalization is
+linear in bytes with a depth bound of 32. Current review queries return at most
+the required one/two approvals and one changes-requested stance; indexed probes
+exclude superseded stances. Cursor order retains exact database timestamp precision
+and numeric sequence order. Applying dispatches one owner command under the
+declared graph budget; owner validators retain their tighter limits.
+
+The conformance suite rejects stale approvals, dependent reviewers, malformed or
+absent receipts, an implicit second decision, altered targets/permits and deliberate
+regressions. The integration journey exercises actual Access/graph admissions,
+header and semantic corrections, revision, rejection, withdrawal, compensation,
+concurrent decisions, lost-response/process recovery, authority revocation,
+immutable SQL guards, cursors and hook ordering. These prove the named bounded
+journey and lifecycle slice, not full-corpus engine cost, restore qualification,
+legacy protection routes or the future merge/wiki owner bindings.

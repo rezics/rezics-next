@@ -22,6 +22,7 @@ import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 import { publicSemantics } from './semantic-disclosure.ts';
+import { checkEditorialAdmission, registerEditorialAdmission } from '../editorial-review/admission.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -34,6 +35,8 @@ export interface VerifiedPrincipal {
 }
 
 export interface AdmissionRequest {
+  /** Server-issued, durable proposal/revision/owner-command permit. */
+  editorialPermit?: string;
   principal: VerifiedPrincipal;
   actingSubject: string;
   /** Omitted by existing commands; direct authority is currently work.create only. */
@@ -783,6 +786,7 @@ export class AccessAdmissionRegistry {
   }
 
   async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
+    if (request.editorialPermit) return registerEditorialAdmission(this.pool, request);
     if (request.action === 'publication.reject.organization') {
       throw new AdmissionDenied('organization moderation requires its atomic episode admission');
     }
@@ -1174,6 +1178,7 @@ export class AccessAdmissionRegistry {
         [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
+      await checkEditorialAdmission(client, row.id);
       if (row.action === 'review.decide' || row.action === 'publication.adopt') {
         const current = await client.query(`SELECT 1 FROM access.representation r
           JOIN access.authority_subject s ON s.id = r.subject_id AND s.active

@@ -111,8 +111,8 @@ export class AccessRoles {
   }
 
   private validPermissions(permissions: string[]): boolean {
-    return permissions.length <= 2 && new Set(permissions).size === permissions.length
-      && permissions.every(permission => permission === 'work.create' || permission === 'work.edit');
+    return permissions.length <= 3 && new Set(permissions).size === permissions.length
+      && permissions.every(permission => permission === 'work.create' || permission === 'work.edit' || permission === 'work.review');
   }
 
   async readFamily(principal: VerifiedPrincipal, issuerSubject: string,

@@ -99,6 +99,7 @@ import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
   wikiQuotations?: QuotationReader;
+  editorialReview?: import('../modules/editorial-review/store.ts').EditorialReviewStore;
   editionPreferences?: import('../modules/session/preference-store.ts').EditionPreferenceStore;
   seriesSessions?: import('../modules/session/series-store.ts').SeriesSessionReader;
   catalogueIntake?: import('../modules/catalogue-intake/store.ts').CatalogueIntakeStore;

@@ -51,6 +51,7 @@ import { ReaderLibraryRatings } from './modules/library/ratings.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
 import { ContentProtectionStore } from './modules/protection/content-store.ts';
+import { EditorialReviewStore } from './modules/editorial-review/store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
 import { ContentSearchReadAccess } from './modules/search-disclosure/content-read-lease.ts';
 import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
@@ -332,6 +333,7 @@ const libraryImport = new ReaderLibraryImportStore(contentPool);
 configureLibraryShelves(contentPool, pool, fuseki);
 const app = createMainApp(fuseki, {
   wikiQuotations: new WikiQuotationStore(contentPool),
+  editorialReview: new EditorialReviewStore(pool),
   suitability: new SuitabilityStore(pool, access),
   follows: new FollowsStore(pool),
   feed: new FeedStore(pool),

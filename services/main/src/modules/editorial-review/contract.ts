@@ -29,6 +29,8 @@ export interface ProposalRevision {
   /** Retained owner snapshot for preview and compensation; clients cannot assert it. */
   before: Json;
   baseHeads: BaseHead[]; evidence: EvidenceRef[];
+  /** Server-computed binding to the existing owner command admission. */
+  ownerCommand?: { action: string; scope: string; digest: string };
 }
 export type ReviewOutcome = 'approve' | 'request_changes' | 'comment';
 export interface ProposalReview {
@@ -47,6 +49,7 @@ export type Blocker =
   | { code: 'required_approvals'; required: number; received: number }
   | { code: 'terminal_decision'; outcome: TerminalDecision['outcome'] }
   | { code: 'owner_unavailable' }
+  | { code: 'revision_required' }
   | { code: 'apply_pending'; operationKey: string };
 export class EditorialBlocked extends Error {
   constructor(readonly blocker: Blocker) { super(blocker.code); }
@@ -74,6 +77,7 @@ export interface TerminalDecision {
 }
 export interface ValidatedCandidate {
   candidate: Json; before: Json; baseHeads: BaseHead[];
+  ownerCommand?: ProposalRevision['ownerCommand'];
 }
 export interface PreviewChange { path: string; before: Json; after: Json }
 
@@ -86,6 +90,8 @@ export interface EditorialWritePermit {
   decidingAgent: ResourceRef;
 }
 export interface ApplyInput {
+  /** Durable admission locator supplied only for receipt recovery. */
+  admissionId?: string;
   target: EditorialTarget; revision: ProposalRevision;
   expectedHeads: BaseHead[];
   /** Stable across lost acknowledgements and a new HTTP retry key. */
@@ -103,10 +109,17 @@ export type ApplyOutcome =
 export interface EditorialAdapter {
   kind: string;
   requiredApprovals: 1 | 2;
+  /** Declare only when every delivery registers through the shared Access
+   * editorial admission lock/mapping. Its absence then proves no owner delivery.
+   * Other owner mechanisms must resolve their own fate, never infer cancellation
+   * from a missing graph admission. This is an owner binding, not a kind state. */
+  admission?: 'access';
   validate(target: EditorialTarget, candidate: unknown, expectedHeads: BaseHead[]): Promise<ValidatedCandidate>;
   preview(revision: ProposalRevision): Promise<PreviewChange[]>;
   apply(input: ApplyInput): Promise<ApplyOutcome>;
   compensate(receipt: OwnerReceipt): Promise<ValidatedCandidate>;
+  /** Receipt-only lookup; must not dispatch or require the old credential. */
+  resolve?(input: ApplyInput): Promise<ApplyOutcome | { outcome: 'cancelled' } | null>;
 }
 export interface EditorialAdapterModule<Dependencies = unknown> {
   kind: string;
@@ -115,10 +128,11 @@ export interface EditorialAdapterModule<Dependencies = unknown> {
 
 /** JSON only: undefined, non-finite numbers, class instances and cycles must not
  * disappear or change meaning while producing an exact candidate digest. */
-export function canonicalCandidate(input: unknown): { candidate: Json; digest: string } {
+export function canonicalCandidate(input: unknown, limits: { bytes: number; depth: number } = { bytes: EDITORIAL_COST.candidateBytes,
+  depth: EDITORIAL_COST.jsonDepth }): { candidate: Json; digest: string } {
   const ancestors = new Set<object>();
   const visit = (value: unknown, depth: number): Json => {
-    if (depth > EDITORIAL_COST.jsonDepth) throw new EditorialInvalid('Candidate nesting exceeds its bound');
+    if (depth > limits.depth) throw new EditorialInvalid('Candidate nesting exceeds its bound');
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value !== 'object' || ancestors.has(value)) throw new EditorialInvalid('Candidate must be JSON');
@@ -138,8 +152,8 @@ export function canonicalCandidate(input: unknown): { candidate: Json; digest: s
     return result;
   };
   const candidate = visit(input, 0), serialized = JSON.stringify(candidate);
-  if (Buffer.byteLength(serialized) > EDITORIAL_COST.candidateBytes) {
-    throw new EditorialInvalid('Candidate exceeds 1 MiB');
+  if (Buffer.byteLength(serialized) > limits.bytes) {
+    throw new EditorialInvalid('Editorial JSON exceeds its byte bound');
   }
   return { candidate, digest: createHash('sha256').update(serialized).digest('hex') };
 }
@@ -174,5 +188,6 @@ export function makeProposalRevision(proposal: string, n: number, validated: Val
   const { candidate, digest } = canonicalCandidate(validated.candidate);
   return { proposal, n, candidate, candidateDigest: digest,
     before: canonicalCandidate(validated.before).candidate, baseHeads: checkedHeads(validated.baseHeads),
+    ...(validated.ownerCommand ? { ownerCommand: validated.ownerCommand } : {}),
     evidence: evidence.map(row => ({ resource: row.resource, revision: row.revision, locator: row.locator })) };
 }

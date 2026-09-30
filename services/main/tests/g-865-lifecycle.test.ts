@@ -7,6 +7,8 @@ import { componentCorrectionAdapter } from '../src/modules/editorial-review/comp
 import { InvalidWorkMetadata } from '../src/modules/work/metadata-schema.ts';
 import { SemanticChangeRejected } from '../src/modules/semantic/command.ts';
 import { componentFixture, native } from './g-865-component-correction-fixture.ts';
+import { adapterModule } from '../src/modules/editorial-review/component-correction-adapter.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 test('G865: candidate canonicalization binds exact bytes and preserves null/omitted/empty', () => {
   expect(canonicalCandidate({ b: 1, a: [null, ''] })).toEqual(canonicalCandidate({ a: [null, ''], b: 1 }));
@@ -133,4 +135,23 @@ test('G865: owner snapshot nodes do not leak into submitted semantic assertion i
   await expect(adapter.validate(f.proposal.target, { ...candidate, state: { ...candidate.state,
     properties: candidate.state.properties.map(property => ({ ...property, node: native() })) } },
   f.input.expectedHeads)).rejects.toBeInstanceOf(SemanticChangeRejected);
+});
+
+test('G865: first Work description uses the live Work head and refuses reserved owner fields', async () => {
+  const resource = native(), currentHead = native(), pinnedRevision = native();
+  const deps = { environment: { fuseki: { query: async (query: string) => ({ results: { bindings:
+    query.includes('SELECT ?head ?manifest') ? [] : [{ head: { type: 'uri',value: currentHead } }] } }) } },
+  account: { verify: async () => { throw new Error('Validation does not dispatch'); } } } as unknown as MainWorkDependencies;
+  const adapter = adapterModule.create({ work: deps,request: new Request('http://main.local') });
+  const target = { resource,work: resource,context: 'urn:rezics:context:global' as const,revision: pinnedRevision };
+  const state = { component: 'resource',types: [],lifecycle: 'active',properties:
+    [{ predicate: 'https://example.test/catalogue/fact',value: { kind: 'string',lexical: 'A fact' } }] };
+  const heads = [{ component: resource,head: currentHead }];
+  const candidate = await adapter.validate(target,{ command: 'semantic-change',state },heads);
+  expect(candidate.baseHeads).toEqual(heads); expect(candidate.ownerCommand?.scope).toBe(`semantic:edit:${resource}`);
+  await expect(adapter.validate(target,{ command: 'semantic-change',state },[{ component: resource,head: pinnedRevision }]))
+    .rejects.toBeInstanceOf(EditorialBlocked);
+  await expect(adapter.validate(target,{ command: 'semantic-change',state: { ...state,properties:
+    [{ predicate: 'https://schema.org/description',value: { kind: 'string',lexical: 'Not the semantic owner' } }] } },heads))
+    .rejects.toBeInstanceOf(EditorialInvalid);
 });

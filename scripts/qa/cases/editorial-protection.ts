@@ -1,5 +1,12 @@
 import type { PendingSubcase } from './types.ts';
 
+type Qualification = { status: 'qualified'; scope: string; tier: 'unit' | 'integration'; file: string; test: string };
+type ProtectionSubcase = PendingSubcase & { qualifiedSlices?: readonly Qualification[] };
+const lifecycle = { status: 'qualified',tier: 'integration',file: 'tests/qa/integration/g-865-editorial-lifecycle.test.ts',
+  test: 'G-865: durable API lifecycle binds current independent review to header and semantic owner receipts' } as const;
+const conformance = { status: 'qualified',tier: 'unit',file: 'services/main/tests/g-865-adapter-conformance.test.ts',
+  test: 'G865: component-correction stale approval, self-review, missing receipt, single terminal and lost acknowledgement' } as const;
+
 // Prospective combinations of existing IDs. A passing top-level case does not
 // qualify these owner-boundary, recovery or workload obligations.
 export const pendingProtectionSubcases = [
@@ -20,19 +27,25 @@ export const pendingProtectionSubcases = [
   { caseIds: ['MODEL25', 'MODEL26'], scenario: 'Mutate an old revision or retarget its manifest',
     requiredResult: 'Reject even if candidate passes SHACL; same-key receipt replay remains possible.', status: 'pending' },
   { caseIds: ['GOV02', 'GOV23'], scenario: 'Label unrelated write as correction or reuse approval for other candidate/context',
-    requiredResult: 'Effect digest, scope, proposal and expected heads reject substitution and extra mutations.', status: 'pending' },
+    requiredResult: 'Effect digest, scope, proposal and expected heads reject substitution and extra mutations.', status: 'pending',
+    qualifiedSlices: [{ ...conformance,scope: 'Shared lifecycle rejects absent/substituted candidate receipts; installed component-correction adapter.' },
+      { ...lifecycle,scope: 'Owner admission rejects an altered digest on the durable review permit; moved header head cannot apply.' }] },
   { caseIds: ['GOV16', 'GOV23', 'IAM10'], scenario: 'Proposer reviews through another Agent or shared controller',
-    requiredResult: 'Private control identity blocks self-approval without disclosure in history or errors.', status: 'pending' },
+    requiredResult: 'Private control identity blocks self-approval without disclosure in history or errors.', status: 'pending',
+    qualifiedSlices: [{ ...lifecycle,scope: 'Header/semantic proposal lifecycle: another Agent of the proposer and a shared controller cannot review; history hides comparison keys.' }] },
   { caseIds: ['GOV02', 'MODEL22', 'FACT04'], scenario: 'Proposal, evidence, rule, protection or content changes during review',
-    requiredResult: 'Decision cannot retarget; retain proposal and require revalidation or report conflict.', status: 'pending' },
+    requiredResult: 'Decision cannot retarget; retain proposal and require revalidation or report conflict.', status: 'pending',
+    qualifiedSlices: [{ ...lifecycle,scope: 'A changed candidate revision invalidates the second independent reviewer approval; stale owner base retains candidate for revision.' }] },
   { caseIds: ['GOV03', 'SYS02', 'SYS11', 'SYS14'], scenario: 'Concurrent decisions, lost response and new-key application repeat',
-    requiredResult: 'One terminal decision and adopted effect per proposal revision; replay respects current disclosure.', status: 'pending' },
+    requiredResult: 'One terminal decision and adopted effect per proposal revision; replay respects current disclosure.', status: 'pending',
+    qualifiedSlices: [{ ...lifecycle,scope: 'Component correction: concurrent decisions make one effect; receipt replay survives lost response/restart; pre-registration interruption cancels safely.' }] },
   { caseIds: ['IAM10', 'GOV23', 'WORK05'], scenario: 'Ordinary editor attempts relax, source-control return or generic unseal',
     requiredResult: 'Require separate admission and existing rule; fixed meaning or release has no generic unseal.', status: 'pending' },
   { caseIds: ['LIVE03', 'GOV23'], scenario: 'Reviewer accepts source correction before later source job',
     requiredResult: 'Reviewed application advances human control; separate source return retains protection and adopted value.', status: 'pending' },
   { caseIds: ['IAM07', 'SYS06', 'SYS11'], scenario: 'Reviewer loses authority in flight',
-    requiredResult: 'Apply declared revocation fence; unknown result remains pending until original or cancellation receipt.', status: 'pending' },
+    requiredResult: 'Apply declared revocation fence; unknown result remains pending until original or cancellation receipt.', status: 'pending',
+    qualifiedSlices: [{ ...lifecycle,scope: 'Appointed reviewer revocation refuses fresh apply; committed-but-unacknowledged effect resolves after revocation without redelivery.' }] },
   { caseIds: ['GOV03', 'MODEL20'], scenario: 'Protect following selection or separate Global and Realm selections',
     requiredResult: 'Pin exact revision or reject dependency profile; preserve other contexts and drafts.', status: 'pending' },
   { caseIds: ['MODEL16', 'MODEL23', 'SYS01'], scenario: 'Resource-wide protection gains child or spans owners',
@@ -44,5 +57,8 @@ export const pendingProtectionSubcases = [
   { caseIds: ['MODEL21', 'OPS04', 'LIVE03'], scenario: 'Activate profile over ambiguous source/control history',
     requiredResult: 'No invented confirmation or source takeover; unsupported old writers fail closed.', status: 'pending' },
   { caseIds: ['FACT03', 'FACT04', 'OPS05', 'OPS06'], scenario: 'Quality recomputation and bounded protection workload',
-    requiredResult: 'Summary cannot unlock adoption; test 32/33 dependencies, 50/51 history, hot target, fan-out, engine work and receipts without claiming full-corpus capacity.', status: 'pending' },
-] as const satisfies readonly PendingSubcase[];
+    requiredResult: 'Summary cannot unlock adoption; test 32/33 dependencies, 50/51 history, hot target, fan-out, engine work and receipts without claiming full-corpus capacity.', status: 'pending',
+    qualifiedSlices: [{ ...lifecycle,scope: 'Editorial timeline crosses 50/51 history without omission; hook sequences are ordered and checkpointed.' },
+      { status: 'qualified',tier: 'unit',file: 'services/main/tests/g-865-lifecycle.test.ts',
+        test: 'G865: absent heads, duplicate components and 32/33 dependencies stay explicit',scope: 'Shared lifecycle logical head dependency bounds only; no native engine/corpus qualification.' }] },
+] as const satisfies readonly ProtectionSubcase[];
