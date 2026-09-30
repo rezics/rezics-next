@@ -82486,6 +82486,12 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "metadata-only-v1",
                     "type": "string"
@@ -82556,6 +82562,12 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "metadata-only-v1",
                     "type": "string"
@@ -82624,6 +82636,12 @@
                   },
                   "expectedHead": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
                   "profile": {
@@ -402394,7 +402412,9 @@
                                       "type": "string"
                                     },
                                     "titleLanguage": {
-                                      "const": "en",
+                                      "maxLength": 35,
+                                      "minLength": 2,
+                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                       "type": "string"
                                     },
                                     "verifiedHead": {
@@ -403968,7 +403988,9 @@
                                           "type": "string"
                                         },
                                         "titleLanguage": {
-                                          "const": "en",
+                                          "maxLength": 35,
+                                          "minLength": 2,
+                                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                           "type": "string"
                                         },
                                         "verifiedHead": {
@@ -405183,7 +405205,9 @@
                                           "type": "string"
                                         },
                                         "titleLanguage": {
-                                          "const": "en",
+                                          "maxLength": 35,
+                                          "minLength": 2,
+                                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                           "type": "string"
                                         },
                                         "verifiedHead": {
@@ -406133,6 +406157,12 @@
                         ],
                         "type": "array"
                       },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      },
                       "name": {
                         "maxLength": 120,
                         "minLength": 1,
@@ -406172,6 +406202,12 @@
                       },
                       "handle": {
                         "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
                       "name": {
@@ -406226,6 +406262,12 @@
                         ],
                         "type": "array"
                       },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      },
                       "name": {
                         "maxLength": 120,
                         "minLength": 1,
@@ -406265,6 +406307,12 @@
                       },
                       "handle": {
                         "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
                       "name": {
@@ -406319,6 +406367,12 @@
                         ],
                         "type": "array"
                       },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "type": "string"
+                      },
                       "name": {
                         "maxLength": 120,
                         "minLength": 1,
@@ -406358,6 +406412,12 @@
                       },
                       "handle": {
                         "pattern": "^[a-z][a-z0-9-]{2,29}$",
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 2,
+                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                         "type": "string"
                       },
                       "name": {
@@ -406860,6 +406920,16 @@
                       ],
                       "type": "array"
                     },
+                    "direction": {
+                      "enum": [
+                        "ltr",
+                        "rtl"
+                      ],
+                      "type": "string"
+                    },
+                    "language": {
+                      "type": "string"
+                    },
                     "membershipPolicy": {
                       "type": "string"
                     },
@@ -406897,6 +406967,8 @@
                     "realm",
                     "owner",
                     "name",
+                    "language",
+                    "direction",
                     "capabilities",
                     "state",
                     "spaceRevision",
@@ -426258,6 +426330,12 @@
                     "const": "urn:rezics:protection-rule:independent-human-review-v1",
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  },
                   "predecessor": {
                     "type": "null"
                   },
@@ -426344,6 +426422,12 @@
                     "const": "urn:rezics:protection-rule:independent-human-review-v1",
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  },
                   "predecessor": {
                     "type": "null"
                   },
@@ -426428,6 +426512,12 @@
                   },
                   "expectedRuleRevision": {
                     "const": "urn:rezics:protection-rule:independent-human-review-v1",
+                    "type": "string"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
                   "predecessor": {
@@ -427015,6 +427105,9 @@
                         "candidateManifest": {
                           "type": "string"
                         },
+                        "language": {
+                          "type": "string"
+                        },
                         "proposal": {
                           "type": "string"
                         },
@@ -427039,7 +427132,8 @@
                         "candidateDigest",
                         "candidateManifest",
                         "proposerAdmissionId",
-                        "title"
+                        "title",
+                        "language"
                       ],
                       "type": "object"
                     }
@@ -430128,7 +430222,7 @@
                   "language": {
                     "maxLength": 35,
                     "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
                   "localizedTitle": {
@@ -430191,7 +430285,6 @@
                 "required": [
                   "profile",
                   "title",
-                  "language",
                   "actingSubject"
                 ],
                 "type": "object"
@@ -430239,7 +430332,7 @@
                   "language": {
                     "maxLength": 35,
                     "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
                   "localizedTitle": {
@@ -430302,7 +430395,6 @@
                 "required": [
                   "profile",
                   "title",
-                  "language",
                   "actingSubject"
                 ],
                 "type": "object"
@@ -430350,7 +430442,7 @@
                   "language": {
                     "maxLength": 35,
                     "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
                   "localizedTitle": {
@@ -430413,7 +430505,6 @@
                 "required": [
                   "profile",
                   "title",
-                  "language",
                   "actingSubject"
                 ],
                 "type": "object"
@@ -461695,6 +461786,12 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "native-work-source-title-application-v1",
                     "type": "string"
@@ -461760,6 +461857,12 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "type": "string"
+                  },
                   "profile": {
                     "const": "native-work-source-title-application-v1",
                     "type": "string"
@@ -461823,6 +461926,12 @@
                   },
                   "expectedHead": {
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
                   "profile": {
@@ -474095,7 +474204,9 @@
                                         "type": "string"
                                       },
                                       "titleLanguage": {
-                                        "const": "en",
+                                        "maxLength": 35,
+                                        "minLength": 2,
+                                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                         "type": "string"
                                       },
                                       "verifiedHead": {
@@ -474532,7 +474643,9 @@
                     "type": "string"
                   },
                   "titleLanguage": {
-                    "const": "en",
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   }
                 },
@@ -474573,7 +474686,9 @@
                     "type": "string"
                   },
                   "titleLanguage": {
-                    "const": "en",
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   }
                 },
@@ -474614,7 +474729,9 @@
                     "type": "string"
                   },
                   "titleLanguage": {
-                    "const": "en",
+                    "maxLength": 35,
+                    "minLength": 2,
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   }
                 },
@@ -474772,7 +474889,9 @@
                           "type": "string"
                         },
                         "titleLanguage": {
-                          "const": "en",
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                           "type": "string"
                         },
                         "verifiedHead": {
@@ -474958,7 +475077,9 @@
                           "type": "string"
                         },
                         "titleLanguage": {
-                          "const": "en",
+                          "maxLength": 35,
+                          "minLength": 2,
+                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                           "type": "string"
                         },
                         "verifiedHead": {
@@ -475730,7 +475851,9 @@
                                   "type": "string"
                                 },
                                 "titleLanguage": {
-                                  "const": "en",
+                                  "maxLength": 35,
+                                  "minLength": 2,
+                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                                   "type": "string"
                                 },
                                 "verifiedHead": {

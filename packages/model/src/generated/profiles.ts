@@ -1000,6 +1000,18 @@ export const profileRegistry = {
       "realm"
     ]
   },
+  "space-realm-v3": {
+    "sha256": "6009918e574419975be06974d6e02987158ae58c7f8c539140c20f171ce3f26d",
+    "file": "shapes/space-realm-v3.ttl",
+    "shapes": [
+      "https://rezics.com/definition/space-realm-v3/space-shape",
+      "https://rezics.com/definition/space-realm-v3/realm-shape"
+    ],
+    "focusRoles": [
+      "space",
+      "realm"
+    ]
+  },
   "statement-cutover-v1": {
     "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "file": "shapes/statement-cutover-v1.ttl",
@@ -1371,6 +1383,16 @@ export const profileRegistry = {
     "file": "shapes/work-title-control-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/work-title-control-v1/control-shape"
+    ],
+    "focusRoles": [
+      "control"
+    ]
+  },
+  "work-title-control-v2": {
+    "sha256": "deeee87603c9babb4211ffc0fd37c8523a88addbe1e56cf2a3aa9fa3769173d8",
+    "file": "shapes/work-title-control-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-title-control-v2/control-shape"
     ],
     "focusRoles": [
       "control"

@@ -1,0 +1,86 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rdfs": {
+      "@id": "http://www.w3.org/2000/01/rdf-schema#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rdfs:label": {
+      "@id": "http://www.w3.org/2000/01/rdf-schema#label"
+    },
+    "rv:communityHandle": {
+      "@id": "https://rezics.com/vocab/communityHandle"
+    },
+    "rv:definitionProfile": {
+      "@id": "https://rezics.com/vocab/definitionProfile",
+      "@type": "@id"
+    },
+    "rv:disclosure": {
+      "@id": "https://rezics.com/vocab/disclosure",
+      "@type": "@id"
+    },
+    "rv:membershipPolicy": {
+      "@id": "https://rezics.com/vocab/membershipPolicy",
+      "@type": "@id"
+    },
+    "rv:owner": {
+      "@id": "https://rezics.com/vocab/owner",
+      "@type": "@id"
+    },
+    "rv:realmCapability": {
+      "@id": "https://rezics.com/vocab/realmCapability",
+      "@type": "@id"
+    },
+    "rv:realmPolicyHead": {
+      "@id": "https://rezics.com/vocab/realmPolicyHead",
+      "@type": "@id"
+    },
+    "rv:realmState": {
+      "@id": "https://rezics.com/vocab/realmState",
+      "@type": "@id"
+    },
+    "rv:reviewMode": {
+      "@id": "https://rezics.com/vocab/reviewMode",
+      "@type": "@id"
+    },
+    "rv:reviewPolicy": {
+      "@id": "https://rezics.com/vocab/reviewPolicy",
+      "@type": "@id"
+    },
+    "rv:selectionPolicy": {
+      "@id": "https://rezics.com/vocab/selectionPolicy",
+      "@type": "@id"
+    },
+    "rv:space": {
+      "@id": "https://rezics.com/vocab/space",
+      "@type": "@id"
+    },
+    "rv:topic": {
+      "@id": "https://rezics.com/vocab/topic",
+      "@type": "@id"
+    },
+    "rv:visibility": {
+      "@id": "https://rezics.com/vocab/visibility",
+      "@type": "@id"
+    }
+  }
+}
