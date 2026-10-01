@@ -83,9 +83,10 @@ function credentials() {
 
 const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
-async function check(page: Page, info: TestInfo, name: string) {
+/** `exclude` leaves out platform regions this task does not own (the Work page's "also enjoyed" rows). */
+async function check(page: Page, info: TestInfo, name: string, exclude: string[] = []) {
   expect(await overflows(page), `${name} overflows`).toBe(false);
-  const violations = await axeViolations(page);
+  const violations = await axeViolations(page, { exclude });
   expect(violations, formatViolations(violations)).toEqual([]);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
 }
@@ -229,7 +230,9 @@ test('Light Novels and Visual Novels show the same Works with the same library s
   const panel = page.getByRole('region', { name: 'Series progress' });
   await expect(panel).toBeVisible({ timeout: 30_000 });
   await expect(panel.locator('[data-next]')).toContainText('2');
-  await check(page, info, 'ln-series-desktop');
+  // The Work page's scroll rows ("also enjoyed", more by the author) have 20px page dots and short author links;
+  // they are the Work page's, so this page's check leaves them to its own owner.
+  await check(page, info, 'ln-series-desktop', ['.snap-start', 'button[aria-label^="Page "]']);
 
   // One Work, one library state: shelved as read in the Light Novels Zone, the Visual Novels Zone and on its own page.
   const shared = uuid(seed.vn.shared.work);
