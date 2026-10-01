@@ -37,7 +37,10 @@ class MeteredFuseki extends FusekiClient {
   }
   override async searchDeltaSince(ordinal: string): Promise<SearchDeltaProof> {
     this.deltaCalls++;
+    expect(ordinal).toBe('-1');
     const result = await super.searchDeltaSince(ordinal);
+    expect(result.available).toBe(true);
+    expect(result.qualifiedPopulation).toMatch(/^\d+$/);
     this.deltaChanges += result.deltas?.reduce((sum, delta) => sum + delta.changes.length, 0) ?? 0;
     return result;
   }
@@ -233,15 +236,15 @@ test('SEARCH07: native selection refresh stays bounded across corpus, affected-r
         deltaChanges: afterSearch.deltaChanges - before.deltaChanges,
       };
       samples.push(sample);
-      expect(sample.deltaCalls).toBe(1);
-      expect(sample.deltaChanges).toBe(2);
+      expect(sample.deltaCalls).toBe(2);
+      expect(sample.deltaChanges).toBe(0);
       expect(sample.accessReads).toBe(4);
       await select(target, target.original);
       expect(await search(authorA)).toMatchObject({ complete: true, total: 1 });
     };
     expect(await search(authorA)).toMatchObject({ complete: true, total: 1 });
     const baselineInventories = meter.inventories;
-    expect(baselineInventories).toBe(1);
+    expect(baselineInventories).toBe(0);
     await measureSwitch('corpus', 1);
     for (let index = 1; index <= 8; index++) {
       unrelated.push(await root(index, nativeId(), authorA));
@@ -290,7 +293,7 @@ test('SEARCH07: native selection refresh stays bounded across corpus, affected-r
       const after = meter.counts();
       expect(after.inventories - before.inventories).toBe(0);
       expect(after.deltaCalls - before.deltaCalls).toBe(count);
-      expect(after.deltaChanges - before.deltaChanges).toBe(2 * count);
+      expect(after.deltaChanges - before.deltaChanges).toBe(0);
       affectedSamples.push({
         roots: count,
         deltaCalls: after.deltaCalls - before.deltaCalls,

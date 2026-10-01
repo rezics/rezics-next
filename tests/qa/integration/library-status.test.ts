@@ -222,7 +222,7 @@ test.each(['initial context', 'retained context'])(
         'idempotency-key': randomUUID() },
       body: JSON.stringify({ collection: olderCollection, name: 'Public shelf', disclosure: 'public',
         actingSubject: person.agent }) }));
-    expect(olderResponse.status).toBe(201);
+    expect(olderResponse.status, await olderResponse.clone().text()).toBe(201);
     const createCollection = await app.handle(new Request('http://main.local/v1/collections', { method: 'POST',
       headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
         'idempotency-key': randomUUID() },

@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -129,7 +130,9 @@ test('G-585: a v1 analyzer volume stays closed until a resumable profile upgrade
   const dockerEnv = loadDockerEnvironment(), volume = `${name}-data`;
   const secrets = Object.fromEntries(['FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY']
     .map(key => [key, randomBytes(32).toString('hex')]));
-  const pool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
+  // The standalone graph has its own epoch; never pair it with the first test's publications.
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['content']);
+  const pool = new Pool({ connectionString: databases.urls.content });
   let server: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
   const original = '魔法禁書目錄 ガラス ＲＵＳＴ', unit = `urn:rezics:g585:${identity}`;
   const priorGeneration = `urn:rezics:text-index-generation:${randomUUID()}`;
@@ -214,6 +217,7 @@ test('G-585: a v1 analyzer volume stays closed until a resumable profile upgrade
     if (!server) spawnSync('docker', ['rm', '-f', name], { env: dockerEnv, timeout: 60_000 });
     docker(['volume', 'rm', '-f', volume], dockerEnv, 60_000);
     await pool.end();
+    await databases.close();
     rmSync(directory, { recursive: true, force: true });
   }
 }, 300_000);

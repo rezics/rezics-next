@@ -267,11 +267,21 @@ export class GovernanceStore {
   /** Decider authority: an active Access grant for the case kind's action on its scope gate. */
   private async decider(client: PoolClient, principal: VerifiedPrincipal, actingSubject: string, scopeId: string,
     action: string): Promise<{ principalId: string; authorityEpoch: string; proofDigest: string }> {
-    const actor = await this.represented(client, principal, actingSubject);
-    const gate = (await client.query<{ authority_epoch: string; open: boolean; dispatch_open: boolean }>(
-      `SELECT authority_epoch::text, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE`,
-      [scopeId])).rows[0];
-    if (!gate?.open || !gate.dispatch_open) throw new GovernanceDenied('governance scope is closed');
+    // Principal, representation and scope are one locked authority basis. Keeping
+    // them together leaves room for the administrator fallback within queue budgets.
+    const basis = (await client.query<{ id: string; enforcement_epoch: string;
+      authority_epoch: string; open: boolean; dispatch_open: boolean }>(`SELECT p.id,
+        p.enforcement_epoch::text, gate.authority_epoch::text, gate.open, gate.dispatch_open
+      FROM access.principal p
+      JOIN access.representation r ON r.principal_id = p.id
+      JOIN access.authority_subject s ON s.id = r.subject_id
+      JOIN access.scope_gate gate ON gate.id = $4
+      WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active AND r.subject_id = $3 AND r.active
+        AND r.valid_until > clock_timestamp() AND s.active
+      LIMIT 1 FOR SHARE OF p, r, s, gate`, [principal.issuer, principal.subject, actingSubject, scopeId])).rows[0];
+    if (!basis?.open || !basis.dispatch_open) throw new GovernanceDenied('governance scope is closed or actor is not represented');
+    const actor = { principalId: basis.id, epoch: basis.enforcement_epoch };
+    const gate = basis;
     if (scopeId === 'governance:platform'
       && ['governance.moderate', 'governance.rights.decide', 'governance.safety.evidence', 'governance.appeal'].includes(action)) {
       const administrator = await platformAdministratorProof(client, actor.principalId, actingSubject);

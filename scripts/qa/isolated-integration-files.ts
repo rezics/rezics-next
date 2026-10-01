@@ -105,6 +105,11 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-824-library-traversal.test.ts',
   // Continue across volumes seeds Home, whose relay replays prior receipts from zero (G-410).
   'tests/qa/integration/structure-book-volumes.test.ts',
+  // These probes bind exact replay positions or a complete graph/owner population.
+  'tests/qa/integration/g-825-structure-receipt-family.test.ts',
+  'tests/qa/integration/g-585-script-folding.test.ts',
+  // Relation history must use the same immutable object directory as its graph.
+  'tests/qa/integration/g-905-catalogue.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

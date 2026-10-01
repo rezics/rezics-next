@@ -115,7 +115,9 @@ test('G571: class guard enumerates all byte delivery paths; held imagery has no 
   const params = new URLSearchParams({ target: work.work, actingSubject: owner.actor });
   for (const url of [`/v1/media/avatars/${selection}`, `/v1/media/uses/${use}`,
     `/v1/media/assets/${image.asset}/bytes?${params}`, realmURL]) {
-    expect((await s.call('GET', url, { token: owner.token })).status).toBe(404);
+    const delivery = new URL(url, 'http://main.local');
+    delivery.searchParams.set('actingSubject', owner.actor);
+    expect((await s.call('GET', delivery.pathname + delivery.search, { token: owner.token })).status).toBe(404);
   }
   const summary = await s.call('POST', '/v1/resources/summaries', { body: { profile: 'resource-summary-batch-v1', resources: [work.work], context, language: 'en' } });
   const summaryBody = await summary.json();
