@@ -2,7 +2,7 @@ import { readComponentState } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RatingAggregateBudgetExceeded, RatingAggregateUnavailable } from './aggregate.ts';
 import { sameRatingInstant } from './observation.ts';
-import { TARGET_OBSERVATION_PROFILE, readTargetRatingContext, targetRatingDigest } from './target.ts';
+import { TARGET_OBSERVATION_PROFILE, LANGUAGE_OBSERVATION_PROFILE, readTargetRatingContext, targetRatingDigest } from './target.ts';
 import type { TargetRatingInventoryStore } from './target-inventory.ts';
 
 export const TARGET_AGGREGATE_PROFILE = 'realm-target-latest-mean-v1';
@@ -22,7 +22,7 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
   }
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?population
     ?contextReceipt ?contextEpoch ?contextSequence ?receipt ?digest ?revisionEpoch ?revisionSequence
-    ?observation ?slot ?head ?availability ?value ?manifest ?predecessor ?evaluatedAt ?submittedAt WHERE {
+    ?observation ?slot ?head ?availability ?value ?manifest ?predecessor ?evaluatedAt ?submittedAt ?profile WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(inventory.contextRevision)} rv:component ${iri(input.context)} ;
@@ -37,9 +37,10 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} { ?observation a rv:TargetRatingObservation ;
       rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} ; rv:ratingSlot ?slot ; rv:observationHead ?head . }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:TargetRatingObservationRevision, rv:RevisionAnchor ;
-        rv:component ?observation ; rv:observation ?observation ; rv:modelRevision ${iri(TARGET_OBSERVATION_PROFILE)} ;
+        rv:component ?observation ; rv:observation ?observation ; rv:modelRevision ?profile ;
         rv:ratingAvailability ?availability ; rv:manifest ?manifest ; rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt ;
         rv:dataEpoch ?revisionEpoch ; rv:sequence ?revisionSequence .
+        VALUES ?profile { ${iri(TARGET_OBSERVATION_PROFILE)} ${iri(LANGUAGE_OBSERVATION_PROFILE)} }
         FILTER NOT EXISTS { ?head a rv:ErasedRevision }
         OPTIONAL { ?head rv:ratingValue ?value } OPTIONAL { ?head rv:predecessor ?predecessor } }
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:ratingObservation ?observation ; rv:observationRevision ?head ;
@@ -62,7 +63,7 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
   for (const row of observations) {
     signal.throwIfAborted();
     const sealed = heads.get(row.observation!.value);
-    if (!sealed || !row.slot || !row.head || !row.manifest || seen.has(row.slot.value)
+    if (!sealed || !row.slot || !row.head || !row.manifest || !row.profile || seen.has(row.slot.value)
       || sealed.slot !== row.slot.value || sealed.revision !== row.head.value
       || sealed.receipt !== row.receipt?.value || sealed.requestDigest !== row.digest?.value
       || sealed.dataEpoch !== row.revisionEpoch?.value || sealed.sequence !== row.revisionSequence?.value
@@ -72,7 +73,7 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
       throw new RatingAggregateUnavailable('Target head differs from seal');
     }
     seen.add(row.slot.value);
-    const state = readComponentState(env.objectDirectory, row.manifest.value, row.observation!.value, TARGET_OBSERVATION_PROFILE, budget);
+    const state = readComponentState(env.objectDirectory, row.manifest.value, row.observation!.value, row.profile!.value, budget);
     const available = row.availability?.value === `${RV}Available`, withdrawn = row.availability?.value === `${RV}Withdrawn`;
     const value = row.value ? Number(row.value.value) : null;
     if ((!available && !withdrawn) || available && (!Number.isInteger(value) || value! < 1 || value! > 10)
@@ -94,7 +95,7 @@ export async function queryTargetRatingAggregate(env: WorkActivationEnvironment,
   const count = population - withdrawnCount;
   return { profile: TARGET_AGGREGATE_PROFILE, complete: true as const, context: input.context, realm: context.realm,
     target: input.target, targetGrain: context.targetGrain,
-    scope: { question: context.question, grain: context.targetGrain, population: 'account-principal' as const,
+    scope: { question: context.question, language: context.language, grain: context.targetGrain, population: 'account-principal' as const,
       countedTarget: input.target }, scale: context.scale, cadence: context.cadence,
     populationPolicy: 'account-principal' as const, aggregationPolicy: 'latest-per-rater-mean' as const,
     population, count, withdrawnCount, histogram, sum, mean: count ? sum / count : null,

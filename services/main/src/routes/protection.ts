@@ -1,3 +1,4 @@
+import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
@@ -297,7 +298,7 @@ export function protectionRoutes(work: ProtectionDependencies) {
     .post('/v1/work-title-corrections', {
       body: t.Object({ profile: t.Literal('work-title-correction-v1'),
         title: t.String({ minLength: 1, maxLength: 200 }),
-        language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
+        language: t.Optional(languageTagSchema(35)),
         predecessor: t.Null(), ...workBasis },
       { additionalProperties: false }), response: graphWriteResponses,
     }, async ({ request, body }) => {

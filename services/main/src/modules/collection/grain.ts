@@ -51,6 +51,13 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
   const afterWork = cursor?.after;
   const readable = new Map<string, boolean>();
   const items = new Map<string, CollectionWork>();
+  // /collections/:id/works is deliberately a Work inventory: series and parts
+  // return Work/MainVersion pairs, not the Collection's base-neutral members.
+  // These candidate predicates retain that grain; summaries admit the audience.
+  // ast-grep-ignore: capability-targets-use-resolver
+  const memberWorks = publicWork('?member', '?memberMain');
+  // ast-grep-ignore: capability-targets-use-resolver
+  const catalogueWorks = publicWork('?work', '?main');
   let afterPair: string | undefined;
   while (true) {
     session.checkDeadline();
@@ -70,8 +77,8 @@ export async function readCollectionGrain(session: WorkReadSession, collection: 
         FILTER NOT EXISTS { ?work a rv:Release }
       }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?work a rv:FixedRelease } }
-      ${publicWork('?member', '?memberMain')}
-      ${publicWork('?work', '?main')}
+      ${memberWorks}
+      ${catalogueWorks}
       BIND(CONCAT(STR(?work), "|", STR(?member)) AS ?key)
       ${afterWork ? `FILTER(STR(?work) > ${lit(afterWork)})` : ''}
       ${afterPair ? `FILTER(?key > ${lit(afterPair)})` : ''}

@@ -402,7 +402,7 @@ test('G-840 G-913: all twelve catalogue fixture queries through the public API',
     for (const target of reviewTargets) {
       const generic = target.grain !== 'main-version';
       const context = generic ? await ok<{ context: string }>(await call('POST', '/v1/rating-contexts', {
-        profile: 'realm-target-rating-context-v1', realm: saoZone.realm, question: target.question,
+        profile: 'realm-target-rating-context-v2', language: 'en', realm: saoZone.realm, question: target.question,
         targetGrain: target.grain, actingSubject: person }), 201) : storyContext;
       await grant(`rating:observe:${context.context}`, 'rating.observation.set');
       const work = Object.values(first.works).find(item => item.work === target.target);

@@ -1,3 +1,4 @@
+import { parseLanguage } from '../display-language/tag.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { publicWork, unerased } from '../work/public-patterns.ts';
@@ -45,7 +46,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     || !Number.isInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > RANKED_CATALOGUE_COST.pageSize
     || input.author !== undefined && !native.test(input.author)
     || input.realm !== undefined && !native.test(input.realm)
-    || input.language !== null && !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language)) {
+    || input.language !== null && !parseLanguage(input.language)) {
     throw new InvalidPublicQuery('invalid ranked catalogue query');
   }
   const position = await assertPublicTextReady(env.fuseki, env.lineage);

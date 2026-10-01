@@ -1,3 +1,4 @@
+import { languageTag } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
@@ -92,7 +93,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
     .get('/v1/resources/:resource/rating-contexts', { params: resourceParams, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(t.Object({ context: readId, question: t.String(),
-        language: t.Literal('en'), scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
+        language: languageTag, scale: t.Object({ min: t.Integer(), max: t.Integer(), step: t.Literal(1) }) })),
         scope: readScope, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try { return Response.json(await workRead(work, request, options,

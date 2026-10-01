@@ -366,7 +366,7 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         try {
           const receipt = await createAdmittedTargetRatingContext(work.environment, work.account, work.access,
             request, { ...body, idempotencyKey });
-          return Response.json({ context: receipt.context, realm: receipt.realm, question: body.question,
+          return Response.json({ context: receipt.context, realm: receipt.realm, question: body.question, language: body.language,
             contextRevision: receipt.revision, targetGrain: body.targetGrain, profile: TARGET_CONTEXT_ID,
             scale: { min: 1, max: 10, step: 1 }, cadence: 'standing', population: 'account-principal',
             aggregation: 'latest-per-rater-mean', replayed: receipt.replayed,

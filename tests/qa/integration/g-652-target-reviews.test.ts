@@ -140,7 +140,7 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
         grain: 'main-version', population: 'account-principal', countedTarget: bunko.mainVersion } });
     const contexts: Context[] = [];
     for (const target of targets) {
-      const body = { profile: 'realm-target-rating-context-v1', realm: realm.realm,
+      const body = { profile: 'realm-target-rating-context-v2', language: 'en', realm: realm.realm,
         targetGrain: target.grain, question: target.question, actingSubject: actor };
       const key = randomUUID();
       const context = await json<Context>(await call('POST', '/v1/rating-contexts', body, a.token, key), 201);
@@ -239,7 +239,7 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
     expect((await call('POST', '/v1/reviews', review(realization, targets[2]!.target), a.token)).status).toBe(422);
     expect((await call('POST', '/v1/reviews', { ...review(realization, targets[1]!.target), actingSubject: other }, b.token)).status).toBe(201);
     const secondQuestion = await json<Context>(await call('POST', '/v1/rating-contexts', {
-      profile: 'realm-target-rating-context-v1', realm: realm.realm, targetGrain: 'realization',
+      profile: 'realm-target-rating-context-v2', language: 'en', realm: realm.realm, targetGrain: 'realization',
       question: 'How faithful is this translation?', actingSubject: actor }, a.token), 201);
     expect(await json(await call('GET', `/v1/resources/${short(targets[1]!.target)}/reviews?context=${encodeURIComponent(secondQuestion.context)}`)))
       .toMatchObject({ items: [] });

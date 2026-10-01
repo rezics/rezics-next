@@ -1,3 +1,4 @@
+import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import { ContentCommentInvalid, resolveParagraphSelector } from '../../../content/src/comments.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -310,7 +311,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         title: t.String({ minLength: 1, maxLength: 200, pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
-        language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
+        language: t.Optional(languageTagSchema(35)),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
       }, { additionalProperties: false }),
       response: { 200: contentEditWriteResult, 202: pendingOperation,

@@ -7,6 +7,21 @@ export interface LanguageTag {
 }
 
 const unspecified = new Set(['und', 'zxx', 'mul']);
+const grandfathered = new Set(['en-gb-oed', 'i-ami', 'i-bnn', 'i-default', 'i-enochian', 'i-hak',
+  'i-klingon', 'i-lux', 'i-mingo', 'i-navajo', 'i-pwn', 'i-tao', 'i-tay', 'i-tsu',
+  'sgn-be-fr', 'sgn-be-nl', 'sgn-ch-de', 'art-lojban', 'cel-gaulish', 'no-bok', 'no-nyn',
+  'zh-guoyu', 'zh-hakka', 'zh-min', 'zh-min-nan', 'zh-xiang']);
+
+/** RFC 5646 §2.1 syntax, including extlang and grandfathered forms that Intl
+ * rejects. As with Intl, this does not consult the IANA subtag registry. */
+function languageSyntax(value: string): boolean {
+  if (/^x(?:-[a-z0-9]{1,8})+$/i.test(value) || grandfathered.has(value.toLowerCase())) return true;
+  const match = /^(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}|[a-z]{4}|[a-z]{5,8})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|[0-9]{3}))?((?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*)((?:-[0-9a-wy-z](?:-[a-z0-9]{2,8})+)*)(?:-x(?:-[a-z0-9]{1,8})+)?$/i.exec(value);
+  if (!match) return false;
+  const variants = match[1]!.toLowerCase().split('-').filter(Boolean);
+  const singletons = match[2]!.toLowerCase().split('-').filter(part => part.length === 1);
+  return new Set(variants).size === variants.length && new Set(singletons).size === singletons.length;
+}
 // RTL field in https://github.com/unicode-org/cldr/blob/main/common/properties/scriptMetadata.txt
 const rtlScripts = new Set(['Adlm', 'Arab', 'Armi', 'Avst', 'Chrs', 'Cprt', 'Elym', 'Gara',
   'Hatr', 'Hebr', 'Hung', 'Khar', 'Lydi', 'Mand', 'Mani', 'Mend', 'Merc', 'Mero', 'Narb',
@@ -19,10 +34,11 @@ const rtlLetterPatterns = [...rtlScripts].flatMap(script => {
 });
 const rtlLetter = new RegExp(rtlLetterPatterns.join('|') || '(?!)', 'u');
 
-/** Intl's structural validation and aliases, plus RFC 5646 §2.2.7 private-only tags.
+/** RFC 5646 syntax with Intl's canonical aliases where supported.
  * This does not validate subtags against a pinned IANA registry. Empty is not recorded. */
 export function parseLanguage(value: string): LanguageTag | null {
   if (typeof value !== 'string' || !value || value.trim() !== value) return null;
+  if (!languageSyntax(value)) return null;
   if (/^x(?:-[a-z0-9]{1,8})+$/i.test(value)) {
     return { originalTag: value, tag: value.toLowerCase(), language: null, script: null };
   }
@@ -32,7 +48,11 @@ export function parseLanguage(value: string): LanguageTag | null {
     const locale = new Intl.Locale(tag);
     return { originalTag: value, tag, language: locale.language,
       script: locale.script ?? (unspecified.has(locale.language) ? null : locale.maximize().script ?? null) };
-  } catch { return null; }
+  } catch {
+    // Preserve uncommon recorded forms without inventing likely-script evidence
+    // or treating an extlang/grandfathered spelling as its primary language.
+    return { originalTag: value, tag: value.toLowerCase(), language: null, script: null };
+  }
 }
 
 export function canonicalLanguage(value: string): string | null {

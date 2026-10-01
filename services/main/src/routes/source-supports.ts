@@ -1,3 +1,4 @@
+import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { authorCreditBody, authorCreditSupportResult, authorCreditWriteResult,
@@ -180,7 +181,7 @@ const sourceAttachmentResult = t.Object({
   binding: t.String(), supportIdentity: t.String(), originalBinding: t.String(), work: t.String(),
   proposal: t.String(), sourceRecord: t.String(), sourceObservation: t.String(),
   sourceConversion: t.String(), sourceGraphReceipt: t.String(), title: t.String(),
-  titleLanguage: t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }), verifiedHead: t.String(),
+  titleLanguage: languageTagSchema(35), verifiedHead: t.String(),
   headGuarantee: t.Literal('verified-before-commit'),
   authority: t.Object({ principalId: t.String(), principalEpoch: t.String(),
     actingSubject: t.String(), subjectGeneration: t.String(), scope: t.String(), action: t.Literal('work.edit'),
@@ -656,7 +657,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       params: t.Object({ id: groupUuid }),
       body: t.Object({ profile: t.Literal('native-work-source-title-attachment-v2'),
         proposal: groupAgent, expectedHead: groupAgent, actingSubject: groupAgent,
-        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }), titleLanguage: t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' }),
+        confirmedTitle: t.String({ minLength: 1, maxLength: 200 }), titleLanguage: languageTagSchema(35),
       }, { additionalProperties: false }),
       response: { 200: sourceAttachmentWriteResult, 201: sourceAttachmentWriteResult,
         ...writeProblems, 404: problemResult(404) },
@@ -820,7 +821,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
       params: t.Object({ id: groupUuid, candidateProposal: groupUuid }),
       body: t.Object({ profile: t.Literal('native-work-source-title-application-v1'),
         expectedHead: groupAgent, actingSubject: groupAgent, titleControl: titleControlBasis,
-        language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
+        language: t.Optional(languageTagSchema(35)),
         confirmedTitle: t.String({ minLength: 1, maxLength: 200 }),
       }, { additionalProperties: false }),
       response: { 200: sourceTitleApplicationWriteResult,

@@ -1,3 +1,4 @@
+import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { direction } from '../modules/display-language/select.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -19,7 +20,7 @@ export const openApiOperations = {
 const spaceCreateFields = {
   name: t.String({ minLength: 1, maxLength: 120,
     pattern: '^[^\\u0000-\\u001f\\u007f]+$' }),
-  language: t.Optional(t.String({ minLength: 2, maxLength: 35, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$' })),
+  language: t.Optional(languageTagSchema(35)),
   capabilities: t.Tuple([t.Literal('realm')]),
   actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
 };

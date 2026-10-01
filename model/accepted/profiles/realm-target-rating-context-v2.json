@@ -1,0 +1,8 @@
+{
+  "sha256": "c599aaf7d0f236a2b1f6fa1e4f02f38b928e979a31605a15f482f6808c0937e7",
+  "binding": {
+    "required": ["realm", "context", "question", "language", "grain"],
+    "optional": [],
+    "roles": ["realm", "context"]
+  }
+}

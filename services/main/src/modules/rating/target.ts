@@ -1,3 +1,4 @@
+import { parseLanguage } from '../display-language/tag.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -19,25 +20,31 @@ import { canonicalRatingInstant, sameRatingInstant, InvalidRatingObservationInpu
   standingRatingReceiptIri, type RatingObservationReceipt } from './observation.ts';
 import { RatingTargetGrainMismatch } from './release.ts';
 
-export const TARGET_CONTEXT_ID = 'realm-target-rating-context-v1';
+export const LEGACY_TARGET_CONTEXT_ID = 'realm-target-rating-context-v1';
+export const TARGET_CONTEXT_ID = 'realm-target-rating-context-v2';
+export const LEGACY_TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${LEGACY_TARGET_CONTEXT_ID}`;
+const LANGUAGE_OBSERVATION_ID = 'realm-target-rating-observation-v2';
+export const LANGUAGE_OBSERVATION_PROFILE = `https://rezics.com/definition/${LANGUAGE_OBSERVATION_ID}`;
 export const TARGET_OBSERVATION_ID = 'realm-target-rating-observation-v1';
 export const TARGET_CONTEXT_PROFILE = `https://rezics.com/definition/${TARGET_CONTEXT_ID}`;
 export const TARGET_OBSERVATION_PROFILE = `https://rezics.com/definition/${TARGET_OBSERVATION_ID}`;
 export const TARGET_GRAINS = { release: 'Release', realization: 'Realization', occurrence: 'Occurrence',
   resource: 'Resource' } as const;
 export type TargetGrain = keyof typeof TARGET_GRAINS;
-export const TARGET_RATING_WRITE_COST = { graphCalls: 24, graphBytes: 524_288, commandDeadlineMs: 10_000 } as const;
+export const TARGET_RATING_WRITE_COST = { graphCalls: 24, graphBytes: 524_288, commandDeadlineMs: 10_000,
+  questionLanguageBytes: 255 } as const;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
-export interface TargetContextInput { realm: string; question: string; targetGrain: TargetGrain; actingSubject: string }
+export interface TargetContextInput { realm: string; question: string; language: string; targetGrain: TargetGrain; actingSubject: string }
 export interface TargetRatingInput { context: string; target: string; expectedRevisionHead: string | null;
   value: number | null; actingSubject: string }
 export interface TargetRatingReceipt extends RatingObservationReceipt { target?: string }
 
 export function targetContextDigest(input: TargetContextInput): string {
   ratingContextDigest(input);
-  if (!Object.hasOwn(TARGET_GRAINS, input.targetGrain)) throw new InvalidRatingObservationInput('Invalid grain');
-  return hash(JSON.stringify({ family: TARGET_CONTEXT_ID, realm: input.realm, question: input.question,
+  if (!parseLanguage(input.language) || input.language.length > TARGET_RATING_WRITE_COST.questionLanguageBytes
+    || !Object.hasOwn(TARGET_GRAINS, input.targetGrain)) throw new InvalidRatingObservationInput('Invalid target grain or question language');
+  return hash(JSON.stringify({ family: TARGET_CONTEXT_ID, realm: input.realm, question: input.question, language: input.language,
     targetGrain: input.targetGrain, actingSubject: input.actingSubject }));
 }
 export function targetRatingDigest(input: TargetRatingInput): string {
@@ -74,10 +81,11 @@ export function targetContextPattern(context: string, realm = '?realm', revision
   }`;
 }
 export async function readTargetRatingContext(env: WorkActivationEnvironment, context: string) {
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?question ?grain ?contextRevision ?manifest WHERE {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?question ?grain ?contextRevision ?manifest ?profile WHERE {
     ${targetContextPattern(context)}
     GRAPH ${iri(GRAPHS.revisions)} { ?contextRevision a rv:RevisionAnchor ; rv:component ${iri(context)} ;
-      rv:modelRevision ${iri(TARGET_CONTEXT_PROFILE)} ; rv:manifest ?manifest .
+      rv:modelRevision ?profile ; rv:manifest ?manifest .
+      VALUES ?profile { ${iri(TARGET_CONTEXT_PROFILE)} ${iri(LEGACY_TARGET_CONTEXT_PROFILE)} }
       FILTER NOT EXISTS { ?contextRevision a rv:ErasedRevision } }
   } LIMIT 2`)).results?.bindings ?? [];
   if (!rows.length) return null;
@@ -86,14 +94,24 @@ export async function readTargetRatingContext(env: WorkActivationEnvironment, co
     throw new RatingObservationUnavailable('Target Context is ambiguous');
   }
   const grain = Object.entries(TARGET_GRAINS).find(([, value]) => `${RV}${value}` === row.grain!.value)?.[0] as TargetGrain | undefined;
-  const state = readComponentState(env.objectDirectory, row.manifest.value, context, TARGET_CONTEXT_PROFILE);
-  if (!grain || state.context !== context || state.realm !== row.realm.value || state.question !== row.question.value
+  const profile = row.profile?.value;
+  if (profile !== TARGET_CONTEXT_PROFILE && profile !== LEGACY_TARGET_CONTEXT_PROFILE) {
+    throw new RatingObservationUnavailable('Target Context profile is unavailable');
+  }
+  // v1 manifests did not carry language. Recover the recorded RDF tag, never
+  // infer it from the question text or the requesting client's locale.
+  const language = row.question['xml:lang'];
+  const state = readComponentState(env.objectDirectory, row.manifest.value, context, profile);
+  if (!language || !parseLanguage(language)
+    || profile === TARGET_CONTEXT_PROFILE && (typeof state.language !== 'string'
+      || state.language.toLowerCase() !== language.toLowerCase())
+    || !grain || state.context !== context || state.realm !== row.realm.value || state.question !== row.question.value
     || state.targetGrain !== grain || state.state !== 'active' || state.scaleMin !== 1 || state.scaleMax !== 10
     || state.cadence !== RATING_STANDING_CADENCE || state.populationPolicy !== RATING_ACCOUNT_POPULATION
     || state.aggregationPolicy !== RATING_LATEST_MEAN_POLICY) throw new RatingObservationUnavailable('Target Context bytes differ');
-  return { context, realm: row.realm.value, question: row.question.value, contextRevision: row.contextRevision.value,
+  return { context, realm: row.realm.value, question: row.question.value, language: profile === TARGET_CONTEXT_PROFILE ? state.language as string : language, contextRevision: row.contextRevision.value,
     targetGrain: grain, scale: { min: 1 as const, max: 10 as const, step: 1 as const }, cadence: 'standing' as const,
-    population: 'account-principal' as const, aggregation: 'latest-per-rater-mean' as const, profile: TARGET_CONTEXT_ID };
+    population: 'account-principal' as const, aggregation: 'latest-per-rater-mean' as const, profile: profile === TARGET_CONTEXT_PROFILE ? TARGET_CONTEXT_ID : LEGACY_TARGET_CONTEXT_ID };
 }
 
 /** Reuse the bounded, owner-authorized target resolver at the command and read boundary. */
@@ -190,21 +208,21 @@ async function createTargetRatingContext(env: WorkActivationEnvironment, admissi
   if (existing) return checked(existing, admission);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Context admission expired');
   const context = ID + Bun.randomUUIDv7(), revision = ID + Bun.randomUUIDv7(), operation = ID + Bun.randomUUIDv7();
-  const state = { context, realm: input.realm, question: input.question, targetGrain: input.targetGrain,
+  const state = { context, realm: input.realm, question: input.question, language: input.language, targetGrain: input.targetGrain,
     state: 'active', scaleMin: 1, scaleMax: 10, cadence: RATING_STANDING_CADENCE,
     populationPolicy: RATING_ACCOUNT_POPULATION, aggregationPolicy: RATING_LATEST_MEAN_POLICY };
   const manifest = prepareComponent(env.objectDirectory, context, state, TARGET_CONTEXT_PROFILE);
   const validations = await profileValidations(env.fuseki, TARGET_CONTEXT_ID, [
     { shape: `${TARGET_CONTEXT_PROFILE}/realm-shape`, focus: [input.realm], graphs: [GRAPHS.current] },
     { shape: `${TARGET_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
-  ], { realm: input.realm, context, question: input.question, grain: `${RV}${TARGET_GRAINS[input.targetGrain]}` });
+  ], { realm: input.realm, context, question: input.question, language: input.language, grain: `${RV}${TARGET_GRAINS[input.targetGrain]}` });
   const result = await validatedCommand(env, { receipt, digest: admission.requestDigest, validations, deadlineMs: 10_000,
     update: `PREFIX rv: <${RV}>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.realm)} rv:ratingContext ${iri(context)} .
-        ${iri(context)} a rv:TargetRatingContext ; rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
-          rv:question ${lit(input.question)}@en ; rv:targetGrain rv:${TARGET_GRAINS[input.targetGrain]} ;
+        ${iri(context)} a rv:TargetRatingContext, rv:LanguageTaggedTargetRatingContext ; rv:contextState rv:Active ; rv:realm ${iri(input.realm)} ;
+          rv:question ${lit(input.question)}@${input.language} ; rv:targetGrain rv:${TARGET_GRAINS[input.targetGrain]} ;
           rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ; rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ;
           rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
           rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} ; rv:head ${iri(revision)} . }
@@ -297,9 +315,11 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
     targetRevision: target.revision, targetGrain: context.targetGrain, contextRevision: context.contextRevision,
     realm: context.realm, predecessor: input.expectedRevisionHead, availability, value: input.value,
     evaluatedAt, submittedAt: admission.registeredAt, originalSubmissionAt: evaluatedAt, revisedAt: admission.registeredAt };
-  const manifest = prepareComponent(env.objectDirectory, observation, state, TARGET_OBSERVATION_PROFILE);
-  const validations = await profileValidations(env.fuseki, TARGET_OBSERVATION_ID,
-    ['realm', 'context', 'observation', 'revision'].map(role => ({ shape: `${TARGET_OBSERVATION_PROFILE}/${role}-shape`,
+  const languageTagged = context.profile === TARGET_CONTEXT_ID;
+  const observationProfile = languageTagged ? LANGUAGE_OBSERVATION_PROFILE : TARGET_OBSERVATION_PROFILE;
+  const manifest = prepareComponent(env.objectDirectory, observation, state, observationProfile);
+  const validations = await profileValidations(env.fuseki, languageTagged ? LANGUAGE_OBSERVATION_ID : TARGET_OBSERVATION_ID,
+    ['realm', 'context', 'observation', 'revision'].map(role => ({ shape: `${observationProfile}/${role}-shape`,
       focus: [role === 'realm' ? context.realm : role === 'context' ? input.context : role === 'observation' ? observation : revision],
       graphs: [GRAPHS.current, GRAPHS.revisions] })),
     { realm: context.realm, context: input.context, target: input.target, slot, observation, revision, availability,
@@ -312,10 +332,10 @@ async function setTargetRating(env: WorkActivationEnvironment, admission: Regist
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       ${prior ? `GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} rv:observationHead ${iri(prior)} }` : ''} }
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} a rv:TargetRatingObservation ; rv:ratingContext ${iri(input.context)} ;
+      GRAPH ${iri(GRAPHS.current)} { ${iri(observation)} a rv:TargetRatingObservation ${languageTagged ? ', rv:LanguageTaggedTargetRatingObservation' : ''} ; rv:ratingContext ${iri(input.context)} ;
         rv:target ${iri(input.target)} ; rv:ratingSlot ${iri(slot)} ; rv:observationHead ${iri(revision)} . }
-      ${anchor(revision, observation, operation, manifest, TARGET_OBSERVATION_PROFILE, env.lineage.dataEpoch)}
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:TargetRatingObservationRevision ;
+      ${anchor(revision, observation, operation, manifest, observationProfile, env.lineage.dataEpoch)}
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:TargetRatingObservationRevision ${languageTagged ? ', rv:LanguageTaggedTargetRatingObservationRevision' : ''} ;
         rv:observation ${iri(observation)} ; rv:ratingAvailability rv:${input.value === null ? 'Withdrawn' : 'Available'} ; ${rated}
         ${prior ? `rv:predecessor ${iri(prior)} ;` : ''}
         rv:evaluatedAt ${lit(evaluatedAt)}^^xsd:dateTime ; rv:submittedAt ${lit(admission.registeredAt)}^^xsd:dateTime ;
@@ -400,19 +420,20 @@ export async function readTargetRatingReceipt(env: WorkActivationEnvironment, id
 export async function readTargetRatingRevision(env: WorkActivationEnvironment, principalId: string,
   input: { context: string; target: string; observation: string; revision: string }) {
   const slot = targetRatingSlotIri(principalId, input.context, input.target);
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?availability ?value ?predecessor ?evaluatedAt ?submittedAt WHERE {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?availability ?value ?predecessor ?evaluatedAt ?submittedAt ?profile WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(input.observation)} a rv:TargetRatingObservation ;
       rv:ratingSlot ${iri(slot)} ; rv:ratingContext ${iri(input.context)} ; rv:target ${iri(input.target)} }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.revision)} a rv:TargetRatingObservationRevision, rv:RevisionAnchor ;
-      rv:component ${iri(input.observation)} ; rv:modelRevision ${iri(TARGET_OBSERVATION_PROFILE)} ;
+      rv:component ${iri(input.observation)} ; rv:modelRevision ?profile ;
       rv:manifest ?manifest ; rv:ratingAvailability ?availability ; rv:evaluatedAt ?evaluatedAt ; rv:submittedAt ?submittedAt .
+      VALUES ?profile { ${iri(TARGET_OBSERVATION_PROFILE)} ${iri(LANGUAGE_OBSERVATION_PROFILE)} }
       FILTER NOT EXISTS { ${iri(input.revision)} a rv:ErasedRevision }
       OPTIONAL { ${iri(input.revision)} rv:ratingValue ?value } OPTIONAL { ${iri(input.revision)} rv:predecessor ?predecessor }
     } } LIMIT 2`)).results?.bindings ?? [];
   if (!rows.length) return null;
   const row = rows[0]!;
-  if (rows.length !== 1 || !row.manifest) throw new RatingObservationUnavailable('Target revision ambiguous');
-  const state = readComponentState(env.objectDirectory, row.manifest.value, input.observation, TARGET_OBSERVATION_PROFILE);
+  if (rows.length !== 1 || !row.manifest || !row.profile) throw new RatingObservationUnavailable('Target revision ambiguous');
+  const state = readComponentState(env.objectDirectory, row.manifest.value, input.observation, row.profile.value);
   if (state.slot !== slot || state.observation !== input.observation || state.revision !== input.revision
     || state.context !== input.context || state.target !== input.target || state.predecessor !== (row.predecessor?.value ?? null)
     || state.availability !== (row.availability?.value === `${RV}Available` ? 'available' : 'withdrawn')

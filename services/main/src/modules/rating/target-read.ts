@@ -1,3 +1,4 @@
+import { parseLanguage } from '../display-language/tag.ts';
 import { t } from 'elysia';
 import { readScope, readId, readPosition, ratingRead } from '../work/read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
@@ -40,15 +41,15 @@ export async function readResourceRatingContexts(session: WorkReadSession, targe
   const binding = ['target-rating-contexts-v1', target, grain, scope];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const rows = await session.query(`SELECT ?context ?question WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${contextPattern(grain, scope)} FILTER(LANG(?question) = "en") }
+    ${contextPattern(grain, scope)} }
     ${cursor ? `FILTER(STR(?context) > ${lit(cursor.after)})` : ''}
   } ORDER BY STR(?context) LIMIT ${limit + 1}`, limit + 1);
-  if (rows.some(row => !row.context || !row.question) || new Set(rows.map(row => row.context!.value)).size !== rows.length) {
+  if (rows.some(row => !row.context || !row.question || !parseLanguage(row.question['xml:lang'] ?? '')) || new Set(rows.map(row => row.context!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Target Context inventory ambiguous');
   }
   const page = rows.slice(0, limit);
   return { scope, ...pageResult(session, page.map(row => ({ context: row.context!.value, question: row.question!.value,
-    language: 'en' as const, targetGrain: grain, scale: { min: 1, max: 10, step: 1 as const } })),
+    language: row.question!['xml:lang']!, targetGrain: grain, scale: { min: 1, max: 10, step: 1 as const } })),
   rows.length > limit ? encodeReadCursor(binding, session.position, page.at(-1)!.context!.value) : null) };
 }
 export async function readResourceRating(session: WorkReadSession, target: string, selectedContext?: string) {

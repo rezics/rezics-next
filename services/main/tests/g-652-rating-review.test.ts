@@ -32,7 +32,7 @@ test('G-652: every resource ratings response variant requires complete aggregati
       population: 'account-principal', countedTarget: id(5) } },
   ...['release', 'realization', 'occurrence', 'resource'].map(grain => ({ ...base,
     profile: 'target-rating-read-v1', target: id(3), targetGrain: grain,
-    aggregationScope: { question: 'How good is this target?', grain,
+    aggregationScope: { question: 'How good is this target?', language: 'en', grain,
       population: 'account-principal', countedTarget: id(3) } }))];
   // Iterate the route's actual response union, so another variant cannot escape this guard.
   for (const member of resourceRatingRead.anyOf) {
@@ -55,7 +55,7 @@ test('G-652: every resource ratings response variant requires complete aggregati
 
 test('G-652: scope is mandatory for every aggregate, including an empty population', () => {
   const result = { profile: 'realm-target-latest-mean-v1', complete: true, context: id(2), realm: id(4),
-    target: id(3), targetGrain: 'realization', scope: { question: 'How good is this translation?',
+    target: id(3), targetGrain: 'realization', scope: { question: 'How good is this translation?', language: 'en',
       grain: 'realization', population: 'account-principal', countedTarget: id(3) }, scale: { min: 1, max: 10, step: 1 },
     cadence: 'standing', populationPolicy: 'account-principal', aggregationPolicy: 'latest-per-rater-mean',
     population: 0, count: 0, withdrawnCount: 0, histogram: Array.from({ length: 10 }, () => 0), sum: 0,

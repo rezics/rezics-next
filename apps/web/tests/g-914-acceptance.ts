@@ -105,7 +105,7 @@ export async function seedAcceptance(port: CataloguePort, manifest: CatalogueMan
   const planned: Planned[] = [];
   for (const item of targets) {
     const generic = item.grain !== 'main-version';
-    const context = generic ? (await post<{ context: string }>('/v1/rating-contexts', { profile: 'realm-target-rating-context-v1',
+    const context = generic ? (await post<{ context: string }>('/v1/rating-contexts', { profile: 'realm-target-rating-context-v2', language: 'en',
       realm: sao.realm, question: item.question, targetGrain: item.grain, actingSubject: port.actingSubject })).context : storyContext;
     await port.grant(`rating:observe:${context}`, 'rating.observation.set');
     const observation = generic ? { profile: 'realm-target-rating-observation-v1', target: item.target }
