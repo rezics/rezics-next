@@ -6,10 +6,13 @@ import { checkProductionEnv } from '../../scripts/ops/production-env.ts';
 
 // The public origin canonical URLs, hreflang alternates and the sitemap use.
 const site = process.env.ABOUT_SITE_URL ?? 'https://rezics.com';
-if (process.env.CLOUDFLARE_ENV === 'production') checkProductionEnv({ ABOUT_SITE_URL: process.env.ABOUT_SITE_URL }, ['about']);
+if (process.env.CLOUDFLARE_ENV === 'production')
+  checkProductionEnv({ ABOUT_SITE_URL: process.env.ABOUT_SITE_URL }, ['about']);
 
 export default defineConfig({
   site,
+  // Worktrees share dependencies, so content caches must stay in their own checkout.
+  cacheDir: '../../.temp/about-cache/',
   // A Worker with static assets serves dist/; pages are `<path>/index.html`.
   output: 'static',
   // Pages are directories (`/en/reading/`); the Worker's asset handling adds the slash in

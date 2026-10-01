@@ -24,10 +24,12 @@
       "/roadmap"
     ]
   },
-  "env": { "production": {
-    "name": "rezics-about-production",
-    "vars": { "ABOUT_SITE_URL": "<ABOUT_SITE_URL>" }
-  } },
+  "env": {
+    "production": {
+      "name": "rezics-about-production",
+      "vars": { "ABOUT_SITE_URL": "<ABOUT_SITE_URL>" }
+    }
+  },
   "d1_databases": [
     {
       "binding": "DB",

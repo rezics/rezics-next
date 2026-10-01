@@ -44,13 +44,24 @@ type _AllInstalled = Assert<AllOperations['length'] extends 25 ? true : false>;
 const client = treaty<MainApp>('http://127.0.0.1:1');
 type CreateWork = Parameters<typeof client.v1.works.post>[0];
 type PublicQuery = Parameters<typeof client.v1.queries.post>[0];
-const work: CreateWork = {
-  profile: 'metadata-only-v1', title: 'A Work', language: 'en',
-  actingSubject: 'https://rezics.com/id/11111111-1111-4111-8111-111111111111',
-};
+// Catalogue intake binds creation to the candidate search for the same title.
+async function createCatalogueWork() {
+  const title = { value: 'A Work', language: 'en' };
+  const search = await client.v1.catalogue.candidates.post({
+    profile: 'catalogue-candidates-v1', originalTitle: title,
+    aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
+  });
+  if (search.error) throw search.error;
+  const work: CreateWork = {
+    profile: 'metadata-only-v1', title: title.value, language: title.language,
+    grain: 'new-creative-scope', candidateReceipt: search.data.candidateReceipt,
+    actingSubject: 'https://rezics.com/id/11111111-1111-4111-8111-111111111111',
+  };
+  return client.v1.works.post(work, { headers: { 'Idempotency-Key': 'eden-catalogue-work' } });
+}
 const query: PublicQuery = { profile: 'public-main-phrase-v1',
   phrase: 'example', language: null };
-void client.v1.works.post(work);
+void createCatalogueWork;
 void client.v1.queries.post(query);
 void client.v1.spaces.post;
 void client.v1.contributions.post;

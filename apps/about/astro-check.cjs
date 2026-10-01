@@ -10,7 +10,14 @@ Module._resolveFilename = function (request, ...rest) {
 // `exports` hides the package's bin, so import it by path from its entry point.
 const path = require('node:path');
 const entry = require.resolve('@astrojs/check', { paths: [__dirname] });
-import(path.join(path.dirname(entry), '..', 'bin', 'astro-check.js')).catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// The standalone checker skips Astro's CLI sync step. Generate collection and
+// environment types first so a clean checkout checks the same types as a build.
+import('astro')
+  .then(async ({ sync }) => {
+    await sync({});
+    return import(path.join(path.dirname(entry), '..', 'bin', 'astro-check.js'));
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
