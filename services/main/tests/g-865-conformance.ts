@@ -3,6 +3,8 @@ import { EditorialBlocked, EditorialReceiptInvalid, type ApplyInput, type BaseHe
   type EditorialAdapter, type Json, type Proposal, type ProposalReview, type Blocker } from '../src/modules/editorial-review/contract.ts';
 import { applyReviewedRevision, reviewState, type CurrentReviewer, type Viewer }
   from '../src/modules/editorial-review/lifecycle.ts';
+import { MemoryCommandJournal } from './g-865-command-journal.ts';
+import type { CommandOutcome, EditorialCommand } from '../src/modules/editorial-review/contract.ts';
 
 export interface AdapterFixture {
   adapter: EditorialAdapter; proposal: Proposal; input: ApplyInput;
@@ -10,6 +12,7 @@ export interface AdapterFixture {
   writes(): number;
   moveHead(): BaseHead[];
   loseNextAcknowledgement(): void;
+  compensationCandidate?: Json;
 }
 export interface AdapterFixtureModule { kind: string; create(): Promise<AdapterFixture> }
 
@@ -55,10 +58,10 @@ export async function runEditorialAdapterConformance(module: AdapterFixtureModul
 
   // Deliberate adapter regressions: success without a receipt and a substituted
   // candidate receipt must both fail the same guard before a terminal decision.
-  const missing: EditorialAdapter = { ...f.adapter,
+  const missing: EditorialAdapter = { ...f.adapter,commands: undefined,
     apply: async () => ({ outcome: 'applied', receipt: undefined! }) };
   await expect(apply(f, missing)).rejects.toBeInstanceOf(EditorialReceiptInvalid);
-  const substituted: EditorialAdapter = { ...f.adapter, apply: async input => ({ outcome: 'applied',
+  const substituted: EditorialAdapter = { ...f.adapter,commands: undefined, apply: async input => ({ outcome: 'applied',
     receipt: { receipt: 'urn:test:wrong-candidate', proposal: input.revision.proposal,
       revision: input.revision.n, candidateDigest: '0'.repeat(64), operationKey: input.operationKey,
       beforeHeads: input.expectedHeads, afterHeads: input.expectedHeads.map(row => ({ ...row, head: 'urn:test:after' })),
@@ -88,6 +91,41 @@ export async function runEditorialAdapterConformance(module: AdapterFixtureModul
   await blocked(apply(lost, lost.adapter, { ...lost.proposal, decision: result }), 'terminal_decision');
   expect(lost.writes()).toBe(1);
   const compensated = await lost.adapter.compensate(result.receipt!);
-  expect(compensated.candidate).toEqual(lost.input.revision.before as Json);
+  expect(compensated.candidate).toEqual(lost.compensationCandidate ?? lost.input.revision.before as Json);
   expect(compensated.baseHeads).toEqual(result.receipt!.afterHeads);
+}
+
+/** Exercise the shared multi-command kernel with each adapter's real fixture
+ * owner. Two independent owner effects use one reviewed application. */
+export async function runEditorialOrderedConformance(module: AdapterFixtureModule): Promise<void> {
+  const owners = await Promise.all([module.create(),module.create()]);
+  const f = owners[0]!;
+  const settled = new Map<string,CommandOutcome>();
+  let interruptSecond = true;
+  const commands: EditorialCommand[] = owners.map((owner,index) => ({
+    key: `${f.input.operationKey}:${index}`,
+    prepare: async () => ({ action: 'test.owner',scope: `test:${index}`,digest: owner.input.revision.candidateDigest }),
+    resolve: async delivery => settled.get(delivery.key) ?? null,
+    execute: async delivery => {
+      if (index === 1 && interruptSecond) { interruptSecond = false; return null; }
+      const result = await owner.adapter.apply(owner.input);
+      if (result.outcome !== 'applied') return null;
+      const outcome: CommandOutcome = { key: delivery.key,outcome: 'applied',receipt: result.receipt.receipt,result: result.receipt.owner };
+      settled.set(delivery.key,outcome); return outcome;
+    },
+  }));
+  const adapter: EditorialAdapter = { ...f.adapter,commands: async () => commands,
+    complete: async input => ({ receipt: 'urn:test:ordered',proposal: input.revision.proposal,revision: input.revision.n,
+      candidateDigest: input.revision.candidateDigest,operationKey: input.operationKey,beforeHeads: input.expectedHeads,
+      afterHeads: input.expectedHeads,candidate: input.revision.candidate,before: input.revision.before,owner: {} }) };
+  const input = { ...f.input,commands: new MemoryCommandJournal() };
+  await blocked(apply(f,adapter,f.proposal,input),'apply_pending');
+  expect(owners.map(owner => owner.writes())).toEqual([1,0]);
+  await blocked(apply(f,adapter,f.proposal,{ ...input,resumeDelivery: false }),'apply_pending');
+  expect(owners.map(owner => owner.writes())).toEqual([1,0]);
+  const result = await apply(f,adapter,f.proposal,input);
+  expect(result.receipt?.commands?.map(command => command.key)).toEqual(commands.map(command => command.key));
+  expect(owners.map(owner => owner.writes())).toEqual([1,1]);
+  expect((await apply(f,adapter,f.proposal,input)).receipt).toEqual(result.receipt);
+  expect(owners.map(owner => owner.writes())).toEqual([1,1]);
 }

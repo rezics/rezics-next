@@ -6,7 +6,7 @@ import type { targetRef } from '../target/contract.ts';
 export type ResourceRef = Static<typeof targetRef>;
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export const EDITORIAL_COST = { candidateBytes: 1_048_576, evidenceRefs: 32,
-  baseHeads: 32, messageChars: 4000, pageSize: 50, jsonDepth: 32, requiredApprovals: 2 } as const;
+  baseHeads: 32, messageChars: 4000, pageSize: 50, jsonDepth: 32, requiredApprovals: 2, commands: 2048 } as const;
 
 export interface EditorialTarget {
   resource: ResourceRef;
@@ -50,6 +50,7 @@ export type Blocker =
   | { code: 'terminal_decision'; outcome: TerminalDecision['outcome'] }
   | { code: 'owner_unavailable' }
   | { code: 'revision_required' }
+  | { code: 'budget_exhausted' }
   | { code: 'apply_pending'; operationKey: string };
 export class EditorialBlocked extends Error {
   constructor(readonly blocker: Blocker) { super(blocker.code); }
@@ -67,6 +68,7 @@ export interface OwnerReceipt {
   candidate: Json; before: Json;
   /** Opaque owner receipt payload, retained for the kind's compensation. */
   owner: Json;
+  commands?: CommandOutcome[];
 }
 export interface TerminalDecision {
   proposal: string; revision: number; actor: ResourceRef;
@@ -97,6 +99,33 @@ export interface ApplyInput {
   /** Stable across lost acknowledgements and a new HTTP retry key. */
   operationKey: string;
   permit: EditorialWritePermit;
+  commands?: OrderedCommandJournal;
+  /** Receipt-only recovery never grants permission to dispatch. */
+  resumeDelivery?: boolean;
+}
+export interface OwnerCommand { action: string; scope: string; digest: string }
+export interface CommandOutcome {
+  key: string; outcome: 'applied' | 'rejected' | 'dependency_rejected';
+  receipt: string | null; result: Json;
+}
+export interface CommandDelivery {
+  input: ApplyInput; key: string; binding: OwnerCommand; admissionId?: string;
+}
+/** The immutable ordered keys are retained before any delivery. Bindings may
+ * depend on an earlier owner's allocated IRI; the journal retains that exact
+ * binding before admission, tied to the approved candidate digest. */
+export interface EditorialCommand {
+  key: string;
+  prepare(settled: readonly CommandOutcome[]): Promise<OwnerCommand>;
+  execute(delivery: CommandDelivery, settled: readonly CommandOutcome[]): Promise<CommandOutcome | null>;
+  resolve(delivery: CommandDelivery, settled: readonly CommandOutcome[]): Promise<CommandOutcome | null>;
+}
+export interface OrderedCommandJournal {
+  plan(input: ApplyInput, keys: readonly string[]): Promise<void>;
+  read(input: ApplyInput, position: number): Promise<{ binding: OwnerCommand | null;
+    admissionId?: string; outcome: CommandOutcome | null }>;
+  bind(input: ApplyInput, position: number, binding: OwnerCommand): Promise<void>;
+  settle(input: ApplyInput, position: number, outcome: CommandOutcome): Promise<void>;
 }
 export type ApplyOutcome =
   | { outcome: 'applied'; receipt: OwnerReceipt }
@@ -117,6 +146,11 @@ export interface EditorialAdapter {
   validate(target: EditorialTarget, candidate: unknown, expectedHeads: BaseHead[]): Promise<ValidatedCandidate>;
   preview(revision: ProposalRevision): Promise<PreviewChange[]>;
   apply(input: ApplyInput): Promise<ApplyOutcome>;
+  /** Shared ordered delivery; adapters supply owner meaning, never a journal. */
+  commands?(input: ApplyInput): Promise<EditorialCommand[]>;
+  complete?(input: ApplyInput, outcomes: readonly CommandOutcome[]): Promise<OwnerReceipt>;
+  /** Owner redaction applies to every public representation of retained bytes. */
+  disclose?(revision: ProposalRevision): Promise<ProposalRevision>;
   compensate(receipt: OwnerReceipt): Promise<ValidatedCandidate>;
   /** Receipt-only lookup; must not dispatch or require the old credential. */
   resolve?(input: ApplyInput): Promise<ApplyOutcome | { outcome: 'cancelled' } | null>;

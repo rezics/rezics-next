@@ -7,6 +7,8 @@ import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { workRead } from '../work/read-session.ts';
 import { resolveTargets } from '../target/resolve.ts';
 import { discoverEditorialAdapters } from './adapters.ts';
+import { EditorialCommandJournal } from './command-journal.ts';
+import { applyOrderedCommands } from './ordered.ts';
 import { editorialController, editorialPrincipal, independenceKey, requireReview, reviewBasis, viewerFor } from './authority.ts';
 import { applyReviewedRevision, assertOpenRevision, assertOwnerReceipt, reviewState, type Viewer } from './lifecycle.ts';
 import { canonicalCandidate, EDITORIAL_COST, EditorialBlocked, EditorialInvalid, makeProposalRevision, revisionOperationKey,
@@ -34,8 +36,9 @@ export interface EditorialEvent { sequence: string; id: string; proposal: string
 /** Logical request costs: one proposal/revision, ≤2 counted approvals and one
  * request_changes stance, ≤32 evidence/head references, ≤50 page rows. Mutation
  * queries use proposal/key indices and one per-proposal session lock. Applying
- * dispatches one owner command within 10s/64 graph calls/4MiB; recovery looks up
- * one admission and receipt. Native planner/full-corpus costs remain unqualified. */
+ * delivers legacy commands within 10s/64 graph calls/4MiB. Ordered delivery uses
+ * that bound per command and yields after 10s; recovery resumes its retained list.
+ * Native planner/full-corpus costs remain unqualified. */
 export const EDITORIAL_STORE_COST = { page: 50, countedApprovals: 2, graphCalls: 64,
   graphBytes: 4 * 1024 * 1024, applyDeadlineMs: 10_000, eventsPage: 50 } as const;
 
@@ -70,6 +73,24 @@ function cursorDecode(cursor: string | undefined, binding: unknown): unknown {
 export class EditorialReviewStore {
   private readonly modules = discoverEditorialAdapters();
   constructor(private readonly pool: Pool) {}
+  /** Internal immutable receipt lookup for an owner's compensation validator. */
+  async appliedReceipt(proposal: string): Promise<OwnerReceipt | null> {
+    return (await this.pool.query<{ owner_receipt: OwnerReceipt }>(`SELECT owner_receipt FROM access.editorial_decision
+      WHERE proposal = $1 AND outcome = 'applied'`,[proposal])).rows[0]?.owner_receipt ?? null;
+  }
+  private async disclosedReceipt(adapter: EditorialAdapter, revision: ProposalRevision, receipt: OwnerReceipt | null) {
+    if (!receipt || !adapter.disclose) return receipt;
+    const disclosed = await adapter.disclose({ ...revision,candidate: receipt.candidate,before: receipt.before });
+    return { ...receipt,candidate: disclosed.candidate,before: disclosed.before };
+  }
+  async discloseResult(call: Pick<EditorialCall,'work' | 'request'>, result: CommandResult): Promise<CommandResult> {
+    if (!result.receipt) return result;
+    const client = await this.pool.connect();
+    try {
+      const row = await this.proposal(client,result.proposal), revision = await this.revision(client,row.id,result.revision);
+      return { ...result,receipt: (await this.disclosedReceipt(await this.adapter(row.kind,call),revision,result.receipt))! };
+    } finally { client.release(); }
+  }
 
   private async adapter(kind: string, call: Pick<EditorialCall,'work' | 'request'>): Promise<EditorialAdapter> {
     const module = (await this.modules).get(kind);
@@ -242,7 +263,7 @@ export class EditorialReviewStore {
     return { target: proposal.target,revision,expectedHeads: revision.baseHeads,operationKey: application.operation_key,
       ...(application.admission ? { admissionId: application.admission } : {}),
       permit: { proof: application.id,proposal: proposal.id,revision: revision.n,candidateDigest: revision.candidateDigest,
-        decidingAgent: application.actor } };
+        decidingAgent: application.actor },commands: new EditorialCommandJournal(this.pool) };
   }
   private async finish(client: PoolClient, row: ProposalRow, revision: ProposalRevision, application: Application,
     outcome: 'applied' | 'stale_base' | 'cancelled', receipt?: OwnerReceipt, blocker?: Blocker): Promise<CommandResult> {
@@ -263,10 +284,11 @@ export class EditorialReviewStore {
     await this.save(client,application.principal,application.command_key,application.command_digest,result);
     return result;
   }
-  private async recover(client: PoolClient, row: ProposalRow, adapter: EditorialAdapter, application: Application): Promise<CommandResult | null> {
+  private async recover(client: PoolClient, row: ProposalRow, adapter: EditorialAdapter, application: Application,
+    resumeCall?: EditorialCall): Promise<CommandResult | null> {
     if (application.outcome) return null;
     const revision = await this.revision(client,row.id,application.revision);
-    if (!application.admission && adapter.admission === 'access') {
+    if (!adapter.commands && !application.admission && adapter.admission === 'access') {
       // Fence registration before resolving an intent left by a crash before
       // delivery. A later register sees its immutable cancellation and fails.
       await this.begin(client);
@@ -278,10 +300,26 @@ export class EditorialReviewStore {
       }
       await client.query('COMMIT'); application = current;
     }
-    if (!adapter.resolve) return null;
+    if (!adapter.resolve && !adapter.commands) return null;
     let resolution: Awaited<ReturnType<NonNullable<EditorialAdapter['resolve']>>>;
-    try { resolution = await adapter.resolve(this.applyInput(rowToProposal(row),revision,application)); }
-    catch { return null; }
+    try {
+      const input = { ...this.applyInput(rowToProposal(row),revision,application),resumeDelivery: !!resumeCall };
+      if (adapter.commands && resumeCall) {
+        await this.begin(client);
+        const proposal = rowToProposal(row);
+        const graph = resumeCall.work.environment.fuseki;
+        await requireReview(client,proposal,application.principal,application.actor,graph);
+        const basis = await reviewBasis(client,proposal,adapter.requiredApprovals,graph,application.approve
+          ? { principal: application.principal,review: { id: application.id,proposal: row.id,revision: revision.n,
+            reviewer: application.actor,reviewerKey: independenceKey(row.id,application.principal),
+            outcome: 'approve',message: application.message,sequence: '0' } } : undefined);
+        const viewer = await viewerFor(client,proposal,application.principal,application.actor,graph);
+        const decision = await applyReviewedRevision(adapter,proposal,input,basis.reviews,basis.authority,viewer,row.reverts);
+        resolution = { outcome: 'applied',receipt: decision.receipt! };
+        await client.query('ROLLBACK');
+      } else resolution = adapter.commands ? await applyOrderedCommands(adapter,input) : await adapter.resolve!(input);
+    }
+    catch { await client.query('ROLLBACK').catch(() => {}); return null; }
     if (!resolution || resolution.outcome === 'pending') return null;
     await this.begin(client);
     const result = await this.finish(client,row,revision,application,resolution.outcome,
@@ -301,7 +339,8 @@ export class EditorialReviewStore {
       let application = await this.application(client,id,row.latest);
       if (application && !application.outcome) {
         await client.query('COMMIT');
-        const recovered = await this.recover(client,row,adapter,application);
+        const recovered = await this.recover(client,row,adapter,application,
+          application.principal === principal && application.actor === call.actingSubject ? call : undefined);
         if (recovered && application.command_key === key && application.principal === principal
           && application.command_digest === requestDigest) return { ...recovered,replayed: true };
         this.pending(await this.application(client,id,row.latest));
@@ -340,11 +379,22 @@ export class EditorialReviewStore {
         const fresh = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki,prospective);
         const viewer = await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
         deliveryAttempted = true;
-        decision = await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
+        const deliver = () => applyReviewedRevision(adapter,proposal,this.applyInput(proposal,revision,application!),fresh.reviews,fresh.authority,viewer,row.reverts);
+        decision = adapter.commands ? await deliver() : await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
           callsLeft: EDITORIAL_STORE_COST.graphCalls,bytesLeft: EDITORIAL_STORE_COST.graphBytes },
-        () => applyReviewedRevision(adapter,proposal,this.applyInput(proposal,revision,application!),fresh.reviews,fresh.authority,viewer,row.reverts));
+        deliver);
       } catch (error) {
         await client.query('ROLLBACK');
+        if (error instanceof EditorialBlocked && error.blocker.code === 'budget_exhausted') {
+          const delivered = (await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
+            UNION ALL SELECT 1 FROM access.editorial_command_admission WHERE application = $1 LIMIT 1`,[application.id])).rowCount;
+          if (!delivered) {
+            await this.begin(client);
+            const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
+            await client.query('COMMIT'); return result;
+          }
+          return { proposal: id,revision: revision.n,outcome: 'apply_pending',replayed: false,blocker: error.blocker };
+        }
         if (error instanceof EditorialBlocked && error.blocker.code === 'stale_base') {
           await this.begin(client); await this.finish(client,row,revision,application,'stale_base',undefined,error.blocker);
           await client.query('COMMIT'); throw error;
@@ -445,9 +495,10 @@ export class EditorialReviewStore {
         WHERE proposal = $1 AND revision < $2 AND outcome = 'approve' ORDER BY sequence DESC LIMIT 51`,[id,row.latest])).rows;
       state.staleApprovalIds = stale.slice(0,50).map(review => review.id);
       await client.query('COMMIT');
-      const { ownerCommand: _owner, ...publicRevision } = revision;
+      const { ownerCommand: _owner, ...publicRevision } = adapter.disclose ? await adapter.disclose(revision) : revision;
       return { profile: 'editorial-proposal-v1',proposal: { id: row.id,kind: row.kind,target: row.target,proposer: row.proposer_agent,
-        latestRevision: row.latest,decision: row.decision,reverts: row.reverts },revision: publicRevision,
+        latestRevision: row.latest,decision: row.decision ? { ...row.decision,
+          receipt: await this.disclosedReceipt(adapter,revision,row.decision.receipt) } : null,reverts: row.reverts },revision: publicRevision,
         preview: await adapter.preview(revision),...state,staleApprovalIdsComplete: stale.length <= 50,timeline: page,
         nextCursor: events.length > limit ? cursorEncode(binding,page.at(-1)!.sequence) : null };
     } catch (error) {

@@ -2,6 +2,7 @@ import { canonicalCandidate, EditorialBlocked, EditorialInvalid, EditorialReceip
   headsEqual, revisionOperationKey, type ApplyInput, type Blocker, type EditorialAdapter,
   type OwnerReceipt, type Proposal, type ProposalReview, type ProposalRevision,
   type ResourceRef, type TerminalDecision } from './contract.ts';
+import { applyOrderedCommands, checkedCommandOutcome } from './ordered.ts';
 
 /** Authority results come from a fresh Access read under its decision fence.
  * Reusing the authority observed when a review was submitted is forbidden. */
@@ -92,10 +93,16 @@ export function assertOwnerReceipt(receipt: OwnerReceipt,
     || !Array.isArray(receipt.afterHeads) || !headsEqual(receipt.afterHeads, receipt.afterHeads)
     || receipt.afterHeads.length !== receipt.beforeHeads.length
     || receipt.afterHeads.some(head => head.head === null || !receipt.beforeHeads.some(before =>
-      before.component === head.component && before.head !== head.head))) {
+      before.component === head.component && (receipt.commands?.length || before.head !== head.head)))) {
     throw new EditorialReceiptInvalid('Application lacks an exact successful owner receipt');
   }
   canonicalCandidate(receipt.owner);
+  if (receipt.commands) {
+    if (!receipt.commands.length || new Set(receipt.commands.map(command => command.key)).size !== receipt.commands.length) {
+      throw new EditorialReceiptInvalid('Ordered receipt lacks unique command outcomes');
+    }
+    for (const command of receipt.commands) checkedCommandOutcome(command,command.key);
+  }
 }
 
 /** This guard returns a decision to persist, never mutates a status. The caller
@@ -121,7 +128,7 @@ export async function applyReviewedRevision(adapter: EditorialAdapter, proposal:
     const blocker = state.blockers.find(row => row.code === 'required_approvals');
     throw new EditorialBlocked(blocker ?? { code: 'review_authority_required' });
   }
-  const result = await adapter.apply(input);
+  const result = adapter.commands ? await applyOrderedCommands(adapter,input) : await adapter.apply(input);
   if (result.outcome === 'stale_base') throw new EditorialBlocked({ code: 'stale_base',
     expectedHeads: input.expectedHeads, actualHeads: result.actualHeads });
   if (result.outcome === 'pending') throw new EditorialBlocked({ code: 'apply_pending', operationKey: input.operationKey });

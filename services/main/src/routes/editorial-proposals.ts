@@ -33,7 +33,9 @@ const evidence = t.Array(t.Object({ resource: ref,revision: ref,locator: t.Nulla
   { additionalProperties: false }),{ maxItems: 32 });
 const target = t.Object({ resource: native,revision: native,context,work: t.Nullable(native) });
 const receipt = t.Object({ receipt: ref,proposal: uuid,revision: n,candidateDigest: t.String(),operationKey: ref,
-  beforeHeads: heads,afterHeads: heads,candidate: t.Unknown(),before: t.Unknown(),owner: t.Unknown() });
+  beforeHeads: heads,afterHeads: heads,candidate: t.Unknown(),before: t.Unknown(),owner: t.Unknown(),
+  commands: t.Optional(t.Array(t.Object({ key: ref,outcome: t.Union([t.Literal('applied'),t.Literal('rejected'),
+    t.Literal('dependency_rejected')]),receipt: t.Nullable(ref),result: t.Unknown() }),{ maxItems: 2048 })) });
 const terminalOutcome = t.Union([t.Literal('applied'),t.Literal('rejected'),t.Literal('withdrawn')]);
 const decision = t.Object({ proposal: uuid,revision: n,actor: native,outcome: terminalOutcome,
   receipt: t.Nullable(receipt),reverts: t.Nullable(uuid) });
@@ -44,6 +46,7 @@ export const editorialBlocker = t.Union([
   t.Object({ code: t.Literal('required_approvals'),required: n,received: t.Integer({ minimum: 0 }) }),
   t.Object({ code: t.Literal('terminal_decision'),outcome: terminalOutcome }),
   t.Object({ code: t.Literal('owner_unavailable') }),t.Object({ code: t.Literal('revision_required') }),
+  t.Object({ code: t.Literal('budget_exhausted') }),
   t.Object({ code: t.Literal('apply_pending'),operationKey: ref }),
 ]);
 const blockedProblem = (status: number) => t.Object({ ...problemResult(status).properties,blocker: t.Optional(editorialBlocker) });
@@ -111,7 +114,8 @@ export function editorialProposalRoutes(work: MainWorkDependencies) {
       const key = request.headers.get('idempotency-key');
       if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) throw new EditorialInvalid('A valid Idempotency-Key header is required');
       const principal = await work.account.verify(request,[scope]);
-      return resultResponse(await run({ work,request,principal,actingSubject },key),created);
+      const call = { work,request,principal,actingSubject };
+      return resultResponse(await owner().discloseResult(call,await run(call,key)),created);
     } catch (error) { return editorialError(error); }
   };
   const read = async (request: Request, actingSubject = '') => ({ work,request,actingSubject,
