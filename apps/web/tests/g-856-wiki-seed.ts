@@ -141,7 +141,53 @@ try {
     });
     facts.push({ statement, text, continuity: seed.work, position: occurrences.at(-1)! });
   }
-  const alternate = await f.publicWork(seed.holderActor, ['en'], 'Synthetic alternate continuity');
+  const namedWork = async (
+    language: string,
+    title: string,
+    semanticTypes: readonly string[] = [],
+  ) => {
+    const created = await activateMetadataWork(f.env, {
+      title,
+      language,
+      semanticTypes,
+      admission: f.admission(
+        seed.holderActor,
+        'work:create:root',
+        'work.create',
+        metadataWorkRequestDigest(title, semanticTypes, language),
+      ),
+    });
+    const contribution = await f.contribution(
+      created.work,
+      seed.holderActor,
+      language,
+      'Synthetic language fixture',
+    );
+    const selection = {
+      context: { kind: 'main-version-default' as const, id: created.mainVersion },
+      work: created.work,
+      contribution: contribution.contribution,
+      publicationDecision: contribution.decision,
+      expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer' as const,
+      actingSubject: seed.holderActor,
+    };
+    const selected = await selectMainDefault(
+      f.env,
+      f.admission(
+        seed.holderActor,
+        `publication:select:${created.mainVersion}`,
+        'publication.select',
+        mainSelectionDigest(selection),
+      ),
+      selection,
+    );
+    if (selected.outcome !== 'succeeded') throw new Error('Language fixture selection failed');
+    return { work: created.work, mainVersion: created.mainVersion };
+  };
+  const alternate = await namedWork('en', 'Synthetic alternate continuity', [
+    'https://schema.org/Book',
+  ]);
   for (const p of [holder, reviewer])
     for (const action of ['work.read', 'work.edit', 'work.review']) {
       await p.grant(`work:${action.slice(5)}:${alternate.work}`, action);
@@ -190,45 +236,6 @@ try {
     if (changed.status !== 200) throw new Error(`Inventory: ${JSON.stringify(changed)}`);
     head = (changed.body as { revision: string }).revision;
   }
-  const namedWork = async (language: string, title: string) => {
-    const created = await activateMetadataWork(f.env, {
-      title,
-      language,
-      admission: f.admission(
-        seed.holderActor,
-        'work:create:root',
-        'work.create',
-        metadataWorkRequestDigest(title, undefined, language),
-      ),
-    });
-    const contribution = await f.contribution(
-      created.work,
-      seed.holderActor,
-      language,
-      'Synthetic language fixture',
-    );
-    const selection = {
-      context: { kind: 'main-version-default' as const, id: created.mainVersion },
-      work: created.work,
-      contribution: contribution.contribution,
-      publicationDecision: contribution.decision,
-      expectedSelectionHead: null,
-      selectionBasis: 'main-maintainer' as const,
-      actingSubject: seed.holderActor,
-    };
-    const selected = await selectMainDefault(
-      f.env,
-      f.admission(
-        seed.holderActor,
-        `publication:select:${created.mainVersion}`,
-        'publication.select',
-        mainSelectionDigest(selection),
-      ),
-      selection,
-    );
-    if (selected.outcome !== 'succeeded') throw new Error('Language fixture selection failed');
-    return { work: created.work };
-  };
   const thai = await namedWork('th', 'เจ้าหญิงแห่งดวงจันทร์');
   const arabic = await namedWork('ar', 'اسم عربي للاختبار');
   const {
