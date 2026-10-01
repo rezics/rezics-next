@@ -335,12 +335,14 @@ export class AccessActingContexts {
   async discover(principal: VerifiedPrincipal): Promise<ActingContextDiscovery> {
     const discovered = await transaction<ActingContextDiscovery>(this.pool, async client => {
       const gate = await currentGate(client);
-      const principalId = await activePrincipal(client, principal);
-      const preference = principalId ? (await client.query<{
-        acting_subject: string | null; revision: string;
-      }>(`SELECT acting_subject, revision FROM access.acting_context_preference
-          WHERE principal_id = $1 AND task = $2`,
-      [principalId, WORK_CREATE_CONTEXT.task])).rows[0] : undefined;
+      const preference = (await client.query<{
+        id: string; acting_subject: string | null; revision: string | null;
+      }>(`SELECT p.id, preference.acting_subject, preference.revision FROM access.principal p
+          LEFT JOIN access.acting_context_preference preference
+            ON preference.principal_id = p.id AND preference.task = $3
+          WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active FOR SHARE OF p`,
+      [principal.issuer, principal.subject, WORK_CREATE_CONTEXT.task])).rows[0];
+      const principalId = preference?.id ?? null;
       if (!gate.open || !gate.dispatch_open || !principalId) return {
         profile: 'work-create-acting-contexts-v1', task: WORK_CREATE_CONTEXT.task,
         scope: WORK_CREATE_CONTEXT.scope, authorityEpoch: gate.authority_epoch,

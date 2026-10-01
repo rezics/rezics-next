@@ -95,7 +95,7 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
       `${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(actor)}`, undefined, token);
     const first = await stack.publicWork(person.agent, ['en'], 'First credited Work');
     const second = await stack.publicWork(person.agent, ['en'], 'Second credited Work');
-    const hidden = await stack.privateWork(person.agent, 'Private Work');
+    const hidden = await stack.privateWork(other.agent, 'Private Work');
     const workHead = async (work: string) => {
       const rows = await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
         GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head } }`);
