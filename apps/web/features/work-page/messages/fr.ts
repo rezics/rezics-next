@@ -332,4 +332,5 @@ export default {
   discussionIntro: 'Fils sur l’œuvre, ses parties et ses éditions. Lire ne demande aucune adhésion.',
   ratingPopulation: insert('Noté par : {{who}}', { who: String }),
   ratingScaleRange: insert('Échelle {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('Critiques de {{target}}', { target: String }),
 } satisfies WorkPageMessages;

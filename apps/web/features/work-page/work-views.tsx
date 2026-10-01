@@ -236,6 +236,7 @@ async function Reviews({ workRef, id, work, scope, context: chosen, locale, mess
   const named = await Promise.all(authors.map(async author => [author, await readReviewer(author)] as const));
   const writable = everyone.ok && everyone.data.context?.context === question.context;
   return <ReviewsSection target={work.id} context={question.context} scale={question.scale.max} initial={initial}
+    subject={materializeData(messages, { locale }).reviewsOf({ target: work.title.value })}
     reviewers={Object.fromEntries(named.filter((entry): entry is [string, Reviewer] => entry[1] !== null))}
     viewer={actingSubject ? { kind: 'reader', actingSubject, canWrite: writable }
       : signedIn ? { kind: 'no-identity' }

@@ -333,4 +333,5 @@ export default {
   discussionIntro: 'Threads zum Werk, seinen Teilen und Ausgaben. Lesen erfordert keine Mitgliedschaft.',
   ratingPopulation: insert('Bewertet von: {{who}}', { who: String }),
   ratingScaleRange: insert('Skala {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('Rezensionen zu {{target}}', { target: String }),
 } satisfies WorkPageMessages;

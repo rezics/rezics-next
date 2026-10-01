@@ -285,4 +285,5 @@ export default {
   discussionIntro: '작품, 구성, 릴리스에 대한 스레드입니다. 읽는 데 멤버십이 필요하지 않습니다.',
   ratingPopulation: insert('평가한 사람: {{who}}', { who: String }),
   ratingScaleRange: insert('척도 {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('{{target}} 리뷰', { target: String }),
 } satisfies WorkPageMessages;

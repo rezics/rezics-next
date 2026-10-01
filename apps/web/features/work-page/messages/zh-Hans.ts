@@ -287,4 +287,5 @@ export default {
   discussionIntro: '关于作品、其组成部分与版本的讨论串。阅读不需要成为成员。',
   ratingPopulation: insert('评分者：{{who}}', { who: String }),
   ratingScaleRange: insert('评分范围 {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('{{target}} 的书评', { target: String }),
 } satisfies Partial<WorkPageMessages>;

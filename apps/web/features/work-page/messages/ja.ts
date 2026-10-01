@@ -285,4 +285,5 @@ export default {
   discussionIntro: '作品、その構成、リリースについてのスレッド。読むだけならメンバーになる必要はありません。',
   ratingPopulation: insert('評価した人：{{who}}', { who: String }),
   ratingScaleRange: insert('尺度 {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('{{target}} のレビュー', { target: String }),
 } satisfies WorkPageMessages;

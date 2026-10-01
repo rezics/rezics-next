@@ -99,8 +99,11 @@ describe('the one primary action', () => {
   const none = { start: null, progress: null, preference: null, releases: 0 };
   const href = `/w/${iri('a1').slice(-36)}`;
 
-  test('hosted text leads, then the next part Main names, then choosing an edition', () => {
-    expect(nextAction({ ...none, start: { kind: 'continue', href: '/w/x/chapters/1', chapter: 'Ch 1' } })?.kind).toBe('read');
+  test('the next part Main names leads, then hosted text, then choosing an edition', () => {
+    const text = { kind: 'continue' as const, href: '/w/x/chapters/1', chapter: 'Ch 1' };
+    expect(nextAction({ ...none, start: text })?.kind).toBe('read');
+    // A composed Work is read part by part: its own text does not outrank its next part.
+    expect(nextAction({ ...none, start: text, progress: series({}) })?.kind).toBe('part');
     expect(nextAction({ ...none, progress: series({}), releases: 2 })).toEqual({ kind: 'part', mode: 'start', href,
       part: 'Volume 1' });
     expect(nextAction({ ...none, progress: series({ furthestCompleted: { part: {} } }) })).toMatchObject({ kind: 'part',

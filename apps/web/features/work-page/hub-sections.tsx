@@ -12,7 +12,7 @@ import { DiscussionSection, StatementsSection } from '../entity-page/sections.ts
 import Link from '../shell/localized-link.tsx';
 import { SeriesProgressPanel } from '../tracking/series-progress-panel.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
-import { readNames, readRealizations, readReleases as readReleasePage } from '../work-levels/read.ts';
+import { readNames, readParts, readRealizations, readReleases as readReleasePage } from '../work-levels/read.ts';
 import { ConnectionsPreview, PartsPreview } from '../work-levels/previews-server.tsx';
 import { EditionsPreviewView } from '../work-levels/previews.tsx';
 import type { WorkPageMessages } from './messages.ts';
@@ -73,13 +73,16 @@ export async function AboutFacts({ id, locale, messages }: Common & { id: string
 
 /**
  * Your edition and availability: the reader's choice first, then the Work's realizations and releases with a
- * way into the full inventory. A Work with neither has no section.
+ * way into the full inventory. A series has no editions of its own, but its reader still chooses a language
+ * and the edition its parts are read in, so a Work with parts has the section too; one with neither does not.
  */
 export async function Availability({ workRef, id, locale, messages }: Common & { workRef: WorkAt; id: string }) {
-  const [realizations, releases] = await Promise.all([readRealizations(id), readReleasePage(id)]);
-  const empty = (realizations.ok && !realizations.data.items.length || !realizations.ok && realizations.failure === 'missing')
-    && (releases.ok && !releases.data.items.length || !releases.ok && releases.failure === 'missing');
-  if (empty) return null;
+  const [realizations, releases, parts] = await Promise.all([readRealizations(id), readReleasePage(id),
+    readParts(id, { limit: 1 })]);
+  const none = (read: { ok: true; data: { items?: unknown[]; parts?: unknown[] } } | { ok: false; failure: string }) =>
+    read.ok ? !(read.data.items ?? read.data.parts)?.length : read.failure === 'missing' || read.failure === 'sign-in'
+      || read.failure === 'identity';
+  if (none(realizations) && none(releases) && none(parts)) return null;
   const t = materializeData(messages, { locale });
   return <Region id="work-availability" title={t.sectionAvailability}>
     <YourEdition work={iriOf(id)} locale={locale} messages={messages}

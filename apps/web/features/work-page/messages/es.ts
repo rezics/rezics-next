@@ -332,4 +332,5 @@ export default {
   discussionIntro: 'Hilos sobre la obra, sus partes y sus ediciones. Leer no requiere ser miembro.',
   ratingPopulation: insert('Valorado por: {{who}}', { who: String }),
   ratingScaleRange: insert('Escala {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('Reseñas de {{target}}', { target: String }),
 } satisfies WorkPageMessages;

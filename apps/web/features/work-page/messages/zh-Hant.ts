@@ -281,4 +281,5 @@ export default {
   discussionIntro: '關於作品、其組成部分與版本的討論串。閱讀不需要成為成員。',
   ratingPopulation: insert('評分者：{{who}}', { who: String }),
   ratingScaleRange: insert('評分範圍 {{min}}–{{max}}', { min: String, max: String }),
+  reviewsOf: insert('{{target}} 的書評', { target: String }),
 } satisfies WorkPageMessages;

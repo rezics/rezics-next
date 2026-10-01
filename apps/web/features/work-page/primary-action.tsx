@@ -29,17 +29,17 @@ export type NextAction =
 type Series = Extract<ProgressSummary, { scope: 'disclosed-composition' }>;
 
 /**
- * Which action leads, in this order: text the reader can open here, the next part Main names (its
- * `primaryAction`), choosing an edition when releases exist and none is chosen. A language-only preference is a
- * choice ("any edition in Japanese"), so only a reader with neither an edition nor a preference is asked. A Work
- * with none of these has no primary action, and the shelf leads instead.
+ * Which action leads, in this order: the next part of a composition Main names (its `primaryAction`), text the
+ * reader can open here, choosing an edition when releases exist and none is chosen. A composed Work is read
+ * part by part, so its own text, when it has one, does not outrank its next part. A language-only preference is
+ * a choice ("any edition in Japanese"), so only a reader with neither an edition nor a preference is asked. A
+ * Work with none of these has no primary action, and the shelf leads instead.
  */
 export function nextAction({ start, progress, preference, releases }: {
   start: ReadStart; progress: Loaded<ProgressSummary> | null; preference: Loaded<EditionPreference | null> | null;
   /** How many releases Main lists for the Work; zero when it could not say. */
   releases: number;
 }): NextAction | null {
-  if (start) return { kind: 'read', start };
   const series: Series | null = progress?.ok && progress.data.scope === 'disclosed-composition' ? progress.data : null;
   const target = series?.primaryAction;
   const work = target ? idOf(target.work) : null;
@@ -52,6 +52,7 @@ export function nextAction({ start, progress, preference, releases }: {
     }
     return { kind: 'part', mode: series.furthestCompleted ? 'continue' : 'start', href: `/w/${work}`, part };
   }
+  if (start) return { kind: 'read', start };
   const chosen = Boolean(preference?.ok && preference.data?.edition);
   return releases > 0 && !chosen ? { kind: 'choose', href: `#${hubAnchors.availability}`, part: null } : null;
 }
