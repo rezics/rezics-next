@@ -3,8 +3,8 @@ FROM ${BUN_IMAGE} AS dependencies
 WORKDIR /app
 COPY . .
 ENV YARN_ENABLE_SCRIPTS=false YARN_ENABLE_IMMUTABLE_INSTALLS=true
-RUN bun yarn.cjs workspaces focus @rezics/main @rezics/account @rezics/content --production \
-    && rm yarn.cjs
+RUN bun yarn.cjs workspaces focus $(cat runtime-workspaces.txt) --production \
+    && rm yarn.cjs runtime-workspaces.txt
 
 FROM ${BUN_IMAGE} AS runtime
 ARG ROLE=main
