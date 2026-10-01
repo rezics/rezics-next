@@ -152,8 +152,11 @@ export async function readRatingContextPolicyWitness(pool: Pool, context: string
   });
 }
 
-// Leading-key equality plus index order stops at k+1 without scanning other
-// targets or admission history. Every admission join uses its primary key.
+// Each branch selects at most k+1 indexed candidates BEFORE precedence and
+// origin joins, then sorts at most 2(k+1) rows. If native votes mask candidates,
+// they also count toward the population: truncation cannot hide an overflow.
+// Every origin, precedence and admission lookup is an exact indexed probe.
+// https://www.postgresql.org/docs/18/indexes-ordering.html
 function inventorySql(release: boolean | 'target'): string { return `SELECT c.realm, c.revision AS context_revision,
     c.policy_revision,
     f.open, f.generation, ca.state AS context_state, ca.graph_outcome AS context_outcome,
@@ -175,11 +178,16 @@ function inventorySql(release: boolean | 'target'): string { return `SELECT c.re
     (SELECT h.*,NULL::text AS effective_work,NULL::text AS effective_main_version FROM access.rating_aggregate_head h
       WHERE context=c.context AND main_version=$2 AND target_release IS NULL ORDER BY slot LIMIT 101)
     UNION ALL SELECT h.*,s.work AS effective_work,s.main_version AS effective_main_version
-      FROM access.rating_merge_selection s JOIN access.rating_aggregate_head h
-        ON h.context=s.context AND h.main_version=s.origin_main_version AND h.slot=s.origin_slot AND h.principal_id=s.principal_id
-      WHERE s.context=c.context AND s.main_version=$2 AND h.target_release IS NULL
-        AND NOT EXISTS (SELECT 1 FROM access.rating_aggregate_head native WHERE native.context=s.context
-          AND native.main_version=s.main_version AND native.principal_id=s.principal_id AND native.target_release IS NULL)
+      FROM (SELECT * FROM access.rating_merge_selection
+        WHERE context=c.context AND main_version=$2 ORDER BY principal_id LIMIT 101) s
+      LEFT JOIN LATERAL (SELECT 1 AS present FROM access.rating_aggregate_head native
+        WHERE native.context=s.context AND native.main_version=s.main_version
+          AND native.principal_id=s.principal_id AND native.target_release IS NULL LIMIT 1) native ON true
+      LEFT JOIN LATERAL (SELECT * FROM access.rating_aggregate_head origin
+        WHERE origin.context=s.context AND origin.main_version=s.origin_main_version
+          AND origin.slot=s.origin_slot AND origin.principal_id=s.principal_id
+          AND origin.target_release IS NULL LIMIT 1) h ON native.present IS NULL
+      WHERE native.present IS NULL
     ) selected ORDER BY slot LIMIT 101` : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
     WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ORDER BY slot LIMIT 101`}) h ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id LIMIT 1) a ON true
@@ -216,6 +224,9 @@ async function readInventory(pool: Pool, context: string, target: string,
     const first = result.rows[0];
     if (!first || first.open !== true || first.context_state !== 'sealed' || first.context_outcome !== 'succeeded') {
       throw new RatingInventoryConflict('Rating inventory is unavailable');
+    }
+    if (result.rows.some(row => row.effective_work && !row.slot)) {
+      throw new RatingInventoryConflict('Merged rating origin is unavailable');
     }
     const heads = result.rows.filter(row => row.slot).map((row): RatingInventoryHead => {
       if (row.state !== 'sealed' || row.graph_outcome !== 'succeeded' || row.identity_valid !== true
