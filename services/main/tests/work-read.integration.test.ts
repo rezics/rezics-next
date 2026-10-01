@@ -163,19 +163,20 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
         work: first.work, mainVersion: first.mainVersion, expectedRevisionHead: null,
         value: member === a ? 8 : 6, actingSubject: member.actor }), 201);
     }
-    const globalRating = await json<Rating>(await get(`${root}/ratings`));
-    expect((await json<Page<unknown>>(await get(`${root}/rating-contexts`))).items)
+    const ratingRoot = `/v1/resources/${short(first.work)}`;
+    const globalRating = await json<Rating>(await get(`${ratingRoot}/ratings`));
+    expect((await json<Page<unknown>>(await get(`${ratingRoot}/rating-contexts`))).items)
       .toMatchObject([{ context: global.context, question: 'Global quality', scale: { max: 5 } }]);
     expect(globalRating).toMatchObject({ scope: { kind: 'global' }, scale: { max: 5 }, count: 2, mean: 3 });
     expect(globalRating.distribution).toEqual([1, 0, 0, 0, 1].map((count, i) => ({ value: i + 1, count })));
-    expect(await json(await get(`${root}/ratings?scope=realm&realm=${encodeURIComponent(realm.realm)}`)))
+    expect(await json(await get(`${ratingRoot}/ratings?scope=realm&realm=${encodeURIComponent(realm.realm)}`)))
       .toMatchObject({ scope: { kind: 'realm', realm: realm.realm }, scale: { max: 10 }, count: 2, mean: 7 });
-    expect(await json(await a.read(`${root}/ratings?scope=mine`)))
+    expect(await json(await a.read(`${ratingRoot}/ratings?scope=mine`)))
       .toMatchObject({ scope: { kind: 'mine' }, scale: { max: 5 }, count: 1, mean: 5 });
-    expect(await json(await b.read(`${root}/ratings?scope=mine`))).toMatchObject({ count: 1, mean: 1 });
-    expect((await get(`${root}/ratings?scope=mine`)).status).toBe(401);
-    expect((await get(`${root}/ratings?scope=realm`)).status).toBe(400);
-    expect((await get(`${root}/ratings?context=${encodeURIComponent(local.context)}`)).status).toBe(404);
+    expect(await json(await b.read(`${ratingRoot}/ratings?scope=mine`))).toMatchObject({ count: 1, mean: 1 });
+    expect((await get(`${ratingRoot}/ratings?scope=mine`)).status).toBe(401);
+    expect((await get(`${ratingRoot}/ratings?scope=realm`)).status).toBe(400);
+    expect((await get(`${ratingRoot}/ratings?context=${encodeURIComponent(local.context)}`)).status).toBe(404);
 
     // The same read must keep working after the legacy decision writer is retired.
     await a.grant('statement:migrate:root', 'statement.migrate');
@@ -230,7 +231,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(realm.space)} rv:disclosure rv:Public } } INSERT { GRAPH ${iri(GRAPHS.current)} {
       ${iri(realm.space)} rv:disclosure rv:Private } } WHERE {}`);
-    expect((await get(`${root}/ratings?scope=realm&realm=${encodeURIComponent(realm.realm)}`)).status).toBe(404);
+    expect((await get(`${ratingRoot}/ratings?scope=realm&realm=${encodeURIComponent(realm.realm)}`)).status).toBe(404);
     expect((await get(`${root}/classifications?scope=realm&realm=${encodeURIComponent(realm.realm)}`)).status).toBe(404);
     expect((await json<Page<unknown>>(await get(`${root}/adoptions`))).items).toEqual([]);
     const erasedVariant = `urn:rezics:variant:${randomUUID()}`;

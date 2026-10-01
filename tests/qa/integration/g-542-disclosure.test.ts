@@ -24,6 +24,8 @@ import { NotificationDispatcher, type NotificationSubjectReader, type ProviderSe
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 
+import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
+
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 async function stopWeb(child: ChildProcess) {
   if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
@@ -163,7 +165,8 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest },
         targets: [{ ...target, locator: null, scopeKind: 'exact_revision', revision: target.revision ?? null,
           expectedHead: target.owner === 'media' ? null : target.revision ?? null, effect: 'disclosure' }],
-        reversesDecisionId: null, answersStepId: null, rationale: 'G-542 fixture restriction', disclosure: 'parties', idempotencyKey: randomUUID() };
+        reasons: fixtureReasons, reversesDecisionId: null, answersStepId: null, rationale: 'G-542 fixture restriction', disclosure: 'parties', idempotencyKey: randomUUID() };
+      await claimFixture(f.accessPool, report.caseId, f.principalId, f.actor);
       const restricted = await governance.decide(principal, decision);
       for (const channel of DISCLOSURE_CHANNELS) expect((await disclose(f.env, [target], ANONYMOUS_VIEWER, channel))[0]).not.toBe('visible');
       expect((await notifications.readStream(principal, null)).items.find(item => item.id === notice.itemId)?.display).toBeNull();
@@ -223,6 +226,7 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         await stopWeb(web); web = undefined;
         await server.stop(true); server = undefined;
       }
+      await claimFixture(f.accessPool, report.caseId, f.principalId, f.actor);
       await governance.decide(principal, { ...decision, expectedGeneration: restricted.caseGeneration, outcome: 'reverse',
         reversesDecisionId: restricted.decisionId, idempotencyKey: randomUUID() });
       for (const channel of DISCLOSURE_CHANNELS) expect(await disclose(f.env, [target], ANONYMOUS_VIEWER, channel)).toEqual(['visible']);

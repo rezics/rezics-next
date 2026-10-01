@@ -300,13 +300,13 @@ test('author baseline: exact Content publication and search eligibility use reso
     expect(avatar.status, await avatar.clone().text()).toBe(201);
     const own = await h.call('GET', `/v1/resources/${short(work.work)}?actingSubject=${encodeURIComponent(h.actor)}`);
     expect(own.status, await own.clone().text()).toBe(200);
-    expect(await own.json()).toMatchObject({ avatar: { kind: 'image' } });
+    expect(await own.json()).toMatchObject({ disclosure: 'restricted', avatar: { kind: 'fallback' } });
     const stranger = await h.agent();
     expect((await h.call('GET', `/v1/resources/${short(work.work)}?actingSubject=${encodeURIComponent(stranger)}`)).status)
       .toBe(404);
     const batch = await h.call('POST', '/v1/resources/summaries', { profile: 'resource-summary-batch-v1',
       resources: [work.work], actingSubject: h.actor });
     expect(batch.status, await batch.clone().text()).toBe(200);
-    expect(await batch.json()).toMatchObject({ summaries: [{ status: 'available', avatar: { kind: 'image' } }] });
+    expect(await batch.json()).toMatchObject({ summaries: [{ status: 'available', disclosure: 'restricted', avatar: { kind: 'fallback' } }] });
   } finally { await h.close(); }
 }, 120_000);

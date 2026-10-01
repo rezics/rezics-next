@@ -23,6 +23,9 @@ import { createRealmSpace, spaceCreationDigest }
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
+
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `${ID}${randomUUID()}`;
 
@@ -54,6 +57,8 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
   await access.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
     [principal, identity.issuer, identity.a.id]);
   await access.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
+  const author = { kind: 'person' as const, displayName: 'Event fixture author' };
+  await createAgentGraph(env, { id: randomUUID(), agent: actor, ...author, digest: agentProvisionDigest(author) });
   async function grantEvent(event: string) {
     const scope = `event:observe:${event}`;
     await access.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
@@ -96,7 +101,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     return data;
   };
   const createWork = async (title: string) => {
-    const response = await post('/v1/works', { profile: 'metadata-only-v1', language: 'en', title, actingSubject: actor });
+    const response = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title, actingSubject: actor });
     const data = await response.json() as { work?: string };
     if (response.status !== 201 || !data.work) throw new Error(`evidence Work failed: ${response.status} ${JSON.stringify(data)}`);
     return data.work;

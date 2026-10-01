@@ -29,9 +29,9 @@ test('G-327 direct authoring commits one native author credit; source adoption d
     expect(credits).toHaveLength(1);
     expect(credits[0]?.agent?.value).toBe(f.actor);
     expect(credits[0]?.role?.value).toBe('author');
-    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
+    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({ language: 'en',
       profile: 'metadata-only-v1', title: 'A curated Work', actingSubject: f.actor,
-    }), 201);
+    })), 201);
     expect(await queryCredits(curated.work)).toHaveLength(0);
     const proposal = await f.propose(`OL${Math.floor(Math.random() * 900000 + 100000)}W`,
       [author('/authors/OL1A')], 'An imported classic');

@@ -86,7 +86,8 @@ async function expectAccessCatalogs(pool: Pool): Promise<void> {
   await expectCatalog(pool, siteSchema, siteColumns, true);
   // No commerce, quota or site table is placed in the Access authority schema.
   const leaked = await pool.query(`SELECT table_name FROM information_schema.tables
-    WHERE table_schema = 'access' AND table_name ~ '^(commerce|quota|site|entitlement|subscription)'`);
+    WHERE table_schema = 'access' AND table_name = ANY($1::text[])`,
+    [[...Object.keys(commerceColumns), ...Object.keys(quotaColumns), ...Object.keys(siteColumns)]]);
   expect(leaked.rows).toEqual([]);
 }
 

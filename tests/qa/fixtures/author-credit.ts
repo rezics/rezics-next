@@ -27,6 +27,7 @@ import { ownerEvidenceCapture } from '../../../services/main/src/modules/governa
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { SourceNativeChildStore } from '../../../services/main/src/modules/source/child-native-support.ts';
 import { sourceChildOccurrence } from '../../../services/main/src/modules/source/child-correspondence.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 
@@ -139,7 +140,9 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   } }), { current: async () => null }, { current: async ref =>
     ref === 'urn:rezics:rule:source-rights' ? { revision: 'v1', digest: ruleDigest } : null });
   let source: Record<string, unknown> = {};
+  const catalogueIntake = new CatalogueIntakeStore(accessPool, env);
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
+    catalogueIntake,
     actingContexts: new AccessActingContexts(accessPool),
     mediaAccess: new MediaAccessBatchReader(accessPool, fuseki),
     accessPolicy: new AccessPolicyOwner(accessPool),
@@ -166,6 +169,14 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     if (response.status !== status) console.error('author credit fixture response', response.status, result);
     expect(response.status).toBe(status);
     return result as T;
+  };
+  const catalogueBody = async <T extends { title: string; language?: string }>(body: T) => {
+    const language = body.language ?? 'und';
+    const { candidateReceipt } = await json<{ candidateReceipt: string }>(await call('POST', '/v1/catalogue/candidates', {
+      profile: 'catalogue-candidates-v1', originalTitle: { value: body.title, language },
+      aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
+    }), 200);
+    return { ...body, language, grain: 'new-creative-scope' as const, candidateReceipt };
   };
   const propose = async (workId: string, authors: unknown, title = 'Author credit Work',
     description?: string, subjects?: string[]) => {
@@ -199,7 +210,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     rightsStore, governance, ruleDigest,
     credits, nativeChildren, principalId, otherPrincipal, actor, sourceAuthorNames,
     setAuthorName: (key: string, name: string) => retainedAuthorNames.set(key, name),
-    call, json, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
+    call, json, catalogueBody, catalogueIntake, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
     failCertificate: () => { loseCertificate = true; }, loseGraph: () => { loseGraphResponse = true; },
     loseRetirementGraph: () => { loseRetirementResponse = true; },
     loseFieldGraph: () => { loseFieldResponse = true; },
