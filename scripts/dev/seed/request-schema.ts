@@ -9,6 +9,17 @@ interface Operation {
 }
 let routes: [RegExp, Record<string, Operation>][] | undefined;
 
+/** OpenAPI 3.0 marks optional nulls with `nullable: true`, which TypeBox's checker
+ * ignores: a nullable enum then refused the null Main accepts. Express each one as
+ * an explicit `anyOf` with `null` before checking. */
+function withNulls(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(withNulls);
+  if (!schema || typeof schema !== 'object') return schema;
+  const { nullable, ...rest } = schema as Record<string, unknown>;
+  const mapped = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, withNulls(value)]));
+  return nullable === true ? { anyOf: [mapped, { type: 'null' }] } : mapped;
+}
+
 /** Seed and fixture transports validate every Main write against the generated
  * public contract, including dynamic paths, before sending any request. */
 export function assertSeedRequest(method: string, path: string, body: unknown): void {
@@ -21,6 +32,7 @@ export function assertSeedRequest(method: string, path: string, body: unknown): 
         ),
       ) as { paths: Record<string, Record<string, Operation>> }
     ).paths,
+  ).map(([route, operations]) => [route, withNulls(operations) as Record<string, Operation>] as const,
   ).map(([route, operations]) => [
     new RegExp(
       `^${route
