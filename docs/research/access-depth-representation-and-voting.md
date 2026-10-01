@@ -8,7 +8,7 @@ The [identity/access](../contracts/identity-and-access.md),
 [governance](../contracts/governance-rules.md) contracts own the semantics. The
 [identity acceptance](../testing/identity-and-access.md) and
 [governance acceptance](../testing/governance-and-delivery.md) pages own detailed
-outcomes; the [recorded backend qualification](../plan/qualification.md)
+outcomes; the [recorded backend qualification](../plan/README.md#current-state)
 identifies their tested scope. Current API paths live under
 `services/main/src/modules/access/` and `services/main/src/modules/vote/`.
 

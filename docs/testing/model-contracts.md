@@ -3,7 +3,7 @@
 The 27 MODEL scenarios and required results are declared in
 [typed cases](../../scripts/qa/cases/model-contracts.ts). This page remains the
 case source path in the frozen QA inventory; moving that path requires a reviewed
-backend-scope fingerprint change. [Recorded qualification](../plan/qualification.md)
+backend-scope fingerprint change. [Recorded qualification](../plan/README.md#current-state)
 identifies the full clean run and exact tests that passed each case. The compiler
 [candidate tests](../../model/compiler/generate.test.ts),
 [native equivalence tests](../../model/tests/native-equivalence.test.ts) and

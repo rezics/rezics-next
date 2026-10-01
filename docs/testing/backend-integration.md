@@ -2,7 +2,7 @@
 
 The [typed SYS01–SYS14 inventory](../../scripts/qa/cases/backend-integration.ts)
 defines the scenarios and required results. This page remains the stable case
-identity in recorded qualification evidence. The [qualification record](../plan/qualification.md)
+identity in recorded qualification evidence. The [qualification record](../plan/README.md#current-state)
 links each case to its actual unit, integration, model or fault/recovery tests;
 the case title alone does not prove every assertion.
 

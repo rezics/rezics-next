@@ -1,7 +1,7 @@
 # Rating and temporal acceptance
 
 These are prospective tests, not executed results. Run at the applicable
-[verification phase](../plan/execution-workflow.md), preserving actual owner
+[verification phase](test-harness.md), preserving actual owner
 boundaries, source snapshots and positive/denied/partial outcomes.
 
 | ID | Scenario | Required result |

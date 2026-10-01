@@ -58,7 +58,7 @@ Broader inference and display grouping remain pending SEARCH subcases.
 Logical candidate, call and byte ceilings are code contracts. They do not prove
 physical engine work or mixed-load latency at rollout scale. The
 [complexity procedure](../testing/complexity.md) and
-[recorded qualification](../plan/qualification.md) carry measured scope and runs.
+[recorded qualification](../plan/README.md#current-state) carry measured scope and runs.
 
 ## Multilingual retrieval direction
 

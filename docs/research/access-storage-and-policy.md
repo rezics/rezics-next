@@ -86,5 +86,5 @@ Trusted fixture writes do not qualify the real grant API, concurrent mutation,
 cross-store revocation or load. Revisit the selected evaluator if representative
 mixed workloads with identical policy, freshness and list completeness show a
 need for specialized relationship evaluation. The
-[recorded backend qualification](../plan/qualification.md) states the current
+[recorded backend qualification](../plan/README.md#current-state) states the current
 accepted scope; full performance and scale verification remain later work.

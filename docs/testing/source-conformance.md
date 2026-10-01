@@ -63,7 +63,7 @@ failures, never empty data or successful skips.
 
 LIVE01–18 scenarios and required results are declared in
 [`source-conformance.ts`](../../scripts/qa/cases/source-conformance.ts).
-The [recorded qualification](../plan/qualification.md) names the executable
+The [recorded qualification](../plan/README.md#current-state) names the executable
 evidence for each ID; the selected-run limits below still apply.
 
 The planned [editorial-protection integration](../contracts/source-lifecycle.md#editorial-protection-and-quality-integration)

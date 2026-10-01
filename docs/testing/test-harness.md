@@ -98,3 +98,6 @@ alone gives partial evidence; complete-case declarations must cover the whole
 scenario and pass on the same clean, stable full run. Unselected tests are
 unverified. `--record` writes a qualification artifact only after these gates
 pass; failed runs retain their diagnostics without replacing qualification.
+The artifact stays with its run; record the run ID and tested source commit in
+the [plan's current state](../plan/README.md#current-state) rather than copying
+the generated page into documentation.

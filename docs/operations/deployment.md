@@ -102,7 +102,7 @@ each TDB2 directory; a second host cannot mount the live files as a replica.
 `task load` runs the named host profile. Its executable thresholds and
 evidence checks live in [the load runner](../../scripts/load/practical.ts) and
 [OPS05 cases](../../scripts/qa/cases/operations.ts). The recorded
-[qualification](../plan/qualification.md) applies only to its exercised
+[qualification](../plan/README.md#current-state) applies only to its exercised
 fixture and host. Storage and restore capacity for 500 million entities, and
 the three-billion-entity scenario, require separate measurement. Preserve
 failed attempts and distinguish setup cost from measured request latency.

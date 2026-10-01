@@ -6,7 +6,7 @@ current state, where a task starts reading, and the acceptance gates. It was
 shortened on 2026-09-30 at the Goal's restart: the stage A–G sequence, the S0–S3
 fast-start milestones and the 2026-09-23/24 documentation verification narrative
 described backend phase 1, which finished on 2026-09-27 (history on
-`archive/goals` and in the [qualification page](qualification.md)).
+`archive/goals`; the recorded run is the baseline below).
 
 ## Current state
 
@@ -35,9 +35,7 @@ Start from intent, then the owner, then the code:
    executable behaviour; documents own intent, reasons and procedures.
 
 Frontend tasks also load the [frontend direction](frontend.md) and the affected
-feature's stories and browser tests. The [read API design](read-api-design.md)
-maps the read families of the Work template as it stood before the generic
-entity page; consult it as material. [Low-priority work](low-priority/README.md)
+feature's stories and browser tests. [Low-priority work](low-priority/README.md)
 lists deferred acquisitions. A wording or link fix needs only the
 affected document and its consumers.
 

@@ -3,7 +3,7 @@
 The [typed IAM cases](../../scripts/qa/cases/identity-and-access.ts) state the
 stable scenarios and required results. [Coverage declarations](../../scripts/qa/coverage/iam.ts)
 and the owner tests identify the executable evidence. The
-[qualification record](../plan/qualification.md) reports the completed run;
+[qualification record](../plan/README.md#current-state) reports the completed run;
 a selected test pass alone does not qualify a case.
 
 Account authenticates a private user. Access selects and checks an acting Agent

@@ -5,7 +5,7 @@ case identities and base outcomes. [Coverage declarations](../../scripts/qa/cove
 distinguish schema, generation, delivery and load evidence. A mock-only pass
 cannot qualify storage or capacity; record inputs, receipts, exact
 profiles/builds and failures at the applicable
-[verification phase](../plan/execution-workflow.md).
+[verification phase](test-harness.md).
 
 ## Prospective refinements
 

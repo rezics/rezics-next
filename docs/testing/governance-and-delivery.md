@@ -6,7 +6,7 @@ code. The [report](../../scripts/qa/coverage/gov-report.ts),
 [rights](../../scripts/qa/coverage/gov-rights.ts),
 [delivery](../../scripts/qa/coverage/gov-notification.ts) and
 [judgment](../../scripts/qa/coverage/gov-judgment.ts) mappings name their owner
-tests; [recorded qualification](../plan/qualification.md) retains the executed
+tests; [recorded qualification](../plan/README.md#current-state) retains the executed
 evidence. The case IDs and qualified denominator are unchanged.
 
 The complaint cases do not certify § 512 eligibility; the

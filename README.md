@@ -5,7 +5,7 @@ stores graph aggregates and runs graph/text queries with jena-text/Lucene.
 PostgreSQL owns Content and private state; Main exposes APIs consumed by the web and Accounts apps.
 
 Backend phase 1 passed all 276 retained backend acceptance IDs in its
-[recorded run](docs/plan/qualification.md). The web journey and later scale and
+[recorded run](docs/plan/README.md#current-state). The web journey and later scale and
 deployment gates have their own status in the [plan](docs/plan/README.md#current-state).
 
 ## Start locally

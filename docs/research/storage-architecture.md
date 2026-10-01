@@ -6,7 +6,7 @@ embedded jena-text/Lucene for the first search binding.** This is the startup
 choice. The [architecture overview](../architecture/overview.md),
 [Content owner](../../services/content/src/core.ts), [owner placement](../storage/ownership-and-placement.md), [Jena owner](../storage/jena.md) and
 [search contract](../contracts/search.md) own current behavior. The
-[qualification record](../plan/qualification.md) records backend phase 1;
+[qualification record](../plan/README.md#current-state) records backend phase 1;
 its passing acceptance run does not establish production capacity or the
 planned 500 million entity scale.
 
@@ -93,7 +93,7 @@ calls. A single HTTP request can hide expensive postings or shard work; a
 per-candidate refill loop is not a bounded plan. Current budgets and tests
 belong to [workload budgets](../storage/workload-budgets.md) and the
 [search owner](../contracts/search.md), with recorded phase-1 evidence in
-[qualification](../plan/qualification.md). Full performance verification and
+[qualification](../plan/README.md#current-state). Full performance verification and
 500 million entity capacity remain later work; these research samples are not
 their SLOs.
 

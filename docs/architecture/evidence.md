@@ -32,7 +32,7 @@ The prior Fluree probes are historical research, not Jena acceptance or a scale
 result. Source documentation for [OAuth](https://www.rfc-editor.org/rfc/rfc9700.html),
 [SHACL](https://www.w3.org/TR/shacl/) and [PROV-O](https://www.w3.org/TR/prov-o/)
 supports their mechanisms, not REZICS's admission, validation or provenance
-composition. The [recorded qualification](../plan/qualification.md) states the
+composition. The [recorded qualification](../plan/README.md#current-state) states the
 actual accepted scope; full performance, 500M corpus and production destruction
 evidence remain later work. [Storage research](../research/README.md) keeps
 experiment provenance and unresolved engine limits.

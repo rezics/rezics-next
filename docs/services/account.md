@@ -3,7 +3,7 @@
 Account owns private users, credentials, sessions, email recovery and
 OAuth/OIDC. These are separate from public Agents and Access authority.
 [Account source](../../services/account/src/auth.ts) and [owner tests](../../services/account/tests/)
-carry endpoint and lifecycle contracts; see [recorded qualification](../plan/qualification.md).
+carry endpoint and lifecycle contracts; see [recorded qualification](../plan/README.md#current-state).
 
 Main verifies issuer, audience, signature and current Account introspection
 for protected requests. Account fences the current key, installation, consent,

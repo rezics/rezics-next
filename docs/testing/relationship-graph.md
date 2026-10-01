@@ -5,7 +5,7 @@ the case identities and base outcomes. [Coverage declarations](../../scripts/qa/
 and the recorded qualification show which tests actually ran. A mock-only pass
 cannot qualify storage, cross-service behavior or capacity; record inputs,
 receipts, exact profiles/builds and failures at the applicable
-[verification phase](../plan/execution-workflow.md).
+[verification phase](test-harness.md).
 
 ## Prospective refinements
 

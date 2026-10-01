@@ -1,7 +1,7 @@
 # Acceptance design
 
 Acceptance cases are declared under `scripts/qa/cases/`. The declarations state
-required behavior, while [recorded qualification](../plan/qualification.md)
+required behavior, while [recorded qualification](../plan/README.md#current-state)
 reports past passes.
 Use [the plan](../plan/README.md#acceptance-gates) for gate definitions and
 [system invariants](../contracts/system-invariants.md) for shared correctness.
@@ -38,7 +38,7 @@ distinguish acquisition, conversion, native mapping and export outcomes.
 The [executable harness](test-harness.md) turns these cases into tests named by
 acceptance ID and records each run's commit, configuration, host, seeds, outcomes
 and failures. `task qa -- --record` publishes per-ID status on the
-[qualification page](../plan/qualification.md). This design collection contains
+[qualification page](../plan/README.md#current-state). This design collection contains
 acceptance contracts, not an implementation progress archive. Unexecuted, skipped, unavailable
 and failed are never a pass. Documentation checks prove links/structure only.
 

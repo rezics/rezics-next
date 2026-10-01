@@ -40,7 +40,7 @@ The standing, daily, experience, Global and release profile definitions live in
 `model/definitions/`; the exact admission and read contracts live in this owner
 module. RATE01–09 are declared in `scripts/qa/cases/ratings-and-event-time.ts`;
 `scripts/qa/coverage/rate*.ts` names the complete-case tests. The recorded
-backend result lives in `docs/plan/qualification.md`.
+backend run is named in `docs/plan/README.md#current-state`.
 
 Materialized rating projections, joined rating search, policy-controlled
 backdated entries, cross-context policies beyond the named Realm/Global

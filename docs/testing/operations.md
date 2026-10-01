@@ -3,7 +3,7 @@
 The OPS01–OPS16 scenarios and required results are
 [typed case declarations](../../scripts/qa/cases/operations.ts); the
 [coverage declarations](../../scripts/qa/coverage/ops-capacity.ts) and
-[qualification record](../plan/qualification.md) name actual evidence.
+[qualification record](../plan/README.md#current-state) name actual evidence.
 The case page remains the stable source identity in QA records.
 
 A small fixture restore or sanitized graph copy does not prove production
