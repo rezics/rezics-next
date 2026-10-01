@@ -47,12 +47,13 @@ async function fileReport(page: Page, locale: 'en' | 'ja', statement: string, fo
   await pressByKeyboard(page, send, found, 'Send report');
   await expect(page).toHaveURL(new RegExp(`/${locale}/report/[0-9a-f-]{36}#[\\w-]{43}$`), { timeout: 60_000 });
   await expect(page.getByRole('heading', { level: 1, name: t.statusTitle })).toBeVisible();
-  await expect(page.getByText(statement)).toBeVisible({ timeout: 60_000 });
+  // The private page names the case and how to come back to it; the statement stays with Main.
+  await expect(page.getByRole('button', { name: t.copyAddress })).toBeVisible({ timeout: 60_000 });
 }
 
 /** The private case page: its private-link control is reached by keyboard, and the page passes the matrix. */
 async function readCase(page: Page, locale: 'en' | 'ja', found: Findings, info: Parameters<typeof checkScreen>[3]) {
-  await keyboardReach(page, page.getByRole('button').filter({ hasText: /./ }).first(), found, `case page control (${locale})`);
+  await keyboardReach(page, page.getByRole('button', { name: textFor(locale).copyAddress }), found, `Copy address (${locale})`);
   await checkScreen(page, `report-case-${locale}`, found, info);
 }
 
