@@ -333,5 +333,6 @@ export default {
   ratingPopulation: insert('Bewertet von: {{who}}', { who: String }),
   ratingScaleRange: insert('Skala {{min}}–{{max}}', { min: String, max: String }),
   reviewsOf: insert('Rezensionen zu {{target}}', { target: String }),
+  identifierMatches: 'Veröffentlichungen mit dieser Kennung',
   signInForParts: 'Melde dich an, um die Teile und Verbindungen dieses Werks zu sehen.',
 } satisfies WorkPageMessages;

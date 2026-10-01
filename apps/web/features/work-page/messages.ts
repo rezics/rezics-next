@@ -281,6 +281,7 @@ const en = {
   ratingPopulation: insert('Rated by: {{who}}', { who: String }),
   signInForParts: 'Sign in to see this Work’s parts and connections.',
   reviewsOf: insert('Reviews of {{target}}', { target: String }),
+  identifierMatches: 'Releases with this identifier',
   ratingScaleRange: insert('Scale {{min}}–{{max}}', { min: String, max: String }),
 };
 

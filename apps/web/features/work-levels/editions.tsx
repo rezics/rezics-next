@@ -5,6 +5,7 @@ import { BookCopyIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { contentText } from '../language/untagged.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
+import { releaseLookupHref } from '../release-lookup/route.ts';
 import Link from '../shell/localized-link.tsx';
 import { languageName } from '../work-page/format.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
@@ -160,7 +161,8 @@ export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detai
           <span className="text-muted-foreground">{item.provider === 'isbn' ? t.isbn : item.provider}</span>{' '}
           {item.provider === 'isbn'
             ? <Link href={`/isbn/${item.value}`} className="font-mono underline-offset-4 hover:underline">{item.value}</Link>
-            : <span className="font-mono">{item.value}</span>}</span>)}</dd>
+            : <Link href={releaseLookupHref({ provider: item.provider, identifier: item.value })}
+              className="font-mono underline-offset-4 hover:underline">{item.value}</Link>}</span>)}</dd>
       </div> : null}
       {release.platform ? <div className="grid gap-0.5">
         <dt className="text-muted-foreground text-xs">{t.platform}</dt><dd className="text-sm">{release.platform}</dd></div> : null}

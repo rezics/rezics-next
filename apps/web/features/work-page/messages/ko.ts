@@ -285,5 +285,6 @@ export default {
   ratingPopulation: insert('평가한 사람: {{who}}', { who: String }),
   ratingScaleRange: insert('척도 {{min}}–{{max}}', { min: String, max: String }),
   reviewsOf: insert('{{target}} 리뷰', { target: String }),
+  identifierMatches: '이 식별자의 릴리스',
   signInForParts: '로그인하면 이 작품의 구성과 연결을 볼 수 있습니다.',
 } satisfies WorkPageMessages;

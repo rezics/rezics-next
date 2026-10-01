@@ -33,11 +33,22 @@ test('query 2: an ISBN or a digital entry resolves to a release, its realization
   expect((await page.goto('/en/isbn/9780316371248'))?.status()).toBe(404);
   expect((await page.goto('/en/isbn/9780306406157'))?.status()).toBe(404);
 
-  // The digital entry's release carries its store identifier, and reaches the same Work through its coverage.
-  await acrossViews(page, info, 'q2-digital', locale => `/${locale}/releases/${uuid(digital.release)}`, '[data-coverage]', async () => {
+  // The digital entry's store identifier, qualified by its provider, reaches the same release as `/isbn/{isbn}` does.
+  const lookup = (locale: string, provider = digital.provider, identifier = digital.value) =>
+    `/${locale}/release?provider=${encodeURIComponent(provider)}&identifier=${encodeURIComponent(identifier)}`;
+  await acrossViews(page, info, 'q2-digital', locale => lookup(locale), '[data-coverage]', async locale => {
+    await expect(page).toHaveURL(new RegExp(`/${locale}/releases/${uuid(digital.release)}$`));
     await expect(page.getByText(digital.value)).toBeVisible();
     expect(await linked(page.locator('[data-coverage] a'))).toContain(uuid(digital.work));
     expect(uuid(digital.mainVersion)).toBe(uuid(data.manifest.works['sao.bunko']!.mainVersion));
+    await expect(page.locator('[data-coverage]')).toHaveCount(1);
   });
+  // The same value under another provider, an unknown value and a lookup missing a half name no release.
+  expect((await page.goto(lookup('en', 'https://example.com/other-store')))?.status()).toBe(404);
+  expect((await page.goto(lookup('en', digital.provider, 'no-such-entry')))?.status()).toBe(404);
+  expect((await page.goto(`/en/release?identifier=${encodeURIComponent(digital.value)}`))?.status()).toBe(404);
+  // The release page links its identifier back to the lookup.
+  await page.goto(`/en/releases/${uuid(digital.release)}`);
+  await page.getByRole('link', { name: digital.value }).click();
+  await expect(page).toHaveURL(new RegExp(`/en/releases/${uuid(digital.release)}$`));
 });
-

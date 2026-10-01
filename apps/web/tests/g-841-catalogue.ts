@@ -39,7 +39,7 @@ export interface Answers {
   seriesParts: Record<'sao.bunko' | 'index.original' | 'index.nt' | 'index.gt', { work: string; label: string }[]>;
   /** Query 2: the ISBN's release and what it covers, the digital entry's release likewise. */
   isbn: { release: string; realization: string; work: string; mainVersion: string };
-  digital: { release: string; realization: string; work: string; mainVersion: string; value: string };
+  digital: { release: string; realization: string; work: string; mainVersion: string; provider: string; value: string };
   /** Queries 3, 4 and 11: the relations each Work has, by fixture key. */
   relations: Record<string, Related[]>;
   credits: Record<string, { role: string; displayName: string }[]>;
@@ -258,7 +258,7 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
     isbn: { release: created.release, realization: paperbackCoverage.realization ?? '', work: paperbackCoverage.work,
       mainVersion: paperbackCoverage.mainVersion },
     digital: { release: digital.release, realization: digitalCoverage.realization ?? '', work: digitalCoverage.work,
-      mainVersion: digitalCoverage.mainVersion, value: digitalPlan.identifiers[0]!.value },
+      mainVersion: digitalCoverage.mainVersion, provider: digitalPlan.identifiers[0]!.provider, value: digitalPlan.identifiers[0]!.value },
     relations: related, credits: credited, readingOrder: await members('index.original.reading'),
     omnibusCoverage, realizations, webReleases };
   return { manifest, answers, spider: { web: workId('D03.web'), book: workId('D03.books') }, isbn: ISBN };
