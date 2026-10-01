@@ -327,11 +327,12 @@ export class NotificationStore {
             VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`, [principalId]);
           await client.query(`INSERT INTO access.notification_digest_candidate (principal_id, day,
             source_owner, source_event, purpose, topic, subject_owner, subject_ref,
-            subject_revision, disclosure_basis, realm, proposal)
-            VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            subject_revision, disclosure_basis, realm, proposal, proposal_reason)
+            VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT DO NOTHING`, [principalId, event.sourceOwner, event.sourceEvent,
             event.purpose, event.topic, event.subject.owner, event.subject.ref,
-            event.subject.revision, event.disclosureBasis, event.display?.realm ?? null, event.proposal?.id ?? null]);
+            event.subject.revision, event.disclosureBasis, event.display?.realm ?? null, event.proposal?.id ?? null,
+            event.proposal?.reasons[principalId] ?? null]);
         }
         if (active.rows[0]?.inbox !== true) continue;
         await client.query(`INSERT INTO access.notification_stream (principal_id, stream)
@@ -617,10 +618,8 @@ export class NotificationStore {
         items.push(base); continue; }
       const resolved = await resolver.resolve({ principalId, owner: raw.subject_owner,
         ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis,
-        realm: raw.realm })
+        realm: raw.realm, recipientReason: raw.reason })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
-      if (resolved.status === 'unavailable')
-        throw new NotificationUnavailable('subject owner is unavailable');
       resolutions.push(resolved);
       if (resolved.status !== 'available') { items.push(base); continue; }
       const fields = resolved.subject.fields;
@@ -652,6 +651,7 @@ export class NotificationStore {
       ? item : { ...item,
             state:
               item.state === 'active' && result.items[index]!.raw.proposal
+                && checked[index]?.status !== 'unavailable'
                 ? ('withdrawn' as const)
                 : item.state,
             subject: null, display: null,
@@ -666,14 +666,15 @@ export class NotificationStore {
       const principalId = await this.reader(client, principal);
       if (!principalId) return { principalId, rows: [] };
       const rows = (await client.query<{ subject_owner: string; subject_ref: string;
-        subject_revision: string | null; disclosure_basis: string; realm: string | null }>(`SELECT i.subject_owner, i.subject_ref,
-          i.subject_revision, i.disclosure_basis, c.realm FROM access.notification_item i
+        subject_revision: string | null; disclosure_basis: string; realm: string | null; reason: ProposalSubscriptionReason | null }>(`SELECT i.subject_owner, i.subject_ref,
+          i.subject_revision, i.disclosure_basis, c.realm, pc.reason FROM access.notification_item i
         JOIN access.notification_stream s ON s.principal_id = i.principal_id AND s.stream = i.stream
           AND s.generation = i.generation
         LEFT JOIN access.notification_read_watermark w ON w.principal_id = i.principal_id
           AND w.stream = i.stream AND w.generation = i.generation
         LEFT JOIN access.notification_item_read r ON r.principal_id = i.principal_id AND r.item_id = i.id
         LEFT JOIN access.notification_display_context c ON c.item_id = i.id
+        LEFT JOIN access.notification_proposal_context pc ON pc.item_id = i.id
         WHERE i.principal_id = $1 AND i.stream = 'inbox' AND i.state = 'active'
           AND i.sequence > coalesce(w.read_through, 0) AND r.item_id IS NULL
         ORDER BY i.sequence DESC LIMIT $2`, [principalId, NOTIFICATION_LIMITS.unreadScan + 1])).rows;
@@ -685,7 +686,7 @@ export class NotificationStore {
       if (!resolver) continue;
       const resolved = await resolver.resolve({ principalId: principalId!, owner: row.subject_owner,
         ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis,
-        realm: row.realm })
+        realm: row.realm, recipientReason: row.reason })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
       subjects.push({ input: { principalId: principalId!, owner: row.subject_owner, ref: row.subject_ref,
         revision: row.subject_revision, disclosureBasis: row.disclosure_basis, realm: row.realm }, result: resolved });

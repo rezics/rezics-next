@@ -49,13 +49,21 @@ export async function editorialNotification(
       proposer_principal: string;
       reverts: string | null;
       review: string | null;
+      actor_principal: string | null;
     }>(
       `
-    SELECT p.proposer_principal,p.reverts, (SELECT r.outcome FROM access.editorial_review r
+    SELECT p.proposer_principal,p.reverts,r.outcome AS review,
+      CASE WHEN $5 = 'reviewed' THEN r.principal
+        WHEN $5 IN ('applied','rejected') THEN d.principal
+        ELSE p.proposer_principal END AS actor_principal
+    FROM access.editorial_proposal p
+    LEFT JOIN LATERAL (SELECT r.outcome,r.principal FROM access.editorial_review r
       WHERE r.proposal = p.id AND r.revision = $2 AND r.reviewer = $3 AND r.created_at <= $4
-      ORDER BY r.sequence DESC LIMIT 1) AS review
-    FROM access.editorial_proposal p WHERE p.id = $1`,
-      [event.proposal, event.revision, event.actor, event.occurredAt],
+      ORDER BY r.sequence DESC LIMIT 1) r ON true
+    LEFT JOIN access.editorial_decision d ON d.proposal = p.id AND d.revision = $2
+      AND d.actor = $3 AND d.created_at <= $4
+    WHERE p.id = $1`,
+      [event.proposal, event.revision, event.actor, event.occurredAt, event.kind],
     )
   ).rows[0];
   if (!row) return null;
@@ -90,9 +98,13 @@ export async function editorialNotification(
       AND NOT EXISTS (SELECT 1 FROM access.proposal_subscription mute
         WHERE mute.principal_id = s.principal_id AND mute.proposal = $1 AND mute.level = 'ignore')
       AND ($3 <> 'review-requested' OR s.reason <> 'author')
+      AND s.principal_id IS DISTINCT FROM $4::uuid
+      AND NOT EXISTS (SELECT 1 FROM access.representation self
+        WHERE self.principal_id = s.principal_id AND self.subject_id = $5
+          AND self.action = 'agent.control' AND self.active AND self.valid_until > clock_timestamp())
     ORDER BY s.principal_id, CASE s.reason WHEN 'author' THEN 0 WHEN 'reviewer' THEN 1 WHEN 'steward' THEN 2 ELSE 3 END
     LIMIT 257`,
-      [event.proposal, topic === 'proposal-reverted' ? row.reverts : null, topic],
+      [event.proposal, topic === 'proposal-reverted' ? row.reverts : null, topic, row.actor_principal, event.actor],
     )
   ).rows;
   if (recipients.length > 256) throw new Error('editorial recipient bound exceeded');
@@ -113,8 +125,9 @@ export async function editorialNotification(
   };
 }
 
-/** Reuse the target owner's current disclosure, including private Work and Realm
- * proofs. Subscription, historic reviews and author status grant no access. */
+/* Stewardship is a current authority, not a permanent watch. Check it on every
+ * inbox, digest and delivery read, in addition to the target's disclosure.
+ * Historic reviews, author status and manual watches grant no read access. */
 export function editorialNotificationSubjectReader(
   access: Pool,
   env: WorkActivationEnvironment,
@@ -132,8 +145,15 @@ export function editorialNotificationSubjectReader(
         await access.query<{ resource: string; context: string }>(
           `SELECT p.resource,p.context
       FROM access.editorial_proposal p JOIN access.editorial_revision r ON r.proposal = p.id
-      WHERE p.id = $1 AND r.n = $2`,
-          [input.ref, input.revision],
+      WHERE p.id = $1 AND r.n = $2
+        AND ($4::text IS DISTINCT FROM 'steward' OR EXISTS (
+          SELECT 1 FROM access.work_maintainer m
+          JOIN access.representation ctrl ON ctrl.subject_id = m.agent AND ctrl.action = 'agent.control'
+          JOIN access.principal who ON who.id = ctrl.principal_id AND who.active
+          JOIN access.authority_subject agent ON agent.id = m.agent AND agent.active AND agent.kind = 'agent'
+          WHERE m.work = p.work AND ctrl.principal_id = $3
+            AND ctrl.active AND ctrl.valid_until > clock_timestamp()))`,
+          [input.ref, input.revision, input.principalId, input.recipientReason ?? null],
         )
       ).rows[0];
       if (!row) return { status: 'undisclosed' };

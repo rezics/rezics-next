@@ -47,7 +47,9 @@ CREATE TABLE access.notification_proposal_context (
 );
 CREATE TRIGGER notification_proposal_context_immutable BEFORE UPDATE OR DELETE ON access.notification_proposal_context
     FOR EACH ROW EXECUTE FUNCTION access.reject_notification_mutation();
-ALTER TABLE access.notification_digest_candidate ADD COLUMN proposal uuid REFERENCES access.editorial_proposal(id);
+ALTER TABLE access.notification_digest_candidate
+    ADD COLUMN proposal uuid REFERENCES access.editorial_proposal(id),
+    ADD COLUMN proposal_reason text CHECK (proposal_reason IN ('author','reviewer','steward','manual'));
 
 -- This cursor consumes G-865's commit-serialized feed directly, including facts
 -- written before this migration. No second event log or outbox is introduced.

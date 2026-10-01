@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
-import type { NotificationStore } from './store.ts';
+import type { NotificationStore, ProposalSubscriptionReason } from './store.ts';
 
 /** One day and up to 51 event checks per tick. Account deduplicates the day
  * before its SMTP queue, so a lost HTTP acknowledgement can be retried. */
 export const DIGEST_COST = { candidatesPerDay: 50, daysPerTick: 1, intervalMs: 1_000 } as const;
 interface Day { principal_id: string; day: string; account_subject: string }
 interface Candidate { topic: string; purpose: string; subject_owner: string; subject_ref: string;
-  subject_revision: string | null; disclosure_basis: string; realm: string | null }
+  subject_revision: string | null; disclosure_basis: string; realm: string | null; proposal_reason: ProposalSubscriptionReason | null }
 
 export class NotificationDigestWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -36,7 +36,7 @@ export class NotificationDigestWorker {
       if (current?.active && current.account_issuer === this.issuer) {
         const candidates = (await this.access.query<Candidate>(
             `SELECT c.topic, c.purpose,
-          c.subject_owner, c.subject_ref, c.subject_revision, c.disclosure_basis, c.realm
+          c.subject_owner, c.subject_ref, c.subject_revision, c.disclosure_basis, c.realm, c.proposal_reason
           FROM access.notification_digest_candidate c
           JOIN access.notification_preference n ON n.principal_id = c.principal_id
             AND n.purpose = c.purpose AND n.topic = c.topic AND n.channel = 'email'
@@ -50,7 +50,7 @@ export class NotificationDigestWorker {
         const inputs = candidates.map(candidate => ({ principalId: day.principal_id,
             owner: candidate.subject_owner, ref: candidate.subject_ref,
             revision: candidate.subject_revision, disclosureBasis: candidate.disclosure_basis,
-            realm: candidate.realm }));
+            realm: candidate.realm, recipientReason: candidate.proposal_reason }));
         const disclosed = typeof this.notifications.resolveDigestSubjects === 'function'
           ? await this.notifications.resolveDigestSubjects(inputs)
           : await Promise.all(inputs.map(input => this.notifications.resolveDigestSubject(input)));

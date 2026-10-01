@@ -11,6 +11,8 @@ import {
   type StreamPage,
 } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
+import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
+import { FakeDeliveryProvider } from '../support/fake-delivery.ts';
 import { NotificationDigestWorker } from '../../../services/main/src/modules/notification/digest.ts';
 import { editorialNotificationSubjectReader, EDITORIAL_NOTIFICATION_TOPICS } from '../../../services/main/src/modules/notification-producers/editorial.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
@@ -43,10 +45,12 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
   const disclosure = disclosurePoolReader(f.accessPool);
   if (disclosure) configureDisclosurePool(measured,disclosure);
   const store = new NotificationStore(measured);
-  store.registerReadSubjectReader(
-    'editorial-proposal-v1',
-    editorialNotificationSubjectReader(f.accessPool, f.env),
-  );
+  const subjects = editorialNotificationSubjectReader(f.accessPool, f.env);
+  let unavailableProposal: string | null = null;
+  store.registerReadSubjectReader('editorial-proposal-v1', {
+    resolve: async input => input.ref === unavailableProposal
+      ? { status: 'unavailable' } : subjects.resolve(input),
+  });
   const producer = new NotificationProducer(f.accessPool, null, f.pool, f.env.fuseki, store, null);
   const deps: MainWorkDependencies = {
     environment: f.env,
@@ -325,6 +329,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
       (await inbox(f.account.tokenA, '?view=done')).items[0] ?? (await inbox()).items[0]!;
     if (!current.done)
       await json(await triage(change.id, { done: true, expectedRevision: current.triageRevision }));
+    await json(await triage(requested.id, { done: true, expectedRevision: null }, tokenB));
     await json(
       await request('POST', `${path}/revisions`, {
         profile: 'editorial-proposal-revise-v1',
@@ -341,15 +346,20 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         (item) => item.topic === 'proposal-revised' && item.proposal?.revision === 2,
       ),
     ).toBe(true);
-    expect(
-      (await inbox()).items.some((item) => item.topic === 'proposal-revised' && !item.done),
-    ).toBe(true);
+    expect((await inbox()).items.some(item => item.topic === 'proposal-revised')).toBe(false);
+    // Done applies to an item: someone else's new revision still reaches the reviewer.
+    expect((await inbox(tokenB)).items.some(item =>
+      item.topic === 'proposal-revised' && !item.done)).toBe(true);
+    expect((await inbox(tokenB, '?view=done')).items.some(item => item.id === requested.id)).toBe(true);
+    expect((await inbox(tokenB)).items.some(item => item.topic === 'changes-requested')).toBe(false);
     const beforeReplay = (await inbox()).items.length;
+    const reviewerBeforeReplay = (await inbox(tokenB)).items.map(item => item.id);
     await f.accessPool.query(
       `UPDATE access.notification_producer_cursor SET position = 0 WHERE consumer = 'editorial-notification-v1'`,
     );
     await producer.runEditorialOnce();
     expect((await inbox()).items).toHaveLength(beforeReplay);
+    expect((await inbox(tokenB)).items.map(item => item.id)).toEqual(reviewerBeforeReplay);
     statements = 0;
     await json(await subscription(proposal.proposal, 'ignore', '1'));
     expect(statements).toBe(NOTIFICATION_SUBSCRIPTION_COST.setStatements);
@@ -363,6 +373,11 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         actingSubject: f.actor,
       }),
     );
+    await producer.runEditorialOnce();
+    await json(await request('POST', `${path}/reviews`, {
+      profile: 'editorial-proposal-review-v1', revision: 3, outcome: 'request_changes',
+      message: 'Muted change request', actingSubject: reader,
+    }, tokenB));
     await producer.runEditorialOnce();
     expect((await inbox()).items).toHaveLength(beforeReplay);
     await json(await subscription(proposal.proposal, 'participating', '2'));
@@ -388,6 +403,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         (item) => item.topic === 'proposal-decided' && item.proposal?.revision === 3,
       ),
     ).toBe(true);
+    expect((await inbox(tokenB)).items.some(item => item.topic === 'proposal-decided')).toBe(false);
     const reversed = await json<{ proposal: string }>(
       await request('POST', `${path}/reversal`, {
         profile: 'editorial-proposal-revert-v1',
@@ -494,14 +510,59 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         (item) => item.topic === 'proposal-decided' && item.proposal?.id === rejected.proposal,
       ),
     ).toBe(true);
-    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
-      readGrant,
-    ]);
+    unavailableProposal = proposal.proposal;
+    const partlyUnavailable = (await inbox(tokenB, '?view=done')).items;
+    expect(partlyUnavailable.find(item => item.id === requested.id)).toMatchObject({
+      state: 'active', subject: null, proposal: null, reason: null,
+    });
+    const mixedPage = (await inbox(tokenB)).items;
+    expect(mixedPage.find(item => item.topic === 'proposal-revised')).toMatchObject({
+      state: 'active', subject: null, proposal: null, reason: null,
+    });
+    expect(mixedPage.some(item => item.proposal?.id === withdrawn.proposal && item.subject !== null)).toBe(true);
+    unavailableProposal = null;
+    const recipient = { issuer: f.account.issuer, subject: f.account.b.id };
+    await store.setPreference(recipient, { purpose: 'governance', topic: 'review-requested',
+      channel: 'email', state: 'enabled', expectedRevision: null, idempotencyKey: randomUUID(), via: 'settings' });
+    await store.registerEndpoint(recipient, { channel: 'push', deviceId: 'review-device',
+      address: 'https://push.local/reviews', addressDigest: hash('review-device'), lockScreenDisclosure: true });
+    const provider = new FakeDeliveryProvider();
+    const dispatcher = new NotificationDispatcher(f.accessPool, provider, subjects);
+    const delivered = await newProposal();
+    await producer.runEditorialOnce();
+    expect(await dispatcher.runOnce()).toMatchObject({ claimed: 1, delivered: 1 });
+    expect((await inbox(tokenB)).items.some(item => item.proposal?.id === delivered.proposal)).toBe(true);
+    const formerSteward = await newProposal();
+    await producer.runEditorialOnce();
     await f.accessPool.query('DELETE FROM access.work_maintainer WHERE work = $1 AND agent = $2', [
-      work.work,
-      reader,
+      work.work, reader,
     ]);
-    const hidden = (await inbox(tokenB)).items;
+    // Read access and manual watches remain usable; only steward authority is lost.
+    await json(await request('GET', `/v1/works/${shortId(work.work)}/metadata?actingSubject=${encodeURIComponent(reader)}`,
+      undefined, tokenB));
+    expect((await inbox(tokenB)).items.some(item => item.proposal?.id === withdrawn.proposal)).toBe(true);
+    expect(await json(await request('GET', `/v1/me/proposal-subscriptions/${formerSteward.proposal}`,
+      undefined, tokenB))).toMatchObject({ subscription: { reason: 'steward', level: 'participating' } });
+    expect(await dispatcher.runOnce()).toMatchObject({ claimed: 1, delivered: 0, cancelled: 1 });
+    expect(provider.calls.send).toBe(1);
+    const cancelled = (await f.accessPool.query<{ state: string }>(`SELECT d.state
+      FROM access.notification_delivery d JOIN access.notification_proposal_context c ON c.item_id = d.item_id
+      WHERE c.proposal = $1 AND d.principal_id = $2`, [formerSteward.proposal, f.otherPrincipal])).rows;
+    expect(cancelled).toEqual([{ state: 'cancelled' }]);
+    await f.accessPool.query(`INSERT INTO access.notification_digest_day (principal_id,day)
+      VALUES ($1,(clock_timestamp() AT TIME ZONE 'UTC')::date - 1)`, [f.otherPrincipal]);
+    await f.accessPool.query(`UPDATE access.notification_digest_candidate
+      SET day = (clock_timestamp() AT TIME ZONE 'UTC')::date - 1 WHERE principal_id = $1`, [f.otherPrincipal]);
+    try {
+      globalThis.fetch = (async (input, init) => String(input) === 'http://digest.local/intake'
+        ? (digests.push(JSON.parse(String(init?.body))), new Response(null, { status: 204 }))
+        : nativeFetch(input, init)) as typeof fetch;
+      await new NotificationDigestWorker(f.accessPool, store, f.account.issuer,
+        'http://digest.local/intake', 'test').runOnce();
+    } finally { globalThis.fetch = nativeFetch; }
+    expect(digests).toHaveLength(1); // No email for the former steward; only the earlier author digest.
+    await f.accessPool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [readGrant]);
+    const hidden = [...(await inbox(tokenB)).items, ...(await inbox(tokenB, '?view=done')).items];
     expect(hidden.length).toBeGreaterThan(0);
     expect(
       hidden.every(

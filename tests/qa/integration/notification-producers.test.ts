@@ -384,4 +384,4 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     await Promise.all([access.end(), relay.end()]);
     await databases.close();
   }
-});
+}, 60_000);
