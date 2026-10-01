@@ -123,7 +123,6 @@ export interface FocusStop { name: string; ring: boolean; covered: boolean; offs
 export const focusStop = (page: Page): Promise<FocusStop> => page.evaluate(() => {
   const element = document.activeElement as HTMLElement | null;
   if (!element || element === document.body) return { name: 'body', ring: false, covered: false, offscreen: false };
-  const style = getComputedStyle(element);
   const drawn = (target: Element, pseudo?: string) => {
     const look = getComputedStyle(target, pseudo);
     return (look.outlineStyle !== 'none' && Number.parseFloat(look.outlineWidth) > 0) || look.boxShadow !== 'none';
