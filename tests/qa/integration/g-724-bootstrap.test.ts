@@ -1,0 +1,346 @@
+import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { Pool } from 'pg';
+import { YAML } from 'bun';
+import { startAccount, freePort, qaEnvironment } from './account-boundary-fixture.ts';
+import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
+import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
+import { AdmittedTypeStore } from '../../../services/main/src/modules/types/store.ts';
+import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
+import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
+import { PostgresRateLimitStore } from '../../../services/main/src/modules/rate-limit/store.ts';
+import { RATE_LIMIT_V1 } from '../../../services/main/src/modules/rate-limit/budgets.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import type { BootstrapPlan } from '../../../scripts/ops/bootstrap/plan.ts';
+import type { BootstrapResult } from '../../../scripts/ops/bootstrap/execute.ts';
+import type { Journal as JournalState } from '../../../scripts/ops/bootstrap/journal.ts';
+
+const root = resolve(import.meta.dir, '../../..');
+
+test('G-724: first administrator is granted once, replay/other configuration is ignored, and empty API bootstrap verifies and recovers', async () => {
+  const qa = qaEnvironment();
+  const namespace = `g724-${randomUUID().slice(0, 8)}`;
+  const folder = join(root, '.temp/bootstrap', namespace);
+  const accessPool = new Pool({ connectionString: qa.accessDatabaseUrl });
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL! });
+  const account = await startAccount({
+    pool: { connectionString: Bun.env.ACCOUNT_DATABASE_URL! },
+    secret: qa.secret,
+    resource: qa.resource,
+  });
+  let main: ReturnType<typeof createMainApp> | undefined;
+  let proxy: ReturnType<typeof Bun.serve> | undefined;
+  let child: ChildProcess | undefined;
+  try {
+    await migrateContent(contentPool);
+    expect(
+      (await accessPool.query('SELECT receipt FROM access.platform_administrator')).rowCount,
+    ).toBe(0);
+    const administrators = new AccessPlatformAdministrators(accessPool);
+    const logs: string[] = [];
+    const first = await administrators.designateFirst(
+      account.issuer,
+      account.operator.id,
+      (message) => logs.push(message),
+    );
+    expect(first.status).toBe('granted');
+    const replay = await administrators.designateFirst(
+      account.issuer,
+      account.operator.id,
+      (message) => logs.push(message),
+    );
+    const ignored = await administrators.designateFirst(
+      account.issuer,
+      'another-account-subject',
+      (message) => logs.push(message),
+    );
+    expect(replay).toEqual({ status: 'ignored', receipt: 'receipt' in first ? first.receipt : '' });
+    expect(ignored).toEqual(replay);
+    expect(logs.filter((message) => message.includes('ignored'))).toHaveLength(2);
+    const designation = (
+      await accessPool.query<{ receipt: string; account_subject: string; role: string }>(`
+      SELECT a.receipt,p.account_subject,a.role FROM access.platform_administrator a
+      JOIN access.principal p ON p.id = a.principal_id`)
+    ).rows;
+    expect(designation).toHaveLength(1);
+    expect(designation[0]).toMatchObject({
+      account_subject: account.operator.id,
+      role: 'platform.administrator',
+    });
+    expect(designation[0]!.receipt).toMatch(/^urn:rezics:access-receipt:[0-9a-f]{64}$/);
+
+    const scopes =
+      'openid agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate';
+    const verifierClient = await account.workloadApp('Bootstrap token verifier', ['work:read']);
+    const client = await account.nativeApp('Launch operator', scopes);
+    const token = (await account.issue(client.client_id, account.operator, scopes)).access_token;
+    const verifier = new AccountAssertionVerifier(account.verifierConfig(verifierClient));
+    const fuseki = new FusekiClient(
+      qa.fusekiUrl,
+      Bun.env.FUSEKI_MAINTENANCE_TOKEN!,
+      Bun.env.FUSEKI_COMMAND_TOKEN!,
+    );
+    const objects = (prefix: string) =>
+      new S3ImmutableObjects({
+        endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+        bucket: Bun.env.MAIN_S3_BUCKET!,
+        region: Bun.env.MAIN_S3_REGION!,
+        accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
+        secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+        prefix,
+      });
+    const workObjects = objects('semantic/work/');
+    const structureObjects = objects('semantic/structure/');
+    await workObjects.initialize();
+    await structureObjects.initialize();
+    const env = {
+      fuseki,
+      lineage: { dataEpoch: qa.dataEpoch, routingEpoch: qa.routingEpoch },
+      objectDirectory: qa.objectDirectory,
+      workObjects,
+      structureObjects,
+    };
+    const access = new AccessAdmissionRegistry(accessPool);
+    access.configureBaseline(fuseki);
+    const rights = new RightsStore(contentPool, accessPool);
+    const intake = new SourceIntakeStore(contentPool);
+    intake.setRawRetentionGate((provider, scope) => rights.rawRetentionPermitted(provider, scope));
+    const limitOptions = {
+      secret: Bun.env.FUSEKI_TITLE_ADMISSION_KEY!,
+      serviceClientIds: new Set<string>(),
+      trustedProxyPeers: new Set<string>(),
+      clientIpHeader: 'x-rezics-client-ip',
+    };
+    const limits = new PostgresRateLimitStore(accessPool, limitOptions);
+    expect(
+      await limits.classify(
+        await verifier.verify(
+          new Request('http://main.local', {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+          [],
+        ),
+      ),
+    ).toBe('trusted');
+    const port = await freePort();
+    const origin = `http://127.0.0.1:${port}`;
+    main = createMainApp(fuseki, {
+      environment: env,
+      account: verifier,
+      access,
+      agentProvisioning: new AgentProvisioning(accessPool, env),
+      actingContexts: new AccessActingContexts(accessPool, env),
+      structureObjects,
+      catalogueIntake: new CatalogueIntakeStore(accessPool, env),
+      sourceIntake: intake,
+      types: new AdmittedTypeStore(accessPool),
+      rateLimit: { options: limitOptions, store: limits, budgets: RATE_LIMIT_V1 },
+    }).listen({ hostname: '127.0.0.1', port });
+    const before = await fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.current)} { ?work a <https://schema.org/CreativeWork> } }`);
+    expect(before.boolean).toBe(false);
+    const agentResponse = await fetch(`${origin}/v1/agents`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'idempotency-key': `${namespace}:operator`,
+      },
+      body: JSON.stringify({
+        profile: 'agent-provision-v1',
+        kind: 'person',
+        displayName: 'Launch operator',
+      }),
+    });
+    expect(agentResponse.status, await agentResponse.clone().text()).toBe(201);
+    const agent = (await agentResponse.json()) as { agent: string };
+    const plan = YAML.parse(
+      await readFile(join(root, 'tests/fixtures/launch/plan.yaml'), 'utf8'),
+    ) as BootstrapPlan;
+    plan.namespace = namespace;
+    plan.operators = [{ accountSubject: account.operator.id, actingSubject: agent.agent }];
+    // Dev/test intake retains TBD stewards; production continues to refuse them.
+    await mkdir(folder, { recursive: true });
+    const planFile = join(folder, 'plan.yaml');
+    await writeFile(planFile, YAML.stringify(plan));
+    const artifact = Bun.env.REZICS_QA_ARTIFACT_DIR!;
+    let interrupt = true;
+    proxy = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        const response = await fetch(`${origin}${url.pathname}${url.search}`, {
+          method: request.method,
+          headers: request.headers,
+          ...(request.method === 'GET' ? {} : { body: await request.arrayBuffer() }),
+        });
+        if (!response.ok) {
+          const problem = (await response
+            .clone()
+            .json()
+            .catch(() => null)) as { code?: string; detail?: string } | null;
+          console.error(
+            'Bootstrap API response',
+            request.method,
+            url.pathname,
+            response.status,
+            problem?.code,
+            problem?.detail,
+          );
+        }
+        if (interrupt && request.method === 'POST' && url.pathname === '/v1/works' && response.ok) {
+          // The graph effect and owner receipt exist, but the client's response
+          // never arrives. Kill Task and its Bun child as one process group.
+          interrupt = false;
+          process.kill(-child!.pid!, 'SIGKILL');
+        }
+        return response;
+      },
+    });
+    const proxyOrigin = `http://127.0.0.1:${proxy.port}`;
+    const command = async (mainOrigin: string, verify = false) => {
+      child = spawn(
+        'task',
+        [
+          'ops:bootstrap',
+          '--',
+          '--mode',
+          'qa',
+          '--plan',
+          planFile,
+          '--main',
+          mainOrigin,
+          '--account',
+          account.base,
+          ...(verify ? ['--verify'] : []),
+        ],
+        {
+          cwd: root,
+          env: {
+            ...Bun.env,
+            BOOTSTRAP_MAIN_TOKEN: token,
+            BOOTSTRAP_ACCOUNT_COOKIE: account.operator.cookie,
+          },
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      const output = async (stream: NodeJS.ReadableStream) => {
+        let text = '';
+        for await (const bytes of stream) text += String(bytes);
+        return text;
+      };
+      const [code, stdout, stderr] = await Promise.all([
+        new Promise<number | null>((resolveExit, reject) => {
+          child!.once('exit', resolveExit);
+          child!.once('error', reject);
+        }),
+        output(child.stdout!),
+        output(child.stderr!),
+      ]);
+      return { code, stdout, stderr };
+    };
+    const interrupted = await command(proxyOrigin);
+    expect(interrupted.code).not.toBe(0);
+    expect(interrupt, interrupted.stderr).toBe(false);
+    const pending = JSON.parse(
+      await readFile(join(folder, 'journal.json'), 'utf8'),
+    ) as JournalState;
+    const pendingWork = pending.entries[`bootstrap:${namespace}:work:vndb:v18334`]!;
+    expect(pendingWork).toBeDefined();
+    expect(pendingWork.response).toBeUndefined();
+    const originalBody = pendingWork.body;
+    const firstRun = await command(proxyOrigin);
+    expect(firstRun.code, firstRun.stderr).toBe(0);
+    const firstReport = JSON.parse(firstRun.stdout) as {
+      result: string;
+      outcome: { status: string };
+      counts: Record<string, number>;
+    };
+    expect(firstReport.result).toBe('verified');
+    expect(firstReport.outcome.status).toBe('completed');
+    expect(firstReport.counts).toEqual({ 'https://schema.org/VideoGame': 1 });
+    const journalBefore = await readFile(join(folder, 'journal.json'), 'utf8');
+    const secondRun = await command(proxyOrigin);
+    expect(secondRun.code, secondRun.stderr).toBe(0);
+    expect(secondRun.stdout).toBe(firstRun.stdout);
+    expect(await readFile(join(folder, 'journal.json'), 'utf8')).toBe(journalBefore);
+    const verified = await command(proxyOrigin, true);
+    expect(verified.code, verified.stderr).toBe(0);
+    expect(JSON.parse(verified.stdout).result).toBe('verified');
+
+    const saved = JSON.parse(await readFile(join(folder, 'result.json'), 'utf8')) as {
+      result: BootstrapResult;
+    };
+    const confirmed = JSON.parse(journalBefore) as JournalState;
+    expect(confirmed.entries[`bootstrap:${namespace}:work:vndb:v18334`]!.body).toEqual(
+      originalBody,
+    );
+    expect(saved.result.zones).toHaveLength(3);
+    expect(
+      Object.keys(saved.result.zones.find((zone) => zone.id === 'franchise-wiki')!.collections),
+    ).toEqual(['characters', 'places', 'events', 'chapters']);
+    expect(
+      (await accessPool.query('SELECT count(*)::int AS n FROM access.platform_administrator'))
+        .rows[0]!.n,
+    ).toBe(1);
+    expect((await account.pool.query('SELECT count(*)::int AS n FROM "user"')).rows[0]!.n).toBe(1);
+    expect(
+      (
+        await fuseki.query(`PREFIX rv: <${RV}> SELECT ?work WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?work a <https://schema.org/CreativeWork> } }`)
+      ).results!.bindings,
+    ).toHaveLength(1);
+    expect(
+      (
+        await accessPool.query(`SELECT count(*)::int AS n FROM access.permission_grant
+      WHERE action IN ('semantic.change','zone.edit','catalogue.verify')`)
+      ).rows[0]!.n,
+    ).toBe(0);
+    expect(
+      (
+        await accessPool.query(
+          'SELECT count(*)::int AS n FROM access.platform_administrator_admission',
+        )
+      ).rows[0]!.n,
+    ).toBeGreaterThan(0);
+    await writeFile(
+      join(artifact, 'g-724-bootstrap-proof.json'),
+      JSON.stringify(
+        {
+          firstAdministrator: first,
+          replay,
+          ignored,
+          interrupted: { code: interrupted.code },
+          firstReport,
+          result: saved.result,
+          journal: JSON.parse(journalBefore) as JournalState,
+        },
+        null,
+        2,
+      ),
+    );
+  } finally {
+    if (child?.pid && child.exitCode === null && child.signalCode === null) {
+      process.kill(-child.pid, 'SIGKILL');
+      await new Promise((resolveExit) => child!.once('exit', resolveExit));
+    }
+    await proxy?.stop(true);
+    await main?.stop(true);
+    await account.stop();
+    await Promise.all([accessPool.end(), contentPool.end()]);
+    await rm(folder, { recursive: true, force: true });
+  }
+}, 600_000);

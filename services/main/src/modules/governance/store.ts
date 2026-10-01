@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { platformAdministratorProof } from '../access/platform-administrator.ts';
 import { decisionOutcomes, enforcementEffects, GLOBAL_CONTEXT, governanceComponents, governanceOwners,
   processSteps } from './schema.ts';
 import { KnownEffectFailure, type ModerationEffects } from './effects.ts';
@@ -271,6 +272,13 @@ export class GovernanceStore {
       `SELECT authority_epoch::text, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE`,
       [scopeId])).rows[0];
     if (!gate?.open || !gate.dispatch_open) throw new GovernanceDenied('governance scope is closed');
+    if (scopeId === 'governance:platform'
+      && ['governance.moderate', 'governance.rights.decide', 'governance.safety.evidence', 'governance.appeal'].includes(action)) {
+      const administrator = await platformAdministratorProof(client, actor.principalId, actingSubject);
+      if (administrator) return { principalId: actor.principalId, authorityEpoch: gate.authority_epoch,
+        proofDigest: sha256(canonical({ principalId: actor.principalId, actingSubject, scopeId, action,
+          authorityEpoch: gate.authority_epoch, administrator })) };
+    }
     const grant = (await client.query<{ id: string; generation: string }>(`SELECT g.id, g.generation::text
       FROM access.permission_grant g JOIN access.representation r ON r.principal_id = $4
         AND r.subject_id = $1 AND r.action IN ($3,'agent.control') AND r.active AND r.valid_until > clock_timestamp()

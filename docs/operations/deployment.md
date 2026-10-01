@@ -4,6 +4,15 @@ Deployment follows the production-readiness [Goal](../../GOAL.md); that Goal
 delivers what this page lists as [ready to deploy](#ready-to-deploy) and does not
 deploy. The maintainer has prepared the hosts and the Cloudflare side.
 
+For the first Main boot, set `PLATFORM_FIRST_ADMIN_ACCOUNT` to the first real
+operator's Account subject. Access consumes this configuration through its own
+startup command only when no platform administrator exists, committing the role
+and an audit receipt together. After successful startup, remove the setting.
+Later boots log that a supplied setting is ignored once a designation exists;
+it cannot restore a deactivated administrator or designate a second one.
+Follow [first installation and launch intake](production-install.md#operator-and-authority)
+for Account ownership, Agent provisioning, scoped credentials and bootstrap.
+
 ## Production fleet
 
 A private NixOS flake (the maintainer's `nixos` repository) defines two hosts.

@@ -272,9 +272,18 @@ export async function executeBootstrap(input: {
   }
   result.definitions = await seedRelationLexicon(
     {
-      post: (path, body, label) => journal.command(api, label, 'POST', path, body),
-      // Access recognizes the creating principal's sealed receipt and live Agent
-      // control. Reading confirms the resource; each label write admits authority.
+      post: (path, body, label) =>
+        journal.command(
+          api,
+          label,
+          'POST',
+          path,
+          path === '/v1/lexicon/presentations'
+            ? { ...body, state: { ...(body as { state: object }).state, reviewStatus: 'reviewed' } }
+            : body,
+        ),
+      // Access recognizes the platform administrator and live Agent control.
+      // Reviewed launch labels are public; every write admits that authority.
       authorizeDefinition: async (receipt) => {
         await api.read(
           `/v1/semantic/resources/${short(receipt.component)}?actingSubject=${encodeURIComponent(actor)}`,
@@ -370,6 +379,32 @@ export async function executeBootstrap(input: {
       });
       if (!work.work || !work.workRevision)
         throw new Error('Catalogue intake did not confirm a Work revision');
+      // The public Work header reads descriptive metadata separately from the
+      // creation manifest. Publish the retained attribution through its API.
+      await command(
+        'PUT',
+        `/v1/works/${short(work.work)}/metadata`,
+        {
+          profile: 'work-metadata-details-v1',
+          expectedHead: null,
+          actingSubject: actor,
+          state: {
+            kind: 'header',
+            originalTitle: record.title,
+            localized: [
+              {
+                language: 'en',
+                title: null,
+                tagline: null,
+                mainVersionLabel: null,
+                description: `${source.attribution} Source: ${source.dumpUrl} (${source.version}); record ${record.id}; observation ${observed.observation.observation}.`,
+              },
+            ],
+          },
+        },
+        `metadata:${source.id}:${record.id}`,
+        { source: source.id, record },
+      );
       const verified = await command<{ receipt: string }>(
         'POST',
         `/v1/works/${short(work.work)}/catalogue-verifications`,

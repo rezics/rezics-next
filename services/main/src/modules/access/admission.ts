@@ -25,6 +25,9 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 import { publicSemantics } from './semantic-disclosure.ts';
 import { checkEditorialAdmission, registerEditorialAdmission } from '../editorial-review/admission.ts';
+import { platformAdministratorAction, platformAdministratorProof,
+  savedPlatformAdministratorProof, savePlatformAdministratorProof,
+  platformAdministratorProofCurrent } from './platform-administrator.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -716,6 +719,12 @@ export class AccessAdmissionRegistry {
         await client.query('COMMIT');
         return false;
       }
+      if (platformAdministratorAction(action, scope)
+        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+        && await platformAdministratorProof(client, principalId, actingSubject)) {
+        await client.query('COMMIT');
+        return true;
+      }
       const readKind = action === 'work.read' ? 'work' : action === 'semantic.read' ? 'collection'
         : action === 'contribution.read' ? 'contribution' : null;
       const targetId = scope.slice(scope.indexOf(':', scope.indexOf(':') + 1) + 1);
@@ -770,6 +779,11 @@ export class AccessAdmissionRegistry {
       [principal.issuer, principal.subject])).rows[0];
       let allowed = false;
       if (gate?.open && gate.dispatch_open && identity) {
+        if (authorityPath === 'represented-agent'
+          && !(await client.query("SELECT id FROM access.policy WHERE scope_id = 'work:create:root'")).rowCount
+          && await platformAdministratorProof(client, identity.id, actingSubject)) {
+          allowed = true;
+        } else
         if (authorityPath === 'direct-principal') {
           allowed = !!await directWorkCreateProof(client, identity.id, actingSubject);
         } else {
@@ -821,6 +835,9 @@ export class AccessAdmissionRegistry {
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
       await ensureBaselineScopeGate(client, request.scope);
+      if (platformAdministratorAction(request.action, request.scope)) {
+        await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [request.scope]);
+      }
       const gateResult = await client.query<GateRow & { group_generation: string }>(
         `SELECT authority_epoch, group_generation, open, dispatch_open
          FROM access.scope_gate WHERE id = $1 FOR UPDATE`, [request.scope]);
@@ -856,6 +873,26 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+
+      const savedAdministrator = existing ? await savedPlatformAdministratorProof(client, existing.id) : null;
+      if (existing && savedAdministrator) {
+        if (existing.request_digest !== request.requestDigest
+          || existing.acting_subject !== request.actingSubject
+          || existing.authority_path !== authorityPath || existing.scope_id !== request.scope) {
+          throw new AdmissionConflict('idempotency key belongs to a different intent');
+        }
+        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+          && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
+          && await platformAdministratorProofCurrent(client, savedAdministrator, principalId, request.actingSubject)
+          && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount;
+        if (!transaction) await client.query('COMMIT');
+        return { id: existing.id, principalId, actingSubject: existing.acting_subject,
+          authorityPath: existing.authority_path, scope: existing.scope_id, action: existing.action,
+          idempotencyKey: existing.idempotency_key, requestDigest: existing.request_digest,
+          authorityEpoch: existing.authority_epoch, registeredAt: existing.registered_at.toISOString(),
+          expiresAt: existing.expires_at.toISOString(), state: existing.state as RegisteredAdmission['state'],
+          dispatchEligible, replayed: true };
+      }
 
       const savedBaseline = existing ? await savedBaselineProof(client, existing.id) : null;
       if (existing && savedBaseline) {
@@ -961,8 +998,12 @@ export class AccessAdmissionRegistry {
       let roleRevision: string | null = null;
       let publishingProof: RepresentedWorkProof | null = null;
       await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
-      const baseline = !existing ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
-      if (baseline) {
+      const administrator = !existing && authorityPath === 'represented-agent'
+        && platformAdministratorAction(request.action, request.scope)
+        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
+        ? await platformAdministratorProof(client, principalId, request.actingSubject) : null;
+      const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
+      if (administrator || baseline) {
         // A named grant source with its own pinned proof, recorded below in the
         // same transaction as the ordinary admission, receipt and audit outbox.
       } else if (authorityPath === 'direct-principal') {
@@ -1115,6 +1156,7 @@ export class AccessAdmissionRegistry {
         await saveBaselineProof(client, id, baseline);
         if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
       }
+      if (administrator) await savePlatformAdministratorProof(client, id, administrator);
       if (publishingProof?.path) await saveInvitedWorkProof(client, id, principalId,
         principal.enforcement_epoch, request.actingSubject, publishingProof);
       await client.query(
@@ -1200,6 +1242,22 @@ export class AccessAdmissionRegistry {
         actingSubject: row.acting_subject, action: row.action, scope: row.scope_id,
         idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
       });
+      const administrator = await savedPlatformAdministratorProof(client, row.id);
+      if (administrator) {
+        let current: VerifiedPrincipal | undefined;
+        try { current = await accountPrincipal?.currentAssertion?.(); }
+        catch (error) {
+          if (error instanceof AccountAssertionDenied) throw new AdmissionDenied('administrator Account assertion is inactive');
+          throw error;
+        }
+        if (!current || current.issuer !== principal.rows[0]!.account_issuer
+          || current.subject !== principal.rows[0]!.account_subject
+          || !platformAdministratorAction(row.action, row.scope_id)
+          || !await platformAdministratorProofCurrent(client, administrator, row.principal_id, row.acting_subject)
+          || (await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [row.scope_id])).rowCount) {
+          throw new AdmissionDenied('platform administrator authority changed before claim');
+        }
+      }
       if (row.action === 'review.decide' || row.action === 'publication.adopt') {
         const current = await client.query(`SELECT 1 FROM access.representation r
           JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
@@ -1239,7 +1297,7 @@ export class AccessAdmissionRegistry {
           throw new AdmissionDenied('private principal authority changed before claim');
         }
       }
-      if (!baseline && row.authority_path === 'represented-agent'
+      if (!baseline && !administrator && row.authority_path === 'represented-agent'
         && (row.action === 'work.create' && row.scope_id === 'work:create:root'
           || ['work.edit', 'relation.change', 'work.derive'].includes(row.action) && row.represented_representation_id)
         && !await selectedRepresentedWorkProof(client, row,

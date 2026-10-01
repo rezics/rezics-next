@@ -77,7 +77,7 @@ export async function admitted<T>(call: AdmittedCall<T>): Promise<T> {
   try {
     let admission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await call.access.claim(registered.id, call.digest); }
+      try { admission = await call.access.claim(registered.id, call.digest, principal); }
       catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
     }
     let dispatched: T | undefined;

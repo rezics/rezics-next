@@ -23,14 +23,23 @@ Supply them as `BOOTSTRAP_ACCOUNT_COOKIE` and `BOOTSTRAP_MAIN_TOKEN`; neither is
 written to the journal. Renew the token through Account if it expires, then
 repeat the command with the same plan and namespace.
 
-Account ownership does not currently confer a Main platform role. Main must
-already admit this Agent's scoped authority for Zone creation/configuration,
-semantic definition creation, catalogue creation and verification, and source
-intake. An OAuth scope is a ceiling, not a grant. Bootstrap refuses a denied
-operation and retains its command for replay. It never inserts grants into a
-database. Platform moderation provisioning still requires a public Access
-authority path; the existing [manual setup](trust-and-safety.md#platform-suitability-moderation-setup)
-is not executed by this command.
+For Main's first boot, set `PLATFORM_FIRST_ADMIN_ACCOUNT` to that Account subject
+in Main's operator environment. Access's startup owner command designates the
+first platform administrator and commits an immutable audit receipt atomically.
+Remove the setting after successful startup. Once any designation exists, Access
+logs that the setting is ignored, including a replay with the same subject or
+a different candidate. Deactivating the principal never lets the configuration
+restore it. There is no additional administrator assignment path.
+
+Account ownership and the Main role are separate. The platform administrator's
+live Agent controller can create/configure official Zones, change semantic
+definitions and reviewed labels, create/verify catalogue Works, admit sources,
+and operate platform moderation. OAuth scopes remain ceilings. Scope closure,
+recovery holds, explicit policies, principal and controller revocation still
+fence operations. The role receives the existing `trusted` rate-limit class;
+bootstrap uses its ordinary budget without installing a service client or
+overriding limits. It refuses denied operations and retains commands for replay.
+It never inserts grants into a database.
 
 The creating principal receives definition stewardship from its successful
 sealed semantic creation receipt and current Agent controller proof. This
@@ -115,12 +124,16 @@ plan or actor is refused. Do not delete receipts to recover from a stale head
 or change the namespace to bypass an uncertain operation. Inspect the API's
 owner result, resolve the conflict, then explicitly prepare a new plan.
 
-## Remaining launch gates
+## Acceptance and remaining launch gates
 
-The current production-shaped acceptance still needs an isolated real-stack
-run with a platform administrator and its API-provisioned authority. The
-checked-in deterministic tests exercise the executor's API requests, pinned
-evidence, no-op replay, interruption, rate-limit handling and creator proof;
-they do not establish complete empty-stack installation. Integrate the full
-source mapping and the public platform-authority path before recording that
-acceptance or starting a larger campaign.
+Run `task goal -- test tests/qa/integration/g-724-bootstrap.test.ts` for the
+isolated empty-stack acceptance. It uses real Account OAuth, owner databases,
+Fuseki, immutable S3 objects and the unchanged trusted-class budget. The test
+invokes the bootstrap Task command, kills its process group after a confirmed
+catalogue API write but before client acknowledgement, resumes the exact command,
+then verifies public resources and a no-op rerun. The dev/test template retains
+`TBD` stewards; production still refuses those enabled sources.
+
+The bounded title proof does not establish the complete launch catalogue.
+Integrate the full source mapping and name production source stewards before
+starting a larger campaign.

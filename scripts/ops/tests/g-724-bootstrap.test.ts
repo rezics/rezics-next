@@ -79,6 +79,14 @@ async function fixture() {
     async write<T>(method: 'POST' | 'PUT', path: string, value: unknown, key: string): Promise<T> {
       const body = value as Record<string, unknown>;
       requests.push({ method, path, body, key });
+      if (path.endsWith('/metadata')) {
+        const state = body.state as { localized: { description: string; language: string }[] };
+        workDescriptions.set(native('imported-work'), {
+          value: state.localized[0]!.description,
+          language: state.localized[0]!.language,
+        });
+        return { revision: native('metadata'), receipt: native('metadata-receipt') } as T;
+      }
       if (path === '/v1/catalogue/candidates') {
         searches++;
         return {

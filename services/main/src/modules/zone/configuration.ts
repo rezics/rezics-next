@@ -138,7 +138,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     scope, action: 'zone.edit', idempotencyKey: input.idempotencyKey, requestDigest: digest });
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
-    try { admission = await access.claim(registered.id, digest); }
+    try { admission = await access.claim(registered.id, digest, principal); }
     catch (error) {
       if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
     }

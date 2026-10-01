@@ -3,6 +3,8 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // G-724 consumes first-administrator configuration and needs empty owner/graph state.
+  'tests/qa/integration/g-724-bootstrap.test.ts',
   // Global classification bootstrap exercises an empty graph and resets its own Context (G-380).
   'tests/qa/integration/classification-bootstrap.test.ts',
   // Read stability writes concurrently while the relay catches up (G-323).

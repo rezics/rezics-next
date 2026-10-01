@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { platformAdministratorProof } from '../access/platform-administrator.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readWorkTerminalReceipt } from '../work/receipt.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -69,7 +70,12 @@ export class CatalogueIntakeStore {
           .some(value => value.value === text.value.normalize('NFC').trim() && value.language === canonicalLanguage(text.language)))) {
         throw new CatalogueInvalid('Search this title and language before creating the Work');
       }
-      const qualified = (await client.query(`SELECT g.id FROM access.permission_grant g
+      const administratorGate = (await client.query(`SELECT id FROM access.scope_gate
+        WHERE id = 'catalogue:verify:root' AND open AND dispatch_open FOR SHARE`)).rowCount === 1;
+      const qualified = administratorGate
+        && !(await client.query("SELECT id FROM access.policy WHERE scope_id = 'catalogue:verify:root'")).rowCount
+        && !!await platformAdministratorProof(client, admission.principalId, admission.actingSubject)
+        || (await client.query(`SELECT g.id FROM access.permission_grant g
         JOIN access.scope_gate s ON s.id = g.scope_id AND s.open AND s.dispatch_open
         JOIN access.authority_subject a ON a.id = g.recipient_subject AND a.active
         JOIN access.representation r ON r.subject_id = a.id AND r.principal_id = $1

@@ -24,6 +24,8 @@ export const mainSpec = {
   MAIN_ROUTING_EPOCH: str({ desc: 'Graph routing epoch this stack was initialized with.', example: '1' }),
   FUSEKI_TITLE_ADMISSION_KEY: secret('HMAC key for Fuseki title admission proofs.'),
   ACCESS_DATABASE_URL: postgres('Access owner PostgreSQL URL.'),
+  PLATFORM_FIRST_ADMIN_ACCOUNT: str({ default: undefined,
+    desc: 'First platform administrator Account subject; Access designates once at startup. Remove after first boot.' }),
   MAIN_RATE_LIMIT_SECRET: str({ default: undefined, desc: 'Stable HMAC key (32+ characters) for principal/IP budgets; defaults to the title admission key.' }),
   MAIN_RATE_LIMIT_BUDGETS: str({ default: '{}', desc: 'Partial JSON overrides of main-rate-limit-v1 class/family maximum and seconds.' }),
   MAIN_READER_IMPORT_SEARCHES_PER_DAY: num({ default: 200, desc: 'Daily Library source search budget; local stacks may override.' }),

@@ -1,4 +1,4 @@
 {
   "extends": "../../../services/main/tsconfig.json",
-  "include": ["./*.ts", "../tests/g-724*.ts"]
+  "include": ["./*.ts", "../tests/g-724*.ts", "../../../tests/qa/integration/g-724-bootstrap.test.ts"]
 }

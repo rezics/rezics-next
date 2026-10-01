@@ -91,12 +91,17 @@ export class PostgresRateLimitStore implements RateLimitStore {
     // class. User tokens retain their Account subject even across clients.
     if (principal.accountClientId
       && this.options.serviceClientIds.has(principal.accountClientId)) return 'service';
-    const row = (await this.pool.query<{ id: string; active: boolean; newcomer: boolean }>(`SELECT id, active,
-      first_seen_at > now() - interval '7 days' AS newcomer FROM access.principal
+    const row = (await this.pool.query<{ id: string; active: boolean; newcomer: boolean; platform_administrator: boolean }>(`SELECT id, active,
+      first_seen_at > now() - interval '7 days' AS newcomer,
+      EXISTS (SELECT 1 FROM access.platform_administrator a WHERE a.singleton AND a.principal_id = p.id) AS platform_administrator
+      FROM access.principal p
       WHERE account_issuer = $1 AND account_subject = $2`, [principal.issuer, principal.subject])).rows[0];
     // The handler remains responsible for authorization, including allowing a
     // suspended principal to use safety intake. Unknown principals are new.
     if (!row || !row.active) return 'new-account';
+    // Platform moderation/catalogue role uses the existing trusted class;
+    // startup configuration never changes budgets or installs a service client.
+    if (row.platform_administrator) return 'trusted';
     const agents = (await this.pool.query<{ subject_id: string; action: string }>(`SELECT DISTINCT r.subject_id, r.action
       FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id AND s.active
       WHERE r.principal_id = $1 AND r.active AND r.valid_until > now()

@@ -14,7 +14,7 @@ sources:
     dumpUrl: https://dl.vndb.org/dump/vndb-db-2026-09-30.tar.zst
     version: '2026-09-30'
     dumpSha256: bd211aaa917fab1b7aa5b2c702fa339803c5f15cccaf682350b106a5e5426f2e
-    slice: tests/fixtures/vndb/slice.json
+    slice: tests/fixtures/seeds/vndb/e472c327c7040df744b759a71e65d64ff4c6f2b92a3516ea2bae015f5600c00b.json
     sliceSha256: e472c327c7040df744b759a71e65d64ff4c6f2b92a3516ea2bae015f5600c00b
     licence: https://opendatacommons.org/licenses/odbl/1-0/
     rightsEvidence: https://vndb.org/d17

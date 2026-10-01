@@ -42,6 +42,7 @@ import { ReadingSettingsStore } from './modules/reading-settings/store.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
 import { SemanticStageStore } from './modules/semantic/staging.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
+import { AccessPlatformAdministrators } from './modules/access/platform-administrator.ts';
 import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
 import { OnboardingPersons } from './modules/onboarding/persons.ts';
@@ -270,6 +271,7 @@ const account = new AccountAssertionVerifier({
   clientId: config.ACCOUNT_MAIN_CLIENT_ID, clientSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,
 });
 const access = new AccessAdmissionRegistry(pool, config.FUSEKI_TITLE_ADMISSION_KEY);
+await new AccessPlatformAdministrators(pool).designateFirst(config.ACCOUNT_ISSUER, config.PLATFORM_FIRST_ADMIN_ACCOUNT);
 access.configureBaseline(fuseki);
 const rankingContextSelections = new PrivateContextSelections(pool);
 const recommendations = recommendationRelayPool ? new RankingGenerations({ access: pool,

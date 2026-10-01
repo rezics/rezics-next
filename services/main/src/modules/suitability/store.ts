@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { platformAdministratorProof } from '../access/platform-administrator.ts';
 import type { WorkEditAuthorityProof } from '../access/work-edit-authority.ts';
 import {
   controlRead,
@@ -30,7 +31,7 @@ export const PLATFORM_ACTION = 'governance.moderate';
 export const SUITABILITY_COST = {
   targets: 64,
   readStatements: 1,
-  moderatorAuthorityStatements: 4,
+  moderatorAuthorityStatements: 5,
   writeStatements: 6,
   commandTargetQueries: 3,
   lockTimeoutMs: 2000,
@@ -95,14 +96,10 @@ export class SuitabilityStore {
         try {
           const owner = await requirePrincipal(client, reader.principal);
           await lockGate(client, PLATFORM_SCOPE, false);
-          await requireMandate(client, owner.id, reader.actingSubject, PLATFORM_ACTION);
-          await requireCeiling(
-            client,
-            reader.actingSubject,
-            PLATFORM_ACTION,
-            undefined,
-            PLATFORM_SCOPE,
-          );
+          if (!await platformAdministratorProof(client, owner.id, reader.actingSubject)) {
+            await requireMandate(client, owner.id, reader.actingSubject, PLATFORM_ACTION);
+            await requireCeiling(client, reader.actingSubject, PLATFORM_ACTION, undefined, PLATFORM_SCOPE);
+          }
           discloseAssessor = true;
         } catch (error) {
           if (!(error instanceof ControlDenied)) throw error;
@@ -202,6 +199,16 @@ export class SuitabilityStore {
     return controlTransaction(this.pool, async (client) => {
       const owner = await requirePrincipal(client, principal);
       const authorityEpoch = await lockGate(client, PLATFORM_SCOPE, false);
+      const administrator = await platformAdministratorProof(client, owner.id, input.actingSubject);
+      if (administrator) {
+        const target = await resolve();
+        const lease = (await client.query<{ valid_until: Date }>(
+          "SELECT clock_timestamp() + interval '15 seconds' AS valid_until")).rows[0]!;
+        return this.append(client, owner.id, target.resource, input, key, digest(target),
+          { principalId: owner.id, principalEpoch: owner.epoch, actingSubject: input.actingSubject,
+            authorityEpoch, scope: PLATFORM_SCOPE, action: PLATFORM_ACTION, administrator,
+            validUntil: lease.valid_until.toISOString() }, lease.valid_until.toISOString());
+      }
       const mandate = await requireMandate(client, owner.id, input.actingSubject, PLATFORM_ACTION);
       const grant = await requireCeiling(
         client,
