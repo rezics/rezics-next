@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync }
 import { join, resolve } from 'node:path';
 import { devStackStopArgs, rememberDevStack, startedDevStacks, stopDevSession }
   from '../../../scripts/dev/stack-session.ts';
-import { browserBudgets, browserFileCounts } from '../../../scripts/qa/browser-budget.ts';
+import { browserBudgets, browserFileCounts, browserProjectCount } from '../../../scripts/qa/browser-budget.ts';
 import { selectTestCommand } from '../../../scripts/qa/test.ts';
 import { commandAsync } from '../../../scripts/qa/core.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
@@ -100,6 +100,9 @@ test('browser runners have independent budgets scaled to the selected files', ()
   expect(browserBudgets(1, 137).playwright).toBe(small.playwright);
   expect(browserBudgets(18, 1).storybook).toBe(small.storybook);
   expect(() => browserBudgets(0, 1)).toThrow('positive integers');
+  // Each engine project repeats the files, so the Playwright budget grows with them.
+  expect(browserBudgets(1, 1, 3).playwright).toBe(3 * small.playwright);
+  expect([browserProjectCount(undefined), browserProjectCount('desktop-chrome'), browserProjectCount('a,b'), browserProjectCount('all')]).toEqual([1, 1, 2, 3]);
   const selected = browserFileCounts(root, ['apps/web/tests/work-page.e2e.ts']);
   expect(selected.playwright).toBe(1);
   expect(selected.storybook).toBeGreaterThan(1);

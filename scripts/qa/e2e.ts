@@ -204,7 +204,7 @@ async function runE2e(): Promise<void> {
   const { Pool } = await import('pg');
   const { initializeRelayCheckpoint } = await import('../../services/main/src/modules/outbox/relay.ts');
   const { readEnv } = await import('../dev/config.ts');
-  const { browserBudgets, browserFileCounts } = await import('./browser-budget.ts');
+  const { browserBudgets, browserFileCounts, browserProjectCount } = await import('./browser-budget.ts');
   const root = resolve(import.meta.dir, '../..');
   const [appsPath, artifactDir, runId, ...playwrightArgs] = process.argv.slice(2);
   if (!appsPath || !artifactDir || !runId || !/^[a-z0-9][a-z0-9-]{0,30}$/.test(runId)) {
@@ -213,7 +213,7 @@ async function runE2e(): Promise<void> {
   const web = requiredWebOrigin();
   const apps = JSON.parse(readFileSync(appsPath, 'utf8')) as Record<string, string>;
   const counts = browserFileCounts(root, playwrightArgs);
-  const budgets = browserBudgets(counts.playwright, counts.storybook);
+  const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount());
   const authDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`, 'web-auth');
   const runtime = readEnv(join(authDir, 'runtime.env'));
   const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };

@@ -14,7 +14,7 @@ import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
-import { browserBudgets, browserFileCounts } from './browser-budget.ts';
+import { browserBudgets, browserFileCounts, browserProjectCount } from './browser-budget.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
@@ -341,7 +341,7 @@ try {
         }
         const args = e2eArgs(selection, chosen);
         const counts = browserFileCounts(root, args);
-        const budgets = browserBudgets(counts.playwright, counts.storybook);
+        const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount());
         const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
           budgets.setup + budgets.playwright + budgets.storybook + 30_000,
           { ...process.env, REZICS_WEB_E2E_BASE_URL: origin, REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) });
