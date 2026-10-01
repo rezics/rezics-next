@@ -142,7 +142,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
       return plan;
     },
     async apply(operationId, ordinal, target, plan, continuation) {
-      if (['search', 'export', 'source_apply'].includes(target.effect))
+      if (restrictionOwners[target.effect] === 'access')
         return { receipt: `access:governance-enforcement:${operationId}:${ordinal}` };
       if (plan?.media && store) {
         const receipt = `${operationId}:${ordinal}`;

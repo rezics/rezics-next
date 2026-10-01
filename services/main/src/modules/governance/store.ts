@@ -17,11 +17,11 @@ export class GovernanceConflict extends Error {}
 export class GovernanceStale extends Error {}
 export class GovernanceUnavailable extends Error {}
 
-export type GovernanceOwner = (typeof governanceOwners)[number];
-export type GovernanceComponent = (typeof governanceComponents)[number];
+export type GovernanceOwner = typeof governanceOwners[number];
+export type GovernanceComponent = typeof governanceComponents[number];
 export type EvidenceState = 'available' | 'empty' | 'unavailable' | 'erased' | 'unsupported';
-export type DecisionOutcome = (typeof decisionOutcomes)[number];
-export type EnforcementEffect = (typeof enforcementEffects)[number];
+export type DecisionOutcome = typeof decisionOutcomes[number];
+export type EnforcementEffect = typeof enforcementEffects[number];
 
 /** Preparation is bounded by 64 targets. Resume uses two Access transactions
  * per unconfirmed effect, each at most 24 statements plus one bounded owner call. */
@@ -45,7 +45,7 @@ const digestPattern = /^[0-9a-f]{64}$/;
 export const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
-    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : item);
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
 
 export interface EvidenceTarget {
   owner: GovernanceOwner; resource: string; component: GovernanceComponent;
@@ -66,8 +66,7 @@ export interface EvidenceCapture {
 /** Current owner head for decision staleness; null when the component has none. */
 export interface TargetHeads {
   current(target: { owner: GovernanceOwner; resource: string; component: GovernanceComponent;
-    revision: string | null; locator: string | null;
-  }): Promise<string | null>;
+    revision: string | null; locator: string | null }): Promise<string | null>;
 }
 /** Current revision and digest of a governance rule; null when unknown or retired. */
 export interface RuleBasis {
@@ -94,8 +93,7 @@ export interface ReportInput {
 export interface ReportResult {
   reportId: string; caseId: string; caseGeneration: string; evidenceDigest: string; replayed: boolean;
   evidence: Array<{ ordinal: number; owner: string; resource: string; component: string; revision: string | null;
-    revisionDigest: string | null; state: EvidenceState;
-  }>;
+    revisionDigest: string | null; state: EvidenceState }>;
 }
 
 export interface DecisionTargetInput {
@@ -122,15 +120,14 @@ export interface DecisionInput {
 export interface DecisionResult {
   decisionId: string; caseId: string; caseGeneration: string; outcome: string;
   enforcement: Array<{ owner: string; resource: string; component: string; revision: string | null; effect: string;
-    state: 'restricted' | 'released'; fenceEpoch: string;
-  }>;
+    state: 'restricted' | 'released'; fenceEpoch: string }>;
   replayed: boolean;
   operation: OperationOutcome;
 }
 
 export interface StepInput {
   caseId: string; decisionId: string; actingSubject: string;
-  process: 'platform_appeal' | 'dmca_512' | 'ordinary_dispute'; step: (typeof processSteps)[number];
+  process: 'platform_appeal' | 'dmca_512' | 'ordinary_dispute'; step: typeof processSteps[number];
   partySubject: string | null; statement: string | null; documentDigest: string | null;
   occurredAt: string; dueAt: string | null; idempotencyKey: string;
 }
@@ -153,11 +150,9 @@ export function normalizeGovernanceError(error: unknown): Error {
 }
 
 function validTarget(target: { owner: string; resource: string; component: string }): boolean {
-  return (
-    (governanceOwners as readonly string[]).includes(target.owner)
+  return (governanceOwners as readonly string[]).includes(target.owner)
     && (governanceComponents as readonly string[]).includes(target.component)
-    && target.resource.length >= 1 && target.resource.length <= 512
-  );
+    && target.resource.length >= 1 && target.resource.length <= 512;
 }
 
 /**
@@ -187,14 +182,14 @@ export class GovernanceStore {
   /** Trusted media owner intake, never a public route. The durable screen job
    * identifies one report across retries; automation is disclosed as evidence. */
   async openScreeningCase(input: import('../media-screen/store.ts').ScreenReview): Promise<string> {
-    if (![input.job, input.asset, input.source].every((value) => uuidPattern.test(value))
+    if (![input.job, input.asset, input.source].every(value => uuidPattern.test(value))
       || !digestPattern.test(input.digest) || input.verdict.clearance !== 'held'
       || !['likely-explicit', 'screen-unavailable'].includes(input.verdict.reason ?? '')) {
       throw new GovernanceInvalid('invalid automated media evidence');
     }
     const resource = `https://rezics.com/id/${input.asset}`;
     const request = sha256(canonical(input));
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-screen:${input.job}`]);
       const previous = (await client.query<{ case_id: string; request_digest: string }>(
         'SELECT case_id, request_digest FROM access.governance_report WHERE id = $1', [input.job])).rows[0];
@@ -293,7 +288,7 @@ export class GovernanceStore {
       || !/^[a-z][a-z0-9_.-]{0,63}$/.test(input.reasonCode)
       || (input.statement !== null && (input.statement.length < 1 || input.statement.length > 4000))
       || input.evidence.length < 1 || input.evidence.length > GOVERNANCE_LIMITS.evidence
-      || !input.evidence.every((item) => validTarget(item))
+      || !input.evidence.every(item => validTarget(item))
       || (input.kind === 'rights_complaint') !== (input.complaint !== undefined)
       || (input.complaint && !digestPattern.test(input.complaint.noticeDigest))) {
       throw new GovernanceInvalid('report does not match its profile');
@@ -317,9 +312,9 @@ export class GovernanceStore {
       }
       captured.push(evidence);
     }
-    const evidenceDigest = sha256(canonical(captured.map((item) => [item.owner, item.resource, item.component,
+    const evidenceDigest = sha256(canonical(captured.map(item => [item.owner, item.resource, item.component,
       item.locator, item.revision, item.revisionDigest, item.state])));
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const actor = await this.represented(client, principal, input.actingSubject);
       const prior = await this.receipt(client, actor.principalId, input.idempotencyKey);
       if (prior) {
@@ -370,7 +365,7 @@ export class GovernanceStore {
   }
 
   private async replayReport(principal: VerifiedPrincipal, key: string, request: string): Promise<ReportResult | null> {
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const row = (await client.query<{ id: string; request_digest: string }>(`SELECT r.id, r.request_digest
         FROM access.governance_report r JOIN access.principal p ON p.id = r.principal_id
         WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active AND r.idempotency_key = $3`,
@@ -383,18 +378,16 @@ export class GovernanceStore {
 
   private async reportResult(client: PoolClient, reportId: string, replayed: boolean,
     specialistRead = false): Promise<ReportResult> {
-    const report = (await client.query<{ case_id: string; generation: string; evidence_digest: string; urgent: boolean;
-      }>(
+    const report = (await client.query<{ case_id: string; generation: string; evidence_digest: string; urgent: boolean }>(
       `SELECT r.case_id, c.generation::text, r.evidence_digest, c.urgent FROM access.governance_report r
        JOIN access.governance_case c ON c.id = r.case_id WHERE r.id = $1 FOR SHARE OF c`, [reportId])).rows[0]!;
     const evidence = report.urgent && !specialistRead ? [] : (await client.query<{ ordinal: number; owner: string; resource: string; component: string;
-      revision: string | null; revision_digest: string | null; state: EvidenceState;
-            }>(`SELECT ordinal, owner,
+      revision: string | null; revision_digest: string | null; state: EvidenceState }>(`SELECT ordinal, owner,
         resource, component, revision, revision_digest, state FROM access.governance_evidence
       WHERE report_id = $1 ORDER BY ordinal`, [reportId])).rows;
     return { reportId, caseId: report.case_id, caseGeneration: report.generation,
       evidenceDigest: report.evidence_digest, replayed,
-      evidence: evidence.map((row) => ({ ordinal: row.ordinal, owner: row.owner, resource: row.resource,
+      evidence: evidence.map(row => ({ ordinal: row.ordinal, owner: row.owner, resource: row.resource,
         component: row.component, revision: row.revision, revisionDigest: row.revision_digest, state: row.state })) };
   }
 
@@ -407,11 +400,10 @@ export class GovernanceStore {
     if (!uuidPattern.test(reportId) || (actingSubject !== null && !agentPattern.test(actingSubject))) {
       throw new GovernanceInvalid('invalid report read');
     }
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const row = (await client.query<{ reporter_issuer: string; reporter_subject: string;
         reporter_active: boolean; scope: string;
-        kind: 'content_report' | 'rights_complaint'; state: string; decision_head: string | null; urgent: boolean;
-        }>(`SELECT
+        kind: 'content_report' | 'rights_complaint'; state: string; decision_head: string | null; urgent: boolean }>(`SELECT
           p.account_issuer AS reporter_issuer, p.account_subject AS reporter_subject, p.active AS reporter_active,
           c.authority_scope_id AS scope,
           c.kind, c.state, c.decision_head, c.urgent FROM access.governance_report r
@@ -426,7 +418,7 @@ export class GovernanceStore {
           row.urgent ? 'governance.safety.evidence' : DECIDE_ACTION[row.kind])
           .catch(() => { throw new GovernanceDenied('report is unavailable'); });
       }
-      return { ...(await this.reportResult(client, reportId, false, row.urgent)), caseState: row.state,
+      return { ...await this.reportResult(client, reportId, false, row.urgent), caseState: row.state,
         decisionHead: row.decision_head };
     });
   }
@@ -450,8 +442,7 @@ export class GovernanceStore {
       || (input.answersStepId !== null && !uuidPattern.test(input.answersStepId))
       || (input.outcome === 'reverse') !== (input.reversesDecisionId !== null)
       || (input.outcome !== 'dismiss' && input.targets.length === 0)
-      || !input.targets.every(
-        (target) => validTarget(target)
+      || !input.targets.every(target => validTarget(target)
         && (enforcementEffects as readonly string[]).includes(target.effect)
         && (target.scopeKind === 'exact_revision') === (target.revision !== null))) {
       throw new GovernanceInvalid('decision does not match its profile');
@@ -474,7 +465,7 @@ export class GovernanceStore {
     const request = sha256(canonical({ ...input, idempotencyKey: undefined }));
     // Do not expose rule or target-head changes to a caller lacking this case's
     // current decision authority. The write transaction checks it again.
-    const caseScope = await this.transaction(async (client) => {
+    const caseScope = await this.transaction(async client => {
       const row = (await client.query<{ kind: 'content_report' | 'rights_complaint'; scope: string; urgent: boolean }>(
         `SELECT kind, authority_scope_id AS scope, urgent FROM access.governance_case WHERE id = $1`,
       [input.caseId])).rows[0];
@@ -502,7 +493,7 @@ export class GovernanceStore {
         throw new GovernanceStale('target changed since review');
       }
     }
-    const planned = await this.transaction(async (client) => {
+    const planned = await this.transaction(async client => {
       const caseRow = (await client.query<{ id: string; kind: 'content_report' | 'rights_complaint';
         authority_kind: string; authority_scope_id: string; context: string; generation: string; state: string;
           urgent: boolean;
@@ -523,8 +514,9 @@ export class GovernanceStore {
           throw new GovernanceInvalid('platform decisions require a statement of reasons');
         const claim = (
           await client.query<{ principal_id: string; acting_subject: string }>(
-            'SELECT principal_id, acting_subject FROM access.safety_case_claim WHERE case_id = $1',
-            [caseRow.id],
+            `SELECT principal_id, acting_subject FROM access.safety_case_claim
+             WHERE case_id = $1 AND case_generation = $2 AND expires_at > $3`,
+            [caseRow.id, caseRow.generation, this.clock()],
           )
         ).rows[0];
         const actor = await this.represented(client, principal, input.actingSubject);
@@ -552,16 +544,15 @@ export class GovernanceStore {
       if (releasing.has(input.outcome)) {
         const dmca = (
           await client.query(
-            "SELECT 1 FROM access.governance_report WHERE case_id = $1 AND process = 'dmca_512' LIMIT 1",
+            "SELECT 1 FROM access.governance_report r WHERE r.case_id = $1 AND (r.process = 'dmca_512' OR EXISTS (SELECT 1 FROM access.rights_complaint c WHERE c.report_id = r.id AND c.process = 'dmca_512')) LIMIT 1",
             [caseRow.id],
           )
         ).rowCount;
         if (dmca) {
           const window = (
-            await client.query<{ earliest: Date | null; latest: Date | null; action: boolean }>(
+            await client.query<{ earliest: Date | null; action: boolean }>(
               `SELECT
             max(due_at) FILTER (WHERE step = 'restoration_not_before') AS earliest,
-            max(due_at) FILTER (WHERE step = 'restoration_not_after') AS latest,
             bool_or(step = 'claimant_action') AS action FROM access.governance_process_step
             WHERE case_id = $1 AND process = 'dmca_512'`,
               [caseRow.id],
@@ -570,13 +561,11 @@ export class GovernanceStore {
           const now = this.clock();
           if (
             !window.earliest ||
-            !window.latest ||
             now < window.earliest ||
-            now > window.latest ||
             window.action
           ) {
             throw new GovernanceStale(
-              'DMCA restoration is outside the recorded window or stayed by claimant action',
+              'DMCA restoration is before the earliest date or stayed by claimant action',
             );
           }
         }
@@ -615,7 +604,7 @@ export class GovernanceStore {
       }
       // The reviewed evidence must be exactly the case's retained evidence set.
       const retained = (await client.query<{ digest: string }>(`SELECT evidence_digest AS digest
-        FROM access.governance_report WHERE case_id = $1`, [caseRow.id])).rows.map((row) => row.digest);
+        FROM access.governance_report WHERE case_id = $1`, [caseRow.id])).rows.map(row => row.digest);
       if (!retained.includes(input.evidenceDigest)) throw new GovernanceStale('evidence basis is not retained');
       if (
         input.reasons?.automation === false &&
@@ -642,8 +631,7 @@ export class GovernanceStore {
         JOIN access.governance_report r ON r.id = e.report_id WHERE r.case_id = $1`,
       [caseRow.id])).rows;
       for (const target of input.targets) {
-        if (!admittedTargets.some(
-            (evidence) => evidence.owner === target.owner
+        if (!admittedTargets.some(evidence => evidence.owner === target.owner
           && evidence.resource === target.resource && evidence.component === target.component
           && evidence.locator === target.locator
           && (!restricting.has(input.outcome) || evidence.state === 'available')
@@ -656,8 +644,7 @@ export class GovernanceStore {
           FROM access.moderation_decision WHERE id = $1 AND case_id = $2`, [input.reversesDecisionId, caseRow.id])).rows[0];
         if (!reversed || !restricting.has(reversed.outcome)) throw new GovernanceStale('nothing to reverse');
         const original = (await client.query<{ owner: string; resource: string; component: string;
-          locator: string | null; scope_kind: string; revision: string | null; effect: string;
-          }>(
+          locator: string | null; scope_kind: string; revision: string | null; effect: string }>(
           `SELECT owner, resource, component, locator, scope_kind, revision, effect
            FROM access.moderation_decision_target t WHERE decision_id = $1
              AND (NOT EXISTS (SELECT 1 FROM access.safety_decision_operation o WHERE o.decision_id = t.decision_id)
@@ -667,7 +654,7 @@ export class GovernanceStore {
           && a.resource === b.resource && a.component === b.component && a.locator === b.locator
           && a.scope_kind === b.scopeKind && a.revision === b.revision && a.effect === b.effect;
         if (original.length !== input.targets.length
-          || original.some((target) => !input.targets.some((candidate) => same(target, candidate)))) {
+          || original.some(target => !input.targets.some(candidate => same(target, candidate)))) {
           throw new GovernanceStale('reversal does not match the original targets');
         }
       }
@@ -677,7 +664,7 @@ export class GovernanceStore {
       // Target writers remain authoritative for their own state; this check
       // rejects a basis that changed before the decision writes begin.
       for (const target of input.targets) {
-        if ((await this.heads.current(target)) !== target.expectedHead) {
+        if (await this.heads.current(target) !== target.expectedHead) {
           throw new GovernanceStale('target changed since review');
         }
         if (target.owner === 'review') {
@@ -712,7 +699,7 @@ export class GovernanceStore {
         if (
           restricting.has(input.outcome) &&
           ['participation', 'capability'].includes(target.effect) &&
-          (!target.expiresAt || new Date(target.expiresAt) <= new Date())
+          (!target.expiresAt || new Date(target.expiresAt) <= this.clock())
         ) {
           throw new GovernanceInvalid('participation restrictions require a future expiry');
         }
@@ -783,8 +770,9 @@ export class GovernanceStore {
             [caseRow.id])).rows[0]!;
         const parties = (await client.query<{ id: string }>(
             `SELECT DISTINCT p.id FROM access.principal p
-          WHERE p.id IN (SELECT principal_id FROM access.agent_provision WHERE agent_id = ANY($1::text[]))
-            OR p.id IN (SELECT principal_id FROM access.representation WHERE subject_id = ANY($1::text[]))`,
+          WHERE p.active AND (p.id IN (SELECT principal_id FROM access.agent_provision WHERE agent_id = ANY($1::text[]))
+            OR p.id IN (SELECT principal_id FROM access.representation WHERE subject_id = ANY($1::text[])
+              AND active AND valid_until > clock_timestamp()))`,
             [authors],
           )).rows;
         for (const party of parties) {
@@ -818,7 +806,7 @@ export class GovernanceStore {
 
   private async replayDecision(principal: VerifiedPrincipal, input: DecisionInput, request: string):
     Promise<DecisionResult | null> {
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const row = (await client.query<{ id: string; request_digest: string }>(`SELECT d.id, d.request_digest
         FROM access.moderation_decision d JOIN access.principal p ON p.id = d.principal_id
         WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
@@ -834,8 +822,7 @@ export class GovernanceStore {
     const decision = (await client.query<{ case_id: string; case_sequence: string; outcome: string }>(
       `SELECT case_id, case_sequence::text, outcome FROM access.moderation_decision WHERE id = $1`, [decisionId])).rows[0]!;
     const enforcement = (await client.query<{ owner: string; resource: string; component: string;
-      revision: string | null; effect: string; state: 'restricted' | 'released'; fence_epoch: string;
-      }>(`SELECT
+      revision: string | null; effect: string; state: 'restricted' | 'released'; fence_epoch: string }>(`SELECT
         e.owner, e.resource, e.component, e.revision, e.effect, e.state, e.fence_epoch::text
       FROM access.moderation_decision_target t JOIN access.moderation_decision d ON d.id = t.decision_id
       JOIN access.governance_enforcement e ON e.owner = t.owner AND e.resource = t.resource
@@ -856,7 +843,7 @@ export class GovernanceStore {
     caseId: string,
     reportCursor?: string,
   ) {
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const row = (
         await client.query<{
           kind: 'content_report' | 'rights_complaint';
@@ -982,7 +969,7 @@ export class GovernanceStore {
     for (let ordinal = 1; ordinal <= GOVERNANCE_LIMITS.targets; ordinal++) {
       // Persist the uncertainty before dispatch, so a process interruption never
       // presents a possibly committed owner effect as undispatched acceptance.
-      await this.transaction(async (client) => {
+      await this.transaction(async client => {
         const decision = (
           await client.query<{ authority_scope_id: string; kind: string; urgent: boolean }>(
             `SELECT d.authority_scope_id,d.kind,c.urgent FROM access.moderation_decision d
@@ -1015,7 +1002,7 @@ export class GovernanceStore {
             [decisionId, ordinal],
           );
       });
-      const next = await this.transaction(async (client) => {
+      const next = await this.transaction(async client => {
         const decision = (
           await client.query<{
             case_id: string;
@@ -1240,7 +1227,7 @@ export class GovernanceStore {
     actor: string,
     decisionId: string,
   ): Promise<DecisionResult> {
-    return this.transaction(async (client) => {
+    return this.transaction(async client => {
       const decision = (
         await client.query<{ authority_scope_id: string; kind: string; case_id: string; urgent: boolean }>(
           `SELECT d.authority_scope_id,d.kind,d.case_id,c.urgent FROM access.moderation_decision d
@@ -1249,7 +1236,7 @@ export class GovernanceStore {
         )
       ).rows[0];
       if (!decision) throw new GovernanceDenied('decision is unavailable');
-      await this.decider(
+      const authority = await this.decider(
         client,
         principal,
         actor,
@@ -1260,6 +1247,12 @@ export class GovernanceStore {
       );
       if (decision.urgent) await this.decider(client, principal, actor,
         decision.authority_scope_id, 'governance.safety.evidence');
+      if (decision.authority_scope_id === 'governance:platform' && !(await client.query(
+        `SELECT 1 FROM access.safety_case_claim WHERE case_id = $1 AND principal_id = $2
+         AND acting_subject = $3 AND expires_at > $4`,
+        [decision.case_id, authority.principalId, actor, this.clock()])).rowCount) {
+        throw new GovernanceDenied('claim the case before cancelling');
+      }
       await client.query(
         'SELECT decision_id FROM access.safety_decision_operation WHERE decision_id = $1 FOR UPDATE',
         [decisionId],
@@ -1297,9 +1290,8 @@ export class GovernanceStore {
       throw new GovernanceInvalid('process step does not match its profile');
     }
     const request = sha256(canonical({ ...input, idempotencyKey: undefined }));
-    return this.transaction(async (client) => {
-      const caseRow = (await client.query<{ kind: 'content_report' | 'rights_complaint'; authority_scope_id: string;
-        }>(
+    return this.transaction(async client => {
+      const caseRow = (await client.query<{ kind: 'content_report' | 'rights_complaint'; authority_scope_id: string }>(
         `SELECT kind, authority_scope_id FROM access.governance_case WHERE id = $1 FOR SHARE`, [input.caseId])).rows[0];
       if (!caseRow) throw new GovernanceDenied('case is unavailable');
       if (caseRow.kind === 'content_report' && input.process !== 'platform_appeal') {
@@ -1333,19 +1325,16 @@ export class GovernanceStore {
   }
 
   /** Current effective fences for one target component, across scopes and contexts (bounded by index). */
-  async readEnforcement(target: { owner: GovernanceOwner; resource: string; component: GovernanceComponent;
-  }):
+  async readEnforcement(target: { owner: GovernanceOwner; resource: string; component: GovernanceComponent }):
     Promise<Array<{ context: string; scope: string; revision: string | null; effect: string;
-      state: 'restricted' | 'released'; fenceEpoch: string; decisionId: string;
-    }>> {
+      state: 'restricted' | 'released'; fenceEpoch: string; decisionId: string }>> {
     if (!validTarget(target)) throw new GovernanceInvalid('invalid enforcement read');
-    return this.transaction(async (client) => (await client.query<{ context: string; scope: string;
+    return this.transaction(async client => (await client.query<{ context: string; scope: string;
       revision: string | null; effect: string; state: 'restricted' | 'released'; fence_epoch: string;
-      decision_id: string;
-        }>(`SELECT context, authority_scope_id AS scope, revision, effect, state,
+      decision_id: string }>(`SELECT context, authority_scope_id AS scope, revision, effect, state,
         fence_epoch::text, decision_id FROM access.governance_enforcement
       WHERE owner = $1 AND resource = $2 AND component = $3 ORDER BY context, authority_scope_id, effect, revision
-      LIMIT $4`, [target.owner, target.resource, target.component, GOVERNANCE_LIMITS.page])).rows.map((row) => ({
+      LIMIT $4`, [target.owner, target.resource, target.component, GOVERNANCE_LIMITS.page])).rows.map(row => ({
       context: row.context, scope: row.scope, revision: row.revision, effect: row.effect, state: row.state,
       fenceEpoch: row.fence_epoch, decisionId: row.decision_id })));
   }
@@ -1353,13 +1342,13 @@ export class GovernanceStore {
   /** Current title disclosure fences for one bounded resource-summary batch. */
   async restrictedTitles(heads: readonly { work: string; revision: string }[], context: string):
     Promise<ReadonlySet<string>> {
-    if (heads.length > 64 || heads.some((item) => !agentPattern.test(item.work)
+    if (heads.length > 64 || heads.some(item => !agentPattern.test(item.work)
       || !agentPattern.test(item.revision)) || context.length < 1 || context.length > 512) {
       throw new GovernanceInvalid('title fence batch is out of bounds');
     }
     if (!heads.length) return new Set();
     const contexts = context === GLOBAL_CONTEXT ? [GLOBAL_CONTEXT] : [GLOBAL_CONTEXT, context];
-    return this.transaction(async (client) => new Set((await client.query<{ resource: string }>(
+    return this.transaction(async client => new Set((await client.query<{ resource: string }>(
       `SELECT DISTINCT requested.work AS resource
        FROM unnest($1::text[], $2::text[]) AS requested(work, revision)
        JOIN access.governance_enforcement e ON e.resource = requested.work
@@ -1367,8 +1356,8 @@ export class GovernanceStore {
          AND e.effect = 'disclosure' AND e.state = 'restricted'
          AND (e.revision IS NULL OR e.revision = requested.revision)
          AND e.context = ANY($3::text[])`,
-      [heads.map((item) => item.work), heads.map((item) => item.revision), contexts])).rows
-      .map((row) => row.resource)), true);
+      [heads.map(item => item.work), heads.map(item => item.revision), contexts])).rows
+      .map(row => row.resource)), true);
   }
 
   /** An exact Content revision remains fenced independently of a later variant head. */
@@ -1376,7 +1365,7 @@ export class GovernanceStore {
     if (!agentPattern.test(resource) || !uuidPattern.test(revision)) {
       throw new GovernanceInvalid('content fence target is invalid');
     }
-    return this.transaction(async (client) => (await client.query(`SELECT 1
+    return this.transaction(async client => (await client.query(`SELECT 1
       FROM access.governance_enforcement WHERE owner = 'content' AND resource = $1
         AND component = 'body' AND effect = 'disclosure' AND state = 'restricted'
         AND context = $2 AND (revision IS NULL OR revision = $3) LIMIT 1`,
@@ -1386,10 +1375,10 @@ export class GovernanceStore {
   /** Steps whose deadline has passed and whose decision is still the case head: pending human disposition. */
   async dueSteps(now: Date, limit: number = GOVERNANCE_LIMITS.page): Promise<Array<{ stepId: string; caseId: string;
     step: string; dueAt: string }>> {
-    return this.transaction(async (client) => (await client.query<{ id: string; case_id: string; step: string;
+    return this.transaction(async client => (await client.query<{ id: string; case_id: string; step: string;
       due_at: Date }>(`SELECT s.id, s.case_id, s.step, s.due_at FROM access.governance_process_step s
       JOIN access.governance_case c ON c.id = s.case_id AND c.decision_head = s.decision_id
-      WHERE s.due_at <= $1 ORDER BY s.due_at, s.id LIMIT $2`, [now, limit])).rows.map((row) => ({
+      WHERE s.due_at <= $1 ORDER BY s.due_at, s.id LIMIT $2`, [now, limit])).rows.map(row => ({
       stepId: row.id, caseId: row.case_id, step: row.step, dueAt: row.due_at.toISOString() })));
   }
 }

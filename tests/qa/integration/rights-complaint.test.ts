@@ -1,3 +1,4 @@
+import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
@@ -84,13 +85,16 @@ test('LIVE18: a complaint fence survives synopsis refresh and human confirmation
       const targets = ['disclosure', 'source_apply', 'search', 'export'].map(effect => ({
         owner: 'source', resource: initial.record, component: 'synopsis', locator: null,
         scopeKind: 'component', revision: null, expectedHead: null, effect }));
-      const decision = await h.json<{ enforcement: Array<{ state: string }> }>(await h.call('POST',
-        '/v1/rights/restrictions', { profile: 'rights-restriction-v1', outcome: 'interim_restrict',
+      await claimFixture(h.accessPool, complaint.caseId, h.otherPrincipal, decider);
+      const restrictionInput = { profile: 'rights-restriction-v1', outcome: 'interim_restrict',
           caseId: complaint.caseId, expectedGeneration: '0', actingSubject: decider,
           targets, rule: { ref: 'urn:rezics:rule:source-rights', revision: 'v1', digest: h.ruleDigest },
           evidenceDigest: complaint.evidenceDigest, reversesDecisionId: null, answersStepId: null,
-          rationale: 'Restrict copied synopsis while the claim is reviewed.', disclosure: 'parties',
-          idempotencyKey: decisionKey }, decisionKey, h.account.tokenB), 201);
+          reasons: fixtureReasons, rationale: 'Restrict copied synopsis while the claim is reviewed.', disclosure: 'parties',
+          idempotencyKey: decisionKey };
+      await h.json(await h.call('POST', '/v1/rights/restrictions', restrictionInput, decisionKey, h.account.tokenB), 202);
+      const decision = await h.json<{ enforcement: Array<{ state: string }> }>(await h.call('POST',
+        '/v1/rights/restrictions', restrictionInput, decisionKey, h.account.tokenB), 200);
       expect(decision.enforcement).toHaveLength(4);
       expect(decision.enforcement.every(item => item.state === 'restricted')).toBe(true);
 
@@ -195,13 +199,14 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
           rightsEvidence: { basis: 'unknown', note: 'No license assertion' } });
       const observed = (await intake('r1')).observation;
       const rules = new Map([['urn:rezics:rule:source-rights', { revision: 'v1', digest: digest('rule-v1') }]]);
+      let clock = new Date();
       const store = new GovernanceStore(access, ownerEvidenceCapture({ source: async (principal, recordId,
         observationId) => {
         const id = principals.get(principal.subject);
         const value = id ? await source.read(id, observationId) : null;
         return value && value.record.endsWith(recordId) ? { record: value.record, retention: value.retention,
           byteDigest: value.byteDigest, mediaType: value.mediaType } : null;
-      } }), { current: async () => null }, { current: async ref => rules.get(ref) ?? null });
+      } }), { current: async () => null }, { current: async ref => rules.get(ref) ?? null }, undefined, undefined, () => clock);
       const rightsStore = new RightsStore(content, access);
       const deps = { account: account.verifier, governance: { store }, rights: { store: rightsStore } } as unknown as MainWorkDependencies;
       const app = new Elysia().use(reportRoutes(deps)).use(rightsRoutes(deps));
@@ -281,10 +286,19 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
         caseId: complaint.body.caseId, expectedGeneration: generation, actingSubject: decider,
         targets, rule: { ref: 'urn:rezics:rule:source-rights', revision: 'v1', digest: digest('rule-v1') },
         evidenceDigest: complaint.body.evidenceDigest, reversesDecisionId: null, answersStepId,
-        rationale: 'Synopsis access restriction pending process.', disclosure: 'parties', idempotencyKey });
-      const restrict = (body: object) => call('/v1/rights/restrictions', account.tokenB, body);
+        reasons: fixtureReasons, rationale: 'Synopsis access restriction pending process.', disclosure: 'parties', idempotencyKey });
+      const restrict = async (body: object) => {
+        await claimFixture(access, complaint.body.caseId, principals.get(account.b.id)!, decider);
+        // Match the injected decision clock for a staff claim after the legal wait.
+        await access.query('UPDATE access.safety_case_claim SET claimed_at = $2,expires_at = $3 WHERE case_id = $1',
+          [complaint.body.caseId, clock, new Date(clock.getTime() + 30 * 60_000)]);
+        const accepted = await call('/v1/rights/restrictions', account.tokenB, body);
+        if (accepted.status !== 202) return accepted;
+        expect(accepted.body.operation.status).toBe('accepted');
+        return call('/v1/rights/restrictions', account.tokenB, body);
+      };
       const interim = await restrict(decision('interim_restrict', '0', null, 'interim-cover'));
-      expect(interim.status, JSON.stringify(interim.body)).toBe(201);
+      expect(interim.status, JSON.stringify(interim.body)).toBe(200);
       expect(interim.body.enforcement).toHaveLength(4);
       expect(interim.body.enforcement.every((item: { state: string }) => item.state === 'restricted')).toBe(true);
       expect(await store.readEnforcement({ owner: 'source', resource: observed.record, component: 'synopsis' }))
@@ -350,13 +364,23 @@ test('GOV24/GOV25/LIVE17/LIVE18: a source synopsis restriction stays exact throu
         expect.objectContaining({ result: 'prohibited', obligations: ['access_restriction'], memberOrdinals: [1] }),
       ]));
       const final = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
-      expect(final.status, JSON.stringify(final.body)).toBe(201);
+      expect(final.status, JSON.stringify(final.body)).toBe(200);
       const replayedFinal = await restrict(decision('final_restrict', '1', null, 'final-synopsis'));
       expect(replayedFinal.status).toBe(200);
       expect(replayedFinal.body).toMatchObject({ decisionId: final.body.decisionId, replayed: true });
+      const earliest = new Date(clock.getTime() + 14 * 86_400_000);
+      const windowStep = (kind: 'restoration_not_before' | 'restoration_not_after', dueAt: Date) => store.recordStep(
+        { issuer: account.issuer, subject: account.b.id }, { caseId: complaint.body.caseId,
+          decisionId: final.body.decisionId, actingSubject: decider, process: 'dmca_512', step: kind,
+          partySubject: null, statement: null, documentDigest: null, occurredAt: new Date().toISOString(),
+          dueAt: dueAt.toISOString(), idempotencyKey: kind });
+      await windowStep('restoration_not_before', earliest);
+      await windowStep('restoration_not_after', new Date(earliest.getTime() + 4 * 86_400_000));
+      expect((await restrict(decision('restore', '2', counter.body.stepId, 'before-earliest'))).status).toBe(409);
+      clock = new Date(earliest.getTime() + 5 * 86_400_000);
       expect((await restrict(decision('restore', '2', null, 'unanswered-restore'))).status).toBe(400);
       const restored = await restrict(decision('restore', '2', counter.body.stepId, 'answered-restore'));
-      expect(restored.status, JSON.stringify(restored.body)).toBe(201);
+      expect(restored.status, JSON.stringify(restored.body)).toBe(200);
       expect(restored.body.enforcement.every((item: { state: string }) => item.state === 'released')).toBe(true);
       expect((await restrict(decision('restore', '2', counter.body.stepId, 'stale-restore'))).status).toBe(409);
       expect((await access.query(`SELECT outcome FROM access.moderation_decision WHERE case_id = $1

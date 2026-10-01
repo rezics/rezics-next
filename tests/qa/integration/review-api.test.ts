@@ -1,3 +1,4 @@
+import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { replacementController } from './g-523-controller-fixture.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
@@ -244,7 +245,8 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
     const decision = { caseId: report.caseId, expectedGeneration: '0', actingSubject: authorSecond,
       outcome: 'restrict' as const, targets: [target], rule,
       evidenceDigest: report.evidenceDigest, reversesDecisionId: null, answersStepId: null,
-      rationale: 'Exact reported body', disclosure: 'parties' as const, idempotencyKey: randomUUID() };
+      reasons: fixtureReasons, rationale: 'Exact reported body', disclosure: 'parties' as const, idempotencyKey: randomUUID() };
+    await claimFixture(stack.accessPool, report.caseId, a.principalId, authorSecond);
     await expect(governance.decide(a.principal, { ...decision, targets: [{ ...target,
       expectedHead: first.revision }] })).rejects.toThrow('target changed since review');
     await governance.decide(a.principal, decision);
@@ -261,6 +263,7 @@ test('G315: reviews bind a current rating, serialize person CAS, hide spoilers a
     expect(provider.calls.send).toBe(0);
     expect((await call('POST', '/v1/reviews', { ...edit, expectedRevision: winner.revision }, a.token)).status)
       .toBe(403);
+    await claimFixture(stack.accessPool, report.caseId, a.principalId, authorSecond);
     await governance.decide(a.principal, { ...decision, outcome: 'restore', expectedGeneration: '1',
       idempotencyKey: randomUUID() });
     expect((await call('GET', `/v1/reviews/${first.review}`)).status).toBe(200);

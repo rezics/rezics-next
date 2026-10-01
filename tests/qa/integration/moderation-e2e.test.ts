@@ -104,9 +104,9 @@ async function setup() {
     const before = await json<{ generation: string; ruleBasis: { revision: string | null } }>(await read(owner,`${root}/settings`));
     return json<{ generation: string; ruleBasis: { ref: string; revision: string; digest: string } }>(await call(owner,'PUT',`${root}/settings`,{
       actingSubject: owner.actor,expectedGeneration: before.generation,expectedRulesRevision: before.ruleBasis.revision,
-      reason: 'Set community admission and rules',settings: { visibility,reviewRequired: true,whoMaySubmit: 'granted',selfJoin,
-        rules: [{ id: 'respect',title: { en: 'Respect others','zh-CN': '尊重他人' },
-          body: { en: 'No personal abuse.','zh-CN': '禁止人身攻击。' },governanceRule: null }] } }),201);
+      reason: 'Set community admission and rules',settings: { visibility,reviewRequired: true,whoMaySubmit: 'granted',selfJoin: visibility === 'public' && selfJoin,
+        rules: [{ id: 'respect',title: { original: 'en',labels: { en: 'Respect others','zh-CN': '尊重他人' } },
+          body: { original: 'en',labels: { en: 'No personal abuse.','zh-CN': '禁止人身攻击。' } },governanceRule: null }] } }),201);
   };
   const invite = async (member: Member,expiresInSeconds = 300) => json<InvitationResult>(await call(owner,'POST',`${root}/invitations`,{
     actingSubject: owner.actor,member: member.actor,expiresInSeconds }));
@@ -309,7 +309,8 @@ test('G314 moderation basis: retained private statement, exact evidence and rule
         scopeKind: 'exact_revision',revision: head,expectedHead: basis.reports[0]!.evidence[0]!.expectedHead,effect: 'disclosure' }],
       rule: { ref: basis.ruleBasis.ref,revision: basis.ruleBasis.revision,digest: basis.ruleBasis.digest },evidenceDigest: report.evidenceDigest,
       reversesDecisionId: null,answersStepId: null,rationale: 'Violates the Realm rule',disclosure: 'private',idempotencyKey: key };
-    await json(await s.call(s.owner,'POST','/v1/moderation/decisions',decision,key),201);
+    await json(await s.call(s.owner,'POST','/v1/moderation/decisions',decision,key),202);
+    await json(await s.call(s.owner,'POST','/v1/moderation/decisions',decision,key),200);
     expect(await json(await s.read(s.owner,`${s.root}/moderation`)))
       .toMatchObject({ items: [] });
     expect(await json(await s.read(s.owner,`${s.root}/moderation?state=closed`)))

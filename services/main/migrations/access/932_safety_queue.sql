@@ -26,7 +26,9 @@ CREATE TABLE access.safety_case_claim (
     case_id uuid PRIMARY KEY REFERENCES access.governance_case(id),
     principal_id uuid NOT NULL REFERENCES access.principal(id),
     acting_subject text NOT NULL REFERENCES access.authority_subject(id),
-    claimed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+    case_generation bigint NOT NULL,
+    claimed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    expires_at timestamptz NOT NULL,
+    CHECK (expires_at > claimed_at)
 );
-CREATE TRIGGER safety_claim_immutable BEFORE UPDATE OR DELETE ON access.safety_case_claim
-    FOR EACH ROW EXECUTE FUNCTION access.reject_governance_mutation();
+-- A claim is current assignment, not an immutable decision or legal fact.

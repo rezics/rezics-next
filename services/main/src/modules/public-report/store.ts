@@ -185,9 +185,10 @@ export class PublicReports {
           cancelled: boolean | null;
         }>(
       `SELECT c.state, c.generation::text, r.received_at, r.reason_code, r.content_language, r.process,
-        d.outcome, d.statement_of_reasons,c.decision_head,op.cancelled, CASE WHEN d.disclosure <> 'private' THEN d.rationale END AS rationale
+        d.outcome, CASE WHEN $2 = 'affected' OR d.disclosure <> 'private' THEN d.statement_of_reasons END AS statement_of_reasons,
+        c.decision_head,op.cancelled, CASE WHEN d.disclosure <> 'private' THEN d.rationale END AS rationale
         FROM access.governance_report r JOIN access.governance_case c ON c.id = r.case_id
-        LEFT JOIN access.moderation_decision d ON d.id = c.decision_head LEFT JOIN access.safety_decision_operation op ON op.decision_id = d.id WHERE r.id = $1`, [credential.report_id])).rows[0]!;
+        LEFT JOIN access.moderation_decision d ON d.id = c.decision_head LEFT JOIN access.safety_decision_operation op ON op.decision_id = d.id WHERE r.id = $1`, [credential.report_id, credential.party])).rows[0]!;
       const steps = (await client.query<{ id: string; step: string; occurred_at: Date; due_at: Date | null;
         statement: string | null; content_language: string | null;
         }>(`SELECT id, step, occurred_at, due_at,

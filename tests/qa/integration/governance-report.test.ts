@@ -1,3 +1,4 @@
+import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -75,12 +76,13 @@ async function governanceStack(name: string) {
     afterHeadRead = null;
     if (race) await race();
     return head;
-  } }, rules, { apply: async (operationId, ordinal, target) => {
+  } }, rules, { ...ownerEffects, apply: async (operationId, ordinal, target, plan, continuation) => {
     ownerApplies++;
     const race = beforeOwnerApply?.ordinal === ordinal ? beforeOwnerApply.work : null;
     if (race) { beforeOwnerApply = null; await race(); }
-    await ownerEffects.apply(operationId, ordinal, target);
+    const receipt = await ownerEffects.apply(operationId, ordinal, target, plan, continuation);
     if (loseOwnerResponse) { loseOwnerResponse = false; throw new Error('lost owner CAS response'); }
+    return receipt;
   } });
   const app = createMainApp(fuseki, { environment: env, account: account.verifier, access: registry,
     governance: { store, rules }, content, structureObjects,
@@ -140,6 +142,7 @@ async function governanceStack(name: string) {
     rmSync(directory, { recursive: true, force: true });
   };
   return { pool, contentPool, account, env, registry, store, rules, unreadable, grant, call,
+    claim: async (caseId: string, actor: string) => claimFixture(pool, caseId, await principalOf(account.b), actor),
     handle: (request: Request) => app.handle(request), author, work, body,
     targetHeadReadCount: () => targetHeadReads,
     ownerApplyCount: () => ownerApplies,
@@ -197,7 +200,7 @@ test('GOV02: a published rule has an exact scoped head, immutable revisions and 
   } finally { await s.close(); }
 }, 180_000);
 
-test('GOV02: partial Content acceptance and stale graph CAS leave Access unchanged', async () => {
+test('GOV02: partial Content acceptance preserves its receipt and fence after stale graph CAS', async () => {
   const s = await governanceStack('gov02-partial');
   try {
     const scope = `governance:platform:${randomUUID()}`;
@@ -226,7 +229,8 @@ test('GOV02: partial Content acceptance and stale graph CAS leave Access unchang
     s.raceOwnerAt(2, async () => {
       newTitleHead = (await s.edit(s.work.workRevision, 'Title changed after Content accepted')).revision;
     });
-    const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, {
+    await s.claim(report.body.caseId, moderator);
+    const decisionInput = {
       profile: 'moderation-decision-v1', caseId: report.body.caseId, expectedGeneration: '0',
       actingSubject: moderator, outcome: 'restrict',
       targets: [
@@ -240,18 +244,23 @@ test('GOV02: partial Content acceptance and stale graph CAS leave Access unchang
       rule: { ref: published.body.ref, revision: published.body.revision,
         digest: published.body.digest }, evidenceDigest: report.body.evidenceDigest,
       reversesDecisionId: null, answersStepId: null, rationale: 'Exact two-owner review',
-      disclosure: 'parties', idempotencyKey: randomUUID(),
-    });
-    expect(decision.status, JSON.stringify(decision.body)).toBe(409);
-    expect(decision.body.code).toBe('stale_governance_basis');
+      disclosure: 'parties', reasons: fixtureReasons, idempotencyKey: randomUUID(),
+    };
+    const accepted = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, decisionInput);
+    expect(accepted.status).toBe(202);
+    const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, decisionInput);
+    expect(decision.status, JSON.stringify(decision.body)).toBe(202);
+    expect(decision.body.operation.status).toBe('partial');
+    expect(decision.body.operation.items.map((item: { state: string }) => item.state)).toEqual(['confirmed', 'failed']);
+    expect(decision.body.operation.items[0].receipt).toBeTruthy();
     expect(newTitleHead).not.toBeNull();
     expect(s.ownerApplyCount()).toBe(2);
     expect((await s.contentPool.query(`SELECT count(*)::int AS n FROM content.moderation_effect
       WHERE resource_id = $1 AND expected_head = $2`, [s.work.work, bodyRevision])).rows[0].n).toBe(1);
     expect((await s.pool.query(`SELECT count(*)::int AS n FROM access.moderation_decision
-      WHERE case_id = $1`, [report.body.caseId])).rows[0].n).toBe(0);
+      WHERE case_id = $1`, [report.body.caseId])).rows[0].n).toBe(1);
     expect(await s.store.readEnforcement({ owner: 'content', resource: s.work.work, component: 'body' }))
-      .toEqual([]);
+      .toEqual([expect.objectContaining({ state: 'restricted', decisionId: decision.body.decisionId })]);
     expect(await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' }))
       .toEqual([]);
     const retained = await s.call('GET', `/v1/reports/${report.body.reportId}`, s.account.tokenA);
@@ -455,7 +464,11 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
       rule: ruleBasis[index],
       evidenceDigest: reports[index].evidenceDigest, reversesDecisionId: null, answersStepId: null,
       rationale: 'Misleading title', disclosure: 'parties', idempotencyKey: randomUUID(), ...overrides });
-    const decide = (body: object, token = s.account.tokenB) => s.call('POST', '/v1/moderation/decisions', token, body);
+    const decide = async (body: object, token = s.account.tokenB) => {
+      const accepted = await s.call('POST', '/v1/moderation/decisions', token, body);
+      if (accepted.status !== 202) return accepted;
+      return s.call('POST', '/v1/moderation/decisions', token, body);
+    };
 
     // Authority: the other Realm's moderator and a caller without grants are denied.
     expect((await decide({ ...decision(0), actingSubject: moderators[1] })).status).toBe(403);
@@ -489,24 +502,27 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
       'Title changed during decision commit')).revision; });
     const readsBeforeRace = s.targetHeadReadCount();
     const raced = await decide(reReviewed);
-    expect(raced.body.code).toBe('stale_governance_basis');
+    expect(raced.status).toBe(202);
+    expect(raced.body.operation.items[0].state).toBe('failed');
+    await s.store.cancelDecision({ issuer: s.account.issuer, subject: s.account.b.id }, moderators[0]!, raced.body.decisionId);
     expect(s.targetHeadReadCount() - readsBeforeRace).toBe(2);
     expect(racedHead).not.toBeNull();
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
-      [reports[0].caseId])).rows[0].n).toBe(0);
+      [reports[0].caseId])).rows[0].n).toBe(1);
     expect((await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' }))
       .filter(fence => fence.context === realms[0])).toEqual([]);
     // A fresh review against the new head can still act on the exact reported revision.
-    const freshReview = { ...reReviewed, targets: [{ ...reReviewed.targets[0]!, expectedHead: racedHead }] };
+    const freshReview = { ...reReviewed, expectedGeneration: '1', idempotencyKey: randomUUID(), targets: [{ ...reReviewed.targets[0]!, expectedHead: racedHead }] };
     const readsBeforeFreshReview = s.targetHeadReadCount();
     s.loseOwnerResponseOnce();
     const lostGraph = await decide(freshReview);
-    expect(lostGraph.status).toBe(503);
+    expect(lostGraph.status).toBe(202);
+    expect(lostGraph.body.operation.items[0].state).toBe('uncertain');
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
-      [reports[0].caseId])).rows[0].n).toBe(0);
+      [reports[0].caseId])).rows[0].n).toBe(2);
     const restricted = await decide(freshReview);
-    expect(restricted.status, JSON.stringify(restricted.body)).toBe(201);
-    expect(s.targetHeadReadCount() - readsBeforeFreshReview).toBe(4);
+    expect(restricted.status, JSON.stringify(restricted.body)).toBe(200);
+    expect(s.targetHeadReadCount() - readsBeforeFreshReview).toBe(2);
     const graphEvents = await s.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?batch ?event ?sequence WHERE {
         GRAPH <urn:rezics:graph:outbox> { ?batch rv:event ?event .
@@ -527,7 +543,7 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     expect((await summary(realms[0]!)).status).toBe(200);
     const otherTarget = { owner: 'graph', resource: agent(), component: 'title', locator: null,
       scopeKind: 'component', revision: null, expectedHead: null, effect: 'disclosure' };
-    expect((await decide(decision(0, { expectedGeneration: '1', targets: [otherTarget] }))).status).toBe(403);
+    expect((await decide(decision(0, { expectedGeneration: '2', targets: [otherTarget] }))).status).toBe(403);
     expect(restricted.body.enforcement).toEqual([{ owner: 'graph', resource: s.work.work, component: 'title',
       revision: s.work.workRevision, effect: 'disclosure', state: 'restricted', fenceEpoch: '1' }]);
     const fences = await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' });
@@ -542,12 +558,12 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     const second = await decide(decision(1, { targets: [{ owner: 'graph', resource: s.work.work, component: 'title',
       locator: null, scopeKind: 'component', revision: null, expectedHead: racedHead,
       effect: 'disclosure' }] }));
-    expect(second.status).toBe(201);
+    expect(second.status).toBe(200);
     expect((await summary(realms[0]!)).status).toBe(200);
     expect((await summary(realms[1]!)).status).toBe(404);
 
     // GOV03: competing reversals of Realm 1's decision have one effect.
-    const reversal = (key: string) => decision(0, { outcome: 'reverse', expectedGeneration: '1',
+    const reversal = (key: string) => decision(0, { outcome: 'reverse', expectedGeneration: '2',
       reversesDecisionId: restricted.body.decisionId, idempotencyKey: key,
       targets: [{ owner: 'graph', resource: s.work.work, component: 'title', locator: null,
         scopeKind: 'exact_revision', revision: s.work.workRevision, expectedHead: racedHead,
@@ -555,15 +571,15 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     expect((await decide({ ...reversal('wrong-target'), targets: [{ ...reversal('unused').targets[0],
       effect: 'publication' }] })).body.code).toBe('stale_governance_basis');
     const competing = await Promise.all([decide(reversal('reverse-a')), decide(reversal('reverse-b'))]);
-    expect(competing.map(response => response.status).sort()).toEqual([201, 409]);
-    const winner = competing.find(response => response.status === 201)!;
+    expect(competing.map(response => response.status).sort()).toEqual([200, 409]);
+    const winner = competing.find(response => response.status === 200)!;
     expect(winner.body.enforcement[0]).toMatchObject({ state: 'released', fenceEpoch: '2' });
     // The winner's retry replays; a late second reversal against the new generation still cannot double-apply.
-    const winnerKey = competing[0]!.status === 201 ? 'reverse-a' : 'reverse-b';
+    const winnerKey = competing[0]!.status === 200 ? 'reverse-a' : 'reverse-b';
     const retried = await decide(reversal(winnerKey));
     expect(retried.status).toBe(200);
     expect(retried.body).toMatchObject({ decisionId: winner.body.decisionId, replayed: true });
-    expect((await decide({ ...reversal('reverse-c'), expectedGeneration: '2' })).status).toBe(409);
+    expect((await decide({ ...reversal('reverse-c'), expectedGeneration: '3' })).status).toBe(409);
     const after = await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' });
     expect(after.map(fence => [fence.context, fence.state, fence.fenceEpoch]).sort()).toEqual([
       [realms[0], 'released', '2'], [realms[1], 'restricted', '1']].sort());
@@ -571,7 +587,7 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     expect((await summary(realms[1]!)).status).toBe(404);
     // Reversal appended a decision; the reversed one is preserved; one outbox fact per decision.
     expect((await s.pool.query(`SELECT outcome FROM access.moderation_decision WHERE case_id = $1
-      ORDER BY case_sequence`, [reports[0].caseId])).rows.map(row => row.outcome)).toEqual(['restrict', 'reverse']);
+      ORDER BY case_sequence`, [reports[0].caseId])).rows.map(row => row.outcome)).toEqual(['restrict', 'restrict', 'reverse']);
     expect((await s.pool.query(`SELECT count(*)::int AS n FROM access.outbox WHERE kind = 'moderation.decided'`))
       .rows[0].n).toBe(3);
     await expect(s.pool.query('DELETE FROM access.moderation_decision WHERE id = $1', [restricted.body.decisionId]))
@@ -634,6 +650,7 @@ test('GOV02: a Content head changing after preflight makes the decision stale', 
     let successor: string | null = null;
     s.raceOwnerOnce(async () => { successor = (await draft(original, 'Edited current body')).revisionId!; });
     const readsBeforeRace = s.targetHeadReadCount();
+    await s.claim(report.body.caseId, moderator);
     const decisionInput = { profile: 'moderation-decision-v1', caseId: report.body.caseId, expectedGeneration: '0',
         actingSubject: moderator, outcome: 'restrict', targets: [{ owner: 'content', resource: s.work.work,
           component: 'body', locator: null, scopeKind: 'exact_revision', revision: original,
@@ -641,28 +658,34 @@ test('GOV02: a Content head changing after preflight makes the decision stale', 
         rule: { ref: published.body.ref, revision: published.body.revision,
           digest: published.body.digest }, evidenceDigest: report.body.evidenceDigest,
         reversesDecisionId: null, answersStepId: null, rationale: 'Exact body only',
-        disclosure: 'parties', idempotencyKey: randomUUID() };
+        disclosure: 'parties', reasons: fixtureReasons, idempotencyKey: randomUUID() };
+    const accepted = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, decisionInput);
+    expect(accepted.status).toBe(202);
     const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, decisionInput);
-    expect(decision.status, JSON.stringify(decision.body)).toBe(409);
-    expect(decision.body.code).toBe('stale_governance_basis');
+    expect(decision.status, JSON.stringify(decision.body)).toBe(202);
+    expect(decision.body.operation.items[0].state).toBe('failed');
+    await s.store.cancelDecision({ issuer: s.account.issuer, subject: s.account.b.id }, moderator, decision.body.decisionId);
     expect(s.targetHeadReadCount() - readsBeforeRace).toBe(2);
     expect(successor).not.toBeNull();
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
-      [report.body.caseId])).rows[0].n).toBe(0);
+      [report.body.caseId])).rows[0].n).toBe(1);
     expect((await s.contentPool.query(`SELECT count(*)::int AS n FROM content.moderation_effect
       WHERE resource_id = $1`, [s.work.work])).rows[0].n).toBe(0);
-    const currentBasis = { ...decisionInput, idempotencyKey: randomUUID(), targets: [{
+    const currentBasis = { ...decisionInput, expectedGeneration: '1', idempotencyKey: randomUUID(), targets: [{
       ...decisionInput.targets[0]!, expectedHead: successor,
     }] };
     const readsBeforeFreshReview = s.targetHeadReadCount();
+    await s.claim(report.body.caseId, moderator);
     s.loseOwnerResponseOnce();
+    expect((await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, currentBasis)).status).toBe(202);
     const lostContent = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, currentBasis);
-    expect(lostContent.status).toBe(503);
+    expect(lostContent.status).toBe(202);
+    expect(lostContent.body.operation.items[0].state).toBe('uncertain');
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
-      [report.body.caseId])).rows[0].n).toBe(0);
+      [report.body.caseId])).rows[0].n).toBe(2);
     const applied = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, currentBasis);
-    expect(applied.status, JSON.stringify(applied.body)).toBe(201);
-    expect(s.targetHeadReadCount() - readsBeforeFreshReview).toBe(4);
+    expect(applied.status, JSON.stringify(applied.body)).toBe(200);
+    expect(s.targetHeadReadCount() - readsBeforeFreshReview).toBe(2);
     expect(s.ownerApplyCount()).toBe(3);
     expect((await s.contentPool.query(`SELECT expected_head::text, effect FROM content.moderation_effect
       WHERE resource_id = $1`, [s.work.work])).rows).toEqual([{

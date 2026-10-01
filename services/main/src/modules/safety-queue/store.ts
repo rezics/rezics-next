@@ -15,8 +15,8 @@ export const SAFETY_QUEUE_COST = {
   page: 50,
   statementTimeoutMs: 5000,
   lockTimeoutMs: 2000,
-  readStatements: 12,
-  claimStatements: 13,
+  readStatements: 15,
+  claimStatements: 21,
   holdStatements: 11,
 } as const;
 type Authority = (
@@ -92,6 +92,13 @@ export class SafetyQueue {
       throw new GovernanceInvalid('invalid queue filter');
     return this.transaction(async (client) => {
       const kinds = await this.actions(client, principal, filter.actingSubject);
+      let specialist = false;
+      try {
+        await this.authority(client, principal, filter.actingSubject, 'governance.safety.evidence');
+        specialist = true;
+      } catch (error) {
+        if (!(error instanceof GovernanceDenied)) throw error;
+      }
       const revision = (
         await client.query<{ revision: string }>(
           'SELECT revision::text FROM access.site_moderation_position WHERE id FOR SHARE',
@@ -104,6 +111,7 @@ export class SafetyQueue {
         principal.subject,
         { ...filter, cursor: undefined, limit: undefined },
         kinds,
+        specialist,
       ];
       const cursor = decodeReadCursor(filter.cursor, binding, position);
       const rows = (
@@ -133,8 +141,10 @@ export class SafetyQueue {
         LEFT JOIN LATERAL (SELECT due_at FROM access.governance_process_step
           WHERE case_id = c.id AND due_at IS NOT NULL ORDER BY due_at,id LIMIT 1) d ON true
         LEFT JOIN access.safety_case_claim claim ON claim.case_id = c.id
+          AND claim.case_generation = c.generation AND claim.expires_at > $10
         WHERE c.authority_kind = 'platform' AND c.authority_scope_id = 'governance:platform'
           AND c.state = 'open' AND c.review_pending AND c.kind = ANY($1::text[])
+          AND (NOT c.urgent OR $9)
           AND ($2::boolean IS NULL OR c.urgent = $2)
           AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM access.governance_report
             WHERE case_id = c.id AND reason_code = $3))
@@ -152,6 +162,8 @@ export class SafetyQueue {
             cursor?.after ?? null,
             cursor?.order ?? null,
             limit + 1,
+            specialist,
+            this.clock(),
           ],
         )
       ).rows;
@@ -186,8 +198,8 @@ export class SafetyQueue {
   async claim(principal: VerifiedPrincipal, actor: string, caseId: string) {
     return this.transaction(async (client) => {
       const row = (
-        await client.query<{ kind: string; urgent: boolean }>(
-          `SELECT kind,urgent FROM access.governance_case
+        await client.query<{ kind: string; urgent: boolean; generation: string }>(
+          `SELECT kind,urgent,generation::text FROM access.governance_case
         WHERE id = $1 AND authority_kind = 'platform' AND authority_scope_id = 'governance:platform'
           AND state = 'open' FOR UPDATE`,
           [caseId],
@@ -201,20 +213,63 @@ export class SafetyQueue {
         row.kind === 'rights_complaint' ? 'governance.rights.decide' : 'governance.moderate',
       );
       if (row.urgent) await this.authority(client, principal, actor, 'governance.safety.evidence');
-      await client.query(
-        `INSERT INTO access.safety_case_claim (case_id,principal_id,acting_subject)
-        VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
-        [caseId, authority.principalId, actor],
-      );
       const claim = (
-        await client.query<{ acting_subject: string; principal_id: string }>(
-          'SELECT acting_subject,principal_id FROM access.safety_case_claim WHERE case_id = $1',
+        await client.query<{
+          acting_subject: string;
+          principal_id: string;
+          case_generation: string;
+          expires_at: Date;
+          account_issuer: string;
+          account_subject: string;
+        }>(
+          `SELECT c.*,c.case_generation::text,p.account_issuer,p.account_subject FROM access.safety_case_claim c
+           JOIN access.principal p ON p.id = c.principal_id WHERE case_id = $1`,
           [caseId],
         )
-      ).rows[0]!;
-      if (claim.principal_id !== authority.principalId || claim.acting_subject !== actor) {
-        throw new GovernanceConflict('case is claimed by another staff member');
+      ).rows[0];
+      const now = this.clock();
+      if (
+        claim &&
+        claim.case_generation === row.generation &&
+        claim.expires_at > now &&
+        (claim.principal_id !== authority.principalId || claim.acting_subject !== actor)
+      ) {
+        let current = true;
+        try {
+          const holder = { issuer: claim.account_issuer, subject: claim.account_subject };
+          await this.authority(
+            client,
+            holder,
+            claim.acting_subject,
+            row.kind === 'rights_complaint' ? 'governance.rights.decide' : 'governance.moderate',
+          );
+          if (row.urgent)
+            await this.authority(
+              client,
+              holder,
+              claim.acting_subject,
+              'governance.safety.evidence',
+            );
+        } catch (error) {
+          if (!(error instanceof GovernanceDenied)) throw error;
+          current = false;
+        }
+        if (current) throw new GovernanceConflict('case is claimed by another staff member');
       }
+      await client.query(
+        `INSERT INTO access.safety_case_claim (case_id,principal_id,acting_subject,case_generation,claimed_at,expires_at)
+        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (case_id) DO UPDATE SET
+          principal_id = EXCLUDED.principal_id,acting_subject = EXCLUDED.acting_subject,
+          case_generation = EXCLUDED.case_generation,claimed_at = EXCLUDED.claimed_at,expires_at = EXCLUDED.expires_at`,
+        [
+          caseId,
+          authority.principalId,
+          actor,
+          row.generation,
+          now,
+          new Date(now.getTime() + 30 * 60_000),
+        ],
+      );
       return { caseId, claimedBy: actor };
     });
   }

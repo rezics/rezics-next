@@ -1,3 +1,4 @@
+import { claimFixture, fixtureReasons } from '../integration/g-565-decision-support.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -86,6 +87,8 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     await access.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'governance.rights.decide', now() + interval '1 hour')`,
     [randomUUID(), principalId, actingSubject]);
+    await access.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'governance.appeal',now() + interval '1 hour')`, [randomUUID(),principalId,actingSubject]);
     for (const action of ['governance.rights.decide', 'governance.appeal']) {
       await access.query(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject,
         scope_id, action, valid_until) VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`,
@@ -112,7 +115,8 @@ test('GOV25: replaying an Access backup preserves its restriction fence through 
     const decisionInput: DecisionInput = { caseId: report.caseId, expectedGeneration: '0', actingSubject,
       outcome: 'interim_restrict', targets, rule, evidenceDigest: report.evidenceDigest,
       reversesDecisionId: null, answersStepId: null, rationale: 'Pending rights process.',
-      disclosure: 'parties', idempotencyKey: 'gov25-restriction' };
+      disclosure: 'parties', reasons: fixtureReasons, idempotencyKey: 'gov25-restriction' };
+    await claimFixture(access, report.caseId, principalId, actingSubject);
     const restriction = await store.decide(principal, decisionInput);
     expect(restriction.enforcement).toEqual([expect.objectContaining({ state: 'restricted', fenceEpoch: '1',
       effect: 'export', revision: null })]);

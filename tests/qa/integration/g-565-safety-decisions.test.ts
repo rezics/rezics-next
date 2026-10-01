@@ -4,6 +4,7 @@ import { mediaTables } from '../../../services/main/src/modules/media/typed-sche
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { requirePlatformParticipation } from '../../../services/main/src/modules/safety-queue/participation.ts';
 import { SAFETY_QUEUE_COST } from '../../../services/main/src/modules/safety-queue/store.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -68,6 +69,17 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
     const staff = await stack.member('staff');
     const other = await stack.member('other-staff');
     const author = await stack.member('affected-author');
+    const former = await stack.member('former-representative');
+    const expired = await stack.member('expired-representative');
+    for (const [member, active, validUntil] of [
+      [former, false, new Date(Date.now() + 3600_000)],
+      [expired, true, new Date(Date.now() - 3600_000)],
+    ] as const)
+      await stack.accessPool.query(
+        `INSERT INTO access.representation
+      (id,principal_id,subject_id,action,active,valid_until) VALUES ($1,$2,$3,'governance.appeal',$4,$5)`,
+        [randomUUID(), member.principalId, author.actor, active, validUntil],
+      );
     for (const member of [staff, other])
       for (const action of [
         'governance.moderate',
@@ -77,7 +89,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       ])
         await member.grant('governance:platform', action);
     const tokenMap = new Map(
-      [staff, other, author].map((member) => [member.token, member.principal]),
+      [staff, other, author, former, expired].map((member) => [member.token, member.principal]),
     );
     let clock = new Date();
     let interruptOrdinal: number | null = null;
@@ -308,6 +320,23 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       cursor = page.nextCursor;
     } while (cursor);
     expect(traversed.size).toBe(55);
+    const claimAsset = await author.upload(png(19, 19));
+    const recoverable = await report(claimAsset.asset);
+    await json(await claim(recoverable), 200);
+    clock = new Date(clock.getTime() + 31 * 60_000);
+    await json(await claim(recoverable, other), 200);
+    await stack.accessPool.query(
+      `UPDATE access.permission_grant SET active = false
+      WHERE recipient_subject = $1 AND scope_id = 'governance:platform' AND action = 'governance.moderate'`,
+      [other.actor],
+    );
+    await json(await claim(recoverable), 200);
+    await stack.accessPool.query(
+      `UPDATE access.permission_grant SET active = true
+      WHERE recipient_subject = $1 AND scope_id = 'governance:platform' AND action = 'governance.moderate'`,
+      [other.actor],
+    );
+    clock = new Date();
     const races = await Promise.all([claim(first), claim(first, other)]);
     expect(races.map((response) => response.status).sort()).toEqual([200, 409]);
     const winner = races[0]!.status === 200 ? staff : other;
@@ -351,6 +380,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       outcome: DecisionInput['outcome'] = 'restrict',
       reversesDecisionId: string | null = null,
     ): Promise<DecisionInput> => {
+      await json(await claim(receipt, member), 200);
       const view = await readCase(receipt, member);
       return {
         caseId: receipt.caseId,
@@ -390,6 +420,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
         body.idempotencyKey,
       );
     const decisionInput = await input(first, [target(asset)], winner);
+    decisionInput.disclosure = 'private';
     const accepted = await json<DecisionResult>(await decide(decisionInput, winner), 202);
     expect(accepted.operation.status).toBe('accepted');
     expect(accepted.enforcement).toEqual([]);
@@ -417,6 +448,15 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       ).rowCount,
     ).toBe(1);
     expect((await stack.store.readAsset(asset.asset))!.moderation).toBe('suppressed');
+    const reassignedDecision = await input(recoverable, [target(claimAsset)]);
+    expect(
+      (await decide({ ...reassignedDecision, actingSubject: other.actor }, other)).status,
+    ).toBe(403);
+    await json(await decide(reassignedDecision), 202);
+    const decidedByReplacement = await json<DecisionResult>(await decide(reassignedDecision), 200);
+    expect(decidedByReplacement.operation.status).toBe('completed');
+    expect((await stack.store.readAsset(claimAsset.asset))!.moderation).toBe('suppressed');
+
     await json<DecisionResult>(await decide(decisionInput, winner), 200);
     expect(applied.get(`governance-moderation:${completed.decisionId}:1`)).toBe(1);
     const notices = await json<{
@@ -424,6 +464,25 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
     }>(await call('GET', '/v1/safety-notices', undefined, author.token), 200);
     const notice = notices.items.find((item) => item.caseId === first.caseId)!;
     expect(notice.reasons.facts).toBe(reasons.facts);
+    for (const member of [former, expired]) {
+      const privateNotices = await json<typeof notices>(
+        await call('GET', '/v1/safety-notices', undefined, member.token),
+        200,
+      );
+      expect(privateNotices.items.some((item) => item.caseId === first.caseId)).toBe(false);
+    }
+    const reporterStatus = await json<{ statementOfReasons: unknown }>(
+      await call(
+        'GET',
+        `/v1/public-reports/${first.caseId}`,
+        undefined,
+        undefined,
+        undefined,
+        first.credential,
+      ),
+      200,
+    );
+    expect(reporterStatus.statementOfReasons).toBeNull();
     const partyStatus = await json<{
       statementOfReasons: typeof reasons;
       operation: DecisionResult['operation'];
@@ -567,6 +626,10 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
     ]);
     await json(await decide(sanction), 202);
     await json(await decide(sanction), 200);
+    for (const member of [former, expired])
+      await expect(
+        requirePlatformParticipation(stack.accessPool, member.principalId),
+      ).resolves.toBeUndefined();
     const privateNotices = await json<typeof notices>(
       await call('GET', '/v1/safety-notices', undefined, author.token),
       200,
@@ -713,6 +776,27 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       );
     await specialist(false);
     expect((await claim(ncii)).status).toBe(403);
+    const ordinaryQueue = await json<{ items: Array<{ urgent: boolean }> }>(
+      await call(
+        'GET',
+        `/v1/safety-cases?actingSubject=${encodeURIComponent(staff.actor)}`,
+        undefined,
+        staff.token,
+      ),
+      200,
+    );
+    expect(ordinaryQueue.items.every((item) => !item.urgent)).toBe(true);
+    const urgentQueue = await json<typeof ordinaryQueue>(
+      await call(
+        'GET',
+        `/v1/safety-cases?actingSubject=${encodeURIComponent(staff.actor)}&urgent=true`,
+        undefined,
+        staff.token,
+      ),
+      200,
+    );
+    expect(urgentQueue.items).toEqual([]);
+
     await specialist(true);
     const beforeClaim = statements;
     await json(await claim(ncii), 200);
@@ -988,11 +1072,29 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       200,
     );
     clock = new Date(
-      dmcaStatus.steps.find((step) => step.kind === 'restoration_not_before')!.dueAt!,
+      Date.parse(dmcaStatus.steps.find((step) => step.kind === 'restoration_not_after')!.dueAt!) +
+        86_400_000,
     );
+    await json(await claim(copyright), 200);
     await json(await decide(restoration), 202);
     await json(await decide(restoration), 200);
     expect((await stack.store.readAsset(copyrightAsset.asset))!.moderation).toBe('none');
+    await governance.recordStep(staff.principal, {
+      caseId: copyright.caseId,
+      decisionId: removed.decisionId,
+      actingSubject: staff.actor,
+      process: 'dmca_512',
+      step: 'claimant_action',
+      partySubject: null,
+      statement: 'Claimant filed an action seeking a court order.',
+      documentDigest: sha('claimant-action'),
+      occurredAt: clock.toISOString(),
+      dueAt: null,
+      idempotencyKey: randomUUID(),
+    });
+    const stayedRestoration = await input(copyright, [target(copyrightAsset)], staff, 'restore');
+    stayedRestoration.answersStepId = counter.stepId;
+    expect((await decide(stayedRestoration)).status).toBe(409);
 
     // Cancelling a partial plan preserves its first owner receipt and stops the second.
     const cancelledCase = await report(copyrightAsset.asset);
@@ -1004,6 +1106,18 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
     const pending = await json<DecisionResult>(await decide(cancelInput), 202);
     interruptOrdinal = 2;
     const beforeCancel = await json<DecisionResult>(await decide(cancelInput), 202);
+    const deniedCancelKey = randomUUID();
+    expect(
+      (
+        await call(
+          'POST',
+          `/v1/safety-decisions/${pending.decisionId}/cancellation`,
+          { actingSubject: other.actor, idempotencyKey: deniedCancelKey },
+          other.token,
+          deniedCancelKey,
+        )
+      ).status,
+    ).toBe(403);
     const cancelKey = randomUUID();
     const cancelled = await json<DecisionResult>(
       await call(

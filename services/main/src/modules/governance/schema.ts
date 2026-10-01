@@ -221,6 +221,8 @@ export const safetyCaseClaim = access.table('safety_case_claim', {
   principalId: uuid('principal_id').notNull(),
   actingSubject: text('acting_subject').notNull(),
   claimedAt: at('claimed_at').notNull(),
+  caseGeneration: bigint('case_generation', { mode: 'bigint' }).notNull(),
+  expiresAt: at('expires_at').notNull(),
 });
 export const siteModerationPosition = access.table('site_moderation_position', {
   id: boolean('id').primaryKey(),

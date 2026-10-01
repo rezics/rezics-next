@@ -42,7 +42,7 @@ cancellation, or when a newer report, appeal or counter-notice needs review.
 | Public status / correspondence | One hashed credential lookup; status returns at most 50 steps with a continuation. A correspondence writes at most 3 steps and one credential-local receipt.                                                                                                                                                   |
 | Preservation                   | One indexed target or account hold lookup and idempotent postponement records. Intake and Content erasure share a target lock across owners. Held Content erasure stops before graph suppression; Account credentials may still be deleted while safety material and its reason remain.                        |
 | `readReport`                   | One report key and at most 16 evidence rows; one indexed authority check for a reviewer.                                                                                                                                                                                                                       |
-| Platform queue / claims       | At most 50 results plus one lookahead; reads use at most 12 Access statements, claims 13 and holds 11 including authority and recovery checks. Keysets retain full timestamp precision.                                                                                                                      |
+| Platform queue / claims       | At most 50 results plus one lookahead; reads use at most 15 Access statements, claims 21 and holds 11 including authority and recovery checks. Keysets retain full timestamp precision.                                                                                                                      |
 | `decide` / resume              | At most 64 reviewed targets; preparation retains one plan per target. Resume uses two Access transactions per unconfirmed effect, each at most 24 statements plus its owner call; graph and Content use exact receipt identities, and copy closure advances at most 100 assets per call. |
 | `recordStep`                   | One case and grant check, one receipt key, one append.                                                                                                                                                                                                                                                         |
 | `readEnforcement`              | Indexed target lookup limited to 50 rows.                                                                                                                                                                                                                                                                      |
@@ -55,8 +55,8 @@ cancellation, or when a newer report, appeal or counter-notice needs review.
 
 The G-565 integration test counts real query bounds and checks concurrent claims, receipt-preserving partial
 recovery, private party reasons, appeals, expiring participation, identical copies
-and legal windows. Earlier GOV02 tests describe the preceding synchronous CAS
-contract and need adaptation to accepted plans and owner failure outcomes.
+and legal timing. The GOV02 tests also retain accepted plans and confirmed owner
+receipts across stale or lost owner responses.
 Cross-owner checks remain bounded to at most 64 targets per decision. The
 resource summary and exact Content revision APIs check the committed Access
 fence against the graph head or exact Content revision before disclosure. The
@@ -103,15 +103,16 @@ restart deadlines.
 
 ## Staff decisions and recovery
 
-Access migrations 932–934 add the platform queue, persistent exclusive claims, private
+Access migrations 932–934 add the platform queue, exclusive claims for the current case generation, private
 mandatory party notices and per-target effect progress. `/v1/safety-cases` filters
 urgency, category, original content language and due time; case reports and queue
 pages have continuations. Urgent evidence, claims, decisions, replay, cancellation and holds
-require the specialist grant.
+require the specialist grant. Claims expire after 30 minutes; a new case generation
+or a holder who no longer has current decision authority permits reassignment.
 `/v1/safety-notices` is an owned private inbox; notice secrets never enter the
 outbox or generic notification payloads. Party credentials keep appeals open
 when participation is restricted. Generic Main write admission checks platform
-participation fences across every Agent represented by the principal and uses
+participation fences across every Agent currently represented by the principal and uses
 the database clock for expiry. Media erasure requires G-564's live Access
 preservation fence; an active hold postpones erasure before owner writes.
 
@@ -120,7 +121,8 @@ appeal route and the rule's exact revision/digest. Automation in retained eviden
 must be disclosed. Cancellation preserves every confirmed effect and prevents
 future dispatch; reconsideration appends a new decision. A reversal after partial
 cancellation targets only the original confirmed effects. DMCA restoration must
-fall inside the recorded counter-notice window and is stayed by claimant action.
+wait until the recorded earliest restoration date and is stayed by claimant action.
+The latest date is a deadline shown by due steps; missing it does not forbid later restoration.
 
 The operation shape adapts the separation of acceptance and progress in
 [AIP-151](https://google.aip.dev/151) and request identity in
