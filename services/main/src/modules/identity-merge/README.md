@@ -22,6 +22,8 @@ The shared ordered application is the only application/retry lifecycle.
 Native stages yield after two effects, including bounded planning within the
 shared 64 graph-read command budget; a populated merge can require several
 explicit decision retries.
+Retries use the original decision's HTTP idempotency key and fresh caller
+authority; a new key cannot replace a still-pending application.
 
 | Owner | Forward policy | Compensation |
 | --- | --- | --- |

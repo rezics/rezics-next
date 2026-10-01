@@ -192,9 +192,9 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
       { profile: 'editorial-proposal-review-v1',revision: 1,outcome: 'approve',message: 'Checked volume and language evidence',actingSubject: actor },token);
     const decide = (id: string,actor: string,token: string,approveNow = false,key = randomUUID()) => call('POST',path(id,'/decisions'),
       { profile: 'editorial-proposal-decide-v1',revision: 1,outcome: 'applied',approve: approveNow,message: 'Apply reviewed correction',actingSubject: actor },token,key);
-    const finish = async (id: string) => {
+    const finish = async (id: string,key = randomUUID()) => {
       for (let attempt=0;attempt<16;attempt++) {
-        const response = await decide(id,actorC,tokenC,true);
+        const response = await decide(id,actorC,tokenC,true,key);
         if (response.status === 200) return json<Command>(response);
         await json<Command>(response,202);
       }
@@ -219,7 +219,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     expect(await json(await call('GET',oldId,undefined,null))).toMatchObject({ status: 'merged',resolution: { survivor: survivor.work } });
     await json(await call('GET',path(proposed.proposal),undefined,null)); expect(libraryCommits).toBe(1);
     app = createMainApp(f.env.fuseki,{ ...deps,editorialReview: new EditorialReviewStore(f.accessPool,modules) });
-    const merged = await finish(proposed.proposal);
+    const merged = await finish(proposed.proposal,applyKey);
     expect(merged.outcome).toBe('applied'); expect(merged.receipt?.commands).toHaveLength(6);
     const identityEvent = async (command: Command,operation: string) => {
       const rows = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?epoch ?sequence WHERE {
