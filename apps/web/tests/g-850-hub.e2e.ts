@@ -156,6 +156,8 @@ test('choose a usable release and save it, mark progress and return to the right
   await expect(primary(page)).toHaveText('Continue');
   await expect(primary(page)).toHaveAttribute('href', `/en/w/${uuid(two!.work)}`);
   await expect(page.getByText('Next: 2')).toBeVisible();
+  // Back at the top of the page, as a reader returns to it: the choice and the action are there to see.
+  await page.goto(at(sao.series));
   await inFirstScreen(page, { title: page.getByRole('heading', { level: 1 }), 'the primary action': primary(page),
     'progress': status(page) });
   await info.attach('series-phone', { body: await page.screenshot(), contentType: 'image/png' });
