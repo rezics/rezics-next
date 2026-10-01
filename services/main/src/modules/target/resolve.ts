@@ -218,7 +218,7 @@ export function targetSummaryReader(session: TargetReadSession): SummaryReader {
 /** Use the resolver's authority adapter when filtering mixed public inventories. */
 export function targetSummaries(session: TargetReadSession, resources: readonly string[]) {
   return readResourceSummaries(session.deps.environment, session.deps.media?.store,
-    targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT,
+    targetSummaryReader(session), { resources, context: DEFAULT_MEDIA_CONTEXT, resolveMerges: false,
       language: session.options.language?.toLowerCase() ?? null, languages: session.displayLanguages });
 }
 

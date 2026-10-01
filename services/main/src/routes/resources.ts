@@ -80,6 +80,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const batch = await summarize(request, { resources: [`${ID}${params.resource}`], ...query });
         const summary = batch.summaries[0]!;
         if (summary.status !== 'available') return unavailable();
+        if (summary.resolution) return Response.json({ profile: 'resource-summary-v1', ...summary,
+          status: 'merged', generation: batch.generation }, { headers: { 'cache-control': 'no-store' } });
         const main = summary.type === 'main-version' ? summary.reference : summary.type === 'work'
           ? (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?main WHERE { GRAPH ${iri(GRAPHS.current)} {
               ${iri(summary.reference)} rv:mainVersion ?main } }`)).results?.bindings[0]?.main?.value : undefined;

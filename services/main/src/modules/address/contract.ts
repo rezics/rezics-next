@@ -15,8 +15,9 @@
  *   snapshot or longer chain is `AddressClaimUnavailable` (503), never a false
  *   404 for a route that exists. Redirects are `no-store`: the canonical slug
  *   can change again.
- * - An exact revision read reports that revision's state and never follows
- *   the present head.
+ * - An exact revision read reports that revision's state and original Work.
+ *   A separate typed merge resolution describes its current survivor, without
+ *   substituting that Work or changing retained revision bytes.
  * - 308 and `Location` are RFC 9110 §15.4.9's; persistent route identity and
  *   the direct Work lookup are REZICS choices informed by W3C's "Cool URIs
  *   don't change".
@@ -48,6 +49,10 @@ export const workAddressCostContract = {
   fusekiRequests: {
     claim: 8, claimReplay: 4, claimConflict: 14, rename: 10, disposition: 7,
     resolve: 1, resolveRenamed: 2, resolveChain: 1 + MAX_WORK_REDIRECT_HOPS, reverse: 1, exact: 1,
+    // Identity edges and each visited public Work are fenced separately; route
+    // redirects and identity merges consume the same 32-hop allowance.
+    resolveMerged: 4 + 2 * MAX_WORK_REDIRECT_HOPS,
+    reverseMerged: 5 + 2 * MAX_WORK_REDIRECT_HOPS, exactMerged: 5 + 2 * MAX_WORK_REDIRECT_HOPS,
   },
   unmeasured: 'Native plan work across R and skewed target degree, Account and Access calls, bytes, TDB2 writer contention and latency percentiles. Chains beyond the hop bound need an indexed route structure, not a larger bound.',
 } as const;

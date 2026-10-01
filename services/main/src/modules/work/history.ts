@@ -6,6 +6,8 @@ import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
   type WorkActivationEnvironment } from './activate.ts';
 import { checkedWorkScalarValue, InvalidWorkScalarValue,
   type WorkScalarValue } from './scalar-value.ts';
+import { readMergedIdentity, type MergedIdentity } from '../identity-merge/resolution.ts';
+import { MergeUnavailable } from '../identity-merge/contract.ts';
 
 export class RevisionNotFound extends Error {}
 export class RevisionUnavailable extends Error {}
@@ -14,6 +16,7 @@ export class RevisionReadBudgetExceeded extends Error {}
 export interface RevisionReadBudget { bytesLeft: number; signal: AbortSignal }
 
 export interface ExactWorkRevision {
+  resolution?: MergedIdentity;
   revision: string;
   work: string;
   predecessor?: string;
@@ -29,6 +32,7 @@ export interface ExactWorkRevision {
 }
 
 export interface ExactMainRevision {
+  resolution?: MergedIdentity;
   revision: string;
   mainVersion: string;
   work: string;
@@ -275,13 +279,15 @@ export async function readMainPayloadForRevision(
 export async function readExactMainRevision(
   env: WorkActivationEnvironment, mainVersion: string, revision: string,
   canReadWork: (work: string) => Promise<boolean>,
+  options: { resolveMerges?: boolean } = {},
 ): Promise<ExactMainRevision> {
   const result = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/>
-    SELECT ?work ?operation ?manifest ?model ?shape ?dataset ?epoch ?sequence ?predecessor WHERE {
+    SELECT ?work ?operation ?manifest ?model ?shape ?dataset ?epoch ?sequence ?predecessor ?mergedInto WHERE {
       GRAPH <${GRAPHS.current}> {
         ?work a schema:CreativeWork ; rv:mainVersion ${iri(mainVersion)} .
         ${iri(mainVersion)} a rv:MainVersion ; rv:work ?work .
+        OPTIONAL { ?work rv:mergedInto ?mergedInto }
       }
       GRAPH <${GRAPHS.revisions}> {
         ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(mainVersion)} ;
@@ -312,7 +318,9 @@ export async function readExactMainRevision(
   if (predecessor !== payload.predecessor) {
     throw new RevisionCorrupt('MainVersion predecessor differs from retained payload');
   }
-  return { revision, mainVersion, work, ...(predecessor ? { predecessor } : {}),
+  const resolution = options.resolveMerges && row.mergedInto
+    ? await disclosedRevisionMerge(env, work, canReadWork) : null;
+  return { revision, mainVersion, work, ...(resolution ? { resolution } : {}), ...(predecessor ? { predecessor } : {}),
     operation: row.operation.value, hostingPolicy: payload.hostingPolicy,
     defaultSelection: payload.defaultSelection, defaultSelections: payload.defaultSelections,
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
@@ -333,15 +341,17 @@ export async function readExactWorkRevision(
   env: WorkActivationEnvironment,
   revision: string,
   canReadWork: (work: string) => Promise<boolean>,
+  options: { resolveMerges?: boolean } = {},
 ): Promise<ExactWorkRevision> {
   const result = await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-    SELECT ?work ?operation ?manifest ?model ?shape ?dataset ?epoch ?sequence ?predecessor WHERE {
+    SELECT ?work ?operation ?manifest ?model ?shape ?dataset ?epoch ?sequence ?predecessor ?mergedInto WHERE {
       GRAPH <${GRAPHS.revisions}> {
         ${iri(revision)} a rv:RevisionAnchor ; rv:component ?work ; rv:operation ?operation ;
           rv:manifest ?manifest ; rv:modelRevision ?model ; rv:shapeRevision ?shape ;
           rv:datasetId ?dataset ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
       }
+      OPTIONAL { GRAPH <${GRAPHS.current}> { ?work rv:mergedInto ?mergedInto } }
     }`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) throw new RevisionNotFound('revision is unavailable');
@@ -356,7 +366,9 @@ export async function readExactWorkRevision(
     throw new RevisionCorrupt('revision anchor is incomplete');
   }
   const state = await readWorkPayloadForRevision(env, row.manifest?.value ?? '', work);
-  return { revision, work, ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
+  const resolution = options.resolveMerges && row.mergedInto
+    ? await disclosedRevisionMerge(env, work, canReadWork) : null;
+  return { revision, work, ...(resolution ? { resolution } : {}), ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     operation: row.operation.value, mainVersion: state.mainVersion, title: state.title,
     language: state.language, semanticTypes: state.semanticTypes,
     ...(state.localizedTitle ? { localizedTitle: state.localizedTitle } : {}),
@@ -364,4 +376,17 @@ export async function readExactWorkRevision(
     ...(state.scalarValue === undefined ? {} : { scalarValue: state.scalarValue }),
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
       sequence: row.sequence.value } };
+}
+
+async function disclosedRevisionMerge(env: WorkActivationEnvironment, work: string,
+  canReadWork: (work: string) => Promise<boolean>) {
+  try {
+    return await readMergedIdentity(env, work, async resource => {
+      if (!await canReadWork(resource)) throw new RevisionNotFound('revision is unavailable');
+      return true;
+    });
+  } catch (error) {
+    if (error instanceof MergeUnavailable) throw new RevisionUnavailable('Identity resolution is unavailable');
+    throw error;
+  }
 }

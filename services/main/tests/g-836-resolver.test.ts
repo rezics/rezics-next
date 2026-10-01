@@ -5,6 +5,8 @@ import { readMergedIdentity, redirectOf } from '../src/modules/identity-merge/re
 import { MergeUnavailable } from '../src/modules/identity-merge/contract.ts';
 import { resolveTargets, TargetUnavailable, TARGET_RESOLVE_COST } from '../src/modules/target/resolve.ts';
 import { WorkReadInvalid, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { readResourceSummaries } from '../src/modules/media/summary.ts';
+import { DEFAULT_MEDIA_CONTEXT, MediaUnavailable } from '../src/modules/media/store.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const uri = (value: string) => ({ type: 'uri' as const, value });
@@ -16,11 +18,12 @@ function fixture(records: Record[]) {
     calls.push(query);
     const requested = records.filter(record => query.includes(`<${record.resource}>`));
     let rows: NonNullable<SparqlResult['results']>['bindings'];
-    if (query.includes('SELECT ?epoch ?sequence ?hold')) rows = requested.map(record => ({
+    if (query.includes('SELECT ?epoch ?sequence ?hold')) rows = requested.length ? requested.map(record => ({
       epoch: literal('epoch'), sequence: literal('1'), r: uri(record.resource), type: literal('work'),
       work: uri(record.resource), head: uri(id(1000)), public: literal(String(record.public ?? true)),
       erased: literal('false'), label: { type: 'literal', value: 'Sword Art Online 1', 'xml:lang': 'en' },
-    }));
+      ...(record.next ? { mergedInto: uri(record.next) } : {}),
+    })) : [{ epoch: literal('epoch'), sequence: literal('1') }];
     else if (query.includes('SELECT ?epoch ?sequence ?r ?revision ?type')) rows = requested.map(record => ({
       epoch: literal('epoch'), sequence: literal('1'), r: uri(record.resource), revision: uri(id(1000)),
       type: uri('https://schema.org/Book'), ...(record.next ? { mergedInto: uri(record.next) } : {}),
@@ -49,6 +52,33 @@ test('G836: every default capability target follows native mergedInto in bounded
     .toEqual([id(2), id(2), id(2)]);
   expect(duplicate.calls).toHaveLength(4);
   await expect(resolveTargets(duplicate.session, Array.from({ length: 65 }, () => id(1)), 'review')).rejects.toBeInstanceOf(WorkReadInvalid);
+});
+
+test('G836: summary identity chains share disclosure, preserve source metadata and batch converging aliases', async () => {
+  const sources = Array.from({ length: 64 }, (_, n) => ({ resource: id(n + 1), next: id(100) }));
+  const f = fixture([...sources, { resource: id(100) }]);
+  const input = { resources: sources.map(record => record.resource), context: DEFAULT_MEDIA_CONTEXT, language: null };
+  const result = await readResourceSummaries(f.environment, undefined, {}, input);
+  expect(result.cost.graphQueries).toBe(3);
+  expect(result.summaries).toHaveLength(64);
+  expect(result.summaries[0]).toMatchObject({ reference: id(1), status: 'available',
+    resolution: { state: 'merged', source: id(1), survivor: id(100), hops: 1 } });
+  for (const hidden of [1, 2]) {
+    const f = fixture([{ resource: id(1), next: id(2), public: hidden !== 1 }, { resource: id(2), public: hidden !== 2 }]);
+    expect((await readResourceSummaries(f.environment, undefined, {}, { ...input, resources: [id(1)] })).summaries)
+      .toEqual([{ reference: id(1), status: 'unavailable' }]);
+  }
+  const chain = Array.from({ length: 33 }, (_, n) => ({ resource: id(n + 1), ...(n < 32 ? { next: id(n + 2) } : {}) }));
+  const deep = fixture(chain);
+  expect((await readResourceSummaries(deep.environment, undefined, {}, { ...input, resources: [id(1)] })).summaries[0])
+    .toMatchObject({ resolution: { hops: 32, survivor: id(33) } });
+  expect(deep.calls).toHaveLength(34);
+  for (const records of [[{ resource: id(1), next: id(2) }, { resource: id(2), next: id(1) }],
+    [...chain.slice(0, 32), { resource: id(33), next: id(34) }, { resource: id(34) }]]) {
+    const f = fixture(records);
+    await expect(readResourceSummaries(f.environment, undefined, {}, { ...input, resources: [id(1)] }))
+      .rejects.toBeInstanceOf(MediaUnavailable);
+  }
 });
 
 test('G836: exactly 32 identity hops resolve; cycles, excess depth and undisclosed source or survivor fail closed', async () => {

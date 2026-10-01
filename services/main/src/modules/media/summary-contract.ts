@@ -3,6 +3,7 @@ import { displayLanguageBasis } from '../display-language/schema.ts';
 import { AVATAR_POLICY } from './store.ts';
 import { FALLBACK_POLICY, MAX_SUMMARY_BATCH } from './summary.ts';
 import { targetBase, targetRef } from '../target/contract.ts';
+import { mergedIdentity } from '../identity-merge/resolution.ts';
 
 // Written as literals, not mapped from an array, so the contract's static type is the union and not `never`.
 const resourceType = t.Union([t.Literal('work'), t.Literal('main-version'), t.Literal('space'), t.Literal('realm'),
@@ -30,7 +31,8 @@ export const resourceSummary = t.Union([
     { additionalProperties: false }),
   t.Object({ reference: t.String(), status: t.Literal('available'), type: resourceType,
     base: t.Nullable(targetBase), work: t.Nullable(targetRef),
-    disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), name, avatar },
+    disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), name, avatar,
+    resolution: t.Optional(mergedIdentity) },
   { additionalProperties: false }),
 ]);
 

@@ -339,7 +339,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const exact = await readExactMainRevision(work.environment,
           `https://rezics.com/id/${params.mainVersion}`,
           `https://rezics.com/id/${params.revision}`,
-          workId => work.access.canReadWork(principal, query.actingSubject, workId));
+          workId => work.access.canReadWork(principal, query.actingSubject, workId), { resolveMerges: true });
         return Response.json(exact, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
@@ -362,7 +362,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             const current = await fuseki.query(`PREFIX schema: <https://schema.org/>
               ASK { GRAPH <urn:rezics:graph:current> { ${iri(workId)} a schema:CreativeWork } }`);
             return current.boolean === true;
-          });
+          }, { resolveMerges: true });
         return Response.json(revision, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         return commandError(error);

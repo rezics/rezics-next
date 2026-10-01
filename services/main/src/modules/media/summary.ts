@@ -16,6 +16,8 @@ import type { Base } from '../target/contract.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaUnavailable,
   type AvatarRow, type MediaStore } from './store.ts';
 import { propertyRevelationRecord } from '../reading-position/store.ts';
+import { MERGE_COST } from '../identity-merge/contract.ts';
+import type { MergedIdentity } from '../identity-merge/resolution.ts';
 
 export { direction } from '../display-language/select.ts';
 
@@ -57,6 +59,8 @@ export interface SummaryReader {
 }
 
 export interface SummaryInput {
+  /** Internal single-hop disclosure for G-506, which owns its own traversal. */
+  resolveMerges?: boolean;
   channel?: DisclosureChannel;
   resources: readonly string[];
   context: string;
@@ -75,7 +79,7 @@ export type ResourceSummary =
   | { reference: string; status: 'available'; type: ResourceType; disclosure: 'public' | 'restricted';
     base: Base | null; work: string | null;
     name: DisplayName & { context?: string; preferenceRevision?: string };
-    avatar: AvatarDescriptor }
+    avatar: AvatarDescriptor; resolution?: MergedIdentity }
   | { reference: string; status: 'unavailable' };
 
 export interface SummaryBatch {
@@ -210,7 +214,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
@@ -245,6 +249,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
         } }
         UNION { GRAPH ${iri(GRAPHS.revisions)} {
           ?r a rv:FixedRelease ; rv:work ?work . BIND("release" AS ?type) } }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?r rv:mergedInto ?mergedInto } }
         OPTIONAL { FILTER(${workType})
           GRAPH ${iri(GRAPHS.current)} { ?work rdfs:label ?label } }
         OPTIONAL { FILTER(${workType})
@@ -290,6 +295,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     throw new MediaUnavailable('graph lineage is unavailable');
   }
   const rows = new Map<string, GraphRow>();
+  const redirects = new Map<string, string>();
   // Keep protection/erasure flags until all rows are collected: dropping only
   // the Work row could let its descriptive semantic component revive the identity.
   const erased = new Set(bindings.filter(binding => binding.erased?.value === 'true')
@@ -297,6 +303,14 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   for (const binding of bindings) {
     const reference = binding.r?.value;
     if (!reference || !binding.type || erased.has(reference)) continue;
+    if (binding.mergedInto) {
+      const target = binding.mergedInto;
+      if (target.type !== 'uri' || !nativeId.test(target.value)
+        || redirects.has(reference) && redirects.get(reference) !== target.value) {
+        throw new MediaUnavailable('Identity merge projection is invalid');
+      }
+      redirects.set(reference, target.value);
+    }
     const type = binding.type.value as ResourceType;
     const previous = rows.get(reference);
     if (previous && typePriority.indexOf(previous.type) < typePriority.indexOf(type)) continue;
@@ -318,14 +332,14 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     }
     rows.set(reference, row);
   }
-  return { rows, generation: `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
+  return { rows, redirects, generation: `${control.epoch.value}:${control.sequence?.value ?? '0'}` };
 }
 
 /** Resource summaries for at most 64 references. The Work path costs one graph
  * query, one media query and one batched Access query. Additional owner types
  * use their current read functions; the returned counters include those probes. */
-export async function readResourceSummaries(env: WorkActivationEnvironment, media: MediaStore | undefined,
-  reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
+async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore | undefined,
+  reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch & { redirects: Map<string, string> }> {
   if (!input.resources.length || input.resources.length > MAX_SUMMARY_BATCH
     || input.resources.some(resource => !nativeId.test(resource))
     || (input.context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(input.context))
@@ -542,7 +556,72 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
           ? { context: input.context, preferenceRevision: selectedContext.preferenceRevision } : {}) },
       avatar: avatar(row.type, reference, avatars.get(reference)) };
   });
-  return { summaries, generation: { graph: graph.generation, media: mediaGeneration }, cost };
+  return { summaries, generation: { graph: graph.generation, media: mediaGeneration }, cost,
+    redirects: graph.redirects };
+}
+
+/** At most 33 owner batches of 64 identities, regardless of converging paths.
+ * Each hop uses the same disclosure/name policy as the requested source. Only
+ * the source's summary is delivered; its typed resolution never substitutes
+ * the survivor's title, media, revision or personal state. Ordinary reads incur
+ * no extra round trip. Merge chains use one graph generation and a 10s budget. */
+export async function readResourceSummaries(env: WorkActivationEnvironment, media: MediaStore | undefined,
+  reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
+  const deadline = Date.now() + MERGE_COST.deadlineMs;
+  const first = await readSummaryPage(env, media, reader, input);
+  if (input.resolveMerges === false) return { summaries: first.summaries,
+    generation: first.generation, cost: first.cost };
+  const summaries = new Map(first.summaries.map(summary => [summary.reference, summary]));
+  const redirects = new Map(first.redirects);
+  const paths = [...new Set(input.resources)].map(source => ({ source, current: source,
+    seen: new Set([source]), hops: 0, hidden: false }));
+  let merged = false;
+  for (;;) {
+    const frontier = new Set<string>();
+    for (const path of paths) {
+      if (path.hidden || summaries.get(path.current)?.status !== 'available') { path.hidden = true; continue; }
+      const next = redirects.get(path.current);
+      if (!next) continue;
+      if (path.hops === MERGE_COST.redirectHops || path.seen.has(next)) {
+        throw new MediaUnavailable('Identity merge cycle or excessive depth');
+      }
+      merged = true;
+      path.seen.add(next); path.current = next; path.hops++;
+      if (!summaries.has(next)) frontier.add(next);
+    }
+    if (!frontier.size) {
+      // Cached/converging paths can still have an unread edge.
+      if (paths.some(path => !path.hidden && redirects.has(path.current))) continue;
+      break;
+    }
+    if (Date.now() >= deadline) throw new MediaUnavailable('Identity merge read deadline exceeded');
+    const page = await readSummaryPage(env, undefined, reader, { ...input, resources: [...frontier] });
+    if (page.generation.graph !== first.generation.graph) throw new MediaUnavailable('Identity merge graph moved');
+    for (const summary of page.summaries) summaries.set(summary.reference, summary);
+    for (const [source, target] of page.redirects) redirects.set(source, target);
+    for (const key of ['graphQueries', 'mediaQueries', 'accessChecks', 'accessQueries'] as const) {
+      first.cost[key] += page.cost[key];
+    }
+  }
+  if (merged) {
+    if (Date.now() >= deadline) throw new MediaUnavailable('Identity merge read deadline exceeded');
+    const control = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?hold WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence
+        OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } } } LIMIT 2`, 4096)).results?.bindings ?? [];
+    first.cost.graphQueries++;
+    if (control.length !== 1 || control[0]?.hold
+      || `${control[0]?.epoch?.value}:${control[0]?.sequence?.value}` !== first.generation.graph) {
+      throw new MediaUnavailable('Identity merge disclosure snapshot moved');
+    }
+  }
+  const bySource = new Map(paths.map(path => [path.source, path]));
+  return { generation: first.generation, cost: first.cost,
+    summaries: input.resources.map(reference => {
+      const path = bySource.get(reference)!, summary = summaries.get(reference)!;
+      if (path.hidden) return { reference, status: 'unavailable' };
+      return summary.status === 'available' && path.hops ? { ...summary,
+        resolution: { state: 'merged' as const, source: reference, survivor: path.current, hops: path.hops } } : summary;
+    }) };
 }
 
 /** Main Version content availability for one summary: actual language basis or metadata-only. */

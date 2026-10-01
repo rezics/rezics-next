@@ -14,11 +14,13 @@ export interface MergePreflightOwner {
 /** Share the address resolver's depth rule. Exact old revisions remain caller
  * data; following an identity never substitutes the requested revision. */
 export async function resolveMergedIdentity(resource: string,
-  redirectOf: (resource: string) => string | null | Promise<string | null>):
+  redirectOf: (resource: string) => string | null | Promise<string | null>,
+  maxHops: number = MERGE_COST.redirectHops):
   Promise<{ state: 'identity'; resource: string } | { state: 'merged'; source: string; survivor: string; hops: number }> {
   if (!Value.Check(targetRef, resource)) throw new InvalidMerge('Invalid Resource reference');
+  if (!Number.isInteger(maxHops) || maxHops < 0 || maxHops > MERGE_COST.redirectHops) throw new InvalidMerge('Invalid hop budget');
   const source = resource, seen = new Set<string>();
-  for (let hops = 0; hops <= MERGE_COST.redirectHops; hops++) {
+  for (let hops = 0; hops <= maxHops; hops++) {
     if (seen.has(resource)) throw new MergeUnavailable('Identity merge cycle');
     seen.add(resource);
     const next = await redirectOf(resource);

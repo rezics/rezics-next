@@ -3,6 +3,7 @@ import './modules/types/registry.ts';
 import { registryWorkType } from './modules/types/contract.ts';
 import { discoveryCredit, discoveryRating } from './modules/discovery/contract.ts';
 import { readAvatar, readName } from './modules/work/read-contract.ts';
+import { mergedIdentity } from './modules/identity-merge/resolution.ts';
 
 export const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
   sequence: t.String({ pattern: '^[0-9]+$' }) });
@@ -59,6 +60,7 @@ export const workScalarWrite = t.Object({
 }, { additionalProperties: false });
 
 export const exactWorkRevision = t.Object({
+  resolution: t.Optional(mergedIdentity),
   revision: t.String(), work: t.String(), predecessor: t.Optional(t.String()),
   operation: t.String(), mainVersion: t.String(), title: t.String(),
   language: t.String(), semanticTypes: t.Array(t.String()), sourcePosition,
@@ -68,6 +70,7 @@ export const exactWorkRevision = t.Object({
 });
 
 export const exactMainRevision = t.Object({
+  resolution: t.Optional(mergedIdentity),
   revision: t.String(), mainVersion: t.String(), work: t.String(),
   predecessor: t.Optional(t.String()), operation: t.String(),
   hostingPolicy: t.Literal('metadata-only'), defaultSelection: t.Nullable(t.String()),
