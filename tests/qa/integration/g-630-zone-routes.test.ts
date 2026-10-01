@@ -76,7 +76,7 @@ test('G630: mounted Zone routes enforce current typed bindings, complete paging 
     await editor.grant(`work:read:${nonMember.work}`, 'work.read');
     await editor.grant('work:create:root', 'work.create');
     const guide = await json<{ work: string; mainVersion: string }>(await editor.send('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: 'Guide', language: 'en',
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Guide', language: 'en',
       semanticTypes: ['https://schema.org/DigitalDocument'], actingSubject: editor.actor,
     }), 201);
     await editor.grant(`work:read:${guide.work}`, 'work.read');

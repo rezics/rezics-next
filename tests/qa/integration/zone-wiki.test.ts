@@ -32,7 +32,7 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
       collection, name: 'Shared references', disclosure: 'public', actingSubject: f.actor,
     }), 201);
     const sharedWork = await f.json<{ work: string }>(await f.call('POST', '/v1/works', { language: 'en',
-      profile: 'metadata-only-v1', title: 'Shared wiki member', actingSubject: f.actor }), 201);
+      profile: 'metadata-only-v1', authoring: 'own-work', title: 'Shared wiki member', actingSubject: f.actor }), 201);
     await f.grant(`work:read:${sharedWork.work}`, 'work.read');
     await f.json(await f.call('POST', `/v1/collections/${shortId(collection)}/changes`, {
       expectedHead: curated.revision, actingSubject: f.actor,

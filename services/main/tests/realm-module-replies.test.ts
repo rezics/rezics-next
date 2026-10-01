@@ -22,6 +22,7 @@ function fixture(options: { privateRealm?: boolean; approved?: boolean; erased?:
     query: async (query: string) => {
       calls.push(query);
       if (query.includes('rv:RestoreCutover')) return [];
+      if (query.includes('# Zone population batch')) return [{ work: bind(work) }];
       return [{ id: bind(placement), reply: bind(reply), work: bind(work), author: bind(realm),
         authorName: bind('Reader'),
         revision: bind(`urn:rezics:content:revision:${revision}`),
@@ -42,9 +43,11 @@ test('Realm discussions and quote excerpts are bounded by current public placeme
   const current = fixture();
   expect(await readZoneReplies(current.session, realm, 'discussions')).toMatchObject({
     profile: 'zone-discussions-v1', items: [{ id: reply, author: realm, authorName: 'Reader',
-      work: { id: work, title: { value: 'Public work' } },
+      work: { id: work, title: { value: 'Public work' }, inZone: true },
       excerpt: 'A thoughtful public reply about this story.' }] });
-  expect(current.calls.at(-1)).toContain('FILTER NOT EXISTS { ?id rv:parentReply ?parent }');
+  expect(current.calls.find(query => query.includes('SELECT DISTINCT ?id')))
+    .toContain('FILTER NOT EXISTS { ?id rv:parentReply ?parent }');
+  expect(current.calls.filter(query => query.includes('# Zone population batch'))).toHaveLength(1);
   expect(await readZoneReplies(fixture({ approved: false }).session, realm,
     'reader-quotes')).toMatchObject({ items: [] });
   expect(await readZoneReplies(fixture({ erased: true }).session, realm,

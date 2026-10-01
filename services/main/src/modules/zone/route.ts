@@ -11,7 +11,7 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { NATIVE_ID, readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
 import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadSession, WorkReadMoved,
-  WorkReadExpired, WorkReadLimit, WorkReadUnavailable, publicWork, type ReadPosition } from '../work/read-session.ts';
+  WorkReadExpired, WorkReadLimit, WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
@@ -20,6 +20,8 @@ import { readZonePublication } from './publication.ts';
 import { ZoneUnavailable } from './configuration.ts';
 import { parseZonePath } from './route-path.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
+import { collectionPopulation, realmPopulation, readZonePopulation, ZONE_POPULATION_COST }
+  from './route-population.ts';
 import { ReadingBoundary } from '../reading-position/boundary.ts';
 export { ZONE_ROUTE_COST } from './route-cost.ts';
 
@@ -39,7 +41,7 @@ export type ZoneRoute = RouteBasis & (
   { kind: 'home' }
   | { kind: 'document'; mount: ZoneMountBinding; resource: ResourceBinding }
   | { kind: 'index'; mount: ZoneMountBinding; collection: string;
-    items: Array<WorkCard | ResourceBinding>; nextCursor: string | null }
+    items: Array<(WorkCard | ResourceBinding) & { inZone: boolean }>; nextCursor: string | null }
   | { kind: 'detail'; mount: ZoneMountBinding | null; collection: string | null;
     resource: ResourceBinding; tab: string | null });
 
@@ -271,29 +273,14 @@ async function collectionHeader(read: RouteRead, collection: string) {
  * placements in a staged/old generation cannot establish population membership. */
 async function collectionMember(read: RouteRead, header: CompositionHeader, resource: string) {
   return (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    ASK { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(header.structure)} rv:structureHead ${iri(header.head)} ; rv:selectedGeneration ${iri(header.generation)} .
-      ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
-        rv:occurrenceRole rv:MemberRole ; schema:item ${iri(resource)} .
-      FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-    } }`, 1024)).boolean === true;
+    ASK { ${collectionPopulation(iri(header.structure), iri(header.head),
+      iri(header.generation), iri(resource))} }`, 1024)).boolean === true;
 }
 
 /** The exact Work's current public Realm selection, never a browse window. */
 async function publiclyAdopted(read: RouteRead, realm: string, resource: string) {
   return (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    ASK {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
-        ?space rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
-        ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ${iri(resource)} ;
-          rv:mainVersion ?main ; rv:selectionHead ?selection .
-        ?contribution rv:publicationHead ?decision . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ; rv:component ?slot ;
-        rv:context ${iri(realm)} ; rv:work ${iri(resource)} ; rv:mainVersion ?main ;
-        rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:selectedDraft ?draft .
-        ?decision rv:disclosure rv:Public . FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
-      ${publicWork(iri(resource), '?main')}
-    }`, 1024)).boolean === true;
+    ASK { ${realmPopulation(realm, iri(resource))} }`, 1024)).boolean === true;
 }
 
 async function indexItems(read: RouteRead, targets: string[]): Promise<Array<WorkCard | ResourceBinding>> {
@@ -381,7 +368,11 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
       ...(cursor ? { after: cursor.after } : {}), limit: ZONE_ROUTE_COST.pageSize,
       canReadTarget: async target => !!await read.target(target),
       visible: item => item.role === 'member' && !!item.target && NATIVE_ID.test(item.target) });
-    const items = await indexItems(read, page.occurrences.map(item => item.target!));
+    const cards = await indexItems(read, page.occurrences.map(item => item.target!));
+    const members = await readZonePopulation(async query =>
+      (await work.environment.fuseki.query(query, ZONE_POPULATION_COST.graphBytes)).results?.bindings ?? [],
+    { collection: header }, cards.map(card => card.id));
+    const items = cards.map(card => ({ ...card, inZone: members.has(card.id) }));
     const fenced = await read.targets([mount.target, ...items.map(item => item.id)]);
     if (!fenced[0]) throw new ZoneRouteMissing('Zone route is unavailable');
     return { ...basis, kind: 'index', mount, collection: mount.target,

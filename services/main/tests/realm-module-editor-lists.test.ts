@@ -21,15 +21,15 @@ const moduleRead = async () => [{ id: 'editors', sources: [{
 test('editor lists keep the Collection partial state and public Work titles', async () => {
   const session = { options: { language: 'fr' }, position: { dataEpoch: 'epoch', sequence: '3' },
     deps: { environment: {} },
-    query: async () => [{ collection: { value: collection },
-      name: { value: 'Sélection', 'xml:lang': 'fr' } }],
+    query: async (query: string) => query.includes('# Zone population batch') ? []
+      : [{ collection: { value: collection }, name: { value: 'Sélection', 'xml:lang': 'fr' } }],
     summaries: async () => [{ status: 'available', disclosure: 'public', type: 'work',
       name: { value: 'Book', language: 'fr', direction: 'ltr', basis: 'requested' },
       avatar: { kind: 'fallback', key: work, policy: 'test', resourceType: 'work' } }],
   } as unknown as WorkReadSession;
   expect(await readZoneEditorLists(session, realm, zoneRead, publicationRead, moduleRead)).toMatchObject({
     profile: 'zone-editor-lists-v1', lists: [{ collection, state: 'partial',
-      name: { value: 'Sélection', language: 'fr' }, items: [{ id: work }] }] });
+      name: { value: 'Sélection', language: 'fr' }, items: [{ id: work, inZone: false }] }] });
   await expect(readZoneEditorLists(session, realm, zoneRead,
     async () => ({ zone, realm, revision: realm, presentation,
       configuration: { presentation } }) as never, moduleRead))

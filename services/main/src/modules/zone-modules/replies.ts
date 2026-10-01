@@ -1,3 +1,4 @@
+import { readZonePopulation } from '../zone/route-population.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
@@ -95,11 +96,14 @@ export async function readZoneReplies(session: WorkReadSession, realm: string, k
       work: { id: row.work!.value, title: summary.name },
       excerpt, dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value });
   }
+  const members = await readZonePopulation((query, rows) => session.query(query, rows),
+    { realm }, items.map(item => item.work.id));
+  const cards = items.map(item => ({ ...item, work: { ...item.work, inZone: members.has(item.work.id) } }));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: kind === 'discussions' ? 'zone-discussions-v1' as const
     : 'zone-reader-quotes-v1' as const, realm,
-    ...pageResult(session, items, rows.length > limit && last
+    ...pageResult(session, cards, rows.length > limit && last
       ? encodeReadCursor(binding, session.position, last.id!.value,
         `${last.epochOrder!.value}:${last.sequence!.value}`) : null) };
 }

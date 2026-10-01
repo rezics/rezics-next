@@ -1,3 +1,4 @@
+import { zoneCards } from './cards.ts';
 import { zoneAdoption } from './adoption.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/credits.ts';
@@ -130,9 +131,9 @@ export async function readZoneWorks(session: WorkReadSession, realm: string, kin
   const hub = session.deps.hub && session.deps.content
     ? await readPublicHubCards(session, visible.map(item => item.id)) : new Map();
   const names = await zoneCreditNames(session, visible.flatMap(item => item.primaryCredits));
-  const items = visible.map(item => ({ ...item, primaryCredits: displayZoneCredits(item.primaryCredits,
-    names.agents, names.sources),
-    hub: hub.get(item.id) ?? null }));
+  const items = await zoneCards(session, { realm }, visible.map(item => ({ ...item,
+    primaryCredits: displayZoneCredits(item.primaryCredits, names.agents, names.sources),
+    hub: hub.get(item.id) ?? null })));
   await readRealmBasis(session, realm);
   const last = page.at(-1);
   return { profile: status ? 'zone-recently-completed-v1' as const : 'zone-new-adoptions-v1' as const,
@@ -242,10 +243,11 @@ export async function readZoneChapters(session: WorkReadSession, realm: string) 
       { value: row.label.value, language: row.label['xml:lang'] }]);
   }
   const ofPublication = new Map(page.map(row => [row.publication!.value, row]));
-  const items = visible.map(item => {
+  const cards = await zoneCards(session, { realm }, visible.map(item => item.work));
+  const items = visible.map((item, index) => {
     const row = ofPublication.get(item.publication)!;
     const label = chapterLabel(labels.get(row.placement!.value) ?? [], item.language);
-    return { ...item, work: { ...item.work,
+    return { ...item, work: { ...cards[index]!,
       primaryCredits: displayZoneCredits(item.work.primaryCredits, names.agents, names.sources) },
     chapterTitle: label ? { value: label.value, language: label.language, direction: 'ltr' as const,
       basis: label.language.toLowerCase() === item.language.toLowerCase() ? 'requested' as const : 'fallback' as const }

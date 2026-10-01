@@ -14,7 +14,7 @@ export const ZONE_MODULE_COST = { pageSize: 20, candidateRows: 21, typeRows: 160
   graphCalls: 160, graphBytes: 4 * 1024 * 1024,
   deadlineMs: 10_000 } as const;
 
-export const zoneWork = t.Object({ ...workCard.properties,
+export const zoneWork = t.Object({ ...workCard.properties, inZone: t.Boolean(),
   primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }), evidence: readId,
   dataEpoch: t.String(), sequence: t.String(),
   hub: t.Nullable(zoneHubCard) });
@@ -26,7 +26,7 @@ export const zoneDecisionPage = t.Object({ profile: t.Literal('zone-recent-decis
   summary: t.Object({ adoption: t.Integer({ minimum: 0 }), classification: t.Integer({ minimum: 0 }),
     semanticRuleChange: t.Integer({ minimum: 0 }), basis: t.Literal('exact-page') }) });
 export const zoneChapterPage = t.Object({ profile: t.Literal('zone-latest-chapters-v1'), realm: readId,
-  items: t.Array(t.Object({ work: t.Object({ ...workCard.properties,
+  items: t.Array(t.Object({ work: t.Object({ ...workCard.properties, inZone: t.Boolean(),
     primaryCredits: t.Array(discoveryCredit, { maxItems: ZONE_MODULE_COST.creditsPerWork }) }), chapter: readId,
     /** The chapter's title as the Book's contents label it, in the requested language; null when unlabelled. */
     chapterTitle: t.Nullable(readName),
@@ -37,7 +37,7 @@ export const zoneChapterPage = t.Object({ profile: t.Literal('zone-latest-chapte
 export const zoneReplyPage = t.Object({ profile: t.Union([
   t.Literal('zone-discussions-v1'), t.Literal('zone-reader-quotes-v1')]), realm: readId,
   items: t.Array(t.Object({ id: readId, placement: readId, author: readId, authorName: t.String(),
-    work: t.Object({ id: readId, title: readName }),
+    work: t.Object({ id: readId, title: readName, inZone: t.Boolean() }),
     excerpt: t.String({ maxLength: 240 }), dataEpoch: t.String(), sequence: t.String() }),
   { maxItems: ZONE_MODULE_COST.pageSize }), ...pageFields });
 export const zoneGenrePage = t.Object({ profile: t.Literal('zone-genres-v1'),
@@ -49,7 +49,7 @@ export const zoneGenrePage = t.Object({ profile: t.Literal('zone-genres-v1'),
 export const zoneEditorLists = t.Object({ profile: t.Literal('zone-editor-lists-v1'),
   realm: readId, lists: t.Array(t.Object({ collection: readId, name: readName,
     state: t.Union([t.Literal('complete'), t.Literal('partial')]),
-    items: t.Array(t.Object({ id: readId, title: readName, cover: readAvatar }), { maxItems: 8 }) }),
+    items: t.Array(t.Object({ id: readId, title: readName, cover: readAvatar, inZone: t.Boolean() }), { maxItems: 8 }) }),
   { maxItems: 2 }), sourcePosition: readPosition });
 
 /** Request bounds, never a population window. Keyset batches continue even

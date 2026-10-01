@@ -166,7 +166,8 @@ const routeRead = t.Union([
   t.Object({ ...routeBasis, kind: t.Literal('home') }),
   t.Object({ ...routeBasis, kind: t.Literal('document'), mount: mountBinding, resource: resourceBinding }),
   t.Object({ ...routeBasis, kind: t.Literal('index'), mount: mountBinding, collection: ref,
-    items: t.Array(t.Union([workCard, resourceBinding]), { maxItems: 24 }), nextCursor: t.Nullable(t.String()) }),
+    items: t.Array(t.Union([t.Object({ ...workCard.properties, inZone: t.Boolean() }),
+      t.Object({ ...resourceBinding.properties, inZone: t.Boolean() })]), { maxItems: 24 }), nextCursor: t.Nullable(t.String()) }),
   t.Object({ ...routeBasis, kind: t.Literal('detail'), mount: t.Nullable(mountBinding),
     collection: t.Nullable(ref), resource: resourceBinding, tab: t.Nullable(t.String()) }),
 ]);

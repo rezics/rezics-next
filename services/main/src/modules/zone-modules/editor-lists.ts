@@ -1,3 +1,4 @@
+import { editorialPopulationKey, readZonePopulation } from '../zone/route-population.ts';
 import { selectDisplayName } from '../display-language/select.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import type { LocalizedText } from '../display-language/select.ts';
@@ -83,6 +84,12 @@ export async function readZoneEditorLists(session: WorkReadSession, realm: strin
           ? [{ id: member.work, title: summary.name, cover: summary.avatar }] : [];
       }) }];
   });
-  return { profile: 'zone-editor-lists-v1' as const, realm, lists,
+  const members = await readZonePopulation((query, rows) => session.query(query, rows),
+    { realm, editorial: { zone: zone.zone, members: lists.flatMap(list =>
+      list.items.map(item => ({ work: item.id, collection: list.collection }))) } },
+    lists.flatMap(list => list.items.map(item => item.id)));
+  const cards = lists.map(list => ({ ...list, items: list.items.map(item =>
+    ({ ...item, inZone: members.has(editorialPopulationKey(item.id, list.collection)) })) }));
+  return { profile: 'zone-editor-lists-v1' as const, realm, lists: cards,
     sourcePosition: session.position };
 }

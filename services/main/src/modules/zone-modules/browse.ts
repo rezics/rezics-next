@@ -1,3 +1,4 @@
+import { zoneCards } from './cards.ts';
 import { zoneAdoption } from './adoption.ts';
 import type { Static } from 'typebox';
 import { primaryDiscoveryCredits } from '../discovery/credits.ts';
@@ -318,9 +319,9 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   if (fenced.some(summary => summary?.status !== 'available' || summary.disclosure !== 'public')) {
     throw new WorkReadUnavailable('Zone browse Work changed disclosure during the read');
   }
-  const items = hydrated.map(item => ({ ...item,
+  const items = await zoneCards(session, { realm }, hydrated.map(item => ({ ...item,
     primaryCredits: displayZoneCredits(item.primaryCredits, names.agents, names.sources),
-    hub: hub.get(item.id) ?? null }));
+    hub: hub.get(item.id) ?? null })));
   // A Concept shows under its public name only; one without is left out rather than shown as an IRI.
   const namedConcepts = new Map(conceptIds.map((concept, index) => [concept, conceptNames[index]] as const));
   const concept = counts.concept.flatMap(item => {
