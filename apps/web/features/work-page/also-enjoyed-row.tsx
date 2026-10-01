@@ -84,7 +84,7 @@ export function AlsoEnjoyedRow({ id, title, works, avatarQuery, locale }: {
         {Array.from({ length: paging.pages }, (_, page) => <button key={page} type="button" onClick={() => show(page)}
           aria-label={t.pageOf({ page: String(page + 1), pages: String(paging.pages) })}
           aria-current={page === paging.page ? 'true' : undefined}
-          className="group/dot grid h-6 w-5 place-items-center rounded-sm outline-none focus-visible:ring-2
+          className="group/dot grid size-6 place-items-center rounded-sm outline-none focus-visible:ring-2
             focus-visible:ring-ring">
           <span className={cn('h-1 w-3.5 rounded-full transition-colors', page === paging.page ? 'bg-foreground'
             : 'bg-border group-hover/dot:bg-muted-foreground')} />
