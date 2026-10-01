@@ -433,38 +433,6 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
   }
 }
 
-export function deploymentRestoreChecks(
-  environment: NodeJS.ProcessEnv = process.env,
-): RestoreChecks | undefined {
-  const verifyTask = environment.OPS_RECOVERY_VERIFY_TASK;
-  const token = environment.OPS_RECOVERY_OPERATOR_TOKEN;
-  if (!verifyTask || !token) return undefined;
-  return {
-    verify: async (restored) => {
-      if (!/^[a-z][a-z0-9:-]*$/.test(verifyTask))
-        throw new Error('Invalid recovery verification task');
-      command(
-        'task',
-        [verifyTask, '--', '--apps-env', restored.appsFile],
-        restored.budget,
-        environment,
-      );
-    },
-    reconcile: async (restored, body, idempotencyKey) =>
-      fetch(new URL('/v1/owners/reconciliations', restored.apps.MAIN_ORIGIN!), {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${token}`,
-          'content-type': 'application/json',
-          'idempotency-key': idempotencyKey,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(Math.min(restored.budget.remaining(), 60_000)),
-        redirect: 'error',
-      }),
-  };
-}
-
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const take = (flag: string) => {
@@ -480,9 +448,5 @@ if (import.meta.main) {
   const frontier = process.env.OPS_RECOVERY_FRONTIER;
   const key = process.env.RECOVERY_MANIFEST_HMAC_KEY ?? '';
   if (!frontier) throw new Error('OPS_RECOVERY_FRONTIER is required from independent custody');
-  console.log(
-    JSON.stringify(
-      await restoreRecoverySet({ set, project, frontier, key, checks: deploymentRestoreChecks() }),
-    ),
-  );
+  console.log(JSON.stringify(await restoreRecoverySet({ set, project, frontier, key })));
 }

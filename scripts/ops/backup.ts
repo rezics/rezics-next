@@ -135,7 +135,8 @@ export interface BackupOptions {
 /** One maintenance cut. Work is O(owner rows + graph references + volume bytes).
  * PostgreSQL roles are fenced before terminating their sessions; Access admission
  * drains before coverage, and no live TDB2/object volume is copied. A failure
- * retains both admission fences and stops storage; there is no automatic retry. */
+ * releases only its own fences before publication so capture can be retried.
+ * A failure after publication keeps storage stopped and retains any hold. */
 export async function backupRecoverySet(
   options: BackupOptions,
 ): Promise<{ index: RecoveryIndex; phases: Record<string, number> }> {
@@ -190,6 +191,7 @@ export async function backupRecoverySet(
   let held = false;
   let complete = false;
   let sourceReleased = false;
+  let generation: string | undefined;
   try {
     const engines = currentEngines(context.environment);
     for (const service of ['postgres', 'fuseki', 'rustfs'] as const) {
@@ -236,7 +238,7 @@ export async function backupRecoverySet(
       server: readFileSync(join(staging, 'server.ttl'), 'utf8'),
       indexer: readFileSync(join(staging, 'indexer.ttl'), 'utf8'),
     };
-    const generation = await budget.phase('fence', async () => {
+    await budget.phase('fence', async () => {
       const existing = (
         await pools.access.query<{ open: boolean }>(
           'SELECT open FROM access.recovery_fence WHERE id = true',
@@ -267,15 +269,16 @@ export async function backupRecoverySet(
       await pools.account.query(
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename IN ('account','access','content','relay')",
       );
-      const generation = await engageAccessRecoveryFence(pools.access);
+      generation = await engageAccessRecoveryFence(pools.access);
       if (
         (await pools.access.query("SELECT 1 FROM access.admission WHERE state <> 'sealed' LIMIT 1"))
           .rowCount
       ) {
         throw new Error('Source has unresolved admissions; reconcile receipts before capture');
       }
-      return generation;
     });
+    if (!generation) throw new Error('Source recovery fence generation is unavailable');
+    const capturedGeneration = generation;
     const coverage = await budget.phase('coverage', async () => {
       // PostgreSQL background WAL can advance once as sessions drain. Retry only
       // that diagnosed movement; owner/graph mismatches remain fatal.
@@ -440,7 +443,7 @@ export async function backupRecoverySet(
         routingEpoch: context.apps.MAIN_ROUTING_EPOCH!,
         sequence: coverage.priorSequence,
       },
-      fenceGeneration: generation,
+      fenceGeneration: capturedGeneration,
       sealedCoverage,
       sealedDeletionSets,
       owners,
@@ -516,7 +519,7 @@ export async function backupRecoverySet(
       // Only PostgreSQL is briefly started to release the SOURCE fence. Product
       // processes and graph/object storage stay stopped throughout.
       context.compose(['up', '-d', '--wait', 'postgres']);
-      await releaseAccessRecoveryFence(pools.access, generation);
+      await releaseAccessRecoveryFence(pools.access, capturedGeneration);
       await pools.account.query(
         'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
       );
@@ -532,15 +535,54 @@ export async function backupRecoverySet(
     return { index, phases: budget.phases };
   } finally {
     await Promise.allSettled(Object.values(pools).map((pool) => pool.end()));
-    if (held && !sourceReleased) {
-      try {
-        stackContext(options.source, new RecoveryBudget()).compose(['stop']);
-      } catch {
-        /* keep the durable SQL fences and original error */
+    try {
+      if (held && !sourceReleased) {
+        // Cleanup has its own deadline: exhausting the capture budget must not
+        // prevent release of an unpublished cut. Never reopen an inherited hold.
+        const cleanup = stackContext(options.source, new RecoveryBudget());
+        if (!complete) {
+          const account = new Pool({
+            connectionString: administratorUrl(context.saved, 'account'),
+            max: 1,
+          });
+          const access = new Pool({
+            connectionString: administratorUrl(context.saved, 'access'),
+            max: 1,
+          });
+          for (const pool of [account, access]) pool.on('error', () => {});
+          try {
+            cleanup.compose(['up', '-d', '--wait', 'postgres']);
+            if (generation) await releaseAccessRecoveryFence(access, generation);
+            await account.query(
+              'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
+            );
+            // Restore the storage precondition for an immediate retry. Main,
+            // Account and all worker processes remain in their maintenance stop.
+            cleanup.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
+          } catch {
+            try {
+              cleanup.compose(['stop']);
+            } catch {
+              /* retain cleanup failure */
+            }
+            throw new Error(
+              'Failed backup cleanup did not complete; inspect source recovery state before resuming product processes',
+            );
+          } finally {
+            await Promise.allSettled([account.end(), access.end()]);
+          }
+        } else {
+          try {
+            cleanup.compose(['stop']);
+          } catch {
+            /* keep the published cut and durable fences */
+          }
+        }
       }
+    } finally {
+      rmSync(staging, { recursive: true, force: true });
+      if (!complete) rmSync(out, { recursive: true, force: true });
     }
-    rmSync(staging, { recursive: true, force: true });
-    if (!complete) rmSync(out, { recursive: true, force: true });
   }
 }
 

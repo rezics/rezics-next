@@ -51,9 +51,14 @@ host-loss protection; transfer and scheduling belong to deployment.
 
 Successful capture briefly restarts only PostgreSQL to release the source
 Access/login fences, then stops it again. It leaves product processes and graph
-storage stopped. Failed capture leaves owner logins and Access held and attempts
-to stop storage. Repair unresolved receipts, custody, keys or coverage before
-trying a new output directory; never reopen an inherited hold to retry capture.
+storage stopped. Before frontier publication, a failed capture releases only
+the Access generation and owner login fence it created, removes the incomplete
+output and restarts storage for a retry with the same output path. The previous
+frontier stays unchanged. Main, Account and worker processes remain stopped.
+After publication, a failure preserves the complete set and keeps storage
+stopped. A pre-existing hold is never reopened. If cleanup cannot release its
+own generation, repair the source recovery state before resuming product
+processes; unresolved delivery evidence must stay held.
 
 The [discovery drill](../../tests/qa/fault-recovery/recovery-coverage-discovery.test.ts)
 checks new tables, row references, exclusions and keyset paging. The whole-set
@@ -113,27 +118,37 @@ old cursors, handles, caches and workers cannot cross that boundary. Owner login
 roles and Access remain closed throughout. It rebuilds Lucene offline with the
 pinned assembler and erasure-aware indexer.
 
-Serving release needs deployment adapters: `OPS_RECOVERY_VERIFY_TASK` names the
-Task that takes `--apps-env <isolated-apps.env>` and checks exact samples,
-authorized and denied reads, retained deletions/revocations, representative
-search additions/deletions and both Account and library takeout. That task also
-provides the private maintenance Main endpoint for the target configuration.
-`OPS_RECOVERY_OPERATOR_TOKEN` supplies a current Account-issued `owner:operate`
-bearer token. The command invokes `POST /v1/owners/reconciliations` with
+The CLI leaves this copy held. Serving release needs owner integration through
+the command's `RestoreChecks` interface: check exact samples, authorized and
+denied reads, retained deletions/revocations, representative search
+additions/deletions and both Account and library takeout. Authenticate through
+Account and invoke `POST /v1/owners/reconciliations` with
 `kind: "restore"`, `profile: "owner-reconciliation-v1"`, signed coverage,
 required deletion sets and a unique `Idempotency-Key`. Only a matched reconciled
 response permits Access and login release. Account authentication is never
 replaced by a recovery-command assertion.
 
-These deployment adapters are not provided by the local stack today. Without
-them, restore performs physical verification and text rebuild, records a held
-result and stops storage. A newer authority/erasure frontier also requires its
-owner's journal replay and a new matching capture before release. The commands
+The CLI has no deployment release adapter today: it performs physical
+verification and text rebuild, records a held result and stops storage. The
+QA drills share an in-process Main route adapter with test authentication;
+they require no listening Main or environment-selected verification Task.
+A newer authority/erasure frontier also requires its owner's journal replay and
+a new matching capture before release. The commands
 currently reject that mismatch; they do not automate arbitrary later journal
 application. Missing required data stays unavailable. A held result needs repair
 and a new project/idempotency key, not a forced Access reopen. Failed copies
 preserve their stopped volumes and `recovery-evidence.json` for diagnosis;
 remove only that failed target when discarding it.
+
+After verified release, start Main, relay and consumers on the restored project,
+resume at the retained, verified checkpoints, then route traffic. Do not serve
+the original project beside its restored successor.
+
+Editorial protection decisions and applications also need exact owner and graph
+coverage before adoption resumes; the pending
+[protection cases](../../scripts/qa/cases/editorial-protection.ts) do not yet
+qualify backup-before-protection or interrupted replay. An absent restored
+protection record must not be interpreted as an open protection state.
 
 ### Timed recovery drill
 
@@ -143,32 +158,50 @@ cutover, Lucene rebuild, samples and serving verification. Phase durations and
 elapsed time are recorded in `backup-evidence.json` and `recovery-evidence.json`.
 This is the acceptance ceiling, not a demonstrated launch-scale RTO. The
 [small command drill](../../tests/qa/fault-recovery/g-727-recovery-set.test.ts)
-checks encryption with a public-only capture keyring, two-owner deletion,
-revocation, exact available/denied Content reads, search, Account archive and
-release ordering. Its test authentication adapter does not qualify deployment
+checks encryption with a public-only capture keyring, retry after a failed
+encryption phase, two-owner deletion, revocation, exact available/denied Content
+reads, search, Account archive and release ordering. Its test authentication
+adapter does not qualify deployment
 OAuth or library takeout.
-The small run `20260930t173941-d8493b` passed on 2026-10-01: the verified
-restore took 30.0 seconds and the complete harness took 133.9 seconds, including
-preparation, capture and a separate intentionally held restore. This one-Work
+The small run `20261001t012136-664edd` passed on 2026-10-01: the verified
+restore took 51.6 seconds and the complete harness took 249.0 seconds, including
+preparation, an intentionally failed capture, immediate backup retry and a
+separate intentionally held restore. This one-Work
 command fixture is evidence of composition, not launch-data performance.
 
-With exclusive host capacity, prepare an isolated launch stack with complete
-receipts and relay handoff, set `G727_LAUNCH_SOURCE_RUN_ID` and
-`G727_LAUNCH_EXPECTED_WORKS` from G-724's recorded catalogue counts, and configure
-the custody and deployment-check variables above. Set `OPS_RECOVERY_RECIPIENT`
-and `OPS_RECOVERY_OFFHOST_GNUPGHOME` for the public-only capture and separate
-recovery keyrings. Run:
+The [fixture drill](../../tests/qa/fault-recovery/g-727-launch-drill.test.ts)
+does not skip: by default it takes a compatible retained `small` fixture and
+runs `task fixture:restore` to obtain its own writable source. It never builds
+the background corpus. `G727_LAUNCH_PROFILE=small` or `medium` selects the
+profile; `G727_LAUNCH_FIXTURE` can pin the retained backup. Routine QA generates
+separate temporary public/secret keyrings and removes them and its encrypted set
+after the drill. The source's actual Work count, exact read, deletion, revocation,
+search and Account archive are
+checked with the same in-process adapter as the one-Work harness.
+
+With exclusive host capacity, the manager prepares the 100,000-Work `medium`
+fixture and restores a copy before the timed run:
+
+```sh
+task fixture:build -- --profile medium
+task fixture:restore -- --fixture <fixture-id> --run-id fixture-g727-src
+```
+
+Set `G727_LAUNCH_SOURCE_RUN_ID=fixture-g727-src` and
+`G727_LAUNCH_EXPECTED_WORKS=100000`. Configure the independent HMAC key and
+frontier above, `OPS_RECOVERY_RECIPIENT`, a public-only `GNUPGHOME`, and
+`OPS_RECOVERY_OFFHOST_GNUPGHOME` for the separate recovery keyring. Run:
 
 ```sh
 bun scripts/goal/goalctl.ts test tests/qa/fault-recovery/g-727-launch-drill.test.ts
 ```
 
-The drill checks the actual Work count, captures the prepared source and times
-restoration with deployment probes. It records `g-727-launch-restore.json` in the
-QA artifacts and removes only its generated target. It skips when the launch
-source is absent, so a routine small run cannot be mistaken for a scale result.
-The launch plan cited by G-727 (`tests/fixtures/launch/plan.yaml`) and G-724's
-counts are absent in this checkout. No launch-scale RPO/RTO is qualified yet.
+The drill verifies successful `fixture:restore` evidence, checks the actual Work
+count, captures the source and times restoration. It records the source fixture,
+count and per-phase evidence in `g-727-launch-restore.json`. It removes its
+generated target and, when it prepared the source itself, that source copy.
+A routine small result cannot qualify the medium fixture. No launch-scale
+RPO/RTO is qualified until the manager records the exclusive run.
 
 ## Offline Lucene rebuild
 
