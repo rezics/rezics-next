@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { openapi } from '@elysia/openapi';
 import { createMainApp, type MainWorkDependencies } from '../../services/main/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { attachCapabilities, operationTools, type CapabilityDeclarations } from '../../services/main/src/modules/mcp/capabilities.ts';
 
 const artifact = 'generated/openapi/main/public.json';
 const commands = [
@@ -116,6 +117,7 @@ const packageWrites = ['/v1/package-resolutions',
   '/v1/package-resolutions/from-captures', '/v1/package-sources/go'] as const;
 
 interface Operation {
+  'x-rezics-capability'?: import('../../services/main/src/modules/mcp/capabilities.ts').Capability;
   parameters?: unknown[];
   security?: { bearerAuth: never[] }[];
   responses?: Record<string, { content?: Record<string, unknown> }>;
@@ -246,7 +248,7 @@ export async function buildMainOpenApi(): Promise<string> {
   const routeDirectory = join(import.meta.dir, '../../services/main/src/routes');
   for (const file of [...new Bun.Glob('*.ts').scanSync({ cwd: routeDirectory })].sort()) {
     const module = await import(join(routeDirectory, file)) as { openApiOperations?: Record<string,
-      Record<string, { bearer?: boolean; idempotencyKey?: boolean }>> };
+      Record<string, { bearer?: boolean; idempotencyKey?: boolean }>>; capabilities?: CapabilityDeclarations };
     for (const [path, methods] of Object.entries(module.openApiOperations ?? {})) {
       for (const [method, declared] of Object.entries(methods)) {
         const operation = document.paths?.[path]?.[method as 'get'];
@@ -258,7 +260,10 @@ export async function buildMainOpenApi(): Promise<string> {
         }];
       }
     }
+    attachCapabilities(document as import('../../services/main/src/modules/mcp/capabilities.ts').CapabilityDocument,
+      module.capabilities ?? {}, `routes/${file}`);
   }
+  operationTools(document as import('../../services/main/src/modules/mcp/capabilities.ts').CapabilityDocument);
   document.components = { ...document.components,
     securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } };
   for (const [, methods] of paths) for (const operation of Object.values(methods)) {

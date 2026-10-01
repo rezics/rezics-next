@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
-import { APIError } from 'better-auth/api';
+import { readFileSync } from 'node:fs';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
@@ -39,7 +40,24 @@ export interface AccountConfig {
 
 type EmailUser = { id: string; email: string; locale?: unknown };
 
+/** Registration is only a ceiling. Installation and explicit consent still
+ * bind issuance, and Main still selects/checks the acting Agent per operation. */
+export function agentRegistrationScopes(): string[] {
+  const document = JSON.parse(readFileSync(new URL('../../../generated/openapi/main/public.json',
+    import.meta.url), 'utf8')) as { paths: Record<string, Record<string, {
+      'x-rezics-capability'?: { mcp?: { scopes?: string[] } } }>> };
+  const scopes = new Set<string>(['openid', 'offline_access']);
+  for (const methods of Object.values(document.paths)) for (const operation of Object.values(methods)) {
+    const mcp = operation['x-rezics-capability']?.mcp;
+    if (mcp) for (const scope of mcp.scopes ?? ['work:read']) scopes.add(scope);
+  }
+  if ([...scopes].some(scope => !providerScopes.includes(scope))) throw new Error('Unknown declared agent OAuth scope');
+  return [...scopes].sort();
+}
+
 export function accountAuthOptions(config: AccountConfig) {
+  const agentScopes = agentRegistrationScopes();
+  const operatorHooks = operatorAuthHooks(config.pool, config.operatorUserIds);
   const requireEmailVerification = config.requireEmailVerification ?? !!config.email;
   if (config.secret.length < 32) throw new Error('ACCOUNT_SECRET must contain at least 32 characters');
   const resource = new URL(config.resource);
@@ -54,7 +72,20 @@ export function accountAuthOptions(config: AccountConfig) {
     // The HTTP boundary checks our session-bound reauthentication proof. The
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0 },
-    hooks: operatorAuthHooks(config.pool, config.operatorUserIds),
+    hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
+      if (ctx.path === '/oauth2/register') {
+        const body = ctx.body as Record<string, unknown>;
+        const grants = body.grant_types ?? ['authorization_code'];
+        if (body.token_endpoint_auth_method !== 'none' || body.subject_type === 'pairwise'
+          || !Array.isArray(grants) || !grants.includes('authorization_code')
+          || grants.some(grant => grant !== 'authorization_code' && grant !== 'refresh_token')
+          || body.client_credentials_scopes !== undefined || body.jwks !== undefined || body.jwks_uri !== undefined) {
+          throw new APIError('BAD_REQUEST', { error: 'invalid_client_metadata',
+            error_description: 'Agent registration requires a public authorization-code client with PKCE' });
+        }
+      }
+      await operatorHooks.before(ctx);
+    }) },
     databaseHooks: { user: { create: { after: async (user: { id: string }, context: { request?: Request } | null) => {
       const locale = takeSignupRequestLocale(user.id, context?.request);
       await config.pool.query(`UPDATE "user" SET signup_locale = $2 WHERE id = $1 AND signup_locale IS NULL`, [user.id, locale]);
@@ -156,7 +187,12 @@ export function accountAuthOptions(config: AccountConfig) {
         resources: [{ identifier: config.resource,
           allowedScopes: [...resourceScopes], accessTokenTtl: 300 }],
         clientRegistrationDefaultResources: [config.resource],
-        allowDynamicClientRegistration: false,
+        clientRegistrationAllowedResources: [config.resource],
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationRequirePKCE: true,
+        clientRegistrationDefaultScopes: agentScopes,
+        clientRegistrationAllowedScopes: [],
         storeTokens: 'hashed',
         // Account's token boundary serializes a rotation and rechecks the live
         // authority before returning any cached response. Ten seconds covers

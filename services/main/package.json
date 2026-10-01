@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",
+    "@modelcontextprotocol/server": "2.0.0",
     "@rezics/wiki-toolkit": "workspace:*",
     "@tensorflow/tfjs": "4.22.0",
     "aws4fetch": "1.0.20",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@elysia/eden": "2.0.0-beta.5",
     "@elysia/openapi": "2.0.0-beta.4",
+    "@modelcontextprotocol/client": "2.0.0",
     "@scalar/types": "0.18.3",
     "@types/bun": "1.4.2",
     "@types/pg": "8.23.1",

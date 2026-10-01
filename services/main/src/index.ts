@@ -350,6 +350,7 @@ const libraryImport = new ReaderLibraryImportStore(contentPool, {
   acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,
 });
 const app = createMainApp(fuseki, {
+  mcp: { issuer: config.ACCOUNT_ISSUER, resource: config.ACCOUNT_MAIN_RESOURCE },
   wikiQuotations: new WikiQuotationStore(contentPool),
   editorialReview: new EditorialReviewStore(pool),
   types,

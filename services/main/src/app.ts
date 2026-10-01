@@ -1,5 +1,6 @@
 import { safetyCaseRoutes } from './routes/safety-cases.ts';
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
+import { mcpRoutes } from './routes/mcp.ts';
 import { entityPageRoutes, setMountedReads } from './routes/entity-pages.ts';
 import { readingPositionsRoutes } from './routes/reading-positions.ts';
 import type { FusekiClient } from './infrastructure/fuseki.ts';
@@ -316,6 +317,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       .use(accessSearchRoutes(fuseki, work))
       .use(contentCommunityRoutes(fuseki, work))
       .use(domainRoutes(fuseki, work))
+      .use(mcpRoutes(work, request => app.handle(request)))
       .use(extraRoutes1(fuseki, work))
       .use(extraRoutes2(fuseki, work))
       .use(extraRoutes3(fuseki, work))
