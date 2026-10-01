@@ -83,7 +83,7 @@ describe('G-722 production configuration', () => {
     expect(() => checkProductionEnv(smtp)).toThrow('SMTP');
   });
   test('production Worker configs exist for all three Workers', () => {
-    for (const app of ['web', 'accounts', 'about']) {
+    for (const app of ['web', 'accounts', 'about'] as const) {
       const config = JSON.parse(
         readFileSync(`${repositoryRoot}/apps/${app}/wrangler.jsonc`, 'utf8'),
       );
