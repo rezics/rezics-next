@@ -96,10 +96,13 @@ export class LibraryBundleExporter {
     }
     if (phase === 3) {
       const key = `file_id::text || ':' || lpad(row_number::text,4,'0')`;
-      const result = await this.content.query<{ key: string; source: CanonicalRow; match: RowMatch | null; resolution: unknown; outcome: unknown }>(`
-        SELECT ${key} AS key,source,match,resolution,outcome FROM reader.library_import_source_row
-        WHERE agent=$1 AND source->>'kind' IN ('source','retained') AND ${key}>$2 ORDER BY ${key} LIMIT $3`,[agent,after,limit]);
+      const result = await this.content.query<{ key: string; source: CanonicalRow; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(`
+        SELECT ${key} AS key,source,private_extras,match,resolution,outcome FROM reader.library_import_source_row
+        WHERE agent=$1 AND (source->>'kind' IN ('source','retained') OR private_extras <> '{}'::jsonb)
+          AND ${key}>$2 ORDER BY ${key} LIMIT $3`,[agent,after,limit]);
       return result.rows.map(s => ({ key: s.key,row: s.source.kind === 'retained' ? s.source
+        : s.source.kind !== 'source' ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
+          raw: { sourceId: s.source.sourceId,fields: s.private_extras } }
         : { ...row('retained',`source:${s.key}`,s.source.work),title: s.source.title,
           // Search suggestions are reproducible catalogue data, not the reader's
           // source. Preserve the chosen decision and source without an unbounded

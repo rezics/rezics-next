@@ -7,11 +7,13 @@ import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
+import type { CapabilityDeclarations } from '../modules/mcp/capabilities.ts';
 
 export const openApiOperations = { '/v1/me/library-export': { get: { bearer: true } } } as const;
 export const capabilities = { '/v1/me/library-export': { get: { disposition: 'supported', mcp: {
   tool: 'library_export',title: 'Export your complete library',
-  description: 'Download a private rezics-library-export-v1 bundle in resumable pages. Keep snapshot with nextCursor; a changed library requires a new export. Import pages individually or join their rows into one bundle.' } } } } as const;
+  scopes: ['work:read','rating:read'],
+  description: 'Download a private rezics-library-export-v1 bundle in resumable pages. Keep snapshot with nextCursor; a changed library requires a new export. Import pages individually or join their rows into one bundle.' } } } } as const satisfies CapabilityDeclarations;
 export function libraryExportRoutes(deps: MainWorkDependencies) {
   return new Elysia().get('/v1/me/library-export', {
     query: t.Object({ actingSubject: readId,limit: t.Optional(t.Integer({ minimum: 1,maximum: LIBRARY_EXPORT_COST.page })),

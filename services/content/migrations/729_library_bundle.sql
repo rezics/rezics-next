@@ -18,6 +18,13 @@ CREATE TABLE reader.library_import_source_row (
   file_id uuid NOT NULL,
   row_number integer NOT NULL CHECK (row_number BETWEEN 0 AND 4999),
   source jsonb NOT NULL CHECK (jsonb_typeof(source) = 'object'),
+  -- Native owner state is exported from its live store. Preserve extension
+  -- evidence separately so repeated imports do not duplicate owner snapshots.
+  private_extras jsonb GENERATED ALWAYS AS (CASE source->>'kind'
+    WHEN 'session' THEN coalesce(source->'raw','{}'::jsonb) - 'nativeSession'
+    WHEN 'entry' THEN coalesce(source->'raw','{}'::jsonb) - ARRAY['sessionProjection','shelfId','disclosure','ratingContext','ratingScaleMax','ratingAvailability']
+    WHEN 'shelf' THEN coalesce(source->'raw','{}'::jsonb) - ARRAY['shelfId','disclosure']
+    ELSE '{}'::jsonb END) STORED,
   match jsonb,
   resolution jsonb,
   outcome jsonb,
@@ -35,7 +42,7 @@ CREATE INDEX library_import_pending ON reader.library_import_source_row(agent, f
   WHERE outcome IS NULL;
 CREATE INDEX library_import_export_key ON reader.library_import_source_row
   (agent, (file_id::text || ':' || lpad(row_number::text,4,'0')))
-  WHERE source->>'kind' IN ('source','retained');
+  WHERE source->>'kind' IN ('source','retained') OR private_extras <> '{}'::jsonb;
 CREATE TABLE reader.library_bundle_fence (
   agent text PRIMARY KEY,
   version bigint NOT NULL DEFAULT 0

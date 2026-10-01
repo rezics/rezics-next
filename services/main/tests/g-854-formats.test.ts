@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { parseLibraryFile, adapters } from '../src/modules/library-import/formats/index.ts';
 import { inspectGenericCsv } from '../src/modules/library-import/formats/generic-csv.ts';
-import { FileImportInvalid, FileImportUnsupported, emptyRow } from '../src/modules/library-import/formats/contract.ts';
+import { FileImportInvalid, emptyRow } from '../src/modules/library-import/formats/contract.ts';
 import { globalImportRating } from '../src/modules/library-import/apply.ts';
 import { chooseCandidates } from '../src/modules/library-import/match.ts';
 import { importDigest } from '../src/modules/library-import/file-store.ts';
@@ -68,6 +68,34 @@ test('G-854: VNDB native XML golden retains all attributes, notes, releases, len
     expect(() => parseLibraryFile('vndb',bad)).toThrow(FileImportInvalid);
   }
 });
+test('G-854: MAL anime and manga golden preserve partial dates, scores, notes and repeat/episode/chapter evidence', () => {
+  const manga = parseLibraryFile('mal',fixture('mal-manga.xml')).filter(r => r.kind === 'source');
+  expect(manga.map(r => [r.sourceId,r.status,r.startedOn,r.finishedOn,r.readCount,r.progress])).toEqual([
+    ['manga:101','paused','2026-08',null,4,null],['manga:102','dnf','2026','2026-09',null,null],
+    ['manga:103','dnf','2026-07','2026-08',null,null] ]);
+  expect(manga[0]).toMatchObject({ score: { value: 8,min: 1,max: 10,step: 1 },
+    identifiers: [{ provider: 'https://myanimelist.net/manga',value: '101' }],
+    review: { text: 'Remember the chapter & translator',language: 'und',spoiler: false },
+    shelves: ['Light novels','Private favourites'],raw: { xml: { attributes: { custom: 'kept' },children: expect.arrayContaining([
+      expect.objectContaining({ name: 'my_read_chapters',text: '123' }),
+      expect.objectContaining({ name: 'my_scanalation_group',text: 'Private group' }),
+      expect.objectContaining({ name: 'future',content: [{ type: 3,value: 'before' },{ child: 0 },{ type: 3,value: 'after' }] }) ]) } } });
+  expect(globalImportRating(manga[0]!)).toBeNull();
+  expect(manga[1]!.score).toBeNull();
+  const anime = parseLibraryFile('mal',fixture('mal-anime.xml'));
+  expect(anime.filter(r => r.kind === 'source').map(r => [r.sourceId,r.status,r.startedOn,r.finishedOn,r.readCount,r.progress]))
+    .toEqual([['anime:201','reading','2026-09-01',null,3,null],['anime:202','want-to-read',null,null,null,null]]);
+  expect(anime[1]!.raw.xml).toMatchObject({ children: expect.arrayContaining([
+    expect.objectContaining({ name: 'my_watched_episodes',text: '12' }),expect.objectContaining({ name: 'my_rewatching_ep',text: '5' }) ]) });
+  expect(anime.filter(r => r.kind === 'retained')).toHaveLength(2);
+  for (const format of ['mal','vndb'] as const) {
+    const root = format === 'mal' ? 'myanimelist' : 'vndb-export';
+    for (const xml of [`<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]><${root}/>`,
+      `<${root}><x></${root}>`,`<${root}>${'<x>'.repeat(66)}${'</x>'.repeat(66)}</${root}>`]) {
+      expect(() => parseLibraryFile(format,xml)).toThrow(FileImportInvalid);
+    }
+  }
+});
 test('G-854: adapter bounds reject truncation, invalid CSV and malformed bundles', () => {
   for (const file of ['Title,Title\nx,y','Title\n"unclosed','Title\n"ok"x','Title\nx,y',`Title\n${'x'.repeat(20_001)}`,
     `Title\n${Array.from({ length: 5001 },() => 'x').join('\n')}`]) {
@@ -79,7 +107,7 @@ test('G-854: adapter bounds reject truncation, invalid CSV and malformed bundles
   expect(() => parseLibraryFile('rezics',JSON.stringify({ profile: 'rezics-library-export-v1',rows: [large] }))).toThrow();
   expect(parseLibraryFile('rezics',JSON.stringify({ profile: 'rezics-library-export-v1',rows: [{ ...large,kind: 'retained' }] }))).toHaveLength(1);
   expect(Object.keys(adapters)).not.toContain('anilist');
-  expect(() => parseLibraryFile('mal','<myanimelist/>')).toThrow(FileImportUnsupported);
+  expect(() => parseLibraryFile('mal','<myanimelist/>')).toThrow(FileImportInvalid);
 });
 test('G-854: ambiguous and incomplete catalogue windows never become automatic matches', () => {
   const row = { ...emptyRow('1','Shared Moon',{}),creators: ['Reader Writer'] };

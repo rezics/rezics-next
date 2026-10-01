@@ -52,7 +52,10 @@ test('G-580: every installed tool preserves each OpenAPI parameter and JSON body
   for (const tool of tools) {
     expect(tool.operation['x-rezics-capability']?.mcp?.tool).toBe(tool.name);
     expect(tool.operation['x-rezics-capability']!.mcp!.scopes.length).toBeGreaterThan(0);
-    if (tool.name.startsWith('wiki_')) expect(tool.operation['x-rezics-capability']!.mcp!.scopes).toEqual(['wiki:propose']);
+    if (['wiki_candidates','wiki_validate'].includes(tool.name)) {
+      expect(tool.operation['x-rezics-capability']!.mcp!.scopes).toEqual(['wiki:propose']);
+    }
+    if (tool.name === 'wiki_evidence') expect(tool.operation['x-rezics-capability']!.mcp!.scopes).toEqual(['work:read']);
     for (const parameter of tool.operation.parameters ?? []) {
       const group = parameter.in === 'header' ? 'headers' : parameter.in;
       const schema = tool.inputSchema.properties[group] as { properties: Record<string, unknown>; required: string[] };

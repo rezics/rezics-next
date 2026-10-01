@@ -30,6 +30,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     const other = await home.provision('Fresh import reader',home.author.token);
     const files = new LibraryFileStore(stack.contentPool), imports = new ReaderLibraryImportStore(stack.contentPool);
     const app = createMainApp(stack.fuseki,{ ...home.deps,libraryFiles: files,libraryImport: imports,
+      mcp: { issuer: 'https://account.test/api/auth',resource: 'http://main.local' },
       accessPolicy: new AccessPolicyOwner(stack.accessPool),
       libraryBundle: new LibraryBundleExporter(stack.contentPool,stack.accessPool),
       libraryRatings: new ReaderLibraryRatings(stack.accessPool),
@@ -40,6 +41,19 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
         ...(body ? { 'content-type': 'application/json' } : {}) },...(body ? { body: JSON.stringify(body) } : {}) }));
     const create = (format: string,file: string,mapping?: object,key = randomUUID(),actor = agent,token = home.reader.token) =>
       call('POST','/v1/me/library-imports',{ actingSubject: actor,format,file,...(mapping ? { mapping } : {}) },key,token);
+    const createViaMcp = async (format: string,file: string) => {
+      const key = randomUUID();
+      const response = await app.handle(new Request('http://main.local/mcp',{ method: 'POST',headers: {
+        authorization: `Bearer ${home.reader.token}`,'content-type': 'application/json',accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': '2026-07-28','mcp-method': 'tools/call','mcp-name': 'library_import_create' },body: JSON.stringify({
+        jsonrpc: '2.0',id: 1,method: 'tools/call',params: { name: 'library_import_create',arguments: {
+          headers: { 'Idempotency-Key': key },body: { actingSubject: agent,format,file } },_meta: {
+          'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          'io.modelcontextprotocol/clientInfo': { name: 'g854',version: '1' },'io.modelcontextprotocol/clientCapabilities': {} } } }) }));
+      const value = await checked<{ result: { structuredContent: { status: number; body: { id: string; total: number } } } }>(response);
+      expect(value.result.structuredContent.status).toBe(201);
+      return value.result.structuredContent.body;
+    };
     const rows = (id: string,cursor = -1,actor = agent,token = home.reader.token) =>
       call('GET',`/v1/me/library-imports/${id}/rows?actingSubject=${encodeURIComponent(actor)}&cursor=${cursor}`,undefined,randomUUID(),token);
     const resolve = (id: string,index: number,version: number,choice: object,actor = agent,token = home.reader.token,key = randomUUID()) =>
@@ -64,7 +78,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     const mapping = { title: 'Title',author: 'Author',status: 'Status',progress: 'Progress',startedOn: 'Started',finishedOn: 'Finished',
       statuses: { Reading: 'reading',Dropped: 'dnf' } };
     const before = (await stack.contentPool.query('SELECT count(*)::integer AS n FROM reader.library_import_file')).rows[0].n;
-    expect((await create('mal','<myanimelist/>')).status).toBe(422);
+    expect((await create('mal','<myanimelist/>')).status).toBe(400);
     expect((await create('vndb','<vndb-export version="1.0"><vn></vndb-export>')).status).toBe(400);
     expect(await checked<{ headers: string[] }>(await create('generic-csv',fixture('novelupdates.csv')))).toHaveProperty('headers');
     expect((await stack.contentPool.query('SELECT count(*)::integer AS n FROM reader.library_import_file')).rows[0].n).toBe(before);
@@ -91,6 +105,31 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     expect(sessions[1]).toMatchObject({ state: 'active',startedOn: '2026-09-01',locators: [] });
     expect(sessions[2]).toMatchObject({ state: 'dnf',startedOn: '2026-08',finishedOn: '2026-09',locators: [] });
     expect((await home.deps.libraryStatus.batch(agent,[first.work]))[0]).toMatchObject({ status: 'reading',startedOn: '2026-09-01' });
+
+    const mal = await checked<{ id: string; total: number }>(await create('mal',fixture('mal-manga.xml')),201);
+    expect(mal.total).toBe(5);
+    const malRows = await checked<ImportPage>(await rows(mal.id));
+    expect(malRows.rows.filter(r => r.source.kind === 'source').map(r => r.match.kind)).toEqual(['ambiguous','ambiguous','matched']);
+    await checked(await resolve(mal.id,1,malRows.rows[1]!.version,{ choice: 'apply',work: first.work,conflictChoice: 'replace' }));
+    await checked(await resolve(mal.id,2,malRows.rows[2]!.version,{ choice: 'private' }));
+    await checked(await resolve(mal.id,3,malRows.rows[3]!.version,{ choice: 'apply',work: dropped.work }));
+    expect(await checked(await apply(mal.id))).toMatchObject({ completed: 5,issues: 0,pending: false });
+    const malSessions = (await stack.contentPool.query('SELECT state FROM reader.consumption_session WHERE agent=$1 ORDER BY attempt_order',[agent])).rows.map(r => r.state);
+    expect(malSessions).toHaveLength(5);
+    expect(malSessions.at(-2)).toMatchObject({ state: 'paused',startedOn: '2026-08',finishedOn: null,locators: [] });
+    expect(malSessions.at(-1)).toMatchObject({ state: 'dnf',startedOn: '2026-07',finishedOn: '2026-08',locators: [] });
+    expect((await home.deps.libraryStatus.privateReviews(agent,[first.work]))[0]).toMatchObject({ text: 'Remember the chapter & translator' });
+    expect((await stack.accessPool.query('SELECT count(*)::integer AS n FROM access.rating_aggregate_head')).rows[0].n).toBe(0);
+
+    // Anime shares the adapter but has no chapter/page correspondence. Keeping
+    // its unmatched source private does not fabricate an attempt or catalogue.
+    const anime = await checked<{ id: string }>(await create('mal',fixture('mal-anime.xml')),201);
+    const animeRows = await checked<ImportPage>(await rows(anime.id));
+    for (const r of animeRows.rows.filter(r => r.source.kind === 'source')) {
+      await checked(await resolve(anime.id,r.index,r.version,{ choice: 'private' }));
+    }
+    expect(await checked(await apply(anime.id))).toMatchObject({ completed: 4,issues: 0,pending: false });
+    expect((await stack.contentPool.query('SELECT count(*)::integer AS n FROM reader.consumption_session WHERE agent=$1',[agent])).rows[0].n).toBe(5);
 
     const grant = async (scope: string,action: string,actor: string,principalId: string) => {
       await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING',[scope]);
@@ -161,6 +200,13 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     sessions = (await stack.contentPool.query('SELECT state FROM reader.consumption_session WHERE agent=$1 ORDER BY attempt_order',[agent])).rows.map(r => r.state);
     expect(sessions.filter(s => s.state === 'finished')).toHaveLength(3);
     expect(sessions.at(-2)).toMatchObject({ state: 'paused',startedOn: '2026-09-01' });
+    const extension = { ...emptyRow('native-private-extra','',{ privateJournal: { chapter: 'c123',note: 'Retain this' } }),
+      kind: 'session' as const,work: first.work,session: { target: first.work,state: 'planned' as const,
+        startedOn: null,finishedOn: null,selections: [{ target: first.work }],locators: [] } };
+    const extra = await checked<{ id: string }>(await create('rezics',JSON.stringify({ profile: 'rezics-library-export-v1',rows: [extension] })),201);
+    await checked(await rows(extra.id));
+    expect(await checked(await apply(extra.id))).toMatchObject({ issues: 0,pending: false });
+    sessions = (await stack.contentPool.query('SELECT state FROM reader.consumption_session WHERE agent=$1 ORDER BY attempt_order',[agent])).rows.map(r => r.state);
     const firstState = (await home.deps.libraryStatus.batch(agent,[first.work]))[0]!;
     await checked(await call('PUT',`/v1/works/${first.work.slice(-36)}/reader-status`,{ actingSubject: agent,
       expectedVersion: firstState.version,status: 'want-to-read',startedOn: firstState.startedOn,finishedOn: firstState.finishedOn }));
@@ -192,8 +238,10 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     // A valid large private record must download and import without lowering the
     // requested row count manually. Three records force the byte page boundary.
     for (let index = 0; index < 3; index++) {
-      const row = { ...emptyRow(`wide-${index}`,'', { evidence: 'x'.repeat(700_000) }),kind: 'retained' as const };
-      const wide = await checked<{ id: string }>(await create('rezics',JSON.stringify({ profile: 'rezics-library-export-v1',rows: [row] })),201);
+      const row = { ...emptyRow(`wide-${index}`,'', { evidence: 'x'.repeat(index === 0 ? 1_100_000 : 700_000) }),kind: 'retained' as const };
+      const bundle = JSON.stringify({ profile: 'rezics-library-export-v1',rows: [row] });
+      const wide = index === 0 ? await createViaMcp('rezics',bundle)
+        : await checked<{ id: string }>(await create('rezics',bundle),201);
       await checked(await rows(wide.id));
       expect(await checked(await apply(wide.id))).toMatchObject({ issues: 0,pending: false });
     }
@@ -211,6 +259,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
       pages.push(page); all.push(...page.rows); next = page.nextCursor; }
     expect(all.filter(r => r.kind === 'retained')).toHaveLength(1200+sourceCount+4);
     expect(all.find(r => r.sourceId.startsWith('rating:') && r.kind === 'retained')?.raw.ratingAvailability).toBe('withdrawn');
+    expect(all.find(r => r.raw.sourceId === 'native-private-extra')?.raw.fields).toEqual(extension.raw);
     expect(all.filter(r => r.kind === 'session')).toHaveLength(sessions.length);
     for (const page of pages) {
       const restored = await checked<{ id: string }>(await create('rezics',JSON.stringify(page),undefined,randomUUID(),other,home.author.token),201);

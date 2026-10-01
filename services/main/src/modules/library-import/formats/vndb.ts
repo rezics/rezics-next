@@ -1,36 +1,14 @@
-import { DOMParser, type Element } from '@xmldom/xmldom';
 import { emptyRow, FileImportInvalid, type CanonicalRow } from './contract.ts';
 import { sourceDate } from './csv.ts';
+import { parseUploadedXml, xmlChildren as children, xmlText as text, retainedXml as retained } from './xml.ts';
 
 /** Reader's native list-export/xml, version 1.0. Official implementation:
  * https://code.blicky.net/yorhel/vndb/src/branch/master/lib/VNWeb/ULists/Export.pm
  * checked 2026-10-01. Only the uploaded file is read; no account/API pull. */
-const children = (element: Element, name?: string) => Array.from(element.childNodes)
-  .filter((node): node is Element => node.nodeType === 1 && (!name || (node as Element).tagName === name));
-const text = (element: Element, name: string) => children(element,name)[0]?.textContent?.trim() ?? '';
-function retained(element: Element): unknown {
-  let child = 0;
-  return { name: element.tagName,attributes: Object.fromEntries(Array.from(element.attributes).map(a => [a.name,a.value])),
-    text: children(element).length ? null : element.textContent,children: children(element).map(retained),
-    // Preserve mixed text and element order without duplicating nested subtrees.
-    content: Array.from(element.childNodes).map(node => node.nodeType === 1 ? { child: child++ }
-      : { type: node.nodeType,value: node.nodeValue }) };
-}
 export function parseVndb(file: string): CanonicalRow[] {
-  if (/<!DOCTYPE|<!ENTITY/i.test(file)) throw new FileImportInvalid('XML entity declarations are unsupported');
-  let malformed = false;
-  let root: Element | null;
-  try { root = new DOMParser({ onError: () => { malformed = true; } }).parseFromString(file,'application/xml').documentElement; }
-  catch { throw new FileImportInvalid('Malformed VNDB export XML'); }
-  if (malformed || !root || root.tagName !== 'vndb-export' || root.getAttribute('version') !== '1.0') {
+  const root = parseUploadedXml(file);
+  if (root.tagName !== 'vndb-export' || root.getAttribute('version') !== '1.0') {
     throw new FileImportInvalid('Choose a VNDB list export version 1.0');
-  }
-  const pending: Array<[Element,number]> = [[root,0]];
-  let nodes = 0;
-  while (pending.length) {
-    const [element,depth] = pending.pop()!;
-    if (++nodes > 50_000 || depth > 64) throw new FileImportInvalid('XML nesting or node count exceeds the import budget');
-    pending.push(...children(element).map(child => [child,depth+1] as [Element,number]));
   }
   const rows: CanonicalRow[] = [];
   const vns = children(root,'vns')[0];

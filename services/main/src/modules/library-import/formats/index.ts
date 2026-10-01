@@ -6,15 +6,15 @@ import { parseStoryGraph } from './storygraph.ts';
 import { parseGenericCsv } from './generic-csv.ts';
 import { parseRezics } from './rezics.ts';
 import { parseVndb } from './vndb.ts';
+import { parseMal } from './mal.ts';
 
-/** XML adapters use this same interface once the maintained parser is declared. */
-export const adapters: Partial<Record<LibraryFileFormat, FormatAdapter>> = {
-  goodreads: parseGoodreads, storygraph: parseStoryGraph, 'generic-csv': parseGenericCsv, rezics: parseRezics, vndb: parseVndb,
+export const adapters: Record<LibraryFileFormat, FormatAdapter> = {
+  goodreads: parseGoodreads, storygraph: parseStoryGraph, 'generic-csv': parseGenericCsv, rezics: parseRezics, vndb: parseVndb, mal: parseMal,
 };
 export function parseLibraryFile(format: LibraryFileFormat, file: string, mapping?: CsvMapping): CanonicalRow[] {
   if (new TextEncoder().encode(file).length > FILE_IMPORT_COST.bytes) throw new FileImportInvalid('File exceeds 2 MiB');
   const adapter = adapters[format];
-  if (!adapter) throw new FileImportUnsupported('MyAnimeList imports are not available yet');
+  if (!adapter) throw new FileImportUnsupported('Unsupported library file format');
   const rows = adapter(file, mapping);
   if (!rows.length || rows.length > FILE_IMPORT_COST.rows) throw new FileImportInvalid('Choose a file with 1 to 5,000 rows');
   if (rows.some(row => !Value.Check(canonicalRow, row))) throw new FileImportInvalid('File contains an invalid or oversized row');

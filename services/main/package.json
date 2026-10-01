@@ -13,6 +13,7 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@rezics/wiki-toolkit": "workspace:*",
     "@tensorflow/tfjs": "4.22.0",
+    "@xmldom/xmldom": "0.9.12",
     "aws4fetch": "1.0.20",
     "better-auth": "1.7.5",
     "buffer": "6.0.3",

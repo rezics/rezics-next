@@ -62,6 +62,10 @@ inventory below and dependency notices in the package's NOTICE. Runtime source
 imports and the installed package are checked for the offline boundary; no
 network, inference or REZICS service implementation enters the package.
 
+Main pins the same @xmldom/xmldom version for readers' uploaded MyAnimeList and
+VNDB exports. Both adapters reject entity declarations and enforce XML depth
+and node budgets before retaining source fields; they perform no live tool pulls.
+
 ## Local image screening
 
 Main pins NSFWJS 4.4.0 (MIT), TensorFlow.js 4.22.0 (Apache-2.0), Buffer 6.0.3
@@ -188,7 +192,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @vitejs/plugin-react | 6.1.1 | apps/accounts, apps/web |
 | @vitejs/plugin-rsc | 0.5.35 | apps/accounts, apps/web |
 | @vitest/browser-playwright | 5.0.2 | apps/accounts, apps/web |
-| @xmldom/xmldom | 0.9.12 | packages/wiki-toolkit |
+| @xmldom/xmldom | 0.9.12 | packages/wiki-toolkit, services/main |
 | astro | 7.3.5 | apps/about |
 | aws4fetch | 1.0.20 | services/main |
 | axe-core | 4.13.0 | apps/about, apps/web |

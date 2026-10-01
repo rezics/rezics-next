@@ -13,6 +13,7 @@ import { problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { resolveTargets, TargetNotBound } from '../modules/target/resolve.ts';
+import type { CapabilityDeclarations } from '../modules/mcp/capabilities.ts';
 
 const headers = { 'cache-control': 'private, no-store' };
 const closed = { additionalProperties: false };
@@ -27,16 +28,21 @@ export const openApiOperations = {
 } as const;
 export const capabilities = {
   '/v1/me/library-imports': { post: { disposition: 'supported', mcp: { tool: 'library_import_create', title: 'Import a library file',
+    scopes: ['work:read'],
     description: 'Upload your own library export or mapped CSV. Source rows stay private; catalogue matches are reviewed before applying. A CSV without mapping returns headers without storing the file.' } } },
   '/v1/me/library-imports/{id}/rows': { get: { disposition: 'supported', mcp: { tool: 'library_import_rows', title: 'Review library import rows',
+    scopes: ['work:read'],
     description: 'Page through every source row and its catalogue or Open Library candidates, retaining unsupported source fields.' } } },
   '/v1/me/library-imports/{id}/rows/{row}': { put: { disposition: 'supported', mcp: { tool: 'library_import_resolve', title: 'Resolve a library import row',
+    scopes: ['work:read'],
     description: 'Choose a native Work and optional exact target, or keep the row private. expectedVersion protects concurrent review.' } } },
   '/v1/me/library-imports/{id}/apply': { post: { disposition: 'supported', mcp: { tool: 'library_import_apply', title: 'Apply a reviewed library import',
+    scopes: ['work:read','collection:edit','rating:read','rating:submit'],
     description: 'Apply a bounded group of reviewed rows through ordinary library commands. Repeat until pending is false; retries resume one effect.' } } },
   '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { disposition: 'supported', mcp: { tool: 'library_import_adopt', title: 'Adopt an Open Library candidate',
+    scopes: ['work:read','work:create'],
     description: 'Explicitly adopt a reviewed Open Library candidate using ordinary catalogue authority, then resolve the source row to the returned Work.' } } },
-} as const;
+} as const satisfies CapabilityDeclarations;
 const match = t.Object({ kind: t.Union([t.Literal('matched'),t.Literal('ambiguous'),t.Literal('not-found')]),
   work: t.Nullable(readId), target: t.Nullable(readId), truncated: t.Boolean(),
   openLibraryAvailability: t.Union([t.Literal('available'),t.Literal('budget-exceeded'),t.Literal('unavailable'),t.Literal('not-requested')]),

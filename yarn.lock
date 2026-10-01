@@ -3855,6 +3855,7 @@ __metadata:
     "@tensorflow/tfjs": "npm:4.22.0"
     "@types/bun": "npm:1.4.2"
     "@types/pg": "npm:8.23.1"
+    "@xmldom/xmldom": "npm:0.9.12"
     aws4fetch: "npm:1.0.20"
     better-auth: "npm:1.7.5"
     buffer: "npm:6.0.3"
