@@ -137,7 +137,7 @@ test('a contributor searches first, adds a translation to an existing volume, an
   await page.goto('/en/catalogue/new');
   await addStory(page, 'Alternative Intake Story D');
   const limit = page.getByRole('alert');
-  await expect(limit).toContainText('Three records are waiting for review');
+  await expect(limit).toContainText('Your records are waiting for review');
   await expect(limit).toContainText('60 seconds');
   await shoot(page, 'limit', info);
 });

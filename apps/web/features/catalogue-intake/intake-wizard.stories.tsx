@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { SearchInput, SearchState } from './intake.ts';
-import { actingSubject, createdWork, found, scriptedPort } from './fixtures.ts';
+import { actingSubject, createdWork, found, scriptedPort, series } from './fixtures.ts';
 import { IntakeWizard } from './intake-wizard.tsx';
 
 const meta = { title: 'Catalogue intake/Wizard', component: IntakeWizard,
@@ -83,10 +83,11 @@ export const CreateNewStory: Story = {
     const canvas = within(canvasElement);
     await userEvent.type(canvas.getByRole('searchbox', { name: /Title, alias/ }), 'Sword Art Online Alternative');
     await userEvent.click(await canvas.findByRole('button', { name: createButton }));
-    await expect(await canvas.findByRole('heading', { name: 'What are you adding?' })).toBeVisible();
+    await expect(await canvas.findByRole('heading', { name: 'What are you adding?' })).toHaveFocus();
     await userEvent.click(canvas.getByRole('radio', { name: /A new story or series/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Create record' }));
-    await expect(await canvas.findByText('Record created')).toBeVisible();
+    const created = await canvas.findByRole('heading', { name: 'Record created' });
+    await expect(created).toHaveFocus();
     await expect(canvas.getByText('Unverified')).toBeVisible();
     await userEvent.click(await canvas.findByText('Where these fields came from'));
     await expect(canvas.getByText('Title')).toBeVisible();
@@ -105,22 +106,60 @@ export const PendingLimit: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: createButton }));
     await userEvent.click(canvas.getByRole('button', { name: 'Create record' }));
     const alert = await canvas.findByRole('alert');
-    await expect(alert).toHaveTextContent('Three records are waiting for review');
+    await expect(alert).toHaveTextContent('Your records are waiting for review');
+    await expect(alert).not.toHaveTextContent(/three|Main/i);
     await expect(alert).toHaveTextContent('60 seconds');
   },
 };
 
 /** A part of a series needs the series chosen from the results. */
 export const PartNeedsASeries: Story = {
-  async play({ canvasElement }) {
+  args: { port: scriptedPort() },
+  async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await userEvent.type(canvas.getByRole('searchbox', { name: /Title, alias/ }), 'Sword Art Online 2');
     await userEvent.click(await canvas.findByRole('button', { name: createButton }));
     await userEvent.click(canvas.getByRole('radio', { name: /A part of a series/ }));
     const submit = canvas.getByRole('button', { name: 'Create record' });
-    await expect(submit).toBeDisabled();
+    // The button stays available: a missing parent is a refusal tied to the choice, not a silent dead button.
+    await userEvent.click(submit);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Choose the record this belongs to.');
+    await expect(within(canvas.getByTestId('intake-parent')).getAllByRole('radio')[0]).toHaveFocus();
     await userEvent.click(within(canvas.getByTestId('intake-parent')).getByRole('radio', { name: 'Sword Art Online' }));
-    await waitFor(() => expect(submit).toBeEnabled());
+    await waitFor(() => expect(canvas.queryByRole('alert')).toBeNull());
+    await userEvent.click(submit);
+    await expect(await canvas.findByRole('heading', { name: 'Record created' })).toHaveFocus();
+    await expect((args.port as ReturnType<typeof scriptedPort>).calls).toContain(`create:${series.work}`);
+    await expect(await canvas.findByRole('link', { name: 'Add it to Sword Art Online' })).toBeVisible();
+  },
+};
+
+/** A collection is made in the library: no path is shown, the contributor is sent there. */
+export const CollectionGoesToTheLibrary: Story = {
+  args: { port: scriptedPort({ ownerApi: async () => ({ outcome: 'owner-api', method: 'POST', path: '/v1/collections' }) }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('searchbox', { name: /Title, alias/ }), 'Sword Art Online shelf');
+    await userEvent.click(await canvas.findByRole('button', { name: createButton }));
+    await userEvent.click(canvas.getByRole('radio', { name: /A collection/ }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
+    await expect(await canvas.findByText('Opening the page where this is added…')).toBeVisible();
+    await expect(canvasElement).not.toHaveTextContent('/v1/');
+  },
+};
+
+/** The write budget is not the pending limit, and a bad title language says what is wrong. */
+export const RefusalsSayTheirOwnReason: Story = {
+  args: { port: scriptedPort({ create: async () => ({ outcome: 'rate-limited', retryAfter: 30 }) }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('searchbox', { name: /Title, alias/ }), 'Too quick');
+    await userEvent.click(await canvas.findByRole('button', { name: createButton }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Create record' }));
+    const alert = await canvas.findByRole('alert');
+    await expect(alert).toHaveTextContent('too quickly');
+    await expect(alert).toHaveTextContent('30 seconds');
+    await expect(alert).not.toHaveTextContent('waiting for review');
   },
 };
 
@@ -156,7 +195,8 @@ export const SearchUnavailable: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.type(canvas.getByRole('searchbox', { name: /Title, alias/ }), 'Sword Art Online');
-    await expect(await canvas.findByRole('alert')).toHaveTextContent('The catalogue could not be reached');
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('The search could not be completed');
+    await expect(canvas.getByText('The catalogue could not be reached. Nothing was added.')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: createButton })).toBeNull();
   },
 };

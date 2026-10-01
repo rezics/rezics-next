@@ -25,7 +25,9 @@ export type SearchState =
   | { phase: 'idle' }
   | { phase: 'searching'; input: SearchInput }
   | { phase: 'found'; input: SearchInput; receipt: string; candidates: readonly Candidate[] }
-  | { phase: 'failed'; input: SearchInput; reason: 'unavailable' | 'signed-out' | 'invalid' };
+  | { phase: 'failed'; input: SearchInput; reason: 'unavailable' | 'signed-out' | 'invalid' }
+  /** The search budget is used up; Main says how long to wait. */
+  | { phase: 'failed'; input: SearchInput; reason: 'rate-limited'; retryAfter: number | null };
 
 /**
  * Creating is the last choice: it is offered only after a search for exactly what is typed now has
@@ -67,23 +69,30 @@ export interface IntakePort {
   search(input: SearchInput): Promise<SearchState>;
   /** Asks Main where a grain other than a new creative scope goes. */
   ownerApi(grain: Grain, input: SearchInput, receipt: string, actingSubject: string): Promise<OwnerAnswer>;
-  create(input: SearchInput, receipt: string, actingSubject: string, semanticType: string | null): Promise<CreateAnswer>;
+  /** `parentComposition` is the record a part belongs to, when the contributor named one. */
+  create(input: SearchInput, receipt: string, actingSubject: string, semanticType: string | null,
+    parentComposition?: string | null): Promise<CreateAnswer>;
   /** The unverified state and field provenance of a created Work, read as the contributor, or null while Main cannot read it yet. */
   provenance(work: string, actingSubject: string): Promise<HeaderMark | null>;
 }
 
 export type OwnerAnswer =
   | { outcome: 'owner-api'; method: string; path: string }
+  | { outcome: 'rate-limited'; retryAfter: number | null }
   | { outcome: 'denied' | 'unavailable' };
 
 export type CreateAnswer =
   | { outcome: 'created'; work: string }
   /** Main is still activating the Work; the same call again returns the same Work. */
   | { outcome: 'pending' }
-  /** The contributor has as many records waiting for review as Main allows. */
+  /** The contributor has as many records waiting for review as Main allows (`pending_creation_limit`). */
   | { outcome: 'limit'; retryAfter: number | null }
-  /** The search receipt expired or no longer matches: search again. */
+  /** The write budget is used up (`rate_limited`), which says nothing about pending records. */
+  | { outcome: 'rate-limited'; retryAfter: number | null }
+  /** The search receipt expired or no longer matches, or the basis moved: search again. */
   | { outcome: 'search-again' }
+  /** Main refused what was sent for a reason the contributor can fix. */
+  | { outcome: 'invalid'; reason: 'title-language' | 'types' | 'other' }
   | { outcome: 'denied' | 'unavailable' };
 
 export interface HeaderMark {
@@ -99,6 +108,13 @@ const seconds = (header: string | null): number | null => {
   return Number.isFinite(value) && value > 0 ? Math.ceil(value) : null;
 };
 
+/** The problem code of a refusal, as Main names it (`pending_creation_limit`, `rate_limited`, ...). */
+export function codeOf(error: { value?: unknown } | null | undefined): string | null {
+  const value = error?.value;
+  const code = typeof value === 'object' && value !== null ? (value as { code?: unknown }).code : null;
+  return typeof code === 'string' ? code : null;
+}
+
 /** Main as the browser reaches it. The client is made per call: the wizard is also rendered on the server, where there is no window. */
 export function mainIntake(given?: Pick<Main, 'v1'>): IntakePort {
   const client = () => given ?? browserMainApi();
@@ -108,6 +124,7 @@ export function mainIntake(given?: Pick<Main, 'v1'>): IntakePort {
         const answer = await client().v1.catalogue.candidates.post(searchBody(input));
         if (answer.data) return { phase: 'found', input, receipt: answer.data.candidateReceipt, candidates: answer.data.candidates };
         const status = answer.error?.status;
+        if (status === 429) return { phase: 'failed', input, reason: 'rate-limited', retryAfter: seconds(answer.response.headers.get('retry-after')) };
         return { phase: 'failed', input, reason: status === 401 || status === 403 ? 'signed-out' : status === 400 ? 'invalid' : 'unavailable' };
       } catch { return { phase: 'failed', input, reason: 'unavailable' }; }
     },
@@ -118,22 +135,29 @@ export function mainIntake(given?: Pick<Main, 'v1'>): IntakePort {
         { headers: { 'idempotency-key': `${creationKey(receipt)}:${grain}` } });
         if (answer.data && 'outcome' in answer.data) return { outcome: 'owner-api', ...answer.data.ownerApi };
         const status = answer.error?.status;
+        if (status === 429) return { outcome: 'rate-limited', retryAfter: seconds(answer.response.headers.get('retry-after')) };
         return { outcome: status === 401 || status === 403 ? 'denied' : 'unavailable' };
       } catch { return { outcome: 'unavailable' }; }
     },
-    async create(input, receipt, actingSubject, semanticType) {
+    async create(input, receipt, actingSubject, semanticType, parentComposition) {
       try {
         const answer = await client().v1.works.post({ profile: 'metadata-only-v1', grain: 'new-creative-scope',
           candidateReceipt: receipt, title: input.text.trim(), language: input.language, actingSubject,
-          ...(semanticType ? { semanticTypes: [semanticType] } : {}) } as CreateBody,
+          ...(semanticType ? { semanticTypes: [semanticType] } : {}),
+          ...(parentComposition ? { parentComposition } : {}) } as CreateBody,
         { headers: { 'idempotency-key': creationKey(receipt) } });
         if (answer.data) {
           if ('operationId' in answer.data) return { outcome: 'pending' };
           return 'work' in answer.data ? { outcome: 'created', work: answer.data.work } : { outcome: 'unavailable' };
         }
         const status = answer.error?.status;
-        if (status === 429) return { outcome: 'limit', retryAfter: seconds(answer.response.headers.get('retry-after')) };
-        if (status === 400 || status === 409) return { outcome: 'search-again' };
+        const code = codeOf(answer.error);
+        const retryAfter = seconds(answer.response.headers.get('retry-after'));
+        if (status === 429) return code === 'pending_creation_limit' ? { outcome: 'limit', retryAfter } : { outcome: 'rate-limited', retryAfter };
+        // Only a receipt that no longer matches, or a basis that moved, is cured by searching again.
+        if (status === 409 || code === 'invalid_catalogue_intake') return { outcome: 'search-again' };
+        if (status === 400) return { outcome: 'invalid', reason: code === 'invalid_title_language' ? 'title-language'
+          : code === 'invalid_work_semantic_types' ? 'types' : 'other' };
         return { outcome: status === 401 || status === 403 ? 'denied' : 'unavailable' };
       } catch { return { outcome: 'unavailable' }; }
     },
@@ -156,11 +180,11 @@ export const idOf = (iri: string) => iri.slice(-36);
 
 /**
  * Where an owner API Main names is done in the web app: the realization and release writes are
- * the Editions edit page (G-837), a composition write is the Parts page. Any other path has no page
- * yet; the wizard says so and names the API.
+ * the Editions edit page (G-837) and a new Collection is made in the reader's library. Any other
+ * path has no page yet; the wizard says so in plain words and never shows the path.
  */
-export function destinationOf(ownerPath: string, work: string): string | null {
-  const id = encodeURIComponent(idOf(work));
-  if (/^\/v1\/works\/\{work\}\/(realizations|releases)\//.test(ownerPath)) return `/w/${id}/edit/editions`;
+export function destinationOf(ownerPath: string, work: string | null): string | null {
+  if (/^\/v1\/collections$/.test(ownerPath)) return '/library';
+  if (work && /^\/v1\/works\/\{work\}\/(realizations|releases)\//.test(ownerPath)) return `/w/${encodeURIComponent(idOf(work))}/edit/editions`;
   return null;
 }

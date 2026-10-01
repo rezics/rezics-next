@@ -3,12 +3,12 @@
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
-import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
+import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { NativeSelect } from '@rezics/ui/native-select';
 import { CircleCheckIcon, HourglassIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import Link from '../shell/localized-link.tsx';
@@ -54,10 +54,18 @@ type Notice = { tone: 'error' | 'info'; title?: string; body: string } | null;
 /** Main applies a creation to the graph a moment after it answers, so the header's provenance is read until it shows. */
 const retryDelays = [0, 500, 1000, 2000, 3000, 5000, 8000];
 
-/** Wait text for Retry-After, in the reader's language. */
-function waitText(seconds: number, locale: UiLocale): string {
+/** Wait text for Retry-After, in the reader's language; "a moment" when no wait was named. */
+function waitText(seconds: number | null, locale: UiLocale, t: Copy): string {
+  if (!seconds) return t.waitUnknown;
   try { return new Intl.NumberFormat(locale, { style: 'unit', unit: 'second', unitDisplay: 'long' }).format(seconds); }
   catch { return `${seconds}s`; }
+}
+
+/** A step's heading. A step replaces the one before it, so the button that was pressed is gone: focus lands here. */
+function FocusHeading({ id, className, children }: { id?: string; className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+  return <h2 ref={ref} id={id} tabIndex={-1} className={`${className ?? ''} outline-none`}>{children}</h2>;
 }
 
 function Results({ candidates, t, busy, onTranslate, onAlias, onCreate, canStartCreate }: {
@@ -84,7 +92,8 @@ function Results({ candidates, t, busy, onTranslate, onAlias, onCreate, canStart
             <div className="flex flex-wrap items-center gap-2">
               <h3 lang={title?.language ?? undefined} className="min-w-0 break-words font-medium font-work-title
                 text-lg">{title?.value ?? id}</h3>
-              {unverified ? <Badge variant="warning" title={t.unverifiedHelp}>{t.unverified}</Badge> : null}
+              {unverified ? <><Badge variant="warning">{t.unverified}</Badge>
+                <span className="sr-only">{t.unverifiedHelp}</span></> : null}
             </div>
             {creators.length ? <p className="text-muted-foreground text-sm">{t.by({ creators: creators.join(', ') })}</p> : null}
             {aliases.length ? <p className="text-muted-foreground text-sm">{t.matchedAs}{': '}
@@ -119,21 +128,24 @@ function AliasForm({ candidate, t, locale, actingSubject, save, onClose }: {
   const title = attributeOf(candidate, 'title')?.value ?? idOf(candidate.work);
   const message = { saved: t.aliasSaved, denied: t.aliasDenied, taken: t.aliasTaken, invalid: t.aliasInvalid,
     failed: t.aliasFailed } as const;
+  // A refusal of the alias itself belongs to its field; the rest concerns the whole save.
+  const fieldProblem = state === 'taken' || state === 'invalid' ? message[state] : null;
   return <form aria-label={t.aliasHeading({ title })} className="grid gap-4 rounded-2xl border border-border/70 bg-card p-4"
     onSubmit={event => {
       event.preventDefault();
       setState('saving');
       void save({ actingSubject, work: candidate.work, alias, language }).then(setState);
     }}>
-    <h2 className="font-semibold text-lg">{t.aliasHeading({ title })}</h2>
-    <Field><FieldLabel>{t.aliasLabel}</FieldLabel>
+    <FocusHeading className="font-semibold text-lg">{t.aliasHeading({ title })}</FocusHeading>
+    <Field invalid={fieldProblem !== null}><FieldLabel>{t.aliasLabel}</FieldLabel>
       <Input value={alias} onChange={event => setAlias(event.currentTarget.value)} maxLength={500} required
-        autoComplete="off" /></Field>
+        autoComplete="off" />
+      {fieldProblem ? <FieldError>{fieldProblem}</FieldError> : null}</Field>
     <Field><FieldLabel>{t.aliasLanguage}</FieldLabel>
       <NativeSelect value={language} onChange={event => setLanguage(event.currentTarget.value)} size="md">
         {inputLanguages.map(tag => <option key={tag} value={tag}>{languageName(tag, locale)}</option>)}
       </NativeSelect></Field>
-    {state !== 'idle' && state !== 'saving' ? <Alert variant={state === 'saved' ? 'success' : 'destructive'} role="status">
+    {state !== 'idle' && state !== 'saving' && !fieldProblem ? <Alert variant={state === 'saved' ? 'success' : 'destructive'} role="status">
       {state === 'saved' ? <CircleCheckIcon aria-hidden="true" /> : <TriangleAlertIcon aria-hidden="true" />}
       <AlertDescription>{message[state]}</AlertDescription></Alert> : null}
     <div className="flex flex-wrap gap-2">
@@ -173,7 +185,14 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
   const [semanticType, setSemanticType] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const [parentError, setParentError] = useState(false);
   const asked = useRef(0);
+  /** No search starts before this moment: Main said how long to wait after the search budget ran out. */
+  const holdUntil = useRef(0);
+  const polling = useRef(0);
+  const searchbox = useRef<HTMLInputElement>(null);
+  const parentLegend = useId();
+  const parentErrorId = useId();
   const input: SearchInput = { text, language, creator };
 
   // Search as the contributor types: the answer applies only to the input it was asked for.
@@ -183,11 +202,23 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
     const current: SearchInput = { text, language, creator };
     const timer = setTimeout(() => {
       setSearch({ phase: 'searching', input: current });
-      intake.search(current).then(answer => { if (request === asked.current) setSearch(answer); },
-        () => { if (request === asked.current) setSearch({ phase: 'failed', input: current, reason: 'unavailable' }); });
-    }, debounceMs);
+      intake.search(current).then(answer => {
+        if (request !== asked.current) return;
+        if (answer.phase === 'failed' && answer.reason === 'rate-limited') holdUntil.current = Date.now() + (answer.retryAfter ?? 10) * 1000;
+        setSearch(answer);
+      }, () => { if (request === asked.current) setSearch({ phase: 'failed', input: current, reason: 'unavailable' }); });
+    }, Math.max(debounceMs, holdUntil.current - Date.now()));
     return () => clearTimeout(timer);
   }, [text, language, creator, intake, debounceMs]);
+
+  // Back on the search step, focus returns to where the contributor types.
+  const stepName = step.name;
+  const lastStep = useRef(stepName);
+  useEffect(() => {
+    if (lastStep.current !== stepName && stepName === 'search') searchbox.current?.focus();
+    lastStep.current = stepName;
+  }, [stepName]);
+  useEffect(() => () => { polling.current = -1; }, []);
 
   const found = search.phase === 'found' ? search : null;
   const reachable = canCreate(search, input);
@@ -211,28 +242,33 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
     const answer: OwnerAnswer = await intake.ownerApi(grain, input, found.receipt, actingSubject);
     if (answer.outcome !== 'owner-api') {
       setBusy(null);
-      setNotice({ tone: 'error', body: answer.outcome === 'denied' ? t.routeDenied : t.routeUnavailable });
+      setNotice({ tone: 'error', body: answer.outcome === 'denied' ? t.routeDenied
+        : answer.outcome === 'rate-limited' ? t.createRateLimited({ wait: waitText(answer.retryAfter, locale, t) }) : t.routeUnavailable });
       return;
     }
-    const to = destinationWork ? destinationOf(answer.path, destinationWork.work) : null;
+    const to = destinationOf(answer.path, destinationWork?.work ?? null);
     if (to) { setNotice({ tone: 'info', body: t.routing }); router.push(localizedPath(to, locale)); return; }
     setBusy(null);
-    setNotice({ tone: 'info', title: t.routedTo({ api: `${answer.method} ${answer.path}` }), body: t.routeMissing });
+    setNotice({ tone: 'info', body: t.routeMissing });
   }
 
   async function create() {
     if (!found || !reachable) return;
     setNotice(null);
     setBusy('create');
-    const answer: CreateAnswer = await intake.create(found.input, found.receipt, actingSubject, semanticType || null);
+    const answer: CreateAnswer = await intake.create(found.input, found.receipt, actingSubject, semanticType || null,
+      kind === 'part' ? parent || null : null);
     setBusy(null);
     switch (answer.outcome) {
       case 'created': {
         const series = kind === 'part' ? found.candidates.find(candidate => candidate.work === parent) ?? null : null;
         setStep({ name: 'created', work: answer.work, parent: series, provenance: null, verification: 'unverified' });
+        const poll = ++polling.current;
         for (const delay of retryDelays) {
           await new Promise(done => setTimeout(done, delay));
+          if (polling.current !== poll) return;
           const read = await intake.provenance(answer.work, actingSubject);
+          if (polling.current !== poll) return;
           if (read?.provenance || read?.verification) {
             setStep(current => current.name === 'created'
               ? { ...current, provenance: read.provenance, verification: read.verification } : current);
@@ -243,7 +279,10 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
       }
       case 'pending': setNotice({ tone: 'info', body: t.createPending }); return;
       case 'limit': setNotice({ tone: 'error', title: t.limitTitle, body: `${t.limitBody} ${answer.retryAfter
-        ? t.limitRetry({ wait: waitText(answer.retryAfter, locale) }) : t.limitRetryUnknown}` }); return;
+        ? t.limitRetry({ wait: waitText(answer.retryAfter, locale, t) }) : t.limitRetryUnknown}` }); return;
+      case 'rate-limited': setNotice({ tone: 'error', body: t.createRateLimited({ wait: waitText(answer.retryAfter, locale, t) }) }); return;
+      case 'invalid': setNotice({ tone: 'error', body: { 'title-language': t.invalidLanguage, types: t.invalidTypes,
+        other: t.invalidOther }[answer.reason] }); return;
       case 'search-again': setStep({ name: 'search' }); setNotice({ tone: 'info', body: t.searchAgain }); retrySearch(); return;
       case 'denied': setNotice({ tone: 'error', body: t.createDenied }); return;
       case 'unavailable': setNotice({ tone: 'error', body: t.createUnavailable }); return;
@@ -258,8 +297,8 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
 
   if (step.name === 'created') {
     return <section aria-labelledby="intake-created" className="grid gap-5">
+      <FocusHeading id="intake-created" className="font-semibold text-2xl tracking-tight">{t.createdHeading}</FocusHeading>
       <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
-        <AlertTitle id="intake-created">{t.createdHeading}</AlertTitle>
         <AlertDescription>{t.createdBody}</AlertDescription></Alert>
       <ProvisionalNotice verification={step.verification} provenance={step.provenance} locale={locale} />
       <div className="flex flex-wrap gap-2">
@@ -267,7 +306,7 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
         {step.parent ? <Link href={`/w/${idOf(step.parent.work)}/edit/parts`}
           className={buttonVariants({ variant: 'outline' })}>
           {t.addToSeries({ series: attributeOf(step.parent, 'title')?.value ?? idOf(step.parent.work) })}</Link> : null}
-        <Button type="button" variant="ghost" onClick={() => { setStep({ name: 'search' }); setText(''); setNotice(null); setKind('story'); }}>
+        <Button type="button" variant="ghost" onClick={() => { polling.current++; setStep({ name: 'search' }); setText(''); setNotice(null); setKind('story'); }}>
           {t.addAnother}</Button>
       </div>
     </section>;
@@ -280,11 +319,15 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
     const parentCandidate = found.candidates.find(candidate => candidate.work === parent) ?? null;
     return <form aria-label={t.stepTwoHeading} className="grid gap-6" onSubmit={event => {
       event.preventDefault();
-      if (needsParent && !parentCandidate) return;
+      if (needsParent && !parentCandidate) {
+        setParentError(true);
+        document.querySelector<HTMLInputElement>('[data-testid="intake-parent"] input')?.focus();
+        return;
+      }
       if (grain) void routeTo(grain, parentCandidate); else void create();
     }}>
       <div className="grid gap-2">
-        <h2 className="font-semibold text-2xl tracking-tight">{t.stepTwoHeading}</h2>
+        <FocusHeading className="font-semibold text-2xl tracking-tight">{t.stepTwoHeading}</FocusHeading>
         <p className="text-muted-foreground text-sm">{t.stepTwoIntro({ title: found.input.text.trim() })}</p>
       </div>
       <fieldset className="grid min-w-0 gap-2">
@@ -293,22 +336,24 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
           border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5
           has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
           <input type="radio" name="kind" value={item.kind} checked={kind === item.kind} className="mt-1"
-            onChange={() => { setKind(item.kind); setParent(''); setNotice(null); }} />
+            onChange={() => { setKind(item.kind); setParent(''); setParentError(false); setNotice(null); }} />
           <span className="grid gap-0.5"><span className="font-medium text-sm">{t[item.label]}</span>
             <span className="text-muted-foreground text-xs">{t[item.help]}</span></span>
         </label>)}
       </fieldset>
-      {needsParent ? <fieldset className="grid min-w-0 gap-2" data-testid="intake-parent">
-        <legend className="mb-2 font-medium text-sm">{kind === 'part' ? t.parentLegendPart : t.parentLegend}</legend>
+      {needsParent ? <fieldset className="grid min-w-0 gap-2" data-testid="intake-parent"
+        aria-describedby={parentError ? parentErrorId : undefined}>
+        <legend id={parentLegend} className="mb-2 font-medium text-sm">{kind === 'part' ? t.parentLegendPart : t.parentLegend}</legend>
         {found.candidates.length ? found.candidates.map(candidate => {
           const title = attributeOf(candidate, 'title');
           return <label key={candidate.work} className="flex cursor-pointer items-start gap-3 rounded-xl border
             border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5">
             <input type="radio" name="parent" value={candidate.work} checked={parent === candidate.work} className="mt-1"
-              onChange={() => setParent(candidate.work)} />
+              aria-invalid={parentError || undefined} onChange={() => { setParent(candidate.work); setParentError(false); }} />
             <span lang={title?.language ?? undefined} className="text-sm">{title?.value ?? idOf(candidate.work)}</span>
           </label>;
         }) : <p className="text-muted-foreground text-sm">{t.parentNone}</p>}
+        {parentError ? <p id={parentErrorId} role="alert" className="text-destructive-foreground text-sm">{t.parentRequired}</p> : null}
       </fieldset> : null}
       {kind === 'story' || kind === 'part' ? types.length ? <Field>
         <FieldLabel>{t.typeLabel}</FieldLabel>
@@ -318,27 +363,29 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
         </NativeSelect></Field> : null : null}
       {alert}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="lg" isLoading={busy !== null} disabled={busy !== null || (needsParent && !parentCandidate)}>
+        <Button type="submit" size="lg" isLoading={busy !== null} disabled={busy !== null}>
           {grain ? t.continue : busy === 'create' ? t.creating : t.createRecord}</Button>
-        <Button type="button" variant="ghost" size="lg" onClick={() => { setStep({ name: 'search' }); setNotice(null); }}>
+        <Button type="button" variant="ghost" size="lg" onClick={() => { setStep({ name: 'search' }); setNotice(null); setParentError(false); }}>
           {t.back}</Button>
       </div>
     </form>;
   }
 
-  const failure = search.phase === 'failed' ? { unavailable: t.searchUnavailable, 'signed-out': t.searchSignedOut,
-    invalid: t.searchInvalid }[search.reason] : null;
+  const failure = search.phase !== 'failed' ? null : search.reason === 'rate-limited'
+    ? t.searchRateLimited({ wait: waitText(search.retryAfter, locale, t) })
+    : { unavailable: t.searchUnavailable, 'signed-out': t.searchSignedOut, invalid: t.searchInvalid }[search.reason];
   return <div className="grid gap-8">
     <form role="search" aria-label={t.searchLegend} className="grid gap-5" onSubmit={event => event.preventDefault()}>
-      <Field>
+      <Field invalid={failure !== null}>
         <FieldLabel>{t.searchLabel}</FieldLabel>
         <div className="relative">
           <SearchIcon aria-hidden="true" className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2
             text-muted-foreground" />
-          <Input name="q" type="search" size="lg" value={text} onChange={event => type(event.currentTarget.value)}
-            maxLength={500} autoComplete="off" spellCheck={false} className="ps-9 font-work-title" />
+          <Input ref={searchbox} name="q" type="search" size="lg" value={text} onChange={event => type(event.currentTarget.value)}
+            maxLength={200} autoComplete="off" spellCheck={false} className="ps-9 font-work-title" />
         </div>
         <FieldHelper>{t.searchHelp}</FieldHelper>
+        {failure ? <FieldError>{failure}</FieldError> : null}
       </Field>
       <div className="grid gap-5 sm:grid-cols-2">
         <Field>
@@ -363,9 +410,10 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
     <div aria-busy={search.phase === 'searching'} className="grid gap-4">
       {search.phase === 'searching' ? <p role="status" className="text-muted-foreground text-sm">{t.searching}</p> : null}
       {failure ? <Alert variant="destructive" role="alert"><TriangleAlertIcon aria-hidden="true" />
-        <AlertTitle>{t.searchFailed}</AlertTitle><AlertDescription className="grid gap-2"><span>{failure}</span>
+        <AlertTitle>{t.searchFailed}</AlertTitle>
+        {search.phase === 'failed' && search.reason === 'rate-limited' ? null : <AlertDescription>
           <Button type="button" variant="outline" size="sm" className="w-fit" onClick={retrySearch}>{t.searchRetry}</Button>
-        </AlertDescription></Alert> : null}
+        </AlertDescription>}</Alert> : null}
       {found && reachable ? <Results candidates={found.candidates} t={t}
         busy={busy} canStartCreate={reachable}
         onAlias={candidate => { setAliasFor(candidate); setNotice(null); }}

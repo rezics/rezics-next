@@ -61,7 +61,8 @@ describe('G-843 search and routing', () => {
     const work = candidates[1].work;
     expect(destinationOf('/v1/works/{work}/realizations/{realization}', work)).toBe(`/w/${work.slice(-36)}/edit/editions`);
     expect(destinationOf('/v1/works/{work}/releases/{release}', work)).toBe(`/w/${work.slice(-36)}/edit/editions`);
-    expect(destinationOf('/v1/collections', work)).toBeNull();
+    expect(destinationOf('/v1/collections', null)).toBe('/library');
+    expect(destinationOf('/v1/unknown', work)).toBeNull();
   });
   test('one idempotency key per search receipt', () => expect(creationKey(receipt)).toBe(`catalogue-intake:${receipt}`));
 });
@@ -79,12 +80,38 @@ describe('G-843 what Main answers becomes what the wizard says', () => {
     const answer = await mainIntake(main({ candidates: { data: { candidateReceipt: receipt, candidates: [...candidates] } } })).search(typed);
     expect(answer).toMatchObject({ phase: 'found', receipt });
   });
-  test('the pending-creation limit carries Main’s Retry-After', async () => {
-    expect(await create({ error: { status: 429 }, headers: { 'retry-after': '60' } })).toEqual({ outcome: 'limit', retryAfter: 60 });
-    expect(await create({ error: { status: 429 } })).toEqual({ outcome: 'limit', retryAfter: null });
+  const problem = (status: number, code: string) => ({ error: { status, value: { code } } });
+  test('only pending_creation_limit is the pending limit, and it carries Main’s Retry-After', async () => {
+    expect(await create({ ...problem(429, 'pending_creation_limit'), headers: { 'retry-after': '60' } })).toEqual({ outcome: 'limit', retryAfter: 60 });
+    expect(await create(problem(429, 'pending_creation_limit'))).toEqual({ outcome: 'limit', retryAfter: null });
   });
-  test('an expired or mismatched receipt asks for a new search', async () => {
-    expect(await create({ error: { status: 400 } })).toEqual({ outcome: 'search-again' });
+  test('the write budget (rate_limited) is not the pending limit', async () => {
+    expect(await create({ ...problem(429, 'rate_limited'), headers: { 'retry-after': '30' } })).toEqual({ outcome: 'rate-limited', retryAfter: 30 });
+    expect(await create({ error: { status: 429 } })).toEqual({ outcome: 'rate-limited', retryAfter: null });
+  });
+  test('a 429 on the search is a wait, not an unreachable catalogue', async () => {
+    const answer = await mainIntake(main({ candidates: { ...problem(429, 'rate_limited'), response: new Response(null, { headers: { 'retry-after': '12' } }) } })).search(typed);
+    expect(answer).toMatchObject({ phase: 'failed', reason: 'rate-limited', retryAfter: 12 });
+  });
+  test('only a receipt that no longer matches, or a moved basis, sends the person back to search', async () => {
+    expect(await create(problem(400, 'invalid_catalogue_intake'))).toEqual({ outcome: 'search-again' });
+    expect(await create(problem(409, 'catalogue_basis_changed'))).toEqual({ outcome: 'search-again' });
+  });
+  test('other 400s say their own reason and never loop back to search', async () => {
+    expect(await create(problem(400, 'invalid_title_language'))).toEqual({ outcome: 'invalid', reason: 'title-language' });
+    expect(await create(problem(400, 'invalid_work_semantic_types'))).toEqual({ outcome: 'invalid', reason: 'types' });
+    expect(await create({ error: { status: 400 } })).toEqual({ outcome: 'invalid', reason: 'other' });
+  });
+  test('a part names the series it belongs to as its declared parent; other records name none', async () => {
+    const sent: unknown[] = [];
+    const client = { v1: { catalogue: {}, works: Object.assign(async () => ({}), { post: async (body: unknown) => {
+      sent.push(body);
+      return { data: { work: 'https://rezics.com/id/w' }, response: new Response() };
+    } }) } } as never;
+    await mainIntake(client).create(typed, receipt, 'https://rezics.com/id/a', null, candidates[0].work);
+    await mainIntake(client).create(typed, receipt, 'https://rezics.com/id/a', null);
+    expect(sent[0]).toMatchObject({ grain: 'new-creative-scope', parentComposition: candidates[0].work });
+    expect(sent[1]).not.toHaveProperty('parentComposition');
   });
   test('a created Work, a pending one and a refusal', async () => {
     expect(await create({ data: { work: 'https://rezics.com/id/w' } })).toEqual({ outcome: 'created', work: 'https://rezics.com/id/w' });
@@ -106,14 +133,25 @@ describe('G-843 the unverified mark', () => {
     const html = renderToStaticMarkup(createElement(ProvisionalNotice, { verification: 'unverified', provenance, locale: 'en' }));
     expect(html).toContain('Unverified');
     expect(html).toContain('Where these fields came from');
-    expect(html).toContain(receipt);
+    expect(html).not.toContain(receipt);
     expect(html).toContain('>Title<');
-    expect(html).toContain('>surprise<');
+    // A field this page has no words for is left out, not shown as a raw key.
+    expect(html).not.toContain('surprise');
   });
   test('a verified record, or one Main did not mark, shows nothing', () => {
     for (const verification of ['verified', null, undefined] as const) {
       expect(renderToStaticMarkup(createElement(ProvisionalNotice, { verification, provenance, locale: 'en' }))).toBe('');
     }
+  });
+});
+
+describe('G-843 copy speaks for the product', () => {
+  test('no locale names an internal service, an API path or a fixed quota', () => {
+    for (const locale of uiLocales) {
+      const text = JSON.stringify(messages[locale]);
+      expect(text, locale).not.toMatch(/\bMain\b|\/v1\/|\{work\}/);
+    }
+    for (const key of ['limitTitle', 'limitBody'] as const) expect(englishMessages[key]).not.toMatch(/three|\b3\b/i);
   });
 });
 

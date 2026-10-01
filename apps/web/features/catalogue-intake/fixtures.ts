@@ -42,7 +42,7 @@ export const found = (input: SearchInput, list: readonly Candidate[] = candidate
 export interface PortScript {
   search?: (input: SearchInput) => Promise<SearchState>;
   ownerApi?: (grain: string) => Promise<OwnerAnswer>;
-  create?: () => Promise<CreateAnswer>;
+  create?: (parentComposition: string | null) => Promise<CreateAnswer>;
   provenance?: () => Promise<HeaderMark | null>;
 }
 
@@ -55,7 +55,10 @@ export function scriptedPort(script: PortScript = {}): IntakePort & { calls: str
       calls.push(`owner:${grain}`);
       return script.ownerApi ? script.ownerApi(grain) : { outcome: 'owner-api', method: 'PUT', path: '/v1/works/{work}/realizations/{realization}' };
     },
-    async create() { calls.push('create'); return script.create ? script.create() : { outcome: 'created', work: createdWork }; },
+    async create(_input, _receipt, _actor, _type, parentComposition = null) {
+      calls.push(parentComposition ? `create:${parentComposition}` : 'create');
+      return script.create ? script.create(parentComposition) : { outcome: 'created', work: createdWork };
+    },
     async provenance() { calls.push('provenance'); return script.provenance ? script.provenance() : marked; },
   };
 }

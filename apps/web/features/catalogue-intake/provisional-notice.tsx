@@ -11,8 +11,8 @@ const fieldKeys = { title: 'fieldTitle', language: 'fieldLanguage', grain: 'fiel
   semanticTypes: 'fieldSemanticTypes', aliases: 'fieldAliases', romanizations: 'fieldRomanizations' } as const satisfies
   Record<string, keyof Copy>;
 
-/** A field's name in words; a field this page does not know is shown as Main names it. */
-const fieldName = (field: string, t: Copy) => field in fieldKeys ? t[fieldKeys[field as keyof typeof fieldKeys]] : field;
+/** A field's name in words; a field this page has no words for is left out rather than shown as a raw key. */
+const fieldName = (field: string, t: Copy) => field in fieldKeys ? t[fieldKeys[field as keyof typeof fieldKeys]] : null;
 
 /**
  * A provisional record's mark: the unverified badge with what it means and which fields its
@@ -35,9 +35,9 @@ export function ProvisionalNotice({ verification, provenance, locale, className 
         <summary className="w-fit cursor-pointer rounded-sm underline decoration-dotted underline-offset-4 outline-none
           hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">{t.provenanceHeading}</summary>
         <div className="mt-2 grid gap-2">
-          <p className="break-all">{t.provenanceBody({ receipt: provenance.candidateReceipt })}</p>
+          <p>{t.provenanceBody}</p>
           <ul data-provenance-fields="" className="flex flex-wrap gap-1.5">
-            {provenance.fields.map(field => <li key={field}><Badge variant="outline">{fieldName(field, t)}</Badge></li>)}
+            {provenance.fields.flatMap(field => fieldName(field, t) ?? []).map(name => <li key={name}><Badge variant="outline">{name}</Badge></li>)}
           </ul>
         </div>
       </details> : null}
