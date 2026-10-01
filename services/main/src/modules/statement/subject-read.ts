@@ -22,6 +22,8 @@ import {
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
 import { propertyRevelationRecord } from '../reading-position/store.ts';
+import { readWikiClaimEvidence, projectWikiEvidence } from '../wiki/evidence-read.ts';
+import type { WikiEvidenceRow } from '../wiki/evidence.ts';
 
 /** Bounded candidate/hydration batches fill a page from disclosed items, with one
  * disclosed lookahead. Withheld rows never produce a short continuing page.
@@ -35,6 +37,7 @@ export const SUBJECT_STATEMENT_COST = {
   referencesPerCandidate: 25,
   referenceBatch: 64,
   disclosurePasses: 2,
+  wikiEvidenceQueriesPerBatch: 1,
   responseBytes: 512 * 1024,
 } as const;
 type Page = Static<typeof subjectStatementPage>;
@@ -205,6 +208,7 @@ export async function readSubjectStatements(
     return allowed;
   };
   const items: Item[] = [];
+  const publishedEvidence = new Map<string,WikiEvidenceRow[]>();
   const positions: { phase: 'component' | 'statement'; key: string; predicate?: string }[] = [];
   if (after.phase === 'component') {
     const component = await readCurrentComponent(session.deps.environment, resource, 'resource');
@@ -249,7 +253,7 @@ export async function readSubjectStatements(
     }
   }
   if (items.length <= limit) {
-    const pattern = acceptedStatementPattern(context, inherit ?? false);
+    const pattern = inherit === null ? '' : acceptedStatementPattern(context, inherit);
     let statementAfter =
       cursor && after.phase === 'statement'
         ? { predicate: after.predicate!, statement: cursor.after }
@@ -257,14 +261,14 @@ export async function readSubjectStatements(
     while (items.length <= limit) {
       const batchSize = SUBJECT_STATEMENT_COST.candidates;
       const rows =
-        inherit === null
+        inherit === null && !session.deps.wikiEvidence
           ? []
           : await session.query(
               `SELECT ?predicate ?statement
       (MIN(CONCAT(STR(?decision), "|", ?decisionSource)) AS ?acceptance) WHERE {
       GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
         rdf:predicate ?predicate ; rv:statementState rv:Active ; rv:meaningKey ?key . }
-      ${pattern}
+      ${session.deps.wikiEvidence ? `OPTIONAL { ${pattern || 'FILTER(false)'} }` : pattern}
       ${
         statementAfter
           ? `FILTER(STR(?predicate) > ${lit(statementAfter.predicate)} ||
@@ -275,7 +279,7 @@ export async function readSubjectStatements(
               batchSize,
             );
       const page = rows;
-      if (page.some((row) => !row.statement || !row.predicate || !row.acceptance)) {
+      if (page.some((row) => !row.statement || !row.predicate)) {
         throw new WorkReadUnavailable('Statement inventory is incomplete');
       }
       if (page.length) {
@@ -309,13 +313,15 @@ export async function readSubjectStatements(
           throw new WorkReadUnavailable('Statement hydration is incomplete or ambiguous');
         }
         const byId = new Map(hydrated.map((row) => [row.statement!.value, row]));
+        const wikiClaims = await readWikiClaimEvidence(session,page.map(row => row.statement!.value),'statement');
         const allowed = await checkReferences(
           hydrated.flatMap((row) => {
             const value = statementValue(row);
             return [
               ...(value.kind === 'resource' ? [value.iri] : []),
               ...list(row.qualifiers?.value, STATEMENT_LIMITS.applicability),
-              ...list(row.sources?.value, STATEMENT_LIMITS.evidence),
+              ...list(row.sources?.value, STATEMENT_LIMITS.evidence).filter(source =>
+                !wikiClaims.get(row.statement!.value)?.some(evidence => evidence.id === source)),
             ];
           }),
         );
@@ -365,16 +371,19 @@ export async function readSubjectStatements(
             ),
           };
           const sources = list(row.sources?.value, STATEMENT_LIMITS.evidence);
+          const evidence = (wikiClaims.get(row.statement!.value) ?? []).filter(row => sources.includes(row.id));
+          if (!candidate.acceptance?.value && !evidence.length) continue;
           if (
             [...qualifiers.applicability, ...sources].some(
-              (ref) => nativeReference.test(ref) && !allowed.has(ref),
+              (ref) => nativeReference.test(ref) && !allowed.has(ref) && !evidence.some(row => row.id === ref),
             )
           )
             continue;
-          const [decision, source] = candidate.acceptance!.value.split('|');
-          if (!decision || !['local', 'global', 'inherited-global'].includes(source!)) {
+          const [decision, source] = candidate.acceptance?.value.split('|') ?? [];
+          if (candidate.acceptance?.value && (!decision || !['local', 'global', 'inherited-global'].includes(source!))) {
             throw new WorkReadUnavailable('Statement acceptance is incomplete');
           }
+          if (evidence.length) publishedEvidence.set(row.statement!.value,evidence);
           batchItems.push({
             kind: 'statement',
             statement: row.statement!.value,
@@ -386,11 +395,13 @@ export async function readSubjectStatements(
             meaningKey: row.key.value,
             qualifiers,
             sources,
-            acceptance: {
+            ...(evidence.length ? {
+              publication: { kind: 'wiki-bundle' as const,works: [...new Set(evidence.map(row => row.sourceWork))] } } : {}),
+            acceptance: decision ? {
               context,
               decision,
               source: source as 'local' | 'global' | 'inherited-global',
-            },
+            } : null,
           });
           batchPositions.push({
             phase: 'statement',
@@ -423,6 +434,18 @@ export async function readSubjectStatements(
       }),
     );
     items.splice(limit);
+  }
+  const published = items.filter((item): item is Extract<Item,{ kind: 'statement' }> =>
+    item.kind === 'statement' && publishedEvidence.has(item.statement));
+  if (published.length) {
+    const fenced = await readWikiClaimEvidence(session,published.map(item => item.statement),'statement');
+    const evidence = published.flatMap(item => publishedEvidence.get(item.statement)!);
+    if (evidence.some(row => !fenced.get(row.claim!)?.some(current => current.id === row.id))) {
+      throw new WorkReadMissing('Wiki claim is unavailable');
+    }
+    const projected = await projectWikiEvidence(session,evidence);
+    for (const item of published) item.evidence = projected.filter(row =>
+      publishedEvidence.get(item.statement)!.some(source => source.id === row.id));
   }
   const fencedReferences = await visibleResourceReferences(session, [...visibleReferences]);
   if ([...visibleReferences].some((ref) => !fencedReferences.has(ref)))

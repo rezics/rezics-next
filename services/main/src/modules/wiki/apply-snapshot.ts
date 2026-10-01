@@ -75,7 +75,7 @@ export async function wikiSnapshot(runtime: EditorialRuntime & { actingSubject: 
   });
 }
 export function wikiSegment(type: string): 'characters' | 'places' | 'events' {
-  if (type === `${RV}Character`) return 'characters';
+  if (type === `${RV}Character` || type === `${RV}Role`) return 'characters';
   if (type === 'https://schema.org/Event' || type === `${RV}Event`) return 'events';
   if (type === 'https://schema.org/Place' || type === `${RV}Place`) return 'places';
   throw new WikiRejected('wiki_entity_type');

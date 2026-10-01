@@ -25,6 +25,7 @@ export const creatableWorkTypeOptions: string[] = [];
 /** Compiled validators call this predicate after each registry refresh. */
 Format.Set('rezics-work-type', (value) => workSemanticTypeOptions.includes(value));
 const activeWorkTypes = new Set<string>();
+const activeResourceTypes = new Set<string>();
 const listeners = new Set<() => void>();
 let installedSnapshot: string | undefined;
 export function onTypeRegistryChange(listener: () => void): void {
@@ -36,6 +37,9 @@ export let typeListTag: string;
 
 export function workTypeAdmitted(type: string): boolean {
   return activeWorkTypes.has(type);
+}
+export function resourceTypeAdmitted(type: string): boolean {
+  return activeResourceTypes.has(type);
 }
 export function compiledType(type: string): TypeDefinition | undefined {
   return compiledTypes.find((entry) => entry.type === type);
@@ -130,9 +134,12 @@ export function installRegisteredTypes(rows: readonly RegisteredType[]): void {
       .map((entry) => entry.type),
   );
   activeWorkTypes.clear();
+  activeResourceTypes.clear();
   const active = [...compiledTypes, ...rows.filter(row => row.lifecycle === 'active').map(row => row.definition)];
-  for (const entry of active)
+  for (const entry of active) {
     if (entry.base === 'work' && !entry.default) activeWorkTypes.add(entry.type);
+    if (entry.base === 'resource' && !entry.default) activeResourceTypes.add(entry.type);
+  }
   typeListBody = body;
   typeListTag = `"${digest}"`;
   installedSnapshot = snapshot;

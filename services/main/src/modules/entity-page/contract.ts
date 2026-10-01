@@ -4,6 +4,7 @@ import { resolvedTarget } from '../target/contract.ts';
 import { typeDefinition } from '../types/contract.ts';
 import { readId, readPosition, workHeader } from '../work/read-contract.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
+import { wikiClaimEvidence } from '../wiki/evidence-contract.ts';
 
 const closed = { additionalProperties: false } as const;
 export const entityPageContext = t.Union([t.Literal(GLOBAL_CLASSIFICATION_CONTEXT), readId]);
@@ -101,14 +102,16 @@ const statement = t.Object(
       closed,
     ),
     sources: t.Array(t.String()),
-    acceptance: t.Object(
+    evidence: t.Optional(t.Array(wikiClaimEvidence, { maxItems: 16 })),
+    publication: t.Optional(t.Object({ kind: t.Literal('wiki-bundle'),works: t.Array(readId) },closed)),
+    acceptance: t.Nullable(t.Object(
       {
         context: t.String(),
         decision: readId,
         source: t.Union([t.Literal('local'), t.Literal('global'), t.Literal('inherited-global')]),
       },
       closed,
-    ),
+    )),
   },
   closed,
 );

@@ -3,7 +3,7 @@ import { authorizedReadProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { WikiRejected } from '../modules/wiki/errors.ts';
-import { withholdPassage } from '../modules/wiki/evidence.ts';
+import { readWikiClaimEvidence, projectWikiEvidence } from '../modules/wiki/evidence-read.ts';
 import { readStatement, StatementNotFound } from '../modules/statement/read.ts';
 import { readCurrentOccurrence } from '../modules/relation/change.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
@@ -23,6 +23,7 @@ export function wikiEvidenceRoutes(work: MainWorkDependencies) {
     params: t.Object({ id: t.String({ format: 'uuid' }) }),
     query: t.Object({ actingSubject: t.Optional(t.String({ maxLength: 128 })),position: readingPositionQuery }),
     response: { 200: t.Object({ profile: t.Literal('wiki-evidence-v1'),id: t.String(),representationSha256: t.String(),
+      sourceWork: t.String(),
       locator: t.Unknown(),quote: t.Nullable(t.String()),method: t.Unknown(),modality: t.String(),submitter: t.String(),rightsBasis: t.String(),
       claim: t.String(),claimKind: t.Union([t.Literal('statement'),t.Literal('relation')]),quoteWithheld: t.Boolean() }),
     ...authorizedReadProblems,422: problemResult(422) },
@@ -34,7 +35,9 @@ export function wikiEvidenceRoutes(work: MainWorkDependencies) {
       if (!row?.claim || !row.claimKind) return problem(404,'wiki_evidence_unavailable','Evidence is unavailable');
       const principal = request.headers.has('authorization') ? await work.account.verify(request,['work:read']) : null;
       const claim = row.claim, kind = row.claimKind;
-      await readingPositionRead(work,request,principal,query.actingSubject,async boundary => {
+      const projected = await readingPositionRead(work,request,principal,query.actingSubject,async boundary => {
+        const evidence = (await readWikiClaimEvidence(boundary.session,[claim],kind,boundary)).get(claim);
+        if (!evidence?.some(item => item.id === row.id)) throw new WikiRejected('wiki_unavailable',404);
         let references: string[];
         if (kind === 'statement') {
           const statement = await readStatement(work.environment,claim,async context => !!principal && !!query.actingSubject
@@ -43,7 +46,8 @@ export function wikiEvidenceRoutes(work: MainWorkDependencies) {
           references = [statement.subject,...(statement.value.kind === 'resource' ? [statement.value.iri] : [])];
         } else {
           const relation = await readCurrentOccurrence(work.environment,claim);
-          if (!relation || relation.state.lifecycle !== 'active') throw new WikiRejected('wiki_unavailable',404);
+          if (!relation || relation.state.lifecycle !== 'active'
+            || !evidence.some(item => item.id === relation.state.evidence)) throw new WikiRejected('wiki_unavailable',404);
           references = relation.state.participations.flatMap(item => item.participant.kind === 'resource' ? [item.participant.ref] : []);
         }
         for (let at = 0; at < references.length; at += WIKI_EVIDENCE_READ_COST.referenceBatch) {
@@ -51,11 +55,9 @@ export function wikiEvidenceRoutes(work: MainWorkDependencies) {
         }
         const visible = await boundary.visible([claim,...references]);
         if ([claim,...references].some(record => !visible.has(record))) throw new WikiRejected('wiki_unavailable',404);
+        return (await projectWikiEvidence(boundary.session,[row]))[0]!;
       });
-      const withheld = (await store.withheld([row.id],work.rights?.store)).has(row.id);
-      return Response.json({ profile: 'wiki-evidence-v1',id: row.id,representationSha256: row.representationSha256,
-        locator: withheld ? withholdPassage(row.locator) : row.locator,quote: withheld ? null : row.quote,
-        method: row.method,modality: row.modality,submitter: row.submitter,rightsBasis: row.rightsBasis,claim,claimKind: kind,quoteWithheld: withheld },
+      return Response.json({ profile: 'wiki-evidence-v1',...projected,claim,claimKind: kind },
       { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) { return error instanceof StatementNotFound
       ? problem(404,'wiki_evidence_unavailable','Evidence is unavailable') : wikiError(error); }

@@ -41,7 +41,7 @@ export function pageRegistry(target: Pick<ResolvedTarget, 'base' | 'types'>) {
   const registryBase =
     target.base === 'work' || target.base === 'resource' ? target.base : 'record';
   const entries = admittedTypes.filter(
-    (entry) => entry.base === registryBase && target.types.includes(entry.type),
+    (entry) => entry.base === registryBase && !entry.default && target.types.includes(entry.type),
   );
   const selected =
     entries.sort((a, b) => a.priority - b.priority || a.type.localeCompare(b.type))[0] ??

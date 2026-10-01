@@ -156,7 +156,7 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
 });
 
 const mountBinding = t.Object({ occurrence: ref, segment: t.String(), target: ref });
-const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }) });
+const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }),name: readName });
 const routeBasis = { profile: t.Literal('zone-route-v1'), zone: ref, path: t.String(),
   ...ZoneName.properties,
   realm: t.Nullable(ref), revision: ref, sourcePosition: readPosition,

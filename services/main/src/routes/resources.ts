@@ -16,6 +16,10 @@ import { mediaError, mediaRoutes } from './media.ts';
 import { resourceSummaryBatch } from '../modules/media/summary-contract.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { problem } from './problems.ts';
+import { readingPositionQuery } from './reading-positions.ts';
+import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
+import { workReadError } from './work-reads.ts';
 
 const ID = 'https://rezics.com/id/';
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -56,14 +60,22 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       : undefined };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
-    context?: string; language?: string }, batch = true) => {
+    context?: string; language?: string; position?: string }, batch = true) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-    return readResourceSummaries(work.environment, work.media?.store,
-      await readerFor(request, input.actingSubject, batch), { resources: input.resources,
+    const reader = await readerFor(request, input.actingSubject, batch);
+    const principal = request.headers.has('authorization') ? await work.account.verify(request,['work:read']) : null;
+    const url = new URL(request.url);
+    if (input.position !== undefined) url.searchParams.set('position',input.position);
+    const selected = new Request(url,{ headers: request.headers,signal: request.signal });
+    return readingPositionRead(work,selected,principal,input.actingSubject,boundary =>
+      readResourceSummaries(work.environment, work.media?.store,
+      { ...reader,visibleRecords: records => boundary.visible(records) }, { resources: input.resources,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,
         languages: readerLanguages([input.language, request.headers.get('x-rezics-display-languages')]
-          .filter(Boolean).join(',') || null, request.headers.get('accept-language')) });
+          .filter(Boolean).join(',') || null, request.headers.get('accept-language')) }));
   };
+  const summaryError = (error: unknown) => error instanceof WorkReadInvalid || error instanceof WorkReadMissing
+    || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable ? workReadError(error) : mediaError(error);
   // Summaries and previews revalidate on every use: generation-bound, never stale-served.
   const headers = (generation: { graph: string; media: string | null }, shared: boolean) => ({
     'cache-control': shared ? 'public, no-cache' : 'private, no-store',
@@ -73,7 +85,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     .get('/v1/resources/:resource', {
       params: t.Object({ resource: uuid }),
       query: t.Object({ actingSubject: t.Optional(nativeId), context: t.Optional(context),
-        language: t.Optional(language) }, { additionalProperties: false }),
+        language: t.Optional(language),position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
@@ -89,12 +101,12 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         return Response.json({ profile: 'resource-summary-v1', ...summary,
           ...(content ? { mainVersion: main, content } : {}), generation: batch.generation },
         { headers: headers(batch.generation, summary.disclosure === 'public' && !request.headers.get('authorization')) });
-      } catch (error) { return mediaError(error); }
+      } catch (error) { return summaryError(error); }
     })
     .post('/v1/resources/summaries', {
       body: t.Object({ profile: t.Literal('resource-summary-batch-v1'),
         resources: t.Array(nativeId, { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
-        actingSubject: t.Optional(nativeId), context: t.Optional(context), language: t.Optional(language) },
+        actingSubject: t.Optional(nativeId), context: t.Optional(context), language: t.Optional(language),position: readingPositionQuery },
       { additionalProperties: false }),
       response: { 200: resourceSummaryBatch, ...authorizedReadProblems },
     }, async ({ request, body }) => {
@@ -104,7 +116,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         return Response.json({ profile: 'resource-summary-batch-v1', complete: true,
           summaries: batch.summaries, generation: batch.generation, cost: batch.cost },
         { headers: headers(batch.generation, false) });
-      } catch (error) { return mediaError(error); }
+      } catch (error) { return summaryError(error); }
     })
     .get('/v1/public-previews/:resource', {
       params: t.Object({ resource: uuid }),

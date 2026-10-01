@@ -1,5 +1,5 @@
 import { Value } from 'typebox/value';
-import { admittedTypes } from '../types/registry.ts';
+import { admittedTypes, onTypeRegistryChange, resourceTypeAdmitted } from '../types/registry.ts';
 import { canonicalLanguage } from '../display-language/tag.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
@@ -13,9 +13,16 @@ import { wikiMembers, wikiScope, WIKI_READ_COST, type WikiRead } from './read.ts
 export const WIKI_CANDIDATES_COST = { names: 64, candidatesPerName: 16,
   nameRecordQueries: 1, nameRecordsPerEntity: 64, normalizedLabels: 512 * 64,
   comparisons: 64 * 512 * 64, ...WIKI_READ_COST } as const;
-export const wikiTypes: ReadonlySet<string> = new Set(admittedTypes.filter(entry => entry.base === 'resource'
-  && !entry.default && semanticTypeOutcome(entry.type) === 'admitted'
-  && !CANONICAL_TYPES.has(entry.type)).map(entry => entry.type));
+const admittedWikiTypes = new Set<string>();
+export const wikiTypes: ReadonlySet<string> = admittedWikiTypes;
+function refreshWikiTypes() {
+  admittedWikiTypes.clear();
+  for (const entry of admittedTypes) if (entry.base === 'resource' && !entry.default
+    && resourceTypeAdmitted(entry.type) && semanticTypeOutcome(entry.type) === 'admitted'
+    && !CANONICAL_TYPES.has(entry.type)) admittedWikiTypes.add(entry.type);
+}
+onTypeRegistryChange(refreshWikiTypes);
+refreshWikiTypes();
 export const wikiLabel = (value: string) => value.normalize('NFKC').trim().toLowerCase();
 
 /** Bound the complete disclosed match set. A match that loses read authority

@@ -6,6 +6,7 @@ import { ReadingPositionStore, type Revelation } from '../reading-position/store
 import { derivedId } from '../structure/graph.ts';
 import { extractionQuotationUses, quotationKey, WIKI_QUOTATION_POLICY } from './quotation.ts';
 import type { WikiExtraction } from './protocol.ts';
+import { WorkReadUnavailable } from '../work/read-session.ts';
 
 export const WIKI_EVIDENCE_COST = { rows: 4096, rightsBatch: 256, statementMs: 1000,
   quotationRows: 10001, revelationRows: 4096 } as const;
@@ -89,6 +90,17 @@ export class WikiEvidenceStore {
     return (await this.pool.query<WikiEvidenceRow>(`SELECT id,representation_sha256 AS "representationSha256",locator,quote,
       method,modality,submitter,rights_basis AS "rightsBasis",source_work AS "sourceWork",claim,claim_kind AS "claimKind"
       FROM wiki.evidence WHERE id = $1`,[id])).rows[0] ?? null;
+  }
+  /** Indexed by claim, never an inventory scan or one lookup per citation. */
+  async forClaims(claims: readonly string[], kind: 'statement' | 'relation'): Promise<WikiEvidenceRow[]> {
+    if (claims.length > 100) throw new WorkReadUnavailable('Wiki claim batch exceeds its bound');
+    if (!claims.length) return [];
+    const rows = (await this.pool.query<WikiEvidenceRow>(`SELECT id,representation_sha256 AS "representationSha256",locator,quote,
+      method,modality,submitter,rights_basis AS "rightsBasis",source_work AS "sourceWork",claim,claim_kind AS "claimKind"
+      FROM wiki.evidence WHERE claim = ANY($1::text[]) AND claim_kind = $2
+      ORDER BY claim,id LIMIT $3`,[claims,kind,WIKI_EVIDENCE_COST.rows + 1])).rows;
+    if (rows.length > WIKI_EVIDENCE_COST.rows) throw new WorkReadUnavailable('Wiki evidence exceeds its bound');
+    return rows;
   }
   async withheld(ids: readonly string[], rights: Pick<RightsStore,'exportScope'> | undefined): Promise<Set<string>> {
     if (!rights) return new Set(ids);

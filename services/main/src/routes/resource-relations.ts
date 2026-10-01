@@ -23,6 +23,8 @@ import { readingPositionQuery } from './reading-positions.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
+import { readWikiClaimEvidence, projectWikiEvidence } from '../modules/wiki/evidence-read.ts';
+import { wikiClaimEvidence } from '../modules/wiki/evidence-contract.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -30,6 +32,7 @@ const receipt = t.Object({ profile: t.Literal('work-derivation-v2'), derivation:
   sourcePosition: position, replayed: t.Boolean() });
 const entry = t.Object({ relation: native, kind: t.Union([t.Literal('occurrence'), t.Literal('derivation'), t.Literal('collection')]),
   revision: t.Nullable(native), evidence: t.Nullable(t.String()),
+  citations: t.Optional(t.Array(wikiClaimEvidence)),
   sourceVersionStatus: t.Optional(t.Union([t.Literal('exact'), t.Literal('unresolved')])),
   sourceMainVersion: t.Optional(t.Nullable(native)), sourceMainRevision: t.Optional(t.Nullable(native)),
   targetMainRevision: t.Optional(native), rendering: t.Nullable(relationRenderingSchema), counterparts: t.Array(resourceSummary) });
@@ -117,6 +120,8 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
                 component: 'record' }], reader.viewer, 'read'))[0] === 'visible'
               && (await visibility([ref])).has(ref),
             canReadOccurrence: canReadSemantic,
+            publicOccurrences: async refs => new Map([...(await readWikiClaimEvidence(boundary.session,refs,'relation',boundary))]
+              .map(([claim,evidence]) => [claim,new Set(evidence.map(row => row.id))])),
             canReadDraftPresentations: async definition => {
               if (!principal || !actor || !work.mediaAccess) return false;
               const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
@@ -125,7 +130,12 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
             visibleRecords: visibility,
             readingPosition: JSON.stringify([principal, actor, await boundary.binding()]),
           }));
-          return result;
+          const evidence = await readWikiClaimEvidence(boundary.session,result.items
+            .filter(item => item.kind === 'occurrence').map(item => item.relation),'relation',boundary);
+          const projected = await projectWikiEvidence(boundary.session,[...evidence.values()].flat());
+          return { ...result,items: result.items.map(item => ({ ...item,
+            ...(evidence.get(item.relation)?.some(source => source.id === item.evidence) ? { citations: projected.filter(row =>
+              evidence.get(item.relation)!.some(source => source.id === row.id)) } : {}) })) };
         });
         return Response.json(page, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {

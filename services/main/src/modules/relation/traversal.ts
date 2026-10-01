@@ -122,6 +122,7 @@ async function resolveCandidate(
   canRead: ReferenceCheck,
   canReadOccurrence: ReferenceCheck,
   definition: (key: string, legacy: boolean) => Promise<ExactDefinition | null>,
+  publicOccurrences?: ReadonlyMap<string,ReadonlySet<string>>,
 ): Promise<Resolved | null> {
   const base = {
     relation: candidate.relation,
@@ -170,7 +171,8 @@ async function resolveCandidate(
     if (!meaning || !(await canRead(meaning.definition))) return null;
     if (meaning.workSubjectRole) {
       if (!(await canRead(relationSubjectWork(meaning, current.state)))) return null;
-    } else if (!(await canReadOccurrence(candidate.relation))) return null;
+    } else if (!(current.state.evidence && publicOccurrences?.get(candidate.relation)?.has(current.state.evidence))
+      && !(await canReadOccurrence(candidate.relation))) return null;
     const refs = current.state.participations.flatMap((item) =>
       item.participant.kind === 'resource' ? [item.participant.ref] : [],
     );
@@ -248,6 +250,7 @@ export async function readResourceRelations(
     after?: string;
     canRead: ReferenceCheck;
     canReadOccurrence: ReferenceCheck;
+    publicOccurrences?: (occurrences: readonly string[]) => Promise<ReadonlyMap<string,ReadonlySet<string>>>;
     canReadDraftPresentations?: ReferenceCheck;
     summarize: (references: string[]) => Promise<ResourceSummary[]>;
     visibleRecords?: (records: readonly string[]) => Promise<ReadonlySet<string>>;
@@ -312,6 +315,7 @@ export async function readResourceRelations(
     return cache.get(id)!;
   };
   const selected: { candidate: Candidate; resolved: Resolved }[] = [];
+  const publiclyDisclosed = new Set<string>();
   const references = new Set<string>([input.resource]);
   let after = cursor?.after,
     hasNext = false,
@@ -331,6 +335,8 @@ export async function readResourceRelations(
         currentDisclosureViewer(),
         'read',
       );
+      const publicOccurrences = await input.publicOccurrences?.(batch.filter((candidate,index) =>
+        decisions[index] === 'visible' && candidate.kind === 'occurrence').map(candidate => candidate.relation));
       for (const [index, candidate] of batch.entries()) {
         after = candidate.key;
         if (decisions[index] !== 'visible') continue;
@@ -341,8 +347,14 @@ export async function readResourceRelations(
           input.canRead,
           input.canReadOccurrence,
           definition,
+          publicOccurrences,
         );
-        if (resolved) disclosed.push({ candidate, resolved });
+        if (resolved) {
+          if (resolved.entry.evidence && publicOccurrences?.get(candidate.relation)?.has(resolved.entry.evidence)) {
+            publiclyDisclosed.add(candidate.relation);
+          }
+          disclosed.push({ candidate, resolved });
+        }
       }
       const revealed = input.visibleRecords
         ? await input.visibleRecords(disclosed.map((item) => item.candidate.relation))
@@ -433,6 +445,13 @@ export async function readResourceRelations(
     ...selected.flatMap(({ resolved }) => (resolved.meaning ? [resolved.meaning.definition] : [])),
   ])) {
     if (!(await input.canRead(ref))) throw new StaleSemanticHead('relation availability changed');
+  }
+  if (input.publicOccurrences) {
+    const occurrences = selected.filter(item => publiclyDisclosed.has(item.candidate.relation)).map(item => item.candidate.relation);
+    const publicOccurrences = await input.publicOccurrences(occurrences);
+    for (const occurrence of occurrences) if (!publicOccurrences.get(occurrence)?.has(
+      selected.find(item => item.candidate.relation === occurrence)!.resolved.entry.evidence!)
+      && !await input.canReadOccurrence(occurrence)) throw new StaleSemanticHead('relation availability changed');
   }
   const end = await position(env);
   if (end.epoch !== snapshot.epoch || end.sequence !== snapshot.sequence)

@@ -33,7 +33,7 @@ export interface ZoneMountBinding { occurrence: string; segment: string; target:
 export interface ZoneNavigationItem extends ZoneMountBinding {
   kind: 'document' | 'index'; name: Available['name'];
 }
-interface ResourceBinding { id: string; types: string[] }
+interface ResourceBinding { id: string; types: string[]; name: Available['name'] }
 interface RouteBasis { profile: 'zone-route-v1'; zone: string; path: string;
   name: Publication['name']; language: string; direction: Publication['direction'];
   realm: string | null; revision: string; sourcePosition: ReadPosition; cost: typeof ZONE_ROUTE_COST }
@@ -106,14 +106,22 @@ class RouteRead {
   }
   async targets(targets: readonly string[]) {
     if (!targets.length) return [];
-    const batch = await readResourceSummaries(this.work.environment, this.work.media?.store, this.reader,
-      { resources: targets, context: DEFAULT_MEDIA_CONTEXT, language: null, includeCollections: true,
+    const summaries: Array<Available | null> = [];
+    for (let at = 0; at < targets.length; at += 50) {
+      const batch = await readResourceSummaries(this.work.environment, this.work.media?.store, this.reader,
+      { resources: targets.slice(at,at + 50), context: DEFAULT_MEDIA_CONTEXT, language: null, includeCollections: true,
         languages: readerLanguages(this.request.headers.get('x-rezics-display-languages'),
           this.request.headers.get('accept-language')) });
     if (batch.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
       throw new WorkReadMoved('Zone population changed during the read');
     }
-    return batch.summaries.map(summary => summary.status === 'available' ? summary : null);
+      for (const summary of batch.summaries) {
+        const available = summary.status === 'available' ? summary : null;
+        this.summaries.set(summary.reference,available);
+        summaries.push(available);
+      }
+    }
+    return summaries;
   }
   async target(target: string) {
     if (!this.summaries.has(target)) this.summaries.set(target, (await this.targets([target]))[0] ?? null);
@@ -248,13 +256,30 @@ async function mountAt(read: RouteRead, state: Publication, header: CompositionH
 }
 
 async function resourceTypes(read: RouteRead, target: string): Promise<ResourceBinding> {
-  const rows = (await read.work.environment.fuseki.query(`SELECT DISTINCT ?type WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(target)} a ?type }
-  } ORDER BY STR(?type) LIMIT ${ZONE_ROUTE_COST.typeRowsPerResource + 1}`, 8192)).results?.bindings ?? [];
-  if (rows.length > ZONE_ROUTE_COST.typeRowsPerResource || rows.some(row => !row.type)) {
-    throw new WorkReadUnavailable('Zone resource types exceed their bound');
+  return (await resourceTypeBatch(read,[target])).get(target)!;
+}
+
+/** One type query for the page, with per-member skew guards. Names come from
+ * the same position-aware summary batch that admitted membership. */
+async function resourceTypeBatch(read: RouteRead, targets: readonly string[]) {
+  const result = new Map<string,ResourceBinding>();
+  if (!targets.length) return result;
+  const limit = targets.length * ZONE_ROUTE_COST.typeRowsPerResource;
+  const rows = (await read.work.environment.fuseki.query(`SELECT DISTINCT ?resource ?type WHERE {
+    VALUES ?resource { ${targets.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?resource a ?type }
+  } ORDER BY STR(?resource) STR(?type) LIMIT ${limit + 1}`, 64 * 1024)).results?.bindings ?? [];
+  if (rows.length > limit) throw new WorkReadUnavailable('Zone resource types exceed their bound');
+  for (const target of targets) {
+    const found = rows.filter(row => row.resource?.value === target);
+    if (found.length > ZONE_ROUTE_COST.typeRowsPerResource || !found.length || found.some(row => !row.type)) {
+      throw new WorkReadUnavailable('Zone resource types exceed their bound');
+    }
+    const summary = await read.target(target);
+    if (!summary) throw new ZoneRouteMissing('Zone route is unavailable');
+    result.set(target,{ id: target,types: found.map(row => row.type!.value),name: summary.name });
   }
-  return { id: target, types: rows.map(row => row.type!.value) };
+  return result;
 }
 
 async function collectionHeader(read: RouteRead, collection: string) {
@@ -284,7 +309,8 @@ async function publiclyAdopted(read: RouteRead, realm: string, resource: string)
 }
 
 async function indexItems(read: RouteRead, targets: string[]): Promise<Array<WorkCard | ResourceBinding>> {
-  const summaries = await read.targets(targets);
+  const summaries = targets.map(target => read.summaries.get(target) ?? null);
+  const resources = await resourceTypeBatch(read,[...new Set(targets.filter((_,index) => summaries[index]?.type !== 'work'))]);
   const works = [...new Set(targets.filter((_, index) => summaries[index]?.type === 'work'))];
   const rows: Row[] = works.length ? (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?work ?head ?main ?type WHERE {
@@ -303,7 +329,7 @@ async function indexItems(read: RouteRead, targets: string[]): Promise<Array<Wor
   for (const [index, target] of targets.entries()) {
     const summary = summaries[index];
     if (!summary) continue;
-    if (summary.type !== 'work') { result.push(await resourceTypes(read, target)); continue; }
+    if (summary.type !== 'work') { result.push(resources.get(target)!); continue; }
     const found = rows.filter(row => row.work?.value === target);
     const row = found[0];
     if (!row?.head || !row.main || found.some(value =>
@@ -367,6 +393,8 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     const page = await readVisibleCompositionPage(work.environment, { structure: header.structure, header,
       ...(cursor ? { after: cursor.after } : {}), limit: ZONE_ROUTE_COST.pageSize,
       canReadTarget: async target => !!await read.target(target),
+      canReadTargets: async targets => new Set((await read.targets(targets))
+        .flatMap(summary => summary ? [summary.reference] : [])),
       visible: item => item.role === 'member' && !!item.target && NATIVE_ID.test(item.target) });
     const cards = await indexItems(read, page.occurrences.map(item => item.target!));
     const members = await readZonePopulation(async query =>

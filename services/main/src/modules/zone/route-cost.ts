@@ -6,4 +6,5 @@ import { VISIBLE_PAGE_COST } from '../collection/visible-page.ts';
 export const ZONE_ROUTE_COST = { pageSize: 24, maxNavigation: 50,
   immutableRangeRows: VISIBLE_PAGE_COST.immutableRangeRows,
   membershipQueries: 1, mountRows: 2, typeRowsPerResource: 8,
+  typeQueriesPerPage: 1, summaryBatch: 50,
   maxGraphReads: 2048, maxGraphBytes: 8 * 1024 * 1024, deadlineMs: 10_000 } as const;
