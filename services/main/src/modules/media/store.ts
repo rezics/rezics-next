@@ -1,3 +1,4 @@
+import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
@@ -9,6 +10,7 @@ export class MediaConflict extends Error {}
 export class MediaStale extends Error {}
 export class MediaMissing extends Error {}
 export class MediaUnavailable extends Error {}
+export class MediaCopyRestorationUnavailable extends MediaUnavailable {}
 export class MediaFenced extends Error {}
 
 export const DEFAULT_MEDIA_CONTEXT = 'urn:rezics:media:context:default';
@@ -415,7 +417,9 @@ export class MediaStore {
 
   /** Disclosure/lifecycle CAS. Deletion and erasure advance the erasure epoch;
    * erasure also marks every representation erased in the same transaction. */
-  async changeState(admission: MediaAdmission, input: AssetStateChangeInput): Promise<CommandOutcome> {
+  async changeState(admission: MediaAdmission, input: AssetStateChangeInput,
+    preservation?: PreservationFence,
+  ): Promise<CommandOutcome> {
     checkAdmission(admission);
     if (!uuid.test(input.asset) || !uuid.test(input.expectedState)
       || !['private', 'public'].includes(input.disclosure)
@@ -423,7 +427,8 @@ export class MediaStore {
       throw new MediaInvalid('asset state change is invalid');
     }
     const operationId = `media-state:${admission.admissionId}`;
-    return transaction(this.pool, async client => {
+    const write = () =>
+      transaction<CommandOutcome>(this.pool, async (client) => {
       const previous = await prior(client, operationId, admission.requestDigest, 'media.asset.state');
       if (previous) {
         const state = await client.query<{ id: string; predecessor: string }>(
@@ -432,7 +437,8 @@ export class MediaStore {
           predecessor: state.rows[0]?.predecessor ?? null, position: position(previous), replayed: true };
       }
       const current = await client.query<{ owner: string; state_head: string; lifecycle: string;
-        erasure_epoch: string; moderation: string }>(`SELECT a.owner, a.state_head, s.lifecycle,
+        erasure_epoch: string; moderation: string;
+        }>(`SELECT a.owner, a.state_head, s.lifecycle,
         s.erasure_epoch::text, s.moderation FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
         WHERE a.id = $1 FOR UPDATE OF a`, [input.asset]);
       const row = current.rows[0];
@@ -463,6 +469,19 @@ export class MediaStore {
       }
       return { outcome: 'succeeded', id, predecessor: row.state_head, position: at, replayed: false };
     });
+    if (input.lifecycle === 'erased') {
+      if (!preservation)
+        throw new MediaFenced('media erasure requires the Access preservation fence');
+      const result = await withPreservationFence(
+        preservation,
+        assetIri(input.asset),
+        operationId,
+        write,
+      );
+      if (result.held) throw new MediaFenced('media is retained under a preservation hold');
+      return result.value;
+    }
+    return write();
   }
 
   /** Avatar selection CAS: one Use for the exact current asset revision and original,
@@ -660,6 +679,80 @@ export class MediaStore {
         suppressed++;
       }
       return { suppressed, continuation: candidates.rows.length > limit ? batch.at(-1)!.id : null };
+    });
+  }
+
+  /** Staff-only primitive after a committed governance plan. Reconciles an exact
+   * owner receipt before testing the saved state, including after a lost response. */
+  async moderateOriginal(
+    operationId: string,
+    source: string,
+    expectedState: string,
+    suppressed: boolean,
+  ): Promise<string> {
+    if (!uuid.test(source) || !uuid.test(expectedState) || operationId.length > 160) {
+      throw new MediaInvalid('invalid moderation original');
+    }
+    const requestDigest = hash(JSON.stringify([operationId, source, expectedState, suppressed]));
+    return transaction(this.pool, async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
+      if (await prior(client, operationId, requestDigest, 'media.screen.review'))
+        return operationId;
+      const row = (
+        await client.query(
+          `SELECT a.id,a.state_head,s.*,p.byte_digest FROM media.asset a
+        JOIN media.asset_state s ON s.id = a.state_head
+        JOIN media.representation p ON p.asset_id = a.id AND p.id = $1 AND p.kind = 'original'
+        WHERE p.availability = 'available' FOR UPDATE OF a,p`,
+          [source],
+        )
+      ).rows[0];
+      if (!row || row.state_head !== expectedState || row.lifecycle !== 'active')
+        throw new MediaStale('media state changed');
+      if (
+        !suppressed &&
+        (
+          await client.query('SELECT 1 FROM media.suppressed_digest WHERE digest = $1', [
+            row.byte_digest,
+          ])
+        ).rowCount
+      )
+        throw new MediaCopyRestorationUnavailable('identical-copy reversal owner is unavailable');
+      const at = await receipt(client, {
+        operationId,
+        digest: requestDigest,
+        action: 'media.screen.review',
+        outcome: 'succeeded',
+        eventType: 'media.screen.reviewed',
+        payload: { asset: row.asset_id, source, suppressed },
+      });
+      const effect = hash(operationId);
+      const decision = `${effect.slice(0, 8)}-${effect.slice(8, 12)}-${effect.slice(12, 16)}-${effect.slice(16, 20)}-${effect.slice(20, 32)}`;
+      await client.query(
+        `INSERT INTO media.clearance_decision (id,source_id,decision_id,clearance,operation_id)
+        VALUES ($1,$2,$3,$4,$5)`,
+        [randomUUID(), source, decision, suppressed ? 'rejected' : 'cleared', operationId],
+      );
+      await client.query(
+        `INSERT INTO media.asset_state (id,asset_id,predecessor,disclosure,moderation,
+        lifecycle,erasure_epoch,actor,authority_epoch,operation_id,data_epoch,sequence)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          randomUUID(),
+          row.asset_id,
+          row.state_head,
+          row.disclosure,
+          suppressed ? 'suppressed' : 'none',
+          row.lifecycle,
+          row.erasure_epoch,
+          row.actor,
+          row.authority_epoch,
+          operationId,
+          at.dataEpoch,
+          at.sequence,
+        ],
+      );
+      return operationId;
     });
   }
 

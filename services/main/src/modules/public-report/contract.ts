@@ -1,3 +1,5 @@
+import { reasons } from '../safety-queue/contract.ts';
+import { operationResult } from '../operation/contract.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { readId } from '../work/read-contract.ts';
@@ -62,6 +64,9 @@ export const publicReportReceipt = t.Object({ profile, ...reportReceipt,
 export const publicReportStatus = t.Object({ profile, ...reportReceipt, state: t.String(),
   generation: t.String(), category: reportCategory, contentLanguage, process: t.String(),
   outcome: t.Nullable(t.String()), reasons: t.Nullable(t.String()),
+  statementOfReasons: t.Nullable(t.Object({ ...reasons.properties,
+    rule: t.Object({ ref: t.String(), revision: t.String(), digest: t.String() }) })),
+  operation: t.Nullable(operationResult),
   steps: t.Array(t.Object({ id: uuid, kind: t.String(), occurredAt: instant, dueAt: t.Nullable(instant),
     statement: t.Nullable(t.String()), contentLanguage: t.Nullable(contentLanguage) }, { additionalProperties: false }),
   { maxItems: PUBLIC_REPORT_COST.page }), nextCursor: t.Nullable(uuid) }, { additionalProperties: false });

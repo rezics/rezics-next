@@ -230,7 +230,7 @@ export function rightsRoutes(work: MainWorkDependencies) {
       body: t.Object({ profile: t.Literal('rights-restriction-v1'),
         outcome: literals(['interim_restrict', 'final_restrict', 'dismiss', 'restore', 'reverse']), ...decisionFields },
       { additionalProperties: false }),
-      response: { 200: decisionResult, 201: decisionResult, ...writeProblems },
+      response: { 200: decisionResult, 202: decisionResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [RIGHTS_DECIDE_SCOPE]);
@@ -239,9 +239,9 @@ export function rightsRoutes(work: MainWorkDependencies) {
         if (!deps.governance) return unavailable();
         const { profile: _profile, ...input } = body;
         const result = await deps.governance.store.decide(principal,
-          input as Parameters<NonNullable<typeof deps.governance>['store']['decide']>[1]);
+          input as Parameters<NonNullable<typeof deps.governance>['store']['decide']>[1], true);
         return Response.json({ profile: 'rights-restriction-v1', ...result },
-          { status: result.replayed ? 200 : 201, ...noStore });
+          { status: result.operation.status === 'completed' ? 200 : 202, ...noStore });
       } catch (error) { return rightsError(error); }
     });
 }

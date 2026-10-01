@@ -1,3 +1,4 @@
+import { safetyCaseRoutes } from './routes/safety-cases.ts';
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import { entityPageRoutes, setMountedReads } from './routes/entity-pages.ts';
 import { readingPositionsRoutes } from './routes/reading-positions.ts';
@@ -168,6 +169,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))
     .use(publicReportRoutes(work))
+    .use(safetyCaseRoutes(work))
     .use(progressSummariesRoutes(work))
     .use(readingPositionsRoutes(work))
     .use(queryRoutes(fuseki, work))

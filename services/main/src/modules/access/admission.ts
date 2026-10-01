@@ -1,3 +1,5 @@
+import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
+import { requirePlatformParticipation } from '../safety-queue/participation.ts';
 import { requireRealmParticipation } from './realm-management-settings.ts';
 import { withRealmPermit, type RealmPermit } from './realm-management-policy.ts';
 import { RealmDirectoryIndex } from '../realm-directory/index.ts';
@@ -785,8 +787,21 @@ export class AccessAdmissionRegistry {
     } finally { client.release(); }
   }
 
+  withPreservationFence<T>(
+    resource: string,
+    operationId: string,
+    write: (fence: PreservationFence) => Promise<T>,
+  ) {
+    return withPreservationFence(this.pool, resource, operationId, write);
+  }
+
   async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
-    if (request.editorialPermit) return registerEditorialAdmission(this.pool, request,this.baselineGraph);
+    if (request.editorialPermit) {
+      const principalId = await this.activePrincipalId(request.principal);
+      if (!principalId) throw new AdmissionDenied('principal is not admitted');
+      await requirePlatformParticipation(this.pool, principalId);
+      return registerEditorialAdmission(this.pool, request, this.baselineGraph);
+    }
     if (request.action === 'publication.reject.organization') {
       throw new AdmissionDenied('organization moderation requires its atomic episode admission');
     }
@@ -821,6 +836,7 @@ export class AccessAdmissionRegistry {
       const principal = principalResult.rows[0];
       if (principal?.active !== true) throw new AdmissionDenied('principal is not admitted');
       const principalId = principal.id;
+      await requirePlatformParticipation(client, principalId);
 
       const existingResult = await client.query<AdmissionRow>(
         `SELECT id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
@@ -1177,6 +1193,7 @@ export class AccessAdmissionRegistry {
         'SELECT active, enforcement_epoch, account_issuer, account_subject FROM access.principal WHERE id = $1 FOR SHARE',
         [row.principal_id]);
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
+      await requirePlatformParticipation(client, row.principal_id);
       await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
       await checkEditorialAdmission(client, row.id,this.baselineGraph);
       if (row.action === 'review.decide' || row.action === 'publication.adopt') {

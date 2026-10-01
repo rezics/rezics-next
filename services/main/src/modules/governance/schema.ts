@@ -59,6 +59,7 @@ export const governanceCase = access.table('governance_case', {
   openedAt: at('opened_at').notNull(),
   closedAt: at('closed_at'),
   urgent: boolean('urgent').notNull(),
+  reviewPending: boolean('review_pending').notNull(),
 });
 
 export const governanceReport = access.table('governance_report', {
@@ -135,6 +136,7 @@ export const moderationDecision = access.table('moderation_decision', {
   disclosure: text('disclosure', { enum: disclosures }).notNull(),
   decidedAt: at('decided_at').notNull(),
   answersStepId: uuid('answers_step_id'),
+  statementOfReasons: jsonb('statement_of_reasons'),
 });
 
 export const moderationDecisionTarget = access.table('moderation_decision_target', {
@@ -148,6 +150,8 @@ export const moderationDecisionTarget = access.table('moderation_decision_target
   revision: text('revision'),
   expectedHead: text('expected_head'),
   effect: text('effect', { enum: enforcementEffects }).notNull(),
+  expiresAt: at('expires_at'),
+  participantSubject: text('participant_subject'),
 }, table => [primaryKey({ columns: [table.decisionId, table.ordinal] })]);
 
 export const governanceProcessStep = access.table('governance_process_step', {
@@ -203,6 +207,8 @@ export const governanceEnforcement = access.table('governance_enforcement', {
   component: text('component', { enum: governanceComponents }).notNull(),
   revision: text('revision'),
   effect: text('effect', { enum: enforcementEffects }).notNull(),
+  expiresAt: at('expires_at'),
+  participantSubject: text('participant_subject'),
   decisionId: uuid('decision_id').notNull(),
   decisionOrdinal: smallint('decision_ordinal').notNull(),
   state: text('state', { enum: ['restricted', 'released'] }).notNull(),
@@ -210,11 +216,54 @@ export const governanceEnforcement = access.table('governance_enforcement', {
   updatedAt: at('updated_at').notNull(),
 });
 
+export const safetyCaseClaim = access.table('safety_case_claim', {
+  caseId: uuid('case_id').primaryKey(),
+  principalId: uuid('principal_id').notNull(),
+  actingSubject: text('acting_subject').notNull(),
+  claimedAt: at('claimed_at').notNull(),
+});
+export const siteModerationPosition = access.table('site_moderation_position', {
+  id: boolean('id').primaryKey(),
+  revision: bigint('revision', { mode: 'bigint' }).notNull(),
+});
+export const safetyDecisionOperation = access.table('safety_decision_operation', {
+  decisionId: uuid('decision_id').primaryKey(),
+  cancelled: boolean('cancelled').notNull(),
+});
+export const safetyDecisionEffect = access.table(
+  'safety_decision_effect',
+  {
+    decisionId: uuid('decision_id').notNull(),
+    ordinal: smallint('ordinal').notNull(),
+    plan: jsonb('plan').notNull(),
+    state: text('state').notNull(),
+    receipt: text('receipt'),
+    continuation: text('continuation'),
+    error: text('error'),
+  },
+  (table) => [primaryKey({ columns: [table.decisionId, table.ordinal] })],
+);
+export const safetyPartyNotice = access.table('safety_party_notice', {
+  id: uuid('id').primaryKey(),
+  decisionId: uuid('decision_id').notNull(),
+  principalId: uuid('principal_id').notNull(),
+  caseId: uuid('case_id').notNull(),
+  credential: text('credential').notNull(),
+  statementOfReasons: jsonb('statement_of_reasons').notNull(),
+  createdAt: at('created_at').notNull(),
+});
+
 export const governanceTables = [governanceRuleHead, governanceRuleRevision,
   governanceCase, governanceReport, governanceEvidence, rightsComplaint,
   moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement,
   governanceRole, governanceCaseCredential, governanceCorrespondenceReceipt, governancePreservationHold,
-  governanceErasurePostponement] as const;
+  governanceErasurePostponement,
+  safetyCaseClaim,
+  siteModerationPosition,
+  safetyDecisionOperation,
+  safetyDecisionEffect,
+  safetyPartyNotice,
+] as const;
 
 export type GovernanceCaseRow = typeof governanceCase.$inferSelect;
 export type GovernanceReportRow = typeof governanceReport.$inferSelect;

@@ -20,7 +20,15 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
       const disclosed = new Set<string>();
       for (const id of ids) {
         const resource = await content.owningResourceForRevision(id);
-        if (resource && await registry.canReadWork(principal, actingSubject, resource)) disclosed.add(id);
+        if (resource &&
+            ((await registry.canReadWork(principal, actingSubject, resource)) ||
+              (
+                await contentPool.query(
+                  `SELECT 1 FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
+            WHERE a.id = $1 AND s.disclosure = 'public' AND s.lifecycle = 'active' AND s.moderation = 'none'`,
+                  [resource.slice(-36)],
+                )
+              ).rowCount)) disclosed.add(id);
       }
       return disclosed;
     } },
@@ -43,7 +51,10 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
       ? reviews.capture(principal, actingSubject, target)
       : evidence.capture(principal, actingSubject, target),
   }, {
-    current: target => target.owner === 'review' ? reviews.current(target) : heads.current(target),
-  }, rules, ownerModerationEffects(new ContentModeration(contentPool), env), reviews);
+    current: (target) => target.owner === 'review' ? reviews.current(target) : heads.current(target),
+  }, rules, ownerModerationEffects(new ContentModeration(contentPool), env, {
+      pool: contentPool,
+      core: content,
+    }), reviews);
   return { store, rules };
 }

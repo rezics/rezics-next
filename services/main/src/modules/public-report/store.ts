@@ -1,3 +1,4 @@
+import { operationOutcome, type OperationItem } from '../operation/outcome.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
@@ -175,25 +176,46 @@ export class PublicReports {
 
   async status(caseId: string, secret: string, after?: string) {
     if (after && !uuidPattern.test(after)) throw new GovernanceInvalid('Invalid correspondence cursor');
-    return this.transaction(async client => {
+    return this.transaction(async (client) => {
       const credential = await this.credential(client, caseId, secret);
       const row = (await client.query<{ state: string; generation: string; received_at: Date;
-        reason_code: string; content_language: string; process: string; outcome: string | null; rationale: string | null }>(
+        reason_code: string; content_language: string; process: string; outcome: string | null; rationale: string | null;
+          statement_of_reasons: unknown;
+          decision_head: string | null;
+          cancelled: boolean | null;
+        }>(
       `SELECT c.state, c.generation::text, r.received_at, r.reason_code, r.content_language, r.process,
-        d.outcome, CASE WHEN d.disclosure <> 'private' THEN d.rationale END AS rationale
+        d.outcome, d.statement_of_reasons,c.decision_head,op.cancelled, CASE WHEN d.disclosure <> 'private' THEN d.rationale END AS rationale
         FROM access.governance_report r JOIN access.governance_case c ON c.id = r.case_id
-        LEFT JOIN access.moderation_decision d ON d.id = c.decision_head WHERE r.id = $1`, [credential.report_id])).rows[0]!;
+        LEFT JOIN access.moderation_decision d ON d.id = c.decision_head LEFT JOIN access.safety_decision_operation op ON op.decision_id = d.id WHERE r.id = $1`, [credential.report_id])).rows[0]!;
       const steps = (await client.query<{ id: string; step: string; occurred_at: Date; due_at: Date | null;
-        statement: string | null; content_language: string | null }>(`SELECT id, step, occurred_at, due_at,
+        statement: string | null; content_language: string | null;
+        }>(`SELECT id, step, occurred_at, due_at,
         statement, content_language FROM access.governance_process_step
         WHERE report_id = $1 AND (party IS NULL OR party = $4)
         AND ($2::uuid IS NULL OR id > $2) ORDER BY id LIMIT $3`,
       [credential.report_id, after ?? null, PUBLIC_REPORT_COST.page + 1, credential.party])).rows;
       const page = steps.slice(0, PUBLIC_REPORT_COST.page);
+      const effects =
+        row.decision_head && row.cancelled !== null
+          ? (
+              await client.query<OperationItem>(
+                `SELECT
+        e.ordinal,t.resource AS target,e.state,e.receipt,e.continuation,e.error FROM access.safety_decision_effect e
+        JOIN access.moderation_decision_target t USING (decision_id,ordinal)
+        WHERE e.decision_id = $1 ORDER BY ordinal`,
+                [row.decision_head],
+              )
+            ).rows
+          : null;
       return { caseId, reportId: credential.report_id, state: row.state, generation: row.generation,
         receivedAt: row.received_at.toISOString(), category: row.reason_code, contentLanguage: row.content_language,
         process: row.process, outcome: row.outcome, reasons: row.rationale,
-        steps: page.map(step => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
+        statementOfReasons: row.statement_of_reasons,
+        operation: effects
+          ? operationOutcome(row.decision_head!, effects, row.cancelled ?? false)
+          : null,
+        steps: page.map((step) => ({ id: step.id, kind: step.step, occurredAt: step.occurred_at.toISOString(),
           dueAt: step.due_at?.toISOString() ?? null, statement: step.statement, contentLanguage: step.content_language })),
         nextCursor: steps.length > PUBLIC_REPORT_COST.page ? page.at(-1)!.id : null };
     });

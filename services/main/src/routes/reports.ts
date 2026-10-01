@@ -1,3 +1,5 @@
+import { operationResult } from '../modules/operation/contract.ts';
+import { reasons } from '../modules/safety-queue/contract.ts';
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale, GovernanceUnavailable,
@@ -61,12 +63,14 @@ const reportResult = t.Object({ profile: t.String(), reportId: t.String(), caseI
   evidence: t.Array(t.Object({ ordinal: t.Number(), owner: t.String(), resource: t.String(), component: t.String(),
     revision: t.Nullable(t.String()), revisionDigest: t.Nullable(t.String()), state: t.String() })) });
 export const decisionFields = {
+  reasons: t.Optional(reasons),
   caseId: uuid,
   expectedGeneration: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
   actingSubject: agent,
   targets: t.Array(t.Object({ owner, resource: bounded(512), component, locator: t.Nullable(bounded(512)),
     scopeKind: t.Union([t.Literal('exact_revision'), t.Literal('component')]), revision: t.Nullable(bounded(512)),
     expectedHead: t.Nullable(bounded(512)),
+    expiresAt: t.Optional(t.Nullable(t.String({ format: 'date-time' }))),
     effect: t.Union([t.Literal('disclosure'), t.Literal('publication'), t.Literal('participation'), t.Literal('capability'),
       t.Literal('search'), t.Literal('raw_delivery'), t.Literal('media_delivery'), t.Literal('export'),
       t.Literal('source_apply')]) },
@@ -80,7 +84,7 @@ export const decisionFields = {
   idempotencyKey: key,
 };
 export const decisionResult = t.Object({ profile: t.String(), decisionId: t.String(), caseId: t.String(),
-  caseGeneration: t.String(), outcome: t.String(), replayed: t.Boolean(),
+  caseGeneration: t.String(), outcome: t.String(), replayed: t.Boolean(), operation: operationResult,
   enforcement: t.Array(t.Object({ owner: t.String(), resource: t.String(), component: t.String(),
     revision: t.Nullable(t.String()), effect: t.String(), state: t.String(), fenceEpoch: t.String() })) });
 export const stepFields = {
@@ -175,7 +179,7 @@ export function reportRoutes(work: MainWorkDependencies) {
         outcome: t.Union([t.Literal('restrict'), t.Literal('interim_restrict'),
           t.Literal('final_restrict'), t.Literal('dismiss'), t.Literal('restore'), t.Literal('reverse')]),
         ...decisionFields }, { additionalProperties: false }),
-      response: { 200: decisionResult, 201: decisionResult, ...writeProblems },
+      response: { 200: decisionResult, 202: decisionResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, [MODERATION_SCOPE]);
@@ -183,9 +187,9 @@ export function reportRoutes(work: MainWorkDependencies) {
         if (keyError) return keyError;
         if (!owner) return unavailable();
         const { profile: _profile, ...input } = body;
-        const result = await owner.store.decide(principal, input);
+        const result = await owner.store.decide(principal, input, true);
         return Response.json({ profile: 'moderation-decision-v1', ...result },
-          { status: result.replayed ? 200 : 201, ...noStore });
+          { status: result.operation.status === 'completed' ? 200 : 202, ...noStore });
       } catch (error) { return governanceError(error); }
     })
     .post('/v1/governance/process-steps', {

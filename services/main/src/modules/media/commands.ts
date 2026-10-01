@@ -10,7 +10,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ImageFormatRejected, verifyImage } from './image.ts';
 import { assetIri, MediaConflict, MediaInvalid, MediaMissing,
-  MediaStale, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
+  MediaStale, MediaFenced, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
   type CommandOutcome, type MediaAdmission, type ReserveUploadInput } from './store.ts';
 
 export class MediaDenied extends Error {}
@@ -24,7 +24,8 @@ export interface MediaDependencies {
 }
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
-type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'activePrincipalId'>;
+type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'activePrincipalId'>
+  & Partial<Pick<AccessAdmissionRegistry, 'withPreservationFence'>>;
 
 function sha256(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
@@ -157,8 +158,21 @@ export function changeAdmittedAssetState(env: WorkActivationEnvironment, media: 
   const { actingSubject, idempotencyKey, ...change } = input;
   return admitted(env, account, access, request, { scope: mediaOwnerScope(actingSubject),
     action: 'media.manage', actingSubject, idempotencyKey, digest: stateDigest(change),
-    operation: id => `media-state:${id}`, accountScope: 'work:edit' },
-  media.store, admission => media.store.changeState(admission, change));
+    operation: (id) => `media-state:${id}`, accountScope: 'work:edit' },
+  media.store,
+    async (admission) => {
+      if (change.lifecycle !== 'erased') return media.store.changeState(admission, change);
+      if (!access.withPreservationFence)
+        throw new MediaFenced('media erasure requires the Access preservation owner');
+      const result = await access.withPreservationFence(
+        assetIri(change.asset),
+        `media-state:${admission.admissionId}`,
+        (fence) => media.store.changeState(admission, change, fence),
+      );
+      if (result.held) throw new MediaFenced('media is retained under a preservation hold');
+      return result.value;
+    },
+  );
 }
 
 export function selectAdmittedAvatar(env: WorkActivationEnvironment, media: MediaDependencies,
