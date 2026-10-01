@@ -2,14 +2,24 @@ import type { Static } from 'typebox';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { allocateAgentHandle, agentForHandle } from '../agent/handle.ts';
 import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadMissing,
-  WorkReadUnavailable, WorkReadMoved, type WorkReadSession, type ReadRow } from '../work/read-session.ts';
+import {
+  decodeReadCursor,
+  encodeReadCursor,
+  pageResult,
+  publicWork,
+  WorkReadMissing,
+  WorkReadUnavailable,
+  WorkReadMoved,
+  type WorkReadSession,
+  type ReadRow,
+} from '../work/read-session.ts';
 import type { shelfWork } from './read-contract.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { readWorkRating } from '../work/read-rating.ts';
 import { selectDisplayName, type LocalizedText } from '../display-language/select.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
+import { admittedPage } from '../disclosure/admitted-page.ts';
 
 export function profileAccess(session: WorkReadSession) {
   if (!session.deps.profiles) throw new WorkReadUnavailable('Profile owner is unavailable');
@@ -36,13 +46,15 @@ export const publicAgent = (agent: string) => `GRAPH ${iri(GRAPHS.current)} {
 
 export async function readAgent(session: WorkReadSession, agent: string) {
   const owner = profileAccess(session);
-  if (!session.deps.personPreferences) throw new WorkReadUnavailable('Profile preferences are unavailable');
-  if (!await session.deps.personPreferences.profileVisible(agent, session.principal)) {
+  if (!session.deps.personPreferences)
+    throw new WorkReadUnavailable('Profile preferences are unavailable');
+  if (!(await session.deps.personPreferences.profileVisible(agent, session.principal))) {
     throw new WorkReadMissing('Agent unavailable');
   }
   const before = await owner.agentFence(agent);
   if (!before) throw new WorkReadMissing('Agent unavailable');
-  const rows = await session.query(`SELECT ?displayName ?agentKind ?handle ?agentHead ?profileHead ?predecessor
+  const rows = await session.query(
+    `SELECT ?displayName ?agentKind ?handle ?agentHead ?profileHead ?predecessor
     ?bio ?avatarSelection ?localizedName ?originalNameLanguage WHERE { ${publicAgent(iri(agent))}
     GRAPH ${iri(GRAPHS.current)} { OPTIONAL { ${iri(agent)} rv:publicProfileHead ?profileHead }
       OPTIONAL { ${iri(agent)} rv:profileBio ?bio }
@@ -53,66 +65,129 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     OPTIONAL { FILTER(BOUND(?profileHead)) GRAPH ${iri(GRAPHS.revisions)} {
       ?profileHead a rv:AgentPublicProfileRevision ;
       rv:component ${iri(agent)} ; rv:predecessor ?predecessor . } }
-    } LIMIT 21`, 21);
+    } LIMIT 21`,
+    21,
+  );
   if (!rows.length) throw new WorkReadMissing('Agent unavailable');
   const row = rows[0]!;
   const kinds: Record<string, 'person' | 'organization' | 'service'> = {
-    [`${RV}PersonAgent`]: 'person', [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service' };
+    [`${RV}PersonAgent`]: 'person',
+    [`${RV}OrganizationAgent`]: 'organization',
+    [`${RV}ServiceAgent`]: 'service',
+  };
   const kind = kinds[field(row, 'agentKind')];
   const originalDisplayName = field(row, 'displayName');
   let localizedNames: LocalizedText | null;
-  try { localizedNames = agentLocalizedName(rows, originalDisplayName); }
-  catch { throw new WorkReadUnavailable('Organization names are invalid'); }
-  if (localizedNames && kind !== 'organization') throw new WorkReadUnavailable('Agent name kind is invalid');
-  const displayNameInfo = localizedNames ? selectDisplayName(localizedNames, session.displayLanguages) : null;
+  try {
+    localizedNames = agentLocalizedName(rows, originalDisplayName);
+  } catch {
+    throw new WorkReadUnavailable('Organization names are invalid');
+  }
+  if (localizedNames && kind !== 'organization')
+    throw new WorkReadUnavailable('Agent name kind is invalid');
+  const displayNameInfo = localizedNames
+    ? selectDisplayName(localizedNames, session.displayLanguages)
+    : null;
   const displayName = displayNameInfo?.value ?? originalDisplayName;
-  if (rows.length > 20 || rows.some(other => other.agentHead?.value !== row.agentHead?.value
-    || other.profileHead?.value !== row.profileHead?.value || other.displayName?.value !== row.displayName?.value)
-    || !kind || !displayName || displayName.length > 200
-    || (row.profileHead && !row.predecessor)
-    || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
+  if (
+    rows.length > 20 ||
+    rows.some(
+      (other) =>
+        other.agentHead?.value !== row.agentHead?.value ||
+        other.profileHead?.value !== row.profileHead?.value ||
+        other.displayName?.value !== row.displayName?.value,
+    ) ||
+    !kind ||
+    !displayName ||
+    displayName.length > 200 ||
+    (row.profileHead && !row.predecessor) ||
+    field(row, 'handle') !== allocateAgentHandle(agent)
+  )
+    throw new WorkReadUnavailable('Agent profile is ambiguous');
   const revision = row.profileHead?.value ?? field(row, 'agentHead');
   const bio = row.bio ? { text: row.bio.value, language: row.bio['xml:lang'] ?? '' } : null;
-  if (bio && (!bio.text || bio.text.length > 500
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(bio.language))) {
+  if (
+    bio &&
+    (!bio.text ||
+      bio.text.length > 500 ||
+      !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(bio.language))
+  ) {
     throw new WorkReadUnavailable('Agent bio is invalid');
   }
   const savedAvatar = row.avatarSelection?.value ?? null;
   let avatarSelection: string | null = null;
   if (savedAvatar) {
-    if (!session.deps.media?.store) throw new WorkReadUnavailable('Agent avatar owner is unavailable');
+    if (!session.deps.media?.store)
+      throw new WorkReadUnavailable('Agent avatar owner is unavailable');
     try {
-      const mediaRow = (await session.deps.media.store.avatarRows([agent], DEFAULT_MEDIA_CONTEXT)).rows.get(agent);
-      if (mediaRow?.selection === savedAvatar && avatarImageEligible(mediaRow)) avatarSelection = savedAvatar;
-    } catch { throw new WorkReadUnavailable('Agent avatar owner is unavailable'); }
+      const mediaRow = (
+        await session.deps.media.store.avatarRows([agent], DEFAULT_MEDIA_CONTEXT)
+      ).rows.get(agent);
+      if (mediaRow?.selection === savedAvatar && avatarImageEligible(mediaRow))
+        avatarSelection = savedAvatar;
+    } catch {
+      throw new WorkReadUnavailable('Agent avatar owner is unavailable');
+    }
   }
   const library = await owner.visibility.read(agent);
   let currentHandle: string;
-  try { currentHandle = await session.deps.agentHandles?.current(agent) ?? field(row, 'handle'); }
-  catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
+  try {
+    currentHandle = (await session.deps.agentHandles?.current(agent)) ?? field(row, 'handle');
+  } catch {
+    throw new WorkReadUnavailable('Agent handle owner is unavailable');
+  }
   const path = `/v1/agents/${agent.slice(-36)}`;
-  const ownerVisible = library.visibility !== 'public' && !!session.principal
-    && session.options.actingSubject === agent
-    && !!await session.deps.access.canReadAsBaselineMember?.(session.principal, agent);
-  const statusShelves = library.visibility === 'public' ? `${path}/shelves`
-    : ownerVisible ? `/v1/me/shelves?actingSubject=${encodeURIComponent(agent)}` : null;
-  if (!await session.deps.personPreferences.profileVisible(agent, session.principal)) {
+  const ownerVisible =
+    library.visibility !== 'public' &&
+    !!session.principal &&
+    session.options.actingSubject === agent &&
+    !!(await session.deps.access.canReadAsBaselineMember?.(session.principal, agent));
+  const statusShelves =
+    library.visibility === 'public'
+      ? `${path}/shelves`
+      : ownerVisible
+        ? `/v1/me/shelves?actingSubject=${encodeURIComponent(agent)}`
+        : null;
+  if (!(await session.deps.personPreferences.profileVisible(agent, session.principal))) {
     throw new WorkReadMissing('Agent unavailable');
   }
-  if (await owner.agentFence(agent) !== before
-    || (await owner.visibility.read(agent)).version !== library.version) {
+  if (
+    (await owner.agentFence(agent)) !== before ||
+    (await owner.visibility.read(agent)).version !== library.version
+  ) {
     throw new WorkReadMoved('Agent profile changed');
   }
-  return { profile: 'agent-read-v1' as const, id: agent, displayName, kind, revision, bio,
-    displayNameInfo, originalDisplayName, localizedNames,
-    avatarSelection, avatarUrl: avatarSelection ? `/v1/media/avatars/${avatarSelection}` : null,
-    handle: currentHandle, disclosure: 'public' as const, sourcePosition: session.position,
+  return {
+    profile: 'agent-read-v1' as const,
+    id: agent,
+    displayName,
+    kind,
+    revision,
+    bio,
+    displayNameInfo,
+    originalDisplayName,
+    localizedNames,
+    avatarSelection,
+    avatarUrl: avatarSelection ? `/v1/media/avatars/${avatarSelection}` : null,
+    handle: currentHandle,
+    disclosure: 'public' as const,
+    sourcePosition: session.position,
     library: { visibility: library.visibility, statusShelvesVisible: statusShelves !== null },
-    links: { profile: `/@${currentHandle}`, works: `${path}/works`, collections: `${path}/collections`,
-      ...(statusShelves ? { statusShelves } : {}) } };
+    links: {
+      profile: `/@${currentHandle}`,
+      works: `${path}/works`,
+      collections: `${path}/collections`,
+      ...(statusShelves ? { statusShelves } : {}),
+    },
+  };
 }
 
-export interface AgentCard { id: string; displayName: string; handle: string; links: { profile: string } }
+export interface AgentCard {
+  id: string;
+  displayName: string;
+  handle: string;
+  links: { profile: string };
+}
 
 /** readAgent's public-Agent gate for a page of cards: one Access fence batch
  * before and after, one graph batch and one handle batch. A hidden Agent is
@@ -123,9 +198,11 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
   if (!ids.length) return cards;
   const owner = profileAccess(session);
   const before = await owner.agentFences(ids);
-  const active = ids.filter(id => before.has(id));
+  const active = ids.filter((id) => before.has(id));
   if (!active.length) return cards;
-  const [rows, handles] = await Promise.all([session.query(`SELECT ?agent ?displayName ?agentKind ?handle
+  const [rows, handles] = await Promise.all([
+    session.query(
+      `SELECT ?agent ?displayName ?agentKind ?handle
     ?agentHead ?profileHead ?predecessor ?bio ?avatarSelection ?localizedName ?originalNameLanguage
     WHERE { VALUES ?agent { ${active.map(iri).join(' ')} }
     ${publicAgent('?agent')}
@@ -137,39 +214,64 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
     OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?agent rv:originalNameLanguage ?originalNameLanguage } }
     OPTIONAL { FILTER(BOUND(?profileHead)) GRAPH ${iri(GRAPHS.revisions)} {
       ?profileHead a rv:AgentPublicProfileRevision ; rv:component ?agent ; rv:predecessor ?predecessor . } }
-  } LIMIT ${active.length * 20 + 1}`, active.length * 20 + 1),
-  (async () => {
-    try { return await session.deps.agentHandles?.currents(active) ?? new Map<string, string>(); }
-    catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
-  })()]);
+  } LIMIT ${active.length * 20 + 1}`,
+      active.length * 20 + 1,
+    ),
+    (async () => {
+      try {
+        return (await session.deps.agentHandles?.currents(active)) ?? new Map<string, string>();
+      } catch {
+        throw new WorkReadUnavailable('Agent handle owner is unavailable');
+      }
+    })(),
+  ]);
   const kinds = new Set([`${RV}PersonAgent`, `${RV}OrganizationAgent`, `${RV}ServiceAgent`]);
   for (const agent of active) {
-    const matched = rows.filter(row => row.agent?.value === agent);
+    const matched = rows.filter((row) => row.agent?.value === agent);
     if (!matched.length) continue;
     const row = matched[0]!;
     const originalDisplayName = field(row, 'displayName');
     let displayName = originalDisplayName;
     let names: LocalizedText | null;
-    try { names = agentLocalizedName(matched, originalDisplayName); }
-    catch { throw new WorkReadUnavailable('Organization names are invalid'); }
+    try {
+      names = agentLocalizedName(matched, originalDisplayName);
+    } catch {
+      throw new WorkReadUnavailable('Organization names are invalid');
+    }
     if (names && field(row, 'agentKind') !== `${RV}OrganizationAgent`) {
       throw new WorkReadUnavailable('Agent name kind is invalid');
     }
-    if (names) displayName = selectDisplayName(names, session.displayLanguages)?.value ?? originalDisplayName;
-    if (matched.length > 20 || matched.some(other => other.agentHead?.value !== row.agentHead?.value
-      || other.profileHead?.value !== row.profileHead?.value || other.displayName?.value !== row.displayName?.value)
-      || !kinds.has(field(row, 'agentKind')) || !displayName || displayName.length > 200
-      || (row.profileHead && !row.predecessor)
-      || field(row, 'handle') !== allocateAgentHandle(agent)) throw new WorkReadUnavailable('Agent profile is ambiguous');
-    if (row.bio && (!row.bio.value || row.bio.value.length > 500
-      || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(row.bio['xml:lang'] ?? ''))) {
+    if (names)
+      displayName =
+        selectDisplayName(names, session.displayLanguages)?.value ?? originalDisplayName;
+    if (
+      matched.length > 20 ||
+      matched.some(
+        (other) =>
+          other.agentHead?.value !== row.agentHead?.value ||
+          other.profileHead?.value !== row.profileHead?.value ||
+          other.displayName?.value !== row.displayName?.value,
+      ) ||
+      !kinds.has(field(row, 'agentKind')) ||
+      !displayName ||
+      displayName.length > 200 ||
+      (row.profileHead && !row.predecessor) ||
+      field(row, 'handle') !== allocateAgentHandle(agent)
+    )
+      throw new WorkReadUnavailable('Agent profile is ambiguous');
+    if (
+      row.bio &&
+      (!row.bio.value ||
+        row.bio.value.length > 500 ||
+        !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(row.bio['xml:lang'] ?? ''))
+    ) {
       throw new WorkReadUnavailable('Agent bio is invalid');
     }
     const handle = handles.get(agent) ?? field(row, 'handle');
     cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` } });
   }
   const after = await owner.agentFences([...cards.keys()]);
-  if ([...cards.keys()].some(agent => after.get(agent) !== before.get(agent))) {
+  if ([...cards.keys()].some((agent) => after.get(agent) !== before.get(agent))) {
     throw new WorkReadMoved('Agent profile changed');
   }
   return cards;
@@ -177,16 +279,26 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
 
 export async function readHandle(session: WorkReadSession, handle: string) {
   let resolved;
-  try { resolved = session.deps.agentHandles
-    ? await session.deps.agentHandles.resolve(handle)
-    : (agentForHandle(handle) ? { agent: agentForHandle(handle)!, state: 'native' as const,
-      redirect: false } : null); }
-  catch { throw new WorkReadUnavailable('Agent handle owner is unavailable'); }
+  try {
+    resolved = session.deps.agentHandles
+      ? await session.deps.agentHandles.resolve(handle)
+      : agentForHandle(handle)
+        ? { agent: agentForHandle(handle)!, state: 'native' as const, redirect: false }
+        : null;
+  } catch {
+    throw new WorkReadUnavailable('Agent handle owner is unavailable');
+  }
   if (!resolved) throw new WorkReadMissing('Agent unavailable');
   const profile = await readAgent(session, resolved.agent);
-  return { ...profile, resolution: { requestedHandle: handle, state: resolved.state,
-    redirect: resolved.redirect || profile.handle !== handle,
-    canonical: profile.links.profile } };
+  return {
+    ...profile,
+    resolution: {
+      requestedHandle: handle,
+      state: resolved.state,
+      redirect: resolved.redirect || profile.handle !== handle,
+      canonical: profile.links.profile,
+    },
+  };
 }
 
 export function pageBasis(session: WorkReadSession, family: string, subject: unknown) {
@@ -203,13 +315,21 @@ export function nextPage(session: WorkReadSession, binding: unknown, ids: string
 export async function shelfWorks(session: WorkReadSession, works: string[]) {
   const ids = [...new Set(works)];
   const summaries = await session.summaries(ids);
-  const typeRows = ids.length ? await session.query(`SELECT ?work ?type WHERE {
+  const typeRows = ids.length
+    ? await session.query(
+        `SELECT ?work ?type WHERE {
     VALUES ?work { ${ids.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?work a ?type .
-      VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
-  } LIMIT ${ids.length * WORK_SEMANTIC_TYPES.length + 1}`, ids.length * WORK_SEMANTIC_TYPES.length) : [];
-  if (typeRows.some(row => !row.work || !row.type || !ids.includes(row.work.value))
-    || new Set(typeRows.map(row => `${row.work!.value}\0${row.type!.value}`)).size !== typeRows.length) {
+      VALUES ?type { ${WORK_SEMANTIC_TYPES.map((type) => `<${type}>`).join(' ')} } }
+  } LIMIT ${ids.length * WORK_SEMANTIC_TYPES.length + 1}`,
+        ids.length * WORK_SEMANTIC_TYPES.length,
+      )
+    : [];
+  if (
+    typeRows.some((row) => !row.work || !row.type || !ids.includes(row.work.value)) ||
+    new Set(typeRows.map((row) => `${row.work!.value}\0${row.type!.value}`)).size !==
+      typeRows.length
+  ) {
     throw new WorkReadUnavailable('Work types are ambiguous');
   }
   const confirmed = await session.summaries(ids);
@@ -217,10 +337,19 @@ export async function shelfWorks(session: WorkReadSession, works: string[]) {
   ids.forEach((id, i) => {
     const summary = summaries[i];
     const final = confirmed[i];
-    if (summary?.status !== 'available' || summary.type !== 'work' || final?.status !== 'available') return;
-    if (JSON.stringify(summary) !== JSON.stringify(final)) throw new WorkReadMoved('Summary changed during read');
-    result.set(id, { id, title: summary.name, cover: summary.avatar,
-      types: typeRows.filter(row => row.work!.value === id).map(row => row.type!.value).sort() });
+    if (summary?.status !== 'available' || summary.type !== 'work' || final?.status !== 'available')
+      return;
+    if (JSON.stringify(summary) !== JSON.stringify(final))
+      throw new WorkReadMoved('Summary changed during read');
+    result.set(id, {
+      id,
+      title: summary.name,
+      cover: summary.avatar,
+      types: typeRows
+        .filter((row) => row.work!.value === id)
+        .map((row) => row.type!.value)
+        .sort(),
+    });
   });
   return result;
 }
@@ -228,7 +357,13 @@ export async function shelfWorks(session: WorkReadSession, works: string[]) {
 export async function readAgentWorks(session: WorkReadSession, agent: string, context?: string) {
   await readAgent(session, agent);
   const { limit, binding, after } = pageBasis(session, 'works', agent);
-  const rows = await session.query(`SELECT DISTINCT ?id WHERE {
+  const selected = await admittedPage<ReadRow>({
+    limit,
+    after: after ? { id: { type: 'uri', value: after } } : undefined,
+    key: (row) => field(row, 'id'),
+    fetch: (seek, size) =>
+      session.query(
+        `SELECT DISTINCT ?id WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:agent ${iri(agent)} ;
       rv:work ?id ; rv:creditRevision ?creditHead . }
     GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit ;
@@ -241,51 +376,102 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
       ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
         rv:occurrenceRole rv:ChapterRole ; schema:item ?id .
       FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } } }
-    FILTER(STR(?id) > ${lit(after)}) } ORDER BY STR(?id) LIMIT ${limit + 1}`, limit + 1);
-  const ids = rows.map(row => field(row, 'id'));
-  const page = ids.slice(0, limit);
+    FILTER(STR(?id) > ${lit(seek ? field(seek, 'id') : '')}) } ORDER BY STR(?id) LIMIT ${size}`,
+        size,
+      ),
+    admit: async (rows) => {
+      const decisions = await session.disclosure(
+        rows.map((row) => ({
+          owner: 'graph',
+          resource: field(row, 'id'),
+          work: field(row, 'id'),
+          component: 'name',
+        })),
+        'read',
+      );
+      return rows.filter((_, index) => decisions[index] === 'visible');
+    },
+  });
+  const page = selected.page.map((row) => field(row, 'id'));
   const cards = await shelfWorks(session, page);
-  const visible = page.filter(id => cards.has(id));
+  const visible = page.filter((id) => cards.has(id));
+  if (visible.length !== page.length) throw new WorkReadMoved('Agent Work admission changed');
   const serial = await readSerialSummaries(session, visible);
   const ratings = new Map<string, Awaited<ReturnType<typeof readWorkRating>>>();
-  if (context) for (const id of visible) ratings.set(id, await readWorkRating(session, id, context));
-  const credits = page.length ? await session.query(`SELECT ?work ?credit ?role WHERE {
+  if (context)
+    for (const id of visible) ratings.set(id, await readWorkRating(session, id, context));
+  const credits = page.length
+    ? await session.query(
+        `SELECT ?work ?credit ?role WHERE {
     VALUES ?work { ${page.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:agent ${iri(agent)} ;
       rv:work ?work ; rv:creditRevision ?revision ; schema:roleName ?role . }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:NativeAgentCreditRevision ; rv:component ?credit ;
       rv:work ?work ; rv:agent ${iri(agent)} ; schema:roleName ?role .
       FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
-  } LIMIT ${page.length * 3 + 1}`, page.length * 3) : [];
-  const items = page.flatMap(id => {
+  } LIMIT ${page.length * 3 + 1}`,
+        page.length * 3,
+      )
+    : [];
+  const items = page.flatMap((id) => {
     const card = cards.get(id);
     if (!card) return [];
-    const attribution = credits.filter(row => field(row, 'work') === id).map(row => {
-      const role = field(row, 'role');
-      if (!['author', 'translator', 'editor'].includes(role)) throw new WorkReadUnavailable('Invalid credit role');
-      return { credit: field(row, 'credit'), role: role as 'author' | 'translator' | 'editor' };
-    });
-    if (!attribution.length || new Set(attribution.map(item => item.role)).size !== attribution.length) {
+    const attribution = credits
+      .filter((row) => field(row, 'work') === id)
+      .map((row) => {
+        const role = field(row, 'role');
+        if (!['author', 'translator', 'editor'].includes(role))
+          throw new WorkReadUnavailable('Invalid credit role');
+        return { credit: field(row, 'credit'), role: role as 'author' | 'translator' | 'editor' };
+      });
+    if (
+      !attribution.length ||
+      new Set(attribution.map((item) => item.role)).size !== attribution.length
+    ) {
       throw new WorkReadUnavailable('Attribution is ambiguous');
     }
     const rating = ratings.get(id);
     const sum = rating?.distribution.reduce((total, bin) => total + bin.value * bin.count, 0) ?? 0;
-    return [{ ...card, tagline: serial.get(id)!.tagline,
-      completionStatus: serial.get(id)!.completionStatus,
-      rating: rating?.status === 'available' && rating.count && rating.context && rating.scale
-        ? { context: rating.context, count: rating.count, sum, mean: rating.mean!,
-          scale: { min: 1 as const, max: rating.scale.max as 5 | 10 } } : null,
-      attribution }];
+    return [
+      {
+        ...card,
+        tagline: serial.get(id)!.tagline,
+        completionStatus: serial.get(id)!.completionStatus,
+        rating:
+          rating?.status === 'available' && rating.count && rating.context && rating.scale
+            ? {
+                context: rating.context,
+                count: rating.count,
+                sum,
+                mean: rating.mean!,
+                scale: { min: 1 as const, max: rating.scale.max as 5 | 10 },
+              }
+            : null,
+        attribution,
+      },
+    ];
   });
   await readAgent(session, agent);
-  return pageResult(session, items, nextPage(session, binding, ids, limit));
+  return pageResult(
+    session,
+    items,
+    selected.lookahead
+      ? encodeReadCursor(binding, session.position, field(selected.last!, 'id'))
+      : null,
+  );
 }
 
 export async function readAgentCollections(session: WorkReadSession, agent: string) {
   await readAgent(session, agent);
   const { limit, binding, after } = pageBasis(session, 'collections', agent);
   // Public partition precedes LIMIT: private shelves never affect cursor or count.
-  const rows = await session.query(`SELECT ?id ?revision ?name ?kind ?structure WHERE {
+  const selected = await admittedPage<ReadRow>({
+    limit,
+    after: after ? { id: { type: 'uri', value: after } } : undefined,
+    key: (row) => field(row, 'id'),
+    fetch: (seek, size) =>
+      session.query(
+        `SELECT ?id ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?id a rv:Collection ; rv:curator ${iri(agent)} ;
       rv:collectionState rv:Active ; rv:disclosure rv:Public ; rv:collectionHead ?revision ;
       schema:name ?name ; rv:collectionKind ?kind ; rv:structure ?structure .
@@ -293,15 +479,55 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
       FILTER NOT EXISTS { ?id rv:protectionHead ?protection } }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:CollectionRevision ; rv:component ?id .
       FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
-    FILTER(STR(?id) > ${lit(after)}) } ORDER BY STR(?id) LIMIT ${limit + 1}`, limit + 1);
-  if (new Set(rows.map(row => field(row, 'id'))).size !== rows.length) throw new WorkReadUnavailable('Ambiguous collection');
-  const items = rows.slice(0, limit).map(row => {
+    FILTER(STR(?id) > ${lit(seek ? field(seek, 'id') : '')}) } ORDER BY STR(?id) LIMIT ${size}`,
+        size,
+      ),
+    admit: async (rows) => {
+      const decisions = await session.disclosure(
+        rows.map((row) => ({
+          owner: 'graph',
+          resource: field(row, 'id'),
+          revision: field(row, 'revision'),
+          component: 'name',
+        })),
+        'read',
+      );
+      return rows.filter((_, index) => decisions[index] === 'visible');
+    },
+  });
+  const rows = selected.page.length
+    ? await session.query(
+        `SELECT ?id ?revision ?name ?kind ?structure WHERE {
+    VALUES (?id ?revision) { ${selected.page.map((row) => `(${iri(field(row, 'id'))} ${iri(field(row, 'revision'))})`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?id rv:collectionHead ?revision ; schema:name ?name ;
+      rv:collectionKind ?kind ; rv:structure ?structure }
+  } LIMIT ${limit + 1}`,
+        limit + 1,
+      )
+    : [];
+  if (rows.length !== selected.page.length) throw new WorkReadMoved('Agent Collection changed');
+  if (new Set(rows.map((row) => field(row, 'id'))).size !== rows.length)
+    throw new WorkReadUnavailable('Ambiguous collection');
+  const items = selected.page.map((selectedRow) => {
+    const row = rows.find((row) => field(row, 'id') === field(selectedRow, 'id'))!;
     const kind = field(row, 'kind');
-    if (![`${RV}StaticCollection`, `${RV}CapturedCollection`].includes(kind)) throw new WorkReadUnavailable('Invalid collection kind');
-    return { id: field(row, 'id'), revision: field(row, 'revision'), name: field(row, 'name'),
-      kind: kind === `${RV}StaticCollection` ? 'static' as const : 'captured' as const,
-      disclosure: 'public' as const, structure: field(row, 'structure') };
+    if (![`${RV}StaticCollection`, `${RV}CapturedCollection`].includes(kind))
+      throw new WorkReadUnavailable('Invalid collection kind');
+    return {
+      id: field(row, 'id'),
+      revision: field(row, 'revision'),
+      name: field(row, 'name'),
+      kind: kind === `${RV}StaticCollection` ? ('static' as const) : ('captured' as const),
+      disclosure: 'public' as const,
+      structure: field(row, 'structure'),
+    };
   });
   await readAgent(session, agent);
-  return pageResult(session, items, nextPage(session, binding, rows.map(row => field(row, 'id')), limit));
+  return pageResult(
+    session,
+    items,
+    selected.lookahead
+      ? encodeReadCursor(binding, session.position, field(selected.last!, 'id'))
+      : null,
+  );
 }
