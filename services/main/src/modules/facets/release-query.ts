@@ -4,7 +4,7 @@ import { RELEASE_QUERY_COST } from './release-contract.ts';
 import { resolveFacet, type AdmittedFacet } from './registry.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
-import { publicWork } from '../work/public-patterns.ts';
+import { publicWork, publishedWork } from '../work/public-patterns.ts';
 
 export interface ReleaseQuery {
   context: AdmittedQuery['context']; scope: Exclude<AdmittedQuery['scope'], { kind: 'mine' }>;
@@ -160,7 +160,8 @@ export function releaseWorkConditions(query: ReleaseQuery, publicContribution: s
       GRAPH ${iri(GRAPHS.current)} { ?languageContribution rv:publicationHead ?languageDecision }
       GRAPH ${iri(GRAPHS.revisions)} { ?languageDecision rv:disclosure rv:Public }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?languageDraft a rv:ErasedRevision } }`
-      : `BIND(${publicContribution} AS ?languageContribution)`;
+      : `${publishedWork('?work', '?main')}
+        BIND(${publicContribution} AS ?languageContribution)`;
     const values = (condition.any ?? condition.all ?? condition.none)! as string[];
     const exists = (chosen: string[]) => `EXISTS { ${selected}
       GRAPH ${iri(GRAPHS.current)} { ?languageContribution rv:language ?workLanguage }

@@ -286,8 +286,6 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     const suspended = await json<Receipt>(await call('POST', '/v1/public-reports', base, { token: f.account.tokenA }), 201);
     expect((await f.accessPool.query('SELECT principal_id FROM access.governance_report WHERE id = $1',
       [suspended.reportId])).rows).toEqual([{ principal_id: null }]);
-    await accountPool.query(`UPDATE rezics_account_security SET suspended_at = NULL, generation = generation + 1
-      WHERE user_id = $1`, [f.account.a.id]);
 
     // Existing disabled governance choices cannot suppress mandatory case notices.
     await f.accessPool.query(`INSERT INTO access.notification_preference (principal_id, purpose, topic, channel, state, revision)
@@ -296,6 +294,8 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
       purpose: 'governance', topic: 'moderation-outcome', subject: { owner: 'access', ref: child.caseId, revision: null },
       recipients: [f.principalId], disclosureBasis: 'private-case-party' });
     expect(notice).toHaveLength(1);
+    await accountPool.query(`UPDATE rezics_account_security SET suspended_at = NULL, generation = generation + 1
+      WHERE user_id = $1`, [f.account.a.id]);
     const accountBase = f.account.issuer.replace(/\/api\/auth$/, '');
     const deletion = await fetch(`${f.account.issuer}/delete-user`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: accountBase, cookie: f.account.a.cookie },

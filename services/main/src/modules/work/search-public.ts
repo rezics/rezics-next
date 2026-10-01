@@ -1,7 +1,6 @@
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
-import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { assertPublicTextReady, assertSameTextInstance, assertSnapshotMoved,
   MAX_SEARCH_RESPONSE_BYTES, PHRASE_HIT_PROBE, SearchSnapshotMoved } from './search-readiness.ts';
@@ -62,7 +61,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
     || contentPosition[0].sequence !== contentPosition[1].sequence)) {
     throw new PublicQueryUnavailable('Content chapter projection is behind its source');
   }
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  // Readiness also fences this lineage and the recovery hold in its control read.
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
@@ -228,7 +227,6 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
   }
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
   const realm = input.context.id;
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>

@@ -11,7 +11,7 @@ test('public phrase page hydrates current Work card fields after the bounded sea
   const stack = await startMediaStack('search-card-rich');
   try {
     const member = await stack.member('writer');
-    const created = await stack.privateWork(member.actor, 'A named search card');
+    const created = await stack.catalogueWork(member.actor, 'A named search card');
     const phrase = `richcard${randomUUID().replaceAll('-', '')}`;
     const source = await stack.contribution(created.work, member.actor, 'en', `${phrase} body`);
     const input = { context: { kind: 'main-version-default' as const, id: created.mainVersion },

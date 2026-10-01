@@ -224,6 +224,12 @@ export async function startMediaStack(label: string, options: { contentProjectio
       expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'claimed',
       dispatchEligible: true, replayed: false };
   };
+  /** Catalogue metadata carries no invented native authorship or publication. */
+  const catalogueWork = async (actor: string, title: string) => {
+    const created = await activateMetadataWork(env, { title, language: 'en',
+      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, undefined, 'en')) });
+    return { work: created.work, mainVersion: created.mainVersion, title };
+  };
   /** A native author draft stays private until its Main selection is public. */
   const privateWork = async (actor: string, title = `${label} private ${randomUUID()}`) => {
     if (!(await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
@@ -251,9 +257,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   };
   /** A Work whose Main Version selects a public native contribution; further languages stay eligible variants. */
   const publicWork = async (actor: string, languages: string[] = ['en'], title = `${label} public ${randomUUID()}`) => {
-    const metadata = await activateMetadataWork(env, { title, language: 'en',
-      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, undefined, 'en')) });
-    const created = { work: metadata.work, mainVersion: metadata.mainVersion, title };
+    const created = await catalogueWork(actor, title);
     const variants = [];
     for (const language of languages) {
       variants.push(await contribution(created.work, actor, language, `${label} ${language} ${randomUUID()}`));
@@ -273,5 +277,5 @@ export async function startMediaStack(label: string, options: { contentProjectio
   };
   return { env, fuseki, main, call, member, access, mediaAccess, accessPool, contentPool, content,
     contentCursor, contentConsumer, store, objects,
-    media, admission, privateWork, publicWork, contribution, stop };
+    media, admission, catalogueWork, privateWork, publicWork, contribution, stop };
 }

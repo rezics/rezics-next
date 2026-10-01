@@ -3,7 +3,6 @@ import { discloseSearchMatches } from '../disclosure/search.ts';
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
-import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance, MAX_SEARCH_RESPONSE_BYTES,
   PHRASE_HIT_PROBE } from './search-readiness.ts';
@@ -54,7 +53,6 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   }
   const realm = input.context.id;
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const cutover = await statementCutoverActive(env);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const fields = input.publicFields ? await querySearchFields(env, input, index, input.publicFields) : [];

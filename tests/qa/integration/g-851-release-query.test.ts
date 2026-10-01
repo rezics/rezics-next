@@ -69,6 +69,8 @@ test('G851: one usable release supplies every condition and every explanation; d
     const editor = await stack.member('release-editor');
     const vn = await stack.publicWork(editor.actor, ['ja'], 'Three incompatible VN releases');
     const book = await stack.publicWork(editor.actor, ['ja'], 'English paperback and Japanese e-book');
+    // An unrelated English publication must not satisfy this Work's language Condition.
+    await stack.publicWork(editor.actor, ['en'], 'Unrelated English text');
     const hidden = await stack.privateWork(editor.actor, 'Hidden omnibus coverage');
     for (const work of [vn, book, hidden]) await editor.grant(`work:edit:${work.work}`, 'work.edit');
     const ja = await realization(editor, vn.work, 'ja');
