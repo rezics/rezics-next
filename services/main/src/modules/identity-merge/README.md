@@ -19,6 +19,9 @@ snapshot in Access before delivery, and atomically saves its native effect and
 receipt. Native receipt lookup precedes stale-state checks. Explicit decision
 retry advances pending stages; public reads only resolve retained receipts.
 The shared ordered application is the only application/retry lifecycle.
+Native stages yield after two effects, including bounded planning within the
+shared 64 graph-read command budget; a populated merge can require several
+explicit decision retries.
 
 | Owner | Forward policy | Compensation |
 | --- | --- | --- |

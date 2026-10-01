@@ -15,6 +15,8 @@ export interface MergeTaskRuntime<Dependencies> {
   begin(task: MergeTask): Promise<void>;
   /** Retain completion only after all owner stages. No further graph effect. */
   finish(task: MergeTask, commandKey: string): Promise<TaskCompletion>;
+  /** Native stages may admit fewer items under their shared command budget. */
+  itemsPerRun?: number;
   checkDeadline(): void;
 }
 
@@ -49,12 +51,14 @@ async function compensationItem(scope: MergeJournalScope, task: MergeTask, raw: 
 
 async function reconcileOwner<Dependencies>(scope: MergeJournalScope, task: MergeTask,
   handler: MergeHandler<Dependencies>, runtime: MergeTaskRuntime<Dependencies>, budget: { processed: number }): Promise<boolean> {
+  const itemLimit = Math.min(runtime.itemsPerRun ?? MERGE_COST.itemsPerRun,MERGE_COST.itemsPerRun);
+  if (!Number.isSafeInteger(itemLimit) || itemLimit < 1) throw new InvalidMerge('Invalid native item budget');
   for (;;) {
     runtime.checkDeadline();
     const checkpoint = await scope.checkpoint(handler.owner);
     if (checkpoint.exhausted && !(await scope.pending(handler.owner, 1)).length) return true;
-    if (budget.processed >= MERGE_COST.itemsPerRun) return false;
-    const pending = await scope.pending(handler.owner, Math.min(MERGE_COST.itemsPerRun - budget.processed, handler.cost.page));
+    if (budget.processed >= itemLimit) return false;
+    const pending = await scope.pending(handler.owner, Math.min(itemLimit - budget.processed, handler.cost.page));
     if (pending.length) {
       for (const item of pending) {
         runtime.checkDeadline();
@@ -71,8 +75,8 @@ async function reconcileOwner<Dependencies>(scope: MergeJournalScope, task: Merg
     } else {
       if (checkpoint.exhausted) return true;
       const page = task.plan.operation === 'merge'
-        ? await handler.plan(task, checkpoint.after, handler.cost.page, runtime.dependencies)
-        : await scope.compensationPage(task.plan.original, handler.owner, checkpoint.after, handler.cost.page);
+        ? await handler.plan(task, checkpoint.after, Math.min(itemLimit,handler.cost.page), runtime.dependencies)
+        : await scope.compensationPage(task.plan.original, handler.owner, checkpoint.after, Math.min(itemLimit,handler.cost.page));
       checkedPage(page, checkpoint.after, handler.cost.page);
       await scope.capture(handler.owner, checkpoint, page);
     }

@@ -39,6 +39,9 @@ export function mergePreflightOwner(runtime: EditorialRuntime, actingSubject: st
 export function mergeTaskRuntime(runtime: EditorialRuntime): MergeTaskRuntime<MergeDependencies> {
   const dependencies = mergeDependencies(runtime), env = runtime.work.environment, deadline = Date.now() + MERGE_COST.deadlineMs;
   return { dependencies,dataEpoch: env.lineage.dataEpoch,
+    // At most two native effects plus their bounded planning fit G-846's
+    // 64 graph reads per command. Pending stages resume through that kernel.
+    itemsPerRun: 2,
     identityReceipt: task => readMergeIdentityReceipt(env,task),
     begin: async task => { await commandWorkMerge(env,dependencies.accessPool,task); },
     async finish(task: MergeTask,commandKey: string) {

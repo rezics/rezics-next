@@ -192,6 +192,14 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
       { profile: 'editorial-proposal-review-v1',revision: 1,outcome: 'approve',message: 'Checked volume and language evidence',actingSubject: actor },token);
     const decide = (id: string,actor: string,token: string,approveNow = false,key = randomUUID()) => call('POST',path(id,'/decisions'),
       { profile: 'editorial-proposal-decide-v1',revision: 1,outcome: 'applied',approve: approveNow,message: 'Apply reviewed correction',actingSubject: actor },token,key);
+    const finish = async (id: string) => {
+      for (let attempt=0;attempt<16;attempt++) {
+        const response = await decide(id,actorC,tokenC,true);
+        if (response.status === 200) return json<Command>(response);
+        await json<Command>(response,202);
+      }
+      throw new Error('Bounded native stages did not finish');
+    };
     await json(await approve(proposed.proposal,actorB,tokenB));
     expect((await json<{ blocker: { code: string } }>(await decide(proposed.proposal,actorB,tokenB),409)).blocker.code).toBe('required_approvals');
     const bot = (await json<{ agent: string }>(await call('POST','/v1/agents',{ profile: 'agent-provision-v1',kind: 'service',displayName: 'Reviewer bot' },tokenB),201)).agent;
@@ -211,7 +219,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     expect(await json(await call('GET',oldId,undefined,null))).toMatchObject({ status: 'merged',resolution: { survivor: survivor.work } });
     await json(await call('GET',path(proposed.proposal),undefined,null)); expect(libraryCommits).toBe(1);
     app = createMainApp(f.env.fuseki,{ ...deps,editorialReview: new EditorialReviewStore(f.accessPool,modules) });
-    const merged = await json<Command>(await decide(proposed.proposal,actorC,tokenC,true));
+    const merged = await finish(proposed.proposal);
     expect(merged.outcome).toBe('applied'); expect(merged.receipt?.commands).toHaveLength(6);
     const identityEvent = async (command: Command,operation: string) => {
       const rows = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?epoch ?sequence WHERE {
@@ -253,7 +261,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     const reverse = await json<Command>(await call('POST',path(proposed.proposal,'/reversal'),
       { profile: 'editorial-proposal-revert-v1',evidence,actingSubject: actorA }),201);
     await json(await approve(reverse.proposal,actorB,tokenB));
-    const unmerged = await json<Command>(await decide(reverse.proposal,actorC,tokenC,true));
+    const unmerged = await finish(reverse.proposal);
     expect(unmerged.outcome).toBe('applied');
     await identityEvent(unmerged,'unmerge');
     expect(unmerged.receipt?.owner).toMatchObject({ outcomes: { ambiguous: 1 } });
