@@ -218,6 +218,10 @@ test('the first screen and accessibility hold in light and dark, on a phone and 
         // theme under test is set on the page itself, as the display menu does.
         await page.waitForLoadState('networkidle');
         await page.evaluate(chosen => {
+          // No colour transitions, so axe and the screenshot see the settled theme rather than a blend of both.
+          const style = document.createElement('style');
+          style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+          document.head.append(style);
           document.documentElement.classList.remove('light', 'dark');
           document.documentElement.classList.add(chosen);
         }, theme);

@@ -89,7 +89,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
     .toHaveText(['AdventureRelevance: Central']);
   await expect(page.getByRole('region', { name: 'Classification' }).getByRole('link', { name: 'Adventure' }))
     .toHaveAttribute('href', /^\/en\/concepts\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Reads the English version');
+  await expect(page.getByRole('region', { name: 'Communities', exact: true })).toContainText('Reads the English version');
   // The overview follows the documented order, each section under a stable anchor, and omits what the Work's
   // projection does not bind (docs/plan/frontend.md#work-page).
   const hubOrder = ['about', 'availability', 'parts', 'wiki', 'ratings', 'discussion', 'lists'];
@@ -128,7 +128,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(classification).toContainText('Estuary cycle');
   await expect(classification).toContainText('Accepted by everyone');
   await expect(classification).toContainText('Adventure');
-  await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Showing');
+  await expect(page.getByRole('region', { name: 'Communities', exact: true })).toContainText('Showing');
 
   // Tabs are links that keep the scope; each view has its own URL.
   await page.getByRole('navigation', { name: 'Work sections' }).getByRole('link', { name: 'Versions' }).click();
