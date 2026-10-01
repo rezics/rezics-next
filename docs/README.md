@@ -55,13 +55,13 @@ remain in code and the contract owners linked by the Goal's decision index.
 | [Architecture](architecture/README.md) | System boundaries, selected technologies and cross-domain invariants. |
 | [Contracts](contracts/README.md) | Identity, operations, state transitions, authority and observable outcomes. |
 | [Services](architecture/services.md) | Service boundaries, owned data and the [Account service](services/account.md) procedures. |
-| [Implementation blueprints](implementation/README.md) | Concrete target representations and producer-to-consumer protocols. |
+| [Implementation blueprints](implementation/README.md) | Concrete representations, extension procedures and producer-to-consumer protocols. |
 | [Storage](storage/README.md) | Engine bindings, placement, history, indexing and workload budgets. |
 | [Frontend](plan/frontend.md) | Product decisions for the main and Accounts sites; stories and browser tests carry the flows. |
 | [Operations](operations/README.md) | Deployment assessment, installation, recovery, erasure and incidents. |
-| [Testing](testing/README.md) | Prospective scenarios and evidence required to qualify the target. |
+| [Testing](testing/README.md) | Test practice, the harness and complexity verification; scenarios live in `scripts/qa/cases/`. |
 | [Development](development/README.md) | Repository organization, generation, development workflow and frontend code boundaries. |
-| [Plan](plan/README.md) | Dependency order, active documentation scope and qualification status. |
+| [Plan](plan/README.md) | Current state, task reading routes, acceptance gates and the frontend direction. |
 | [Research](research/README.md) | Questions that still affect implementation choices. |
 | [Legal drafts](legal/README.md) | Terms, privacy, ratings, AI, copyright, takedown, child-safety, API and creator-agreement drafts adapted from openly licensed policies (2026-09-29). Not reviewed by counsel; the [safety and legal-readiness decision](operations/trust-and-safety.md#safety-and-legal-readiness) records the accepted risk until counsel is affordable. |
 
