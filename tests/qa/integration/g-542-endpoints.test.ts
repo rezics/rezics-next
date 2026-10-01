@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
+import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { png } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GovernanceStore, GLOBAL_CONTEXT, type EvidenceTarget } from '../../../services/main/src/modules/governance/store.ts';
@@ -46,7 +47,8 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
       content: { core: stack.content, canRead: async (_p, _a, ids) => new Set(ids) },
       media: { pool: stack.contentPool, canReadWork: async () => true },
     }), ownerTargetHeads({ graph: stack.env, content: stack.contentPool }), rules,
-    ownerModerationEffects(new ContentModeration(stack.contentPool), stack.env));
+    ownerModerationEffects(new ContentModeration(stack.contentPool), stack.env,
+      { pool: stack.contentPool, core: stack.content }));
     const suitability = new SuitabilityStore(stack.accessPool, stack.access);
     const cursor = new ContentProjectionCursor(stack.contentPool), consumer = `g542-${randomUUID()}`;
     await cursor.initialize(consumer);
@@ -140,12 +142,18 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
         rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest },
         targets: [{ ...target, locator, scopeKind: 'exact_revision' as const,
           expectedHead: target.owner === 'media' ? null : target.revision, effect: 'disclosure' as const }],
-        reversesDecisionId: null, answersStepId: null, rationale: 'Endpoint matrix', disclosure: 'parties' as const, idempotencyKey: randomUUID() };
+        reversesDecisionId: null, answersStepId: null, rationale: 'Endpoint matrix', disclosure: 'parties' as const,
+        reasons: fixtureReasons, idempotencyKey: randomUUID() };
+      await claimFixture(stack.accessPool, report.caseId, member.principalId, actor);
       const decision = await governance.decide(principal, input);
-      return (expectedHead = target.revision) => governance.decide(principal, { ...input,
-        targets: input.targets.map(target => ({ ...target, expectedHead: target.owner === 'media' ? null : expectedHead })),
-        outcome: 'reverse', expectedGeneration: decision.caseGeneration,
-        reversesDecisionId: decision.decisionId, idempotencyKey: randomUUID() });
+      expect(decision.operation.status, JSON.stringify(decision.operation)).toBe('completed');
+      return async (expectedHead = target.revision) => {
+        await claimFixture(stack.accessPool, report.caseId, member.principalId, actor);
+        return governance.decide(principal, { ...input,
+          targets: input.targets.map(target => ({ ...target, expectedHead: target.owner === 'media' ? null : expectedHead })),
+          outcome: 'reverse', expectedGeneration: decision.caseGeneration,
+          reversesDecisionId: decision.decisionId, idempotencyKey: randomUUID() });
+      };
     };
     await check(true);
     const restore = await restrict({ owner: 'graph', resource: work.work, component: 'title', revision: heads.head!.value });

@@ -46,6 +46,7 @@ test('notification producer emits a submission decision to its represented recip
   const reviewer = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
   const emitted: unknown[] = [];
   const client = { query: async (sql: string) => {
+    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
     if (sql.includes('FROM access.notification_producer_cursor')) return { rows: [{ position: '0' }] };
     if (sql.includes('FROM access.notification_producer_event')) return { rows: [{
       position: '1', kind: 'submission_decision', event_id: 'decision' }] };
