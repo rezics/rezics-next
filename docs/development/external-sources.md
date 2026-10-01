@@ -21,7 +21,7 @@ Official starting points: [Elysia](https://elysiajs.com/llms.txt),
 [Cloudflare Workers](https://developers.cloudflare.com/workers/llms.txt),
 [R2](https://developers.cloudflare.com/r2/llms.txt) and
 [Turnstile](https://developers.cloudflare.com/turnstile/llms.txt); the local
-[integration notes](../turnstile.md) own its planned use.
+[integration notes](../services/account.md#registration-abuse-protection) own its planned use.
 For storage and tooling, use [Jena](https://jena.apache.org/documentation/),
 [PostgreSQL](https://www.postgresql.org/docs/),
 [vinext](https://github.com/cloudflare/vinext),

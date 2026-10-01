@@ -35,6 +35,20 @@ Publish a staged key for 300 seconds before normal activation. Emergency
 retirement of an active key requires a staged successor. Reapply a compromise
 retirement before routing a backup restored from before it.
 
+## Registration abuse protection
+
+Sign-up, password-reset and verification-email requests pass a server-verified
+Cloudflare Turnstile challenge (action `account-enrollment`, hostname of
+`ACCOUNT_BASE_URL`) before any account or email effect. Turnstile is abuse
+admission, not authentication or proof of ownership. For production set
+`ACCOUNT_TURNSTILE_MODE=cloudflare` on the service and Accounts site, configure
+`ACCOUNT_TURNSTILE_SECRET_KEY` (service only) and `ACCOUNT_TURNSTILE_SITE_KEY`,
+and register the public hostname with Cloudflare; a missing site key disables
+the widget and logs the problem. Local stacks use `ACCOUNT_TURNSTILE_MODE=local`,
+an always-pass verifier that Account refuses in production. Check live provider
+reachability when provisioning the widget; it is not needed for local seeding
+or tests.
+
 ## Operations
 
 [Account startup and recovery](../../services/account/README.md),

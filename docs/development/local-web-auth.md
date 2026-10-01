@@ -38,7 +38,7 @@ exhaustion. Library's separate daily source budgets use
 `MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY`; local stack configuration raises
 these too. Runtime admission has no development/test bypass.
 
-Enrollment uses the offline profile described in [Turnstile](../turnstile.md).
+Enrollment uses the offline profile described in [Turnstile](../services/account.md#registration-abuse-protection).
 `task dev:seed` reads its local challenge proof from the prepared environment.
 The web BFF replaces `x-rezics-client-ip` from `WEB_CLIENT_IP_HEADER` (Cloudflare's
 `cf-connecting-ip` by default). The ingress must replace that source header, and
