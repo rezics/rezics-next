@@ -134,3 +134,13 @@ copies, appeals and deletion under preservation holds before claiming readiness.
 Registration, uploads and public posting can be paused independently while
 reporting and recovery remain reachable; [deployment](deployment.md#launch-shape)
 owns that launch sequence.
+
+The executable [launch drill declarations](../../scripts/qa/cases/launch-safety.ts)
+and [recovery tests](../../tests/qa/fault-recovery/g-744-safety.test.ts) distinguish
+deadline tracking from alert delivery, and a private case inbox from safety
+email. G-744's source review found both delivery paths incomplete: due NCII
+steps require polling, no primary/backup roster or absence escalation is wired,
+and media enforcement's private party notice does not reach its uploader by
+email. Keep readiness unclaimed until SAFETY03, SAFETY07 and SAFETY08 run with
+real delivery and responder configuration. The [security review](security.md#launch-review-2026-10-01)
+records the reviewed source and release-image limitation.

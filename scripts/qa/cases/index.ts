@@ -6,6 +6,7 @@ import { cases as content_composition } from './content-composition.ts';
 import { cases as governance_and_delivery } from './governance-and-delivery.ts';
 import { cases as identity_and_access } from './identity-and-access.ts';
 import { cases as information_verification } from './information-verification.ts';
+import { cases as launch_safety } from './launch-safety.ts';
 import { cases as model_contracts } from './model-contracts.ts';
 import { cases as native_work } from './native-work.ts';
 import { cases as operations } from './operations.ts';
@@ -30,6 +31,7 @@ export const declaredCases: readonly DeclaredCase[] = [
   governance_and_delivery,
   identity_and_access,
   information_verification,
+  launch_safety,
   model_contracts,
   native_work,
   operations,

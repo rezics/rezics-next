@@ -39,3 +39,34 @@ derivatives and delivery. [Suitability](../contracts/classification-judgments.md
 owns audience gates. Server revocation fences future delivery; it cannot promise
 to recall independent copies already delivered, as
 [client synchronization](../contracts/client-synchronization.md) records.
+
+## Launch review, 2026-10-01
+
+G-744 reviewed launch source at
+`d1cba62ea061a5c861a2bce1c7684522ed32e05b`: Account enrollment, recovery,
+OAuth, first-party sessions and mail suppression; Main admission and disclosure
+for editorial proposals and wiki publication; media clearance, public reports,
+appeals and preservation; MCP dispatch and wiki-toolkit credentials; Worker
+proxies, release image inputs and production configuration checks. The existing
+G-897/G-904 and G-898 disclosure regressions passed, as did the Account SR-1/SR-3
+and G-731 regressions. This is a source review with targeted disposable-stack
+checks, not release-image qualification. The OCI build failed because its
+context omitted the wiki-toolkit workspace; a fresh release-image bootstrap
+therefore could not be reviewed.
+
+Readiness remains blocked by G744-H1 (no automatic NCII deadline alert or
+absent-responder escalation) and G744-M1 (media enforcement creates a private
+party notice but does not queue the affected uploader's safety email). Their
+executable counterexamples are in the
+[finding tests](../../tests/qa/integration/g-744-findings.test.ts); the
+[safety drills](../../tests/qa/fault-recovery/g-744-safety.test.ts) leave missing
+capabilities explicitly unfinished. Neither finding is an accepted residual risk.
+
+The accepted launch limits remain the maintainer's narrowed market/feature
+policy and lack of age assurance: assessed age-gated targets are withheld from
+everyone, and staff retain separate correction authority. Off-service copies
+already delivered cannot be recalled. No conclusion here covers deployed edge
+configuration, off-host inbox staffing, vendor scanner enrollment or container
+dependency vulnerabilities; those need release and operator evidence. Changes
+merged after the reviewed source, including merge/unmerge, wiki deltas and
+library import, require the manager's final pass.
