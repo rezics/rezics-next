@@ -29,6 +29,12 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
   const objects = f.objects('semantic/structure/'); await objects.initialize();
   const reading = new ReadingPositionStore(f.contentPool), evidence = new WikiEvidenceStore(f.contentPool);
   const nativePublish = evidence.publish.bind(evidence);
+  const nativeReveal = evidence.reveal.bind(evidence);
+  let interruptRevelation = false;
+  evidence.reveal = async (...args) => {
+    if (interruptRevelation) { interruptRevelation = false; throw new Error('Position transaction interrupted'); }
+    return nativeReveal(...args);
+  };
   let pausePublication: string | null = null;
   evidence.publish = async (...args) => {
     if (args[1] === pausePublication) { pausePublication = null; throw new Error('Evidence owner interrupted before commit'); }
@@ -73,9 +79,9 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
   const decide = (proposal: string,revision: number,key = randomUUID(),token = steward.token,actor = steward.actor) =>
     call('POST',path(proposal,'/decisions'),{ profile: 'editorial-proposal-decide-v1',revision,outcome: 'applied',
       approve: true,message: 'Checked chapter citations',actingSubject: actor },token,key);
-  const apply = async (proposal: string,revision: number,key = randomUUID()) => {
+  const apply = async (proposal: string,revision: number,key = randomUUID(),token = steward.token,actor = steward.actor) => {
     for (let attempt = 0; attempt < 100; attempt++) {
-      const response = await decide(proposal,revision,key);
+      const response = await decide(proposal,revision,key,token,actor);
       const result = await json<Command>(response,response.status === 202 ? 202 : 200);
       if (result.receipt) return result.receipt;
     }
@@ -118,7 +124,8 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     const collections: Record<string,string> = {};
     for (const segment of ['franchise','characters','places','events','chapters']) {
       const collection = id();
-      await holder.grant(`collection:edit:${collection}`,'collection.edit'); await holder.grant(`semantic:read:${collection}`,'semantic.read');
+      await holder.grant(`collection:edit:${collection}`,'collection.edit');
+      await steward.grant(`collection:edit:${collection}`,'collection.edit'); await holder.grant(`semantic:read:${collection}`,'semantic.read');
       const created = await json<{ structure: string; revision: string }>(await call('POST','/v1/collections',{
         collection,name: segment,language: 'en',disclosure: 'public',actingSubject: holder.actor }),201);
       if (segment === 'franchise') await json(await call('POST',`/v1/collections/${short(collection)}/changes`,{
@@ -134,6 +141,10 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     for (const [routeSegment,target] of Object.entries(collections)) navigation = await json(await call('POST',`/v1/zones/${short(zone)}/mounts`,{
       expectedHead: navigation.revision,target,routeSegment,position: 'last',disclosure: 'public',actingSubject: holder.actor }));
     await holder.grant('semantic:create:root','semantic.change');
+    await steward.grant('semantic:create:root','semantic.change');
+    await steward.grant('relation:create:root','relation.change');
+    await steward.grant(`statement:speak:${steward.actor}`,'statement.record');
+    await steward.grant(`statement:speak:${steward.actor}`,'statement.withdraw');
     const property = await json<{ component: string }>(await call('POST','/v1/semantic/changes',{ profile: 'semantic-change-v1',
       expectedHead: null,actingSubject: holder.actor,state: { component: 'definition',kind: 'property' } }),201);
     await holder.grant(`semantic:read:${property.component}`,'semantic.read');
@@ -170,8 +181,13 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     await f.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
       VALUES ($1,$2,$3,'agent.control','infinity')`,[randomUUID(),holder.principalId,secondAgent]);
     expect((await decide(proposal.proposal,2,randomUUID(),holder.token,secondAgent)).status).toBe(403);
-    loseEntity = 2;
+    const beforePositionFailure = semanticWrites;
+    interruptRevelation = true;
     const applyKey = randomUUID();
+    await json(await decide(proposal.proposal,2,applyKey),202);
+    expect(semanticWrites).toBe(beforePositionFailure);
+    expect((await f.contentPool.query('SELECT record FROM wiki.revelation_record')).rowCount).toBe(0);
+    loseEntity = 2;
     await json(await decide(proposal.proposal,2,applyKey),202);
     expect((await f.accessPool.query(`SELECT position FROM access.editorial_command_outcome o
       JOIN access.editorial_application a ON a.id = o.application WHERE a.proposal = $1 ORDER BY position`,[proposal.proposal])).rows)
@@ -226,9 +242,45 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     expect((await call('GET',`/v1/statements/${short(outcomeResult(hiddenReceipt,'claim:0').component)}?position=all`,undefined,null)).status).toBe(404);
     expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { <${hiddenCharacter}> <${RV}semanticWork> ?work } }`)).boolean).toBe(false);
     expect((await call('GET',`/v1/wiki/evidence/${short((hiddenReceipt.owner as { evidence: string[] }).evidence[0]!)}?position=all`,undefined,null)).status).toBe(404);
+    // A missing revelation stays hidden even for an explicit all-position read.
+    const heldPosition = (await reading.lookup([statement])).get(statement)![0]!;
+    await f.contentPool.query('DELETE FROM reading_position.revelation WHERE record = $1',[statement]);
+    expect((await call('GET',`/v1/statements/${short(statement)}?position=all`,undefined,null)).status).toBe(404);
+    expect((await call('GET',`/v1/wiki/evidence/${short(quoteIds[0]!)}?position=all`,undefined,null)).status).toBe(404);
+    await nativeReveal(shown.work.work,[heldPosition],[]);
+    // Ordinary semantic permission alone cannot edit an entity of another Work.
+    const matched = await setup(true);
+    matched.bundle.entities[0]!.match = elizabeth;
+    matched.bundle.entities[0]!.names.push({ value: 'Foreign-work alias',language: 'en',kind: 'alias',revealedAt: 'ch3' });
+    await steward.grant(`semantic:edit:${elizabeth}`,'semantic.change');
+    await f.accessPool.query(`UPDATE access.permission_grant SET active = false
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.edit'`,[steward.actor,`work:edit:${shown.work.work}`]);
+    const matchedProposal = await proposalFor(matched.bundle), matchedReceipt = await apply(matchedProposal.proposal,1);
+    expect(matchedReceipt.commands!.find(command => command.key.endsWith(':entity:elizabeth')))
+      .toMatchObject({ outcome: 'rejected',receipt: null,result: { code: 'owner_authority_required' } });
+    expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { <${elizabeth}> <https://schema.org/alternateName> "Foreign-work alias"@en } }`)).boolean).toBe(false);
+    await f.accessPool.query(`UPDATE access.permission_grant SET active = true
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.edit'`,[steward.actor,`work:edit:${shown.work.work}`]);
+    for (const component of [elizabeth,outcomeResult(receipt,'entity:jane').component]) {
+      await steward.grant(`semantic:edit:${component}`,'semantic.change');
+    }
+    await steward.grant(`relation:edit:${relationship}`,'relation.change');
     const reversal = await json<Command>(await call('POST',path(proposal.proposal,'/reversal'),{
       profile: 'editorial-proposal-revert-v1',evidence: [],actingSubject: holder.actor }),201);
-    await apply(reversal.proposal,1);
+    const otherSteward = await f.member('other-steward');
+    tokenPrincipals.set(otherSteward.token,otherSteward.principal);
+    await f.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity')`,[randomUUID(),otherSteward.principalId,otherSteward.actor]);
+    await otherSteward.grant(`work:read:${shown.work.work}`,'work.read');
+    await otherSteward.grant(`work:review:${shown.work.work}`,'work.review');
+    await otherSteward.grant(`work:edit:${shown.work.work}`,'work.edit');
+    for (const collection of Object.values(shown.collections)) await otherSteward.grant(`collection:edit:${collection}`,'collection.edit');
+    for (const component of [elizabeth,jane]) await otherSteward.grant(`semantic:edit:${component}`,'semantic.change');
+    await otherSteward.grant(`relation:edit:${relationship}`,'relation.change');
+    await otherSteward.grant(`statement:speak:${otherSteward.actor}`,'statement.withdraw');
+    const retracted = await apply(reversal.proposal,1,randomUUID(),otherSteward.token,otherSteward.actor);
+    expect(retracted.commands!.find(command => command.key.endsWith(':retract-claim:0'))?.outcome).toBe('rejected');
+    expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { <${statement}> <${RV}statementState> <${RV}Active> } }`)).boolean).toBe(true);
     expect((await call('GET',`/v1/resources/${short(elizabeth)}/page?position=all`,undefined,null)).status).toBe(404);
     expect((await f.contentPool.query('SELECT id FROM wiki.evidence WHERE id = ANY($1::text[])',[quoteIds])).rowCount).toBe(2);
     const rejected = await setup(true), rejectedProposal = await proposalFor(rejected.bundle);

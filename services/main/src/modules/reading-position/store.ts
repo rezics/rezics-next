@@ -3,7 +3,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
 
-export const REVELATION_COST = { batch: 50, lookupSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
+export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
   record: string;
   recordKind: 'entity' | 'name' | 'alias' | 'statement' | 'relation';
@@ -51,6 +51,13 @@ export class ReadingPositionStore {
     const found = new Map<string, Revelation[]>();
     for (const row of result.rows) found.set(row.record, [...found.get(row.record) ?? [], row]);
     return found;
+  }
+  async required(records: readonly string[]): Promise<Set<string>> {
+    if (records.length > REVELATION_COST.batch) throw new WorkReadInvalid('Revelation batch exceeds 50 records');
+    if (!records.length) return new Set();
+    const result = await this.pool.query<{ record: string }>(`SELECT record
+      FROM wiki.revelation_record WHERE record = ANY($1::text[])`,[records]);
+    return new Set(result.rows.map(row => row.record));
   }
   /** Only the reviewed publication/correction owner calls this in its transaction.
    * Readers never write. Corrections update an existing row under its prior

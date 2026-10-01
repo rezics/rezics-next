@@ -105,7 +105,7 @@ export async function wikiRetractionCommands(runtime: EditorialRuntime, input: A
         const originalOwner = original.owner as Record<string,Json>;
         if (typeof originalOwner.decidingAgent !== 'string') throw new EditorialInvalid('Original wiki receipt lacks its speaker');
         const statement = { statement: component,expectedHead: head,speaker: { kind: 'personal' as const },
-          actingSubject: input.permit.decidingAgent,originalSpeaker: originalOwner.decidingAgent };
+          actingSubject: input.permit.decidingAgent };
         const request = withdrawStatementRequest(statement);
         return { binding: { action: request.action,scope: request.scope,digest: request.digest },
           read: id => readCommandReceipt(env,id,STATEMENT_FAMILIES.withdraw),

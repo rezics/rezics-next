@@ -22,7 +22,7 @@ function fixture(selection: string, principal = false) {
   let privateReads = 0;
   const store = { lookup: async (records: readonly string[]) => {
     lookedUp.push(records.length); return new Map(records.flatMap(record => rows.has(record) ? [[record, rows.get(record)!]] : []));
-  }, generation: async () => version, privateSnapshot: async () => { privateReads++; return version; },
+  }, required: async () => new Set(), generation: async () => version, privateSnapshot: async () => { privateReads++; return version; },
     completed: async () => new Set([chapter3]), finishedWorks: async () => new Set() };
   const deps = { readingPositions: store, access: { canReadAsBaselineMember: async () => own } } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request(`http://main.local/v1/fixture?position=${encodeURIComponent(selection)}`),

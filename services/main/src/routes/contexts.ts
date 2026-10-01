@@ -27,7 +27,7 @@ import { ReasoningInputRejected, ReasoningProfileRejected } from '../modules/sem
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
-import { resolveTargets } from '../modules/target/resolve.ts';
+import { targetSummaries } from '../modules/target/resolve.ts';
 import { StatementNotFound, readStatement, resolveStatementAcceptance } from '../modules/statement/read.ts';
 import { CUTOVER_FAMILY, MIGRATION_FAMILY, cutoverRequest, cutoverV1Decisions,
   migrateV1Decision, migrationRequest } from '../modules/statement/migrate-v1.ts';
@@ -749,12 +749,17 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const read = await readingPositionRead(work, request, principal, query.actingSubject, async boundary => {
           const statement = await readStatement(env, `https://rezics.com/id/${params.id}`,
             privateReader(principal, query.actingSubject ?? null));
-          await resolveTargets(boundary.session,[statement.subject,
-            ...(statement.value.kind === 'resource' ? [statement.value.iri] : [])],'collection-member');
           const records = [statement.statement, statement.subject, ...statement.applicability,
             ...(statement.value.kind === 'resource' ? [statement.value.iri] : [])];
           const visible = await boundary.visible(records);
           if (records.some(record => !visible.has(record))) throw new StatementNotFound('Statement is unavailable');
+          if (boundary.requiresPosition(statement.statement)) {
+            const subjects = await targetSummaries(boundary.session,[statement.subject,
+              ...(statement.value.kind === 'resource' ? [statement.value.iri] : [])]);
+            if (subjects.summaries.some(subject => subject.status !== 'available')) {
+              throw new StatementNotFound('Statement is unavailable');
+            }
+          }
           return statement;
         });
         return Response.json(read, { headers: noStore });

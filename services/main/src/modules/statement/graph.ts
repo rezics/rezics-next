@@ -2,7 +2,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, StaleContextCommand, checkedCommandReceipt,
-  commitCommand, readCommandReceipt, sealCommandTerminal, term,
+  commandReceiptIri, commitCommand, readCommandReceipt, sealCommandTerminal, term,
   type ContextCommandReceipt } from '../context/command.ts';
 import { resolveInterpretation, type Interpretation,
   type InterpretationSpeaker } from '../context/interpretation.ts';
@@ -98,7 +98,8 @@ export async function statementInterpretation(env: WorkActivationEnvironment, in
  * base triple and no acceptance.
  */
 export async function recordStatement(env: WorkActivationEnvironment, admission: RegisteredAdmission,
-  input: RecordStatementInput, speaker: InterpretationSpeaker): Promise<ContextCommandReceipt> {
+  input: RecordStatementInput, speaker: InterpretationSpeaker,
+  beforeCommit?: (component: string, receipt: string) => Promise<void>): Promise<ContextCommandReceipt> {
   const request = recordStatementRequest(input);
   const family = STATEMENT_FAMILIES.record;
   const existing = await readCommandReceipt(env, admission.id, family);
@@ -146,6 +147,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
     ...(interpretation.definition ? [interpretation.definition] : [])]);
   const realmGuard = input.speaker.kind === 'realm'
     ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.speaker.realm)} a rv:Realm ; rv:realmState rv:Active . }` : '';
+  await beforeCommit?.(statement,commandReceiptIri(admission.id,family));
   const committed = await commitCommand(env, admission, { family, digest: request.digest, validations, operation,
     component: statement, revision, expectedHead: null,
     insert: `GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a rdf:Statement ;
@@ -180,20 +182,17 @@ export interface WithdrawStatementInput {
   speaker: StatementSpeaker;
   expectedHead: string;
   actingSubject: string;
-  /** Server-bound reviewed compensation may retract a prior speaker's source.
-   * Ordinary transports never accept this field; admission still binds its scope. */
-  originalSpeaker?: string;
 }
 
 export function withdrawStatementRequest(input: WithdrawStatementInput) {
   if (!nativeId.test(input.statement) || !nativeId.test(input.expectedHead)
-    || !nativeId.test(input.actingSubject) || input.originalSpeaker !== undefined && !nativeId.test(input.originalSpeaker)
+    || !nativeId.test(input.actingSubject)
     || (input.speaker.kind === 'realm' && !nativeId.test(input.speaker.realm))) {
     throw new InvalidContextCommand('invalid Statement withdrawal');
   }
-  return { ...STATEMENT_AUTHORITY.speak(input.originalSpeaker ?? speakerIri(input)), action: 'statement.withdraw',
+  return { ...STATEMENT_AUTHORITY.speak(speakerIri(input)), action: 'statement.withdraw',
     digest: hash(JSON.stringify([STATEMENT_FAMILIES.withdraw, input.statement, input.speaker,
-      input.expectedHead, input.actingSubject,...(input.originalSpeaker ? [input.originalSpeaker] : [])])) };
+      input.expectedHead, input.actingSubject])) };
 }
 
 /** Withdraw the source without erasing its meaning or its retained active revision. */
@@ -203,7 +202,7 @@ export async function withdrawStatement(env: WorkActivationEnvironment, admissio
   const family = STATEMENT_FAMILIES.withdraw;
   const existing = await readCommandReceipt(env, admission.id, family);
   if (existing) return checkedCommandReceipt(existing, admission, request.digest);
-  const speaker = input.originalSpeaker ?? speakerIri(input);
+  const speaker = speakerIri(input);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     SELECT ?head ?state WHERE {

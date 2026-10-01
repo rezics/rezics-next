@@ -175,6 +175,9 @@ test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence 
     }`);
     expect(mapped.results?.bindings).toHaveLength(1);
     const statement = mapped.results!.bindings[0]!.statement!.value;
+    // G-846 regression: migrated Statements retain their main-version subject;
+    // reading it is disclosure, not a collection-member capability bind.
+    expect((await f.call('GET',`/v1/statements/${statement.split('/').at(-1)}`)).status).toBe(200);
     const meaningKey = newMain.results[0]!.classification.meaningKey!;
     const stateBody = (state: 'active' | 'retired', expectedHead: string | null) => ({
       profile: 'context-definition-state-v1', definition: proposition.revision!,

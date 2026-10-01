@@ -32,6 +32,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/resources/{id}/wholes', 'read'],
   ['GET', '/v1/releases', 'read'],
   ['PUT', '/v1/works/{id}/realizations/{realization}', 'write'],
+  ['GET', '/v1/wiki/evidence/{id}', 'read'],
   ['GET', '/v1/works/{id}/realizations/{realization}', 'read'],
   ['GET', '/v1/works/{id}/realizations', 'read'],
   ['GET', '/v1/me/continue/{work}', 'read'],

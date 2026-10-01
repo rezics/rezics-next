@@ -71,8 +71,10 @@ export class WikiEvidenceStore {
     return rows.rowCount === expected;
   }
   async reveal(work: string, rows: readonly Revelation[], claims: readonly {
-    evidence: string[]; claim: string; kind: 'statement' | 'relation' }[]) {
+    evidence: string[]; claim: string; kind: 'statement' | 'relation' }[], required = rows.map(row => row.record)) {
     await this.transaction(work,async client => {
+      if (required.length) await client.query(`INSERT INTO wiki.revelation_record(record)
+        SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,[required]);
       const store = new ReadingPositionStore(this.pool);
       for (const row of rows) await store.write(client,row,null);
       for (const claim of claims) {

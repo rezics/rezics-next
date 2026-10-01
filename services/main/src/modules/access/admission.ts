@@ -800,7 +800,7 @@ export class AccessAdmissionRegistry {
       const principalId = await this.activePrincipalId(request.principal);
       if (!principalId) throw new AdmissionDenied('principal is not admitted');
       await requirePlatformParticipation(this.pool, principalId);
-      return registerEditorialAdmission(this.pool, request, this.baselineGraph);
+      return registerEditorialAdmission(this.pool, request, this.baselineGraph, ordinary => this.register(ordinary));
     }
     if (request.action === 'publication.reject.organization') {
       throw new AdmissionDenied('organization moderation requires its atomic episode admission');
@@ -1195,7 +1195,11 @@ export class AccessAdmissionRegistry {
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       await requirePlatformParticipation(client, row.principal_id);
       await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
-      await checkEditorialAdmission(client, row.id,this.baselineGraph);
+      await checkEditorialAdmission(client, row.id,this.baselineGraph,this.pool, {
+        principal: accountPrincipal ?? { issuer: principal.rows[0]!.account_issuer, subject: principal.rows[0]!.account_subject },
+        actingSubject: row.acting_subject, action: row.action, scope: row.scope_id,
+        idempotencyKey: row.idempotency_key, requestDigest: row.request_digest,
+      });
       if (row.action === 'review.decide' || row.action === 'publication.adopt') {
         const current = await client.query(`SELECT 1 FROM access.representation r
           JOIN access.authority_subject s ON s.id = r.subject_id AND s.active

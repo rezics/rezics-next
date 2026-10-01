@@ -265,7 +265,23 @@ test('G-865: durable API lifecycle binds current independent review to header an
     const semanticState = (lexical: string) => ({ component: 'resource',types: [],lifecycle: 'active',
       properties: [{ predicate: 'https://example.test/catalogue/fact',value: { kind: 'string',lexical } }] });
     const semantic = await propose({ command: 'semantic-change',state: semanticState('Reviewed fact') },[{ component: work.work,head: work.workRevision }]);
-    const semanticReceipt = await json<Command>(await decide(semantic.proposal,1));
+    // The review role includes Work edits, but cannot substitute for the
+    // semantic owner's ordinary target permission (shared kernel conformance).
+    const deniedSemantic = await json<{ blocker: { code: string } }>(await decide(semantic.proposal,1),409);
+    expect(deniedSemantic.blocker.code).toBe('revision_required'); expect(semanticWrites).toBe(0);
+    expect((await f.accessPool.query(`SELECT o.outcome FROM access.editorial_application_outcome o
+      JOIN access.editorial_application a ON a.id = o.application WHERE a.proposal = $1`,[semantic.proposal])).rows)
+      .toEqual([{ outcome: 'cancelled' }]);
+    await f.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING',[`semantic:edit:${work.work}`]);
+    for (const [agent,principal] of [[actorB,f.otherPrincipal],[actorC,principalC]]) {
+      await f.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,'semantic.change','infinity')`,[randomUUID(),principal,agent]);
+      await f.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,$4,'semantic.change','infinity')`,[randomUUID(),f.actor,agent,`semantic:edit:${work.work}`]);
+    }
+    await json(await revise(semantic.proposal,1,{ command: 'semantic-change',state: semanticState('Reviewed fact') },
+      [{ component: work.work,head: work.workRevision }]));
+    const semanticReceipt = await json<Command>(await decide(semantic.proposal,2));
     expect(semanticReceipt.receipt?.afterHeads[0]?.component).toBe(work.work); expect(semanticWrites).toBe(1);
     const reversedSemantic = await json<Command>(await request('POST',path(semantic.proposal,'/reversal'),{
       profile: 'editorial-proposal-revert-v1',evidence,actingSubject: f.actor }),201);

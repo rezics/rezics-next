@@ -152,13 +152,20 @@ the wiki+ positioning. The rules it relies on:
   may choose an occurrence or show everything with `position=all`. A position
   applies only within its continuity; unrelated or unreadable continuities
   withhold their affected records without suppressing the rest of the page.
-  Records without a revelation position keep their existing disclosure rules.
+  Ordinary records without a revelation position keep their existing disclosure
+  rules. Wiki publication registers its record identities and writes positions
+  before the owner graph commit; a registered wiki record without a position is
+  hidden, including when a reader chooses `position=all`.
 - **The Work page stays the hub.** It shows the wiki's summary beside ratings,
   reviews, library status, discussion, relations and lists; the wiki Zone is its
   deep end, not a replacement.
 
 External-text evidence, reviewed bundle publication, dependency outcomes and
 revelation positions now share the existing proposal and owner-command lifecycle.
+Every owner command requires the applying steward's ordinary Access authority
+for its target in addition to the candidate-bound review permit. Editing a
+matched entity also requires the authority of each Work that owns it. Personal
+Statements can be withdrawn only under their original speaker's ordinary path.
 What remains missing (R51) is bounded chapter-delta reconciliation and its MCP
 bindings. The first editorial benchmark still needs one Work with two language
 editions, a wiki Zone and a chapter update, measured in editor minutes per accepted

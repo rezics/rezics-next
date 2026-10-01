@@ -74,6 +74,8 @@ export interface SemanticChangeIntent {
   /** The semantic head, or the existing Work head for its first description. */
   expectedHead: string | null;
   state: ComponentInput;
+  /** Server-only publication hook; complete disclosure metadata before graph visibility. */
+  beforeCommit?: (component: string, receipt: string) => Promise<void>;
 }
 
 export interface SemanticChangeResult {
@@ -431,6 +433,7 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     ...(state.component === 'definition' && state.notation
       ? await validationsFor(env, 'definition-key-v1', [{ role: 'key', focus: [definitionKeyIri(target)] }]) : []),
   ];
+  await intent.beforeCommit?.(target,receipt);
   await sendSemanticWrite(env, {
     receipt, digest, admission: intent.admission, validations,
     deletes: old.length ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(target)} ${triple} .`).join('\n')} }` : '',

@@ -29,6 +29,8 @@ export interface RelationChangeIntent {
   occurrence?: string;
   expectedHead: string | null;
   input: RelationInput;
+  /** Server-only publication hook; complete disclosure metadata before graph visibility. */
+  beforeCommit?: (component: string, receipt: string) => Promise<void>;
 }
 
 /** Stored occurrence revision state; participation and value node identities are exact. */
@@ -217,6 +219,7 @@ export async function changeRelationOccurrence(env: WorkActivationEnvironment,
     ...nodes.length ? await validationsFor(env, 'value-exact-v1',
       [{ role: 'external-reference', focus: nodes.map(node => node[0]!) }]) : [],
   ];
+  await intent.beforeCommit?.(occurrence,receipt);
   await sendSemanticWrite(env, {
     receipt, digest, admission: intent.admission, validations,
     deletes: old.length ? `GRAPH ${iri(GRAPHS.current)} { ${old.map(triple => `${iri(occurrence)} ${triple} .`).join('\n')} }` : '',

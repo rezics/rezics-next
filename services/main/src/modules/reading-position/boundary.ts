@@ -133,6 +133,7 @@ export function prefixVisible(composition: ReadingComposition, position: string 
 
 export class ReadingBoundary {
   private readonly records = new Map<string, Revelation[]>();
+  private readonly required = new Set<string>();
   private readonly compositions = new Map<string, Promise<ReadingComposition>>();
   private readonly positions = new Map<string, Promise<string | null>>();
   private generation: Promise<string> | null = null;
@@ -251,11 +252,13 @@ export class ReadingBoundary {
     for (let at = 0; at < missing.length; at += REVELATION_COST.batch) {
       const batch = missing.slice(at, at + REVELATION_COST.batch);
       const found = await store?.lookup(batch) ?? new Map<string, Revelation[]>();
+      for (const record of await store?.required(batch) ?? []) this.required.add(record);
       for (const record of batch) this.records.set(record, found.get(record) ?? []);
     }
     const visible = new Set<string>();
     for (const record of records) {
       const rows = this.records.get(record)!;
+      if (!rows.length && this.required.has(record)) continue;
       if (!rows.length || this.selection === 'all') { visible.add(record); continue; }
       if (this.selection === 'start' || this.selection === 'mine' && !this.session.principal) continue;
       for (const row of rows) {
@@ -274,6 +277,7 @@ export class ReadingBoundary {
     await this.fence(false);
     return visible;
   }
+  requiresPosition(record: string): boolean { return this.required.has(record); }
   async require(resource: string) {
     if (!(await this.visible([resource])).has(resource)) throw new WorkReadMissing('Resource is unavailable');
   }

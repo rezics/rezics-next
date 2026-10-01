@@ -1,4 +1,4 @@
-import type { RegisteredAdmission, GraphTerminalProof } from '../access/admission.ts';
+import { AdmissionDenied, type RegisteredAdmission, type GraphTerminalProof } from '../access/admission.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { canonicalCandidate, type CommandDelivery, type CommandOutcome, type EditorialCommand,
   type OwnerCommand } from '../editorial-review/contract.ts';
@@ -52,9 +52,14 @@ export function wikiGraphCommand(runtime: EditorialRuntime, key: string,
       if (!spec) return dependencyRejected(key);
       const principal = await runtime.work.account.verify(runtime.request,['work:review']);
       const { binding,input } = delivery;
-      const registered = await runtime.work.access.register({ principal,actingSubject: input.permit.decidingAgent,
+      let registered: RegisteredAdmission;
+      try { registered = await runtime.work.access.register({ principal,actingSubject: input.permit.decidingAgent,
         editorialPermit: input.permit.proof,action: binding.action,scope: binding.scope,
-        requestDigest: binding.digest,idempotencyKey: key });
+        requestDigest: binding.digest,idempotencyKey: key }); }
+      catch (error) {
+        if (!(error instanceof AdmissionDenied)) throw error;
+        return { key,outcome: 'rejected',receipt: null,result: { code: 'owner_authority_required' } };
+      }
       const receipt = await finish({ ...delivery,admissionId: registered.id },settled,spec);
       if (receipt) return receipt;
       if (!registered.dispatchEligible) {
@@ -63,7 +68,13 @@ export function wikiGraphCommand(runtime: EditorialRuntime, key: string,
         await spec.cancel(registered);
         return finish({ ...delivery,admissionId: registered.id },settled,spec);
       }
-      const admission = await runtime.work.access.claim(registered.id,binding.digest,principal);
+      let admission: RegisteredAdmission;
+      try { admission = await runtime.work.access.claim(registered.id,binding.digest,principal); }
+      catch (error) {
+        if (!(error instanceof AdmissionDenied)) throw error;
+        await spec.cancel(registered);
+        return finish({ ...delivery,admissionId: registered.id },settled,spec);
+      }
       try { await spec.dispatch(admission); }
       catch (error) {
         if (error instanceof CommandRejected || error instanceof SemanticChangeRejected || error instanceof SemanticTargetUnavailable

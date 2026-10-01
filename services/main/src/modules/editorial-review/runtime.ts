@@ -27,8 +27,8 @@ export function ownerReceipt(input: ApplyInput, receipt: string, revision: strin
 }
 export function componentOwners(runtime: EditorialRuntime): ComponentCorrectionOwners {
   const { work,request } = runtime, env = work.environment;
-  // The API capability is review. Fine write authority comes exclusively from
-  // the server-bound permit; callers need no separate ordinary edit capability.
+  // The transport capability is review. The server-bound permit narrows the
+  // command; Access independently requires the ordinary owner authority.
   const account: MainWorkDependencies['account'] = { verify: (req,scopes) => work.account.verify(req,
     scopes.length === 1 && scopes[0] === 'work:edit' ? ['work:review'] : scopes) };
   const owners: ComponentCorrectionOwners = {

@@ -1,7 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { AdmissionConflict, AdmissionDenied, type AdmissionRequest, type RegisteredAdmission } from '../access/admission.ts';
+import { withWorkEditAuthority } from '../access/work-edit-authority.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { editorialController, editorialPrincipal, independenceKey, requireReview, reviewBasis, viewerFor } from './authority.ts';
 import { EditorialBlocked, type Proposal } from './contract.ts';
@@ -38,7 +39,8 @@ async function current(client: PoolClient, row: PermitRow, graph: Pick<FusekiCli
   if (!state.allowedActions.includes('apply')) throw new EditorialBlocked(state.blockers[0] ?? { code: 'review_authority_required' });
 }
 export async function registerEditorialAdmission(pool: Pool, request: AdmissionRequest,
-  graph: Pick<FusekiClient,'query'> | undefined): Promise<RegisteredAdmission> {
+  graph: Pick<FusekiClient,'query'> | undefined,
+  registerOrdinary: (request: AdmissionRequest) => Promise<RegisteredAdmission>): Promise<RegisteredAdmission> {
   return controlTransaction(pool, async client => {
     const principal = await editorialPrincipal(client, request.principal);
     // Serialize retries of this one permit without locking the proposal row
@@ -68,38 +70,57 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
       : (await client.query<{ id: string }>(`SELECT admission AS id FROM access.editorial_owner_admission
         WHERE application = $1`,[row.id])).rows[0];
     await current(client, row,graph);
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [request.scope]);
-    const gate = (await client.query<{ authority_epoch: string }>(`SELECT authority_epoch::text
-      FROM access.scope_gate WHERE id = $1 AND open AND dispatch_open FOR UPDATE`, [request.scope])).rows[0];
-    if (!gate) throw new AdmissionDenied('Owner dispatch is fenced');
-    const id = old?.id ?? randomUUID();
-    if (!old) {
-      await client.query(`INSERT INTO access.admission (id,principal_id,acting_subject,scope_id,action,
-        idempotency_key,request_digest,authority_epoch,expires_at,state)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp() + interval '30 seconds','registered')`,
-      [id, principal, request.actingSubject, request.scope, request.action, request.idempotencyKey, request.requestDigest, gate.authority_epoch]);
-      if (command) await client.query(`INSERT INTO access.editorial_command_admission (application,position,admission)
-        VALUES ($1,$2,$3)`,[row.id,command.position,id]);
-      else await client.query(`INSERT INTO access.editorial_owner_admission (application,admission) VALUES ($1,$2)`, [row.id,id]);
-      await client.query(`INSERT INTO access.admission_receipt (admission_id,principal_id,action,idempotency_key,request_digest,outcome)
-        VALUES ($1,$2,$3,$4,$5,'registered')`, [id,principal,request.action,request.idempotencyKey,request.requestDigest]);
-      await client.query(`INSERT INTO access.outbox (id,kind,admission_id,scope_id,authority_epoch)
-        VALUES ($1,'admission.registered',$2,$3,$4)`, [randomUUID(),id,request.scope,gate.authority_epoch]);
-    }
-    const saved = (await client.query<{ expires_at: Date; registered_at: Date; state: RegisteredAdmission['state']; eligible: boolean }>(
-      `SELECT expires_at,registered_at,state,expires_at > clock_timestamp() AS eligible FROM access.admission WHERE id = $1`, [id])).rows[0]!;
-    return { id, principalId: principal, actingSubject: request.actingSubject, scope: request.scope, action: request.action,
-      idempotencyKey: request.idempotencyKey, requestDigest: request.requestDigest, authorityEpoch: gate.authority_epoch,
-      expiresAt: saved.expires_at.toISOString(), registeredAt: saved.registered_at.toISOString(), state: saved.state,
-      dispatchEligible: saved.eligible && saved.state !== 'sealed', replayed: !!old };
+    // The permit narrows an ordinary owner admission; it never supplies its
+    // authority. A crash between registration and attachment replays the same
+    // ordinary idempotency key before delivery can begin.
+    return withCommandOwnerAuthority(pool, request, graph, async () => {
+      const admission = await registerOrdinary({ ...request, editorialPermit: undefined });
+      if (old && old.id !== admission.id) throw new AdmissionConflict('Editorial owner admission changed');
+      if (!old) {
+        if (command) await client.query(`INSERT INTO access.editorial_command_admission (application,position,admission)
+          VALUES ($1,$2,$3)`,[row.id,command.position,admission.id]);
+        else await client.query(`INSERT INTO access.editorial_owner_admission (application,admission) VALUES ($1,$2)`, [row.id,admission.id]);
+      }
+      return admission;
+    });
   });
 }
 export async function checkEditorialAdmission(client: PoolClient, admission: string,
-  graph: Pick<FusekiClient,'query'> | undefined): Promise<boolean> {
+  graph: Pick<FusekiClient,'query'> | undefined, pool: Pool, request: AdmissionRequest): Promise<boolean> {
   const binding = (await client.query<{ application: string }>(
     `SELECT application FROM access.editorial_owner_admission WHERE admission = $1
       UNION ALL SELECT application FROM access.editorial_command_admission WHERE admission = $1`, [admission])).rows[0];
   if (!binding) return false;
   await current(client, await permit(client, binding.application),graph);
+  await withCommandOwnerAuthority(pool, request, graph, async () => {});
+  // Generic explicit owner grants have no pinned Work/baseline proof. Recheck
+  // their live mandate at claim, as well as the independent review authority.
+  const ordinary = await client.query(`SELECT 1 FROM access.admission a
+    WHERE a.id = $1 AND (a.represented_representation_id IS NOT NULL
+      OR EXISTS (SELECT 1 FROM access.baseline_admission b WHERE b.admission_id = a.id)
+      OR EXISTS (SELECT 1 FROM access.representation r
+        JOIN access.permission_grant g ON g.recipient_subject = r.subject_id
+          AND g.scope_id = a.scope_id AND g.action = a.action AND g.active AND g.valid_until > clock_timestamp()
+        WHERE r.principal_id = a.principal_id AND r.subject_id = a.acting_subject AND r.action = a.action
+          AND r.active AND r.valid_until > clock_timestamp()))`, [admission]);
+  if (!ordinary.rowCount) throw new AdmissionDenied('Owner authority changed before claim');
   return true;
+}
+
+/** An entity edit also belongs to each Work that owns its semantic record,
+ * independently of the proposal's Work and its reviewing steward. */
+async function withCommandOwnerAuthority<T>(pool: Pool, request: AdmissionRequest,
+  graph: Pick<FusekiClient,'query'> | undefined, operation: () => Promise<T>): Promise<T> {
+  if (!request.scope.startsWith('semantic:edit:')) return operation();
+  if (!graph) throw new AdmissionDenied('Owner authority is unavailable');
+  const target = request.scope.slice('semantic:edit:'.length);
+  const rows = (await graph.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?work WHERE {
+    GRAPH ${iri(GRAPHS.current)} {
+      { ${iri(target)} rv:semanticWork ?work }
+      UNION { ${iri(target)} a <https://schema.org/CreativeWork> . BIND(${iri(target)} AS ?work) }
+    } } LIMIT 17`,8192)).results?.bindings ?? [];
+  if (rows.length > 16) throw new AdmissionDenied('Owner authority exceeds its bound');
+  const check = (at: number): Promise<T> => at === rows.length ? operation()
+    : withWorkEditAuthority(pool,request.principal,request.actingSubject,rows[at]!.work!.value,() => check(at + 1),graph);
+  return check(0);
 }

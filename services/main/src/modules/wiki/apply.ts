@@ -43,11 +43,11 @@ export function wikiEntityState(entity: WikiEntity, snapshot: WikiSnapshot): Com
     properties: [...new Map(properties.map(property => [canonicalCandidate(property).digest,property])).values()] };
 }
 export function semanticSpec(runtime: EditorialRuntime, target: string | undefined, head: string | null,
-  state: ComponentInput): WikiGraphCommand {
+  state: ComponentInput, beforeCommit?: (component: string, receipt: string) => Promise<void>): WikiGraphCommand {
   const env = runtime.work.environment;
   return { binding: { action: 'semantic.change',scope: target ? `semantic:edit:${target}` : 'semantic:create:root',
     digest: semanticChangeDigest(target,head,state) },read: id => readSemanticChangeTerminal(env,id),
-  dispatch: admission => changeSemanticComponent(env,{ admission,...(target ? { target } : {}),expectedHead: head,state }),
+  dispatch: admission => changeSemanticComponent(env,{ admission,...(target ? { target } : {}),expectedHead: head,state,beforeCommit }),
   cancel: admission => cancelSemanticAdmission(env,familyReceiptIri(admission.id,'semantic-change'),admission) };
 }
 export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput): Promise<EditorialCommand[]> {
@@ -72,7 +72,11 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
       const head = rows[0]?.head?.value;
       if (rows.length !== 1 || head !== input.expectedHeads[0]?.head) throw new EditorialBlocked({ code: 'stale_base',
         expectedHeads: input.expectedHeads,actualHeads: [{ component: bundle.target,head: head ?? null }] });
-      await evidence.publish(bundle,input.revision.proposal,input.revision.n,snapshot.submitter);
+      const principal = await runtime.work.account.verify(runtime.request,['work:review']);
+      const authorize = runtime.work.access.withWorkEditAuthority;
+      if (!authorize) throw new EditorialBlocked({ code: 'owner_unavailable' });
+      await authorize.call(runtime.work.access,principal,input.permit.decidingAgent,bundle.target,async () =>
+        evidence.publish(bundle,input.revision.proposal,input.revision.n,snapshot.submitter));
       return evidenceOutcome(await publicCatalogueWork(env.fuseki,bundle.target));
     } }];
   const reveal = async (rows: Revelation[], claims: Parameters<typeof evidence.reveal>[2] = []) => {
@@ -83,28 +87,39 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
       const batch = rows.slice(at,at + 50), existing = await runtime.work.readingPositions!.lookup(batch.map(row => row.record));
       fresh.push(...batch.filter(row => !existing.get(row.record)?.some(old => old.continuityWork === row.continuityWork)));
     }
-    await evidence.reveal(bundle.target,fresh,claims);
+    await evidence.reveal(bundle.target,fresh,claims,rows.map(row => row.record));
   };
   const unit = (id: string) => bundle.units.find(unit => unit.id === id)!;
   const position = (record: string,kind: Revelation['recordKind'],revealedAt: string,receipt: string): Revelation => ({
     record,recordKind: kind,continuityWork: bundle.target,occurrence: unit(revealedAt).occurrence!,receipt });
   for (const entity of bundle.entities) {
     const state = wikiEntityState(entity,snapshot), before = snapshot.entities[entity.id];
-    commands.push(wikiGraphCommand(runtime,key(`entity:${entity.id}`),async () =>
-      semanticSpec(runtime,entity.match,before?.head ?? null,state),async result => {
+    const revealEntity = async (component: string,receipt: string) => {
       const earliest = [...entity.names].sort((a,b) => unit(a.revealedAt).ordinal - unit(b.revealedAt).ordinal)[0]!;
-      await reveal([position(result.component,'entity',earliest.revealedAt,result.receipt),...entity.names.map(name => {
+      await reveal([position(component,'entity',earliest.revealedAt,receipt),...entity.names.map(name => {
         const predicate = `https://schema.org/${name.kind === 'alias' ? 'alternateName' : 'name'}`;
-        return position(propertyRevelationRecord(result.component,predicate,
-          { kind: 'language-string',lexical: name.value,language: name.language }),name.kind === 'alias' ? 'alias' : 'name',name.revealedAt,result.receipt);
+        return position(propertyRevelationRecord(component,predicate,
+          { kind: 'language-string',lexical: name.value,language: name.language }),name.kind === 'alias' ? 'alias' : 'name',name.revealedAt,receipt);
       })]);
-    }));
+    };
+    commands.push(wikiGraphCommand(runtime,key(`entity:${entity.id}`),async settled => {
+      const next = structuredClone(state);
+      if (next.component === 'resource' && resultFor(settled,key('evidence'))?.publicWork
+        && !next.properties.some(property => property.predicate === SEMANTIC_TERMS.semanticWork
+          && property.value.kind === 'resource' && property.value.ref === bundle.target)) {
+        next.properties.push({ predicate: SEMANTIC_TERMS.semanticWork,value: { kind: 'resource',ref: bundle.target } });
+      }
+      return semanticSpec(runtime,entity.match,before?.head ?? null,next,revealEntity);
+    },
+      async result => revealEntity(result.component,result.receipt)));
   }
   const ref = (value: string,settled: readonly CommandOutcome[]) => bundle.entities.some(entity => entity.id === value)
     ? resource(settled,key(`entity:${value}`)) : value;
   for (const [index,claim] of bundle.claims.entries()) {
     const predicate = snapshot.predicates[claim.predicate]!;
     const ids = claim.evidence.map((_e,e) => evidenceId(input.revision.proposal,input.revision.n,index,e));
+    const revealClaim = (component: string,receipt: string) => reveal([position(component,
+      predicate.kind === 'property' ? 'statement' : 'relation',claim.revealedAt,receipt)]);
     commands.push(wikiGraphCommand(runtime,key(`claim:${index}`),async settled => {
       const subject = ref(claim.subject,settled), object = claim.object.kind === 'entity' ? ref(claim.object.ref,settled) : null;
       if (!subject || claim.object.kind === 'entity' && !object) return null;
@@ -117,7 +132,7 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
         const request = recordStatementRequest(statement);
         return { binding: { action: request.action,scope: request.scope,digest: request.digest },
           read: id => readCommandReceipt(env,id,STATEMENT_FAMILIES.record),
-          dispatch: admission => recordStatement(env,admission,statement,{ kind: 'personal',canReadPrivate: async () => false }),
+          dispatch: admission => recordStatement(env,admission,statement,{ kind: 'personal',canReadPrivate: async () => false },revealClaim),
           cancel: admission => sealCommandTerminal(env,admission,STATEMENT_FAMILIES.record,'unavailable') };
       }
       const relation: RelationInput = { definition: predicate.head,participations: [
@@ -126,22 +141,11 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
       const state = canonicalRelation(predicate.definition!,relation);
       return { binding: { action: 'relation.change',scope: 'relation:create:root',digest: relationChangeDigest(undefined,null,state) },
         read: id => readRelationChangeTerminal(env,id),
-        dispatch: admission => changeRelationOccurrence(env,{ admission,expectedHead: null,input: relation }),
+        dispatch: admission => changeRelationOccurrence(env,{ admission,expectedHead: null,input: relation,beforeCommit: revealClaim }),
         cancel: admission => cancelSemanticAdmission(env,familyReceiptIri(admission.id,'relation-change'),admission) };
     },async result => reveal([position(result.component,predicate.kind === 'property' ? 'statement' : 'relation',
       claim.revealedAt,result.receipt)],[{ evidence: ids,claim: result.component,kind: predicate.kind === 'property' ? 'statement' : 'relation' }])));
   }
-  for (const entity of bundle.entities) commands.push(wikiGraphCommand(runtime,key(`work-link:${entity.id}`),async settled => {
-    const created = resultFor(settled,key(`entity:${entity.id}`));
-    if (!created || typeof created.component !== 'string' || typeof created.revision !== 'string') return null;
-    const state = wikiEntityState(entity,snapshot);
-    if (state.component !== 'resource') throw new EditorialInvalid('Wiki entity state is invalid');
-    if (resultFor(settled,key('evidence'))?.publicWork && !state.properties.some(property =>
-      property.predicate === SEMANTIC_TERMS.semanticWork && property.value.kind === 'resource' && property.value.ref === bundle.target)) {
-      state.properties.push({ predicate: SEMANTIC_TERMS.semanticWork,value: { kind: 'resource',ref: bundle.target } });
-    }
-    return semanticSpec(runtime,created.component,created.revision,state);
-  }));
   const mounts = ['characters','places','events','chapters'] as const;
   for (const segment of mounts) {
     const items = segment === 'chapters' ? [...bundle.units].filter(unit => unit.occurrence)

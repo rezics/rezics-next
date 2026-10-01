@@ -41,3 +41,26 @@ test('G-846: maximum wire entity ids retain bounded, distinct compensation keys'
   expect(wikiItemKey(input,`retract-entity:${'b'.repeat(64)}`)).not.toBe(key);
   expect(wikiItemKey(input,'entity:lizzy')).toBe(`wiki:${input.revision.proposal}:${input.revision.n}:entity:lizzy`);
 });
+
+
+test('G-846: a registered wiki record without a revelation fails closed for every position', async () => {
+  const { ReadingBoundary } = await import('../src/modules/reading-position/boundary.ts');
+  const { WorkReadSession } = await import('../src/modules/work/read-session.ts');
+  const record = 'https://rezics.com/id/00000000-0000-0000-0000-000000000001';
+  for (const position of ['start','mine','all']) {
+    const deps = { readingPositions: { generation: async () => '1',lookup: async () => new Map(),
+      required: async () => new Set([record]) } } as unknown as import('../src/routes/dependencies.ts').MainWorkDependencies;
+    const session = new WorkReadSession(deps,new Request(`http://main.local/?position=${position}`),{},
+      { dataEpoch: 'epoch',sequence: '1' });
+    expect([...(await new ReadingBoundary(session).visible([record,'ordinary']))]).toEqual(['ordinary']);
+  }
+});
+
+test('G-846: personal withdrawal binds the applying speaker even when a legacy originalSpeaker is supplied', async () => {
+  const { withdrawStatementRequest } = await import('../src/modules/statement/graph.ts');
+  const actor = 'https://rezics.com/id/00000000-0000-0000-0000-000000000001';
+  const request = { statement: actor,expectedHead: actor,speaker: { kind: 'personal' as const },actingSubject: actor };
+  const originalSpeaker = 'https://rezics.com/id/00000000-0000-0000-0000-000000000002';
+  expect(withdrawStatementRequest({ ...request,originalSpeaker } as typeof request)).toEqual(withdrawStatementRequest(request));
+  expect(withdrawStatementRequest(request).scope).toBe(`statement:speak:${actor}`);
+});

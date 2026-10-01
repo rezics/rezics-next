@@ -47,3 +47,9 @@ DROP INDEX rights.material_scope_idx;
 CREATE UNIQUE INDEX material_scope_idx ON rights.material
   (scope_kind,provider,namespace,source_record_id,content_variant_id,media_asset,work_id,wiki_evidence_id,component)
   NULLS NOT DISTINCT;
+
+-- Registered before a wiki graph write, in the revelation transaction. Retain
+-- the requirement if a position is absent so incomplete publication stays hidden.
+CREATE TABLE wiki.revelation_record (
+  record text PRIMARY KEY CHECK (record ~ '^https://rezics[.]com/id/[0-9a-f-]{36}$')
+);

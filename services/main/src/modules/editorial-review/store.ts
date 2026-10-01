@@ -355,6 +355,10 @@ export class EditorialReviewStore {
           application.principal === principal && application.actor === call.actingSubject ? call : undefined);
         if (recovered && application.command_key === key && application.principal === principal
           && application.command_digest === requestDigest) return { ...recovered,replayed: true };
+        if (!recovered && application.command_key === key && application.principal === principal
+          && application.actor === call.actingSubject && application.command_digest === requestDigest) {
+          return { proposal: id,revision: application.revision,outcome: 'apply_pending',replayed: false };
+        }
         this.pending(await this.application(client,id,row.latest));
         await this.begin(client); row = await this.proposal(client,id);
       }
