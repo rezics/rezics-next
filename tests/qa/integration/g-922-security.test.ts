@@ -186,7 +186,7 @@ test.todo('G922-H2: two source reviewers cannot merge a public Work into a priva
 }, 180_000);
 
 // Owner: library file import (G-854), principal budgets (G-543).
-test.todo('G922-M1: library files consume the principal upload budget before parsing or retention', async () => {
+test('G922-M1: library files consume the principal upload budget before parsing or retention', async () => {
   const home = await startHomeStack('g-922-upload');
   let limits: PostgresRateLimitStore | undefined;
   try {
@@ -255,7 +255,7 @@ test.todo('G922-M1: library files consume the principal upload budget before par
 }, 180_000);
 
 // Owner: wiki candidate lookup (G-898), reading-position boundary (G-920).
-test.todo('G922-M2: wiki candidate matching cannot identify a later alias at the reader default position', async () => {
+test('G922-M2: wiki candidate matching cannot identify a later alias at the reader default position', async () => {
   const wiki = await publishedWiki();
   try {
     const { call, work, zone, reader, entity } = wiki;
