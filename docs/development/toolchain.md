@@ -396,6 +396,13 @@ public recipient key. Keep its private key off-host and keep the recovery HMAC
 key in independent custody. The [recovery procedure](../operations/recovery.md)
 owns keyring setup, serving holds and qualification limits.
 
+## Phone engines for the launch journeys
+
+The launch journeys also run on Playwright's WebKit (iPhone emulation) and on Chromium with Android emulation,
+through `REZICS_E2E_PROJECTS` ([how](launch-accessibility.md#running)). WebKit is the version Playwright pins
+(`playwright install webkit`), a host installation rather than a lockfile pin; it needs `libicu74` and
+`libjpeg-turbo8`, which Fedora does not ship.
+
 ## Agent orchestration
 
 The [Goal program](../goals/README.md) owns the worker lifecycle and commands;
