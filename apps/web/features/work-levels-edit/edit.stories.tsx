@@ -10,6 +10,12 @@ import { PartsEditor } from './parts-editor.tsx';
 import { RelationEditor } from './relation-editor.tsx';
 import type { WriteState } from './write.ts';
 
+/** Opens a styled select and picks an option; the list is portalled, so options are found on the document. */
+async function choose(scope: ReturnType<typeof within>, name: string | RegExp, option: string) {
+  await userEvent.click(scope.getByRole('combobox', { name }));
+  await userEvent.click(await within(document.body).findByRole('option', { name: option }));
+}
+
 type Answer = (form: FormData) => WriteState;
 const done: Answer = () => ({ status: 'done', receipt: 'receipt-0193', replayed: false, nonce: crypto.randomUUID() });
 const stale: Answer = form => ({ status: 'error', problem: 'stale', detail: 'Expected composition head is stale', field: null,
@@ -54,7 +60,7 @@ export const AddAPart: Story = {
     await userEvent.type(within(form).getByRole('textbox', { name: /Work/ }), 'New Test');
     await userEvent.click(await within(form).findByRole('button', { name: 'New Testament 22 Reverse' }));
     await userEvent.type(within(form).getByRole('textbox', { name: 'Label' }), '22 Reverse');
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Place' }), 'After 22');
+    await choose(within(form), 'Place', 'After 22');
     await userEvent.click(within(form).getByRole('button', { name: 'Add part' }));
     await expect(await canvas.findByText(/receipt-0193/)).toBeVisible();
     await noOverflow();
@@ -132,8 +138,10 @@ export const RecordRelation: Story = { args: { section: 'relations' },
     const canvas = within(canvasElement);
     const form = canvas.getByRole('form', { name: 'Record a relation' });
     // Every relation's words are Main's rendering, none the page's own.
-    await expect(within(form).getByRole('option', { name: 'Sequel to' })).toBeVisible();
-    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'This Work is' }), 'Sequel to');
+    await userEvent.click(within(form).getByRole('combobox', { name: 'This Work is' }));
+    const sequel = await within(document.body).findByRole('option', { name: 'Sequel to' });
+    await waitFor(() => expect(sequel).toBeVisible());
+    await userEvent.click(sequel);
     await userEvent.type(within(form).getByRole('textbox', { name: 'The other Work' }), '01944100-0000-7000-8000-000000000031');
     await userEvent.type(within(form).getByRole('textbox', { name: /Evidence/ }), 'https://example.com/sequel');
     await userEvent.click(within(form).getByRole('button', { name: 'Record relation' }));

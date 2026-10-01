@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { Editions, Realization, Release, Relations, SeriesSummary, Session, WorkSummary } from './types.ts';
 
 // Records in the shape Main answers, for stories and tests: Sword Art Online volume 1 with a print
@@ -81,7 +82,7 @@ export const spiderRelations = (counterpart = book, title = 'So I’m a Spider, 
   profile: 'resource-relations-v1', resource: web, next: null, sourcePosition: position,
   items: [{ relation: iri('x1'), kind: 'occurrence', revision: iri('x19'), evidence: null,
     counterparts: [{ reference: counterpart, status: 'available', type: 'work' as never, base: 'work', work: counterpart, disclosure: 'public',
-      name: { value: title, language: 'en', direction: 'ltr', basis: 'requested' },
+      name: { value: title, language: 'en', direction: direction('en', title), basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: counterpart, resourceType: 'work' as never } }],
     rendering: { profile: 'relation-rendering-v1', meaning: { definition: equivalentDefinition, revision: iri('d19'), lifecycle: 'active', roles: [] },
       occurrence: null, viewingRole: 'source', bindings: [],

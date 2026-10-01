@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { IntakeCatalogue } from './g-843-catalogue.ts';
+import { chooseOption } from './g-934-choose.ts';
 
 // The records are written once into this isolated QA stack through Main's catalogue routes
 // (`g-843-catalogue.ts`); the browser signs in as the stack's web member and adds to the catalogue
@@ -56,7 +57,7 @@ async function addStory(page: Page, title: string) {
   await search(page, title);
   await page.getByRole('button', { name: 'Add something new' }).click();
   await page.getByRole('radio', { name: /A new story or series/ }).check();
-  await page.getByRole('combobox', { name: 'Kind of work' }).selectOption({ label: 'Book' });
+  await chooseOption(page, page, 'Kind of work', 'Book');
   await page.getByRole('button', { name: 'Create record' }).click();
 }
 
@@ -101,7 +102,7 @@ test('a contributor searches first, adds a translation to an existing volume, an
   const realization = page.getByRole('form', { name: 'Add a realization' });
   await realization.getByRole('textbox', { name: 'Language', exact: true }).fill('zh-Hans');
   await realization.getByRole('checkbox', { name: 'I am the translator' }).check();
-  await realization.getByRole('combobox', { name: 'Status' }).selectOption({ label: 'Unofficial' });
+  await chooseOption(realization, page, 'Status', 'Unofficial');
   await realization.getByRole('button', { name: 'Add realization' }).click();
   await expect(page.getByText(/Receipt: /).first()).toBeVisible();
   await expect(async () => {

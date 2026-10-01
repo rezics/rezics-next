@@ -1,8 +1,8 @@
+import { isClientIp } from '../../worker/client-ip.ts';
 import { SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from './browser.ts';
 import { sameOriginWrite } from './origins.ts';
-import { isIP } from 'node:net';
 
 // The BFF forwards `/api/main/<Main path>` to Main with the session's bearer
 // token. It keeps Main's path shape, so the browser Eden client uses the same
@@ -45,7 +45,7 @@ export function mainRequestHeaders(incoming: Headers, accessToken: string | unde
   // The ingress must replace this source header. Never forward a caller's
   // x-rezics-client-ip/XFF; Main additionally checks the proxy's peer address.
   const clientIp = incoming.get(clientIpHeader)?.trim();
-  if (clientIp && isIP(clientIp)) headers.set('x-rezics-client-ip', clientIp);
+  if (clientIp && isClientIp(clientIp)) headers.set('x-rezics-client-ip', clientIp);
   return headers;
 }
 

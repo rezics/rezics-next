@@ -1,6 +1,7 @@
 // Typed `entity-page-v1` projections for stories and tests. Shapes come from the Eden types, so a contract change
 // breaks them as well as the page. The section table mirrors Main's (`modules/entity-page/read.ts`): a base binds
 // its sections, and a Work's presentation adds its one type section.
+import { direction } from '@rezics/main/language';
 import { typeEntry } from '../catalogue/types.ts';
 import type { EntityProjection, SectionId, StatementItem, StatementPage, TargetBase } from './types.ts';
 
@@ -40,7 +41,7 @@ export function projectionFor({ id = '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d', bas
       revision: iri('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c'), disclosure: restricted ? 'restricted' : 'public' },
     summary: { reference: iri(id), status: 'available', type: summaryType[base], base, work: base === 'work' ? iri(id) : null,
       disclosure: restricted ? 'restricted' : 'public',
-      name: { value: name, language: 'en', direction: 'ltr', basis: 'requested' },
+      name: { value: name, language: 'en', direction: direction('en', name), basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: '3fa2c9d17b8e4a6f0c2d5e8b1a4f7c90',
         resourceType: summaryType[base] } },
     registry, work: null, sections, sourcePosition,

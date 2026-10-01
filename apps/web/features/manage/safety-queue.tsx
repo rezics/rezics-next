@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Kbd } from '@rezics/ui/kbd';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Switch } from '@rezics/ui/switch';
 import { cn } from '@rezics/ui/utils';
 import { InboxIcon, LockIcon, SirenIcon } from 'lucide-react';
@@ -50,23 +50,23 @@ function Filters({ view, locale, messages }: { view: SafetyView; locale: UiLocal
   return <form method="get" action={localizedPath(SITE_SAFETY_PATH, locale)} aria-label={t.safetyFilters}
     className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
     <Field><FieldLabel>{t.urgencyLabel}</FieldLabel>
-      <NativeSelect name="urgency" defaultValue={view.urgent === null ? '' : view.urgent ? 'urgent' : 'routine'}>
-        <option value="">{t.urgencyAny}</option><option value="urgent">{t.urgencyUrgent}</option>
-        <option value="routine">{t.urgencyRoutine}</option></NativeSelect></Field>
+      <ChoiceSelect name="urgency" label={t.urgencyLabel} className="w-full" portalled={false}
+        defaultValue={view.urgent === null ? '' : view.urgent ? 'urgent' : 'routine'}
+        options={[{ value: '', label: t.urgencyAny }, { value: 'urgent', label: t.urgencyUrgent },
+          { value: 'routine', label: t.urgencyRoutine }]} /></Field>
     <Field><FieldLabel>{t.categoryFilter}</FieldLabel>
-      <NativeSelect name="category" defaultValue={view.category ?? ''}>
-        <option value="">{t.anyCategory}</option>
-        {categoriesFor(null).map(category => <option key={category} value={category}>
-          {categoryName(category, text)}</option>)}</NativeSelect></Field>
+      <ChoiceSelect name="category" label={t.categoryFilter} className="w-full" portalled={false}
+        defaultValue={view.category ?? ''}
+        options={[{ value: '', label: t.anyCategory },
+          ...categoriesFor(null).map(category => ({ value: category, label: categoryName(category, text) ?? category }))]} /></Field>
     <Field><FieldLabel>{t.languageFilter}</FieldLabel>
-      <NativeSelect name="language" defaultValue={view.language ?? ''}>
-        <option value="">{t.anyLanguage}</option>
-        {languages.map(code => <option key={code} value={code}>
-          {new Intl.DisplayNames([locale], { type: 'language' }).of(code)}</option>)}</NativeSelect></Field>
+      <ChoiceSelect name="language" label={t.languageFilter} className="w-full" portalled={false}
+        defaultValue={view.language ?? ''}
+        options={[{ value: '', label: t.anyLanguage }, ...languages.map(code => ({ value: code,
+          label: new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code }))]} /></Field>
     <Field><FieldLabel>{t.dueFilter}</FieldLabel>
-      <NativeSelect name="due" defaultValue={view.due ?? ''}>
-        <option value="">{t.dueAny}</option>
-        {dueWindows.map(([label, value]) => <option key={value} value={value}>{t[label]}</option>)}</NativeSelect></Field>
+      <ChoiceSelect name="due" label={t.dueFilter} className="w-full" portalled={false} defaultValue={view.due ?? ''}
+        options={[{ value: '', label: t.dueAny }, ...dueWindows.map(([label, value]) => ({ value, label: t[label] }))]} /></Field>
     <div className="flex gap-2">
       <Button type="submit" size="sm">{t.applyFilters}</Button>
       {view.urgent !== null || view.category || view.language || view.due

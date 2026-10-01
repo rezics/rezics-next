@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, within } from 'storybook/test';
@@ -36,10 +37,10 @@ function Series({ locale, signedIn, surface }: { locale: UiLocale; signedIn: boo
     more: null }, state: { state: 'ready', data: { tabs: [{ id: 'all', label: 'All', items: seriesWorks }] } } } as PlacedModule;
   const Slot = lightNovels.slots.index!;
   const items = seriesWorks.map(work => ({ id: work.id, revision: work.id, mainVersion: work.id,
-    title: { value: work.title!.value, language: 'en', direction: 'ltr' as const, basis: 'requested' as const },
+    title: { value: work.title!.value, language: 'en', direction: direction('en', work.title!.value), basis: 'requested' as const },
     cover: { kind: 'fallback' as const, policy: 'zone', key: work.id, resourceType: 'work' }, types: [],
     tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null, inZone: true }));
-  const route = { name: 'Catalogue', language: 'en', direction: 'ltr' as const, profile: 'zone-route-v1' as const, zone: 'z',
+  const route = { name: 'Catalogue', language: 'en', direction: direction('en', 'Catalogue'), profile: 'zone-route-v1' as const, zone: 'z',
     path: '/catalogue', realm: null, revision: 'r', sourcePosition: { dataEpoch: 'e', sequence: '1' }, cost: {} as never,
     kind: 'index' as const, mount: { occurrence: 'o', segment: 'catalogue', target: 't' }, collection: 'c', items,
     nextCursor: null };

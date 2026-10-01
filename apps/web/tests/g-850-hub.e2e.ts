@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { type Browser, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 import type { Hub } from './g-850-seed.ts';
+import { chooseOption } from './g-934-choose.ts';
 
 // The Work page as the hub, on the Sword Art Online records the G-838 fixture writes (a series of three
 // volumes; volume 1 in English with a paperback, an audiobook and an omnibus) plus one review of the series.
@@ -126,7 +127,7 @@ test('choose a usable release and save it, mark progress and return to the right
   await expect(page).toHaveURL(new RegExp(`/en/w/${uuid(one!.work)}#availability$`));
   const availability = page.getByRole('region', { name: 'Your edition and availability' });
   await expect(availability).toBeVisible();
-  await availability.getByLabel('Edition', { exact: true }).selectOption({ label: 'Sword Art Online 1: Aincrad (audiobook)' });
+  await chooseOption(availability, page, 'Edition', 'Sword Art Online 1: Aincrad (audiobook)');
   await availability.getByRole('button', { name: 'Save choice' }).click();
   await expect(availability.getByText('Saved.')).toBeVisible();
   // The edition is what the page says it is, after a reload and in the first screen.
@@ -150,7 +151,7 @@ test('choose a usable release and save it, mark progress and return to the right
 
   // Choosing the series' language is a choice: the action becomes Continue, and it leads to volume 2.
   const seriesChoice = page.getByRole('region', { name: 'Your edition and availability' });
-  await seriesChoice.getByLabel('Language').selectOption('en');
+  await chooseOption(seriesChoice, page, 'Language', 'English');
   await seriesChoice.getByRole('button', { name: 'Save choice' }).click();
   await expect(seriesChoice.getByText('Saved.')).toBeVisible();
   await expect(primary(page)).toHaveText('Continue');

@@ -3,7 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
 import { BookPlusIcon, LanguagesIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -13,6 +13,7 @@ import { mayEdit } from './allowed.ts';
 import { materializeData } from 'native-i18n';
 import type { Copy, WorkLevelsEditMessages } from './messages.ts';
 import { workIdFrom } from './route.ts';
+import { urlPlaceholder } from './placeholders.ts';
 import { useWrite } from './use-write.ts';
 import { hintFor, WriteStatus } from './write-status.tsx';
 import type { WriteState } from './write.ts';
@@ -59,8 +60,8 @@ export function RealizationEditor({ work, mainVersion, mainRevision, existing, a
     <div className="grid gap-4 sm:grid-cols-2">
       {languageField(t, 'language', values.language ?? '', hint('language'))}
       <Field><FieldLabel>{t.realizationKind}</FieldLabel>
-        <NativeSelect name="kind" defaultValue={values.kind ?? 'translation'}>
-          <option value="translation">{t.kindTranslation}</option><option value="original">{t.kindOriginal}</option></NativeSelect></Field>
+        <ChoiceSelect name="kind" label={t.realizationKind} defaultValue={values.kind ?? 'translation'} className="w-full"
+          options={[{ value: 'translation', label: t.kindTranslation }, { value: 'original', label: t.kindOriginal }]} /></Field>
     </div>
     <label className="flex items-center gap-3 text-sm">
       <input type="checkbox" name="translatorMe" defaultChecked={values.translatorMe === 'on'} className="size-4 accent-primary" />
@@ -74,22 +75,21 @@ export function RealizationEditor({ work, mainVersion, mainRevision, existing, a
         <FieldHelper>{t.publishersHelp}</FieldHelper><FieldError>{hint('publishers')}</FieldError></Field>
     </div>
     <Field><FieldLabel>{t.realizationSource}</FieldLabel>
-      <NativeSelect name="source" defaultValue={values.source ?? 'unresolved'}>
-        <option value="unresolved">{t.sourceUnresolved}</option><option value="main-version">{t.sourceMainVersion}</option>
-        {existing.map(item => <option key={item.id} value={`realization:${item.id.slice(-36)}:${item.revision.slice(-36)}`}
-          lang={item.language}>{t.sourceRealization({ language: item.language })}</option>)}
-      </NativeSelect></Field>
+      <ChoiceSelect name="source" label={t.realizationSource} defaultValue={values.source ?? 'unresolved'} className="w-full"
+        options={[{ value: 'unresolved', label: t.sourceUnresolved }, { value: 'main-version', label: t.sourceMainVersion },
+          ...existing.map(item => ({ value: `realization:${item.id.slice(-36)}:${item.revision.slice(-36)}`,
+            label: t.sourceRealization({ language: item.language }), lang: item.language }))]} /></Field>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field><FieldLabel>{t.realizationStatus}</FieldLabel>
-        <NativeSelect name="status" defaultValue={values.status ?? 'unofficial'}>
-          <option value="official">{t.statusOfficial}</option><option value="unofficial">{t.statusUnofficial}</option></NativeSelect></Field>
+        <ChoiceSelect name="status" label={t.realizationStatus} defaultValue={values.status ?? 'unofficial'} className="w-full"
+          options={[{ value: 'official', label: t.statusOfficial }, { value: 'unofficial', label: t.statusUnofficial }]} /></Field>
       <Field><FieldLabel>{t.verification}</FieldLabel>
-        <NativeSelect name="verification" defaultValue={values.verification ?? 'unverified'}>
-          <option value="verified">{t.verified}</option><option value="unverified">{t.unverified}</option></NativeSelect></Field>
+        <ChoiceSelect name="verification" label={t.verification} defaultValue={values.verification ?? 'unverified'} className="w-full"
+          options={[{ value: 'verified', label: t.verified }, { value: 'unverified', label: t.unverified }]} /></Field>
     </div>
     <Field invalid={hint('evidence') !== null}><FieldLabel>{t.realizationEvidence}</FieldLabel>
       <Input name="evidence" type="url" inputMode="url" defaultValue={values.evidence ?? ''} maxLength={2048} autoComplete="off"
-        placeholder="https://" /><FieldHelper>{t.realizationEvidenceHelp}</FieldHelper><FieldError>{hint('evidence')}</FieldError></Field>
+        placeholder={urlPlaceholder} /><FieldHelper>{t.realizationEvidenceHelp}</FieldHelper><FieldError>{hint('evidence')}</FieldError></Field>
     <Button type="submit" isLoading={pending} disabled={pending} className="w-fit">
       <LanguagesIcon aria-hidden="true" />{pending ? t.submitting : t.addRealizationButton}</Button>
   </form></div>;
@@ -164,14 +164,14 @@ export function ReleaseEditor({ work, own, allowed, locale, action, messages, ac
     </div>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field invalid={hint('kind') !== null}><FieldLabel>{t.releaseKind}</FieldLabel>
-        <NativeSelect name="kind" defaultValue={values.kind ?? 'formal'}>
-          <option value="formal">{t.releaseFormal}</option><option value="web">{t.releaseWeb}</option>
-          <option value="fixed">{t.releaseFixed}</option><option value="virtual">{t.releaseVirtual}</option></NativeSelect><FieldError>{hint('kind')}</FieldError></Field>
+        <ChoiceSelect name="kind" label={t.releaseKind} defaultValue={values.kind ?? 'formal'} className="w-full"
+          options={[{ value: 'formal', label: t.releaseFormal }, { value: 'web', label: t.releaseWeb },
+            { value: 'fixed', label: t.releaseFixed }, { value: 'virtual', label: t.releaseVirtual }]} /><FieldError>{hint('kind')}</FieldError></Field>
       <Field invalid={hint('status') !== null}><FieldLabel>{t.releaseStatus}</FieldLabel>
-        <NativeSelect name="status" defaultValue={values.status ?? 'official'}>
-          <option value="official">{t.statusOfficial}</option><option value="unofficial">{t.statusUnofficial}</option>
-          <option value="virtual">{t.statusVirtual}</option><option value="withdrawn">{t.statusWithdrawn}</option>
-          <option value="cancelled">{t.statusCancelled}</option></NativeSelect><FieldError>{hint('status')}</FieldError></Field>
+        <ChoiceSelect name="status" label={t.releaseStatus} defaultValue={values.status ?? 'official'} className="w-full"
+          options={[{ value: 'official', label: t.statusOfficial }, { value: 'unofficial', label: t.statusUnofficial },
+            { value: 'virtual', label: t.statusVirtual }, { value: 'withdrawn', label: t.statusWithdrawn },
+            { value: 'cancelled', label: t.statusCancelled }]} /><FieldError>{hint('status')}</FieldError></Field>
     </div>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field><FieldLabel>{t.platform}</FieldLabel>
@@ -200,9 +200,9 @@ export function ReleaseEditor({ work, own, allowed, locale, action, messages, ac
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field><FieldLabel>{t.coverageCompleteness}</FieldLabel>
-        <NativeSelect name="completeness" defaultValue={values.completeness ?? 'complete'}>
-          <option value="complete">{t.coverageComplete}</option><option value="partial">{t.coveragePartial}</option>
-          <option value="trial">{t.coverageTrial}</option><option value="unknown">{t.coverageUnknown}</option></NativeSelect></Field>
+        <ChoiceSelect name="completeness" label={t.coverageCompleteness} defaultValue={values.completeness ?? 'complete'} className="w-full"
+          options={[{ value: 'complete', label: t.coverageComplete }, { value: 'partial', label: t.coveragePartial },
+            { value: 'trial', label: t.coverageTrial }, { value: 'unknown', label: t.coverageUnknown }]} /></Field>
       <Field><FieldLabel>{t.coveragePortion}</FieldLabel>
         <Input name="portion" defaultValue={values.portion ?? ''} maxLength={120} autoComplete="off" />
         <FieldHelper>{t.coveragePortionHelp}</FieldHelper></Field>

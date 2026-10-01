@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { EditCatalogue } from './g-839-catalogue.ts';
+import { chooseOption } from './g-934-choose.ts';
 
 // The records are written once into this isolated QA stack through Main's routes (`g-839-catalogue.ts`);
 // the browser signs in as the stack's web member, an editor of those Works, and maintains their
@@ -79,7 +80,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   const add = page.getByRole('form', { name: 'Add a part' });
   await add.getByRole('textbox', { name: 'Work' }).fill(uuid(index.reverse.work));
   await add.getByRole('textbox', { name: 'Label' }).fill('22 Reverse');
-  await add.getByRole('combobox', { name: 'Place' }).selectOption({ label: 'After 22' });
+  await chooseOption(add, page, 'Place', 'After 22');
   await add.getByRole('button', { name: 'Add part' }).click();
   await expect(receipt(page)).toBeVisible();
   await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22', '22 Reverse']);
@@ -123,7 +124,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   // Relations: Genesis Testament is a Sequel of New Testament, with evidence. Main words every label.
   await page.goto(at(index.genesisTestament, 'edit/relations'));
   const relation = page.getByRole('form', { name: 'Record a relation' });
-  await relation.getByRole('combobox', { name: 'This Work is' }).selectOption({ label: 'Sequel to' });
+  await chooseOption(relation, page, 'This Work is', 'Sequel to');
   await relation.getByRole('textbox', { name: 'The other Work' }).fill(uuid(index.newTestament.work));
   await relation.getByRole('textbox', { name: /Evidence/ }).fill('https://example.com/genesis-testament/sequel');
   await shoot(page, 'relations-form', info);
@@ -140,7 +141,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   const realization = page.getByRole('form', { name: 'Add a realization' });
   await realization.getByRole('textbox', { name: 'Language', exact: true }).fill('zh-Hans');
   await realization.getByRole('checkbox', { name: 'I am the translator' }).check();
-  await realization.getByRole('combobox', { name: 'Status' }).selectOption({ label: 'Unofficial' });
+  await chooseOption(realization, page, 'Status', 'Unofficial');
   await realization.getByRole('button', { name: 'Add realization' }).click();
   await expect(receipt(page).first()).toBeVisible();
   // Main applies a write to its graph a moment after the receipt: read again until the record shows.

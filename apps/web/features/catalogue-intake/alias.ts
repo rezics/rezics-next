@@ -1,10 +1,9 @@
+import { parseLanguage } from '@rezics/main/language';
 import { browserMainApi } from '../api/browser.ts';
 import { detailsValues, saveWorkDetails } from '../studio/details-api.ts';
 
 export type AliasResult = 'saved' | 'denied' | 'taken' | 'invalid' | 'failed';
 export type AliasSaver = (input: { actingSubject: string; work: string; alias: string; language: string }) => Promise<AliasResult>;
-
-const tag = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i;
 
 /**
  * Adds a name to an existing record: a title in one more language, saved on the head just read.
@@ -13,7 +12,7 @@ const tag = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i;
  */
 export const saveAlias: AliasSaver = async ({ actingSubject, work, alias, language }) => {
   const text = alias.trim();
-  if (!text || text.length > 500 || !tag.test(language)) return 'invalid';
+  if (!text || text.length > 500 || !parseLanguage(language)) return 'invalid';
   const api = browserMainApi().v1.works({ id: work.slice(-36) }).metadata;
   try {
     const current = await api.get({ query: { actingSubject } });

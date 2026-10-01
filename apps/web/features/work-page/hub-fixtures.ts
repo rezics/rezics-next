@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { StatementGroup } from '../entity-page/types.ts';
 import { iri, summary } from '../work-levels/fixtures.ts';
 import type { Loaded, RelationEntry, RelationsPage, Summary } from '../work-levels/types.ts';
@@ -19,7 +20,7 @@ export const character = (name: string, tail: string): Summary => ({ ...summary(
 export function characterRelations(characters: readonly Summary[]): Loaded<RelationsPage> {
   const entry = { relation: iri('f1'), kind: 'occurrence', revision: iri('f2'), evidence: null, counterparts: characters,
     rendering: { profile: 'relation-rendering-v1', meaning: { definition: iri('f3'), revision: iri('f4') }, viewingRole: 'work',
-      projections: [{ fromRole: 'work', toRole: 'character', language: 'en', direction: 'ltr', fallback: null,
+      projections: [{ fromRole: 'work', toRole: 'character', language: 'en', direction: direction('en'), fallback: null,
         labels: { noun: 'Character', heading: 'Characters', plurals: { one: 'Character', other: 'Characters' } },
         arguments: characters.map(item => ({ role: 'character', type: 'resource',
           value: { kind: 'resource', ref: item.reference } })) }] } } as unknown as RelationEntry;

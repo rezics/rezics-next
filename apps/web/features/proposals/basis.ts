@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { settle } from '../feed/types.ts';
 import { readHeaderState } from './read.ts';
 import { type CorrectionBasis, GLOBAL_CONTEXT, type Loaded, type MainClient } from './types.ts';
@@ -9,8 +8,10 @@ import { type CorrectionBasis, GLOBAL_CONTEXT, type Loaded, type MainClient } fr
  * proposal names it in its base heads. A drift would show as Main's typed
  * `stale_base` refusal, never as a wrong write.
  */
-export const headerComponent = (work: string) => `urn:rezics:work-metadata:${
-  createHash('sha256').update(`${work}\0header`).digest('hex')}`;
+export async function headerComponent(work: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${work}\0header`));
+  return `urn:rezics:work-metadata:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
 
 /**
  * What a correction of a Work's header is written against: the Work's exact
@@ -26,6 +27,6 @@ export async function readCorrectionBasis(main: MainClient, work: string, acting
   if (!metadata.ok) return metadata;
   const resource = header.data.id;
   return { ok: true, data: { target: { resource, revision: header.data.revision, context: GLOBAL_CONTEXT },
-    baseHeads: [{ component: headerComponent(resource), head: metadata.data.head }], state: metadata.data.state,
+    baseHeads: [{ component: await headerComponent(resource), head: metadata.data.head }], state: metadata.data.state,
     name: { value: header.data.title.value, language: header.data.title.language } } };
 }

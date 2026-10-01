@@ -4,9 +4,10 @@ import type { UiLocale } from '../../i18n/define.ts';
 import visualNovels from '../../zones/official/visual-novels/index.tsx';
 import { RealmPageStory } from '../realm/story-page.tsx';
 import { ReleaseBrowse, ReleaseBrowseHeader } from '../release-filter/browse.tsx';
+import { parseReleaseFilter } from '../release-filter/state.ts';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { cardRenderer } from '../zones/zone-home.tsx';
-import { type Answer, parseFilter, results, visualNovelFilter, zoneFor } from './release-fixtures.ts';
+import { type Answer, resolvedFilter, results, zoneFor } from './release-fixtures.ts';
 import { hubPlan } from '../work-page/hub.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
 import { OverviewLayout } from '../work-page/work-frame.tsx';
@@ -21,8 +22,8 @@ function Browse({ locale, params, answer, next = null }: {
   const zone = zoneFor('visual-novels', locale);
   const messages = zoneMessagesFor(locale);
   const spec = visualNovels.releaseFilter!(locale);
-  const filter = visualNovelFilter(locale);
-  const state = parseFilter(locale, params);
+  const filter = resolvedFilter(spec, locale);
+  const state = parseReleaseFilter(params, filter);
   const base = zone.links.browse;
   return <RealmPageStory zone={zone} pkg={visualNovels} execution={{ mode: 'package', slug: 'visual-novels' }} locale={locale}>
     <ReleaseBrowse header={<ReleaseBrowseHeader zone={zone} pkg={visualNovels} spec={spec} filter={filter} state={state}
@@ -50,9 +51,9 @@ export const Filtered: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('form', { name: 'Find a playable release' })).toBeVisible();
-    await expect(canvas.getByLabelText('Language')).toHaveValue('en');
-    await expect(canvas.getByLabelText('Platform')).toHaveValue('Windows');
-    await expect(canvas.getByLabelText('Completeness')).toHaveValue('complete');
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
+    await expect(canvas.getByRole('combobox', { name: 'Platform' })).toHaveTextContent('Windows');
+    await expect(canvas.getByRole('combobox', { name: 'Completeness' })).toHaveTextContent('Complete');
     await expect(canvas.getByText(/English · Windows · complete · fan translation by/)).toBeVisible();
     await expect(canvas.getByText('Moonlight Translators')).toBeVisible();
     await expect(canvas.getByText('Aoi')).toBeVisible();

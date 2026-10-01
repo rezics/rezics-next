@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { messages } from '../realm/messages.ts';
@@ -10,16 +11,16 @@ import { cardRenderer } from './zone-home.tsx';
 
 // The pages a Zone's mounts give it, and the navigation and breadcrumbs that lead to them.
 
-const name = (value: string) => ({ value, lang: 'en', dir: 'ltr' as const });
+const name = (value: string) => ({ value, lang: 'en', dir: direction('en', value) });
 const links = [{ href: '/r/books/guide', label: name('Guide') }, { href: '/r/books/picks', label: name('Picks') }];
 const zone = fictionZone('en');
 const card = cardRenderer(zone, null, 'en', zoneMessagesFor('en'));
 
 const items = works.slice(0, 6).map(work => ({ id: work.id, revision: work.id, mainVersion: work.id,
-  title: { value: work.title?.value ?? '', language: 'en', direction: 'ltr' as const, basis: 'requested' as const },
+  title: { value: work.title?.value ?? '', language: 'en', direction: direction('en', work.title?.value ?? ''), basis: 'requested' as const },
   cover: { kind: 'fallback' as const, policy: 'zone', key: work.id, resourceType: 'work' }, types: [],
   tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null, inZone: true }));
-const route = { name: 'Books', language: 'en', direction: 'ltr' as const, profile: 'zone-route-v1' as const, zone: 'z', path: '/picks', realm: null, revision: 'r',
+const route = { name: 'Books', language: 'en', direction: direction('en', 'Books'), profile: 'zone-route-v1' as const, zone: 'z', path: '/picks', realm: null, revision: 'r',
   sourcePosition: { dataEpoch: 'e', sequence: '1' }, cost: {} as never, kind: 'index' as const,
   mount: { occurrence: 'o', segment: 'picks', target: 't' }, collection: 'c', items, nextCursor: 'next' };
 

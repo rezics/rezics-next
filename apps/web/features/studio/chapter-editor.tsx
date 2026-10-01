@@ -5,7 +5,7 @@ import { SendIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { UiLocale } from '../../i18n/define.ts';
+import { interfaceDirection, type UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { type ChapterPublication, type ChapterTarget, type DraftBasis, readChapterRevision, saveChapterDraft }
   from './content-api.ts';
@@ -19,11 +19,6 @@ import { ChapterPublishDialog } from './publish-dialog.tsx';
 import type { StudioChapter } from './read.ts';
 import { studioAgentName } from './studio-frame.tsx';
 import type { MainClient } from './types.ts';
-
-/** Interface copy is left to right in every shipped locale. The manuscript keeps its own direction. */
-const interfaceDirection = {
-  en: 'ltr', 'zh-Hant': 'ltr', 'zh-Hans': 'ltr', ja: 'ltr', ko: 'ltr', de: 'ltr', fr: 'ltr', es: 'ltr',
-} as const satisfies Record<UiLocale, 'ltr' | 'rtl'>;
 
 export interface ChapterEditorProps {
   agent: AgentOption;

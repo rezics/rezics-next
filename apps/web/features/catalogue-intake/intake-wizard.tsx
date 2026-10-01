@@ -5,7 +5,7 @@ import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { CircleCheckIcon, HourglassIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
@@ -142,9 +142,8 @@ function AliasForm({ candidate, t, locale, actingSubject, save, onClose }: {
         autoComplete="off" />
       {fieldProblem ? <FieldError>{fieldProblem}</FieldError> : null}</Field>
     <Field><FieldLabel>{t.aliasLanguage}</FieldLabel>
-      <NativeSelect value={language} onChange={event => setLanguage(event.currentTarget.value)} size="md">
-        {inputLanguages.map(tag => <option key={tag} value={tag}>{languageName(tag, locale)}</option>)}
-      </NativeSelect></Field>
+      <ChoiceSelect value={language} onValueChange={setLanguage} label={t.aliasLanguage} portalled={false}
+        options={inputLanguages.map(tag => ({ value: tag, label: languageName(tag, locale) }))} /></Field>
     {state !== 'idle' && state !== 'saving' && !fieldProblem ? <Alert variant={state === 'saved' ? 'success' : 'destructive'} role="status">
       {state === 'saved' ? <CircleCheckIcon aria-hidden="true" /> : <TriangleAlertIcon aria-hidden="true" />}
       <AlertDescription>{message[state]}</AlertDescription></Alert> : null}
@@ -357,10 +356,8 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
       </fieldset> : null}
       {kind === 'story' || kind === 'part' ? types.length ? <Field>
         <FieldLabel>{t.typeLabel}</FieldLabel>
-        <NativeSelect value={semanticType} onChange={event => setSemanticType(event.currentTarget.value)} className="sm:max-w-72">
-          <option value="">{t.typeNone}</option>
-          {types.map(choice => <option key={choice.type} value={choice.type}>{choice.label}</option>)}
-        </NativeSelect></Field> : null : null}
+        <ChoiceSelect value={semanticType} onValueChange={setSemanticType} label={t.typeLabel} className="sm:max-w-72"
+          options={[{ value: '', label: t.typeNone }, ...types.map(choice => ({ value: choice.type, label: choice.label }))]} /></Field> : null : null}
       {alert}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="lg" isLoading={busy !== null} disabled={busy !== null}>
@@ -390,11 +387,10 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
       <div className="grid gap-5 sm:grid-cols-2">
         <Field>
           <FieldLabel>{t.languageLabel}</FieldLabel>
-          <NativeSelect name="language" value={language} className="w-full"
-            onChange={event => { setLanguage(event.currentTarget.value); setLanguageTouched(true); }}>
-            {inputLanguages.map(tag => <option key={tag} value={tag}>{languageName(tag, locale)}</option>)}
-            <option value="und">{t.languageUndetermined}</option>
-          </NativeSelect>
+          <ChoiceSelect name="language" value={language} label={t.languageLabel} className="w-full"
+            onValueChange={value => { setLanguage(value); setLanguageTouched(true); }}
+            options={[...inputLanguages.map(tag => ({ value: tag, label: languageName(tag, locale) })),
+              { value: 'und', label: t.languageUndetermined }]} />
         </Field>
         <Field>
           <FieldLabel>{t.creatorLabel}</FieldLabel>

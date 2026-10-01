@@ -7,6 +7,11 @@ export const localeNames: Record<UiLocale, string> = {
   ko: '한국어', de: 'Deutsch', fr: 'Français', es: 'Español',
 };
 
+/** Interface copy is left to right in every shipped locale; content keeps the direction of its own language. */
+export const interfaceDirection = {
+  en: 'ltr', 'zh-Hant': 'ltr', 'zh-Hans': 'ltr', ja: 'ltr', ko: 'ltr', de: 'ltr', fr: 'ltr', es: 'ltr',
+} as const satisfies Record<UiLocale, 'ltr' | 'rtl'>;
+
 export function isUiLocale(value: string): value is UiLocale {
   return (uiLocales as readonly string[]).includes(value);
 }

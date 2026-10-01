@@ -235,7 +235,7 @@ describe('G-853 the control and its results', () => {
   const state = parse({ releaseLanguage: 'en', releasePlatform: 'Windows' });
   const html = (node: ReactNode) => renderToStaticMarkup(node as never);
 
-  test('every field is a labelled native select in a GET form, reachable without script', () => {
+  test('every field is a labelled select with a real form field in a GET form, reachable without script', () => {
     const markup = html(createElement(ReleaseFilterControl, { spec, filter, state, action: '/r/visual-novels/browse',
       clearHref: '/r/visual-novels/browse' }));
     expect(markup).toContain('method="get"');

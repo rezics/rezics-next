@@ -3,12 +3,12 @@
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { formatLabel, locatorParts, unitLabel } from './display.ts';
 import type { Copy } from './messages.ts';
-import { dateText, type EditionOption, knownFormats, locatorOf, parsePosition, today, validDate } from './model.ts';
+import { dateText, type EditionOption, isoDatePlaceholder, knownFormats, locatorOf, parsePosition, today, validDate } from './model.ts';
 import type { LocatorUnit, Selection, Session } from './types.ts';
 
 // The small forms of an attempt. Each sends one change and says nothing about the result: the card
@@ -33,7 +33,7 @@ export function DateField({ label, value, locale, t, busy, onSave }: {
     <FieldLabel className="text-muted-foreground text-xs">{label} · <span className="text-foreground">
       {dateText(value, locale) ?? t.dateUnknown}</span></FieldLabel>
     <div className="flex flex-wrap items-center gap-2">
-      <Input size="sm" value={draft} inputMode="numeric" placeholder="YYYY-MM-DD" aria-label={label} aria-invalid={invalid || undefined}
+      <Input size="sm" value={draft} inputMode="numeric" placeholder={isoDatePlaceholder} aria-label={label} aria-invalid={invalid || undefined}
         className="w-36"
         onChange={event => { setDraft(event.target.value); setInvalid(false); }} />
       <Button size="sm" variant="outline" disabled={busy || next === value} onClick={() => void save(next)}>{t.saveDate}</Button>
@@ -59,18 +59,14 @@ export function EditionPicker({ options, nameOf, t, busy, submit, onSubmit, allo
   return <div className="flex flex-wrap items-end gap-2">
     <Field className="gap-1">
       <FieldLabel className="text-muted-foreground text-xs">{t.edition}</FieldLabel>
-      <NativeSelect size="sm" value={resource} onChange={event => setResource(event.target.value)} className="max-w-56">
-        <NativeSelectOption value="">{allowWork ? t.workInGeneral : t.chooseEdition}</NativeSelectOption>
-        {options.filter(option => option.kind !== 'work').map(option => <NativeSelectOption key={option.resource} value={option.resource}>
-          {nameOf(option)}</NativeSelectOption>)}
-      </NativeSelect>
+      <ChoiceSelect portalled={false} size="sm" value={resource} onValueChange={setResource} label={t.edition} className="max-w-56"
+        options={[{ value: '', label: allowWork ? t.workInGeneral : t.chooseEdition },
+          ...options.filter(option => option.kind !== 'work').map(option => ({ value: option.resource, label: nameOf(option) }))]} />
     </Field>
     <Field className="gap-1">
       <FieldLabel className="text-muted-foreground text-xs">{t.format}</FieldLabel>
-      <NativeSelect size="sm" value={format} onChange={event => setFormat(event.target.value)}>
-        <NativeSelectOption value="">{t.noFormat}</NativeSelectOption>
-        {knownFormats.map(known => <NativeSelectOption key={known} value={known}>{formatLabel(known, t)}</NativeSelectOption>)}
-      </NativeSelect>
+      <ChoiceSelect portalled={false} size="sm" value={format} onValueChange={setFormat} label={t.format}
+        options={[{ value: '', label: t.noFormat }, ...knownFormats.map(known => ({ value: known, label: formatLabel(known, t) ?? known }))]} />
     </Field>
     <Button size="sm" variant="outline" disabled={busy || (!allowWork && !chosen)}
       onClick={() => void onSubmit(chosen, format || null)}>{submit}</Button>
@@ -101,10 +97,9 @@ export function PositionEditor({ session, selection, t, busy, onSave }: {
     <div className="flex flex-wrap items-end gap-2">
       <Field className="gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.positionUnit}</FieldLabel>
-        <NativeSelect size="sm" value={unit} disabled={Boolean(locator)} onChange={event => setUnit(event.target.value as LocatorUnit)}>
-          {(['page', 'percentage', 'media-time'] as const).map(item => <NativeSelectOption key={item} value={item}>
-            {unitLabel(item, t)}</NativeSelectOption>)}
-        </NativeSelect>
+        <ChoiceSelect portalled={false} size="sm" value={unit} disabled={Boolean(locator)} onValueChange={value => setUnit(value as LocatorUnit)}
+          label={t.positionUnit}
+          options={(['page', 'percentage', 'media-time'] as const).map(item => ({ value: item, label: unitLabel(item, t) }))} />
       </Field>
       <Field className="gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.positionValue}</FieldLabel>

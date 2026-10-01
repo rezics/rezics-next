@@ -1,12 +1,12 @@
-import type { ZoneContext, ZoneWork } from '@rezics/zone-sdk';
+import { direction } from '@rezics/main/language';
+import type { ZoneContext, ZoneReleaseFilterSpec, ZoneWork } from '@rezics/zone-sdk';
 import { facetRegistry } from '../../../../packages/model/src/generated/facets.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReleaseHit, type ReleaseRecords, type ReleaseResult, releaseWork } from '../release-filter/adapt.ts';
 import { resolveReleaseFilter, type ResolvedReleaseFilter, type ServedFacet } from '../release-filter/registry.ts';
-import { parseReleaseFilter, type ReleaseFilterState } from '../release-filter/state.ts';
+import type { ReleaseFilterState } from '../release-filter/state.ts';
 import { presetTokens } from '../zones/presentation.ts';
 import type { Realization, Release } from '../work-levels/types.ts';
-import visualNovels from '../../zones/official/visual-novels/index.tsx';
 
 // Story data for the Visual Novels and Light Novels Zones. A filtered page's cards are not written by hand: each
 // story states a filter, the records a Main read would return for it (the hits with their matched release IDs,
@@ -15,13 +15,11 @@ import visualNovels from '../../zones/official/visual-novels/index.tsx';
 /** The registry as Main serves it. */
 export const served = Object.values(facetRegistry) as unknown as ServedFacet[];
 
-export const visualNovelFilter = (locale: UiLocale): ResolvedReleaseFilter =>
-  resolveReleaseFilter(visualNovels.releaseFilter!(locale), served, locale)!;
+/** The Zone's filter spec (read from its package by the story, as the host loader would) against the served registry. */
+export const resolvedFilter = (spec: ZoneReleaseFilterSpec, locale: UiLocale): ResolvedReleaseFilter =>
+  resolveReleaseFilter(spec, served, locale)!;
 
-export const parseFilter = (locale: UiLocale, params: Record<string, string>): ReleaseFilterState =>
-  parseReleaseFilter(params, visualNovelFilter(locale));
-
-const text = (value: string, lang = 'en') => ({ value, lang, dir: 'ltr' as const });
+const text = (value: string, lang = 'en') => ({ value, lang, dir: direction(lang, value) });
 const id = (name: string) => `https://rezics.com/id/00000000-0000-7000-8000-${name.padStart(12, '0')}`;
 
 export function zoneFor(slug: 'visual-novels' | 'light-novels', locale: UiLocale): ZoneContext {
@@ -61,7 +59,7 @@ const records: ReleaseRecords = {
 };
 
 const hit = (work: string, title: string, matched: string[], more = false, lang = 'en'): ReleaseHit => ({ id: work,
-  title: { value: title, language: lang, direction: 'ltr', basis: 'requested' } as ReleaseHit['title'], cover: null,
+  title: { value: title, language: lang, direction: direction(lang, title), basis: 'requested' } as ReleaseHit['title'], cover: null,
   matchedReleases: matched, moreMatchedReleases: more });
 
 /** The Main answers each story's filter would get: only Works with a release meeting every condition. */

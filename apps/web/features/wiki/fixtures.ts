@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { HomeSlotProps, ZoneContext, ZoneEntity, ZoneHomeSection, ZoneMember, ZonePositionState, ZoneText,
   ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -8,7 +9,7 @@ import type { PositionChoiceOption } from './position-control.tsx';
 // Pride and Prejudice at different positions. Every name below is a record "Main returned"; the slot tests assert
 // that nothing else is drawn.
 
-export const text = (value: string, lang = 'en'): ZoneText => ({ value, lang, dir: 'ltr' });
+export const text = (value: string, lang = 'en'): ZoneText => ({ value, lang, dir: direction(lang, value) });
 const id = (name: string) => `https://rezics.com/id/00000000-0000-7000-8000-${name.padStart(12, '0')}`;
 const page = (segment: string, name: string) => `/r/franchise-wiki/${segment}/${id(name).slice(-36)}`;
 

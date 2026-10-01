@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { selectDisplayName } from '@rezics/main/language';
+import { direction, selectDisplayName } from '@rezics/main/language';
 import { materializeData } from 'native-i18n';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -412,8 +412,8 @@ export const G504UndeterminedRtlTitle: Story = {
 
 /** G-516: a Japanese title in a Korean interface, with a Hebrew author and an Arabic translator in the credits. */
 export const G516NonLatinNames: Story = {
-  args: { work: { ...fixture.work, title: { value: '吾輩は猫である', language: 'ja', direction: 'ltr', basis: 'fallback' },
-    originalTitle: { value: 'مكتبة الأدب', language: 'ar', direction: 'rtl' },
+  args: { work: { ...fixture.work, title: { value: '吾輩は猫である', language: 'ja', direction: direction('ja', '吾輩は猫である'), basis: 'fallback' },
+    originalTitle: { value: 'مكتبة الأدب', language: 'ar', direction: direction('ar', 'مكتبة الأدب') },
     tagline: null, description: null, selectedLanguage: null },
   agentCredits: fixture.agentCredits.ok ? fixture.ok({ ...fixture.agentCredits.data,
     items: fixture.agentCredits.data.items.map((credit, index) =>

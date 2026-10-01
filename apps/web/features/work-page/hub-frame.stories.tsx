@@ -172,8 +172,8 @@ export const EditionChoice: StoryObj<Meta<EditionArgs>> = {
   args: { locale: 'en' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const edition = await canvas.findByRole('combobox', { name: 'Edition' });
-    await userEvent.selectOptions(edition, 'Sword Art Online 1 (audiobook)');
+    await userEvent.click(await canvas.findByRole('combobox', { name: 'Edition' }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Sword Art Online 1 (audiobook)' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save choice' }));
     await expect(await canvas.findByText('Saved.')).toBeVisible();
   },

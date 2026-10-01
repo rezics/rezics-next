@@ -171,14 +171,14 @@ describe('the correction form', () => {
     expect(webHref('https://rezics.com/id/x y')).toBeNull();
   });
 
-  test('the header component is the one Main names for the Work’s header', () => {
+  test('the header component is the one Main names for the Work’s header', async () => {
     const header = checkedMetadataState({ kind: 'header', originalTitle: null, localized: [] });
-    expect(headerComponent(ids.work)).toBe(metadataComponent(ids.work, header));
+    expect(await headerComponent(ids.work)).toBe(metadataComponent(ids.work, header));
     // Header content never changes which component it is.
     const edited = checkedMetadataState({ kind: 'header', originalTitle: { value: 'X', language: 'en' },
       localized: [{ language: 'en', title: 'T', description: null, mainVersionLabel: null }] });
-    expect(headerComponent(ids.work)).toBe(metadataComponent(ids.work, edited));
-    expect(headerComponent(ids.work)).not.toBe(headerComponent(ids.workRevision));
+    expect(await headerComponent(ids.work)).toBe(metadataComponent(ids.work, edited));
+    expect(await headerComponent(ids.work)).not.toBe(await headerComponent(ids.workRevision));
   });
 });
 

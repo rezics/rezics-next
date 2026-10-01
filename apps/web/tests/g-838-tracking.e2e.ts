@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { type Browser, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import type { Catalogue } from './g-838-catalogue.ts';
+import { chooseOption } from './g-934-choose.ts';
 
 // Two browser contexts are two devices of one reader: a desktop and a phone, each signed in on its own.
 // The records are written once into this isolated QA stack through Main's routes (`g-838-catalogue.ts`).
@@ -108,15 +109,15 @@ test('attempts on two devices, series progress and the offered correspondence', 
   let sheetA = await openDetails(a);
   await expect(sheetA.getByText('No attempts recorded yet.')).toBeVisible();
   const start = sheetA.getByRole('region', { name: 'Start an attempt' });
-  await start.getByLabel('Edition').selectOption({ label: 'Sword Art Online 1: Aincrad · paperback' });
-  await start.getByLabel('Format').selectOption({ label: 'Print' });
+  await chooseOption(start, a, 'Edition', 'Sword Art Online 1: Aincrad · paperback');
+  await chooseOption(start, a, 'Format', 'Print');
   await start.getByRole('button', { name: 'Start reading' }).click();
   const first = sheetA.getByRole('article', { name: 'First read' });
   await expect(first.getByText('Reading', { exact: true })).toBeVisible();
   await expect(first).toContainText('Sword Art Online 1: Aincrad · paperback');
   await expect(first).toContainText('Print');
-  await first.getByLabel('Edition', { exact: true }).selectOption({ label: 'Sword Art Online 1: Aincrad (audiobook) · audiobook' });
-  await first.getByLabel('Format', { exact: true }).selectOption({ label: 'Audiobook' });
+  await chooseOption(first, a, 'Edition', 'Sword Art Online 1: Aincrad (audiobook) · audiobook');
+  await chooseOption(first, a, 'Format', 'Audiobook');
   await first.getByRole('button', { name: 'Add' }).click();
   await expect(first).toContainText('Audiobook');
   // A page belongs to an edition: it is recorded against the paperback, current apart from furthest.
@@ -160,7 +161,7 @@ test('attempts on two devices, series progress and the offered correspondence', 
 
   // A starts a reread with the omnibus, which covers all three volumes, and finishes it.
   const reread = sheetA.getByRole('region', { name: 'Start a reread' });
-  await reread.getByLabel('Edition').selectOption({ label: 'Sword Art Online: Volumes 1–3 omnibus · ebook' });
+  await chooseOption(reread, a, 'Edition', 'Sword Art Online: Volumes 1–3 omnibus · ebook');
   await reread.getByRole('button', { name: 'Start reading' }).click();
   const second = sheetA.getByRole('article', { name: 'Reread 1' });
   await expect(second).toBeVisible();
@@ -189,7 +190,7 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await a.goto(at(index.series, '/connections'));
   const indexPanel = a.getByRole('region', { name: 'Series progress' });
   await expect(indexPanel).toBeVisible();
-  await indexPanel.getByLabel('Language').selectOption('zh-Hant');
+  await chooseOption(indexPanel, a, 'Language', 'Traditional Chinese');
   await indexPanel.getByRole('button', { name: 'Save choice' }).click();
   await expect(indexPanel.getByText('Saved.')).toBeVisible();
   await expect(indexPanel.locator('[data-state="caughtUpWithAvailableMaterial"]')).toHaveAttribute('data-value', 'true');

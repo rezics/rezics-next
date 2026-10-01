@@ -1,12 +1,12 @@
 import { Button } from '@rezics/ui/button';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import type { ZoneReleaseFilterSpec } from '@rezics/zone-sdk';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { ResolvedField, ResolvedReleaseFilter } from './registry.ts';
 import { releaseFilterActive, type ReleaseFilterState } from './state.ts';
 
-// The release filter as a form: native selects and one submit button, so every choice is reachable by keyboard,
-// works without script and leaves each filtered view with its own address. The registry names the fields and
+// The release filter as a form: styled selects (each keeps a real form field) and one submit button, so every choice
+// is reachable by keyboard, a submit leaves each filtered view with its own address. The registry names the fields and
 // their values (`resolveReleaseFilter`); the Zone adds its words (`ZoneReleaseFilterSpec`); the platform owns
 // the control and the query.
 
@@ -45,11 +45,8 @@ export function ReleaseFilterControl({ spec, filter, state, action, idPrefix = '
         const current = state.conditions[field.facet];
         return <div key={field.facet} className="grid min-w-0 gap-1">
           <label htmlFor={id} className="font-medium text-muted-foreground text-xs">{field.label}</label>
-          <NativeSelect id={id} name={field.facet} defaultValue={current ?? ''} size="md" className="w-full">
-            <NativeSelectOption value="">{field.any}</NativeSelectOption>
-            {optionsOf(field, current).map(option => <NativeSelectOption key={option.value} value={option.value}>
-              {option.label}</NativeSelectOption>)}
-          </NativeSelect>
+          <ChoiceSelect id={id} name={field.facet} defaultValue={current ?? ''} label={field.label} className="w-full"
+            options={[{ value: '', label: field.any }, ...optionsOf(field, current)]} />
         </div>;
       })}
     </div>

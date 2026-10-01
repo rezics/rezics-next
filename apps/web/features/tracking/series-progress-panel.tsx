@@ -3,7 +3,7 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { useEffect, useId, useState } from 'react';
 import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
@@ -95,17 +95,14 @@ export function PreferenceForm({ work, preference, language, editions, api, loca
     <div className="flex flex-wrap items-end gap-3">
       <Field className="gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.language}</FieldLabel>
-        <NativeSelect size="sm" value={language} onChange={event => { setEdition(''); onLanguage(event.target.value); }}>
-          {languages.map(tag => <NativeSelectOption key={tag} value={tag}>{languageName(tag, locale)}</NativeSelectOption>)}
-        </NativeSelect>
+        <ChoiceSelect portalled={false} size="sm" value={language} onValueChange={value => { setEdition(''); onLanguage(value); }}
+          label={t.language} options={languages.map(tag => ({ value: tag, label: languageName(tag, locale) }))} />
       </Field>
       <Field className="gap-1">
         <FieldLabel className="text-muted-foreground text-xs">{t.edition}</FieldLabel>
-        <NativeSelect size="sm" value={edition} onChange={event => setEdition(event.target.value)} className="max-w-60">
-          <NativeSelectOption value="">{t.anyEdition}</NativeSelectOption>
-          {offered.map(item => <NativeSelectOption key={`${item.kind}|${item.resource}`} value={`${item.kind}|${item.resource}`}>
-            {item.name}</NativeSelectOption>)}
-        </NativeSelect>
+        <ChoiceSelect portalled={false} size="sm" value={edition} onValueChange={setEdition} label={t.edition} className="max-w-60"
+          options={[{ value: '', label: t.anyEdition },
+            ...offered.map(item => ({ value: `${item.kind}|${item.resource}`, label: item.name }))]} />
       </Field>
       <Button type="submit" size="sm" variant="outline" disabled={busy}>{t.savePreference}</Button>
     </div>

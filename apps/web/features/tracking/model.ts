@@ -60,6 +60,9 @@ export function dateText(value: string | null, locale: string): string | null {
   return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(at);
 }
 
+/** The shape of a typed date: ISO 8601 notation is a protocol format, not interface copy, so it is not localized. */
+export const isoDatePlaceholder = 'YYYY-MM-DD';
+
 export const today = () => new Date().toISOString().slice(0, 10);
 
 /** `1:02:03`, `12:30` or seconds, as seconds; null when it is none of these. */

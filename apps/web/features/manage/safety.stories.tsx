@@ -169,8 +169,8 @@ export const FilteredEmpty: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'No case matches these filters' })).toBeVisible();
     await expect(canvas.getAllByRole('link', { name: 'Clear filters' })[0]).toHaveAttribute('href', '/en/manage/site');
-    await expect(canvas.getByRole('combobox', { name: 'Category' })).toHaveValue('privacy');
-    await expect(canvas.getByRole('combobox', { name: 'Due' })).toHaveValue('overdue');
+    await expect(canvas.getByRole('combobox', { name: 'Category' })).toHaveTextContent('Private information');
+    await expect(canvas.getByRole('combobox', { name: 'Due' })).toHaveTextContent('Overdue');
   },
 };
 

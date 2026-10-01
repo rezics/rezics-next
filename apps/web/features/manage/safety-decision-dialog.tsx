@@ -5,7 +5,7 @@ import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
 import { CircleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -211,16 +211,15 @@ export function SafetyDecisionDialog({ item, detail, outcome, evidence, offer, a
           <Confirm checked={automation} onChange={setAutomation}>{t.automationLabel}</Confirm>
           <Field>
             <FieldLabel>{t.reasonLanguageLabel}</FieldLabel>
-            <NativeSelect value={written} onChange={event => setWritten(event.currentTarget.value)}>
-              {languages.map(code => <option key={code} value={code}>{languageLabel(code, locale)}</option>)}
-            </NativeSelect>
+            <ChoiceSelect portalled={false} value={written} onValueChange={setWritten} label={t.reasonLanguageLabel}
+              className="w-full" options={languages.map(code => ({ value: code, label: languageLabel(code, locale) }))} />
           </Field>
           {restricts(shown) ? <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel>{t.effectLabel}</FieldLabel>
-              <NativeSelect value={effect} onChange={event => setEffect(event.currentTarget.value as SafetyEffect)}>
-                {effects.map(entry => <option key={entry.effect} value={entry.effect}>{t[entry.label]}</option>)}
-              </NativeSelect>
+              <ChoiceSelect portalled={false} value={effect} onValueChange={value => setEffect(value as SafetyEffect)}
+                label={t.effectLabel} className="w-full"
+                options={effects.map(entry => ({ value: entry.effect, label: t[entry.label] }))} />
             </Field>
             <Field>
               <FieldLabel>{t.expiryLabel}</FieldLabel>

@@ -9,6 +9,12 @@ import { createMemoryMain, type MemoryMain, memoryReader, memoryTracking } from 
 import { SeriesProgressPanel } from './series-progress-panel.tsx';
 import { TrackingControl } from './tracking-control.tsx';
 
+/** Opens a styled select and picks an option; the list is portalled, so options are found on the document. */
+async function choose(scope: ReturnType<typeof within>, name: string | RegExp, option: string) {
+  await userEvent.click(scope.getByRole('combobox', { name }));
+  await userEvent.click(await within(document.body).findByRole('option', { name: option }));
+}
+
 interface Args { locale: UiLocale; main: MemoryMain; work: string; title: string; status?: 'read' | 'reading' | null }
 
 const signInHref = '/auth/start';
@@ -52,15 +58,15 @@ export const AttemptLifecycle: Story = {
     const sheet = await openDetails(canvasElement);
     await sheet.findByText('No attempts recorded yet.');
     const start = sheet.getByRole('region', { name: 'Start an attempt' });
-    await userEvent.selectOptions(within(start).getByLabelText('Edition'), 'Sword Art Online 1: Aincrad · paperback');
-    await userEvent.selectOptions(within(start).getByLabelText('Format'), 'Print');
+    await choose(within(start), 'Edition', 'Sword Art Online 1: Aincrad · paperback');
+    await choose(within(start), 'Format', 'Print');
     await userEvent.click(within(start).getByRole('button', { name: 'Start reading' }));
     const first = await sheet.findByRole('article', { name: 'First read' });
     await expect(within(first).getByText('Reading')).toBeVisible();
     await expect(within(first).getByText(/Sword Art Online 1: Aincrad · paperback/)).toBeVisible();
 
-    await userEvent.selectOptions(within(first).getByLabelText('Edition', { selector: 'select' }), 'Sword Art Online 1 (audiobook) · audiobook');
-    await userEvent.selectOptions(within(first).getByLabelText('Format', { selector: 'select' }), 'Audiobook');
+    await choose(within(first), 'Edition', 'Sword Art Online 1 (audiobook) · audiobook');
+    await choose(within(first), 'Format', 'Audiobook');
     await userEvent.click(within(first).getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(within(first).getAllByText(/audiobook/i).length).toBeGreaterThan(1));
 
@@ -100,7 +106,7 @@ export const PageAndFurthest: Story = {
     const sheet = await openDetails(canvasElement);
     const card = await sheet.findByRole('article', { name: 'First read' });
     await expect(within(card).getByText(/Choose an edition to record a page/)).toBeVisible();
-    await userEvent.selectOptions(within(card).getByLabelText('Edition', { selector: 'select' }), 'Sword Art Online 1: Aincrad · paperback');
+    await choose(within(card), 'Edition', 'Sword Art Online 1: Aincrad · paperback');
     await userEvent.click(within(card).getByRole('button', { name: 'Add' }));
     const position = await within(card).findByLabelText('Value');
     await userEvent.type(position, '200');
@@ -199,7 +205,7 @@ export const EditionPreference: Story = {
   render: args => <Device {...args} panel />,
   async play({ canvasElement, args }) {
     const panel = within(await within(canvasElement).findByRole('region', { name: 'Series progress' }));
-    await userEvent.selectOptions(panel.getByLabelText('Edition'), 'Sword Art Online 1: Aincrad');
+    await choose(panel, 'Edition', 'Sword Art Online 1: Aincrad');
     await userEvent.click(panel.getByRole('button', { name: 'Save choice' }));
     await waitFor(() => expect(args.main.preferences.get(fixture.saoOne)).toMatchObject({ language: 'en', version: 1,
       edition: { kind: 'release', resource: fixture.iri('p1') } }));

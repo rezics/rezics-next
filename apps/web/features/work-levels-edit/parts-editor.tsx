@@ -4,7 +4,7 @@ import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { ArrowDownIcon, ArrowUpIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -91,9 +91,9 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
                 <Input name="label" defaultValue={typed(part)?.label ?? part.label} maxLength={500} required autoComplete="off" />
                 <FieldError>{hintIn(`update:${part.occurrence}`, 'label')}</FieldError></Field>
               <Field><FieldLabel>{t.partInclusion}</FieldLabel>
-                <NativeSelect name="inclusion" defaultValue={typed(part)?.inclusion ?? part.inclusion}>
-                  {inclusionOptions(t).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </NativeSelect></Field>
+                <ChoiceSelect name="inclusion" label={t.partInclusion} defaultValue={typed(part)?.inclusion ?? part.inclusion}
+                  className="w-full" portalled={false}
+                  options={inclusionOptions(t).map(([value, label]) => ({ value, label }))} /></Field>
               <Button type="submit" size="sm" disabled={pending} className="w-fit">{t.savePart}</Button></Context></form>
           </details> : null}
           <details className="rounded-xl border border-border/60 px-2 py-1 text-sm open:basis-full">
@@ -122,13 +122,12 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
         <FieldHelper>{t.partLabelHelp}</FieldHelper><FieldError>{hintIn('add', 'label')}</FieldError></Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field><FieldLabel>{t.partInclusion}</FieldLabel>
-          <NativeSelect name="inclusion" defaultValue={added.inclusion ?? 'required'}>
-            {inclusionOptions(t).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</NativeSelect></Field>
+          <ChoiceSelect name="inclusion" label={t.partInclusion} defaultValue={added.inclusion ?? 'required'}
+            className="w-full" options={inclusionOptions(t).map(([value, label]) => ({ value, label }))} /></Field>
         <Field invalid={hintIn('add', 'after') !== null}><FieldLabel>{t.partPlace}</FieldLabel>
-          <NativeSelect name="after" defaultValue={added.after ?? 'last'}>
-            <option value="last">{t.placeLast}</option><option value="first">{t.placeFirst}</option>
-            {parts.map(part => <option key={part.occurrence} value={part.occurrence}>{t.placeAfter({ label: part.label })}</option>)}
-          </NativeSelect><FieldError>{hintIn('add', 'after')}</FieldError></Field>
+          <ChoiceSelect name="after" label={t.partPlace} defaultValue={added.after ?? 'last'} className="w-full"
+            options={[{ value: 'last', label: t.placeLast }, { value: 'first', label: t.placeFirst },
+              ...parts.map(part => ({ value: part.occurrence, label: t.placeAfter({ label: part.label }) }))]} /><FieldError>{hintIn('add', 'after')}</FieldError></Field>
       </div>
       <Button type="submit" isLoading={pending} disabled={pending} className="w-fit">
         <PlusIcon aria-hidden="true" />{pending ? t.submitting : t.addPartButton}</Button>

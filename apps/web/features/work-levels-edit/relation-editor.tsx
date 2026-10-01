@@ -3,7 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { LinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -11,6 +11,7 @@ import { mayEdit } from './allowed.ts';
 import { type KindOption, viaOf } from './kinds.ts';
 import { materializeData } from 'native-i18n';
 import type { WorkLevelsEditMessages } from './messages.ts';
+import { urlPlaceholder } from './placeholders.ts';
 import { useWrite } from './use-write.ts';
 import { hintFor, WriteStatus } from './write-status.tsx';
 import type { WriteState } from './write.ts';
@@ -43,16 +44,15 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
     <input type="hidden" name="mainVersion" value={mainVersion} /><input type="hidden" name="head" value={head} />
     <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
       <Field invalid={hint('kind') !== null}><FieldLabel>{t.relKind}</FieldLabel>
-        <NativeSelect name="kind" value={current.key} onChange={event => setChosen(event.currentTarget.value)}>
-          {kinds.map(kind => <option key={kind.key} value={kind.key} lang={kind.language}>{kind.label}</option>)}
-        </NativeSelect><FieldHelper>{t.relKindHelp}</FieldHelper><FieldError>{hint('kind')}</FieldError></Field>
+        <ChoiceSelect name="kind" label={t.relKind} value={current.key} onValueChange={setChosen} className="w-full"
+          options={kinds.map(kind => ({ value: kind.key, label: kind.label, lang: kind.language }))} /><FieldHelper>{t.relKindHelp}</FieldHelper><FieldError>{hint('kind')}</FieldError></Field>
       <Field invalid={hint('counterpart') !== null}><FieldLabel>{t.relCounterpart}</FieldLabel>
         <WorkPicker name="counterpart" locale={locale} t={t} load={load} initial={values.counterpart ?? ''}
           invalid={hint('counterpart') !== null} /><FieldHelper>{t.relCounterpartHelp}</FieldHelper><FieldError>{hint('counterpart')}</FieldError></Field>
     </div>
     <Field invalid={hint('evidence') !== null}><FieldLabel>{t.relEvidence}</FieldLabel>
       <Input name="evidence" type="url" inputMode="url" defaultValue={values.evidence ?? ''} required maxLength={2048}
-        autoComplete="off" placeholder="https://" /><FieldHelper>{t.relEvidenceHelp}</FieldHelper><FieldError>{hint('evidence')}</FieldError></Field>
+        autoComplete="off" placeholder={urlPlaceholder} /><FieldHelper>{t.relEvidenceHelp}</FieldHelper><FieldError>{hint('evidence')}</FieldError></Field>
     {viaOf(current.key) === 'derivation' ? <label className="flex items-start gap-3 text-sm">
       <input type="checkbox" name="unresolved" defaultChecked={values.unresolved === 'on'} className="mt-1 size-4 accent-primary" />
       <span className="grid gap-0.5"><span>{t.relUnresolved}</span>

@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ZoneReleaseFilterSpec } from '@rezics/zone-sdk';
 import { expect, userEvent, within } from 'storybook/test';
@@ -37,7 +38,7 @@ function Browse({ locale, params, withResults, next = null }: {
   const context = { locale, ref: 'books', realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001' };
   const items = withResults ? ['Pride and Prejudice', 'Persuasion'].map((title, index) => releaseWork({
     id: `https://rezics.com/id/00000000-0000-7000-8000-00000000000${index + 2}`,
-    title: { value: title, language: 'en', direction: 'ltr', basis: 'requested' } as never, cover: null,
+    title: { value: title, language: 'en', direction: direction('en', title), basis: 'requested' } as never, cover: null,
     matchedReleases: [], moreMatchedReleases: false }, state, spec, context,
   { releases: new Map(), realizations: new Map(), translators: new Map() })) : [];
   return <RealmPageStory zone={zone} locale={locale}>
@@ -50,7 +51,7 @@ function Browse({ locale, params, withResults, next = null }: {
 function zoneFor(locale: UiLocale) {
   const home = `/${locale}/r/books`;
   return { slug: 'books', realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001',
-    name: { value: 'Books', lang: 'en', dir: 'ltr' as const }, description: null, icon: null, hero: null,
+    name: { value: 'Books', lang: 'en', dir: direction('en', 'Books') }, description: null, icon: null, hero: null,
     tokens: presetTokens.editorial, locale, links: { home, browse: `${home}/browse`, works: `${home}/browse`,
       discussions: `${home}/discussions`, decisions: `${home}/decisions`, about: `${home}/about` } };
 }
@@ -71,8 +72,8 @@ export const Filtered: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('form', { name: 'Find an edition' })).toBeVisible();
-    await expect(canvas.getByLabelText('Language')).toHaveValue('en');
-    await expect(canvas.getByLabelText('Format')).toHaveValue('ebook');
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
+    await expect(canvas.getByRole('combobox', { name: 'Format' })).toHaveTextContent('E-book');
     await expect(canvas.getByRole('link', { name: 'Remove filter: E-book' })).toHaveAttribute('href',
       '/en/r/books/browse?releaseLanguage=en');
     await fits();
@@ -109,15 +110,14 @@ export const SecondPage: Story = {
   },
 };
 
-/** Keyboard only: tab through each select and on to the button. */
+/** Keyboard only: tab through each select and on to the button */
 export const Keyboard: Story = {
   args: { params: {}, withResults: false },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    canvas.getByLabelText('Language').focus();
-    await userEvent.keyboard('{ArrowDown}');
+    canvas.getByRole('combobox', { name: 'Language' }).focus();
     await userEvent.tab();
-    await expect(canvas.getByLabelText('Format')).toHaveFocus();
+    await expect(canvas.getByRole('combobox', { name: 'Format' })).toHaveFocus();
     await userEvent.tab();
     await expect(canvas.getByRole('button', { name: 'Show matching books' })).toHaveFocus();
   },

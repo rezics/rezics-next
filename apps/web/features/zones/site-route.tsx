@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { isUiLocale } from '../../i18n/define.ts';
 import { getMessages, getTranslation } from '../../i18n/server.ts';
+import { zoneContentText } from '../language/untagged.ts';
 import { zoneText } from '../realm/adapt.ts';
 import type { RealmMessages } from '../realm/messages.ts';
 import { loadRealmView, RealmFrame } from '../realm/realm-page.tsx';
@@ -141,7 +142,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       return frame(<DocumentPage work={work.header} text={text.data} messages={workMessages} />, crumbs);
     }
     case 'index': {
-      const name = mountName(route.mount.segment) ?? { value: route.mount.segment, lang: '', dir: 'ltr' as const };
+      const name = mountName(route.mount.segment) ?? zoneContentText(route.mount.segment);
       const card = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
       const members = await readMembers(site, route.mount.segment, route.items, locale, state);
       const Slot = view.pkg?.slots.index;
@@ -162,19 +163,18 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     case 'detail': {
       const id = idOf(route.resource.id);
       if (!id) notFound();
-      const mount = route.mount ? { label: mountName(route.mount.segment) ?? { value: route.mount.segment, lang: '',
-        dir: 'ltr' as const }, href: kept(`/r/${encodeURIComponent(ref)}/${encodeURIComponent(route.mount.segment)}`) } : null;
+      const mount = route.mount ? { label: mountName(route.mount.segment) ?? zoneContentText(route.mount.segment), href: kept(`/r/${encodeURIComponent(ref)}/${encodeURIComponent(route.mount.segment)}`) } : null;
       // What the page is comes from Main's page projection, which also answers 404 for a record not yet revealed.
       const projection = await readEntityProjection(id, state?.main);
       if (!projection.ok) {
         if (projection.failure === 'missing') notFound();
         return frame(failure(projection.failure, siteHref(locale, ref, path), view.messages),
-          [home, ...mount ? [mount] : [], { label: { value: shortId(id), lang: '', dir: 'ltr' }, href: null }]);
+          [home, ...mount ? [mount] : [], { label: zoneContentText(shortId(id)), href: null }]);
       }
       if (projection.data.target.base === 'work') {
         const tab = workTabOf(route.tab);
         const work = await loadWork(id, locale);
-        const title = work.ok ? zoneText(work.header.title) : { value: shortId(id), lang: '', dir: 'ltr' as const };
+        const title = work.ok ? zoneText(work.header.title) : zoneContentText(shortId(id));
         return frame(<ZoneWorkPage base={workBase(ref, id, route.mount?.segment ?? null, view.context.realm)}
           tab={tab} search={search} locale={locale} pkg={view.pkg} />,
         [home, ...mount ? [mount] : [], { label: title, href: null }]);
@@ -182,7 +182,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       const summary = projection.data.summary;
       const chapter = state && projection.data.target.base === 'occurrence' ? occurrenceName(state, route.resource.id, locale) : null;
       const title = chapter ?? (summary.status === 'available' ? zoneText(summary.name)
-        : { value: shortId(id), lang: '', dir: 'ltr' as const });
+        : zoneContentText(shortId(id)));
       return frame(<ZoneEntityPage view={view} id={id} projection={projection.data} locale={locale} search={search}
         site={site} state={state} mount={route.mount?.segment ?? null}
         path={`/r/${encodeURIComponent(ref)}/${path.map(encodeURIComponent).join('/')}`} />,

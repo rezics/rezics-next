@@ -1,5 +1,6 @@
 'use server';
 
+import { parseLanguage } from '@rezics/main/language';
 import { mainApi } from '../api/main.ts';
 import { readWorkHeader, reader } from '../work-page/read.ts';
 import { isRelationKind, viaOf } from './kinds.ts';
@@ -159,7 +160,7 @@ export async function addRealization(_previous: WriteState, form: FormData): Pro
     const evidence = text(form, 'evidence');
     const translators = agentsOf(text(form, 'translators'));
     const publishers = agentsOf(text(form, 'publishers'));
-    if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(language)) return { refused: 'language' };
+    if (!parseLanguage(language)) return { refused: 'language' };
     if (!translators) return { refused: 'translators' };
     if (!publishers) return { refused: 'publishers' };
     if (evidence && !httpsUrl.test(evidence)) return { refused: 'evidence' };
@@ -204,7 +205,7 @@ export async function addRelease(_previous: WriteState, form: FormData): Promise
       return iriPattern.test(realization ?? '') && iriPattern.test(revision ?? '') ? [{ realization: realization!, revision: revision! }] : [];
     });
     if (!title || title.length > 500) return { refused: 'title' };
-    if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(language)) return { refused: 'language' };
+    if (!parseLanguage(language)) return { refused: 'language' };
     if (!['formal', 'web', 'fixed', 'virtual'].includes(kind)) return { refused: 'kind' };
     if (!['official', 'unofficial', 'virtual', 'withdrawn', 'cancelled'].includes(status)) return { refused: 'status' };
     if (isbn13 && !/^97[89][0-9]{10}$/.test(isbn13)) return { refused: 'isbn13' };
