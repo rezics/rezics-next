@@ -6,8 +6,7 @@ export function browserBudgets(playwrightFiles: number, storyFiles: number) {
   }
   return {
     setup: 30_000 + 90_000 + 30_000 + 240_000,
-    // 420s floor: a franchise-seeded journey spends about 80s seeding before its first page (G-841).
-    playwright: Math.max(420_000, 30_000 + playwrightFiles * 30_000),
+    playwright: Math.max(300_000, 30_000 + playwrightFiles * 30_000),
     // The 137-file browser tier took 156s on the shared host. Allow 3s/file
     // plus startup; individual story deadlines still bound a stuck interaction.
     storybook: Math.max(180_000, 60_000 + storyFiles * 3_000),
