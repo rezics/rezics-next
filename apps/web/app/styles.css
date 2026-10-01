@@ -6,3 +6,8 @@
 
 /* Production builds narrow this to the components the app imports (usedUiSources in vite.config.ts). */
 @source "../../../packages/ui/src";
+
+/* The sticky header is 4rem tall: scrolling a focused control or an anchor into view must not leave it underneath (WCAG 2.4.11). */
+html {
+  scroll-padding-top: 5rem;
+}
