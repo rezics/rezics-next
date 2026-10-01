@@ -7,9 +7,19 @@ import { acrossViews, firstLinks, seeded, test, uuid, type Seeded } from './g-84
 
 let data: Seeded;
 test.use({ actionTimeout: 15_000 });
-test.beforeAll(() => {
+test.beforeAll(async () => {
   test.setTimeout(540_000);
   data = seeded();
+  // A Realm's public header comes from a projection that can trail the Zone, and a Zone's site needs it.
+  for (const realm of [data.acceptance.zones.sao.realm, data.acceptance.zones.crossover.realm]) {
+    let found = false;
+    for (const deadline = Date.now() + 120_000; Date.now() < deadline && !found;) {
+      const header = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/realms/${uuid(realm)}`).catch(() => null);
+      found = Boolean(header?.ok);
+      if (!found) await new Promise(done => setTimeout(done, 1000));
+    }
+    if (!found) throw new Error(`The Realm ${realm} never became readable`);
+  }
 });
 
 const work = (key: string) => data.manifest.works[key]!.work;
