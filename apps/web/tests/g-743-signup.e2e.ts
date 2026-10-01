@@ -19,7 +19,7 @@ async function openSignUp(page: Page, locale: string, found: Findings) {
   await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
   if (new URL(page.url()).pathname === '/sign-in') {
     // Joining is the link below the sign-in step on Accounts.
-    await page.getByRole('link', { name: /create|sign up|join/i }).first().click();
+    await pressByKeyboard(page, page.locator('a[href^="/sign-up"]').first(), found, 'Create an account link');
     await page.waitForURL(url => url.pathname === '/sign-up', { timeout: 60_000 });
     await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
   }
