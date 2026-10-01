@@ -90,6 +90,7 @@ for (const viewport of [
     await clean(page, info, `q7-contradictions-${viewport.width}`);
     await page.goto(`${path}?position=all`);
     await expect(box).toContainText(seed.facts[2]!.text);
+    await clean(page, info, `q7-continuities-${viewport.width}`);
     // The API exposes applicability for each assertion. The corresponding
     // displayed claim must let the reader see which continuity it belongs to.
     for (const fact of seed.facts) {
@@ -125,8 +126,8 @@ for (const viewport of [
     await button.click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('link', { name: 'Chapter 1000', exact: true })).toBeVisible();
     await clean(page, info, `inventory-1000-${viewport.width}`);
+    await expect(dialog.getByRole('link', { name: 'Chapter 1000', exact: true })).toBeVisible();
   });
   test(`G856 ${viewport.width}: Thai and Arabic names survive an English interface`, async ({
     page,

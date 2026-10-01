@@ -227,9 +227,12 @@ for (const viewport of viewports) {
         await expect(rows.getByRole('link', { name: w.darcy })).toBeVisible();
         const passages = page.locator('[data-wiki-passages]');
         await expect(passages.getByRole('heading', { name: w.passages })).toBeVisible();
-        await expect(passages.locator('blockquote').first()).toContainText('Elizabeth and Jane were sisters');
-        await expect(passages.locator('[data-wiki-evidence]').first()).toContainText(w.edition);
-        await expect(passages.locator('[data-wiki-evidence]').first()).toContainText('Holder extraction agent');
+        // Sources are not ordered: verify the citation belonging to this quotation.
+        const sisterEvidence = passages.locator('[data-wiki-evidence]').filter({ hasText: 'Elizabeth and Jane were sisters' });
+        await expect(sisterEvidence).toHaveCount(1);
+        await expect(sisterEvidence.locator('blockquote')).toContainText('Elizabeth and Jane were sisters');
+        await expect(sisterEvidence).toContainText(w.edition);
+        await expect(sisterEvidence).toContainText('Holder extraction agent');
         await check(page, info, `reader-character-${locale}-${viewport.name}`);
 
         // A chapter page lists what it reveals, and its neighbours.
