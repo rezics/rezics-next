@@ -396,10 +396,16 @@ export async function exerciseRatingAggregates(f: Fixture) {
   }
   for (const plan of plans as { Plan: Record<string, unknown> }[][]) {
     const inventoryNodes = nodes(plan[0]!.Plan).filter(node => node['Relation Name'] === 'rating_aggregate_head');
-    expect(inventoryNodes, JSON.stringify(inventoryNodes)).toHaveLength(1);
-    expect(inventoryNodes[0]!['Index Name']).toBe('rating_aggregate_head_pkey');
-    expect(inventoryNodes[0]!['Actual Rows']).toBe(6);
-    expect(inventoryNodes[0]!['Rows Removed by Filter'] ?? 0).toBe(0);
+    // Merge-selection branches are planned but this native-only fixture must
+    // execute exactly one bounded head lookup, with no unrelated rows filtered.
+    const executed = inventoryNodes.filter(node => Number(node['Actual Loops']) > 0);
+    expect(executed, JSON.stringify(inventoryNodes)).toHaveLength(1);
+    expect(executed[0]!['Index Name'], JSON.stringify(inventoryNodes)).toBe('rating_aggregate_head_pkey');
+    expect(executed[0]!['Actual Rows']).toBe(6);
+    expect(executed[0]!['Rows Removed by Filter'] ?? 0).toBe(0);
+    for (const dormant of inventoryNodes.filter(node => Number(node['Actual Loops']) === 0)) {
+      expect(dormant['Actual Rows']).toBe(0);
+    }
   }
   for (const node of nodes((plans.at(-1) as { Plan: Record<string, unknown> }[])[0]!.Plan)
     .filter(node => node['Relation Name'] === 'admission')) {

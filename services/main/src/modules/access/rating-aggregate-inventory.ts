@@ -172,8 +172,8 @@ function inventorySql(release: boolean | 'target'): string { return `SELECT c.re
   JOIN access.admission ca ON ca.id = c.admission_id
   CROSS JOIN access.recovery_fence f
   LEFT JOIN LATERAL (${release === false ? `SELECT * FROM (
-    SELECT h.*,NULL::text AS effective_work,NULL::text AS effective_main_version FROM access.rating_aggregate_head h
-      WHERE context=c.context AND main_version=$2 AND target_release IS NULL
+    (SELECT h.*,NULL::text AS effective_work,NULL::text AS effective_main_version FROM access.rating_aggregate_head h
+      WHERE context=c.context AND main_version=$2 AND target_release IS NULL ORDER BY slot LIMIT 101)
     UNION ALL SELECT h.*,s.work AS effective_work,s.main_version AS effective_main_version
       FROM access.rating_merge_selection s JOIN access.rating_aggregate_head h
         ON h.context=s.context AND h.main_version=s.origin_main_version AND h.slot=s.origin_slot AND h.principal_id=s.principal_id
