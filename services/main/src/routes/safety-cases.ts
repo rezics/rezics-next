@@ -22,10 +22,11 @@ const queuePage = t.Object({
       caseId: uuid,
       kind: t.String(),
       urgent: t.Boolean(),
+      restricted: t.Boolean(),
       generation: t.String(),
       decisionHead: t.Nullable(uuid),
       openedAt: t.String(),
-      target: caseTarget,
+      target: t.Nullable(caseTarget),
       category: t.Nullable(t.String()),
       contentLanguage: t.Nullable(t.String()),
       dueAt: t.Nullable(t.String()),
@@ -59,7 +60,35 @@ const caseView = t.Object({
   state: t.String(),
   reports: t.Array(t.Object({ reportId: uuid, evidenceDigest: t.String(), category: t.String() })),
   reportsNextCursor: t.Nullable(uuid),
-  decision: t.Nullable(t.Object({ ...decisionResult.properties, profile: t.Optional(t.String()) })),
+  steps: t.Array(
+    t.Object({
+      id: uuid,
+      kind: t.String(),
+      process: t.String(),
+      reportId: t.Nullable(uuid),
+      decisionId: t.Nullable(uuid),
+      party: t.Nullable(t.String()),
+      partySubject: t.Nullable(agent),
+      statement: t.Nullable(t.String()),
+      documentDigest: t.Nullable(t.String()),
+      contentLanguage: t.Nullable(t.String()),
+      declarations: t.Nullable(t.Record(t.String(), t.Unknown())),
+      occurredAt: t.String(),
+      dueAt: t.Nullable(t.String()),
+      recordedAt: t.String(),
+    }),
+    { maxItems: 50 },
+  ),
+  stepsNextCursor: t.Nullable(uuid),
+  decision: t.Nullable(
+    t.Object({
+      ...decisionResult.properties,
+      profile: t.Optional(t.String()),
+      statementOfReasons: t.Nullable(
+        t.Object({ ...reasons.properties, rule: decisionFields.rule }),
+      ),
+    }),
+  ),
   targets: decisionFields.targets,
 });
 const noStore = { headers: { 'cache-control': 'no-store' } };
@@ -127,7 +156,11 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
       '/v1/safety-cases/:caseId',
       {
         params: t.Object({ caseId: uuid }),
-        query: t.Object({ actingSubject: agent, reportCursor: t.Optional(uuid) }),
+        query: t.Object({
+          actingSubject: agent,
+          reportCursor: t.Optional(uuid),
+          stepCursor: t.Optional(uuid),
+        }),
         response: { 200: caseView, ...authorizedReadProblems },
       },
       async ({ request, params, query }) => {
@@ -140,6 +173,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
               query.actingSubject,
               params.caseId,
               query.reportCursor,
+              query.stepCursor,
             ),
             noStore,
           );

@@ -5,10 +5,16 @@ import {
   GovernanceConflict,
   GovernanceDenied,
   GovernanceInvalid,
+  GovernanceStale,
   GovernanceUnavailable,
   normalizeGovernanceError,
 } from '../governance/store.ts';
-import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
+import {
+  decodeReadCursor,
+  encodeReadCursor,
+  WorkReadInvalid,
+  WorkReadExpired,
+} from '../work/read-session.ts';
 import { lockPreservationTarget } from '../public-report/preservation.ts';
 
 export const SAFETY_QUEUE_COST = {
@@ -58,6 +64,8 @@ export class SafetyQueue {
       return result;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof WorkReadInvalid) throw new GovernanceInvalid(error.message);
+      if (error instanceof WorkReadExpired) throw new GovernanceStale(error.message);
       throw normalizeGovernanceError(error);
     } finally {
       client.release();
@@ -104,7 +112,7 @@ export class SafetyQueue {
           'SELECT revision::text FROM access.site_moderation_position WHERE id FOR SHARE',
         )
       ).rows[0]!.revision;
-      const position = { dataEpoch: 'safety-queue-v1', sequence: revision };
+      const position = { dataEpoch: 'safety-queue-v2', sequence: revision };
       const binding = [
         'safety-queue',
         principal.issuer,
@@ -114,6 +122,7 @@ export class SafetyQueue {
         specialist,
       ];
       const cursor = decodeReadCursor(filter.cursor, binding, position);
+      // Descending urgency, then ascending timestamp and UUID, on every page.
       const rows = (
         await client.query<{
           id: string;
@@ -144,15 +153,15 @@ export class SafetyQueue {
           AND claim.case_generation = c.generation AND claim.expires_at > $10
         WHERE c.authority_kind = 'platform' AND c.authority_scope_id = 'governance:platform'
           AND c.state = 'open' AND c.review_pending AND c.kind = ANY($1::text[])
-          AND (NOT c.urgent OR $9)
           AND ($2::boolean IS NULL OR c.urgent = $2)
           AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM access.governance_report
             WHERE case_id = c.id AND reason_code = $3))
           AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM access.governance_report
             WHERE case_id = c.id AND content_language = $4))
           AND ($5::timestamptz IS NULL OR d.due_at <= $5)
-          AND ($6::timestamptz IS NULL OR (c.opened_at,c.id) > ($6::timestamptz,$7::uuid))
-        ORDER BY c.opened_at,c.id LIMIT $8`,
+          AND ($6::timestamptz IS NULL OR c.urgent < $9::boolean
+            OR (c.urgent = $9::boolean AND (c.opened_at,c.id) > ($6::timestamptz,$7::uuid)))
+        ORDER BY c.urgent DESC,c.opened_at,c.id LIMIT $8`,
           [
             kinds,
             filter.urgent ?? null,
@@ -160,36 +169,47 @@ export class SafetyQueue {
             filter.contentLanguage ?? null,
             filter.dueBefore ?? null,
             cursor?.after ?? null,
-            cursor?.order ?? null,
+            cursor?.order.slice(2) ?? null,
             limit + 1,
-            specialist,
+            cursor ? cursor.order.startsWith('1:') : null,
             this.clock(),
           ],
         )
       ).rows;
       const page = rows.slice(0, limit);
       return {
-        items: page.map((row) => ({
-          caseId: row.id,
-          kind: row.kind,
-          urgent: row.urgent,
-          generation: row.generation,
-          decisionHead: row.decision_head,
-          openedAt: row.opened_at.toISOString(),
-          target: {
-            owner: row.target_owner,
-            resource: row.target_resource,
-            component: row.target_component,
-          },
-          category: row.category,
-          contentLanguage: row.content_language,
-          dueAt: row.due_at?.toISOString() ?? null,
-          claimedBy: row.claimed_by,
-        })),
+        items: page.map((row) => {
+          const restricted = row.urgent && !specialist;
+          return {
+            caseId: row.id,
+            kind: row.kind,
+            urgent: row.urgent,
+            restricted,
+            generation: row.generation,
+            decisionHead: restricted ? null : row.decision_head,
+            openedAt: row.opened_at.toISOString(),
+            target: restricted
+              ? null
+              : {
+                  owner: row.target_owner,
+                  resource: row.target_resource,
+                  component: row.target_component,
+                },
+            category: row.category,
+            contentLanguage: restricted ? null : row.content_language,
+            dueAt: row.due_at?.toISOString() ?? null,
+            claimedBy: restricted ? null : row.claimed_by,
+          };
+        }),
         sourcePosition: position,
         nextCursor:
           rows.length > limit
-            ? encodeReadCursor(binding, position, page.at(-1)!.opened_key, page.at(-1)!.id)
+            ? encodeReadCursor(
+                binding,
+                position,
+                page.at(-1)!.opened_key,
+                `${page.at(-1)!.urgent ? '1' : '0'}:${page.at(-1)!.id}`,
+              )
             : null,
       };
     });

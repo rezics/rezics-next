@@ -34,6 +34,8 @@ export const GOVERNANCE_OPERATION_COST = {
 } as const;
 
 export const GOVERNANCE_LIMITS = { evidence: 16, targets: 64, page: 50 } as const;
+/** Independent report/step keysets; no per-row authority or owner calls. */
+export const SAFETY_CASE_READ_COST = { page: 50, statements: 24, statementTimeoutMs: 5000 } as const;
 /** Access actions a decider's acting Agent must hold on the case authority scope. */
 export const DECIDE_ACTION = { content_report: 'governance.moderate', rights_complaint: 'governance.rights.decide' } as const;
 export const APPEAL_ACTION = 'governance.appeal';
@@ -842,6 +844,7 @@ export class GovernanceStore {
     actor: string,
     caseId: string,
     reportCursor?: string,
+    stepCursor?: string,
   ) {
     return this.transaction(async client => {
       const row = (
@@ -854,7 +857,7 @@ export class GovernanceStore {
         }>(
           `SELECT kind,urgent,decision_head,
         generation::text,state FROM access.governance_case WHERE id = $1 AND authority_kind = 'platform'
-        AND authority_scope_id = 'governance:platform'`,
+        AND authority_scope_id = 'governance:platform' FOR SHARE`,
           [caseId],
         )
       ).rows[0];
@@ -874,9 +877,28 @@ export class GovernanceStore {
           [caseId, reportCursor ?? null],
         )
       ).rows;
-      const decision = row.decision_head
-        ? await this.decisionResult(client, row.decision_head, false)
-        : null;
+      const steps = (await client.query<{
+        id: string; step: string; process: string; report_id: string | null;
+        decision_id: string | null; party: string | null; party_subject: string | null;
+        statement: string | null; document_digest: string | null; content_language: string | null;
+        declarations: Record<string, unknown> | null; occurred_at: Date; due_at: Date | null;
+        recorded_at: Date;
+      }>(`SELECT id,step,process,report_id,decision_id,party,party_subject,statement,
+        document_digest,content_language,declarations,occurred_at,due_at,recorded_at
+        FROM access.governance_process_step WHERE case_id = $1
+        AND ($2::uuid IS NULL OR id > $2) ORDER BY id LIMIT $3`,
+      [caseId, stepCursor ?? null, SAFETY_CASE_READ_COST.page + 1])).rows;
+      let decision = null;
+      if (row.decision_head) {
+        const recorded = (await client.query<{
+          statement_of_reasons: (StatementOfReasons & { rule: DecisionInput['rule'] }) | null;
+        }>('SELECT statement_of_reasons FROM access.moderation_decision WHERE id = $1',
+        [row.decision_head])).rows[0]!;
+        decision = {
+          ...await this.decisionResult(client, row.decision_head, false),
+          statementOfReasons: recorded.statement_of_reasons,
+        };
+      }
       const targets = row.decision_head
         ? (
             await client.query<{
@@ -912,6 +934,16 @@ export class GovernanceStore {
             category: report.reason_code,
           })),
         decision,
+        steps: steps.slice(0, SAFETY_CASE_READ_COST.page).map(step => ({
+          id: step.id, kind: step.step, process: step.process, reportId: step.report_id,
+          decisionId: step.decision_id, party: step.party, partySubject: step.party_subject,
+          statement: step.statement, documentDigest: step.document_digest,
+          contentLanguage: step.content_language, declarations: step.declarations,
+          occurredAt: step.occurred_at.toISOString(), dueAt: step.due_at?.toISOString() ?? null,
+          recordedAt: step.recorded_at.toISOString(),
+        })),
+        stepsNextCursor: steps.length > SAFETY_CASE_READ_COST.page
+          ? steps[SAFETY_CASE_READ_COST.page - 1]!.id : null,
         targets: targets.map((target) => ({
           owner: target.owner,
           resource: target.resource,

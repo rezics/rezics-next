@@ -776,7 +776,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       );
     await specialist(false);
     expect((await claim(ncii)).status).toBe(403);
-    const ordinaryQueue = await json<{ items: Array<{ urgent: boolean }> }>(
+    const ordinaryQueue = await json<{ items: Array<{ urgent: boolean; restricted: boolean; target: unknown }> }>(
       await call(
         'GET',
         `/v1/safety-cases?actingSubject=${encodeURIComponent(staff.actor)}`,
@@ -785,7 +785,7 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       ),
       200,
     );
-    expect(ordinaryQueue.items.every((item) => !item.urgent)).toBe(true);
+    expect(ordinaryQueue.items.every((item) => !item.urgent || item.restricted && item.target === null)).toBe(true);
     const urgentQueue = await json<typeof ordinaryQueue>(
       await call(
         'GET',
@@ -795,7 +795,8 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       ),
       200,
     );
-    expect(urgentQueue.items).toEqual([]);
+    expect(urgentQueue.items.length).toBeGreaterThan(0);
+    expect(urgentQueue.items.every((item) => item.urgent && item.restricted && item.target === null)).toBe(true);
 
     await specialist(true);
     const beforeClaim = statements;
