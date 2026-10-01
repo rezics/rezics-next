@@ -1,7 +1,7 @@
 import { Value } from 'typebox/value';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryReader } from '../media/summary.ts';
+import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryBatch, type SummaryReader } from '../media/summary.ts';
 import { DATASET, GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { READ_PREFIX, workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
@@ -259,14 +259,37 @@ export async function resolveTargets<Session extends TargetReadSession>(session:
     }
   }
   const summaries = await targetSummaries(session, resources);
+  const targets = await resolveSummarizedTargets(session, summaries, capability, false);
+  return iris.map(resource => targets.get(canonical.get(resource)!)!);
+}
+
+/** Inventory disclosure shares the exact resolver with command/capability reads.
+ * Hydrate once, omit unavailable identities, and fail closed on invalid grains,
+ * ambiguous heads or graph movement. This does not grant partial command success. */
+export async function resolveVisibleTargets(session: TargetReadSession, resources: readonly string[],
+  capability: Capability): Promise<ResolvedTarget[]> {
+  session.checkDeadline();
+  if (!resources.length || resources.length > TARGET_RESOLVE_COST.batch
+    || resources.some(resource => !Value.Check(targetRef, resource))) {
+    throw new WorkReadInvalid('Target batch is invalid');
+  }
+  const summaries = await targetSummaries(session, [...new Set(resources)]);
+  const targets = await resolveSummarizedTargets(session, summaries, capability, true);
+  return resources.flatMap(resource => {
+    const target = targets.get(resource);
+    return target ? [target] : [];
+  });
+}
+
+async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,
+  capability: Capability, inventory: boolean): Promise<Map<string, ResolvedTarget>> {
   if (summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during target resolution');
   }
   // Availability is checked for the entire batch before revealing any grain mismatch.
-  if (summaries.summaries.some(summary => summary.status !== 'available')) throw new TargetUnavailable();
+  if (!inventory && summaries.summaries.some(summary => summary.status !== 'available')) throw new TargetUnavailable();
   const accepted: readonly Base[] = capabilityBases[capability];
-  const available = summaries.summaries.map(summary => {
-    if (summary.status !== 'available') throw new TargetUnavailable();
+  const available = summaries.summaries.filter(summary => summary.status === 'available').map(summary => {
     if (summary.type === 'main-version' || !summary.base || !accepted.includes(summary.base)) {
       throw new TargetNotBound();
     }
@@ -277,6 +300,7 @@ export async function resolveTargets<Session extends TargetReadSession>(session:
     }
     return summary;
   });
+  if (!available.length) return new Map();
   const branches = [...new Set(available.map(summary => summary.base!))].map(base => `{
     VALUES ?r { ${available.filter(summary => summary.base === base).map(summary => iri(summary.reference)).join(' ')} }
     ${revisionPatterns[base]}
@@ -302,7 +326,10 @@ export async function resolveTargets<Session extends TargetReadSession>(session:
   const targets = new Map<string, ResolvedTarget>();
   for (const summary of available) {
     const exact = byResource.get(summary.reference) ?? [];
-    if (!exact.length) throw new TargetUnavailable();
+    if (!exact.length) {
+      if (inventory) continue;
+      throw new TargetUnavailable();
+    }
     const revisions = new Set(exact.map(row => row.revision?.value));
     if (revisions.size !== 1 || !Value.Check(targetRef, exact[0]?.revision?.value)) {
       throw new WorkReadUnavailable('Target revision is ambiguous');
@@ -312,5 +339,5 @@ export async function resolveTargets<Session extends TargetReadSession>(session:
     targets.set(summary.reference, { resource: summary.reference, base: summary.base!,
       work: summary.work, revision: exact[0]!.revision!.value, types, disclosure: summary.disclosure });
   }
-  return iris.map(resource => targets.get(canonical.get(resource)!)!);
+  return targets;
 }

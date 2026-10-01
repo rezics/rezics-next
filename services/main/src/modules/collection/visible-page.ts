@@ -19,10 +19,15 @@ export async function readVisibleCompositionPage(env: WorkActivationEnvironment,
     boundary.session.principal, boundary.session.options.actingSubject, await boundary.binding()];
   const cursor = decodeReadCursor(input.after, binding, boundary.session.position);
   const page = await readCompositionPage(env, { ...input, after: cursor?.after, signal,
+    canReadTargets: input.canReadTargets ? async targets => {
+      const readable = await input.canReadTargets!(targets);
+      const visible = await boundary.visible([...readable]);
+      return new Set([...readable].filter(target => visible.has(target)));
+    } : undefined,
     canReadTarget: async target => await input.canReadTarget(target) && (await boundary.visible([target])).has(target) });
   await boundary.fence();
   return { ...page, next: page.next ? encodeReadCursor(binding, boundary.session.position, page.next) : null };
 }
 
 export const VISIBLE_PAGE_COST = { deadlineMs: 5_000, immutableRangeRows: 101,
-  targetChecksPerPlacement: 1 } as const;
+  targetChecksPerPlacement: 1, targetBatchesPerRange: 2 } as const;

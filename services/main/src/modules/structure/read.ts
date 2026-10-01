@@ -98,6 +98,9 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
 export async function readCompositionPage(env: WorkActivationEnvironment, input: {
   structure: string; revision?: string; parent?: string; occurrence?: string; after?: string; limit: number;
   canReadTarget: (target: string) => Promise<boolean>; outline?: boolean;
+  /** One disclosure pass per immutable range, including visible lookahead.
+   * The returned set is local to that range, never a cached authorization. */
+  canReadTargets?: (targets: readonly string[]) => Promise<ReadonlySet<string>>;
   /** The Structure's header when the caller already read it for this request; saves two queries. */
   header?: CompositionHeader;
   /** An owner's disclosure projection filters inside the immutable range scan,
@@ -163,7 +166,8 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       throw error;
     }
     const withheld = record.target && !isCatalogTarget(profile, record.target)
-      && !await input.canReadTarget(record.target);
+      && !(input.canReadTargets ? (await input.canReadTargets([record.target])).has(record.target)
+        : await input.canReadTarget(record.target));
     if (withheld && profile.withholdUnreadableTargets) throw new CompositionUnavailable('occurrence is unavailable');
     const visible = withheld
       ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
@@ -235,7 +239,9 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
     const candidates = disclosed ? ordered : ordered.slice(0, input.limit);
     const found = await recordTree(objects).lookup(manifest.records,
       candidates.map(entry => entry.occurrence), cost);
-    for (const entry of candidates) {
+    // Validate the entire bounded range before handing target identities to
+    // disclosure owners. Corrupt immutable records must never trigger hydration.
+    const records = candidates.map(entry => {
       input.signal?.throwIfAborted();
       const record = found.get(entry.occurrence);
       if (!record || record.state !== 'active' || record.parent !== parent
@@ -248,8 +254,15 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
         if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
         throw error;
       }
+      return record;
+    });
+    const targets = [...new Set(records.flatMap(record => record.target && !isCatalogTarget(profile, record.target)
+      ? [record.target] : []))];
+    const readable = input.canReadTargets && targets.length ? await input.canReadTargets(targets) : undefined;
+    for (const record of records) {
+      input.signal?.throwIfAborted();
       const withheld = record.target && !isCatalogTarget(profile, record.target)
-        && !await input.canReadTarget(record.target);
+        && !(readable ? readable.has(record.target) : await input.canReadTarget(record.target));
       if (!withheld || !profile.withholdUnreadableTargets) {
         const visible = withheld ? { ...record, target: undefined, selection: undefined, labels: [] } : record;
         if (!input.visible || input.visible(visible)) occurrences.push(visible);

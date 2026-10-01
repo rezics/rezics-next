@@ -7,6 +7,7 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
+import { collectionTargetBatchReader } from '../modules/composition/visible-targets.ts';
 import { CollectionNameInvalid, CollectionNameStale, CollectionNameUnavailable,
   publishCollectionName, readCollectionName } from '../modules/collection/names.ts';
 import type { LocalizedText } from '../modules/display-language/select.ts';
@@ -153,11 +154,12 @@ async function page(fuseki: FusekiClient, work: MainWorkDependencies, request: R
     if (!header || header.profile !== 'collection-membership' || header.owner !== collection) {
       throw new CompositionUnavailable('Collection is unavailable');
     }
-    const result = await readVisibleCompositionPage(work.environment, { structure,
+    const result = await readVisibleCompositionPage(work.environment, { structure, header,
       ...(input.revision ? { revision: input.revision } : {}),
       ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
       limit: input.limit ?? 50, visible: item => item.role !== 'member' || !!item.target,
       readingBoundary: boundary,
+      canReadTargets: collectionTargetBatchReader(session),
       canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)) });
     // The shared page retains hidden uses for exact owner history. This projection
     // returns only disclosed members and has no hidden count or timing counters.
