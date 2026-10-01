@@ -15,12 +15,12 @@ import { LanguageSelect } from '../content-language/language-select.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import Link from '../shell/localized-link.tsx';
-import { uploadCommunityImage } from './images.ts';
+import { ImageRefused, uploadCommunityImage } from './images.ts';
 import { communityNames, type NameTranslation } from './name-fields.ts';
 import { ruleFromText } from '../manage/rules.ts';
 import { communityText as words } from './messages.ts';
 import { TopicPicker, type TopicChoice } from './topics.tsx';
-import { CommunityUploadField } from './upload-field.tsx';
+import { CommunityUploadField, type UploadOutcome } from './upload-field.tsx';
 
 type Rule = { key: string; title: string; body: string };
 type Translation = NameTranslation & { key: string };
@@ -50,6 +50,9 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<'create' | 'handle' | 'configure' | null>(null);
   const [translationError, setTranslationError] = useState(false);
+  // What screening said about each image, or that its upload budget is spent.
+  const [outcomes, setOutcomes] = useState<Record<'icon' | 'banner', UploadOutcome>>({ icon: null, banner: null });
+  const outcome = (kind: 'icon' | 'banner', value: UploadOutcome) => setOutcomes(before => ({ ...before, [kind]: value }));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +67,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     const operation = key.current;
     const main = browserMainApi();
     let realm = createdRealm;
+    let uploading: 'icon' | 'banner' = 'icon';
     try {
       if (!realm) {
         const { data, error } = await main.v1.spaces.post({ profile: 'space-realm-v2',
@@ -100,13 +104,15 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       let selectedIcon = iconSelection;
       let selectedBanner = bannerSelection;
       if (icon && !selectedIcon) {
+        uploading = 'icon';
         selectedIcon = await uploadCommunityImage({ image: icon, realm, actingSubject, kind: 'icon',
-          key: `${operation}:icon` });
+          key: `${operation}:icon`, onClearance: clearance => outcome('icon', { clearance }) });
         setIconSelection(selectedIcon);
       }
       if (banner && !selectedBanner) {
+        uploading = 'banner';
         selectedBanner = await uploadCommunityImage({ image: banner, realm, actingSubject, kind: 'banner',
-          key: `${operation}:banner` });
+          key: `${operation}:banner`, onClearance: clearance => outcome('banner', { clearance }) });
         setBannerSelection(selectedBanner);
       }
       const publication = { ...names,
@@ -121,7 +127,12 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       try { localStorage.setItem(`rezics:community-setup:${actingSubject}:${realm}`,
         JSON.stringify({ topics: topics.length > 0, invite: false })); } catch { /* optional local checklist */ }
       router.push(localizedPath(`/r/${id}`, locale));
-    } catch { setFailure(realm ? 'configure' : 'create'); }
+    } catch (error) {
+      if (error instanceof ImageRefused && error.reason === 'limited') {
+        outcome(uploading, { limited: error.retryAfter ?? 60 });
+      }
+      setFailure(realm ? 'configure' : 'create');
+    }
     finally { setBusy(false); }
   }
 
@@ -214,8 +225,8 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         <PlusIcon aria-hidden="true" />{words.addRule[locale]}</Button> : null}
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">
-      <CommunityUploadField kind="icon" locale={locale} file={icon} onChange={setIcon} />
-      <CommunityUploadField kind="banner" locale={locale} file={banner} onChange={setBanner} />
+      <CommunityUploadField kind="icon" locale={locale} file={icon} onChange={setIcon} outcome={outcomes.icon} />
+      <CommunityUploadField kind="banner" locale={locale} file={banner} onChange={setBanner} outcome={outcomes.banner} />
     </div>
     {failure ? <Alert variant="destructive" role="alert"><CircleAlertIcon aria-hidden="true" />
       <AlertDescription>{words[failure === 'create' ? 'createFailed' : failure === 'handle' ? 'handleTaken'

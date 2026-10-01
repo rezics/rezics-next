@@ -6,6 +6,7 @@ import { useId } from 'react';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { authorHref } from '../author/route.ts';
+import { ReportAction } from '../safety/report-action.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { useFeed } from './feed-context.tsx';
@@ -187,6 +188,7 @@ export function PostRow({ kind, href, meta, title, titleLang, titleDir, titleCla
     <div className={cn('-ms-2 flex items-center', postRhythm.section, postRhythm.bar)}>
       <div role="group" aria-label={t.actions} className="relative z-10 flex items-center gap-x-1 sm:gap-x-3">
         {vote}{comments}{actions}</div>
+      {href ? <ReportAction target={href} kind="post" iconOnly className={cn(barAction, 'ms-auto w-8 justify-center px-0')} /> : null}
     </div>
   </article>;
 }

@@ -8,6 +8,8 @@ import { BFF_PREFIX } from '../api/browser.ts';
 import { messages as authMessages } from '../auth/messages.ts';
 import { HandleField } from '../onboarding/handle-field.tsx';
 import { messages as onboardingMessages } from '../onboarding/messages.ts';
+import { UploadStatus } from '../safety/upload-status.tsx';
+import { clearanceFromQuery, uploadErrorText } from '../safety/upload-state.ts';
 import { PageContainer } from '../shell/page.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { type UiLocale } from '../../i18n/define.ts';
@@ -17,12 +19,16 @@ import { ProfileEditForm } from './profile-edit-form.tsx';
 import { SettingsSections } from './settings-sections.tsx';
 
 export function ProfileSettings({ agent, profile, locale, error, updated, accountOrigin, preview,
-  messages: translatedMessages, readingLanguages }: {
+  messages: translatedMessages, readingLanguages, avatar = null, wait = null }: {
   agent: AgentOption | null;
   profile: PublicAgentProfile | null;
   locale: UiLocale;
   error: string | null;
   updated: 'handle' | 'profile' | null;
+  /** The check a just-saved avatar is in (`screening`, `held`, `cleared`), carried back by the save. */
+  avatar?: string | null;
+  /** Seconds a spent upload budget asks the person to wait. */
+  wait?: string | null;
   accountOrigin?: string;
   preview?: boolean;
   messages?: SettingsMessages;
@@ -35,7 +41,8 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
   const errors: Record<string, string> = { cooldown: t.cooldown, denied: t.denied,
     conflict: t.conflict, invalid: t.invalid, 'avatar-denied': t.avatarDenied,
     'avatar-unavailable': t.avatarUnavailable };
-  const errorText = error ? errors[error] ?? t.failed : null;
+  const errorText = error ? uploadErrorText(error, wait, locale) ?? errors[error] ?? t.failed : null;
+  const avatarCheck = updated === 'profile' ? clearanceFromQuery(avatar) : null;
   return <PageContainer className="grid max-w-2xl gap-6 py-8 sm:py-12">
     <header className="grid gap-2">
       <h1 className="font-semibold text-3xl">{t.pageTitle}</h1>
@@ -52,6 +59,7 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
     {errorText || updated ? <Alert variant={errorText ? 'warning' : 'info'}>
       <AlertDescription role="status">{errorText ?? (updated === 'profile' ? t.profileSaved : t.saved)}</AlertDescription>
     </Alert> : null}
+    {avatarCheck ? <UploadStatus clearance={avatarCheck} locale={locale} /> : null}
     <SettingsSections agent={agent?.iri ?? null} locale={locale} t={t}
       accountOrigin={accountOrigin ?? 'https://account.rezics.com'} preview={preview}
       previewLanguages={readingLanguages}>

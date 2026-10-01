@@ -5,10 +5,15 @@ import { FileUpload, FileUploadDescription, FileUploadDropzone, FileUploadDropzo
 import { ImageIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import type { Clearance } from '../safety/upload-state.ts';
+import { UploadLimited, UploadStatus } from '../safety/upload-status.tsx';
 import { communityText as words } from './messages.ts';
 
-export function CommunityUploadField({ kind, locale, file, onChange }: { kind: 'icon' | 'banner';
-  locale: UiLocale; file: File | null; onChange: (file: File | null) => void }) {
+/** What happened to the image once it was sent: its check, or a spent upload budget. */
+export type UploadOutcome = { clearance: Clearance } | { limited: number } | null;
+
+export function CommunityUploadField({ kind, locale, file, onChange, outcome = null }: { kind: 'icon' | 'banner';
+  locale: UiLocale; file: File | null; onChange: (file: File | null) => void; outcome?: UploadOutcome }) {
   const [preview, setPreview] = useState<string | null>(null);
   useEffect(() => {
     if (!file) { setPreview(null); return; }
@@ -30,6 +35,8 @@ export function CommunityUploadField({ kind, locale, file, onChange }: { kind: '
       </FileUploadDropzone>
       <FileUploadList />
     </FileUpload>
+    {outcome && 'clearance' in outcome ? <UploadStatus clearance={outcome.clearance} locale={locale} />
+      : outcome ? <UploadLimited retryAfter={outcome.limited} locale={locale} /> : null}
     <p className="text-muted-foreground text-xs">{words.imageHelp[locale]}</p>
   </div>;
 }

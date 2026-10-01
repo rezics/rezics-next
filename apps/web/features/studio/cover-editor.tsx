@@ -12,6 +12,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import type { WorkCover as MainCover } from '../discover/types.ts';
+import { UploadLimited, UploadStatus, useClearance } from '../safety/upload-status.tsx';
+import type { Clearance } from '../safety/upload-state.ts';
 import { type CoverOutcome, coverTypes, removeCover, uploadCover } from './cover-api.ts';
 import type { StudioMessages } from './messages.ts';
 import { StudioCover } from './studio-cover.tsx';
@@ -57,6 +59,11 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
   const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [current, setCurrent] = useState(cover);
+  // The newest image's check: it shows to its uploader alone until Main clears it.
+  const [uploaded, setUploaded] = useState<{ upload: string; clearance: Clearance } | null>(null);
+  const [limited, setLimited] = useState<number | null>(null);
+  const [rejected, setRejected] = useState(false);
+  const clearance = useClearance(uploaded?.upload ?? null, uploaded?.clearance ?? null, send);
   useEffect(() => setCurrent(cover), [cover]);
   useEffect(() => () => { if (source) URL.revokeObjectURL(source.url); }, [source]);
   const kind = coverKindOf(work.types);
@@ -82,20 +89,29 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
       else { URL.revokeObjectURL(url); setResult({ ok: false, message: t.coverUnsupported }); }
     });
   };
-  const message = (outcome: CoverOutcome['outcome']) => outcome === 'denied' ? t.coverDenied
+  const message = (outcome: Exclude<CoverOutcome['outcome'], 'done' | 'limited' | 'rejected'>) => outcome === 'denied' ? t.coverDenied
     : outcome === 'too-large' ? t.coverTooLarge : outcome === 'unsupported' ? t.coverUnsupported : t.coverFailed;
+  /** Says what a refused upload means: a spent budget, an image not accepted, or what went wrong. */
+  const refuse = (outcome: Exclude<CoverOutcome, { outcome: 'done' }>) => {
+    // Both are answers to the image, not to the framing, and the dialog would hide them: close it.
+    if (outcome.outcome === 'limited') { close(); setLimited(outcome.retryAfter); setResult(null); return; }
+    if (outcome.outcome === 'rejected') { close(); setUploaded(null); setResult(null); setRejected(true); return; }
+    setResult({ ok: false, message: message(outcome.outcome) });
+  };
   const save = async () => {
     if (!cropReady || !crop.current) return;
     setBusy('upload');
+    setLimited(null); setRejected(false);
     const image = await crop.current().catch(() => null);
     const outcome = image ? await uploadCover({ actingSubject: agent.iri, work: work.id, image, expected: selection,
       key: crypto.randomUUID() }, send) : { outcome: 'failed' as const };
     setBusy(null);
     if (outcome.outcome === 'done') {
       close();
+      setUploaded(outcome.upload && outcome.clearance ? { upload: outcome.upload, clearance: outcome.clearance } : null);
       setResult({ ok: true, message: t.coverSaved });
       router.refresh();
-    } else setResult({ ok: false, message: message(outcome.outcome) });
+    } else refuse(outcome);
   };
   const remove = async () => {
     setBusy('remove');
@@ -103,10 +119,10 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
       key: crypto.randomUUID() }, send);
     setBusy(null);
     if (outcome.outcome === 'done') {
-      setCurrent(null);
+      setCurrent(null); setUploaded(null);
       setResult({ ok: true, message: t.coverRemoved });
       router.refresh();
-    } else setResult({ ok: false, message: message(outcome.outcome) });
+    } else refuse(outcome);
   };
 
   return <section aria-labelledby={`${inputId}-heading`} className="grid content-start gap-4">
@@ -131,6 +147,9 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
       : <Alert variant="destructive"><TriangleAlertIcon aria-hidden="true" />
         <AlertDescription role="alert" className="text-destructive-foreground">{result.message}</AlertDescription></Alert>
       : null}
+    {clearance ? <UploadStatus clearance={clearance} locale={locale} /> : null}
+    {rejected ? <UploadStatus clearance="rejected" locale={locale} /> : null}
+    {limited !== null ? <UploadLimited retryAfter={limited} locale={locale} /> : null}
     <Dialog open={source !== null} onOpenChange={details => { if (!details.open && busy === null) close(); }}>
       <DialogContent size="md">
         <DialogHeader title={t.cropHeading} description={t.cropHelp} />

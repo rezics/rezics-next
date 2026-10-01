@@ -3,6 +3,7 @@
 import { cn } from '@rezics/ui/utils';
 import { ArrowRightIcon, CheckIcon, LinkIcon, MinusIcon, PlusIcon, ReplyIcon } from 'lucide-react';
 import { useId, useState } from 'react';
+import { ReportAction } from '../safety/report-action.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { VoteControl } from './actions.tsx';
@@ -112,6 +113,7 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
           {reply.blocked ? null : <button type="button" aria-expanded={replying} className={action} onClick={() => setReplying(!replying)}>
             <ReplyIcon aria-hidden="true" className="size-3.5" />{t.replyAction}</button>}
           <CopyLink href={context.replyHref(reply.reply)} />
+          <ReportAction target={reply.reply} kind="reply" className={action} />
           <button type="button" className={cn(action, 'sm:hidden')} onClick={() => setFolded(true)}>
             <MinusIcon aria-hidden="true" className="size-3.5" />{t.collapse}</button>
         </fieldset>

@@ -5,7 +5,7 @@ import { ACCESS_COOKIE, AGENT_COOKIE, cookieOptions, isSessionKey, REFRESH_COOKI
 import { accountClient } from './features/auth/client.ts';
 import { refreshSession } from './features/auth/refresh.ts';
 import { type SessionCookie, sessionCookies } from './features/auth/session-state.ts';
-import { isPublicPagePath, LOCALE_COOKIE, pathLocale, resolveLocale } from './i18n/locale.ts';
+import { isPublicPagePath, isReportPath, LOCALE_COOKIE, pathLocale, resolveLocale } from './i18n/locale.ts';
 import { isZonePage, ZONE_NONCE_HEADER, zoneCsp, zoneNonce } from './features/zones/csp.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
@@ -53,6 +53,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
   const response = NextResponse.next({ request: { headers } });
   if (policy) response.headers.set('content-security-policy', policy);
+  // A case's private page keeps its credential in the address; no request it makes may carry that address on.
+  if (isReportPath(pathname)) response.headers.set('referrer-policy', 'no-referrer');
   for (const cookie of cookies) response.cookies.set(cookie.name, cookie.value, cookie.options);
   return response;
 }

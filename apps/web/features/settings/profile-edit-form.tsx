@@ -9,6 +9,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
+import { uploadErrorText } from '../safety/upload-state.ts';
 import { AvatarFileField } from './avatar-file-field.tsx';
 import type { SettingsMessages } from './messages.ts';
 
@@ -22,6 +23,7 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
 }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string>();
+  const [wait, setWait] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [bio, setBio] = useState(profile?.bio?.text ?? '');
   const [chosen, setChosen] = useState<string | null>(null);
@@ -33,7 +35,7 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
   const errors: Record<string, string> = { conflict: t.conflict, denied: t.denied,
     invalid: t.invalid, 'avatar-denied': t.avatarDenied,
     'avatar-unavailable': t.avatarUnavailable };
-  const errorMessage = failure ? errors[failure] ?? t.failed : null;
+  const errorMessage = failure ? uploadErrorText(failure, wait, locale) ?? errors[failure] ?? t.failed : null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,6 +51,7 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
         window.location.assign(`${result.pathname}${result.search}`);
         return;
       }
+      setWait(result.searchParams.get('wait'));
       setFailure(result.searchParams.get('error') ?? 'unavailable');
     } catch { setFailure('unavailable'); }
     setBusy(false);

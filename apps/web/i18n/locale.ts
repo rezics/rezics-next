@@ -20,10 +20,15 @@ export function withoutLocale(pathname: string): string {
 /** Routes backed by locale-prefixed pages; auth and service paths stay at the origin root. */
 export function isPublicPagePath(pathname: string): boolean {
   const bare = withoutLocale(pathname);
-  return bare === '/' || /^\/(?:authors|concepts|discover|e|isbn|library|manage|notifications|proposals|r|releases|search|studio|submit|w|works)(?:\/|$)/.test(bare)
+  return bare === '/' || /^\/(?:authors|concepts|discover|e|isbn|library|manage|notifications|proposals|r|releases|report|search|studio|submit|w|works)(?:\/|$)/.test(bare)
     || bare === '/identity'
     // Profiles, `/@{handle}` (app/[locale]/[handle]).
     || /^\/(?:@|%40)[^/]/.test(bare);
+}
+
+/** `/report` and the private case pages under it: no page there may leak its address in a Referer. */
+export function isReportPath(pathname: string): boolean {
+  return /^\/report(?:\/|$)/.test(withoutLocale(pathname));
 }
 
 export function localizedPath(path: string, locale: UiLocale): string {

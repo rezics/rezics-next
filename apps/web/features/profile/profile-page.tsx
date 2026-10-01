@@ -15,6 +15,7 @@ import { WorkGrid, WorkShelf } from '../catalogue/work-shelf.tsx';
 import { Notice } from '../discover/notice.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
+import { ReportAction } from '../safety/report-action.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { Expandable } from '../work-page/expandable.tsx';
 import { creditedCard, shelfCard, worksSummary } from './cards.ts';
@@ -103,6 +104,7 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
         <p lang={profile.bio.language} className={cn('whitespace-pre-line text-pretty text-[1.0625rem]',
           proseClass(profile.bio.language))}>{profile.bio.text}</p>
       </Expandable> : null}
+      {own ? null : <div><ReportAction target={profile.id} kind="profile" /></div>}
     </div>
   </header>;
 }

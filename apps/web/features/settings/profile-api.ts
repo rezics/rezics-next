@@ -1,9 +1,19 @@
 import { serviceOrigin } from '../api/origins.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 import { UNSPECIFIED, writingTag } from '../content-language/writing-language.ts';
+import { retryAfterSeconds } from '../safety/report-api.ts';
+import { type Clearance, clearanceOf } from '../safety/upload-state.ts';
 
 export type ProfileSaveResult = 'saved' | 'invalid' | 'conflict' | 'denied' | 'unavailable'
-  | 'avatar-denied' | 'avatar-unavailable';
+  | 'avatar-denied' | 'avatar-unavailable' | 'avatar-limited' | 'avatar-rejected';
+
+/**
+ * What a save learned about its image, for the page to tell the person: a new
+ * avatar is `screening` or `held` and shows to them alone until Main clears it
+ * (a saved profile does not mean a visible photo), and a spent upload budget
+ * names when to retry.
+ */
+export interface AvatarReport { clearance?: Clearance; retryAfter?: number }
 export type ProfileSender = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 const avatarTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const avatarMaxBytes = 4 * 1024 * 1024;
@@ -25,6 +35,8 @@ interface SaveInput {
   removeAvatar: boolean;
   expectedAvatarSelection: string | null;
   key: string;
+  /** Filled in when `avatar` was sent. */
+  report?: AvatarReport;
 }
 
 /** A selected image becomes a public avatar only after Main admits all three
@@ -42,6 +54,10 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
   const origin = serviceOrigin('MAIN_ORIGIN');
   const headers = { authorization: `Bearer ${input.token}`, 'content-type': 'application/json' };
   const problem = async (response: Response, media = false): Promise<ProfileSaveResult> => {
+    if (media && response.status === 429) {
+      if (input.report) input.report.retryAfter = retryAfterSeconds(response);
+      return 'avatar-limited';
+    }
     if (response.status === 409) return 'conflict';
     if (response.status === 400 || response.status === 413 || response.status === 422) return 'invalid';
     if (response.status === 403) return media ? 'avatar-denied' : 'denied';
@@ -68,8 +84,12 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
         body: bytes, cache: 'no-store',
       });
       if (!uploaded.ok) return problem(uploaded, true);
-      const outcome = await uploaded.json() as { status: string };
+      const outcome = await uploaded.json() as { status: string; clearance?: string };
       if (outcome.status !== 'activated') return 'invalid';
+      const clearance = clearanceOf(outcome.clearance);
+      if (input.report) input.report.clearance = clearance;
+      // Main will not show an image it rejected, so it is not made the avatar.
+      if (clearance === 'rejected') return 'avatar-rejected';
     }
     if (input.avatar || input.removeAvatar && input.expectedAvatarSelection) {
       mediaStage = true;
@@ -98,12 +118,12 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
  */
 export function profileSaveInput(profile: PublicAgentProfile, values: {
   token: string; agent: string; displayName: string; bioText: string; bioLanguage: string;
-  avatar?: File; removeAvatar: boolean; key: string;
+  avatar?: File; removeAvatar: boolean; key: string; report?: AvatarReport;
 }): SaveInput {
   const text = values.bioText.trim();
   return { token: values.token, agent: values.agent, expectedHead: profile.revision,
     displayName: values.displayName, bio: text ? { text,
       language: values.bioLanguage.trim() || (profile.bio?.text === text ? profile.bio.language : UNSPECIFIED) } : null,
     avatarSelection: profile.avatarSelection, expectedAvatarSelection: profile.avatarSelection,
-    avatar: values.avatar, removeAvatar: values.removeAvatar, key: values.key };
+    avatar: values.avatar, removeAvatar: values.removeAvatar, key: values.key, report: values.report };
 }

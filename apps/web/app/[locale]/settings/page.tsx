@@ -12,7 +12,7 @@ import { serviceOrigin } from '../../../features/api/origins.ts';
 
 export default async function SettingsPage({ params, searchParams }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ error?: string; updated?: string }>;
+  searchParams: Promise<{ error?: string; updated?: string; avatar?: string; wait?: string }>;
 }) {
   const { locale: requested } = await params;
   const locale = isUiLocale(requested) ? requested : 'en';
@@ -26,6 +26,7 @@ export default async function SettingsPage({ params, searchParams }: {
     accountOrigin={serviceOrigin('ACCOUNT_ORIGIN')}
     locale={locale}
     messages={messages}
+    avatar={query.avatar ?? null} wait={query.wait ?? null}
     error={query.error ?? null} updated={query.updated === 'handle' || query.updated === 'profile'
       ? query.updated : null} />;
 }
