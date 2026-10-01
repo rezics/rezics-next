@@ -1,0 +1,7564 @@
+{
+  "provenance": {
+    "dump": {
+      "url": "https://dl.vndb.org/dump/vndb-db-2026-09-30.tar.zst",
+      "date": "2026-09-30",
+      "timestamp": "2026-09-30 08:00:25+00",
+      "sha256": "bd211aaa917fab1b7aa5b2c702fa339803c5f15cccaf682350b106a5e5426f2e",
+      "size": 189932962
+    },
+    "showcase": {
+      "vn": "v18334",
+      "japaneseWindowsComplete": "r50668",
+      "englishSwitchComplete": "r80447",
+      "englishWindowsTrial": "r53222",
+      "unofficial": "r96811",
+      "unofficialVn": "v18334"
+    },
+    "territory": null,
+    "notes": [
+      "The VNDB dump has no territory column, so release territory is unrecorded.",
+      "A release language may have a null title string. That language is still part of the release."
+    ]
+  },
+  "tables": {
+    "vn": [
+      {
+        "id": "v10",
+        "olang": "ja"
+      },
+      {
+        "id": "v11",
+        "olang": "ja"
+      },
+      {
+        "id": "v1143",
+        "olang": "ja"
+      },
+      {
+        "id": "v12402",
+        "olang": "ja"
+      },
+      {
+        "id": "v12849",
+        "olang": "ja"
+      },
+      {
+        "id": "v1474",
+        "olang": "ja"
+      },
+      {
+        "id": "v15538",
+        "olang": "ja"
+      },
+      {
+        "id": "v16044",
+        "olang": "ja"
+      },
+      {
+        "id": "v17",
+        "olang": "ja"
+      },
+      {
+        "id": "v17102",
+        "olang": "ja"
+      },
+      {
+        "id": "v18334",
+        "olang": "ja"
+      },
+      {
+        "id": "v19073",
+        "olang": "ja"
+      },
+      {
+        "id": "v2002",
+        "olang": "ja"
+      },
+      {
+        "id": "v2016",
+        "olang": "ja"
+      },
+      {
+        "id": "v211",
+        "olang": "ja"
+      },
+      {
+        "id": "v2153",
+        "olang": "ja"
+      },
+      {
+        "id": "v21905",
+        "olang": "en"
+      },
+      {
+        "id": "v24",
+        "olang": "ja"
+      },
+      {
+        "id": "v3",
+        "olang": "ja"
+      },
+      {
+        "id": "v3112",
+        "olang": "ja"
+      },
+      {
+        "id": "v3144",
+        "olang": "ja"
+      },
+      {
+        "id": "v34",
+        "olang": "ja"
+      },
+      {
+        "id": "v382",
+        "olang": "ja"
+      },
+      {
+        "id": "v4",
+        "olang": "ja"
+      },
+      {
+        "id": "v44",
+        "olang": "ja"
+      },
+      {
+        "id": "v487",
+        "olang": "ja"
+      },
+      {
+        "id": "v5",
+        "olang": "ja"
+      },
+      {
+        "id": "v50",
+        "olang": "ja"
+      },
+      {
+        "id": "v5154",
+        "olang": "ja"
+      },
+      {
+        "id": "v5652",
+        "olang": "ja"
+      },
+      {
+        "id": "v57",
+        "olang": "ja"
+      },
+      {
+        "id": "v6540",
+        "olang": "ja"
+      },
+      {
+        "id": "v67",
+        "olang": "ja"
+      },
+      {
+        "id": "v68",
+        "olang": "ja"
+      },
+      {
+        "id": "v7",
+        "olang": "ja"
+      },
+      {
+        "id": "v7014",
+        "olang": "ja"
+      },
+      {
+        "id": "v711",
+        "olang": "ja"
+      },
+      {
+        "id": "v715",
+        "olang": "ja"
+      },
+      {
+        "id": "v716",
+        "olang": "ja"
+      },
+      {
+        "id": "v751",
+        "olang": "ja"
+      },
+      {
+        "id": "v7679",
+        "olang": "ja"
+      },
+      {
+        "id": "v7738",
+        "olang": "ja"
+      },
+      {
+        "id": "v777",
+        "olang": "ja"
+      },
+      {
+        "id": "v7809",
+        "olang": "ja"
+      },
+      {
+        "id": "v810",
+        "olang": "ja"
+      },
+      {
+        "id": "v9093",
+        "olang": "ja"
+      },
+      {
+        "id": "v92",
+        "olang": "ja"
+      },
+      {
+        "id": "v93",
+        "olang": "ja"
+      },
+      {
+        "id": "v945",
+        "olang": "en"
+      },
+      {
+        "id": "v97",
+        "olang": "ja"
+      }
+    ],
+    "vn_titles": [
+      {
+        "id": "v10",
+        "lang": "ja",
+        "official": true,
+        "title": "narcissu",
+        "latin": null
+      },
+      {
+        "id": "v10",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "水仙",
+        "latin": "shuixian"
+      },
+      {
+        "id": "v11",
+        "lang": "ja",
+        "official": true,
+        "title": "Fate/stay night",
+        "latin": null
+      },
+      {
+        "id": "v1143",
+        "lang": "en",
+        "official": true,
+        "title": "Majikoi! Love Me Seriously!!",
+        "latin": null
+      },
+      {
+        "id": "v1143",
+        "lang": "ja",
+        "official": true,
+        "title": "真剣で私に恋しなさい！",
+        "latin": "Maji de Watashi ni Koi Shinasai!"
+      },
+      {
+        "id": "v1143",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "认真和我谈恋爱！！",
+        "latin": "Ren Zhen He Wo Tan Lian Ai!!"
+      },
+      {
+        "id": "v12402",
+        "lang": "en",
+        "official": true,
+        "title": "The House in Fata Morgana",
+        "latin": null
+      },
+      {
+        "id": "v12402",
+        "lang": "ja",
+        "official": true,
+        "title": "ファタモルガーナの館",
+        "latin": "Fata Morgana no Yakata"
+      },
+      {
+        "id": "v12402",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "海市蜃楼之馆",
+        "latin": "Haishishenlou zhi Guan"
+      },
+      {
+        "id": "v12402",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "海市蜃樓之館",
+        "latin": "Haishishenlou zhi Guan"
+      },
+      {
+        "id": "v12849",
+        "lang": "en",
+        "official": true,
+        "title": "Aokana - Four Rhythms Across the Blue",
+        "latin": null
+      },
+      {
+        "id": "v12849",
+        "lang": "ja",
+        "official": true,
+        "title": "蒼の彼方のフォーリズム",
+        "latin": "Ao no Kanata no Four Rhythm"
+      },
+      {
+        "id": "v12849",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "苍之彼方的四重奏",
+        "latin": "Cang zhi Bifang de Sichongzou"
+      },
+      {
+        "id": "v12849",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "蒼之彼方的四重奏",
+        "latin": "Cang zhi Bifang de Sichongzou"
+      },
+      {
+        "id": "v1474",
+        "lang": "en",
+        "official": true,
+        "title": "Hoshizora no Memoria -Wish upon a Shooting Star-",
+        "latin": null
+      },
+      {
+        "id": "v1474",
+        "lang": "ja",
+        "official": true,
+        "title": "星空のメモリア-Wish upon a shooting star-",
+        "latin": "Hoshizora no Memoria -Wish Upon a Shooting Star-"
+      },
+      {
+        "id": "v1474",
+        "lang": "ko",
+        "official": false,
+        "title": "별하늘의 메모리아 -Wish upon a shooting star-",
+        "latin": "Byeolhaneurui Memoria -Wish upon a shooting star-"
+      },
+      {
+        "id": "v1474",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "星空的记忆 -Wish upon a shooting star",
+        "latin": "Xingkong de Jiyi -Wish upon a shooting star"
+      },
+      {
+        "id": "v15538",
+        "lang": "en",
+        "official": true,
+        "title": "NEKOPARA Vol. 1",
+        "latin": null
+      },
+      {
+        "id": "v15538",
+        "lang": "ja",
+        "official": true,
+        "title": "ネコぱら Vol.1 ソレイユ開店しました！",
+        "latin": "Neko Para Vol.1 Soleil Kaiten Shimashita!"
+      },
+      {
+        "id": "v15538",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "猫娘乐园 Vol.1",
+        "latin": "Miaoniang Leyuan Vol.1 La Soleil Kaidian Le"
+      },
+      {
+        "id": "v15538",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "貓娘樂園 Vol.1",
+        "latin": "Maoniang Leyuan Vol.1 La Soleil Kaidian Le"
+      },
+      {
+        "id": "v16044",
+        "lang": "en",
+        "official": true,
+        "title": "Sabbat of the Witch",
+        "latin": null
+      },
+      {
+        "id": "v16044",
+        "lang": "ja",
+        "official": true,
+        "title": "サノバウィッチ",
+        "latin": "Sanoba Witch"
+      },
+      {
+        "id": "v16044",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "魔女的夜宴",
+        "latin": "Monü de Yeyan"
+      },
+      {
+        "id": "v16044",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "魔女的夜宴",
+        "latin": "Monü de Yeyan"
+      },
+      {
+        "id": "v17",
+        "lang": "en",
+        "official": true,
+        "title": "Ever17 -out of infinity-",
+        "latin": null
+      },
+      {
+        "id": "v17",
+        "lang": "ja",
+        "official": true,
+        "title": "Ever17 -the out of infinity-",
+        "latin": null
+      },
+      {
+        "id": "v17",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "时空轮回",
+        "latin": "Shikong Lunhui"
+      },
+      {
+        "id": "v17",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "時光的羈絆",
+        "latin": "Shiguang de Jiban"
+      },
+      {
+        "id": "v17102",
+        "lang": "es",
+        "official": false,
+        "title": "Steins;Gate 0",
+        "latin": null
+      },
+      {
+        "id": "v17102",
+        "lang": "ja",
+        "official": true,
+        "title": "STEINS;GATE 0",
+        "latin": null
+      },
+      {
+        "id": "v17102",
+        "lang": "ko",
+        "official": false,
+        "title": "슈타인즈 게이트 제로",
+        "latin": "Steins;Gate 0"
+      },
+      {
+        "id": "v17102",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "命运石之门0",
+        "latin": "Mingyun Shi zhi Men 0"
+      },
+      {
+        "id": "v18334",
+        "lang": "en",
+        "official": true,
+        "title": "Danganronpa V3: Killing Harmony",
+        "latin": null
+      },
+      {
+        "id": "v18334",
+        "lang": "ja",
+        "official": true,
+        "title": "ニューダンガンロンパV3 みんなのコロシアイ新学期",
+        "latin": "New Dangan Ronpa V3 Minna no Koroshiai Shingakki"
+      },
+      {
+        "id": "v18334",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "新枪弹辩驳V3 大家自相残杀的新学期",
+        "latin": "Xin Qiangdan Bianbo V3 Dajia de Zixiangcansha Xinxueqi"
+      },
+      {
+        "id": "v18334",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "新槍彈辯駁 V3 大家的自相殘殺新學期",
+        "latin": "Xin Qiangdan Bianbo V3 Dajia de Zixiangcansha Xinxueqi"
+      },
+      {
+        "id": "v19073",
+        "lang": "en",
+        "official": true,
+        "title": "Senren＊Banka",
+        "latin": null
+      },
+      {
+        "id": "v19073",
+        "lang": "ja",
+        "official": true,
+        "title": "千恋＊万花",
+        "latin": "Senren * Banka"
+      },
+      {
+        "id": "v19073",
+        "lang": "ko",
+        "official": true,
+        "title": "천연만화 (Senren * Banka)",
+        "latin": "Cheonyeon Manhwa"
+      },
+      {
+        "id": "v19073",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "千恋＊万花",
+        "latin": "Qianlian * Wanhua"
+      },
+      {
+        "id": "v19073",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "千戀＊萬花",
+        "latin": "Qianlian * Wanhua"
+      },
+      {
+        "id": "v2002",
+        "lang": "en",
+        "official": true,
+        "title": "Steins;Gate",
+        "latin": null
+      },
+      {
+        "id": "v2002",
+        "lang": "ja",
+        "official": true,
+        "title": "STEINS;GATE",
+        "latin": null
+      },
+      {
+        "id": "v2002",
+        "lang": "ko",
+        "official": false,
+        "title": "슈타인즈 게이트",
+        "latin": "STEINS;GATE"
+      },
+      {
+        "id": "v2002",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "命运石之门",
+        "latin": "Mingyun Shi zhi Men"
+      },
+      {
+        "id": "v2002",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "命運石之門",
+        "latin": "Mingyun Shi zhi Men"
+      },
+      {
+        "id": "v2016",
+        "lang": "en",
+        "official": true,
+        "title": "Full Metal Daemon Muramasa",
+        "latin": null
+      },
+      {
+        "id": "v2016",
+        "lang": "ja",
+        "official": true,
+        "title": "装甲悪鬼村正",
+        "latin": "Soukou Akki Muramasa"
+      },
+      {
+        "id": "v2016",
+        "lang": "ko",
+        "official": false,
+        "title": "장갑악귀 무라마사",
+        "latin": "Janggap Akgwi Muramasa"
+      },
+      {
+        "id": "v2016",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "装甲恶鬼村正",
+        "latin": "Zhuangjia Egui Cunzheng"
+      },
+      {
+        "id": "v211",
+        "lang": "ar",
+        "official": false,
+        "title": "G-senjou no Maou",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "en",
+        "official": true,
+        "title": "G-senjou no Maou - The Devil on G-String",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "es",
+        "official": false,
+        "title": "G-senjou no Maou",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "hu",
+        "official": false,
+        "title": "Az Ördög a G-húron",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "it",
+        "official": false,
+        "title": "G-senjou no Maou",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "ja",
+        "official": true,
+        "title": "G線上の魔王",
+        "latin": "G-senjou no Maou"
+      },
+      {
+        "id": "v211",
+        "lang": "ko",
+        "official": false,
+        "title": "G선상의 마왕",
+        "latin": "G-Seonsangui Mawang"
+      },
+      {
+        "id": "v211",
+        "lang": "pl",
+        "official": false,
+        "title": "Diabeł na strunie G",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "pt-br",
+        "official": false,
+        "title": "O Diabo na Corda Sol",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "ru",
+        "official": false,
+        "title": "G-senjou no Maou - The Devil on G-String",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "vi",
+        "official": false,
+        "title": "G-senjou no Maou",
+        "latin": null
+      },
+      {
+        "id": "v211",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "G弦上的魔王",
+        "latin": "G-xian Shang de Mowang"
+      },
+      {
+        "id": "v2153",
+        "lang": "en",
+        "official": true,
+        "title": "Umineko When They Cry - Answer Arcs",
+        "latin": null
+      },
+      {
+        "id": "v2153",
+        "lang": "ja",
+        "official": true,
+        "title": "うみねこのなく頃に散",
+        "latin": "Umineko no Naku Koro ni Chiru"
+      },
+      {
+        "id": "v2153",
+        "lang": "ru",
+        "official": false,
+        "title": "Когда Плачут Чайки: Крах",
+        "latin": "Kogda Plachut Chajki: Krah"
+      },
+      {
+        "id": "v2153",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "海猫鸣泣之时散",
+        "latin": "Haimao Mingqi zhi Shi San"
+      },
+      {
+        "id": "v21905",
+        "lang": "de",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "en",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "es",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "fr",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "it",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "ja",
+        "official": true,
+        "title": "ドキドキ文芸部!",
+        "latin": "Doki Doki Bungeibu!"
+      },
+      {
+        "id": "v21905",
+        "lang": "ko",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "pl",
+        "official": false,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "pt-br",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "ru",
+        "official": true,
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "tr",
+        "official": false,
+        "title": "Doki Doki Edebiyat Kulübü!",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "uk",
+        "official": false,
+        "title": "Doki Doki Літературний клуб!",
+        "latin": "Doki Doki Literaturnyi klub!"
+      },
+      {
+        "id": "v21905",
+        "lang": "vi",
+        "official": false,
+        "title": "Câu lạc bộ Văn Học vui nhộn",
+        "latin": null
+      },
+      {
+        "id": "v21905",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "心跳文学部！",
+        "latin": "Xin Tiao Wen Xue Bu!"
+      },
+      {
+        "id": "v21905",
+        "lang": "zh-Hant",
+        "official": false,
+        "title": "心動動文學社！",
+        "latin": "Xin Dong Dong Wen Xue She!"
+      },
+      {
+        "id": "v24",
+        "lang": "en",
+        "official": true,
+        "title": "Umineko When They Cry - Question Arcs",
+        "latin": null
+      },
+      {
+        "id": "v24",
+        "lang": "ja",
+        "official": true,
+        "title": "うみねこのなく頃に",
+        "latin": "Umineko no Naku Koro ni"
+      },
+      {
+        "id": "v24",
+        "lang": "ru",
+        "official": false,
+        "title": "Когда плачут чайки",
+        "latin": "Kogda plachut chajki"
+      },
+      {
+        "id": "v24",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "海猫鸣泣之时",
+        "latin": "Haimao Mingqi zhi Shi"
+      },
+      {
+        "id": "v3",
+        "lang": "en",
+        "official": false,
+        "title": "Utawarerumono",
+        "latin": null
+      },
+      {
+        "id": "v3",
+        "lang": "ja",
+        "official": true,
+        "title": "うたわれるもの",
+        "latin": "Utawarerumono"
+      },
+      {
+        "id": "v3",
+        "lang": "ko",
+        "official": false,
+        "title": "칭송받는 자",
+        "latin": "Chingsongbanneun Ja"
+      },
+      {
+        "id": "v3",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "传颂之物",
+        "latin": "Chuansong zhi Wu"
+      },
+      {
+        "id": "v3",
+        "lang": "zh-Hant",
+        "official": false,
+        "title": "受讚頌者",
+        "latin": "Shouzansongzhe"
+      },
+      {
+        "id": "v3112",
+        "lang": "ar",
+        "official": false,
+        "title": "الهروب المصفر: تسع ساعات، تسع أشخاص، تسع أبواب",
+        "latin": "Al-Huruubul Muṣṣafir: Tis'u Saa'aat, Tis'u Ashkhaaṣ, Tis'u Abwaab"
+      },
+      {
+        "id": "v3112",
+        "lang": "en",
+        "official": true,
+        "title": "999: Nine Hours, Nine Persons, Nine Doors",
+        "latin": null
+      },
+      {
+        "id": "v3112",
+        "lang": "es",
+        "official": false,
+        "title": "999: Nueve Horas, Nueve Personas, Nueve Puertas",
+        "latin": null
+      },
+      {
+        "id": "v3112",
+        "lang": "it",
+        "official": false,
+        "title": "999: Nine Hours, Nine Persons, Nine Doors",
+        "latin": null
+      },
+      {
+        "id": "v3112",
+        "lang": "ja",
+        "official": true,
+        "title": "極限脱出 9時間9人9の扉",
+        "latin": "Kyokugen Dasshutsu - 9-Jikan 9-Nin 9 no Tobira"
+      },
+      {
+        "id": "v3112",
+        "lang": "ko",
+        "official": false,
+        "title": "극한탈출: 9시간 9명 9의 문",
+        "latin": "Geughantalchul: 9sigan 9myeong 9ui Mun"
+      },
+      {
+        "id": "v3112",
+        "lang": "ru",
+        "official": false,
+        "title": "Экстремальный побег: 9 часов, 9 человек, 9 дверей",
+        "latin": "Ekstremal'nyj pobeg: 9 chasov, 9 chelovek, 9 dverej"
+      },
+      {
+        "id": "v3112",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "极限脱出 9小时9人9扇门",
+        "latin": "Jixian Tuochu 9-Xiaoshi 9-Ren 9 Shan Men"
+      },
+      {
+        "id": "v3144",
+        "lang": "en",
+        "official": true,
+        "title": "Wonderful Everyday ~Diskontinuierliches Dasein~",
+        "latin": null
+      },
+      {
+        "id": "v3144",
+        "lang": "es",
+        "official": false,
+        "title": "Días Maravillosos ~Existencia Discontinua~",
+        "latin": null
+      },
+      {
+        "id": "v3144",
+        "lang": "ja",
+        "official": true,
+        "title": "素晴らしき日々～不連続存在～",
+        "latin": "Subarashiki Hibi ~Furenzoku Sonzai~"
+      },
+      {
+        "id": "v3144",
+        "lang": "ko",
+        "official": false,
+        "title": "멋진 나날들 ～불연속 존재～",
+        "latin": "Meotjin Nanaldeul ~Buryeonsok Jonjae~"
+      },
+      {
+        "id": "v3144",
+        "lang": "ru",
+        "official": false,
+        "title": "Чудесные Дни: Пунктирная Жизнь",
+        "latin": "Chudesnye Dni: Punktirnaja Zhizn'"
+      },
+      {
+        "id": "v3144",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "美好的每一天～不连续存在～",
+        "latin": "Meihao de Meiyitian ~Bulianxu Cunzai~"
+      },
+      {
+        "id": "v34",
+        "lang": "de",
+        "official": true,
+        "title": "planetarian",
+        "latin": null
+      },
+      {
+        "id": "v34",
+        "lang": "en",
+        "official": true,
+        "title": "planetarian ~Dream of Little Star~",
+        "latin": null
+      },
+      {
+        "id": "v34",
+        "lang": "es",
+        "official": true,
+        "title": "planetarian",
+        "latin": null
+      },
+      {
+        "id": "v34",
+        "lang": "fr",
+        "official": true,
+        "title": "planetarian",
+        "latin": null
+      },
+      {
+        "id": "v34",
+        "lang": "ja",
+        "official": true,
+        "title": "planetarian ～ちいさなほしのゆめ～",
+        "latin": "planetarian ~Chiisana Hoshi no Yume~"
+      },
+      {
+        "id": "v34",
+        "lang": "ko",
+        "official": false,
+        "title": "planetarian ~작은 별의 꿈~",
+        "latin": "Planetarian ~Jageun Byeorui Kkum~"
+      },
+      {
+        "id": "v34",
+        "lang": "tr",
+        "official": false,
+        "title": "Planetarian ~küçük bir gezegenin hülyası~",
+        "latin": null
+      },
+      {
+        "id": "v34",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "planetarian～小小的星之梦～",
+        "latin": "planetarian ～Xiaoxiao de Xing Zhi Meng～"
+      },
+      {
+        "id": "v34",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "planetarian∼小小的星之夢∼",
+        "latin": "planetarian ～Xiaoxiao de Xing Zhi Meng～"
+      },
+      {
+        "id": "v382",
+        "lang": "en",
+        "official": false,
+        "title": "Chaos;Head",
+        "latin": null
+      },
+      {
+        "id": "v382",
+        "lang": "es",
+        "official": false,
+        "title": "Chaos;Head",
+        "latin": null
+      },
+      {
+        "id": "v382",
+        "lang": "ja",
+        "official": true,
+        "title": "CHAOS;HEAD",
+        "latin": null
+      },
+      {
+        "id": "v382",
+        "lang": "ko",
+        "official": false,
+        "title": "카오스;헤드",
+        "latin": "Chaos;HEAd"
+      },
+      {
+        "id": "v382",
+        "lang": "ru",
+        "official": false,
+        "title": "Chaos;Head",
+        "latin": null
+      },
+      {
+        "id": "v382",
+        "lang": "tr",
+        "official": true,
+        "title": "Kaos;Head",
+        "latin": null
+      },
+      {
+        "id": "v382",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "Chaos;Head",
+        "latin": null
+      },
+      {
+        "id": "v4",
+        "lang": "en",
+        "official": true,
+        "title": "CLANNAD",
+        "latin": null
+      },
+      {
+        "id": "v4",
+        "lang": "ja",
+        "official": true,
+        "title": "CLANNAD",
+        "latin": null
+      },
+      {
+        "id": "v4",
+        "lang": "ko",
+        "official": true,
+        "title": "클라나드",
+        "latin": "CLANNAD"
+      },
+      {
+        "id": "v4",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "CLANNAD",
+        "latin": null
+      },
+      {
+        "id": "v44",
+        "lang": "en",
+        "official": true,
+        "title": "Yume Miru Kusuri - A Drug That Makes You Dream",
+        "latin": null
+      },
+      {
+        "id": "v44",
+        "lang": "ja",
+        "official": true,
+        "title": "ユメミルクスリ",
+        "latin": "Yume Miru Kusuri"
+      },
+      {
+        "id": "v44",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "夢見之藥",
+        "latin": "Mengjian zhi Yao"
+      },
+      {
+        "id": "v487",
+        "lang": "en",
+        "official": true,
+        "title": "Sengoku Rance",
+        "latin": null
+      },
+      {
+        "id": "v487",
+        "lang": "ja",
+        "official": true,
+        "title": "戦国ランス",
+        "latin": "Sengoku Rance"
+      },
+      {
+        "id": "v487",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "战国兰斯",
+        "latin": "Zhanguo Lansi"
+      },
+      {
+        "id": "v5",
+        "lang": "en",
+        "official": true,
+        "title": "Little Busters!",
+        "latin": null
+      },
+      {
+        "id": "v5",
+        "lang": "es",
+        "official": false,
+        "title": "Little Busters!",
+        "latin": null
+      },
+      {
+        "id": "v5",
+        "lang": "ja",
+        "official": true,
+        "title": "リトルバスターズ！",
+        "latin": "Little Busters!"
+      },
+      {
+        "id": "v5",
+        "lang": "ko",
+        "official": false,
+        "title": "리틀 버스터즈!",
+        "latin": "Little Busters!"
+      },
+      {
+        "id": "v5",
+        "lang": "ru",
+        "official": false,
+        "title": "Маленькие проказники!",
+        "latin": "Malen'kie prokazniki!"
+      },
+      {
+        "id": "v5",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "Little Busters!",
+        "latin": null
+      },
+      {
+        "id": "v50",
+        "lang": "ja",
+        "official": true,
+        "title": "Fate/hollow ataraxia",
+        "latin": null
+      },
+      {
+        "id": "v5154",
+        "lang": "en",
+        "official": true,
+        "title": "The Fruit of Grisaia",
+        "latin": null
+      },
+      {
+        "id": "v5154",
+        "lang": "ja",
+        "official": true,
+        "title": "グリザイアの果実 -LE FRUIT DE LA GRISAIA-",
+        "latin": "Grisaia no Kajitsu -LE FRUIT DE LA GRISAIA-"
+      },
+      {
+        "id": "v5154",
+        "lang": "ko",
+        "official": false,
+        "title": "그리자이아의 과실",
+        "latin": "Grisaia-ui Gwasil"
+      },
+      {
+        "id": "v5154",
+        "lang": "ru",
+        "official": false,
+        "title": "Grisaia no Kajitsu",
+        "latin": null
+      },
+      {
+        "id": "v5154",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "灰色的果实 -LE FRUIT DE LA GRISAIA-",
+        "latin": "Huise de Guoshi -LE FRUIT DE LA GRISAIA-"
+      },
+      {
+        "id": "v5652",
+        "lang": "ja",
+        "official": true,
+        "title": "神採りアルケミーマイスター",
+        "latin": "Kamidori Alchemy Meister"
+      },
+      {
+        "id": "v5652",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "神采炼金名匠",
+        "latin": "Shencai Lianjin Mingjiang"
+      },
+      {
+        "id": "v57",
+        "lang": "en",
+        "official": true,
+        "title": "Sharin no Kuni: The Girl Among the Sunflowers",
+        "latin": null
+      },
+      {
+        "id": "v57",
+        "lang": "ja",
+        "official": true,
+        "title": "車輪の国、向日葵の少女",
+        "latin": "Sharin no Kuni, Himawari no Shoujo"
+      },
+      {
+        "id": "v57",
+        "lang": "ko",
+        "official": false,
+        "title": "차륜의 나라, 해바라기의 소녀",
+        "latin": "Charyun-ui Nara, Haebaragi-ui Sonyeo"
+      },
+      {
+        "id": "v57",
+        "lang": "ru",
+        "official": false,
+        "title": "Страна Колес, Девочка-Подсолнух",
+        "latin": "Strana Koljos, Devochka-Podsolnuh"
+      },
+      {
+        "id": "v57",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "车轮之国，向日葵的少女",
+        "latin": "Chelun zhi Guo, Xiangrikui de Shaonv"
+      },
+      {
+        "id": "v6540",
+        "lang": "en",
+        "official": true,
+        "title": "euphoria",
+        "latin": null
+      },
+      {
+        "id": "v6540",
+        "lang": "ja",
+        "official": true,
+        "title": "euphoria",
+        "latin": null
+      },
+      {
+        "id": "v6540",
+        "lang": "ko",
+        "official": false,
+        "title": "euphoria",
+        "latin": null
+      },
+      {
+        "id": "v6540",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "euphoria",
+        "latin": null
+      },
+      {
+        "id": "v67",
+        "lang": "en",
+        "official": true,
+        "title": "Higurashi When They Cry - Question Arcs",
+        "latin": null
+      },
+      {
+        "id": "v67",
+        "lang": "fr",
+        "official": true,
+        "title": "Le sanglot des cigales ~cycle des énigmes~",
+        "latin": null
+      },
+      {
+        "id": "v67",
+        "lang": "it",
+        "official": false,
+        "title": "Higurashi - Quando piangono le cicale - Archi di domanda",
+        "latin": null
+      },
+      {
+        "id": "v67",
+        "lang": "ja",
+        "official": true,
+        "title": "ひぐらしのなく頃に",
+        "latin": "Higurashi no Naku Koro ni"
+      },
+      {
+        "id": "v67",
+        "lang": "pl",
+        "official": false,
+        "title": "Gdy zapłaczą cykady",
+        "latin": null
+      },
+      {
+        "id": "v67",
+        "lang": "ru",
+        "official": false,
+        "title": "Когда плачут цикады",
+        "latin": "Kogda plachut cikady"
+      },
+      {
+        "id": "v67",
+        "lang": "vi",
+        "official": false,
+        "title": "Khi Ve Sầu Khóc",
+        "latin": null
+      },
+      {
+        "id": "v67",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "寒蝉鸣泣之时 出题篇",
+        "latin": "Hanchan Mingqi zhi Shi Chuti Pian"
+      },
+      {
+        "id": "v68",
+        "lang": "en",
+        "official": true,
+        "title": "Higurashi When They Cry - Answer Arcs",
+        "latin": null
+      },
+      {
+        "id": "v68",
+        "lang": "fr",
+        "official": true,
+        "title": "Le sanglot des cigales R ~cycle des résolutions~",
+        "latin": null
+      },
+      {
+        "id": "v68",
+        "lang": "ja",
+        "official": true,
+        "title": "ひぐらしのなく頃に解",
+        "latin": "Higurashi no Naku Koro ni Kai"
+      },
+      {
+        "id": "v68",
+        "lang": "ru",
+        "official": false,
+        "title": "Когда плачут цикады: Ответы",
+        "latin": "Kogda plachut cikady: Otvety"
+      },
+      {
+        "id": "v68",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "寒蝉鸣泣之时解",
+        "latin": "Hanchan Mingqi zhi Shi Jie"
+      },
+      {
+        "id": "v7",
+        "lang": "ja",
+        "official": true,
+        "title": "月姫",
+        "latin": "Tsukihime"
+      },
+      {
+        "id": "v7",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "月姫",
+        "latin": "Yueji"
+      },
+      {
+        "id": "v7014",
+        "lang": "de",
+        "official": false,
+        "title": "Danganronpa: Trigger Happy Havoc",
+        "latin": null
+      },
+      {
+        "id": "v7014",
+        "lang": "en",
+        "official": true,
+        "title": "Danganronpa: Trigger Happy Havoc",
+        "latin": null
+      },
+      {
+        "id": "v7014",
+        "lang": "es",
+        "official": false,
+        "title": "Danganronpa: Trigger Happy Havoc",
+        "latin": null
+      },
+      {
+        "id": "v7014",
+        "lang": "fr",
+        "official": false,
+        "title": "Dangan Ronpa Kibou no Gakuen to Zetsubou no Koukousei",
+        "latin": null
+      },
+      {
+        "id": "v7014",
+        "lang": "it",
+        "official": false,
+        "title": "Danganronpa: Hope’s Academy and Despair’s Students",
+        "latin": null
+      },
+      {
+        "id": "v7014",
+        "lang": "ja",
+        "official": true,
+        "title": "ダンガンロンパ 希望の学園と絶望の高校生",
+        "latin": "Dangan Ronpa: Kibou no Gakuen to Zetsubou no Koukousei"
+      },
+      {
+        "id": "v7014",
+        "lang": "pl",
+        "official": false,
+        "title": "Danganronpa: Trigger Happy Havoc",
+        "latin": null
+      },
+      {
+        "id": "v7014",
+        "lang": "ru",
+        "official": false,
+        "title": "Danganronpa: Академия Надежды и отчаявшиеся ученики",
+        "latin": "Danganronpa: Akademija Nadezhdy i otchajavshyesja ucheniki"
+      },
+      {
+        "id": "v7014",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "弹丸论破 希望的学园与绝望的高中生",
+        "latin": "Danwan Lunpo: Xiwang de Xueyuan yu Juewang de Gaozhongsheng"
+      },
+      {
+        "id": "v7014",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "槍彈辯駁 希望學園與絕望高中生",
+        "latin": "Qiangdan Bianbo: Xiwang Xueyuan yu Juewang Gaozhongsheng"
+      },
+      {
+        "id": "v711",
+        "lang": "en",
+        "official": true,
+        "title": "Phoenix Wright: Ace Attorney",
+        "latin": null
+      },
+      {
+        "id": "v711",
+        "lang": "es",
+        "official": true,
+        "title": "Phoenix Wright: Ace Attorney",
+        "latin": null
+      },
+      {
+        "id": "v711",
+        "lang": "ja",
+        "official": true,
+        "title": "逆転裁判",
+        "latin": "Gyakuten Saiban"
+      },
+      {
+        "id": "v711",
+        "lang": "ko",
+        "official": true,
+        "title": "역전재판",
+        "latin": "Yeokjeon Jaepan"
+      },
+      {
+        "id": "v711",
+        "lang": "pt-br",
+        "official": false,
+        "title": "Advogados de Primeira: Fênix Veríssimo",
+        "latin": null
+      },
+      {
+        "id": "v711",
+        "lang": "ru",
+        "official": false,
+        "title": "Судебный поворот",
+        "latin": "Sudebnyj povorot"
+      },
+      {
+        "id": "v711",
+        "lang": "vi",
+        "official": false,
+        "title": "Luật Sư Tài Ba Trần Vân Phượng",
+        "latin": null
+      },
+      {
+        "id": "v711",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "逆转裁判",
+        "latin": "Nizhuan Caipan"
+      },
+      {
+        "id": "v715",
+        "lang": "en",
+        "official": true,
+        "title": "Phoenix Wright: Ace Attorney - Justice for All",
+        "latin": null
+      },
+      {
+        "id": "v715",
+        "lang": "es",
+        "official": true,
+        "title": "Phoenix Wright: Ace Attorney - Justice for All",
+        "latin": null
+      },
+      {
+        "id": "v715",
+        "lang": "ja",
+        "official": true,
+        "title": "逆転裁判2",
+        "latin": "Gyakuten Saiban 2"
+      },
+      {
+        "id": "v715",
+        "lang": "ko",
+        "official": true,
+        "title": "역전재판 2",
+        "latin": "Yeokjeon Jaepan 2"
+      },
+      {
+        "id": "v715",
+        "lang": "pt-br",
+        "official": false,
+        "title": "Advogados de Primeira 2: Justiça para Todos",
+        "latin": null
+      },
+      {
+        "id": "v715",
+        "lang": "ru",
+        "official": false,
+        "title": "Судебный поворот 2",
+        "latin": "Sudebnyj povorot 2"
+      },
+      {
+        "id": "v715",
+        "lang": "vi",
+        "official": false,
+        "title": "Luật Sư Tài Ba Trần Vân Phượng 2: Bảo Vệ Công Lý",
+        "latin": null
+      },
+      {
+        "id": "v715",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "逆转裁判2",
+        "latin": "Nizhuan Caipan 2"
+      },
+      {
+        "id": "v716",
+        "lang": "en",
+        "official": true,
+        "title": "Phoenix Wright: Ace Attorney - Trials and Tribulations",
+        "latin": null
+      },
+      {
+        "id": "v716",
+        "lang": "es",
+        "official": true,
+        "title": "Phoenix Wright: Ace Attorney - Trials and Tribulations",
+        "latin": null
+      },
+      {
+        "id": "v716",
+        "lang": "ja",
+        "official": true,
+        "title": "逆転裁判3",
+        "latin": "Gyakuten Saiban 3"
+      },
+      {
+        "id": "v716",
+        "lang": "ko",
+        "official": true,
+        "title": "역전재판 3",
+        "latin": "Yeokjeon Jaepan 3"
+      },
+      {
+        "id": "v716",
+        "lang": "pt-br",
+        "official": false,
+        "title": "Advogados de Primeira 3: Casos e Acasos",
+        "latin": null
+      },
+      {
+        "id": "v716",
+        "lang": "ru",
+        "official": false,
+        "title": "Судебный поворот 3",
+        "latin": "Sudebnyj povorot 3"
+      },
+      {
+        "id": "v716",
+        "lang": "vi",
+        "official": false,
+        "title": "Luật Sư Tài Ba Trần Vân Phượng 3: Phiên tòa thử thách",
+        "latin": null
+      },
+      {
+        "id": "v716",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "逆转裁判3",
+        "latin": "Nizhuan Caipan 3"
+      },
+      {
+        "id": "v751",
+        "lang": "en",
+        "official": true,
+        "title": "Rewrite",
+        "latin": null
+      },
+      {
+        "id": "v751",
+        "lang": "ja",
+        "official": true,
+        "title": "Rewrite",
+        "latin": null
+      },
+      {
+        "id": "v751",
+        "lang": "ru",
+        "official": false,
+        "title": "Перезапись",
+        "latin": "Perezapis'"
+      },
+      {
+        "id": "v7679",
+        "lang": "en",
+        "official": true,
+        "title": "Danganronpa 2: Goodbye Despair",
+        "latin": null
+      },
+      {
+        "id": "v7679",
+        "lang": "ja",
+        "official": true,
+        "title": "スーパーダンガンロンパ2 さよなら絶望学園",
+        "latin": "Super Dangan Ronpa 2 Sayonara Zetsubou Gakuen"
+      },
+      {
+        "id": "v7679",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "超级弹丸论破2 再见绝望学园",
+        "latin": "Chaoji Danwan Lunpo 2 Zaijian Juewang Xueyuan"
+      },
+      {
+        "id": "v7738",
+        "lang": "en",
+        "official": true,
+        "title": "YOU and ME and HER: A Love Story",
+        "latin": null
+      },
+      {
+        "id": "v7738",
+        "lang": "ja",
+        "official": true,
+        "title": "君と彼女と彼女の恋。",
+        "latin": "Kimi to Kanojo to Kanojo no Koi."
+      },
+      {
+        "id": "v7738",
+        "lang": "ko",
+        "official": true,
+        "title": "당신과 그녀와 그녀의 사랑",
+        "latin": "Dangsingwa Geunyeowa Geunyeoui Sarang"
+      },
+      {
+        "id": "v7738",
+        "lang": "ru",
+        "official": false,
+        "title": "Ты, я и она: История любви",
+        "latin": "Ty, ja i ona: Istorija ljubvi"
+      },
+      {
+        "id": "v7738",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "你和她和她的恋爱。",
+        "latin": "Ni He Ta He Ta de Lian'ai."
+      },
+      {
+        "id": "v777",
+        "lang": "en",
+        "official": true,
+        "title": "Witch on the Holy Night",
+        "latin": null
+      },
+      {
+        "id": "v777",
+        "lang": "ja",
+        "official": true,
+        "title": "魔法使いの夜",
+        "latin": "Mahoutsukai no Yoru"
+      },
+      {
+        "id": "v777",
+        "lang": "ko",
+        "official": false,
+        "title": "마법사의 밤",
+        "latin": "Mabeopsa'ui Bam"
+      },
+      {
+        "id": "v777",
+        "lang": "ru",
+        "official": false,
+        "title": "Ведьма Святой Ночи",
+        "latin": "Ved'ma Svjatoj nochi"
+      },
+      {
+        "id": "v777",
+        "lang": "vi",
+        "official": false,
+        "title": "Mahoutsukai no Yoru - Phù thuỷ Đêm Thánh",
+        "latin": null
+      },
+      {
+        "id": "v777",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "魔法使之夜",
+        "latin": "Mofashi zhi Ye"
+      },
+      {
+        "id": "v777",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "魔法使之夜",
+        "latin": "Mofashi zhi Ye"
+      },
+      {
+        "id": "v7809",
+        "lang": "en",
+        "official": true,
+        "title": "Zero Escape: Virtue's Last Reward",
+        "latin": null
+      },
+      {
+        "id": "v7809",
+        "lang": "ja",
+        "official": true,
+        "title": "極限脱出ADV 善人シボウデス",
+        "latin": "Kyokugen Dasshutsu ADV - Zennin Shibou Desu"
+      },
+      {
+        "id": "v7809",
+        "lang": "zh-Hans",
+        "official": false,
+        "title": "极限脱出ADV 善人死亡",
+        "latin": "Jixian Tuochu ADV Shanren Siwang"
+      },
+      {
+        "id": "v810",
+        "lang": "en",
+        "official": true,
+        "title": "Kara no Shojo",
+        "latin": null
+      },
+      {
+        "id": "v810",
+        "lang": "ja",
+        "official": true,
+        "title": "殻ノ少女",
+        "latin": "Kara no Shoujo"
+      },
+      {
+        "id": "v810",
+        "lang": "vi",
+        "official": false,
+        "title": "Thiếu Nữ Trong Vỏ Trứng",
+        "latin": null
+      },
+      {
+        "id": "v810",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "壳之少女",
+        "latin": "Ke zhi Shaonü"
+      },
+      {
+        "id": "v810",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "殼之少女",
+        "latin": "Ke zhi Shaonü"
+      },
+      {
+        "id": "v9093",
+        "lang": "en",
+        "official": true,
+        "title": "If My Heart Had Wings",
+        "latin": null
+      },
+      {
+        "id": "v9093",
+        "lang": "ja",
+        "official": true,
+        "title": "この大空に、翼をひろげて",
+        "latin": "Kono Oozora ni, Tsubasa o Hirogete"
+      },
+      {
+        "id": "v9093",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "在这苍穹展翅",
+        "latin": "Zai Zhe Cangqiong Zhanchi"
+      },
+      {
+        "id": "v9093",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "在這蒼穹展翅",
+        "latin": "Zai Zhe Cangqiong Zhanchi"
+      },
+      {
+        "id": "v92",
+        "lang": "en",
+        "official": true,
+        "title": "Muv-Luv Alternative",
+        "latin": null
+      },
+      {
+        "id": "v92",
+        "lang": "ja",
+        "official": true,
+        "title": "マブラヴ　オルタネイティヴ",
+        "latin": "Muv-Luv Alternative"
+      },
+      {
+        "id": "v93",
+        "lang": "en",
+        "official": true,
+        "title": "Muv-Luv",
+        "latin": null
+      },
+      {
+        "id": "v93",
+        "lang": "ja",
+        "official": true,
+        "title": "マブラヴ",
+        "latin": "Muv-Luv"
+      },
+      {
+        "id": "v93",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "Muv-Luv",
+        "latin": null
+      },
+      {
+        "id": "v945",
+        "lang": "en",
+        "official": true,
+        "title": "Katawa Shoujo",
+        "latin": null
+      },
+      {
+        "id": "v945",
+        "lang": "ja",
+        "official": true,
+        "title": "かたわ少女",
+        "latin": "Katawa Shoujo"
+      },
+      {
+        "id": "v945",
+        "lang": "ko",
+        "official": false,
+        "title": "장애소녀",
+        "latin": "Jangae Sonyeo"
+      },
+      {
+        "id": "v945",
+        "lang": "vi",
+        "official": true,
+        "title": "Khiếm Khuyết Thiếu Nữ",
+        "latin": null
+      },
+      {
+        "id": "v945",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "片轮少女",
+        "latin": "Pianlun Shaonü"
+      },
+      {
+        "id": "v945",
+        "lang": "zh-Hant",
+        "official": true,
+        "title": "片輪少女",
+        "latin": "Pianlun Shaonü"
+      },
+      {
+        "id": "v97",
+        "lang": "de",
+        "official": false,
+        "title": "Saya no Uta",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "en",
+        "official": true,
+        "title": "Saya no Uta ~ The Song of Saya",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "es",
+        "official": false,
+        "title": "La canción de Saya",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "fr",
+        "official": false,
+        "title": "Saya no Uta",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "it",
+        "official": false,
+        "title": "Saya no Uta",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "ja",
+        "official": true,
+        "title": "沙耶の唄",
+        "latin": "Saya no Uta"
+      },
+      {
+        "id": "v97",
+        "lang": "ko",
+        "official": false,
+        "title": "사야의 노래",
+        "latin": "Sayaui Norae"
+      },
+      {
+        "id": "v97",
+        "lang": "pt-br",
+        "official": false,
+        "title": "Saya no Uta",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "ru",
+        "official": false,
+        "title": "Песнь Сайи",
+        "latin": "Pesn' Saji"
+      },
+      {
+        "id": "v97",
+        "lang": "tr",
+        "official": false,
+        "title": "Saya’nın Şarkısı",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "vi",
+        "official": false,
+        "title": "Khúc ca của Saya",
+        "latin": null
+      },
+      {
+        "id": "v97",
+        "lang": "zh-Hans",
+        "official": true,
+        "title": "沙耶之歌",
+        "latin": "Shaye zhi Ge"
+      }
+    ],
+    "releases": [
+      {
+        "id": "r10124",
+        "olang": "ja",
+        "released": "20101126",
+        "official": true
+      },
+      {
+        "id": "r10238",
+        "olang": "ja",
+        "released": "20101203",
+        "official": true
+      },
+      {
+        "id": "r1025",
+        "olang": "ja",
+        "released": "20061215",
+        "official": true
+      },
+      {
+        "id": "r10295",
+        "olang": "ja",
+        "released": "20101028",
+        "official": true
+      },
+      {
+        "id": "r103269",
+        "olang": "ja",
+        "released": "20200423",
+        "official": true
+      },
+      {
+        "id": "r10378",
+        "olang": "ja",
+        "released": "20101015",
+        "official": true
+      },
+      {
+        "id": "r10379",
+        "olang": "ja",
+        "released": "20110901",
+        "official": true
+      },
+      {
+        "id": "r106942",
+        "olang": "ja",
+        "released": "20240118",
+        "official": true
+      },
+      {
+        "id": "r108124",
+        "olang": "en",
+        "released": "20230728",
+        "official": true
+      },
+      {
+        "id": "r10979",
+        "olang": "ja",
+        "released": "20110422",
+        "official": true
+      },
+      {
+        "id": "r11",
+        "olang": "ja",
+        "released": "20060922",
+        "official": true
+      },
+      {
+        "id": "r111538",
+        "olang": "en",
+        "released": "99999999",
+        "official": true
+      },
+      {
+        "id": "r112866",
+        "olang": "ja",
+        "released": "20231214",
+        "official": true
+      },
+      {
+        "id": "r114283",
+        "olang": "ja",
+        "released": "20240328",
+        "official": true
+      },
+      {
+        "id": "r116079",
+        "olang": "en",
+        "released": "20211203",
+        "official": true
+      },
+      {
+        "id": "r116148",
+        "olang": "ja",
+        "released": "20180525",
+        "official": true
+      },
+      {
+        "id": "r117298",
+        "olang": "ja",
+        "released": "20240328",
+        "official": true
+      },
+      {
+        "id": "r117300",
+        "olang": "ja",
+        "released": "20180726",
+        "official": true
+      },
+      {
+        "id": "r117339",
+        "olang": "ja",
+        "released": "20080521",
+        "official": true
+      },
+      {
+        "id": "r118758",
+        "olang": "ja",
+        "released": "20240411",
+        "official": true
+      },
+      {
+        "id": "r118759",
+        "olang": "ja",
+        "released": "20240411",
+        "official": true
+      },
+      {
+        "id": "r118889",
+        "olang": "ja",
+        "released": "20180920",
+        "official": true
+      },
+      {
+        "id": "r118913",
+        "olang": "ja",
+        "released": "20240807",
+        "official": true
+      },
+      {
+        "id": "r118914",
+        "olang": "ja",
+        "released": "20240807",
+        "official": true
+      },
+      {
+        "id": "r12",
+        "olang": "en",
+        "released": "20051220",
+        "official": true
+      },
+      {
+        "id": "r12056",
+        "olang": "ja",
+        "released": "20100826",
+        "official": true
+      },
+      {
+        "id": "r121674",
+        "olang": "ja",
+        "released": "20190704",
+        "official": true
+      },
+      {
+        "id": "r122346",
+        "olang": "ja",
+        "released": "20240627",
+        "official": true
+      },
+      {
+        "id": "r123023",
+        "olang": "ja",
+        "released": "20240628",
+        "official": true
+      },
+      {
+        "id": "r123195",
+        "olang": "ja",
+        "released": "20240705",
+        "official": true
+      },
+      {
+        "id": "r124822",
+        "olang": "ja",
+        "released": "20210318",
+        "official": true
+      },
+      {
+        "id": "r125631",
+        "olang": "en",
+        "released": "20240815",
+        "official": true
+      },
+      {
+        "id": "r125890",
+        "olang": "ja",
+        "released": "20250806",
+        "official": true
+      },
+      {
+        "id": "r125891",
+        "olang": "ja",
+        "released": "20250806",
+        "official": true
+      },
+      {
+        "id": "r12671",
+        "olang": "en",
+        "released": "20110210",
+        "official": true
+      },
+      {
+        "id": "r126832",
+        "olang": "en",
+        "released": "20200821",
+        "official": true
+      },
+      {
+        "id": "r127618",
+        "olang": "ja",
+        "released": "20250227",
+        "official": true
+      },
+      {
+        "id": "r128782",
+        "olang": "ja",
+        "released": "20250425",
+        "official": true
+      },
+      {
+        "id": "r12932",
+        "olang": "ja",
+        "released": "20110224",
+        "official": true
+      },
+      {
+        "id": "r12992",
+        "olang": "ja",
+        "released": "20110624",
+        "official": true
+      },
+      {
+        "id": "r13",
+        "olang": "ja",
+        "released": "20080229",
+        "official": true
+      },
+      {
+        "id": "r130533",
+        "olang": "ja",
+        "released": "20120202",
+        "official": true
+      },
+      {
+        "id": "r133624",
+        "olang": "ja",
+        "released": "20250720",
+        "official": true
+      },
+      {
+        "id": "r133919",
+        "olang": "ja",
+        "released": "20250207",
+        "official": true
+      },
+      {
+        "id": "r135574",
+        "olang": "ja",
+        "released": "20180727",
+        "official": true
+      },
+      {
+        "id": "r138454",
+        "olang": "en",
+        "released": "20180517",
+        "official": true
+      },
+      {
+        "id": "r138684",
+        "olang": "en",
+        "released": "99999999",
+        "official": true
+      },
+      {
+        "id": "r1403",
+        "olang": "ja",
+        "released": "20051223",
+        "official": true
+      },
+      {
+        "id": "r140358",
+        "olang": "ja",
+        "released": "20250814",
+        "official": true
+      },
+      {
+        "id": "r1411",
+        "olang": "ja",
+        "released": "20060331",
+        "official": true
+      },
+      {
+        "id": "r1416",
+        "olang": "ja",
+        "released": "20060331",
+        "official": true
+      },
+      {
+        "id": "r141619",
+        "olang": "ja",
+        "released": "20270114",
+        "official": true
+      },
+      {
+        "id": "r14311",
+        "olang": "en",
+        "released": "20110629",
+        "official": true
+      },
+      {
+        "id": "r144",
+        "olang": "ja",
+        "released": "20051125",
+        "official": true
+      },
+      {
+        "id": "r146603",
+        "olang": "ja",
+        "released": "20261002",
+        "official": true
+      },
+      {
+        "id": "r147379",
+        "olang": "en",
+        "released": "20260117",
+        "official": true
+      },
+      {
+        "id": "r148219",
+        "olang": "ja",
+        "released": "20260202",
+        "official": true
+      },
+      {
+        "id": "r14872",
+        "olang": "ja",
+        "released": "20110303",
+        "official": true
+      },
+      {
+        "id": "r149683",
+        "olang": "ja",
+        "released": "20251119",
+        "official": true
+      },
+      {
+        "id": "r150407",
+        "olang": "ja",
+        "released": "20080425",
+        "official": true
+      },
+      {
+        "id": "r1513",
+        "olang": "ja",
+        "released": "20110624",
+        "official": true
+      },
+      {
+        "id": "r1514",
+        "olang": "ja",
+        "released": "20120412",
+        "official": true
+      },
+      {
+        "id": "r151681",
+        "olang": "ja",
+        "released": "20260424",
+        "official": true
+      },
+      {
+        "id": "r152254",
+        "olang": "zh-Hans",
+        "released": "20230721",
+        "official": true
+      },
+      {
+        "id": "r15329",
+        "olang": "en",
+        "released": "20130506",
+        "official": true
+      },
+      {
+        "id": "r154799",
+        "olang": "ja",
+        "released": "20250530",
+        "official": true
+      },
+      {
+        "id": "r15651",
+        "olang": "ja",
+        "released": "20120216",
+        "official": true
+      },
+      {
+        "id": "r162281",
+        "olang": "ja",
+        "released": "19990813",
+        "official": true
+      },
+      {
+        "id": "r16243",
+        "olang": "ja",
+        "released": "20120223",
+        "official": true
+      },
+      {
+        "id": "r167",
+        "olang": "ja",
+        "released": "20050805",
+        "official": true
+      },
+      {
+        "id": "r174",
+        "olang": "ja",
+        "released": "20070727",
+        "official": true
+      },
+      {
+        "id": "r18265",
+        "olang": "ja",
+        "released": "20120525",
+        "official": true
+      },
+      {
+        "id": "r18401",
+        "olang": "ja",
+        "released": "20171101",
+        "official": true
+      },
+      {
+        "id": "r1898",
+        "olang": "en",
+        "released": "20120104",
+        "official": true
+      },
+      {
+        "id": "r1951",
+        "olang": "ja",
+        "released": "20070525",
+        "official": true
+      },
+      {
+        "id": "r196",
+        "olang": "ja",
+        "released": "20030516",
+        "official": true
+      },
+      {
+        "id": "r22797",
+        "olang": "ja",
+        "released": "20120830",
+        "official": true
+      },
+      {
+        "id": "r23",
+        "olang": "en",
+        "released": "20050821",
+        "official": true
+      },
+      {
+        "id": "r25",
+        "olang": "ja",
+        "released": "20031226",
+        "official": true
+      },
+      {
+        "id": "r26772",
+        "olang": "en",
+        "released": "20130628",
+        "official": true
+      },
+      {
+        "id": "r27673",
+        "olang": "en",
+        "released": "20140331",
+        "official": true
+      },
+      {
+        "id": "r297",
+        "olang": "ja",
+        "released": "20020426",
+        "official": true
+      },
+      {
+        "id": "r31469",
+        "olang": "ja",
+        "released": "20140130",
+        "official": true
+      },
+      {
+        "id": "r32926",
+        "olang": "ja",
+        "released": "20160513",
+        "official": true
+      },
+      {
+        "id": "r339",
+        "olang": "ja",
+        "released": "20001229",
+        "official": true
+      },
+      {
+        "id": "r34916",
+        "olang": "ja",
+        "released": "20141230",
+        "official": true
+      },
+      {
+        "id": "r34972",
+        "olang": "en",
+        "released": "20150529",
+        "official": true
+      },
+      {
+        "id": "r34973",
+        "olang": "ja",
+        "released": "20140912",
+        "official": true
+      },
+      {
+        "id": "r357",
+        "olang": "en",
+        "released": "20070425",
+        "official": true
+      },
+      {
+        "id": "r35703",
+        "olang": "en",
+        "released": "20151127",
+        "official": true
+      },
+      {
+        "id": "r36485",
+        "olang": "ja",
+        "released": "20150227",
+        "official": true
+      },
+      {
+        "id": "r3748",
+        "olang": "ja",
+        "released": "20090731",
+        "official": true
+      },
+      {
+        "id": "r3949",
+        "olang": "ja",
+        "released": "20090504",
+        "official": true
+      },
+      {
+        "id": "r3950",
+        "olang": "ja",
+        "released": "20091030",
+        "official": true
+      },
+      {
+        "id": "r40754",
+        "olang": "zh-Hant",
+        "released": "20070125",
+        "official": true
+      },
+      {
+        "id": "r41274",
+        "olang": "en",
+        "released": "20151105",
+        "official": true
+      },
+      {
+        "id": "r41280",
+        "olang": "ja",
+        "released": "20160708",
+        "official": true
+      },
+      {
+        "id": "r4189",
+        "olang": "en",
+        "released": "20091215",
+        "official": true
+      },
+      {
+        "id": "r42918",
+        "olang": "ja",
+        "released": "20170112",
+        "official": true
+      },
+      {
+        "id": "r430",
+        "olang": "en",
+        "released": "20160309",
+        "official": true
+      },
+      {
+        "id": "r43059",
+        "olang": "en",
+        "released": "20180712",
+        "official": true
+      },
+      {
+        "id": "r43062",
+        "olang": "en",
+        "released": "20180712",
+        "official": true
+      },
+      {
+        "id": "r44583",
+        "olang": "en",
+        "released": "20160218",
+        "official": true
+      },
+      {
+        "id": "r44623",
+        "olang": "en",
+        "released": "20160418",
+        "official": true
+      },
+      {
+        "id": "r44996",
+        "olang": "en",
+        "released": "20171218",
+        "official": true
+      },
+      {
+        "id": "r45245",
+        "olang": "ja",
+        "released": "20160729",
+        "official": true
+      },
+      {
+        "id": "r45680",
+        "olang": "ja",
+        "released": "20160826",
+        "official": true
+      },
+      {
+        "id": "r45776",
+        "olang": "en",
+        "released": "99999999",
+        "official": true
+      },
+      {
+        "id": "r46419",
+        "olang": "en",
+        "released": "20211217",
+        "official": true
+      },
+      {
+        "id": "r46942",
+        "olang": "ja",
+        "released": "20170324",
+        "official": true
+      },
+      {
+        "id": "r47406",
+        "olang": "ja",
+        "released": "20160805",
+        "official": true
+      },
+      {
+        "id": "r50668",
+        "olang": "ja",
+        "released": "20170926",
+        "official": true
+      },
+      {
+        "id": "r52360",
+        "olang": "ja",
+        "released": "20200214",
+        "official": true
+      },
+      {
+        "id": "r52383",
+        "olang": "en",
+        "released": "20210217",
+        "official": true
+      },
+      {
+        "id": "r52911",
+        "olang": "en",
+        "released": "99999999",
+        "official": true
+      },
+      {
+        "id": "r53017",
+        "olang": "en",
+        "released": "20190919",
+        "official": true
+      },
+      {
+        "id": "r53222",
+        "olang": "ja",
+        "released": "20170825",
+        "official": true
+      },
+      {
+        "id": "r53689",
+        "olang": "en",
+        "released": "20170922",
+        "official": true
+      },
+      {
+        "id": "r54133",
+        "olang": "ja",
+        "released": "20171117",
+        "official": true
+      },
+      {
+        "id": "r55462",
+        "olang": "ja",
+        "released": "20181026",
+        "official": true
+      },
+      {
+        "id": "r55464",
+        "olang": "ja",
+        "released": "20180704",
+        "official": true
+      },
+      {
+        "id": "r56184",
+        "olang": "ja",
+        "released": "20180508",
+        "official": true
+      },
+      {
+        "id": "r57694",
+        "olang": "en",
+        "released": "20200513",
+        "official": true
+      },
+      {
+        "id": "r58672",
+        "olang": "ja",
+        "released": "20190927",
+        "official": true
+      },
+      {
+        "id": "r59722",
+        "olang": "ru",
+        "released": "20191229",
+        "official": false
+      },
+      {
+        "id": "r62494",
+        "olang": "ja",
+        "released": "20190409",
+        "official": true
+      },
+      {
+        "id": "r63343",
+        "olang": "ja",
+        "released": "20191107",
+        "official": true
+      },
+      {
+        "id": "r64727",
+        "olang": "en",
+        "released": "20190813",
+        "official": true
+      },
+      {
+        "id": "r7350",
+        "olang": "ja",
+        "released": "20011221",
+        "official": true
+      },
+      {
+        "id": "r76933",
+        "olang": "ja",
+        "released": "20210122",
+        "official": true
+      },
+      {
+        "id": "r80357",
+        "olang": "en",
+        "released": "20210630",
+        "official": true
+      },
+      {
+        "id": "r80363",
+        "olang": "en",
+        "released": "20211008",
+        "official": true
+      },
+      {
+        "id": "r80447",
+        "olang": "en",
+        "released": "20211203",
+        "official": true
+      },
+      {
+        "id": "r80448",
+        "olang": "ja",
+        "released": "20211104",
+        "official": true
+      },
+      {
+        "id": "r81304",
+        "olang": "en",
+        "released": "20210825",
+        "official": true
+      },
+      {
+        "id": "r83450",
+        "olang": "ja",
+        "released": "20211203",
+        "official": true
+      },
+      {
+        "id": "r84524",
+        "olang": "en",
+        "released": "20211111",
+        "official": true
+      },
+      {
+        "id": "r85789",
+        "olang": "ja",
+        "released": "20221208",
+        "official": true
+      },
+      {
+        "id": "r88352",
+        "olang": "ja",
+        "released": "20220322",
+        "official": true
+      },
+      {
+        "id": "r886",
+        "olang": "ja",
+        "released": "20080321",
+        "official": true
+      },
+      {
+        "id": "r95905",
+        "olang": "ja",
+        "released": "20220915",
+        "official": true
+      },
+      {
+        "id": "r96811",
+        "olang": "ru",
+        "released": "20220126",
+        "official": false
+      }
+    ],
+    "releases_titles": [
+      {
+        "id": "r10124",
+        "lang": "ja",
+        "title": "星空のメモリア COMPLETE",
+        "latin": "Hoshizora no Memoria Complete"
+      },
+      {
+        "id": "r10238",
+        "lang": "ja",
+        "title": "Innocent Grey premium box『PARANOIA』",
+        "latin": "Innocent Grey Premium Box \"Paranoia\""
+      },
+      {
+        "id": "r1025",
+        "lang": "ja",
+        "title": "戦国ランス パッケージ版",
+        "latin": "Sengoku Rance - Package Edition"
+      },
+      {
+        "id": "r10295",
+        "lang": "ja",
+        "title": "車輪の国、向日葵の少女 限定版",
+        "latin": "Sharin no Kuni, Himawari no Shoujo - Limited Edition"
+      },
+      {
+        "id": "r103269",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r103269",
+        "lang": "ja",
+        "title": "リトルバスターズ！Converted Edition - Physical Edition",
+        "latin": "Little Busters! Converted Edition - Physical Edition"
+      },
+      {
+        "id": "r10378",
+        "lang": "ja",
+        "title": "うみねこのなく頃に",
+        "latin": "Umineko no Naku Koro ni - Download Edition"
+      },
+      {
+        "id": "r10379",
+        "lang": "ja",
+        "title": "うみねこのなく頃に散",
+        "latin": "Umineko no Naku Koro ni Chiru - Download Edition"
+      },
+      {
+        "id": "r106942",
+        "lang": "en",
+        "title": "Senren * Banka - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r106942",
+        "lang": "ja",
+        "title": "千恋＊万花ーツ パッケージ版",
+        "latin": "Senren * Banka - Package Edition"
+      },
+      {
+        "id": "r106942",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r106942",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r108124",
+        "lang": "en",
+        "title": "The Shell Part I: Inferno",
+        "latin": null
+      },
+      {
+        "id": "r108124",
+        "lang": "zh-Hans",
+        "title": "壳之少女",
+        "latin": "Ke zhi Shaonü"
+      },
+      {
+        "id": "r108124",
+        "lang": "zh-Hant",
+        "title": "殼之少女",
+        "latin": "Ke zhi Shaonü"
+      },
+      {
+        "id": "r10979",
+        "lang": "ja",
+        "title": "神採りアルケミーマイスター パッケージ版",
+        "latin": "Kamidori Alchemy Meister - Package Edition"
+      },
+      {
+        "id": "r11",
+        "lang": "ja",
+        "title": "マブラヴ 全年齢版",
+        "latin": "Muv-Luv - All Ages Edition"
+      },
+      {
+        "id": "r111538",
+        "lang": "en",
+        "title": "Hoshizora no Memoria -Wish upon a Shooting Star- HD Censored Edition",
+        "latin": null
+      },
+      {
+        "id": "r111538",
+        "lang": "zh-Hans",
+        "title": "星空的记忆 -Wish upon a shooting star- HD 删剪版",
+        "latin": "Xingkong de Jiyi -Wish upon a shooting star- HD Censored Edition"
+      },
+      {
+        "id": "r112866",
+        "lang": "en",
+        "title": "WITCH ON THE HOLY NIGHT",
+        "latin": null
+      },
+      {
+        "id": "r112866",
+        "lang": "ja",
+        "title": "魔法使いの夜",
+        "latin": "Mahoutsukai no Yoru"
+      },
+      {
+        "id": "r112866",
+        "lang": "zh-Hans",
+        "title": "魔法使之夜",
+        "latin": "Mofashi zhi Ye"
+      },
+      {
+        "id": "r112866",
+        "lang": "zh-Hant",
+        "title": "魔法使之夜",
+        "latin": "Mofashi zhi Ye"
+      },
+      {
+        "id": "r114283",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r114283",
+        "lang": "ja",
+        "title": "Muv-Luv 20th Odyssey Box",
+        "latin": null
+      },
+      {
+        "id": "r116079",
+        "lang": "en",
+        "title": "Danganronpa Decadence - Collector's Edition",
+        "latin": null
+      },
+      {
+        "id": "r116148",
+        "lang": "ja",
+        "title": "グリザイア・コンプリートボックス 重版",
+        "latin": "Grisaia Complete Box - Reprint Edition"
+      },
+      {
+        "id": "r117298",
+        "lang": "ja",
+        "title": "うみねこのなく頃に咲 ～猫箱と夢想の交響曲～ ベスト版",
+        "latin": "Umineko no Naku Koro ni Saku ~Nekobako to Musou no Koukyoukyoku~ EG THE BEST"
+      },
+      {
+        "id": "r117300",
+        "lang": "ja",
+        "title": "ひぐらしのなく頃に奉 完全生產限定版",
+        "latin": "Higurashi no Naku Koro ni Hou - Limited Edition"
+      },
+      {
+        "id": "r117339",
+        "lang": "ja",
+        "title": "タユタマ -Kiss on my Deity- TECH GIAN 2008年7月号付録",
+        "latin": "Tayutama -Kiss on my Deity- TECH GIAN July 2008 Issue"
+      },
+      {
+        "id": "r118758",
+        "lang": "ja",
+        "title": "STEINS;GATE ELITE グッドバリュー版",
+        "latin": "STEINS;GATE ELITE - Good Value Edition"
+      },
+      {
+        "id": "r118759",
+        "lang": "ja",
+        "title": "STEINS;GATE 15周年記念ダブルパック",
+        "latin": "STEINS;GATE - 15th Anniversary Commemorative Double Pack"
+      },
+      {
+        "id": "r118889",
+        "lang": "ja",
+        "title": "シュタインズ・ゲート エリート ダウンロード版",
+        "latin": "Steins;Gate Elite - Download Edition"
+      },
+      {
+        "id": "r118889",
+        "lang": "zh-Hant",
+        "title": "命運石之門ELITE",
+        "latin": "Mingyun Shi zhi Men Elite"
+      },
+      {
+        "id": "r118913",
+        "lang": "en",
+        "title": "Fate/stay night REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r118913",
+        "lang": "ja",
+        "title": "Fate/stay night REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r118913",
+        "lang": "zh-Hans",
+        "title": "Fate/stay night REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r118914",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r118914",
+        "lang": "ja",
+        "title": "Fate/stay night REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r118914",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r12",
+        "lang": "en",
+        "title": "Ever 17 - Out of Infinity",
+        "latin": null
+      },
+      {
+        "id": "r12056",
+        "lang": "ja",
+        "title": "EVER17 -THE END OF INFINITY- PREMIUM EDITION ベスト版",
+        "latin": "Ever17 -The Out of Infinity- Premium Edition - Best Edition"
+      },
+      {
+        "id": "r121674",
+        "lang": "en",
+        "title": "CLANNAD - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r121674",
+        "lang": "ja",
+        "title": "CLANNAD パッケージ版",
+        "latin": "CLANNAD - Package Edition"
+      },
+      {
+        "id": "r122346",
+        "lang": "en",
+        "title": "planetarian: The Reverie of a Little Planet & Snow Globe - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r122346",
+        "lang": "fr",
+        "title": "planetarian: Le Rêve d'une petite étoile & Boule à neige - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r122346",
+        "lang": "ja",
+        "title": "planetarian～ちいさなほしのゆめ＆雪圏球～ パッケージ版",
+        "latin": "planetarian ~Chiisana Hoshi no Yume & Snow Globe~ Package Edition"
+      },
+      {
+        "id": "r122346",
+        "lang": "zh-Hans",
+        "title": "planetarian～星之梦＆雪圏球～",
+        "latin": "planetarian ~Xing zhi Meng＆Xue Quan Qiu~"
+      },
+      {
+        "id": "r122346",
+        "lang": "zh-Hant",
+        "title": "planetarian～星之夢＆雪圏球～",
+        "latin": "planetarian ~Xing zhi Meng＆Xue Quan Qiu~"
+      },
+      {
+        "id": "r123023",
+        "lang": "ja",
+        "title": "君と彼女と彼女の恋。普及版",
+        "latin": "Kimi to Kanojo to Kanojo no Koi. - Popular Edition"
+      },
+      {
+        "id": "r123195",
+        "lang": "en",
+        "title": "Higurashi When They Cry Hou+ - USB Physical Edition",
+        "latin": null
+      },
+      {
+        "id": "r123195",
+        "lang": "ja",
+        "title": "ひぐらしのなく頃に 奉+ - USB Physical Edition",
+        "latin": "Higurashi no Naku Koro ni Hou+ - USB Physical Edition"
+      },
+      {
+        "id": "r124822",
+        "lang": "en",
+        "title": "If My Heart Had Wings",
+        "latin": null
+      },
+      {
+        "id": "r124822",
+        "lang": "ja",
+        "title": "この大空に、翼をひろげて",
+        "latin": "Kono Oozora ni, Tsubasa o Hirogete"
+      },
+      {
+        "id": "r124822",
+        "lang": "zh-Hans",
+        "title": "在这苍穹展翅",
+        "latin": "Zai Zhe Cangqiong Zhanchi"
+      },
+      {
+        "id": "r124822",
+        "lang": "zh-Hant",
+        "title": "在這蒼穹展翅",
+        "latin": "Zai Zhe Cangqiong Zhanchi"
+      },
+      {
+        "id": "r125631",
+        "lang": "en",
+        "title": "Katawa Shoujo - Censored Edition",
+        "latin": null
+      },
+      {
+        "id": "r125631",
+        "lang": "es",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r125631",
+        "lang": "fr",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r125631",
+        "lang": "ja",
+        "title": "かたわ少女 - Censored Edition",
+        "latin": "Katawa Shoujo - Censored Edition"
+      },
+      {
+        "id": "r125890",
+        "lang": "en",
+        "title": "Fate/hollow ataraxia REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r125890",
+        "lang": "ja",
+        "title": "Fate/hollow ataraxia REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r125890",
+        "lang": "zh-Hans",
+        "title": "Fate/hollow ataraxia REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r125891",
+        "lang": "en",
+        "title": "Fate/hollow ataraxia REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r125891",
+        "lang": "ja",
+        "title": "Fate/hollow ataraxia REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r125891",
+        "lang": "zh-Hans",
+        "title": "Fate/hollow ataraxia REMASTERED",
+        "latin": null
+      },
+      {
+        "id": "r12671",
+        "lang": "en",
+        "title": "Higurashi When They Cry Kai Bundle Pack",
+        "latin": null
+      },
+      {
+        "id": "r126832",
+        "lang": "en",
+        "title": "Aokana - Four Rhythms Across the Blue",
+        "latin": null
+      },
+      {
+        "id": "r127618",
+        "lang": "ja",
+        "title": "うたわれるもの トリロジーセット パッケージ版",
+        "latin": "Utawarerumono - Trilogy Set - Package Edition"
+      },
+      {
+        "id": "r128782",
+        "lang": "ja",
+        "title": "蒼の彼方のフォーリズム 10th Anniversary Box",
+        "latin": "Ao no Kanata no Four Rhythm 10th Anniversary Box"
+      },
+      {
+        "id": "r12932",
+        "lang": "ja",
+        "title": "神採りアルケミーマイスター 体験版",
+        "latin": "Kamidori Alchemy Meister - Trial Edition"
+      },
+      {
+        "id": "r12992",
+        "lang": "ja",
+        "title": "ユーフォリア パッケージ版",
+        "latin": "euphoria - Package Edition"
+      },
+      {
+        "id": "r13",
+        "lang": "ja",
+        "title": "CLANNAD フルボイス",
+        "latin": "Clannad Full Voice"
+      },
+      {
+        "id": "r130533",
+        "lang": "ja",
+        "title": "極限脱出9時間9人9の扉",
+        "latin": "Kyokugen Dasshutsu 9-Jikan 9-Nin 9 no Tobira"
+      },
+      {
+        "id": "r133624",
+        "lang": "ja",
+        "title": "素晴らしき日々~不連続存在~ 15th anniversary edition",
+        "latin": "Subarashiki Hibi ~Furenzoku Sonzai~ 15th Anniversary Edition"
+      },
+      {
+        "id": "r133919",
+        "lang": "en",
+        "title": "Muv-Luv Alternative",
+        "latin": null
+      },
+      {
+        "id": "r133919",
+        "lang": "ja",
+        "title": "Muv-Luv Alternative - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r135574",
+        "lang": "ja",
+        "title": "G線上の魔王 クオリティパッケージ限定1000シリーズ B2タペストリー付き",
+        "latin": "G-senjou no Maou - Quality Package Edition 1000 Series - B2 Tapestry included"
+      },
+      {
+        "id": "r138454",
+        "lang": "en",
+        "title": "The House in Fata Morgana Deluxe Edition w/OST",
+        "latin": null
+      },
+      {
+        "id": "r138684",
+        "lang": "en",
+        "title": "Rewrite+",
+        "latin": null
+      },
+      {
+        "id": "r138684",
+        "lang": "ja",
+        "title": "Rewrite+",
+        "latin": null
+      },
+      {
+        "id": "r1403",
+        "lang": "ja",
+        "title": "逆転裁判 PC",
+        "latin": "Gyakuten Saiban PC"
+      },
+      {
+        "id": "r140358",
+        "lang": "en",
+        "title": "Nekopara Love Project Vol.1",
+        "latin": null
+      },
+      {
+        "id": "r140358",
+        "lang": "ja",
+        "title": "ネコぱら ラブプロジェクトVol.1",
+        "latin": "Nekopara Love Project Vol.1"
+      },
+      {
+        "id": "r140358",
+        "lang": "zh-Hans",
+        "title": "猫娘乐园 Love Project Vol.1",
+        "latin": "Miaoniang Leyuan Love Project Vol.1"
+      },
+      {
+        "id": "r140358",
+        "lang": "zh-Hant",
+        "title": "貓娘樂園 Love Project Vol.1",
+        "latin": "Miaoniang Leyuan Love Project Vol.1"
+      },
+      {
+        "id": "r1411",
+        "lang": "ja",
+        "title": "逆転裁判 2 PC",
+        "latin": "Gyakuten Saiban 2 PC"
+      },
+      {
+        "id": "r1416",
+        "lang": "ja",
+        "title": "逆転裁判3 PC",
+        "latin": "Gyakuten Saiban 3 PC"
+      },
+      {
+        "id": "r141619",
+        "lang": "en",
+        "title": "Danganronpa 2x2",
+        "latin": null
+      },
+      {
+        "id": "r141619",
+        "lang": "ja",
+        "title": "スーパーダンガンロンパ２×２",
+        "latin": "Super Dangan Ronpa 2x2"
+      },
+      {
+        "id": "r141619",
+        "lang": "zh-Hans",
+        "title": "超级枪弹辩驳２×２",
+        "latin": "Chaoji Qiangdan Bianbo 2x2"
+      },
+      {
+        "id": "r141619",
+        "lang": "zh-Hant",
+        "title": "超級槍彈辯駁２×２",
+        "latin": "Chaoji Qiangdan Bianbo 2x2"
+      },
+      {
+        "id": "r14311",
+        "lang": "en",
+        "title": "Kara no Shojo - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r144",
+        "lang": "ja",
+        "title": "車輪の国、向日葵の少女 初回版",
+        "latin": "Sharin no Kuni, Himawari no Shoujo - First Press Edition"
+      },
+      {
+        "id": "r146603",
+        "lang": "en",
+        "title": "Sengoku Rance",
+        "latin": null
+      },
+      {
+        "id": "r146603",
+        "lang": "ja",
+        "title": "戦国ランス",
+        "latin": "Sengoku Rance"
+      },
+      {
+        "id": "r146603",
+        "lang": "zh-Hans",
+        "title": "战国兰斯",
+        "latin": "Zhanguo Lansi"
+      },
+      {
+        "id": "r147379",
+        "lang": "de",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "en",
+        "title": "Katawa Shoujo - Censored Edition",
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "es",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "fr",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "ja",
+        "title": "かたわ少女 - Censored Edition",
+        "latin": "Katawa Shoujo - Censored Edition"
+      },
+      {
+        "id": "r147379",
+        "lang": "ko",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "pl",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "pt-br",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "ru",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r147379",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "en",
+        "title": "The House in Fata Morgana - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "fr",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "it",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "ja",
+        "title": "ファタモルガーナの館 - Download Edition",
+        "latin": "Fata Morgana no Yakata - Download Edition"
+      },
+      {
+        "id": "r148219",
+        "lang": "ko",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "pt-br",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "ru",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r148219",
+        "lang": "zh-Hans",
+        "title": "海市蜃楼之馆 - 下载版",
+        "latin": "Haishishenlou zhi Guan - Download Edition"
+      },
+      {
+        "id": "r14872",
+        "lang": "ja",
+        "title": "BugBug 200 Anniversary DVD ミニミニAVG集 Part1",
+        "latin": "BugBug 200 Anniversary DVD MiniMini AVG Collection Part 1"
+      },
+      {
+        "id": "r149683",
+        "lang": "de",
+        "title": "Phoenix Wright: Ace Attorney Trilogy",
+        "latin": null
+      },
+      {
+        "id": "r149683",
+        "lang": "en",
+        "title": "Phoenix Wright: Ace Attorney Trilogy",
+        "latin": null
+      },
+      {
+        "id": "r149683",
+        "lang": "es",
+        "title": "Phoenix Wright: Ace Attorney Trilogy",
+        "latin": null
+      },
+      {
+        "id": "r149683",
+        "lang": "fr",
+        "title": "Phoenix Wright: Ace Attorney Trilogy",
+        "latin": null
+      },
+      {
+        "id": "r149683",
+        "lang": "ja",
+        "title": "逆転裁判123 成歩堂セレクション",
+        "latin": "Gyakuten Saiban 123: Naruhodou Selection"
+      },
+      {
+        "id": "r149683",
+        "lang": "ko",
+        "title": "역전재판 123 나루호도 셀렉션",
+        "latin": "Yeokjeon Jaepan 123: Naruhodou Selection"
+      },
+      {
+        "id": "r149683",
+        "lang": "pt-br",
+        "title": "Phoenix Wright: Ace Attorney Trilogy",
+        "latin": null
+      },
+      {
+        "id": "r149683",
+        "lang": "zh-Hans",
+        "title": "逆转裁判123成步堂精选集",
+        "latin": "Nizhuan Caipan 123: Naruhodou Jingxuanji"
+      },
+      {
+        "id": "r149683",
+        "lang": "zh-Hant",
+        "title": "逆轉裁判123成步堂精選集",
+        "latin": "Nizhuan Caipan 123: Naruhodou Jingxuanji"
+      },
+      {
+        "id": "r150407",
+        "lang": "ja",
+        "title": "CHAOS;HEAD ダウンロード版",
+        "latin": "CHAOS;HEAD - Download Edition"
+      },
+      {
+        "id": "r1513",
+        "lang": "ja",
+        "title": "Rewrite 初回限定版",
+        "latin": "Rewrite - First Press Limited Edition"
+      },
+      {
+        "id": "r1514",
+        "lang": "ja",
+        "title": "魔法使いの夜 初回版",
+        "latin": "Mahoutsukai no Yoru - First Press Edition"
+      },
+      {
+        "id": "r151681",
+        "lang": "ja",
+        "title": "ヌキコレvol.100 ユメミルクスリ standard edition",
+        "latin": "NukiColle vol.100 - Yume Miru Kusuri - standard Edition"
+      },
+      {
+        "id": "r152254",
+        "lang": "ja",
+        "title": "サノバウィッチ - FHD Edition",
+        "latin": "Sanoba Witch - FHD Edition"
+      },
+      {
+        "id": "r152254",
+        "lang": "zh-Hans",
+        "title": "魔女的夜宴 - FHD Edition",
+        "latin": "Monü de Yeyan - FHD Edition"
+      },
+      {
+        "id": "r152254",
+        "lang": "zh-Hant",
+        "title": "魔女的夜宴 - FHD Edition",
+        "latin": "Monü de Yeyan - FHD Edition"
+      },
+      {
+        "id": "r15329",
+        "lang": "en",
+        "title": "The Song of Saya ~ Saya no Uta - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r154799",
+        "lang": "ja",
+        "title": "素晴らしき日々～不連続存在～ フルボイスHD版 ブラウザ版",
+        "latin": "Subarashiki Hibi ~Furenzoku Sonzai~ Full Voice HD Edition - Browser Edition"
+      },
+      {
+        "id": "r15651",
+        "lang": "ja",
+        "title": "極限脱出ADV 善人シボウデス",
+        "latin": "Kyokugen Dasshutsu ADV Zennin Shibou Desu"
+      },
+      {
+        "id": "r162281",
+        "lang": "ja",
+        "title": "月姫無料告知フロッピー",
+        "latin": "Tsukihime (Preview)"
+      },
+      {
+        "id": "r16243",
+        "lang": "ja",
+        "title": "真剣で私に恋しなさい！Ｒ",
+        "latin": "Maji de Watashi ni Koishinasai! R"
+      },
+      {
+        "id": "r167",
+        "lang": "ja",
+        "title": "ナルキッソス　ＣＤ版",
+        "latin": "Narcissu - CD Edition"
+      },
+      {
+        "id": "r174",
+        "lang": "ja",
+        "title": "リトルバスターズ！ 初回限定版",
+        "latin": "Little Busters! - First Press Limited Edition"
+      },
+      {
+        "id": "r18265",
+        "lang": "ja",
+        "title": "この大空に、翼をひろげて 初回限定版",
+        "latin": "Kono Oozora ni, Tsubasa o Hirogete - First Press Limited Edition"
+      },
+      {
+        "id": "r18401",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r18401",
+        "lang": "ja",
+        "title": "Little Busters! English Edition",
+        "latin": null
+      },
+      {
+        "id": "r1898",
+        "lang": "en",
+        "title": "Katawa Shoujo",
+        "latin": null
+      },
+      {
+        "id": "r1951",
+        "lang": "ja",
+        "title": "ナルキッソス SIDE 2nd",
+        "latin": "Narcissu Side 2nd"
+      },
+      {
+        "id": "r196",
+        "lang": "ja",
+        "title": "Ever17 -The Out of Infinity-",
+        "latin": null
+      },
+      {
+        "id": "r22797",
+        "lang": "ja",
+        "title": "ユーフォリア DVDPG",
+        "latin": "euphoria - DVDPG"
+      },
+      {
+        "id": "r23",
+        "lang": "en",
+        "title": "Narcissu",
+        "latin": null
+      },
+      {
+        "id": "r25",
+        "lang": "ja",
+        "title": "沙耶の唄",
+        "latin": "Saya no Uta"
+      },
+      {
+        "id": "r26772",
+        "lang": "en",
+        "title": "If My Heart Had Wings - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r27673",
+        "lang": "en",
+        "title": "Steins;Gate - Limited Edition",
+        "latin": null
+      },
+      {
+        "id": "r297",
+        "lang": "ja",
+        "title": "うたわれるもの 初回限定版",
+        "latin": "Utawarerumono - First Press Limited Edition"
+      },
+      {
+        "id": "r31469",
+        "lang": "ja",
+        "title": "Fate/stay night＋hollow ataraxiaセット",
+        "latin": "Fate/Stay Night + Fate/Hollow Ataraxia Set"
+      },
+      {
+        "id": "r32926",
+        "lang": "en",
+        "title": "The House in Fata Morgana - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r32926",
+        "lang": "ja",
+        "title": "ファタモルガーナの館 - Download Edition",
+        "latin": "Fata Morgana no Yakata - Download Edition"
+      },
+      {
+        "id": "r339",
+        "lang": "ja",
+        "title": "月姫",
+        "latin": "Tsukihime"
+      },
+      {
+        "id": "r34916",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r34916",
+        "lang": "ja",
+        "title": "ネコぱら Vol.1 ソレイユ開店しました！ パッケージ限定版",
+        "latin": "Neko Para Vol.1 Soleil Kaiten Shimashita! - Package Limited Edition"
+      },
+      {
+        "id": "r34916",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r34972",
+        "lang": "en",
+        "title": "The Fruit of Grisaia - Steam Edition",
+        "latin": null
+      },
+      {
+        "id": "r34973",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r34973",
+        "lang": "ja",
+        "title": "Planetarian ~the reverie of a little planet~ Steam Edition",
+        "latin": null
+      },
+      {
+        "id": "r357",
+        "lang": "en",
+        "title": "Yume Miru Kusuri :: A Drug That Makes You Dream - Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r35703",
+        "lang": "en",
+        "title": "euphoria - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r36485",
+        "lang": "ja",
+        "title": "サノバウィッチ パッケージ版",
+        "latin": "Sanoba Witch - Package Edition"
+      },
+      {
+        "id": "r3748",
+        "lang": "ja",
+        "title": "Key 10th Memorial BOX",
+        "latin": null
+      },
+      {
+        "id": "r3949",
+        "lang": "ja",
+        "title": "装甲悪鬼村正 体験版",
+        "latin": "Soukou Akki Muramasa - Trial Edition"
+      },
+      {
+        "id": "r3950",
+        "lang": "ja",
+        "title": "装甲悪鬼村正 限定生産版",
+        "latin": "Soukou Akki Muramasa - Limited Edition"
+      },
+      {
+        "id": "r40754",
+        "lang": "zh-Hant",
+        "title": "夢見之藥 初回限定版",
+        "latin": "Mengjian zhi Yao - First Press Limited Edition"
+      },
+      {
+        "id": "r41274",
+        "lang": "en",
+        "title": "G-senjou no Maou - The Devil on G-String - Voiced Edition",
+        "latin": null
+      },
+      {
+        "id": "r41280",
+        "lang": "en",
+        "title": "Umineko When They Cry - Question Arcs - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r41280",
+        "lang": "ja",
+        "title": "うみねこのなく頃に",
+        "latin": "Umineko no Naku Koro ni - Download Edition"
+      },
+      {
+        "id": "r4189",
+        "lang": "en",
+        "title": "Higurashi When They Cry - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r42918",
+        "lang": "ja",
+        "title": "NEWダンガンロンパV3 みんなのコロシアイ新学期",
+        "latin": "New Dangan Ronpa V3 Minna no Koroshiai Shingakki"
+      },
+      {
+        "id": "r430",
+        "lang": "en",
+        "title": "CLANNAD - Kickstarter Limited Edition",
+        "latin": null
+      },
+      {
+        "id": "r43059",
+        "lang": "en",
+        "title": "Muv-Luv - Physical Edition",
+        "latin": null
+      },
+      {
+        "id": "r43062",
+        "lang": "en",
+        "title": "Muv-Luv Trilogy - Collector's Box",
+        "latin": null
+      },
+      {
+        "id": "r44583",
+        "lang": "en",
+        "title": "Danganronpa: Trigger Happy Havoc",
+        "latin": null
+      },
+      {
+        "id": "r44623",
+        "lang": "en",
+        "title": "Danganronpa 2: Goodbye Despair",
+        "latin": null
+      },
+      {
+        "id": "r44996",
+        "lang": "en",
+        "title": "Hoshizora no Memoria -Wish upon a Shooting Star- Censored Edition",
+        "latin": null
+      },
+      {
+        "id": "r45245",
+        "lang": "ja",
+        "title": "千恋＊万花 パッケージ版",
+        "latin": "Senren * Banka - Package Edition"
+      },
+      {
+        "id": "r45680",
+        "lang": "ja",
+        "title": "STEINS;GATE 0 パッケージ通常版",
+        "latin": "Steins;Gate 0 - Regular Package Edition"
+      },
+      {
+        "id": "r45776",
+        "lang": "en",
+        "title": "Sharin no Kuni: The Girl Among the Sunflowers - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r46419",
+        "lang": "en",
+        "title": "Rewrite+",
+        "latin": null
+      },
+      {
+        "id": "r46942",
+        "lang": "en",
+        "title": "Zero Escape: The Nonary Games",
+        "latin": null
+      },
+      {
+        "id": "r46942",
+        "lang": "ja",
+        "title": "Zero Escape: 『9時間9人9の扉』と『善人シボウデス』",
+        "latin": "Zero Escape: \"9-Jikan 9-Nin 9 no Tobira\" to \"Zennin Shibou Desu\""
+      },
+      {
+        "id": "r47406",
+        "lang": "en",
+        "title": "Danganronpa: Trigger Happy Havoc",
+        "latin": null
+      },
+      {
+        "id": "r47406",
+        "lang": "ja",
+        "title": "ダンガンロンパ 希望の学園と絶望の高校生",
+        "latin": "Dangan Ronpa: Kibou no Gakuen to Zetsubou no Koukousei"
+      },
+      {
+        "id": "r47406",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r50668",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r50668",
+        "lang": "fr",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r50668",
+        "lang": "ja",
+        "title": "Danganronpa V3: Killing Harmony",
+        "latin": null
+      },
+      {
+        "id": "r50668",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r50668",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r52360",
+        "lang": "en",
+        "title": "Senren＊Banka",
+        "latin": null
+      },
+      {
+        "id": "r52360",
+        "lang": "ja",
+        "title": "千恋 * 万花",
+        "latin": "Senren * Banka"
+      },
+      {
+        "id": "r52360",
+        "lang": "zh-Hans",
+        "title": "千恋＊万花",
+        "latin": "Qianlian * Wanhua"
+      },
+      {
+        "id": "r52360",
+        "lang": "zh-Hant",
+        "title": "千戀＊萬花",
+        "latin": "Qianlian * Wanhua"
+      },
+      {
+        "id": "r52383",
+        "lang": "en",
+        "title": "Majikoi! Love Me Seriously! - Limited Collector's Edition",
+        "latin": null
+      },
+      {
+        "id": "r52911",
+        "lang": "en",
+        "title": "Wonderful Everyday ~Diskontinuierliches Dasein~ Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r53017",
+        "lang": "en",
+        "title": "Sengoku Rance",
+        "latin": null
+      },
+      {
+        "id": "r53222",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r53222",
+        "lang": "ja",
+        "title": "Danganronpa V3: Killing Harmony - Demo Version Steam Edition",
+        "latin": null
+      },
+      {
+        "id": "r53222",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r53222",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r53689",
+        "lang": "en",
+        "title": "Doki Doki Literature Club!",
+        "latin": null
+      },
+      {
+        "id": "r54133",
+        "lang": "en",
+        "title": "Umineko When They Cry - Answer Arcs - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r54133",
+        "lang": "ja",
+        "title": "うみねこのなく頃に散",
+        "latin": "Umineko no Naku Koro ni Chiru - Download Edition"
+      },
+      {
+        "id": "r55462",
+        "lang": "en",
+        "title": "Sabbat of the Witch",
+        "latin": null
+      },
+      {
+        "id": "r55462",
+        "lang": "ja",
+        "title": "サノバウィッチ",
+        "latin": "Sanoba Witch"
+      },
+      {
+        "id": "r55464",
+        "lang": "en",
+        "title": "NEKOPARA Vol.1",
+        "latin": null
+      },
+      {
+        "id": "r55464",
+        "lang": "ja",
+        "title": "ネコぱら Vol.1 ソレイユ開店しました！",
+        "latin": "Neko Para Vol.1 Soleil Kaiten Shimashita!"
+      },
+      {
+        "id": "r55464",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r55464",
+        "lang": "zh-Hant",
+        "title": "貓娘樂園 Vol.1",
+        "latin": "Maoniang Leyuan Vol.1"
+      },
+      {
+        "id": "r56184",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r56184",
+        "lang": "ja",
+        "title": "STEINS;GATE 0",
+        "latin": null
+      },
+      {
+        "id": "r57694",
+        "lang": "en",
+        "title": "YOU and ME and HER: a love story - Limited Edition",
+        "latin": null
+      },
+      {
+        "id": "r58672",
+        "lang": "en",
+        "title": "Aokana - Four Rhythms Across the Blue",
+        "latin": null
+      },
+      {
+        "id": "r58672",
+        "lang": "ja",
+        "title": "蒼の彼方のフォーリズム",
+        "latin": "Ao no Kanata no Four Rhythm"
+      },
+      {
+        "id": "r58672",
+        "lang": "zh-Hans",
+        "title": "苍之彼方的四重奏",
+        "latin": "Cang zhi Bifang de Sichongzou"
+      },
+      {
+        "id": "r58672",
+        "lang": "zh-Hant",
+        "title": "蒼之彼方的四重奏",
+        "latin": "Cang zhi Bifang de Sichongzou"
+      },
+      {
+        "id": "r59722",
+        "lang": "ru",
+        "title": "Chaos;Head",
+        "latin": null
+      },
+      {
+        "id": "r62494",
+        "lang": "en",
+        "title": "Phoenix Wright: Ace Attorney Trilogy",
+        "latin": null
+      },
+      {
+        "id": "r62494",
+        "lang": "ja",
+        "title": "逆転裁判123 成歩堂セレクション",
+        "latin": "Gyakuten Saiban 123: Naruhodou Selection"
+      },
+      {
+        "id": "r63343",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r63343",
+        "lang": "ja",
+        "title": "グリザイアの果実・迷宮・楽園 フルパッケージ",
+        "latin": "The Grisaia Trilogy"
+      },
+      {
+        "id": "r64727",
+        "lang": "en",
+        "title": "Saya no Uta ~ The Song of Saya - Steam Edition",
+        "latin": null
+      },
+      {
+        "id": "r64727",
+        "lang": "zh-Hans",
+        "title": "沙耶之歌",
+        "latin": "Shaye zhi Ge"
+      },
+      {
+        "id": "r7350",
+        "lang": "ja",
+        "title": "輪廻月姫",
+        "latin": "Rinne Tsukihime"
+      },
+      {
+        "id": "r76933",
+        "lang": "en",
+        "title": "Utawarerumono: Prelude to the Fallen",
+        "latin": null
+      },
+      {
+        "id": "r76933",
+        "lang": "ja",
+        "title": "うたわれるもの 散りゆく者への子守唄",
+        "latin": "Utawarerumono: Chiriyuku Mono e no Komoriuta"
+      },
+      {
+        "id": "r76933",
+        "lang": "zh-Hant",
+        "title": "受讚頌者 給逝者的搖籃曲",
+        "latin": "Shouzansongzhe Geishizhedeyaolanqu"
+      },
+      {
+        "id": "r80357",
+        "lang": "de",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "en",
+        "title": "Doki Doki Literature Club Plus!",
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "es",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "fr",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "it",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "ja",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "ko",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "pt-br",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "ru",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80357",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "de",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "en",
+        "title": "Doki Doki Literature Club Plus! - Premium Edition",
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "es",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "fr",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "it",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "ja",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "ko",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "pt-br",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "ru",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "zh-Hans",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80363",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r80447",
+        "lang": "en",
+        "title": "Danganronpa Decadence - NA Package Edition",
+        "latin": null
+      },
+      {
+        "id": "r80448",
+        "lang": "ja",
+        "title": "ダンガンロンパ トリロジーパック+ ハッピーダンガンロンパＳ 超高校級の南国サイコロ合宿",
+        "latin": "Dangan Ronpa Trilogy Pack + Dangan Ronpa S - Chou Koukou Kyuu no Nangoku Saikoro Gashuku"
+      },
+      {
+        "id": "r81304",
+        "lang": "en",
+        "title": "Full Metal Daemon Muramasa - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r83450",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r83450",
+        "lang": "ja",
+        "title": "NEWダンガンロンパV3 みんなのコロシアイ新学期",
+        "latin": "Danganronpa V3: Killing Harmony Anniversary Edition"
+      },
+      {
+        "id": "r84524",
+        "lang": "en",
+        "title": "YOU and ME and HER: A Love Story - Steam Edition",
+        "latin": null
+      },
+      {
+        "id": "r84524",
+        "lang": "zh-Hans",
+        "title": "你和她和她的恋爱。",
+        "latin": "Ni He ta He Ta De Lianai"
+      },
+      {
+        "id": "r85789",
+        "lang": "en",
+        "title": "Witch on the Holy Night - Download Edition",
+        "latin": null
+      },
+      {
+        "id": "r85789",
+        "lang": "ja",
+        "title": "魔法使いの夜 ダウンロード版",
+        "latin": "Mahoutsukai no Yoru - Download Edition"
+      },
+      {
+        "id": "r85789",
+        "lang": "zh-Hans",
+        "title": "魔法使之夜 下载版",
+        "latin": "Mofashi zhi Ye - Download Edition"
+      },
+      {
+        "id": "r85789",
+        "lang": "zh-Hant",
+        "title": "魔法使之夜 下載版",
+        "latin": "Mofashi zhi Ye - Download Edition"
+      },
+      {
+        "id": "r88352",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r88352",
+        "lang": "ja",
+        "title": "ZERO ESCAPE ９時間９人９の扉 善人シボウデス ダブルパック",
+        "latin": "Zero Escape: The Nonary Games"
+      },
+      {
+        "id": "r886",
+        "lang": "ja",
+        "title": "CHAOS;HEAD 体験版",
+        "latin": "CHAOS;HEAD - Trial Edition"
+      },
+      {
+        "id": "r95905",
+        "lang": "en",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r95905",
+        "lang": "ja",
+        "title": "NEWダンガンロンパV3 みんなのコロシアイ新学期",
+        "latin": "Danganronpa V3: Killing Harmony Anniversary Edition"
+      },
+      {
+        "id": "r95905",
+        "lang": "zh-Hant",
+        "title": null,
+        "latin": null
+      },
+      {
+        "id": "r96811",
+        "lang": "ru",
+        "title": "Danganronpa V3: Killing Harmony Chapters 1-3",
+        "latin": null
+      }
+    ],
+    "releases_platforms": [
+      {
+        "id": "r10124",
+        "platform": "win"
+      },
+      {
+        "id": "r10238",
+        "platform": "win"
+      },
+      {
+        "id": "r1025",
+        "platform": "win"
+      },
+      {
+        "id": "r10295",
+        "platform": "xb3"
+      },
+      {
+        "id": "r103269",
+        "platform": "swi"
+      },
+      {
+        "id": "r10378",
+        "platform": "win"
+      },
+      {
+        "id": "r10379",
+        "platform": "win"
+      },
+      {
+        "id": "r106942",
+        "platform": "swi"
+      },
+      {
+        "id": "r108124",
+        "platform": "win"
+      },
+      {
+        "id": "r10979",
+        "platform": "win"
+      },
+      {
+        "id": "r11",
+        "platform": "win"
+      },
+      {
+        "id": "r111538",
+        "platform": "win"
+      },
+      {
+        "id": "r112866",
+        "platform": "win"
+      },
+      {
+        "id": "r114283",
+        "platform": "swi"
+      },
+      {
+        "id": "r116079",
+        "platform": "swi"
+      },
+      {
+        "id": "r116148",
+        "platform": "win"
+      },
+      {
+        "id": "r117298",
+        "platform": "swi"
+      },
+      {
+        "id": "r117300",
+        "platform": "swi"
+      },
+      {
+        "id": "r117339",
+        "platform": "win"
+      },
+      {
+        "id": "r118758",
+        "platform": "swi"
+      },
+      {
+        "id": "r118759",
+        "platform": "swi"
+      },
+      {
+        "id": "r118889",
+        "platform": "swi"
+      },
+      {
+        "id": "r118913",
+        "platform": "win"
+      },
+      {
+        "id": "r118914",
+        "platform": "swi"
+      },
+      {
+        "id": "r12",
+        "platform": "win"
+      },
+      {
+        "id": "r12056",
+        "platform": "psp"
+      },
+      {
+        "id": "r121674",
+        "platform": "swi"
+      },
+      {
+        "id": "r122346",
+        "platform": "swi"
+      },
+      {
+        "id": "r123023",
+        "platform": "win"
+      },
+      {
+        "id": "r123195",
+        "platform": "lin"
+      },
+      {
+        "id": "r123195",
+        "platform": "mac"
+      },
+      {
+        "id": "r123195",
+        "platform": "win"
+      },
+      {
+        "id": "r124822",
+        "platform": "swi"
+      },
+      {
+        "id": "r125631",
+        "platform": "lin"
+      },
+      {
+        "id": "r125631",
+        "platform": "mac"
+      },
+      {
+        "id": "r125631",
+        "platform": "win"
+      },
+      {
+        "id": "r125890",
+        "platform": "win"
+      },
+      {
+        "id": "r125891",
+        "platform": "swi"
+      },
+      {
+        "id": "r12671",
+        "platform": "win"
+      },
+      {
+        "id": "r126832",
+        "platform": "swi"
+      },
+      {
+        "id": "r127618",
+        "platform": "swi"
+      },
+      {
+        "id": "r128782",
+        "platform": "win"
+      },
+      {
+        "id": "r12932",
+        "platform": "win"
+      },
+      {
+        "id": "r12992",
+        "platform": "win"
+      },
+      {
+        "id": "r13",
+        "platform": "win"
+      },
+      {
+        "id": "r130533",
+        "platform": "web"
+      },
+      {
+        "id": "r133624",
+        "platform": "win"
+      },
+      {
+        "id": "r133919",
+        "platform": "win"
+      },
+      {
+        "id": "r135574",
+        "platform": "win"
+      },
+      {
+        "id": "r138454",
+        "platform": "win"
+      },
+      {
+        "id": "r138684",
+        "platform": "win"
+      },
+      {
+        "id": "r1403",
+        "platform": "win"
+      },
+      {
+        "id": "r140358",
+        "platform": "and"
+      },
+      {
+        "id": "r140358",
+        "platform": "ios"
+      },
+      {
+        "id": "r1411",
+        "platform": "win"
+      },
+      {
+        "id": "r1416",
+        "platform": "win"
+      },
+      {
+        "id": "r141619",
+        "platform": "win"
+      },
+      {
+        "id": "r14311",
+        "platform": "win"
+      },
+      {
+        "id": "r144",
+        "platform": "win"
+      },
+      {
+        "id": "r146603",
+        "platform": "win"
+      },
+      {
+        "id": "r147379",
+        "platform": "lin"
+      },
+      {
+        "id": "r147379",
+        "platform": "mac"
+      },
+      {
+        "id": "r147379",
+        "platform": "win"
+      },
+      {
+        "id": "r148219",
+        "platform": "win"
+      },
+      {
+        "id": "r14872",
+        "platform": "win"
+      },
+      {
+        "id": "r149683",
+        "platform": "win"
+      },
+      {
+        "id": "r150407",
+        "platform": "win"
+      },
+      {
+        "id": "r1513",
+        "platform": "win"
+      },
+      {
+        "id": "r1514",
+        "platform": "win"
+      },
+      {
+        "id": "r151681",
+        "platform": "win"
+      },
+      {
+        "id": "r152254",
+        "platform": "win"
+      },
+      {
+        "id": "r15329",
+        "platform": "win"
+      },
+      {
+        "id": "r154799",
+        "platform": "web"
+      },
+      {
+        "id": "r15651",
+        "platform": "n3d"
+      },
+      {
+        "id": "r162281",
+        "platform": "win"
+      },
+      {
+        "id": "r16243",
+        "platform": "ps3"
+      },
+      {
+        "id": "r167",
+        "platform": "lin"
+      },
+      {
+        "id": "r167",
+        "platform": "mac"
+      },
+      {
+        "id": "r167",
+        "platform": "win"
+      },
+      {
+        "id": "r174",
+        "platform": "win"
+      },
+      {
+        "id": "r18265",
+        "platform": "win"
+      },
+      {
+        "id": "r18401",
+        "platform": "win"
+      },
+      {
+        "id": "r1898",
+        "platform": "lin"
+      },
+      {
+        "id": "r1898",
+        "platform": "mac"
+      },
+      {
+        "id": "r1898",
+        "platform": "win"
+      },
+      {
+        "id": "r1951",
+        "platform": "win"
+      },
+      {
+        "id": "r196",
+        "platform": "win"
+      },
+      {
+        "id": "r22797",
+        "platform": "dvd"
+      },
+      {
+        "id": "r23",
+        "platform": "lin"
+      },
+      {
+        "id": "r23",
+        "platform": "mac"
+      },
+      {
+        "id": "r23",
+        "platform": "win"
+      },
+      {
+        "id": "r25",
+        "platform": "win"
+      },
+      {
+        "id": "r26772",
+        "platform": "win"
+      },
+      {
+        "id": "r27673",
+        "platform": "win"
+      },
+      {
+        "id": "r297",
+        "platform": "win"
+      },
+      {
+        "id": "r31469",
+        "platform": "win"
+      },
+      {
+        "id": "r32926",
+        "platform": "win"
+      },
+      {
+        "id": "r339",
+        "platform": "win"
+      },
+      {
+        "id": "r34916",
+        "platform": "win"
+      },
+      {
+        "id": "r34972",
+        "platform": "win"
+      },
+      {
+        "id": "r34973",
+        "platform": "win"
+      },
+      {
+        "id": "r357",
+        "platform": "win"
+      },
+      {
+        "id": "r35703",
+        "platform": "win"
+      },
+      {
+        "id": "r36485",
+        "platform": "win"
+      },
+      {
+        "id": "r3748",
+        "platform": "win"
+      },
+      {
+        "id": "r3949",
+        "platform": "win"
+      },
+      {
+        "id": "r3950",
+        "platform": "win"
+      },
+      {
+        "id": "r40754",
+        "platform": "win"
+      },
+      {
+        "id": "r41274",
+        "platform": "win"
+      },
+      {
+        "id": "r41280",
+        "platform": "lin"
+      },
+      {
+        "id": "r41280",
+        "platform": "mac"
+      },
+      {
+        "id": "r41280",
+        "platform": "win"
+      },
+      {
+        "id": "r4189",
+        "platform": "win"
+      },
+      {
+        "id": "r42918",
+        "platform": "ps4"
+      },
+      {
+        "id": "r430",
+        "platform": "win"
+      },
+      {
+        "id": "r43059",
+        "platform": "win"
+      },
+      {
+        "id": "r43062",
+        "platform": "win"
+      },
+      {
+        "id": "r44583",
+        "platform": "lin"
+      },
+      {
+        "id": "r44583",
+        "platform": "mac"
+      },
+      {
+        "id": "r44583",
+        "platform": "win"
+      },
+      {
+        "id": "r44623",
+        "platform": "lin"
+      },
+      {
+        "id": "r44623",
+        "platform": "mac"
+      },
+      {
+        "id": "r44623",
+        "platform": "win"
+      },
+      {
+        "id": "r44996",
+        "platform": "win"
+      },
+      {
+        "id": "r45245",
+        "platform": "win"
+      },
+      {
+        "id": "r45680",
+        "platform": "win"
+      },
+      {
+        "id": "r45776",
+        "platform": "win"
+      },
+      {
+        "id": "r46419",
+        "platform": "win"
+      },
+      {
+        "id": "r46942",
+        "platform": "win"
+      },
+      {
+        "id": "r47406",
+        "platform": "lin"
+      },
+      {
+        "id": "r47406",
+        "platform": "mac"
+      },
+      {
+        "id": "r47406",
+        "platform": "win"
+      },
+      {
+        "id": "r50668",
+        "platform": "win"
+      },
+      {
+        "id": "r52360",
+        "platform": "win"
+      },
+      {
+        "id": "r52383",
+        "platform": "win"
+      },
+      {
+        "id": "r52911",
+        "platform": "win"
+      },
+      {
+        "id": "r53017",
+        "platform": "win"
+      },
+      {
+        "id": "r53222",
+        "platform": "win"
+      },
+      {
+        "id": "r53689",
+        "platform": "lin"
+      },
+      {
+        "id": "r53689",
+        "platform": "mac"
+      },
+      {
+        "id": "r53689",
+        "platform": "win"
+      },
+      {
+        "id": "r54133",
+        "platform": "lin"
+      },
+      {
+        "id": "r54133",
+        "platform": "mac"
+      },
+      {
+        "id": "r54133",
+        "platform": "win"
+      },
+      {
+        "id": "r55462",
+        "platform": "win"
+      },
+      {
+        "id": "r55464",
+        "platform": "swi"
+      },
+      {
+        "id": "r56184",
+        "platform": "win"
+      },
+      {
+        "id": "r57694",
+        "platform": "win"
+      },
+      {
+        "id": "r58672",
+        "platform": "win"
+      },
+      {
+        "id": "r59722",
+        "platform": "win"
+      },
+      {
+        "id": "r62494",
+        "platform": "win"
+      },
+      {
+        "id": "r63343",
+        "platform": "swi"
+      },
+      {
+        "id": "r64727",
+        "platform": "win"
+      },
+      {
+        "id": "r7350",
+        "platform": "gba"
+      },
+      {
+        "id": "r76933",
+        "platform": "win"
+      },
+      {
+        "id": "r80357",
+        "platform": "mac"
+      },
+      {
+        "id": "r80357",
+        "platform": "win"
+      },
+      {
+        "id": "r80363",
+        "platform": "swi"
+      },
+      {
+        "id": "r80447",
+        "platform": "swi"
+      },
+      {
+        "id": "r80448",
+        "platform": "swi"
+      },
+      {
+        "id": "r81304",
+        "platform": "win"
+      },
+      {
+        "id": "r83450",
+        "platform": "swi"
+      },
+      {
+        "id": "r84524",
+        "platform": "win"
+      },
+      {
+        "id": "r85789",
+        "platform": "swi"
+      },
+      {
+        "id": "r88352",
+        "platform": "win"
+      },
+      {
+        "id": "r88352",
+        "platform": "xbo"
+      },
+      {
+        "id": "r88352",
+        "platform": "xxs"
+      },
+      {
+        "id": "r886",
+        "platform": "win"
+      },
+      {
+        "id": "r95905",
+        "platform": "win"
+      },
+      {
+        "id": "r95905",
+        "platform": "xbo"
+      },
+      {
+        "id": "r95905",
+        "platform": "xxs"
+      },
+      {
+        "id": "r96811",
+        "platform": "psv"
+      }
+    ],
+    "releases_vn": [
+      {
+        "id": "r10124",
+        "vid": "v1474",
+        "rtype": "complete"
+      },
+      {
+        "id": "r10238",
+        "vid": "v810",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1025",
+        "vid": "v487",
+        "rtype": "complete"
+      },
+      {
+        "id": "r10295",
+        "vid": "v57",
+        "rtype": "complete"
+      },
+      {
+        "id": "r103269",
+        "vid": "v5",
+        "rtype": "complete"
+      },
+      {
+        "id": "r10378",
+        "vid": "v24",
+        "rtype": "complete"
+      },
+      {
+        "id": "r10379",
+        "vid": "v2153",
+        "rtype": "complete"
+      },
+      {
+        "id": "r106942",
+        "vid": "v19073",
+        "rtype": "complete"
+      },
+      {
+        "id": "r108124",
+        "vid": "v810",
+        "rtype": "complete"
+      },
+      {
+        "id": "r10979",
+        "vid": "v5652",
+        "rtype": "complete"
+      },
+      {
+        "id": "r11",
+        "vid": "v93",
+        "rtype": "complete"
+      },
+      {
+        "id": "r111538",
+        "vid": "v1474",
+        "rtype": "complete"
+      },
+      {
+        "id": "r112866",
+        "vid": "v777",
+        "rtype": "complete"
+      },
+      {
+        "id": "r114283",
+        "vid": "v92",
+        "rtype": "complete"
+      },
+      {
+        "id": "r116079",
+        "vid": "v7679",
+        "rtype": "complete"
+      },
+      {
+        "id": "r116148",
+        "vid": "v5154",
+        "rtype": "complete"
+      },
+      {
+        "id": "r117298",
+        "vid": "v2153",
+        "rtype": "complete"
+      },
+      {
+        "id": "r117300",
+        "vid": "v68",
+        "rtype": "complete"
+      },
+      {
+        "id": "r117339",
+        "vid": "v211",
+        "rtype": "trial"
+      },
+      {
+        "id": "r118758",
+        "vid": "v2002",
+        "rtype": "complete"
+      },
+      {
+        "id": "r118759",
+        "vid": "v17102",
+        "rtype": "complete"
+      },
+      {
+        "id": "r118889",
+        "vid": "v2002",
+        "rtype": "complete"
+      },
+      {
+        "id": "r118913",
+        "vid": "v11",
+        "rtype": "complete"
+      },
+      {
+        "id": "r118914",
+        "vid": "v11",
+        "rtype": "complete"
+      },
+      {
+        "id": "r12",
+        "vid": "v17",
+        "rtype": "complete"
+      },
+      {
+        "id": "r12056",
+        "vid": "v17",
+        "rtype": "complete"
+      },
+      {
+        "id": "r121674",
+        "vid": "v4",
+        "rtype": "complete"
+      },
+      {
+        "id": "r122346",
+        "vid": "v34",
+        "rtype": "complete"
+      },
+      {
+        "id": "r123023",
+        "vid": "v7738",
+        "rtype": "complete"
+      },
+      {
+        "id": "r123195",
+        "vid": "v68",
+        "rtype": "complete"
+      },
+      {
+        "id": "r124822",
+        "vid": "v9093",
+        "rtype": "complete"
+      },
+      {
+        "id": "r125631",
+        "vid": "v945",
+        "rtype": "complete"
+      },
+      {
+        "id": "r125890",
+        "vid": "v50",
+        "rtype": "complete"
+      },
+      {
+        "id": "r125891",
+        "vid": "v50",
+        "rtype": "complete"
+      },
+      {
+        "id": "r12671",
+        "vid": "v68",
+        "rtype": "complete"
+      },
+      {
+        "id": "r126832",
+        "vid": "v12849",
+        "rtype": "complete"
+      },
+      {
+        "id": "r127618",
+        "vid": "v3",
+        "rtype": "complete"
+      },
+      {
+        "id": "r128782",
+        "vid": "v12849",
+        "rtype": "complete"
+      },
+      {
+        "id": "r12932",
+        "vid": "v5652",
+        "rtype": "trial"
+      },
+      {
+        "id": "r12992",
+        "vid": "v6540",
+        "rtype": "complete"
+      },
+      {
+        "id": "r13",
+        "vid": "v4",
+        "rtype": "complete"
+      },
+      {
+        "id": "r130533",
+        "vid": "v3112",
+        "rtype": "complete"
+      },
+      {
+        "id": "r133624",
+        "vid": "v3144",
+        "rtype": "complete"
+      },
+      {
+        "id": "r133919",
+        "vid": "v92",
+        "rtype": "complete"
+      },
+      {
+        "id": "r135574",
+        "vid": "v211",
+        "rtype": "complete"
+      },
+      {
+        "id": "r138454",
+        "vid": "v12402",
+        "rtype": "complete"
+      },
+      {
+        "id": "r138684",
+        "vid": "v751",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1403",
+        "vid": "v711",
+        "rtype": "complete"
+      },
+      {
+        "id": "r140358",
+        "vid": "v15538",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1411",
+        "vid": "v715",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1416",
+        "vid": "v716",
+        "rtype": "complete"
+      },
+      {
+        "id": "r141619",
+        "vid": "v7679",
+        "rtype": "complete"
+      },
+      {
+        "id": "r14311",
+        "vid": "v810",
+        "rtype": "complete"
+      },
+      {
+        "id": "r144",
+        "vid": "v57",
+        "rtype": "complete"
+      },
+      {
+        "id": "r146603",
+        "vid": "v487",
+        "rtype": "complete"
+      },
+      {
+        "id": "r147379",
+        "vid": "v945",
+        "rtype": "complete"
+      },
+      {
+        "id": "r148219",
+        "vid": "v12402",
+        "rtype": "complete"
+      },
+      {
+        "id": "r14872",
+        "vid": "v1143",
+        "rtype": "complete"
+      },
+      {
+        "id": "r149683",
+        "vid": "v716",
+        "rtype": "complete"
+      },
+      {
+        "id": "r150407",
+        "vid": "v382",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1513",
+        "vid": "v751",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1514",
+        "vid": "v777",
+        "rtype": "complete"
+      },
+      {
+        "id": "r151681",
+        "vid": "v44",
+        "rtype": "complete"
+      },
+      {
+        "id": "r152254",
+        "vid": "v16044",
+        "rtype": "complete"
+      },
+      {
+        "id": "r15329",
+        "vid": "v97",
+        "rtype": "complete"
+      },
+      {
+        "id": "r154799",
+        "vid": "v3144",
+        "rtype": "complete"
+      },
+      {
+        "id": "r15651",
+        "vid": "v7809",
+        "rtype": "complete"
+      },
+      {
+        "id": "r162281",
+        "vid": "v7",
+        "rtype": "trial"
+      },
+      {
+        "id": "r16243",
+        "vid": "v1143",
+        "rtype": "complete"
+      },
+      {
+        "id": "r167",
+        "vid": "v10",
+        "rtype": "complete"
+      },
+      {
+        "id": "r174",
+        "vid": "v5",
+        "rtype": "complete"
+      },
+      {
+        "id": "r18265",
+        "vid": "v9093",
+        "rtype": "complete"
+      },
+      {
+        "id": "r18401",
+        "vid": "v5",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1898",
+        "vid": "v945",
+        "rtype": "complete"
+      },
+      {
+        "id": "r1951",
+        "vid": "v10",
+        "rtype": "complete"
+      },
+      {
+        "id": "r196",
+        "vid": "v17",
+        "rtype": "complete"
+      },
+      {
+        "id": "r22797",
+        "vid": "v6540",
+        "rtype": "complete"
+      },
+      {
+        "id": "r23",
+        "vid": "v10",
+        "rtype": "complete"
+      },
+      {
+        "id": "r25",
+        "vid": "v97",
+        "rtype": "complete"
+      },
+      {
+        "id": "r26772",
+        "vid": "v9093",
+        "rtype": "complete"
+      },
+      {
+        "id": "r27673",
+        "vid": "v2002",
+        "rtype": "complete"
+      },
+      {
+        "id": "r297",
+        "vid": "v3",
+        "rtype": "complete"
+      },
+      {
+        "id": "r31469",
+        "vid": "v50",
+        "rtype": "complete"
+      },
+      {
+        "id": "r32926",
+        "vid": "v12402",
+        "rtype": "complete"
+      },
+      {
+        "id": "r339",
+        "vid": "v7",
+        "rtype": "complete"
+      },
+      {
+        "id": "r34916",
+        "vid": "v15538",
+        "rtype": "complete"
+      },
+      {
+        "id": "r34972",
+        "vid": "v5154",
+        "rtype": "complete"
+      },
+      {
+        "id": "r34973",
+        "vid": "v34",
+        "rtype": "complete"
+      },
+      {
+        "id": "r357",
+        "vid": "v44",
+        "rtype": "complete"
+      },
+      {
+        "id": "r35703",
+        "vid": "v6540",
+        "rtype": "complete"
+      },
+      {
+        "id": "r36485",
+        "vid": "v16044",
+        "rtype": "complete"
+      },
+      {
+        "id": "r3748",
+        "vid": "v34",
+        "rtype": "complete"
+      },
+      {
+        "id": "r3949",
+        "vid": "v2016",
+        "rtype": "trial"
+      },
+      {
+        "id": "r3950",
+        "vid": "v2016",
+        "rtype": "complete"
+      },
+      {
+        "id": "r40754",
+        "vid": "v44",
+        "rtype": "complete"
+      },
+      {
+        "id": "r41274",
+        "vid": "v211",
+        "rtype": "complete"
+      },
+      {
+        "id": "r41280",
+        "vid": "v24",
+        "rtype": "complete"
+      },
+      {
+        "id": "r4189",
+        "vid": "v67",
+        "rtype": "complete"
+      },
+      {
+        "id": "r42918",
+        "vid": "v18334",
+        "rtype": "complete"
+      },
+      {
+        "id": "r430",
+        "vid": "v4",
+        "rtype": "complete"
+      },
+      {
+        "id": "r43059",
+        "vid": "v93",
+        "rtype": "complete"
+      },
+      {
+        "id": "r43062",
+        "vid": "v92",
+        "rtype": "complete"
+      },
+      {
+        "id": "r44583",
+        "vid": "v7014",
+        "rtype": "complete"
+      },
+      {
+        "id": "r44623",
+        "vid": "v7679",
+        "rtype": "complete"
+      },
+      {
+        "id": "r44996",
+        "vid": "v1474",
+        "rtype": "complete"
+      },
+      {
+        "id": "r45245",
+        "vid": "v19073",
+        "rtype": "complete"
+      },
+      {
+        "id": "r45680",
+        "vid": "v17102",
+        "rtype": "complete"
+      },
+      {
+        "id": "r45776",
+        "vid": "v57",
+        "rtype": "complete"
+      },
+      {
+        "id": "r46419",
+        "vid": "v751",
+        "rtype": "complete"
+      },
+      {
+        "id": "r46942",
+        "vid": "v7809",
+        "rtype": "complete"
+      },
+      {
+        "id": "r47406",
+        "vid": "v7014",
+        "rtype": "complete"
+      },
+      {
+        "id": "r50668",
+        "vid": "v18334",
+        "rtype": "complete"
+      },
+      {
+        "id": "r52360",
+        "vid": "v19073",
+        "rtype": "complete"
+      },
+      {
+        "id": "r52383",
+        "vid": "v1143",
+        "rtype": "complete"
+      },
+      {
+        "id": "r52911",
+        "vid": "v3144",
+        "rtype": "complete"
+      },
+      {
+        "id": "r53017",
+        "vid": "v487",
+        "rtype": "complete"
+      },
+      {
+        "id": "r53222",
+        "vid": "v18334",
+        "rtype": "trial"
+      },
+      {
+        "id": "r53689",
+        "vid": "v21905",
+        "rtype": "complete"
+      },
+      {
+        "id": "r54133",
+        "vid": "v2153",
+        "rtype": "complete"
+      },
+      {
+        "id": "r55462",
+        "vid": "v16044",
+        "rtype": "complete"
+      },
+      {
+        "id": "r55464",
+        "vid": "v15538",
+        "rtype": "complete"
+      },
+      {
+        "id": "r56184",
+        "vid": "v17102",
+        "rtype": "complete"
+      },
+      {
+        "id": "r57694",
+        "vid": "v7738",
+        "rtype": "complete"
+      },
+      {
+        "id": "r58672",
+        "vid": "v12849",
+        "rtype": "complete"
+      },
+      {
+        "id": "r59722",
+        "vid": "v382",
+        "rtype": "complete"
+      },
+      {
+        "id": "r62494",
+        "vid": "v716",
+        "rtype": "complete"
+      },
+      {
+        "id": "r63343",
+        "vid": "v5154",
+        "rtype": "complete"
+      },
+      {
+        "id": "r64727",
+        "vid": "v97",
+        "rtype": "complete"
+      },
+      {
+        "id": "r7350",
+        "vid": "v7",
+        "rtype": "complete"
+      },
+      {
+        "id": "r76933",
+        "vid": "v3",
+        "rtype": "complete"
+      },
+      {
+        "id": "r80357",
+        "vid": "v21905",
+        "rtype": "complete"
+      },
+      {
+        "id": "r80363",
+        "vid": "v21905",
+        "rtype": "complete"
+      },
+      {
+        "id": "r80447",
+        "vid": "v18334",
+        "rtype": "complete"
+      },
+      {
+        "id": "r80448",
+        "vid": "v18334",
+        "rtype": "complete"
+      },
+      {
+        "id": "r81304",
+        "vid": "v2016",
+        "rtype": "complete"
+      },
+      {
+        "id": "r83450",
+        "vid": "v18334",
+        "rtype": "complete"
+      },
+      {
+        "id": "r84524",
+        "vid": "v7738",
+        "rtype": "complete"
+      },
+      {
+        "id": "r85789",
+        "vid": "v777",
+        "rtype": "complete"
+      },
+      {
+        "id": "r88352",
+        "vid": "v7809",
+        "rtype": "complete"
+      },
+      {
+        "id": "r886",
+        "vid": "v382",
+        "rtype": "trial"
+      },
+      {
+        "id": "r95905",
+        "vid": "v18334",
+        "rtype": "complete"
+      },
+      {
+        "id": "r96811",
+        "vid": "v18334",
+        "rtype": "partial"
+      }
+    ],
+    "releases_producers": [
+      {
+        "id": "r10124",
+        "pid": "p612",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r10238",
+        "pid": "p277",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r1025",
+        "pid": "p120",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r10295",
+        "pid": "p146",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r103269",
+        "pid": "p24",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r103269",
+        "pid": "p26",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r10378",
+        "pid": "p1665",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r10378",
+        "pid": "p82",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r10379",
+        "pid": "p1665",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r10379",
+        "pid": "p82",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r106942",
+        "pid": "p6347",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r106942",
+        "pid": "p6388",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r106942",
+        "pid": "p7496",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r106942",
+        "pid": "p98",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r108124",
+        "pid": "p9483",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r10979",
+        "pid": "p268",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r11",
+        "pid": "p4",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r111538",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r112866",
+        "pid": "p11317",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r112866",
+        "pid": "p19754",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r112866",
+        "pid": "p6",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r112866",
+        "pid": "p763",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r114283",
+        "pid": "p10241",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r116079",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r116148",
+        "pid": "p336",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r117298",
+        "pid": "p6066",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r117298",
+        "pid": "p82",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r117300",
+        "pid": "p6066",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r117300",
+        "pid": "p82",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r117339",
+        "pid": "p3045",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r118758",
+        "pid": "p146",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r118758",
+        "pid": "p42",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r118759",
+        "pid": "p146",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r118889",
+        "pid": "p146",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r118889",
+        "pid": "p42",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r118913",
+        "pid": "p11317",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r118913",
+        "pid": "p6",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r118914",
+        "pid": "p11317",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r118914",
+        "pid": "p6",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r12",
+        "pid": "p9",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r12056",
+        "pid": "p543",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r12056",
+        "pid": "p8",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r121674",
+        "pid": "p24",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r121674",
+        "pid": "p26",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r122346",
+        "pid": "p24",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r122346",
+        "pid": "p26",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r123023",
+        "pid": "p12368",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r123195",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r124822",
+        "pid": "p3392",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r125631",
+        "pid": "p454",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r125890",
+        "pid": "p11317",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r125890",
+        "pid": "p6",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r125891",
+        "pid": "p11317",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r125891",
+        "pid": "p6",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r12671",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r126832",
+        "pid": "p1661",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r127618",
+        "pid": "p21",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r127618",
+        "pid": "p87",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r128782",
+        "pid": "p1326",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r12932",
+        "pid": "p268",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r12992",
+        "pid": "p200",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r13",
+        "pid": "p24",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r130533",
+        "pid": "p331",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r133624",
+        "pid": "p1040",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r133919",
+        "pid": "p26020",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r133919",
+        "pid": "p4",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r135574",
+        "pid": "p56",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r138454",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r138684",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r1403",
+        "pid": "p350",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r140358",
+        "pid": "p22807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r1411",
+        "pid": "p350",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r1416",
+        "pid": "p350",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r141619",
+        "pid": "p26181",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r141619",
+        "pid": "p2807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r14311",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r144",
+        "pid": "p56",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r146603",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r146603",
+        "pid": "p7869",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r147379",
+        "pid": "p454",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r148219",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r14872",
+        "pid": "p301",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r14872",
+        "pid": "p9234",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r149683",
+        "pid": "p350",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r150407",
+        "pid": "p146",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r150407",
+        "pid": "p42",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r150407",
+        "pid": "p5429",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r1513",
+        "pid": "p24",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r1514",
+        "pid": "p6",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r151681",
+        "pid": "p40",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r152254",
+        "pid": "p6347",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r152254",
+        "pid": "p98",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r15329",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r154799",
+        "pid": "p1040",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r15651",
+        "pid": "p331",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r162281",
+        "pid": "p6",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r16243",
+        "pid": "p301",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r16243",
+        "pid": "p5010",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r167",
+        "pid": "p11",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r174",
+        "pid": "p24",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r18265",
+        "pid": "p76",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r18401",
+        "pid": "p24",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r18401",
+        "pid": "p26",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r18401",
+        "pid": "p993",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r1898",
+        "pid": "p454",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r1951",
+        "pid": "p11",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r196",
+        "pid": "p8",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r22797",
+        "pid": "p187",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r22797",
+        "pid": "p200",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r23",
+        "pid": "p12",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r23",
+        "pid": "p25",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r25",
+        "pid": "p42",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r26772",
+        "pid": "p3392",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r27673",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r27673",
+        "pid": "p146",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r27673",
+        "pid": "p42",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r297",
+        "pid": "p21",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r297",
+        "pid": "p87",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r31469",
+        "pid": "p6",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r32926",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r339",
+        "pid": "p6",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r34916",
+        "pid": "p4488",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r34972",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r34972",
+        "pid": "p336",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r34973",
+        "pid": "p12",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r34973",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r357",
+        "pid": "p41",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r35703",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r36485",
+        "pid": "p98",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r3748",
+        "pid": "p24",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r3748",
+        "pid": "p993",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r3949",
+        "pid": "p42",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r3950",
+        "pid": "p42",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r40754",
+        "pid": "p1276",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r41274",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r41280",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r4189",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r42918",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r430",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r44583",
+        "pid": "p2807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r44623",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r44996",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r45245",
+        "pid": "p98",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r45680",
+        "pid": "p146",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r45680",
+        "pid": "p1665",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r45776",
+        "pid": "p336",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r46419",
+        "pid": "p162",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r46942",
+        "pid": "p2807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r47406",
+        "pid": "p2807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r50668",
+        "pid": "p2807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r52360",
+        "pid": "p6347",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r52360",
+        "pid": "p7496",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r52383",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r52911",
+        "pid": "p336",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r53017",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r53222",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r53689",
+        "pid": "p7209",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r54133",
+        "pid": "p428",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r55462",
+        "pid": "p7496",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r55464",
+        "pid": "p4488",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r55464",
+        "pid": "p7657",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r56184",
+        "pid": "p146",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r56184",
+        "pid": "p2807",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r57694",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r58672",
+        "pid": "p7496",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r59722",
+        "pid": "p10180",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r62494",
+        "pid": "p350",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r63343",
+        "pid": "p26",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r63343",
+        "pid": "p336",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r64727",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r64727",
+        "pid": "p7869",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r7350",
+        "pid": "p1248",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r76933",
+        "pid": "p21",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r76933",
+        "pid": "p4153",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r76933",
+        "pid": "p8336",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r76933",
+        "pid": "p87",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r76933",
+        "pid": "p9483",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r80357",
+        "pid": "p2846",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r80357",
+        "pid": "p7209",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r80363",
+        "pid": "p2846",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r80363",
+        "pid": "p7209",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r80447",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r80448",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r81304",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r83450",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r84524",
+        "pid": "p102",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r85789",
+        "pid": "p11317",
+        "developer": false,
+        "publisher": true
+      },
+      {
+        "id": "r85789",
+        "pid": "p6",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r88352",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r886",
+        "pid": "p146",
+        "developer": true,
+        "publisher": false
+      },
+      {
+        "id": "r886",
+        "pid": "p42",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r95905",
+        "pid": "p2807",
+        "developer": true,
+        "publisher": true
+      },
+      {
+        "id": "r96811",
+        "pid": "p15665",
+        "developer": false,
+        "publisher": true
+      }
+    ],
+    "producers": [
+      {
+        "id": "p10180",
+        "type": "ng",
+        "lang": "ru",
+        "name": "ChaosWORLD",
+        "latin": null
+      },
+      {
+        "id": "p102",
+        "type": "co",
+        "lang": "en",
+        "name": "JAST USA",
+        "latin": null
+      },
+      {
+        "id": "p10241",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社aNCHOR",
+        "latin": "aNCHOR Inc."
+      },
+      {
+        "id": "p1040",
+        "type": "co",
+        "lang": "ja",
+        "name": "ケロQ",
+        "latin": "KeroQ"
+      },
+      {
+        "id": "p11",
+        "type": "ng",
+        "lang": "ja",
+        "name": "ステージなな",
+        "latin": "Stage-nana"
+      },
+      {
+        "id": "p11317",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社アニプレックス",
+        "latin": "Aniplex Inc."
+      },
+      {
+        "id": "p12",
+        "type": "ng",
+        "lang": "en",
+        "name": "insani",
+        "latin": null
+      },
+      {
+        "id": "p120",
+        "type": "co",
+        "lang": "ja",
+        "name": "アリスソフト",
+        "latin": "Alice Soft"
+      },
+      {
+        "id": "p12368",
+        "type": "co",
+        "lang": "ja",
+        "name": "ニトロオリジン",
+        "latin": "NITRO ORIGIN"
+      },
+      {
+        "id": "p1248",
+        "type": "ng",
+        "lang": "ja",
+        "name": "Inside-cap",
+        "latin": null
+      },
+      {
+        "id": "p1276",
+        "type": "co",
+        "lang": "zh",
+        "name": "未來數位",
+        "latin": "Weilai Shuwei"
+      },
+      {
+        "id": "p1326",
+        "type": "co",
+        "lang": "ja",
+        "name": "sprite",
+        "latin": null
+      },
+      {
+        "id": "p146",
+        "type": "co",
+        "lang": "ja",
+        "name": "MAGES.",
+        "latin": null
+      },
+      {
+        "id": "p15665",
+        "type": "ng",
+        "lang": "ru",
+        "name": "Бюро портов и переводов «Котонэ»",
+        "latin": "Bjuro portov i perevodov \"Kotone\""
+      },
+      {
+        "id": "p162",
+        "type": "co",
+        "lang": "en",
+        "name": "Sekai Project",
+        "latin": null
+      },
+      {
+        "id": "p1661",
+        "type": "co",
+        "lang": "en",
+        "name": "PQube",
+        "latin": null
+      },
+      {
+        "id": "p1665",
+        "type": "co",
+        "lang": "ja",
+        "name": "ホビボックス株式会社",
+        "latin": "HOBIBOX Co., Ltd."
+      },
+      {
+        "id": "p187",
+        "type": "co",
+        "lang": "ja",
+        "name": "アイチェリー",
+        "latin": "AiCherry"
+      },
+      {
+        "id": "p19754",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社ラセングル",
+        "latin": "Lasengle Inc."
+      },
+      {
+        "id": "p200",
+        "type": "co",
+        "lang": "ja",
+        "name": "CLOCKUP",
+        "latin": null
+      },
+      {
+        "id": "p21",
+        "type": "co",
+        "lang": "ja",
+        "name": "Leaf",
+        "latin": null
+      },
+      {
+        "id": "p22807",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社グッドスマイルカンパニー",
+        "latin": "Good Smile Company, Inc."
+      },
+      {
+        "id": "p24",
+        "type": "co",
+        "lang": "ja",
+        "name": "Key",
+        "latin": null
+      },
+      {
+        "id": "p25",
+        "type": "in",
+        "lang": "en",
+        "name": "Haeleth",
+        "latin": null
+      },
+      {
+        "id": "p26",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社プロトタイプ",
+        "latin": "PROTOTYPE"
+      },
+      {
+        "id": "p26020",
+        "type": "co",
+        "lang": "ja",
+        "name": "aNTIQ",
+        "latin": null
+      },
+      {
+        "id": "p26181",
+        "type": "co",
+        "lang": "ja",
+        "name": "ジェムドロップ株式会社",
+        "latin": "Gemdrops, Inc"
+      },
+      {
+        "id": "p268",
+        "type": "co",
+        "lang": "ja",
+        "name": "エウシュリー",
+        "latin": "Eushully"
+      },
+      {
+        "id": "p277",
+        "type": "co",
+        "lang": "ja",
+        "name": "Innocent Grey",
+        "latin": null
+      },
+      {
+        "id": "p2807",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社スパイク・チュンソフト",
+        "latin": "Spike Chunsoft"
+      },
+      {
+        "id": "p2846",
+        "type": "co",
+        "lang": "en",
+        "name": "Serenity Forge",
+        "latin": null
+      },
+      {
+        "id": "p301",
+        "type": "co",
+        "lang": "ja",
+        "name": "みなとそふと",
+        "latin": "Minato Soft"
+      },
+      {
+        "id": "p3045",
+        "type": "co",
+        "lang": "ja",
+        "name": "テックジャイアン",
+        "latin": "TECH GIAN"
+      },
+      {
+        "id": "p331",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社チュンソフト",
+        "latin": "Chunsoft"
+      },
+      {
+        "id": "p336",
+        "type": "co",
+        "lang": "ja",
+        "name": "Frontwing",
+        "latin": null
+      },
+      {
+        "id": "p3392",
+        "type": "co",
+        "lang": "en",
+        "name": "MoeNovel",
+        "latin": null
+      },
+      {
+        "id": "p350",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社カプコン",
+        "latin": "CAPCOM Co., Ltd."
+      },
+      {
+        "id": "p4",
+        "type": "co",
+        "lang": "ja",
+        "name": "アージュ",
+        "latin": "age"
+      },
+      {
+        "id": "p40",
+        "type": "co",
+        "lang": "ja",
+        "name": "ルーフ",
+        "latin": "rúf"
+      },
+      {
+        "id": "p41",
+        "type": "co",
+        "lang": "en",
+        "name": "Peach Princess",
+        "latin": null
+      },
+      {
+        "id": "p4153",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社スティング",
+        "latin": "STING CO., LTD."
+      },
+      {
+        "id": "p42",
+        "type": "co",
+        "lang": "ja",
+        "name": "ニトロプラス",
+        "latin": "NITRO PLUS"
+      },
+      {
+        "id": "p428",
+        "type": "co",
+        "lang": "en",
+        "name": "MangaGamer",
+        "latin": null
+      },
+      {
+        "id": "p4488",
+        "type": "ng",
+        "lang": "ja",
+        "name": "NEKO WORKs",
+        "latin": null
+      },
+      {
+        "id": "p454",
+        "type": "ng",
+        "lang": "en",
+        "name": "Four Leaf Studios",
+        "latin": null
+      },
+      {
+        "id": "p5010",
+        "type": "co",
+        "lang": "ja",
+        "name": "みなとすてーしょん",
+        "latin": "Minato Station"
+      },
+      {
+        "id": "p5429",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社RED FLAGSHIP",
+        "latin": "Red Flagship Co.,Ltd."
+      },
+      {
+        "id": "p543",
+        "type": "co",
+        "lang": "ja",
+        "name": "サイバーフロント",
+        "latin": "CYBERFRONT"
+      },
+      {
+        "id": "p56",
+        "type": "co",
+        "lang": "ja",
+        "name": "あかべぇそふとつぅ",
+        "latin": "AKABEiSOFT2"
+      },
+      {
+        "id": "p6",
+        "type": "co",
+        "lang": "ja",
+        "name": "TYPE-MOON",
+        "latin": null
+      },
+      {
+        "id": "p6066",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社エンターグラム",
+        "latin": "ENTERGRAM"
+      },
+      {
+        "id": "p612",
+        "type": "co",
+        "lang": "ja",
+        "name": "FAVORITE",
+        "latin": null
+      },
+      {
+        "id": "p6347",
+        "type": "co",
+        "lang": "zh",
+        "name": "株式会社 HIKARI FIELD",
+        "latin": "HIKARI FIELD"
+      },
+      {
+        "id": "p6388",
+        "type": "co",
+        "lang": "en",
+        "name": "Limited Run Games",
+        "latin": null
+      },
+      {
+        "id": "p7209",
+        "type": "ng",
+        "lang": "en",
+        "name": "Team Salvato",
+        "latin": null
+      },
+      {
+        "id": "p7496",
+        "type": "co",
+        "lang": "en",
+        "name": "NekoNyan",
+        "latin": null
+      },
+      {
+        "id": "p76",
+        "type": "co",
+        "lang": "ja",
+        "name": "PULLTOP",
+        "latin": null
+      },
+      {
+        "id": "p763",
+        "type": "co",
+        "lang": "ja",
+        "name": "HuneX",
+        "latin": null
+      },
+      {
+        "id": "p7657",
+        "type": "co",
+        "lang": "ko",
+        "name": "CFK Co., Ltd.",
+        "latin": null
+      },
+      {
+        "id": "p7869",
+        "type": "co",
+        "lang": "en",
+        "name": "Kagura Games",
+        "latin": null
+      },
+      {
+        "id": "p8",
+        "type": "co",
+        "lang": "ja",
+        "name": "キッド",
+        "latin": "KID"
+      },
+      {
+        "id": "p82",
+        "type": "ng",
+        "lang": "ja",
+        "name": "07th Expansion",
+        "latin": null
+      },
+      {
+        "id": "p8336",
+        "type": "co",
+        "lang": "ja",
+        "name": "合同会社DMM GAMES",
+        "latin": "DMM GAMES"
+      },
+      {
+        "id": "p87",
+        "type": "co",
+        "lang": "ja",
+        "name": "AQUAPLUS",
+        "latin": null
+      },
+      {
+        "id": "p9",
+        "type": "co",
+        "lang": "en",
+        "name": "Hirameki International",
+        "latin": null
+      },
+      {
+        "id": "p9234",
+        "type": "co",
+        "lang": "ja",
+        "name": "サン出版",
+        "latin": "San Shuppan"
+      },
+      {
+        "id": "p9483",
+        "type": "co",
+        "lang": "en",
+        "name": "Shiravune",
+        "latin": null
+      },
+      {
+        "id": "p98",
+        "type": "co",
+        "lang": "ja",
+        "name": "ゆずソフト",
+        "latin": "Yuzusoft"
+      },
+      {
+        "id": "p993",
+        "type": "co",
+        "lang": "ja",
+        "name": "株式会社ビジュアルアーツ",
+        "latin": "VISUAL ARTS Co.,Ltd."
+      }
+    ]
+  }
+}

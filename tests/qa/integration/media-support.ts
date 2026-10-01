@@ -33,6 +33,12 @@ import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -70,7 +76,8 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
  * bearer-to-principal table so several isolated members can act concurrently. */
-export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean; autoClearUploads?: boolean } = {}) {
+export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean;
+  autoClearUploads?: boolean; agents?: boolean; rights?: boolean; library?: boolean } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT || !Bun.env.MAIN_OBJECT_DIRECTORY) {
@@ -97,6 +104,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   await objects('media/').initialize();
   const media: MediaDependencies = { store, content, objects };
   const access = new AccessAdmissionRegistry(accessPool);
+  access.configureBaseline(fuseki);
   const grants = new AccessGrants(accessPool);
   const actingContexts = new AccessActingContexts(accessPool);
   const managedOrganizations = new AccessManagedOrganizations(accessPool);
@@ -114,11 +122,20 @@ export async function startMediaStack(label: string, options: { contentProjectio
     ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,
       consumer: contentConsumer } } : {}),
     mediaAccess, actingContexts, managedOrganizations, contextSelections,
+    ...(options.agents ? { agentProvisioning: new AgentProvisioning(accessPool, env) } : {}),
+    ...(options.library ? { libraryStatus: new ReaderLibraryStatusStore(contentPool),
+      profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool),
+      libraryRatings: new ReaderLibraryRatings(accessPool) } : {}),
+    ...(options.rights ? { rights: { store: new RightsStore(contentPool, accessPool) } } : {}),
     account: { verify: async request => {
       const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
       const principal = tokens.get(token);
       if (!principal) throw new Error('unknown QA bearer');
-      return principal;
+      if (!options.library) return principal;
+      // A baseline member claim re-reads the Account assertion. The library
+      // flag is that verified reader, so the re-read stays the same principal.
+      const verified = { ...principal, emailVerified: true as const };
+      return { ...verified, currentAssertion: async () => verified };
     } } });
 
   // Existing media journeys use an explicitly deterministic benign screen.

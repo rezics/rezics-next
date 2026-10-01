@@ -362,7 +362,7 @@ describe('dev seed plan', () => {
       expect(lines).toContain(`  ${person.name}: ${person.email} / ${person.password}`);
     }
     expect(steps.map(step => step.name)).toEqual([
-      'seedAccounts', 'seedClassics', 'seedWorks', 'seedFranchises', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
+      'seedAccounts', 'seedClassics', 'seedWorks', 'seedFranchises', 'seedVnCatalogue', 'seedLnVnZones', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
       'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedZoneSites', 'seedBookConcepts',
       'seedOfficialThemes',

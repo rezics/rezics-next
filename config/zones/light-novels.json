@@ -1,0 +1,15 @@
+{
+  "id": "light-novels",
+  "name": "Light Novels",
+  "language": "en",
+  "routeSegment": "light-novels",
+  "preset": "editorial",
+  "mountSegment": "catalogue",
+  "navigation": [
+    { "label": "Home", "href": "/" },
+    { "label": "Catalogue", "href": "/catalogue" }
+  ],
+  "browse": ["language", "status", "length"],
+  "sharedMember": "v18334",
+  "announcement": "Series and volumes from the shared catalogue."
+}

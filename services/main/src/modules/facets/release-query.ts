@@ -121,24 +121,25 @@ export function releaseGroupPattern(condition: FilterCondition, release: string,
   const correlation = related.correlation;
   const binding = correlation ? { predicate: correlation.predicate, entry } : undefined;
   const v3 = `<https://rezics.com/definition/release-v3>`;
-  return `GRAPH ${iri(GRAPHS.current)} { ?work (${path}|^rv:work) ${release} .
+  const head = `GRAPH ${iri(GRAPHS.current)} { ?work (${path}|^rv:work) ${release} .
     VALUES ?releaseType${key} { ${related.types.map(term).join(' ')} }
     ${release} a ?releaseType${key} ; rv:releaseHead ?releaseHead${key} . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ReleaseRevision ; rv:component ${release} }
-    {
-      GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:modelRevision ${v3} }
+    GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ReleaseRevision ; rv:component ${release} }`;
+  // A single UNION lets Jena reorder the legacy branches across every coverage
+  // entry. On a v3 catalogue that plan exceeds the release read deadline.
+  // Separate subqueries keep each definition's join on its own branch.
+  const project = `?work ${release} ?releaseHead${key}`;
+  const branch = (body: string) => `{ SELECT ${project} WHERE { ${head} ${body} } }`;
+  return `${branch(`GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:modelRevision ${v3} }
       ${correlation ? `GRAPH ${iri(GRAPHS.current)} {
         ${release} ${term(correlation.predicate)} ${entry} .
         ${entry} ${term(correlation.resource)} ?work ; a ?coverageType${key} .
         VALUES ?coverageType${key} { ${correlation.types.map(term).join(' ')} } }` : ''}
-      FILTER(${groupTest(condition.where!, release, key, binding)})
-    } UNION {
+      FILTER(${groupTest(condition.where!, release, key, binding)})`)} UNION ${branch(`
       GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v2> }
-      FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v2' } : undefined)})
-    } UNION {
+      FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v2' } : undefined)})`)} UNION ${branch(`
       GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} rv:component ${release} ; rv:modelRevision <https://rezics.com/definition/release-v1> }
-      FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v1' } : undefined)})
-    }
+      FILTER(${groupTest(condition.where!, release, key, binding ? { ...binding, legacy: 'v1' } : undefined)})`)}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${release} rv:protectionHead ?releaseProtection${key} } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ErasedRevision } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${release} rv:work|rv:coverageWork|rv:coverage/rv:work ?coveredWork }

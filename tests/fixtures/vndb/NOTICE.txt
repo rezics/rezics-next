@@ -1,0 +1,16 @@
+VNDB database dump slice dated 2026-09-30.
+
+Archive: https://dl.vndb.org/dump/vndb-db-2026-09-30.tar.zst
+SHA-256: bd211aaa917fab1b7aa5b2c702fa339803c5f15cccaf682350b106a5e5426f2e
+Size: 189932962 bytes
+Fetched: 2026-09-30T08:00:25Z
+
+The database and its structured contents are under the Open Database License (ODbL) 1.0
+and the Database Contents License (DbCL) 1.0. Copies of both licences are beside this notice.
+Attribute the VNDB contributors. If you adapt the database, share the adaptation under the ODbL.
+
+This slice keeps rows for about 50 visual novels: vn, vn_titles, releases, releases_titles,
+releases_platforms, releases_vn, releases_producers and producers. Title strings are catalogue
+titles, not excerpts. Descriptions, images, tags, traits, characters, votes, staff notes and
+quotes are omitted. The dump has no territory column. A release language row may have a null
+title; the language is still recorded.

@@ -1,0 +1,16 @@
+{
+  "id": "visual-novels",
+  "name": "Visual Novels",
+  "language": "en",
+  "routeSegment": "visual-novels",
+  "preset": "editorial",
+  "mountSegment": "catalogue",
+  "navigation": [
+    { "label": "Home", "href": "/" },
+    { "label": "Catalogue", "href": "/catalogue" }
+  ],
+  "browse": ["language", "status", "length"],
+  "sharedMember": "v18334",
+  "announcement": "Visual novel records from the VNDB dump, under the ODbL and DbCL. © VNDB contributors.",
+  "releaseBrowse": "One usable release is the existing release-group query. This Zone does not add a facet."
+}

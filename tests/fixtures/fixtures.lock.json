@@ -520,6 +520,16 @@
       "size": 196,
       "reuseBasis": "Wikidata structured data CC0; retain only Q42 identifier, revision and en/ja/zh labels. No article text, descriptions, references, images or external database content. https://www.wikidata.org/wiki/Wikidata:Licensing",
       "seed": "tests/fixtures/seeds/wikidata/e0c501071173f33b03f41ca9472ba98746cfe494a05b5dcd2efbb0c24a629585.json"
+    },
+    {
+      "id": "dump-2026-09-30",
+      "source": "vndb",
+      "requestUrl": "https://dl.vndb.org/dump/vndb-db-2026-09-30.tar.zst",
+      "fetchedAt": "2026-09-30T08:00:25.000Z",
+      "sha256": "e472c327c7040df744b759a71e65d64ff4c6f2b92a3516ea2bae015f5600c00b",
+      "size": 163889,
+      "reuseBasis": "VNDB database dump 2026-09-30 archive https://dl.vndb.org/dump/vndb-db-2026-09-30.tar.zst SHA-256 bd211aaa917fab1b7aa5b2c702fa339803c5f15cccaf682350b106a5e5426f2e size 189932962. ODbL 1.0 and DbCL 1.0. The committed seed is the extracted slice, not the archive. It keeps vn, titles, releases, platforms, languages, producers and release producers only. No descriptions, images or quoted text. The dump has no territory column.",
+      "seed": "tests/fixtures/seeds/vndb/e472c327c7040df744b759a71e65d64ff4c6f2b92a3516ea2bae015f5600c00b.json"
     }
   ]
 }
