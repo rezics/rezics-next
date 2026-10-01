@@ -31,7 +31,7 @@ export default {
   matchAll: "Alle",
   matchAny: "Beliebige",
   matchAllHelp: "Werke mit allen enthaltenen Themen",
-  matchAnyHelp: "Werke mit mindestens einem enthaltenen Thema",
+  matchAnyHelp: "Werke mit dem Thema dieser Seite und mindestens einem weiteren enthaltenen Thema",
   addConcept: "Thema hinzufügen",
   searchConcepts: "Themen suchen",
   searchingConcepts: "Suche läuft…",

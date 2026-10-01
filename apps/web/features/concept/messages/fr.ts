@@ -31,7 +31,7 @@ export default {
   matchAll: "Tous",
   matchAny: "Au moins un",
   matchAllHelp: "Œuvres associées à tous les thèmes inclus",
-  matchAnyHelp: "Œuvres associées à au moins un thème inclus",
+  matchAnyHelp: "Œuvres associées au thème de cette page et à au moins un autre thème inclus",
   addConcept: "Ajouter un thème",
   searchConcepts: "Rechercher des thèmes",
   searchingConcepts: "Recherche…",

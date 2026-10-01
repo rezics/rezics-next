@@ -31,6 +31,28 @@ export const Chinese: Story = { args: { locale: 'zh-Hans', messages: { ...messag
     await expect(canvas.getByText('读完 8 本')).toBeVisible();
   } };
 
+/** A title with no recorded language is not labeled `und`. Recorded languages stay. */
+export const UnrecordedTitleLanguage: Story = {
+  args: { stats: { ok: true, data: { ...stats.data, titleLanguages: [{ language: 'und', count: 2 },
+    { language: 'en', count: 3 }] } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('und · 2')).toBeNull();
+    await expect(canvas.getByText('en · 3')).toBeVisible();
+  },
+};
+
+/** When every finished title is unrecorded, the language list is absent. */
+export const OnlyUnrecordedTitleLanguage: Story = {
+  args: { stats: { ok: true, data: { ...stats.data, titleLanguages: [{ language: 'und', count: 2 }] } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('und · 2')).toBeNull();
+    await expect(canvas.queryByRole('heading', { name: 'Recorded title languages' })).toBeNull();
+    await expect(canvas.getByRole('heading', { name: 'Reading in 2026' })).toBeVisible();
+  },
+};
+
 export const TotalsWithoutDetails: Story = { args: { stats: { ok: true, data: {
   ...stats.data, detailsAvailability: 'unavailable', books: 1_000,
   months: stats.data.months.map(month => ({ ...month, books: month.books * 125 })),

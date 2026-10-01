@@ -18,7 +18,7 @@ export default {
   removeValue: insert('{{name}}を削除', { name: String }),
   match: '一致条件', matchAll: 'すべて', matchAny: 'いずれか',
   matchAllHelp: '含めたすべての概念が含まれる作品',
-  matchAnyHelp: '含めた概念のいずれかが含まれる作品',
+  matchAnyHelp: 'このページの概念と、含めた他の概念のいずれかが含まれる作品',
   addConcept: '概念を追加', searchConcepts: '概念を検索', searchingConcepts: '検索中…',
   noConcepts: '一致する概念はありません',
   conceptSearchFailed: '概念を検索できませんでした。もう一度お試しください。',

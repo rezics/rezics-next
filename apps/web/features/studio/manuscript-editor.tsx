@@ -52,6 +52,8 @@ export interface ManuscriptEditorProps {
   store: ManuscriptStore;
   language: string;
   direction: 'ltr' | 'rtl';
+  /** Direction of the placeholder, which is interface copy. Defaults to the manuscript's direction. */
+  placeholderDirection?: 'ltr' | 'rtl';
   back: { href: string; label: string; title: { value: string; language: string } };
   /** The line above the title: where this text belongs and who writes it. */
   context: string;
@@ -74,8 +76,8 @@ export interface ManuscriptEditorProps {
  * until Main has it, and stopped at a conflict until the writer chooses.
  * Autosave never publishes; the publish control does, as the Studio Agent.
  */
-export function ManuscriptEditor({ store, language, direction, back, context, title, initial, notice: opening = null,
-  publish, label, locale, messages, delay = 2_500 }: ManuscriptEditorProps) {
+export function ManuscriptEditor({ store, language, direction, placeholderDirection, back, context, title, initial,
+  notice: opening = null, publish, label, locale, messages, delay = 2_500 }: ManuscriptEditorProps) {
   const t = materializeData(messages, { locale });
   const storage = useMemo(browserStorage, []);
   const [notice, setNotice] = useState<string | null>(opening);
@@ -227,7 +229,14 @@ export function ManuscriptEditor({ store, language, direction, back, context, ti
         <AlertDescription role="status" className="text-foreground">{notice}</AlertDescription></Alert> : null}
       {conflict ? <ConflictView mine={value} theirs={theirs} lang={language} dir={direction}
         onKeepMine={resolveMine} onTakeTheirs={resolveTheirs} labels={t} /> : null}
-      <Editor aria-label={label} lang={language} dir={direction} value={value} placeholder={t.placeholder}
+      {/* Chromium ignores `direction` on ::placeholder. plaintext takes the direction from the
+          placeholder's first letter — the interface language — and text-align keeps that line at
+          the interface's start, so a period stays at the end of an English sentence in an Arabic chapter. */}
+      {placeholderDirection ? <style>{`textarea[data-placeholder-dir="ltr"]::placeholder{unicode-bidi:plaintext;text-align:left}
+textarea[data-placeholder-dir="rtl"]::placeholder{unicode-bidi:plaintext;text-align:right}`}</style> : null}
+      <Editor aria-label={label} lang={language} dir={direction}
+        {...(placeholderDirection ? { 'data-placeholder-dir': placeholderDirection } : {})}
+        value={value} placeholder={t.placeholder}
         readOnly={conflict || snapshot.denied} onChange={event => change(event.target.value)} onKeyDown={keyDown}
         onBlur={() => void autosave.flush()} autoFocus={!initial.body} />
     </div>

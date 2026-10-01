@@ -77,8 +77,12 @@ export const feedQuery = t.Object({ ...pageQuery,
   interests: t.Optional(t.String({ minLength: 2, maxLength: 64 })),
   contentLanguages: t.Optional(t.Array(readingLanguages.items, { minItems: 1, maxItems: 20, uniqueItems: true })),
   realms: t.Optional(t.Array(readId, { minItems: 1, maxItems: 8, uniqueItems: true })),
-  /** Concepts a Work card must carry in its Context: a one-Condition Filter each (docs/contracts/queries.md). */
+  /** Concepts a Work matches any of. Together with `requiredConcept` and `excludedConcepts`, at most three. */
   concepts: t.Optional(t.Array(readId, { minItems: 1, maxItems: 3, uniqueItems: true })),
+  /** A Concept the Work must carry, beside any Concept in `concepts`. */
+  requiredConcept: t.Optional(readId),
+  /** Concepts the Work must not carry. */
+  excludedConcepts: t.Optional(t.Array(readId, { minItems: 1, maxItems: 2, uniqueItems: true })),
 }, { additionalProperties: false });
 export type FeedQuery = Static<typeof feedQuery>;
 /**

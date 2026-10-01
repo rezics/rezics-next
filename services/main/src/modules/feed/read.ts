@@ -330,10 +330,26 @@ export function contentLanguageVisible(language: string | null,
     && (!saved?.length || !language || languageSatisfies(language, saved));
 }
 
+/** Any-of Concepts, the required page Concept, and exclusions. Home admits at most three of these. */
+function pinnedConcepts(query: FeedQuery): string[] {
+  return [...new Set([...(query.concepts ?? []), ...(query.requiredConcept ? [query.requiredConcept] : []),
+    ...(query.excludedConcepts ?? [])])];
+}
+
+/** A match-any page requires its Concept and any addition, and drops an excluded Concept. Any-of stays any-of. */
+function carriesPinnedConcepts(query: FeedQuery, senses: readonly string[]): boolean {
+  if (query.requiredConcept && !senses.includes(query.requiredConcept)) return false;
+  if (query.concepts?.length && !query.concepts.some(concept => senses.includes(concept))) return false;
+  return !query.excludedConcepts?.some(concept => senses.includes(concept));
+}
+
 const normalized = (query: FeedQuery) => [
   [...(query.kinds ?? [])].sort(), [...new Set((query.contentLanguages ?? []).map(value => value.toLowerCase()))].sort(),
   [...(query.realms ?? [])].sort(), [...(query.concepts ?? [])].sort(), query.language?.toLowerCase() ?? null,
   parseFeedInterests(query.interests).sort(),
+  // Absent for every feed that is not an anchored page, so those cursors stay bound as before.
+  ...(query.requiredConcept || query.excludedConcepts?.length
+    ? [query.requiredConcept ?? null, [...(query.excludedConcepts ?? [])].sort()] : []),
 ];
 
 /** Reads run in dependent stages and each stage's independent reads run
@@ -343,6 +359,7 @@ const normalized = (query: FeedQuery) => [
  * item and any other failure fails the read exactly as a serial read would. */
 export async function readFeed(session: WorkReadSession, query: FeedQuery, reader?: FeedReader) {
   const interests = parseFeedInterests(query.interests);
+  if (pinnedConcepts(query).length > 3) throw new WorkReadInvalid('A feed names at most three Concepts');
   const store = session.deps.feed;
   const follows = session.deps.follows;
   if (!store || !follows) throw new WorkReadUnavailable('Feed owner is unavailable');
@@ -393,7 +410,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     }
     after = { id: cursor.after, key: order.key }; asOf = order.asOf; recentRealms = order.recentRealms; followedSeen = order.followedSeen;
   }
-  const limit = Math.min(query.limit ?? FEED_COST.pageSize, query.concepts ? FEED_COST.tagCandidates : FEED_COST.candidates);
+  const conceptFilter = pinnedConcepts(query);
+  const limit = Math.min(query.limit ?? FEED_COST.pageSize, conceptFilter.length ? FEED_COST.tagCandidates : FEED_COST.candidates);
   const rows = await store.page(session.position, checkpoint.revision, sort, limit, after, reader, window, asOf, query.kinds);
   const page: FeedRow[] = [];
   let members = 0;
@@ -508,7 +526,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
           return settle(feedCardData(session, source, itemTarget(source, target, undefined, source),
             targetLink(source), types, personSettings?.spoilerPolicy === 'show'));
         }))),
-      query.concepts ? readTagSets(session, query.language, candidates, query.concepts) : new Map<string, Settled<string[]>>());
+      conceptFilter.length ? readTagSets(session, query.language, candidates, conceptFilter) : new Map<string, Settled<string[]>>());
   });
   const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
   // A Work's news also answers to follows of the authors its card credits,
@@ -540,10 +558,10 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
         : { kind: 'recommended', basis: scope === 'following' ? 'thin-following' : 'all' };
       if (!contentLanguageVisible(item.post.language,
         [query.contentLanguages, personal?.preferences.contentLanguages])) continue;
-      if (query.concepts) {
+      if (conceptFilter.length) {
         if (!source.work) continue;
         const senses = unwrap(acceptedTags.get(tagKey(source))!);
-        if (!query.concepts.some(concept => senses.includes(concept))) continue;
+        if (!carriesPinnedConcepts(query, senses)) continue;
       }
       items.push(item);
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }

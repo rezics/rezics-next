@@ -3,6 +3,11 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { LibraryMessages } from './messages.ts';
 import type { Loaded, ReadingYear } from './types.ts';
 
+/** `und` records no language, so it is not a language label. */
+function recordedTitleLanguages(languages: ReadingYear['titleLanguages']): { language: string; count: number }[] {
+  return (languages ?? []).filter(item => !/^und(?:-|$)/i.test(item.language));
+}
+
 /** Twelve fixed months keep empty months visible instead of suggesting a shorter year. */
 export function ReadingStats({ stats, locale, messages }: { stats: Loaded<ReadingYear>;
   locale: UiLocale; messages: LibraryMessages }) {
@@ -10,6 +15,7 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
   const { data } = stats;
   const t = materializeData(messages, { locale });
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
+  const titleLanguages = recordedTitleLanguages(data.titleLanguages);
   const maximum = Math.max(1, ...data.months.map(month => month.books));
   const title = t.readingStats({ year: String(data.year) });
   return <section aria-labelledby="library-reading-stats" className="grid gap-5 rounded-2xl bg-muted/50 p-4 sm:p-6">
@@ -28,8 +34,8 @@ export function ReadingStats({ stats, locale, messages }: { stats: Loaded<Readin
         <ol className="flex flex-wrap gap-2">{data.topConcepts.map(item =>
           <li key={item.name} className="rounded-full bg-background px-3 py-1">
             {item.name} · {number(item.count)}</li>)}</ol></div>}
-      {data.titleLanguages !== null && data.titleLanguages.length > 0 && <div><h3 className="font-medium">{t.titleLanguages}</h3>
-        <ol className="flex flex-wrap gap-2">{data.titleLanguages.map(item =>
+      {titleLanguages.length > 0 && <div><h3 className="font-medium">{t.titleLanguages}</h3>
+        <ol className="flex flex-wrap gap-2">{titleLanguages.map(item =>
           <li key={item.language} className="rounded-full bg-background px-3 py-1">
             {item.language} · {number(item.count)}</li>)}</ol></div>}
     </div>

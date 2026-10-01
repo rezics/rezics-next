@@ -96,6 +96,20 @@ export const IncludeAndExclude: Story = {
   },
 };
 
+/** Match any keeps this page’s Concept and takes any other included Concept. */
+export const MatchAny: Story = {
+  args: (() => {
+    const filtered = state({ include: [conceptUuid(8)], exclude: [conceptUuid(3)], match: 'any' });
+    return { state: filtered, works: ok(worksPage(filtered, [works[0]!, works[2]!])) };
+  })(),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Works with this page’s Concept and any other included Concept')).toBeVisible();
+    const match = within(canvas.getByRole('region', { name: 'Conditions' })).getByRole('group', { name: 'Match' });
+    await expect(within(match).getByRole('link', { name: /^Any/ })).toHaveAttribute('aria-current', 'true');
+  },
+};
+
 /** Add a value by name: Concept search offers it, to include or exclude. */
 export const AddByName: Story = {
   async play({ canvasElement }) {

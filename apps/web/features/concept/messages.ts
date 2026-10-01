@@ -37,7 +37,7 @@ export const messages = {
   matchAll: 'All',
   matchAny: 'Any',
   matchAllHelp: 'Works with every included Concept',
-  matchAnyHelp: 'Works with any included Concept',
+  matchAnyHelp: 'Works with this page’s Concept and any other included Concept',
   addConcept: 'Add a Concept',
   searchConcepts: 'Search Concepts',
   searchingConcepts: 'Searching…',

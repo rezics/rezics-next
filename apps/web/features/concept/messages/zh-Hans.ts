@@ -31,7 +31,7 @@ export default {
   matchAll: '全部',
   matchAny: '任一',
   matchAllHelp: '作品包含所有已包含的概念',
-  matchAnyHelp: '作品包含任一已包含的概念',
+  matchAnyHelp: '作品包含本页概念，以及任一其他已包含的概念',
   addConcept: '添加概念',
   searchConcepts: '搜索概念',
   searchingConcepts: '正在搜索…',

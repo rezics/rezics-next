@@ -18,7 +18,7 @@ export default {
   removeValue: insert('移除 {{name}}', { name: String }),
   match: '符合', matchAll: '全部', matchAny: '任一',
   matchAllHelp: '作品必須包含所有已包含的概念',
-  matchAnyHelp: '作品只要包含任一已包含的概念即可',
+  matchAnyHelp: '作品包含本頁概念，以及任一其他已包含的概念',
   addConcept: '新增概念', searchConcepts: '搜尋概念', searchingConcepts: '正在搜尋…',
   noConcepts: '找不到相符的概念', conceptSearchFailed: '無法搜尋概念，請再試一次。',
   include: '包含', exclude: '排除',

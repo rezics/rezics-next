@@ -31,7 +31,7 @@ export default {
   matchAll: "Todos",
   matchAny: "Cualquiera",
   matchAllHelp: "Obras que incluyen todos los temas seleccionados",
-  matchAnyHelp: "Obras que incluyen cualquiera de los temas seleccionados",
+  matchAnyHelp: "Obras que incluyen el tema de esta página y cualquiera de los demás temas seleccionados",
   addConcept: "Añadir tema",
   searchConcepts: "Buscar temas",
   searchingConcepts: "Buscando…",

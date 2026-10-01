@@ -20,6 +20,11 @@ import type { StudioChapter } from './read.ts';
 import { studioAgentName } from './studio-frame.tsx';
 import type { MainClient } from './types.ts';
 
+/** Interface copy is left to right in every shipped locale. The manuscript keeps its own direction. */
+const interfaceDirection = {
+  en: 'ltr', 'zh-Hant': 'ltr', 'zh-Hans': 'ltr', ja: 'ltr', ko: 'ltr', de: 'ltr', fr: 'ltr', es: 'ltr',
+} as const satisfies Record<UiLocale, 'ltr' | 'rtl'>;
+
 export interface ChapterEditorProps {
   agent: AgentOption;
   book: { id: string; title: { value: string; language: string } };
@@ -92,6 +97,7 @@ export function ChapterEditor({ agent, book, chapter: data, locale, messages, de
   }));
 
   return <ManuscriptEditor store={store} language={data.chapter.language} direction={data.chapter.direction}
+    placeholderDirection={interfaceDirection[locale]}
     back={{ href: workHref(agent, book.id, 'chapters'), label: t.backToChapters, title: book.title }}
     context={[book.title.value, languageName(data.chapter.language, locale), `${t.writingAs} ${studioAgentName(agent, t)}`]
       .join(' · ')}

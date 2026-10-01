@@ -141,6 +141,25 @@ export const Chinese: Story = {
   },
 };
 
+/** An Arabic chapter keeps the manuscript right to left. The English placeholder stays left to right, so its period sits at the end. */
+export const ArabicChapter: Story = {
+  args: (() => {
+    const opened = page({}, false);
+    return { ...opened, chapter: { ...opened.chapter, chapter: { ...opened.chapter.chapter, language: 'ar',
+      direction: 'rtl' as const, title: { value: 'الفصل الأول', language: 'ar' } } } };
+  })(),
+  async play({ canvasElement }) {
+    const editor = within(canvasElement).getByRole('textbox', { name: 'Chapter text' });
+    await expect(editor).toHaveAttribute('lang', 'ar');
+    await expect(editor).toHaveAttribute('dir', 'rtl');
+    await expect(editor).toHaveAttribute('data-placeholder-dir', 'ltr');
+    await expect(editor).toHaveAttribute('placeholder', 'Start writing. Each line is a paragraph.');
+    const placeholder = getComputedStyle(editor, '::placeholder');
+    await expect(placeholder.unicodeBidi).toBe('plaintext');
+    await expect(placeholder.textAlign).toBe('left');
+  },
+};
+
 export const Dark: Story = { args: page(), globals: { theme: 'dark' } };
 
 export const Phone: Story = {

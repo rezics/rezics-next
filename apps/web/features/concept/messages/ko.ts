@@ -17,7 +17,7 @@ export default {
   pageValue: insert('{{name}} (이 페이지의 개념)', { name: String }),
   removeValue: insert('{{name}} 삭제', { name: String }),
   match: '일치 조건', matchAll: '모두', matchAny: '하나 이상',
-  matchAllHelp: '포함한 모든 개념이 있는 작품', matchAnyHelp: '포함한 개념 중 하나라도 있는 작품',
+  matchAllHelp: '포함한 모든 개념이 있는 작품', matchAnyHelp: '이 페이지의 개념과 포함한 다른 개념 중 하나가 있는 작품',
   addConcept: '개념 추가', searchConcepts: '개념 검색', searchingConcepts: '검색 중…',
   noConcepts: '일치하는 개념이 없습니다',
   conceptSearchFailed: '개념을 검색하지 못했습니다. 다시 시도해 주세요.',
