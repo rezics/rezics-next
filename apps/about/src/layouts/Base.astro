@@ -9,11 +9,11 @@ import { copy } from '../i18n/format.ts';
 import { localeDirection, openGraphLocale, uiLocales, type UiLocale } from '../i18n/locales.ts';
 import { absoluteUrl, alternates } from '../lib/site.ts';
 import { copyStatus } from '../copy-status.ts';
-import { pagePath, pageSlug, type PageId } from '../pages.ts';
+import { pagePath, pageSlug, type RoutePage } from '../pages.ts';
 
 interface Props {
   locale: UiLocale;
-  page: PageId;
+  page: RoutePage;
   title: string;
   description: string;
   /** Extra JSON-LD objects for this page. */
@@ -26,7 +26,8 @@ interface Props {
 const { locale, page, title, description, structuredData = [], noindex = false, contentLang = locale } = Astro.props;
 const site = Astro.site;
 const url = absoluteUrl(pagePath(locale, page), site);
-const image = absoluteUrl(`/og/${page === 'home' ? 'home' : pageSlug(page)}.png`, site);
+// A policy page shares the home page's image: share images are drawn per product page only.
+const image = absoluteUrl(`/og/${page === 'home' || page.startsWith('legal/') ? 'home' : pageSlug(page)}.png`, site);
 const chrome = copy('site', locale);
 const data = [
   { '@context': 'https://schema.org', '@type': 'Organization', name: 'REZICS Inc.', url: absoluteUrl('/', site),
@@ -79,7 +80,7 @@ const data = [
   <body class="min-h-dvh bg-background text-foreground">
     <SkipNavLink>{chrome.skip}</SkipNavLink>
     <Header locale={locale} page={page} />
-    <main id="skip-nav-content" tabindex="-1" class="outline-none" data-copy={copyStatus[page]} lang={contentLang === locale ? undefined : contentLang}>
+    <main id="skip-nav-content" tabindex="-1" class="outline-none" data-copy={page in copyStatus ? copyStatus[page as keyof typeof copyStatus] : 'final'} lang={contentLang === locale ? undefined : contentLang}>
       <slot />
     </main>
     <Footer locale={locale} page={page} />

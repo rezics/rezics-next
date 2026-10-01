@@ -1,0 +1,46 @@
+---
+import { getCollection } from 'astro:content';
+import { copy } from '../../../i18n/format.ts';
+import { uiLocales, type UiLocale } from '../../../i18n/locales.ts';
+import Base from '../../../layouts/Base.astro';
+import { policies, type PolicySlug } from '../../../legal/policies.ts';
+
+/** One page per policy per locale; the policy text is English in every locale. */
+export async function getStaticPaths() {
+  const entries = await getCollection('legal');
+  return uiLocales.flatMap((locale) =>
+    policies.map(({ slug }) => ({
+      params: { locale, slug },
+      props: { entry: entries.find((entry) => entry.id === slug)! },
+    })),
+  );
+}
+
+const locale = Astro.params.locale as UiLocale;
+const slug = Astro.params.slug as PolicySlug;
+const { entry } = Astro.props;
+const chrome = copy('legal', locale);
+const name = chrome.names[slug];
+// The sources link to each other as /legal/<slug>/; keep the reader in their locale.
+const html = (entry.rendered?.html ?? '').replaceAll('href="/legal/', `href="/${locale}/legal/`);
+const prose = 'max-w-prose [&_h2]:mt-10 [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:ps-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:ps-6 [&_li]:my-1 [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4 [&_table]:my-4 [&_table]:block [&_table]:overflow-x-auto [&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-start [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_mark]:rounded [&_mark]:bg-yellow-200 [&_mark]:px-1 [&_mark]:text-black';
+---
+<Base locale={locale} page={`legal/${slug}`} title={`${name} · REZICS`} description={chrome.summary} noindex={entry.data.draft}>
+  <article class="mx-auto w-full max-w-300 px-5 py-12 sm:px-8 sm:py-16" data-policy={slug}>
+    <h1 class="type-title" lang={locale === 'en' ? undefined : locale}>{name}</h1>
+    {entry.data.draft && (
+      <aside role="note" data-draft-banner class="mt-6 max-w-prose rounded-2xl border border-border bg-muted px-5 py-4">
+        <p class="font-semibold">{chrome.draft.title}</p>
+        <p class="mt-1 text-sm">{chrome.draft.body}</p>
+      </aside>
+    )}
+    {locale !== 'en' && (
+      <aside role="note" data-english-governs class="mt-6 max-w-prose rounded-2xl border border-border px-5 py-4">
+        <p class="font-semibold">{chrome.governs.title}</p>
+        <p class="mt-1 text-sm">{chrome.governs.body}</p>
+      </aside>
+    )}
+    <div lang="en" class={`mt-8 ${prose}`} set:html={html} />
+    <p class="mt-10 text-sm text-muted-foreground">{chrome.source}: <a class="underline underline-offset-4" href={`https://github.com/rezics/rezics-next/blob/main/${entry.data.source}`} rel="noopener">{entry.data.source}</a></p>
+  </article>
+</Base>

@@ -1,12 +1,14 @@
 ---
 import { localeNames, uiLocales, type UiLocale } from '../i18n/locales.ts';
 import { copy } from '../i18n/format.ts';
-import { infoPageIds, links, pagePath, productLineIds, type PageId } from '../pages.ts';
+import { policies } from '../legal/policies.ts';
+import { infoPageIds, links, pagePath, productLineIds, type RoutePage } from '../pages.ts';
 import Logo from './Logo.astro';
 
-interface Props { locale: UiLocale; page: PageId }
+interface Props { locale: UiLocale; page: RoutePage }
 const { locale, page } = Astro.props;
 const site = copy('site', locale);
+const legal = copy('legal', locale);
 const link = 'inline-block py-1.5 text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring rounded-md';
 ---
 <footer class="border-t border-border">
@@ -40,6 +42,11 @@ const link = 'inline-block py-1.5 text-sm text-muted-foreground underline-offset
     </nav>
   </div>
   <div class="border-t border-border/60">
+    <nav aria-label={legal.heading} class="mx-auto w-full max-w-300 px-5 pt-4 sm:px-8">
+      <ul class="flex flex-wrap gap-x-5">
+        {policies.map(({ slug }) => <li><a class={link} href={pagePath(locale, `legal/${slug}`)} lang={locale === 'en' ? undefined : locale}>{legal.names[slug]}</a></li>)}
+      </ul>
+    </nav>
     <p class="mx-auto w-full max-w-300 px-5 py-5 text-sm text-muted-foreground sm:px-8">© {new Date().getFullYear()} {site.footer.rights}</p>
   </div>
 </footer>

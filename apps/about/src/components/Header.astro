@@ -3,12 +3,12 @@ import { ChevronDown, Menu } from 'lucide-react';
 import { buttonVariants } from '@rezics/ui/button';
 import type { UiLocale } from '../i18n/locales.ts';
 import { copy } from '../i18n/format.ts';
-import { infoPageIds, pagePath, productLineIds, type PageId } from '../pages.ts';
+import { infoPageIds, pagePath, productLineIds, type RoutePage } from '../pages.ts';
 import ThemeToggle from './ThemeToggle.astro';
 import Logo from './Logo.astro';
 import LocaleMenu from './LocaleMenu.astro';
 
-interface Props { locale: UiLocale; page: PageId }
+interface Props { locale: UiLocale; page: RoutePage }
 const { locale, page } = Astro.props;
 const site = copy('site', locale);
 const linkClass = 'rounded-xl px-3 py-2 text-sm font-medium outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:text-primary';

@@ -8,6 +8,7 @@ import { distribution } from './distribution.ts';
 import { featureCopy } from './features.ts';
 import { home } from './home.ts';
 import { illustrations } from './illustrations.ts';
+import { legal } from './legal.ts';
 import { lightNovels } from './light-novels.ts';
 import type { LinePageCopy } from './page.ts';
 import { reading } from './reading.ts';
@@ -34,6 +35,7 @@ export const catalogs = {
   developers,
   trust,
   roadmap,
+  legal,
 } as const;
 
 /** The product line pages, which share the `LinePageCopy` shape, by page id. */

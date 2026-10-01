@@ -1,9 +1,9 @@
 ---
 import { Languages } from 'lucide-react';
 import { localeNames, uiLocales, type UiLocale } from '../i18n/locales.ts';
-import { pagePath, type PageId } from '../pages.ts';
+import { pagePath, type RoutePage } from '../pages.ts';
 
-interface Props { locale: UiLocale; page: PageId; label: string; class?: string }
+interface Props { locale: UiLocale; page: RoutePage; label: string; class?: string }
 const { locale, page, label } = Astro.props;
 ---
 <details class="group/lang relative">

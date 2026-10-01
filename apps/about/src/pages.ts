@@ -29,12 +29,17 @@ export const productLineIds = [
 
 export const infoPageIds = ['developers', 'trust', 'roadmap'] as const satisfies readonly PageId[];
 
+/** A policy page, `legal/<slug>` (see `src/legal/policies.ts`); not a product page, so not in `pageIds`. */
+export type LegalPageId = `legal/${string}`;
+/** Anything with a locale-prefixed path. */
+export type RoutePage = PageId | LegalPageId;
+
 /** The path segment of a page under its locale prefix; empty for Home. */
-export function pageSlug(page: PageId): string {
+export function pageSlug(page: RoutePage): string {
   return page === 'home' ? '' : page;
 }
 
-export function pagePath(locale: string, page: PageId): string {
+export function pagePath(locale: string, page: RoutePage): string {
   return `/${locale}/${pageSlug(page)}${page === 'home' ? '' : '/'}`;
 }
 

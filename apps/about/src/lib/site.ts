@@ -1,5 +1,5 @@
 import { defaultLocale, uiLocales, type UiLocale } from '../i18n/locales.ts';
-import { pagePath, type PageId } from '../pages.ts';
+import { pagePath, type RoutePage } from '../pages.ts';
 
 /** The site's public origin, from `astro.config.ts` (`ABOUT_SITE_URL`). */
 export function absoluteUrl(path: string, site: URL | string | undefined): string {
@@ -8,7 +8,7 @@ export function absoluteUrl(path: string, site: URL | string | undefined): strin
 
 /** The same page in every locale, plus `x-default`, for hreflang and the sitemap. */
 export function alternates(
-  page: PageId,
+  page: RoutePage,
   site: URL | string | undefined,
 ): { hreflang: string; href: string }[] {
   return [
