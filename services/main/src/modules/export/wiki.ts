@@ -10,7 +10,9 @@ import { readWikiHistory } from '../wiki/history-read.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { WikiRevisionSet } from '../wiki/delta.ts';
-import { ExportStale } from './readers.ts';
+import { ExportSourceNotFound, ExportSourceUnavailable, ExportStale } from './readers.ts';
+import { WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+import { MediaUnavailable } from '../media/store.ts';
 
 /** Use the sealed export-plan manifest, with an owner-verified journal pin.
  * Resolution links stay outside the exported historical content. */
@@ -25,28 +27,37 @@ export async function readWikiExport(
   rights: LicenseScopeHook,
   scope?: import('../wiki/history-read.ts').WikiHistoryScope,
 ) {
-  const {
-    resolutions: _resolutions,
-    nextCursor,
-    ...history
-  } = await readWikiHistory(work, principal, actor, resource, revisions, undefined, scope);
-  let cursor = nextCursor;
-  while (cursor) {
-    const page = await readWikiHistory(
-      work,
-      principal,
-      actor,
-      resource,
-      history.revisions,
-      undefined,
-      scope,
-      { cursor },
-    );
-    history.claims.push(...page.claims);
-    history.entities.push(...page.entities);
-    history.units.push(...page.units);
-    cursor = page.nextCursor;
-  }
+  const read = async () => {
+    try {
+      // One bounded disclosure session covers the complete export inventory,
+      // rather than retaining an earlier page after a later-page revocation.
+      const {
+        resolutions: _resolutions,
+        nextCursor: _cursor,
+        ...history
+      } = await readWikiHistory(
+        work,
+        principal,
+        actor,
+        resource,
+        revisions,
+        undefined,
+        scope,
+        { all: true },
+        'export',
+      );
+      return history;
+    } catch (error) {
+      if (error instanceof WorkReadMissing)
+        throw new ExportSourceNotFound('Selected source is unavailable', { cause: error });
+      if (error instanceof WorkReadMoved)
+        throw new ExportStale('Wiki changed during export disclosure', { cause: error });
+      if (error instanceof WorkReadUnavailable || error instanceof MediaUnavailable)
+        throw new ExportSourceUnavailable('Wiki disclosure is unavailable', { cause: error });
+      throw error;
+    }
+  };
+  const history = await read();
   if (
     position.dataEpoch !== history.sourcePosition.dataEpoch ||
     position.sequence !== history.sourcePosition.sequence
@@ -85,5 +96,11 @@ export async function readWikiExport(
       },
     ],
   );
-  return planExport({ targetProfile: 'rezics-wiki-v1', useScope, members, residuals: [] }, rights);
+  const plan = await planExport(
+    { targetProfile: 'rezics-wiki-v1', useScope, members, residuals: [] },
+    rights,
+  );
+  if (canonicalCandidate(await read()).digest !== canonicalCandidate(history).digest)
+    throw new ExportStale('Wiki disclosure changed during export planning');
+  return plan;
 }
