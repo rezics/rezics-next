@@ -7,7 +7,7 @@ const caseId = '0198a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
 const credential = 'B'.repeat(43);
 const status = (overrides: Partial<CaseStatus> = {}): CaseStatus => ({ profile: 'public-report-v1', reportId: 'r', caseId,
   receivedAt: '2026-10-01T09:00:00.000Z', state: 'open', generation: '1', category: 'harassment',
-  contentLanguage: 'en', process: 'platform_rules', outcome: null, reasons: null, nextCursor: null,
+  contentLanguage: 'en', process: 'platform_rules', outcome: null, reasons: null, statementOfReasons: null, operation: null, nextCursor: null,
   steps: [{ id: 's1', kind: 'intake', occurredAt: '2026-10-01T09:00:00.000Z', dueAt: null, statement: null,
     contentLanguage: null }], ...overrides });
 
