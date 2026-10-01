@@ -18,6 +18,7 @@ import { seedFranchises } from './franchises-step.ts';
 import { seedLnVnZones } from './ln-vn-zones-step.ts';
 import { seedBookConcepts } from './genres-step.ts';
 import { seedLibrary } from './library-step.ts';
+import { retainSharedSeedIntake } from './intake-cache.ts';
 import { seedModeration } from './moderation-step.ts';
 import { seedOfficialZones } from './official-zones-step.ts';
 import { seedZoneSites } from './zone-sites-step.ts';
@@ -74,6 +75,12 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
       : 'Shared dev stack is absent; start it from the main checkout with task dev');
   }
   const env = readEnv(envPath);
+  // The shared stack's successful creations bind the original checkout's
+  // retained candidate evidence, not a fresh search performed by this worktree.
+  if (worktree && directory === join(commonRoot(), '.temp/stack/rezics-dev')) {
+    const retained = retainSharedSeedIntake(root, commonRoot());
+    if (retained) console.log(`Retained ${retained} shared-stack catalogue intake receipts.`);
+  }
   const compose = readEnv(join(directory, 'compose.env'));
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; resource: string };
