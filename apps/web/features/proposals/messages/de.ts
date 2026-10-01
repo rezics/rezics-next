@@ -61,6 +61,7 @@ export default {
   approvalsSoFar: plural({ one: insert('Bisher liegen {{count}} vor.'), other: insert('Bisher liegen {{count}} vor.') }, { count: asValue(number()) }),
   blockerTerminal: insert('Über diese Korrektur ist bereits entschieden: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'Der Datensatz des Werks ist gerade nicht erreichbar. Versuch es gleich noch einmal.',
+  blockerBudgetExhausted: 'Diese Änderung würde mehr aus der Quelle zitieren, als das Werk erlaubt. Kürze oder entferne Zitate und überarbeite sie dann.',
   blockerRevisionRequired: 'Überarbeite zuerst die Korrektur.',
   blockerApplyPending: 'REZICS wendet dies noch an. Sieh später nach oder prüfe den Status.',
   staleApprovals: plural({ one: insert('{{count}} frühere Genehmigung zählt nicht mehr, weil die Korrektur überarbeitet wurde.'), other: insert('{{count}} frühere Genehmigungen zählen nicht mehr, weil die Korrektur überarbeitet wurde.') }, { count: asValue(number()) }),

@@ -61,6 +61,7 @@ export default {
   approvalsSoFar: plural({ one: insert('Tiene {{count}} por ahora.'), other: insert('Tiene {{count}} por ahora.') }, { count: asValue(number()) }),
   blockerTerminal: insert('Esta corrección ya se decidió: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'El registro de la obra no está disponible ahora. Inténtalo de nuevo en un momento.',
+  blockerBudgetExhausted: 'Este cambio citaría más de la fuente de lo que la obra permite. Acorta o quita citas y luego revísalo.',
   blockerRevisionRequired: 'Primero revisa la corrección.',
   blockerApplyPending: 'REZICS todavía la está aplicando. Vuelve a mirar más tarde o comprueba el estado.',
   staleApprovals: plural({ one: insert('{{count}} aprobación anterior ya no cuenta porque la corrección se revisó.'), other: insert('{{count}} aprobaciones anteriores ya no cuentan porque la corrección se revisó.') }, { count: asValue(number()) }),

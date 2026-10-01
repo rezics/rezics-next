@@ -4,7 +4,7 @@ import type { Blocker } from './types.ts';
 export const blockerKey = {
   stale_revision: 'blockerStaleRevision', stale_base: 'blockerStaleBase', self_review: 'blockerSelfReview',
   review_authority_required: 'blockerReviewAuthority', required_approvals: 'blockerRequiredApprovals',
-  terminal_decision: 'blockerTerminal', owner_unavailable: 'blockerOwnerUnavailable',
+  terminal_decision: 'blockerTerminal', owner_unavailable: 'blockerOwnerUnavailable', budget_exhausted: 'blockerBudgetExhausted',
   revision_required: 'blockerRevisionRequired', apply_pending: 'blockerApplyPending',
 } as const satisfies Record<Blocker['code'], string>;
 

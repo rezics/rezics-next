@@ -61,6 +61,7 @@ export default {
   approvalsSoFar: plural({ one: insert('目前有 {{count}} 個。'), other: insert('目前有 {{count}} 個。') }, { count: asValue(number()) }),
   blockerTerminal: insert('這項更正已經有結果：{{outcome}}。', { outcome: String }),
   blockerOwnerUnavailable: '目前無法連到作品的紀錄，請稍後再試。',
+  blockerBudgetExhausted: '此修改引用原文的篇幅超出作品允許的範圍。請縮短或刪除引文後再修訂。',
   blockerRevisionRequired: '請先修訂這項更正。',
   blockerApplyPending: 'REZICS 仍在套用這項更正。請稍後再查看，或執行復原檢查。',
   staleApprovals: plural({ one: insert('有 {{count}} 個先前的核准因更正已修訂而失效。'), other: insert('有 {{count}} 個先前的核准因更正已修訂而失效。') }, { count: asValue(number()) }),

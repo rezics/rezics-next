@@ -67,6 +67,7 @@ export const messages = {
   approvalsSoFar: plural({ one: insert('It has {{count}} so far.'), other: insert('It has {{count}} so far.') }, { count: asValue(number()) }),
   blockerTerminal: insert('This correction was already decided: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'The Work’s record can’t be reached right now. Try again shortly.',
+  blockerBudgetExhausted: 'This change would quote more of the source than the Work allows. Shorten or remove quotations, then revise.',
   blockerRevisionRequired: 'Revise the correction first.',
   blockerApplyPending: 'REZICS is still applying this. Check again, or recover it.',
   staleApprovals: plural({ one: insert('{{count}} earlier approval no longer counts because the correction was revised.'), other: insert('{{count}} earlier approvals no longer count because the correction was revised.') }, { count: asValue(number()) }),
