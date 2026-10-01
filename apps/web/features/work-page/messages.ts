@@ -282,6 +282,15 @@ const en = {
   signInForParts: 'Sign in to see this Work’s parts and connections.',
   reviewsOf: insert('Reviews of {{target}}', { target: String }),
   identifierMatches: 'Releases with this identifier',
+  reviewGrains: 'What the reviews are of',
+  grainStory: 'Story', grainEdition: 'Editions', grainTranslation: 'Translations', grainRelated: 'Related works',
+  reviewsNoQuestion: 'No rating question covers this here, so there are no reviews to show. Choose a community to see the reviews of editions and translations.',
+  grainNameMainVersion: 'story (Main Version)', grainNameRelease: 'edition (release)', grainNameRealization: 'translation (realization)',
+  grainNameOccurrence: 'part', grainNameResource: 'resource',
+  populationAccount: 'one rating per account', populationGlobalAccount: 'one rating per account across REZICS', populationReaderAccount: 'one rating per reader account',
+  aggregateNone: 'No ratings yet',
+  aggregateGrain: insert('Counted per {{grain}}', { grain: String }),
+  aggregateMean: insert('Mean {{mean}} of {{max}}', { mean: String, max: String }),
   ratingScaleRange: insert('Scale {{min}}–{{max}}', { min: String, max: String }),
 };
 

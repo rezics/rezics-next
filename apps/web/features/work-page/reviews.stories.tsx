@@ -209,3 +209,46 @@ export const OfAnotherResource: Story = {
     await expect(canvas.getAllByRole('article')).toHaveLength(3);
   },
 };
+
+const grainTargets = [
+  { grain: 'story' as const, target: fixture.work.id, label: 'Sword Art Online' },
+  { grain: 'edition' as const, target: 'https://rezics.com/id/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d', label: 'Sword Art Online 1: Aincrad · Yen Press · 2014' },
+  { grain: 'translation' as const, target: 'https://rezics.com/id/1c0f5e3b-7d2a-4f9c-b4e6-8a3d0f2c5b7e', label: 'English · Translation' },
+  { grain: 'related' as const, target: 'https://rezics.com/id/2d1a6f4c-8e3b-4a0d-85f7-9b4e1a3d6c8f', label: 'Aincrad (manga)' },
+];
+const aggregate = (grain: string, count: number, mean: number | null) => ({ question: 'How good is this edition?', grain,
+  population: 'account-principal', countedTarget: grainTargets[1]!.target, count, mean, scale: { min: 1, max: 10 } });
+
+/** What the reviews are of is the reader's choice, and each choice states the scope of its own aggregate. */
+export const ByGrain: Story = {
+  args: { api: fixture.memoryReviewApi(), targets: grainTargets, scopeQuery: { scope: 'realm', realm: 'https://rezics.com/id/3e2b7a5d-9f4c-4b1e-96a8-0c5f2b4e7d90' },
+    aggregate: { ...aggregate('main-version', 12, 8.5), question: 'How good is this story or adaptation?', countedTarget: 'https://rezics.com/id/4f3c8b6e-0a5d-4c2f-a7b9-1d6a3c5f8e01' },
+    grainReader: async target => target === grainTargets[3]!.target ? { kind: 'no-question' }
+      : { kind: 'ready', context: fixture.reviewContext, scale: 10, aggregate: aggregate('release', 3, 8), reviews: fixture.reviewPage(fixture.reviews) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    // The Work's own reviews first, counted per Main Version.
+    await expect(canvas.getByText(/story \(Main Version\)/)).toBeVisible();
+    const edition = canvas.getByRole('button', { name: grainTargets[1]!.label });
+    await userEvent.click(edition);
+    await waitFor(() => expect(canvas.getByText(/edition \(release\)/)).toBeVisible());
+    await expect(edition).toHaveAttribute('aria-pressed', 'true');
+    await expect(canvas.getByText('Reviews of Sword Art Online 1: Aincrad · Yen Press · 2014')).toBeVisible();
+    // A related Work with no rating question in this scope says so instead of borrowing another's reviews.
+    await userEvent.click(canvas.getByRole('button', { name: 'Aincrad (manga)' }));
+    await waitFor(() => expect(canvas.getByText(/No rating question covers this here/)).toBeVisible());
+    await expect(canvas.queryAllByRole('article')).toHaveLength(0);
+    // The story is one choice away.
+    await userEvent.click(canvas.getByRole('button', { name: 'Sword Art Online' }));
+    await waitFor(() => expect(canvas.getByText(/story \(Main Version\)/)).toBeVisible());
+  },
+};
+
+export const ByGrainPhone: Story = {
+  ...ByGrain,
+  args: { ...ByGrain.args, locale: 'zh-Hant', messages: messages['zh-Hant'] },
+  globals: { locale: 'zh-Hant', viewport: { value: 'phone' } },
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};

@@ -2,7 +2,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { copyOf } from './messages.ts';
 import { ConnectionsPreviewView, EditionsPreviewView, PartsPreviewView, PREVIEW_COUNTS } from './previews.tsx';
-import { namesOf, readParts, readRealizations, readReleases, readRelations, readWholes } from './read.ts';
+import { namesOf, readParts, readPeople, readRealizations, readReleases, readRelations, readWholes } from './read.ts';
 
 // The previews a Work hub page and a franchise Zone embed. Each reads Main for
 // the Work it is given and renders a few items with a link into the full page;
@@ -22,7 +22,8 @@ export async function PartsPreview({ id, workRef, locale, pageMessages }: Embedd
 export async function ConnectionsPreview({ id, workRef, locale, pageMessages }: Embedded) {
   const t = copyOf(locale);
   const relations = await readRelations(id, { limit: 20 });
-  return <ConnectionsPreviewView relations={relations} workRef={workRef} locale={locale}
+  const people = relations.ok ? await readPeople(relations.data.items) : undefined;
+  return <ConnectionsPreviewView relations={relations} people={people} workRef={workRef} locale={locale}
     pageMessages={pageMessages} t={t} />;
 }
 

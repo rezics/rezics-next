@@ -31,10 +31,12 @@ import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readA
   readHubWorkPage, readText } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
-import { type ContentsQuery, EVERYONE, type HistoryFilter, idOf, type VersionQuery, type WorkAt, type WorkScope,
+import { type ContentsQuery, EVERYONE, mainScope, type HistoryFilter, idOf, type VersionQuery, type WorkAt, type WorkScope,
   workHref, workRefOf } from './route.ts';
 import { ScopeBar, ScopeBarSkeleton, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
 import { ReviewsSection } from './reviews.tsx';
+import { aggregateOf } from './reviews-grain-model.tsx';
+import { reviewTargets } from './reviews-grain-options.tsx';
 import type { WorkHeader as Header, Reviewer } from './types.ts';
 import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
@@ -240,7 +242,11 @@ async function Reviews({ workRef, id, work, scope, context: chosen, locale, mess
   const authors = initial.ok ? [...new Set(initial.data.items.map(review => review.author))] : [];
   const named = await Promise.all(authors.map(async author => [author, await readReviewer(author)] as const));
   const writable = everyone.ok && everyone.data.context?.context === question.context;
+  // Editions, translations and related Works have their own rating questions, read in the scope the reviews are in.
+  const targets = await reviewTargets(id, work, locale);
   return <ReviewsSection target={work.id} context={question.context} scale={question.scale.max} initial={initial}
+    targets={targets} scopeQuery={mainScope(scope.kind === 'mine' ? EVERYONE : scope)}
+    aggregate={ratings.ok ? aggregateOf(ratings.data.summary) : null}
     subject={materializeData(messages, { locale }).reviewsOf({ target: work.title.value })}
     reviewers={Object.fromEntries(named.filter((entry): entry is [string, Reviewer] => entry[1] !== null))}
     viewer={actingSubject ? { kind: 'reader', actingSubject, canWrite: writable }

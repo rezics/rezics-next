@@ -10,7 +10,7 @@ import { copyOf } from './messages.ts';
 import { PartsSection } from './parts.tsx';
 import { ReleaseFailure, ReleaseView } from './release-page.tsx';
 import { franchisesOf } from './relation-rows.ts';
-import { namesOf, readCollectionMembers, readParts, readRealization, readRealizations, readRelease, readReleases,
+import { namesOf, readCollectionMembers, readParts, readPeople, readRealization, readRealizations, readRelease, readReleases,
   readReleaseWork, readRelations, readWholes } from './read.ts';
 import type { ConnectionsQuery, EditionsQuery } from './route.ts';
 import type { Loaded, PartsPage, Realization, ReleasePage, Summary } from './types.ts';
@@ -57,12 +57,12 @@ export async function ConnectionsPage({ workRef, id, query, locale, pageMessages
       ...(franchise.members.ok ? franchise.members.data.members.flatMap(member => member.target ?? []) : []),
       ...[...franchise.parts.values()].flatMap(read => (read.ok ? read.data.parts.flatMap(part => part.work ?? []) : []))]),
   ];
-  const names = await namesOf(references);
+  const [names, people] = await Promise.all([namesOf(references), relations.ok ? readPeople(relations.data.items) : undefined]);
   return <div className="grid gap-10">
     <EditEntry workRef={workRef} id={id} section="parts" locale={locale} />
     <PartsSection parts={parts} wholes={wholes} names={names} workRef={workRef} query={query} locale={locale} t={t}
       pageMessages={pageMessages} />
-    <ConnectionsSection relations={relations} franchises={franchises} names={names} workRef={workRef} current={id}
+    <ConnectionsSection relations={relations} franchises={franchises} names={names} people={people} workRef={workRef} current={id}
       query={query} locale={locale} t={t} pageMessages={pageMessages} />
   </div>;
 }

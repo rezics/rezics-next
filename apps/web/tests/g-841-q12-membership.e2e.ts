@@ -29,3 +29,36 @@ test('query 12: franchise membership never merges Works', async ({ page }, info)
     });
   }
 });
+
+test('query 12: a contributor\'s link resolves to one identity from both Zones', async ({ page }, info) => {
+  test.setTimeout(420_000);
+  const { zones, contributor } = data.acceptance;
+  const profile = new RegExp(`/@${contributor.handle}$`);
+  expect(contributor.displayName).toBe('Reki Kawahara');
+  // Two Zones, two Realms, neither one the other's: the contributor is named in the pages of both.
+  expect(zones.sao.realm).not.toBe(zones.crossover.realm);
+  const inZone = (locale: string, zone: keyof typeof zones, key: string) =>
+    `/${locale}/r/${uuid(zones[zone].realm)}/franchise/${uuid(work(key))}`;
+
+  // The SAO Zone names him as the story's author; the crossover Zone, whose Works he did not write, as the
+  // concept supervisor of Alternative GGO. Each link is the person's profile, never a page of the Zone.
+  const links: string[] = [];
+  const cases = [{ zone: 'sao', key: 'sao.bunko', link: (p: typeof page) => p.locator(`a[href$="/@${contributor.handle}"]`).first() },
+    { zone: 'crossover', key: 'sao.aggo', link: (p: typeof page) => p.locator(`[data-contributor="${contributor.agent}"]`) }] as const;
+  for (const { zone, key, link } of cases) {
+    await acrossViews(page, info, `q12-${zone}`, locale => inZone(locale, zone, key), `a[href$="/@${contributor.handle}"]`, async () => {
+      const anchor = link(page);
+      await expect(anchor).toBeVisible();
+      await expect(anchor).toHaveText(contributor.displayName);
+      await expect(anchor).toHaveAttribute('href', profile);
+    });
+    await page.goto(inZone('en', zone, key));
+    const anchor = link(page);
+    links.push((await anchor.getAttribute('href'))!);
+    await anchor.click();
+    await expect(page).toHaveURL(profile);
+    await expect(page.getByRole('heading', { name: contributor.displayName }).first()).toBeVisible();
+  }
+  // Both Zones led to the same address, so to the same identity.
+  expect(new Set(links).size).toBe(1);
+});

@@ -4,6 +4,7 @@ import { LocalizedText } from '@rezics/ui/localized-text';
 import { cn } from '@rezics/ui/utils';
 import { LinkIcon, NetworkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { authorHref } from '../author/route.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { languageName } from '../work-page/format.ts';
@@ -13,7 +14,7 @@ import type { Copy } from './messages.ts';
 import { NameLink, SummaryLink, type SummaryHref } from './names.tsx';
 import { labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains, workLinkHref } from './route.ts';
-import type { CollectionMembers, Loaded, Names, PartsPage, RelationsPage, Summary } from './types.ts';
+import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
 
@@ -25,10 +26,18 @@ export interface Franchise {
   parts: ReadonlyMap<string, Loaded<PartsPage>>;
 }
 
-function Target({ item, t, hrefFor }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref }) {
+function Target({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
   const target = item.target;
   if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.unavailable}</span>;
-  if (target.kind === 'external') return <bdi className="font-mono text-sm">{target.label}</bdi>;
+  if (target.kind === 'external') {
+    // A contributor is one REZICS Agent wherever they are named: the link is their profile, not a page of this Zone.
+    const person = target.agent ? people?.get(target.agent) : undefined;
+    return person
+      ? <Link href={authorHref({ kind: 'agent', handle: person.handle })} title={`@${person.handle}`} data-contributor={target.agent}
+        className="rounded-sm font-medium outline-none decoration-1 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+        {person.name}</Link>
+      : <bdi className="font-mono text-sm">{target.label}</bdi>;
+  }
   return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
 }
 
@@ -53,9 +62,11 @@ function RowLabel({ label, locale, t }: { label: RelationRow['label']; locale: U
  * direction. Relations to Works read as rows, relations to people or
  * characters as role chips; neither is built by joining words around a name.
  */
-export function RelationRows({ rows, locale, t, hrefFor }: { rows: readonly RelationRow[]; locale: UiLocale; t: Copy;
+export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: readonly RelationRow[]; locale: UiLocale; t: Copy;
   /** Where a counterpart's page is, for a surface that hosts resources itself (a Zone). */
-  hrefFor?: SummaryHref }) {
+  hrefFor?: SummaryHref;
+  /** The contributors the rows name, by Agent, so each links to its profile. */
+  people?: People }) {
   const listed = rows.filter(row => row.style === 'row');
   const chips = rows.filter(row => row.style === 'chips');
   return <div className="grid gap-5">
@@ -66,7 +77,7 @@ export function RelationRows({ rows, locale, t, hrefFor }: { rows: readonly Rela
           <ul className="grid gap-1">
             {row.items.map((item, index) => <li key={`${item.relation}-${index}`}
               className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <Target item={item} t={t} hrefFor={hrefFor} /><Unresolved item={item} t={t} />
+              <Target item={item} t={t} hrefFor={hrefFor} people={people} /><Unresolved item={item} t={t} />
             </li>)}
           </ul>
         </dd>
@@ -76,7 +87,7 @@ export function RelationRows({ rows, locale, t, hrefFor }: { rows: readonly Rela
       {chips.flatMap(row => row.items.map((item, index) => <li key={`${row.key}-${item.relation}-${index}`} data-role-chip
         className="flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-border/70 px-3 py-1 text-sm">
         <span className="text-muted-foreground"><RowLabel label={labelFor(row.projection, 1)} locale={locale} t={t} /></span>
-        <Target item={item} t={t} hrefFor={hrefFor} />
+        <Target item={item} t={t} hrefFor={hrefFor} people={people} />
       </li>))}
     </ul> : null}
   </div>;
@@ -159,8 +170,8 @@ function Franchises({ franchises, names, workRef, current, query, t }: {
  * Typed relations in both directions, the franchises (Collections) that contain
  * the Work with their series ⇄ parts grain, and Main's continuation of both.
  */
-export function ConnectionsSection({ relations, franchises, names, workRef, current, query, locale, t, pageMessages }: {
-  relations: Loaded<RelationsPage>; franchises: readonly Franchise[]; names: Names; workRef: string;
+export function ConnectionsSection({ relations, franchises, names, people, workRef, current, query, locale, t, pageMessages }: {
+  relations: Loaded<RelationsPage>; franchises: readonly Franchise[]; names: Names; people?: People; workRef: string;
   /** The Work's UUID, to mark it among its franchise's members. */
   current: string; query: ConnectionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
 }) {
@@ -177,7 +188,7 @@ export function ConnectionsSection({ relations, franchises, names, workRef, curr
       ? <EmptyState icon={NetworkIcon} headingLevel={3} title={t.noConnections} description={t.noConnectionsBody} />
       : <>
         <Franchises franchises={franchises} names={names} workRef={workRef} current={current} query={query} t={t} />
-        {rows.length ? <RelationRows rows={rows} locale={locale} t={t} /> : null}
+        {rows.length ? <RelationRows rows={rows} locale={locale} t={t} people={people} /> : null}
       </>}
     {query.relationsAfter || relations.data.next
       ? <nav aria-label={t.relationsPages} className="flex flex-wrap justify-between gap-2">

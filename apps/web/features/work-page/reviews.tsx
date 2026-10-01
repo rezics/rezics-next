@@ -6,7 +6,7 @@ import { Textarea } from '@rezics/ui/textarea';
 import { cn } from '@rezics/ui/utils';
 import { EyeIcon, MessageSquareTextIcon, PencilIcon, ThumbsUpIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { type FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { StarMeter } from '../catalogue/rating.tsx';
 import { RateWork, useReaderActions } from '../catalogue/reader-actions.tsx';
@@ -17,6 +17,8 @@ import Link from '../shell/localized-link.tsx';
 import { Expandable } from './expandable.tsx';
 import { formatDate, isoTime, languageName, paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
+import { AggregateScope, GrainChooser, type GrainRead, readGrain } from './reviews-grain.tsx';
+import type { ReviewAggregate, ReviewScopeQuery, ReviewTarget } from './reviews-grain-model.tsx';
 import { type ReviewApi, type ReviewFilter, type ReviewWrite, mainReviewApi } from './reviews-api.ts';
 import type { Loaded, ReadFailure, Review, Reviewer, ReviewPage } from './types.ts';
 
@@ -47,6 +49,14 @@ export interface ReviewsProps {
   /** Stories supply their own; pages read and write Main through the BFF. */
   api?: ReviewApi;
   locale: UiLocale; messages: WorkPageMessages;
+  /** The aggregate of `context` with the scope Main states for it (question, grain, population). */
+  aggregate?: ReviewAggregate | null;
+  /** What else the Work's reviews can be of (editions, translations, related Works); the chooser appears with more than one. */
+  targets?: readonly ReviewTarget[];
+  /** The rating scope the page is in, which the chosen target's question is read in. */
+  scopeQuery?: ReviewScopeQuery;
+  /** Stories supply their own; pages read the chosen target from Main through the BFF. */
+  grainReader?: typeof readGrain;
 }
 
 const reviewAnchor = /^#review-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -221,8 +231,8 @@ function ReviewEditor({ target, own, actingSubject, api, onSaved, onCancel, loca
  * `#review-{id}` link (the home feed's review cards) scrolls to that review,
  * reading it on its own when it is not on the first page.
  */
-export function ReviewsSection({ target, href, subject, context, scale, initial, reviewers: named, viewer, api: given, locale,
-  messages }: ReviewsProps) {
+function ReviewsPanel({ target, href, subject, context, scale, initial, reviewers: named, viewer, api: given, locale,
+  messages, aggregate, controls }: ReviewsProps & { controls?: ReactNode }) {
   const t = materializeData(messages, { locale });
   const api = useMemo(() => given ?? mainReviewApi({ target, href, context,
     actingSubject: viewer.kind === 'reader' ? viewer.actingSubject : null }), [given, target, href, context, viewer]);
@@ -272,6 +282,12 @@ export function ReviewsSection({ target, href, subject, context, scale, initial,
     // Reload only when the reader changes the filter.
   }, [filter]);
 
+  // A page the browser read for another target arrives without its reviewers' names.
+  useEffect(() => {
+    if (initial.ok) void name(initial.data.items);
+    // Only on arrival.
+  }, []);
+
   // A followed `#review-{id}` link: scroll to the review, reading it on its own when it is not listed.
   useEffect(() => {
     const id = linkedReview(window.location.hash);
@@ -312,6 +328,8 @@ export function ReviewsSection({ target, href, subject, context, scale, initial,
           variant: 'outline' })}><PencilIcon aria-hidden="true" />{t.writeReview}
           <span className="sr-only"> — {t.signInToReview}</span></Link> : null}
     </div>
+    {controls}
+    <AggregateScope aggregate={aggregate ?? null} locale={locale} t={t} />
     {editing ? <ReviewEditor target={target} own={own} actingSubject={viewer.kind === 'reader' ? viewer.actingSubject : ''} api={api} locale={locale} t={t} onCancel={() => setEditing(false)}
       onSaved={() => { setEditing(false); void load(filter); }} /> : null}
     {/* Sorting and filtering help once there is something to sort. */}
@@ -357,5 +375,62 @@ export function ReviewsSection({ target, href, subject, context, scale, initial,
         {t.moreReviews}</Button></div> : null}
     <p aria-live="polite" className="sr-only">{loading ? t.loadingReviews
       : page.ok ? t.reviewsShown(listed.length) : ''}</p>
+  </section>;
+}
+
+/** The reviews section's heading alone, for the moments a chosen target has no list to show yet. */
+function ReviewsHeading({ t, subject }: { t: Translation; subject?: string }) {
+  return <div className="grid gap-1">
+    <h2 id={REVIEWS_REGION} className="font-semibold text-xl tracking-tight">{t.reviews}</h2>
+    {subject ? <p className="text-muted-foreground text-sm">{subject}</p> : null}
+  </div>;
+}
+
+/**
+ * The Work's reviews, filterable by what they are of. The page's own target (the story) renders from the server's
+ * first page; choosing an edition, a translation or a related Work reads that target's rating question, aggregate
+ * and reviews in the browser, in the page's scope, and shows its aggregate scope beside them: one resource's
+ * reviews never stand in for another's. Writing stays with the story, whose stars the page rates.
+ */
+export function ReviewsSection(props: ReviewsProps) {
+  const { targets, scopeQuery, viewer, locale, messages, aggregate } = props;
+  const t = materializeData(messages, { locale });
+  const [chosen, setChosen] = useState<{ option: ReviewTarget; read: GrainRead | null } | null>(null);
+  const latest = useRef<string | null>(null);
+  const actingSubject = viewer.kind === 'reader' ? viewer.actingSubject : null;
+
+  async function choose(option: ReviewTarget) {
+    latest.current = option.target;
+    if (option.target === props.target) { setChosen(null); return; }
+    setChosen({ option, read: null });
+    const read = await (props.grainReader ?? readGrain)(option.target, scopeQuery ?? { scope: 'global' }, actingSubject);
+    // A later choice wins; an answer for an earlier one is dropped.
+    if (latest.current === option.target) setChosen({ option, read });
+  }
+  const selected = chosen?.option.target ?? props.target;
+  const chooser = targets && targets.length > 1
+    ? <GrainChooser targets={targets} selected={selected} onSelect={option => void choose(option)} t={t} /> : null;
+
+  if (!chosen) return <ReviewsPanel {...props} aggregate={aggregate} controls={chooser} />;
+  const { option, read } = chosen;
+  const subject = t.reviewsOf({ target: option.label });
+  if (read?.kind === 'ready') {
+    // Another target's reviews are read, not written: its stars are not the ones this page rates.
+    const readOnly: ReviewViewer = viewer.kind === 'reader' ? { kind: 'reader', actingSubject: viewer.actingSubject, canWrite: false }
+      : { kind: 'read-only' };
+    return <ReviewsPanel key={option.target} target={option.target} context={read.context} scale={read.scale}
+      initial={read.reviews} reviewers={{}} viewer={readOnly} locale={locale} messages={messages} subject={subject}
+      aggregate={read.aggregate} controls={chooser} />;
+  }
+  return <section aria-labelledby={REVIEWS_REGION} aria-busy={read === null || undefined} className="grid min-w-0 content-start gap-5">
+    <ReviewsHeading t={t} subject={subject} />
+    {chooser}
+    {read === null ? <p aria-live="polite" className="text-muted-foreground text-sm">{t.loadingReviews}</p>
+      : read.kind === 'no-question' ? <p data-review-no-question className="rounded-2xl bg-muted/60 px-5 py-4 text-sm">
+        {t.reviewsNoQuestion}</p>
+        : <p role="alert" className="flex flex-wrap items-center gap-3 rounded-xl bg-muted/60 px-4 py-3 text-sm">
+          <TriangleAlertIcon aria-hidden="true" className="size-4 text-destructive-foreground" />
+          <span className="flex-1">{t.reviewsUnavailable}. {failureText(read.failure, t)}</span>
+          <Button size="sm" variant="outline" onClick={() => void choose(option)}>{t.retry}</Button></p>}
   </section>;
 }

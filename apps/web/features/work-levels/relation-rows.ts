@@ -11,7 +11,8 @@ import type { NameText, RelationEntry, RelationProjection, Summary } from './typ
 /** One counterpart of a relation: a resource Main named, an external identity, or one it withheld. */
 export type RelationTarget =
   | { kind: 'resource'; reference: string; summary: Summary | null }
-  | { kind: 'external'; label: string }
+  /** `agent` is the REZICS Agent an external participant names (a contributor), whose profile the row can link. */
+  | { kind: 'external'; label: string; agent: string | null }
   | { kind: 'withheld' };
 
 export interface RelationItem {
@@ -45,7 +46,8 @@ function participantTarget(value: unknown, summaries: ReadonlyMap<string, Summar
       return { kind: 'resource', reference: value.ref, summary: summaries.get(value.ref) ?? null };
     }
     if (value.kind === 'external' && 'key' in value && typeof value.key === 'string') {
-      return { kind: 'external', label: value.key };
+      const native = 'provider' in value && value.provider === 'rezics' && 'namespace' in value && value.namespace === 'agent';
+      return { kind: 'external', label: value.key, agent: native ? value.key : null };
     }
   }
   return { kind: 'withheld' };
@@ -96,4 +98,10 @@ export function relationRows(entries: readonly RelationEntry[]): RelationRow[] {
 /** The franchises (Collections) an entry list places the Work in, in Main's order. */
 export function franchisesOf(entries: readonly RelationEntry[]): Summary[] {
   return entries.flatMap(entry => (entry.kind === 'collection' ? entry.counterparts : []));
+}
+
+/** The Agents the rows name as external participants (contributors), once each, in the order they appear. */
+export function agentsOf(rows: readonly RelationRow[]): string[] {
+  return [...new Set(rows.flatMap(row => row.items.flatMap(item =>
+    item.target.kind === 'external' && item.target.agent ? [item.target.agent] : [])))];
 }

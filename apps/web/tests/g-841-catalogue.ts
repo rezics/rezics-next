@@ -16,6 +16,7 @@ import { EditionPreferenceStore } from '../../../services/main/src/modules/sessi
 import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+import { type AcceptanceAnswers, answerAcceptance, seedAcceptance } from './g-914-acceptance.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { relationLexiconSeedMapPath, seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { cataloguePlan, catalogueResourceId, loadCatalogue, type CatalogueManifest, type CatalogueResponse }
@@ -58,6 +59,8 @@ export interface Seeded {
   answers: Answers;
   spider: { web: string; book: string };
   isbn: string;
+  /** Queries 5 and 12 (G-914): the Zones, the reviews per grain and the contributor, as Main answers them. */
+  acceptance: AcceptanceAnswers;
 }
 
 interface Item { kind: string; evidence: string | null; sourceVersionStatus?: string;
@@ -239,6 +242,9 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
       { role: 'target', participant: { kind: 'resource', ref: workId('D03.books') } }],
     actingSubject: person }, 'g841:correspondence:spider'), 201);
 
+  // Queries 5 and 12 (G-914): two Zones, the related Works, and a review on each grain in the SAO Zone's Realm.
+  const acceptance = await seedAcceptance(port, manifest, { digitalRelease: digital.release, digitalRealization: english.realization });
+
   // Main keeps processing the writes' events for a while, moving the graph under every read (409).
   let last = '';
   let still = 0;
@@ -261,7 +267,8 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
       mainVersion: digitalCoverage.mainVersion, provider: digitalPlan.identifiers[0]!.provider, value: digitalPlan.identifiers[0]!.value },
     relations: related, credits: credited, readingOrder: await members('index.original.reading'),
     omnibusCoverage, realizations, webReleases };
-  return { manifest, answers, spider: { web: workId('D03.web'), book: workId('D03.books') }, isbn: ISBN };
+  return { manifest, answers, spider: { web: workId('D03.web'), book: workId('D03.books') }, isbn: ISBN,
+    acceptance: await answerAcceptance(acceptance, retried, actor, manifest) };
 }
 
 function missingWork(id: string): never { throw new Error(`catalogue work ${id} is missing`); }

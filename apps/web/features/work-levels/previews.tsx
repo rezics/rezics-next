@@ -13,7 +13,7 @@ import { NameLink } from './names.tsx';
 import { WholesLines } from './parts.tsx';
 import { franchisesOf, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, editionsHref, releaseHref } from './route.ts';
-import type { Loaded, Names, PartsPage, RealizationPage, RelationsPage, ReleasePage, WholesPage } from './types.ts';
+import type { Loaded, Names, PartsPage, People, RealizationPage, RelationsPage, ReleasePage, WholesPage } from './types.ts';
 
 // The previews a Work hub page and a franchise Zone embed: a few items of each
 // level and one link into its full page. They take what Main answered, so the
@@ -54,8 +54,8 @@ export function PartsPreviewView({ parts, wholes, names, workRef, pageMessages, 
 }
 
 /** The first typed relations and the franchises that contain the Work. */
-export function ConnectionsPreviewView({ relations, workRef, locale, pageMessages, t }: {
-  relations: Loaded<RelationsPage>; workRef: string; locale: UiLocale;
+export function ConnectionsPreviewView({ relations, people, workRef, locale, pageMessages, t }: {
+  relations: Loaded<RelationsPage>; people?: People; workRef: string; locale: UiLocale;
   pageMessages: WorkPageMessages; t: Copy;
 }) {
   if (!relations.ok) {
@@ -70,7 +70,7 @@ export function ConnectionsPreviewView({ relations, workRef, locale, pageMessage
       {franchises.map((franchise, index) => <span key={franchise.reference}>{index ? ', ' : ''}
         {franchise.status === 'available' ? <LocalizedText text={franchise.name} className="font-medium" />
           : <span className="text-muted-foreground">{t.unavailable}</span>}</span>)}</p> : null}
-    {rows.length ? <RelationRows rows={rows} locale={locale} t={t} /> : null}
+    {rows.length ? <RelationRows rows={rows} locale={locale} t={t} people={people} /> : null}
     <ViewAll href={connectionsHref(workRef, {}, anchors.relations)} label={t.allConnections} />
   </Region>;
 }

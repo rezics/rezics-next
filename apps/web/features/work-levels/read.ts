@@ -1,9 +1,10 @@
 import { cache } from 'react';
 import { failureOf } from '../work-page/failure.ts';
-import { reader } from '../work-page/read.ts';
+import { reader, readReviewer } from '../work-page/read.ts';
 import { iriOf } from '../work-page/route.ts';
+import { agentsOf, relationRows } from './relation-rows.ts';
 import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
-  RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
+  People, RelationEntry, RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
 
 // Server reads for the Work-level pages. Each returns a `Loaded` result instead
 // of throwing, so one section's failure never takes down another. Main answers
@@ -120,4 +121,10 @@ export async function readReleaseWork(release: string): Promise<Loaded<{ work: s
   const summary = answer.data as { type?: string; work?: string | null };
   return summary.type === 'release' && summary.work
     ? { ok: true, data: { work: summary.work.slice(-36) } } : { ok: false, failure: 'missing' };
+}
+
+/** The contributors a relation page names as REZICS Agents, with the name and handle their profile link needs; one Agent Main will not name stays a bare key. */
+export async function readPeople(entries: readonly RelationEntry[]): Promise<People> {
+  const found = await Promise.all(agentsOf(relationRows(entries)).map(async agent => [agent, await readReviewer(agent)] as const));
+  return new Map(found.flatMap(([agent, person]) => (person ? [[agent, person] as const] : [])));
 }
