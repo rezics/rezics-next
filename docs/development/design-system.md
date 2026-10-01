@@ -15,8 +15,3 @@ small-text contrast on the light surfaces, so keeping it off text makes the
 meaning consistent across themes. Interface text uses Manrope; the serif face
 distinguishes Work titles from navigation and controls. Self-hosted faces avoid
 a font CDN and keep the first render stable.
-
-Planned Post cards keep content full width on phones and put a vote pill,
-comments, share, save and overflow below. Planned Work pages pair cover/title
-with Context-labelled ratings, shelf actions and distribution, separate provider
-statistics and revision tabs. These still need feature stories.
