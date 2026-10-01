@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 import { keyed, textFor } from '../features/safety/report.ts';
-import { checkScreen, composeCjk, expectClean, type Findings, keyboardReach, locales, motionRunning, pressByKeyboard } from './g-743-matrix.ts';
+import { checkScreen, chooseRadio, composeCjk, expectClean, type Findings, keyboardReach, locales, motionRunning, pressByKeyboard } from './g-743-matrix.ts';
 import { hubRecords, visitor } from './g-743-stack.ts';
 import type { Hub } from './g-850-seed.ts';
 
@@ -33,8 +33,7 @@ async function fileReport(page: Page, locale: 'en' | 'ja', statement: string, fo
 
   // A kind of problem, chosen with the keyboard; its own form follows.
   const category = form.getByRole('radio', { name: new RegExp(keyed(t, 'cat', 'spam_or_manipulation')) });
-  await keyboardReach(page, category, found, 'Kind of problem');
-  await page.keyboard.press(' ');
+  await chooseRadio(page, category, found, 'Kind of problem');
   await expect(category).toBeChecked();
   const written = form.getByLabel(t.statementLabel);
   await keyboardReach(page, written, found, 'Statement');

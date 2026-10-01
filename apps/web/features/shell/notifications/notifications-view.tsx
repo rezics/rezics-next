@@ -169,7 +169,9 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
       <p className={cn('text-pretty text-sm', !item.read && 'font-semibold')}>
         {href ? <Link href={localizedPath(href, locale)} onClick={() => onRead(item)}
           lang={display?.target.language ?? undefined}
-          className={cn('outline-none hover:underline focus-visible:underline', !invitation && 'after:absolute after:inset-0')}>
+          className={cn('outline-none hover:underline focus-visible:underline',
+            invitation ? 'rounded-sm focus-visible:ring-2 focus-visible:ring-ring'
+              : 'after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring focus-visible:after:ring-inset')}>
           {text}</Link>
           : <span lang={display?.target.language ?? undefined}>{text}</span>}
         {grouped ? <span className="font-normal text-muted-foreground"> {t.moreLikeThis(grouped)}</span> : null}

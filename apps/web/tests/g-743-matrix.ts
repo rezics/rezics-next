@@ -85,13 +85,14 @@ export const focusStop = (page: Page): Promise<FocusStop> => page.evaluate(() =>
   const element = document.activeElement as HTMLElement | null;
   if (!element || element === document.body) return { name: 'body', ring: false, covered: false, offscreen: false };
   const style = getComputedStyle(element);
-  const ring = (style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0) || style.boxShadow !== 'none'
-    // A control drawn by its parent (a styled radio or checkbox) shows its ring on that parent.
-    || [element.parentElement, element.closest('label')].some(parent => {
-      if (!parent) return false;
-      const parentStyle = getComputedStyle(parent);
-      return (parentStyle.outlineStyle !== 'none' && Number.parseFloat(parentStyle.outlineWidth) > 0) || parentStyle.boxShadow !== 'none';
-    });
+  const drawn = (target: Element, pseudo?: string) => {
+    const look = getComputedStyle(target, pseudo);
+    return (look.outlineStyle !== 'none' && Number.parseFloat(look.outlineWidth) > 0) || look.boxShadow !== 'none';
+  };
+  // A control drawn by its parent (a styled radio or checkbox) shows its ring on that parent; a link stretched
+  // over its row draws it on its own ::after.
+  const ring = drawn(element) || drawn(element, '::after') || drawn(element, '::before')
+    || [element.parentElement, element.closest('label')].some(parent => !!parent && drawn(parent));
   const box = element.getBoundingClientRect();
   const offscreen = box.width === 0 || box.height === 0 || box.bottom < 0 || box.top > innerHeight
     || box.right < 0 || box.left > innerWidth;
@@ -105,26 +106,39 @@ export const focusStop = (page: Page): Promise<FocusStop> => page.evaluate(() =>
     ring, covered, offscreen };
 });
 
-/**
- * Move to `target` with Tab (then Shift+Tab, in case it lies behind) and nothing else, noting every stop that
- * shows no focus indicator or is hidden behind something. Throws when the target cannot be reached.
- */
-export async function keyboardReach(page: Page, target: Locator, found: Findings, label: string, max = 120): Promise<void> {
-  const reached = () => target.evaluate(element => element === document.activeElement || element.contains(document.activeElement))
-    .catch(() => false);
+/** Tab (then Shift+Tab, in case it lies behind) until `there` holds, noting every stop that shows no focus indicator or is hidden. */
+async function walkTo(page: Page, there: () => Promise<boolean>, found: Findings, label: string, max: number): Promise<void> {
   const seen = new Set<string>();
   for (const key of ['Tab', 'Shift+Tab'] as const) {
     for (let stop = 0; stop < max; stop += 1) {
-      if (await reached()) return;
+      if (await there()) return;
       await page.keyboard.press(key);
       const focus = await focusStop(page);
       const id = `${focus.name}`;
       if (!focus.ring && focus.name !== 'body' && !seen.has(`ring ${id}`)) { seen.add(`ring ${id}`); found.push(`${label}: no focus indicator on ${id}`); }
       if (focus.covered && !seen.has(`cover ${id}`)) { seen.add(`cover ${id}`); found.push(`${label}: focus is hidden behind another element on ${id}`); }
-      if (await reached()) return;
+      if (await there()) return;
     }
   }
   throw new Error(`${label}: the keyboard could not reach the control (Tab and Shift+Tab, ${max} stops each)`);
+}
+
+/** Move to `target` with Tab and nothing else, noting every stop without a focus indicator or hidden behind something. */
+export async function keyboardReach(page: Page, target: Locator, found: Findings, label: string, max = 120): Promise<void> {
+  await walkTo(page, () => target.evaluate(element => element === document.activeElement || element.contains(document.activeElement))
+    .catch(() => false), found, label, max);
+}
+
+/**
+ * Choose one radio of a group as a keyboard does: Tab to the group (one stop, on its checked or first radio), then
+ * the arrow keys to the one wanted. Throws when no arrow reaches it.
+ */
+export async function chooseRadio(page: Page, target: Locator, found: Findings, label: string): Promise<void> {
+  const group = target.locator('xpath=ancestor::*[@role="radiogroup"][1]');
+  await walkTo(page, () => group.evaluate(element => element.contains(document.activeElement)).catch(() => false), found, label, 120);
+  const size = await group.getByRole('radio').count();
+  for (let press = 0; press <= size && !await target.isChecked(); press += 1) await page.keyboard.press('ArrowDown');
+  if (!await target.isChecked()) throw new Error(`${label}: the arrow keys never reached the radio`);
 }
 
 /** Activate the focused control with the keyboard: Enter, or Space for what Space activates. */

@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { checkScreen, composeCjk, expectClean, type Findings, keyboardReach, locales, motionRunning, pressByKeyboard } from './g-743-matrix.ts';
+import { checkScreen, chooseRadio, composeCjk, expectClean, type Findings, keyboardReach, locales, motionRunning, pressByKeyboard } from './g-743-matrix.ts';
 import { act, device, type LoopRecords, loopRecords } from './g-743-stack.ts';
 
 // Launch journey `propose-review-inbox`: a contributor proposes a correction, a steward reviews a proposal in the
@@ -86,7 +86,7 @@ test('propose-review-inbox: a steward writes a review in the composer, by keyboa
     await page.keyboard.press('Tab');
     expect(await dialog.evaluate(element => element.contains(document.activeElement)), 'focus stays in the review composer').toBe(true);
   }
-  await pressByKeyboard(page, dialog.getByRole('radio', { name: /Request changes/ }), found, 'Request changes', 'Space');
+  await chooseRadio(page, dialog.getByRole('radio', { name: /Request changes/ }), found, 'Request changes');
   const message = dialog.getByLabel('Message');
   await keyboardReach(page, message, found, 'Message');
   const composed = await composeCjk(page, message, imeText);
