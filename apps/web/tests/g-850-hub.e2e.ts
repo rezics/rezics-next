@@ -184,6 +184,9 @@ test('a review names the Work it is about, and the sections follow the documente
   const sections = await page.locator('[data-hub-section]').evaluateAll(nodes => nodes.map(node => node.id));
   expect(sections).toEqual(['about', 'availability', 'parts', 'wiki', 'ratings', 'discussion', 'lists']);
   await expect(page.getByRole('region', { name: 'Explore the wiki' })).toContainText('No wiki exists for this Work yet.');
+  // Anchors and region labels are ids: none is claimed twice on the page.
+  const ids = await page.locator('[id]').evaluateAll(nodes => nodes.map(node => node.id).filter(Boolean));
+  expect(ids.filter((id, index) => ids.indexOf(id) !== index), 'ids used more than once').toEqual([]);
   // On a wide screen the cover and the action make a rail beside the title, and tabs return.
   const rail = (await primary(page).boundingBox())!;
   const heading = (await page.getByRole('heading', { level: 1 }).boundingBox())!;

@@ -28,7 +28,8 @@ export async function RelationsSection({ section, cursor, ...rest }: SectionProp
 }
 
 
-export async function DiscussionSection({ section, cursor, resource, registry, signedIn, preview, ...rest }: SectionProps & {
+export async function DiscussionSection({ section, cursor, resource, registry, signedIn, preview, anchor, ...rest }: SectionProps & {
+  anchor?: string;
   cursor: string | undefined; resource: string; registry: EntityProjection['registry']; signedIn: boolean;
   /** Show only the first few replies and no paging, for a host that links to the full list (the Work hub). */
   preview?: number;
@@ -41,7 +42,7 @@ export async function DiscussionSection({ section, cursor, resource, registry, s
     const header = await readRealm(realm, rest.locale);
     return [realm, header.ok ? header.data.name : null] as const;
   })));
-  return <DiscussionView page={page} realms={realms} cursor={cursor} resource={resource}
+  return <DiscussionView page={page} realms={realms} cursor={cursor} resource={resource} anchor={anchor}
     subject={inSentence(entryLabel(registry, rest.locale), rest.locale)} signedIn={signedIn} hrefFor={rest.hrefFor}
     locale={rest.locale} t={rest.t} messages={rest.messages} />;
 }

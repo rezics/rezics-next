@@ -147,7 +147,9 @@ export function RelationsView({ page, cursor, hrefFor, locale, t, messages }: {
  * one: "Discuss this chapter" leads to the composer with this resource as its
  * target, so the action is the same on every page.
  */
-export function DiscussionView({ page, realms, cursor, resource, subject, signedIn, hrefFor, locale, t, messages }: {
+export function DiscussionView({ page, realms, cursor, resource, subject, signedIn, hrefFor, locale, t, messages, anchor = 'discussion' }: {
+  /** The region's id; a host that already uses `discussion` for its own anchor names another. */
+  anchor?: string;
   page: Loaded<DiscussionPage>; realms: ReadonlyMap<string, ScopeRealm['name']>; cursor: string | undefined;
   resource: string; /** What the resource is called in a sentence ("chapter"). */ subject: string; signedIn: boolean;
   hrefFor: HrefFor; locale: UiLocale; t: Copy; messages: WorkPageMessages;
@@ -157,11 +159,11 @@ export function DiscussionView({ page, realms, cursor, resource, subject, signed
     className={buttonVariants({ size: 'sm', pill: true })} data-discuss>
     <MessagesSquareIcon aria-hidden="true" />{t.startDiscussion({ subject })}</Link>;
   if (!page.ok) {
-    return <Region id="discussion" title={t.discussion} aside={start}>
+    return <Region id={anchor} title={t.discussion} aside={start}>
       <RegionFailure title={messages.discussionUnavailable} failure={page.failure} messages={messages}
         restartHref={hrefFor({ kind: 'continue', section: 'discussion', cursor: null })} /></Region>;
   }
-  return <Region id="discussion" title={t.discussion} aside={start}>
+  return <Region id={anchor} title={t.discussion} aside={start}>
     {page.data.items.length ? <DiscussionList items={page.data.items} locale={locale} messages={messages}
       realmLabel={realm => realmLabel({ id: realm, name: realms.get(realm) ?? null }, messages, locale)} />
       : <Quiet title={messages.noDiscussionGlobal}>{start}</Quiet>}

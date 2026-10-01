@@ -136,7 +136,7 @@ export async function DiscussionHub({ workRef, id, locale, messages }: Common & 
   const hrefFor = standaloneHrefFor({}, entityHref(id));
   return <div className="grid gap-4" data-discussion-hub>
     <DiscussionSection section={section} cursor={undefined} resource={page.data.target.resource}
-      registry={page.data.registry} signedIn={signedIn} preview={3}
+      registry={page.data.registry} signedIn={signedIn} preview={3} anchor="work-discussion"
       hrefFor={link => link.kind === 'continue' ? discussion : hrefFor(link)} locale={locale} t={entityCopy(locale)}
       messages={messages} />
     <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-muted-foreground text-sm">{t.discussionIntro}
