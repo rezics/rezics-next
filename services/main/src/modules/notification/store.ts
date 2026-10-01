@@ -327,7 +327,8 @@ export class NotificationStore {
                AND n.channel = 'email' AND n.state = 'enabled') AS email
            FROM access.principal p WHERE p.id = $1 FOR SHARE`,
         [principalId, event.purpose, event.topic,
-            optionalNotification(event.purpose, event.topic),
+            !['security', 'account'].includes(event.purpose)
+              && !(event.purpose === 'governance' && event.topic === 'moderation-outcome'),
           ]);
         if (active.rows[0]?.email && optionalNotification(event.purpose, event.topic)) {
           await client.query(`INSERT INTO access.notification_digest_day (principal_id, day)

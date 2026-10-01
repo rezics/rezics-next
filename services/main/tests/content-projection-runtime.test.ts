@@ -32,7 +32,7 @@ class SearchFuseki extends FusekiClient {
     if (sparql.includes('ASK {')) return { boolean: true };
     if (sparql.includes('?probeScore')) {
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
-        generation: binding(generation) }] } };
+        generation: binding(generation), population: binding('1') }] } };
     }
     if (sparql.includes('rv:publicTextInventory()')) {
       return { results: { bindings: [{ population: binding('1') }] } };

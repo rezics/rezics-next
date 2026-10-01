@@ -61,15 +61,15 @@ function fake(initialPopulation = 102) {
     query: async (sparql: string): Promise<SparqlResult> => {
     queryCalls++;
     if (sparql.includes('ASK {')) return { boolean: true };
-    if (sparql.includes('SELECT ?epoch ?sequence ?generation WHERE')) {
+    if (sparql.includes('SELECT ?epoch ?sequence ?generation')) {
       controls++;
+      const audit = sparql.includes('rv:publicTextInventory()');
+      if (audit) {
+        inventories++;
+        if (indexed !== population) throw new Error('native index differs from RDF membership');
+      }
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
-        generation: binding(generationCurrent) }] } };
-    }
-    if (sparql.includes('rv:publicTextInventory()')) {
-      inventories++;
-      if (indexed !== population) throw new Error('native index differs from RDF membership');
-      return { results: { bindings: [{ population: binding(String(population)) }] } };
+        generation: binding(generationCurrent), ...(audit ? { population: binding(String(population)) } : {}) }] } };
     }
     if (sparql.includes('?ratingPopulation') && sparql.includes('text:query')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),

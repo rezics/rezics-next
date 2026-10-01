@@ -253,7 +253,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
   query: async (sparql: string): Promise<SparqlResult> => {
     if (sparql.includes('ASK {')) return { boolean: true };
     if (sparql.includes('?probeScore')) return { results: { bindings: [{
-      epoch: binding('epoch'), sequence: binding('7'), generation: binding(generation) }] } };
+      epoch: binding('epoch'), sequence: binding('7'), generation: binding(generation), population: binding('2') }] } };
     if (sparql.includes('rv:publicTextInventory()')) return { results: { bindings: [{
       population: binding('2') }] } };
     if (sparql.includes('?ratingPopulation') && sparql.includes('text:query')) {

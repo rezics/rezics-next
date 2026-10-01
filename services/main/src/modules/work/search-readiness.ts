@@ -210,9 +210,10 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
   if (known) return known;
   const state = await serverState(fuseki);
   if (state.publicSearchWriteActive) throw new SearchSnapshotMoved('public index write is in progress');
-  const control = await fuseki.query(`PREFIX rv: <${RV}>
+  let control: SparqlResult;
+  try { control = await fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?epoch ?sequence ?generation WHERE {
+    SELECT ?epoch ?sequence ?generation${state.publicSearchDeltaAvailable ? '' : ' ?population'} WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
           rv:routingEpoch ${lit(lineage.routingEpoch)} ; rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)} ;
@@ -224,7 +225,12 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
       }
       ${textIndexProbePattern()}
-    }`, MAX_PROOF_RESPONSE_BYTES);
+      ${state.publicSearchDeltaAvailable ? '' : 'BIND(rv:publicTextInventory() AS ?population)'}
+    }`, MAX_PROOF_RESPONSE_BYTES); }
+  catch (error) {
+    if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
+    throw new SearchIndexUnavailable('public text control or inventory is unavailable', { cause: error });
+  }
   const rows = control.results?.bindings ?? [];
   const row = rows[0];
   if (rows.length !== 1 || row?.epoch?.value !== lineage.dataEpoch
@@ -246,17 +252,8 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
   if (!state.publicSearchDeltaAvailable) {
     // Only disposable fault-injection datasets expose bypass writers. They
     // cannot reuse a journal baseline; audit with a streaming native collector.
-    let audit: SparqlResult;
-    try {
-      audit = await fuseki.query(`PREFIX rv: <${RV}>
-        SELECT ?population WHERE { BIND(rv:publicTextInventory() AS ?population) }`, MAX_PROOF_RESPONSE_BYTES);
-    } catch (error) {
-      if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
-      throw new SearchIndexUnavailable('public text inventory is unavailable', { cause: error });
-    }
-    const rows = audit.results?.bindings ?? [];
-    if (rows.length !== 1) throw new SearchIndexUnavailable('public text inventory cannot be verified');
-    position.population = count(rows[0]?.population?.value);
+    // The native collector and control proof share one graph read snapshot.
+    position.population = count(row.population?.value);
     await assertSameTextInstance(fuseki, position);
     return position;
   }

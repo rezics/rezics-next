@@ -25,7 +25,7 @@ function fixture(titleCount = 1, titleReady = true) {
     calls.push(sparql);
     if (sparql.includes('ASK {')) return { boolean: true };
     if (sparql.includes('?probeScore')) return { results: { bindings: [{
-      epoch: value('epoch'), sequence: value('7'), generation: value(generation) }] } };
+      epoch: value('epoch'), sequence: value('7'), generation: value(generation), population: value('1') }] } };
     if (sparql.includes('rv:publicTextInventory()')) return { results: { bindings: [{
       population: value('1'),
     }] } };
