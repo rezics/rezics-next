@@ -228,6 +228,19 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   server-side through named slots and loaded only while their build digest
   holds an active approval (`packages/zone-sdk`). A sandboxed iframe was
   rejected: it can paint only its own box and breaks SSR, SEO, focus and scrolling.
+- **Zones that read at a position** (2026-10-01, the franchise wiki). A package
+  may declare `positions: { mount }`; the host then puts a position control in
+  the Zone's frame, sends the reader's position with every read and leaves all
+  withholding to Main, so a slot never filters. The control is links, so the
+  choice lives in the address (`?position=<chapter>` or `all`) and each page
+  the reader moves to keeps it. Main's default for a reader who has finished no
+  chapter, and for an anonymous visitor, is the start, where it withholds every
+  record that has a position. The host therefore starts that reader at the
+  story's first chapter and says so, since an empty wiki teaches nothing and
+  chapter 1 is what any first page of the book reveals. Pages that are not
+  Works are the generic resource page inside the frame or the package's
+  `entity` slot, chosen by Main's page projection and never by a type; their
+  data are the reads Main returned, and a read that failed leaves its part out.
 - **Safety.** Each official Zone keeps a complete token-and-layout fallback, a
   reader opt-out and a safe-mode URL; a kill switch works globally, per theme
   and per viewer; a nonce CSP; gzipped budgets with Core Web Vitals and
