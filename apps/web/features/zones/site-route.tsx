@@ -16,7 +16,10 @@ import { localeAlternates, pageUrl } from '../seo/address.ts';
 import { workPageMetadata } from '../seo/work.ts';
 import { loadWork, readText, resolveWork } from '../work-page/read.ts';
 import { idOf, shortId, type WorkTab } from '../work-page/route.ts';
-import { cardRenderer } from './zone-home.tsx';
+import type { ZoneWork } from '@rezics/zone-sdk';
+import LocalizedLink from '../shell/localized-link.tsx';
+import { SlotBoundary } from './slot-boundary.tsx';
+import { cardRenderer, workRenderers } from './zone-home.tsx';
 import { DocumentPage, DocumentUnavailable, IndexPage, PageNotAvailable } from './site-pages.tsx';
 import type { SiteCrumb } from './site-navigation.tsx';
 import { workBase, workTabOf, ZoneWorkPage } from './site-work.tsx';
@@ -125,8 +128,12 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     case 'index': {
       const name = mountName(route.mount.segment) ?? { value: route.mount.segment, lang: '', dir: 'ltr' as const };
       const card = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
+      const Slot = view.pkg?.slots.index;
+      const arrange = Slot ? (works: ZoneWork[], grid: ReactNode) => <SlotBoundary slot="index" fallback={grid}>
+        <Slot zone={view.zone} works={works} fallback={grid} Link={LocalizedLink}
+          {...workRenderers(card, locale, view.zoneMessages)} /></SlotBoundary> : undefined;
       return frame(<IndexPage route={route} cursor={cursor} context={view.context} card={card} locale={locale}
-        messages={view.messages} title={<span lang={name.lang || undefined} dir={name.dir}>{name.value}</span>} />,
+        messages={view.messages} arrange={arrange} title={<span lang={name.lang || undefined} dir={name.dir}>{name.value}</span>} />,
       [home, { label: name, href: null }]);
     }
     case 'detail': {

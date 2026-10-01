@@ -69,7 +69,7 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
 }
 
 /** What a package's hero and module slots set Works out with: the platform card and "Why here?" stamp. */
-function workRenderers(card: CardRenderer, locale: UiLocale, messages: ZoneMessages): ZoneWorkRenderers {
+export function workRenderers(card: CardRenderer, locale: UiLocale, messages: ZoneMessages): ZoneWorkRenderers {
   return { card, whyHere: work => <WhyHere work={work} locale={locale} messages={messages} />,
     nextVolumes: (works, heading) => <NextVolumeShelf works={works} heading={heading} locale={locale} /> };
 }

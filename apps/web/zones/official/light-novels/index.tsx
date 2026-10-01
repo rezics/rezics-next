@@ -1,6 +1,6 @@
 import { defineZonePackage } from '@rezics/zone-sdk';
 import css from './light-novels.css?raw';
-import { LightNovelCard, LightNovelDetail, LightNovelFooter, LightNovelShelf } from './slots.tsx';
+import { LightNovelCard, LightNovelDetail, LightNovelFooter, LightNovelIndex, LightNovelShelf } from './slots.tsx';
 
 /**
  * The official Light Novels Zone (`/r/light-novels`): series and their volumes over the shared catalogue.
@@ -11,6 +11,6 @@ import { LightNovelCard, LightNovelDetail, LightNovelFooter, LightNovelShelf } f
 export default defineZonePackage({
   slug: 'light-novels',
   css,
-  slots: { workCard: LightNovelCard, workDetail: LightNovelDetail, footer: LightNovelFooter,
+  slots: { index: LightNovelIndex, workCard: LightNovelCard, workDetail: LightNovelDetail, footer: LightNovelFooter,
     modules: { shelf: LightNovelShelf } },
 });

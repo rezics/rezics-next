@@ -339,8 +339,15 @@ export interface WorkDetailSlotProps extends ZoneSlotProps {
   regions: ZoneDetailRegions;
 }
 
+/** A mounted Collection's index page: the Works on this page, set out by the platform as `fallback`. */
+export interface IndexSlotProps extends ZoneSlotProps, ZoneWorkRenderers {
+  works: ZoneWork[];
+}
+
 /** The slots a package may fill; an empty slot keeps the platform rendering. */
 export interface ZoneSlots {
+  /** The index page of a mounted Collection (`/r/light-novels/catalogue`). */
+  index?: ComponentType<IndexSlotProps>;
   /** Above the Zone's browse results: the release filter and the words around it. */
   browseHeader?: ComponentType<BrowseHeaderSlotProps>;
   /** A Work's overview page inside the Zone. */

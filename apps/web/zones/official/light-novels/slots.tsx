@@ -1,4 +1,4 @@
-import type { ModuleSlotProps, WorkCardSlotProps, WorkDetailSlotProps, ZoneSlotProps } from '@rezics/zone-sdk';
+import type { IndexSlotProps, ModuleSlotProps, WorkCardSlotProps, WorkDetailSlotProps, ZoneSlotProps } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
 // Slots of the official Light Novels Zone. They render only what the platform passes in: the platform
@@ -11,6 +11,12 @@ export function LightNovelCard({ layout, fallback, nextVolume }: WorkCardSlotPro
     {fallback}
     <div className="ln-next">{nextVolume}</div>
   </div>;
+}
+
+/** The catalogue page: "Continue your series" first when the reader has started one, then the platform's grid of series. */
+export function LightNovelIndex({ zone, works, nextVolumes, fallback }: IndexSlotProps) {
+  const t = strings(zone.locale);
+  return <div className="ln-index">{nextVolumes(works, t.continueTitle)}{fallback}</div>;
 }
 
 /** The home shelf: "Continue your series" first when the reader has started one, then the Zone's own shelf. */

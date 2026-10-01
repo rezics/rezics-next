@@ -9,7 +9,9 @@ import { RealmPageStory } from '../realm/story-page.tsx';
 import * as tracking from '../tracking/fixtures.ts';
 import { createMemoryMain, memoryReader } from '../tracking/memory.ts';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
-import { cardRenderer, type PlacedModule, ZoneHome } from '../zones/zone-home.tsx';
+import { cardRenderer, type PlacedModule, workRenderers, ZoneHome } from '../zones/zone-home.tsx';
+import { messages as realmMessages } from '../realm/messages.ts';
+import { IndexPage } from '../zones/site-pages.tsx';
 import { ReleaseBrowse, ReleaseBrowseHeader } from './browse.tsx';
 import { filtered, seriesWorks, zoneFor } from './fixtures.ts';
 import { parseReleaseFilter, type ReleaseFilterState } from './state.ts';
@@ -214,5 +216,57 @@ export const SeriesShelfSignedOut: StoryObj<typeof Series> = {
     await expect(canvas.getAllByText('Sword Art Online').length).toBeGreaterThan(0);
     await expect(canvasElement.querySelector('[data-next-volume]')).toBeNull();
     await expect(canvasElement.querySelector('[data-next-volume-shelf]')).toBeNull();
+  },
+};
+
+/** The catalogue page of the Light Novels Zone: "Continue your series" leads, then the series with their next volume. */
+function SeriesIndexPage({ locale, signedIn }: { locale: UiLocale; signedIn: boolean }) {
+  const zone = zoneFor('light-novels', locale);
+  const messages = zoneMessagesFor(locale);
+  const main = createMemoryMain({ summaries: { [locale]: { ...tracking.indexSummary, language: locale,
+    counts: { completed: 1, required: 3, completedRequired: 1 }, completedParts: [tracking.indexSummary.completedParts[0]!],
+    next: { part: { ...tracking.indexSummary.completedParts[1]!, displayLabel: 'Volume 2', available: true },
+      reason: 'next_available_required_part' } } } });
+  const [actions] = useState(() => memoryReader(main, { [seriesWorks[0]!.id]: 'reading' }));
+  const card = cardRenderer(zone, lightNovels, locale, messages);
+  const Slot = lightNovels.slots.index!;
+  const items = seriesWorks.map(work => ({ id: work.id, revision: work.id, mainVersion: work.id,
+    title: { value: work.title!.value, language: 'en', direction: 'ltr' as const, basis: 'requested' as const },
+    cover: { kind: 'fallback' as const, policy: 'zone', key: work.id, resourceType: 'work' }, types: [],
+    tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null, inZone: true }));
+  const route = { name: 'Catalogue', language: 'en', direction: 'ltr' as const, profile: 'zone-route-v1' as const, zone: 'z',
+    path: '/catalogue', realm: null, revision: 'r', sourcePosition: { dataEpoch: 'e', sequence: '1' }, cost: {} as never,
+    kind: 'index' as const, mount: { occurrence: 'o', segment: 'catalogue', target: 't' }, collection: 'c', items,
+    nextCursor: null };
+  const page = <IndexPage route={route} title="Catalogue" cursor={undefined}
+    context={{ locale, ref: 'light-novels', realm: 'r', mounts: new Map() }} card={card} locale={locale}
+    messages={realmMessages}
+    arrange={(works, grid) => <Slot zone={zone} works={works} fallback={grid} Link={'a' as never}
+      {...workRenderers(card, locale, messages)} />} />;
+  return <RealmPageStory zone={zone} pkg={lightNovels} execution={{ mode: 'package', slug: 'light-novels' }} locale={locale}>
+    <main>{signedIn ? <ReaderActionsProvider signedIn signInHref="/auth/start" actions={actions}>{page}</ReaderActionsProvider> : page}</main>
+  </RealmPageStory>;
+}
+
+export const SeriesIndex: StoryObj<typeof SeriesIndexPage> = {
+  args: { locale: 'en', signedIn: true },
+  render: (args, { globals }) => <SeriesIndexPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const shelf = await canvas.findByRole('region', { name: 'Continue your series' });
+    await expect(within(shelf).getAllByRole('link', { name: 'Volume 2' })[0]).toBeVisible();
+    // The cards under it carry the same next volume, and the library state sits on each cover.
+    await expect(canvas.getAllByText('Sword Art Online').length).toBeGreaterThan(1);
+    await fits();
+  },
+};
+
+export const SeriesIndexSignedOut: StoryObj<typeof SeriesIndexPage> = {
+  args: { locale: 'en', signedIn: false },
+  render: args => <SeriesIndexPage {...args} />,
+  async play({ canvasElement }) {
+    await expect(canvasElement.querySelector('[data-next-volume-shelf]')).toBeNull();
+    await expect(canvasElement.querySelector('[data-next-volume]')).toBeNull();
+    await expect(within(canvasElement).getAllByText('Sword Art Online').length).toBeGreaterThan(0);
   },
 };

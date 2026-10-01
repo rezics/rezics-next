@@ -13,6 +13,11 @@
       display: none;
     }
 
+    .ln-index {
+      display: grid;
+      gap: 2rem;
+    }
+
     .ln-shelf {
       display: grid;
       gap: 1.25rem;

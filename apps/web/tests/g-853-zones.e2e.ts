@@ -189,7 +189,7 @@ test('Visual Novels: a page leads with where the novel can be played, and credit
     });
     expect(order).toBe(true);
     await expect(page.locator('.vn-availability')).toContainText('Moonlit Garden release');
-    await expect(page.locator('.vn-availability')).toContainText('Windows');
+    await expect(page.locator('.vn-availability')).toContainText('English');
     await expect(page.locator('.vn-source').first()).toContainText('VNDB');
     await expect(page.getByRole('link', { name: 'Open the Light Novels Zone' })).toBeVisible();
     await expect(page.getByText('does not sell games, link to stores, show prices')).toBeVisible();
@@ -214,7 +214,7 @@ test('Light Novels and Visual Novels show the same Works with the same library s
   expect(shelved.status(), await shelved.text()).toBeLessThan(300);
 
   // Light Novels: "Continue your series" names volume 2 as next, in the reader's language.
-  await page.goto('/en/r/light-novels');
+  await page.goto('/en/r/light-novels/catalogue');
   await ready(page);
   const shelf = page.locator('[data-next-volume-shelf]');
   await expect(shelf).toBeVisible({ timeout: 30_000 });
@@ -234,7 +234,7 @@ test('Light Novels and Visual Novels show the same Works with the same library s
   // One Work, one library state: shelved as read in the Light Novels Zone, the Visual Novels Zone and on its own page.
   const shared = uuid(seed.vn.shared.work);
   const mark = (name: RegExp) => page.getByRole('button', { name }).first();
-  await page.goto('/en/r/light-novels');
+  await page.goto('/en/r/light-novels/catalogue');
   await ready(page);
   await expect(page.getByRole('button', { name: /Starlit Crossing.*· Read/ }).first()).toBeVisible({ timeout: 30_000 });
   await page.goto('/en/r/visual-novels/browse?releaseLanguage=en&releasePlatform=Switch');

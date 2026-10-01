@@ -1,6 +1,7 @@
 import { FileQuestionIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { CSSProperties, ReactNode } from 'react';
+import type { ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type AdaptContext, zoneWork } from '../realm/adapt.ts';
 import type { RealmMessages } from '../realm/messages.ts';
@@ -60,24 +61,29 @@ export function DocumentUnavailable({ messages, workMessages }: { messages: Real
  * A mounted Collection: its public members a page at a time, each opening under the mount. A member that is
  * not a Work has no card to show yet; it opens as its page, which this host says it cannot show.
  */
-export function IndexPage({ route, title, cursor, context, card, locale, messages }: {
+export function IndexPage({ route, title, cursor, context, card, locale, messages, arrange }: {
   route: Route<'index'>; title: ReactNode; cursor: string | undefined; context: AdaptContext; card: CardRenderer;
   locale: UiLocale; messages: RealmMessages;
+  /** The Zone package's `index` slot: given the page's Works and the platform's grid, returns the page's body. */
+  arrange?: (works: ZoneWork[], grid: ReactNode) => ReactNode;
 }) {
   const t = materializeData(messages, { locale });
   const segment = route.mount.segment;
   const here = (query: Record<string, string | undefined> = {}) => siteHref(locale, context.ref, [segment], query);
+  const works = route.items.flatMap(item => 'title' in item ? [zoneWork(item, context, null, segment)] : []);
+  const grid = <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
+    {route.items.map(item => <li key={item.id} className="min-w-0">
+      {'title' in item ? card(zoneWork(item, context, null, segment), { layout: 'cover' })
+        : <LocalizedLink href={realmWorkHref(context.ref, item.id, segment)}
+          className="block rounded-(--zone-radius-card) border border-border/60 p-4 text-sm underline-offset-4
+            hover:underline">{t.pageItem({ id: shortId(item.id) })}</LocalizedLink>}
+    </li>)}
+  </ul>;
   return <PageContainer className="grid gap-6">
     <header><ModuleHeading id="zone-index-title" className="text-[length:calc(1.75rem*var(--zone-heading-scale,1))]">
       {title}</ModuleHeading></header>
-    {route.items.length ? <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-      {route.items.map(item => <li key={item.id} className="min-w-0">
-        {'title' in item ? card(zoneWork(item, context, null, segment), { layout: 'cover' })
-          : <LocalizedLink href={realmWorkHref(context.ref, item.id, segment)}
-            className="block rounded-(--zone-radius-card) border border-border/60 p-4 text-sm underline-offset-4
-              hover:underline">{t.pageItem({ id: shortId(item.id) })}</LocalizedLink>}
-      </li>)}
-    </ul> : <EmptyState icon={FileQuestionIcon} title={messages.indexEmptyTitle} description={messages.indexEmptyBody} />}
+    {route.items.length ? arrange ? arrange(works, grid) : grid
+      : <EmptyState icon={FileQuestionIcon} title={messages.indexEmptyTitle} description={messages.indexEmptyBody} />}
     <Pager next={route.nextCursor ? here({ cursor: route.nextCursor }) : null} first={cursor ? here() : null}
       messages={messages} />
   </PageContainer>;
