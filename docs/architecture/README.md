@@ -8,7 +8,6 @@
 - [Semantic model](../contracts/semantic-model.md): identities, values and model admission.
 - [Storage ownership](../storage/ownership-and-placement.md): one writer, multiple stores and placement.
 - [Decision evidence](evidence.md): sources, selected lessons and remaining qualification.
-- [Coverage and invariant traceability](coverage.md): capability realization and prospective acceptance.
 
 ## Domain contracts
 

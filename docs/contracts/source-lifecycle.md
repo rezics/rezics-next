@@ -57,7 +57,7 @@ child families and general protection remain future work.
 Bootstrap and change feeds overlap at a recorded frontier. Gaps need reconciliation
 or a new baseline; an empty query does not prove deletion. Runs retain provider
 contracts and examples without freezing future versions. Keep source coverage,
-mapping, query and export qualification separate; see [source acceptance](../testing/source-conformance.md) and [workers](../services/workers.md).
+mapping, query and export qualification separate; see [source acceptance](../testing/source-conformance.md) and [workers](events-and-jobs.md#consumer-and-job-contracts-still-to-qualify).
 
 ## Import rollout
 

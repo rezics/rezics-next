@@ -54,7 +54,7 @@ remain in code and the contract owners linked by the Goal's decision index.
 | [Product](product/capabilities.md) | Scope, capability coverage and the [design principles](product/design-principles.md) for capabilities, APIs and screens. |
 | [Architecture](architecture/README.md) | System boundaries, selected technologies and cross-domain invariants. |
 | [Contracts](contracts/README.md) | Identity, operations, state transitions, authority and observable outcomes. |
-| [Services](services/README.md) | Service interfaces, owned data, dependencies and failure handling. |
+| [Services](architecture/services.md) | Service boundaries, owned data and the [Account service](services/account.md) procedures. |
 | [Implementation blueprints](implementation/README.md) | Concrete target representations and producer-to-consumer protocols. |
 | [Storage](storage/README.md) | Engine bindings, placement, history, indexing and workload budgets. |
 | [Frontend](plan/frontend.md) | Product decisions for the main and Accounts sites; stories and browser tests carry the flows. |

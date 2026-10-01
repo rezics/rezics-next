@@ -27,8 +27,8 @@ Start from intent, then the owner, then the code:
    capabilities, Zones as routed sites, the relation lexicon and expansion
    acceptance; [markets and growth](../product/markets-and-growth.md) for launch
    order and revenue.
-3. The owner contract the brief names, found through the [contracts index](../contracts/README.md)
-   and the [coverage map](../architecture/coverage.md). Work levels, realizations
+3. The owner contract the brief names, found through the [contracts index](../contracts/README.md).
+   Work levels, realizations
    and the catalogue fixtures live in [Work and release](../contracts/work-and-release.md);
    merge and split in [identity correction](../contracts/identity-correction.md).
 4. The code, types, schemas, stories and tests of the affected owner. They own

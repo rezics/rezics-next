@@ -60,8 +60,16 @@ deliveries need provider idempotency or uncertain-result reconciliation.
 Timers only wake durably scheduled work. Recovery restores checkpoints, receipts
 and fences before effects resume. Metrics distinguish ingest, relay, consumer
 and active-generation lag. A successful event delivery alone does not prove
-Lucene projection readiness. [Worker practice](../services/workers.md) records
-the remaining deployment and recovery decisions.
+Lucene projection readiness.
+
+Workers consume committed intents under a scoped service identity and submit
+commands to the authoritative owner; they never write Main RDF directly, open
+live TDB2/Lucene files or exceed delegated ceilings. Source workers limit
+provider rates, sizes and redirects and only propose mappings; media workers
+verify quarantined bytes before transforming them; delivery workers recheck
+recipients, preferences and disclosure before external effects. Separate
+expensive imports from latency-sensitive work, and treat large Lucene
+reconstruction as stopped-Fuseki maintenance.
 
 ## Main owns business tasks
 

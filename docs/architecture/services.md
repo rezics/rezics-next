@@ -22,7 +22,12 @@ The executable process and route topology lives in
 [Content](../../services/content/src/index.ts) and
 [AppHost](../../apphost/). Typed dependencies in
 [Main's route interface](../../services/main/src/routes/dependencies.ts)
-and the repository's import rules carry module boundaries.
+and the repository's import rules carry module boundaries. No cross-service
+call bypasses the receiving owner's domain command, and sharing an executable
+does not merge private data ownership. A polling outbox inside an owner process
+is enough for the first relay and workers; Redis, a broker or an independent
+worker fleet are later additions when fan-out or isolation needs them. The
+[Account service](../services/account.md) records its own operating procedures.
 
 Service separation is independent of machine placement. The
 [deployment assessment](../operations/deployment.md) selects a starting host
