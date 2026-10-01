@@ -31,7 +31,8 @@ and buffers gzip until a streamed page ends, which the edge does not. The
 [accessibility audit](../../apps/web/tests/a11y-audit.ts) runs axe on every
 page type signed out and as a writer and moderator, in both themes and widths.
 The [budgets](../../apps/web/tests/perf.e2e.ts) and [accessibility checks](../../apps/web/tests/a11y.e2e.ts)
-run in the QA browser tier.
+run in the QA browser tier. The launch journeys have their own matrix and
+phone engines: [launch journey accessibility](launch-accessibility.md).
 
 Stream what Main is slow to answer behind a Suspense boundary rather than
 holding the page for it, as Home does with its posts. Keep server-only modules
