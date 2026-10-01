@@ -143,7 +143,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
             </NativeSelect>
           </Field>
         </div>
-        {errors.birth ? <p role="alert" className="mt-2 text-sm text-destructive">{errors.birth}</p> : null}
+        {errors.birth ? <p role="alert" className="mt-2 text-sm text-destructive-foreground">{errors.birth}</p> : null}
         <p className="mt-2 text-sm text-muted-foreground">{t.birthMonthHint}</p>
         <p className="mt-1 text-sm font-medium" data-region={country ?? 'unknown'}>
           {region ? t.regionDetected({ region }) : t.regionUnknown}</p>

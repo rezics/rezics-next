@@ -203,11 +203,19 @@ export const motionRunning = (page: Page): Promise<string[]> => page.evaluate(()
 /**
  * Compose `text` in a field the way a CJK input method does: composition events with an uncommitted preedit, an Enter
  * that belongs to the composition (`isComposing`, keyCode 229, as an IME's candidate confirmation arrives), then the
- * commit. Chromium only (a CDP call); WebKit and the physical phones are checked by hand (see the journeys' notes).
+ * commit. Composition is driven through CDP, so Chromium only; WebKit gets the text as one input event, and WebKit's
+ * own composition and the physical phones are checked by hand (docs/development/launch-accessibility.md).
  * Returns what the field held mid-composition and after the commit, and whether the composition's Enter submitted
  * the form or was swallowed by a key handler.
  */
 export async function composeCjk(page: Page, field: Locator, text: string): Promise<{ value: string; duringComposition: string; submitted: boolean }> {
+  if (page.context().browser()?.browserType().name() !== 'chromium') {
+    // WebKit has no composition API: the text arrives as one input event, which still proves the field takes CJK text.
+    await field.focus();
+    await page.keyboard.insertText(text);
+    const value = await field.inputValue();
+    return { value, duringComposition: value, submitted: false };
+  }
   const session = await page.context().newCDPSession(page);
   try {
     await field.focus();
