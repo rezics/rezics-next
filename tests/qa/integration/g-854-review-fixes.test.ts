@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { LibraryFileStore } from '../../../services/main/src/modules/library-import/file-store.ts';
+import { importDigest, LibraryFileStore } from '../../../services/main/src/modules/library-import/file-store.ts';
 import { ReaderLibraryImportStore } from '../../../services/main/src/modules/library-import/reader-import.ts';
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { LibraryBundleExporter } from '../../../services/main/src/modules/library-export/bundle.ts';
@@ -73,6 +73,19 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
       ['2020-01-01','2020-02-01'],['2026-01-01','2026-02-01'] ]);
     await checked(await call('POST','/v1/collections',{ actingSubject: agent,collection: `https://rezics.com/id/${randomUUID()}`,
       name: 'Replay shelf',disclosure: 'private' }),201);
+    // Native source rows kept private or awaiting application have no live
+    // owner state from which to reconstruct their core fields.
+    const privateEntry: CanonicalRow = { ...emptyRow('private-entry','Private intention',{}),kind: 'entry',work: book.work,status: 'want-to-read' };
+    const privateSession: CanonicalRow = { ...emptyRow('private-session','Private paused attempt',{}),kind: 'session',work: book.work,
+      session: { target: book.work,state: 'paused',startedOn: '2022',finishedOn: null,selections: [{ target: book.work }],locators: [] } };
+    const privateShelf: CanonicalRow = { ...emptyRow('private-shelf','Unapplied shelf',{ shelfId: `https://rezics.com/id/${randomUUID()}`,disclosure: 'private' }),kind: 'shelf',shelves: ['Unapplied shelf'] };
+    const privateNative = [privateEntry,privateSession,privateShelf];
+    const privateUpload = await upload(privateNative);
+    for (const index of privateNative.keys()) await checked(await call('PUT',`/v1/me/library-imports/${privateUpload.id}/rows/${index}`,{
+      actingSubject: agent,expectedVersion: 1,choice: 'private' }));
+    await checked(await apply(privateUpload.id));
+    const pendingNative = { ...privateEntry,sourceId: 'pending-entry',status: 'dnf' as const };
+    await upload([pendingNative]);
     const first = await checked<Page>(await exported());
     expect(first.nextCursor).not.toBeNull();
     await stack.publicWork(other,['en'],'Unrelated catalogue write');
@@ -80,6 +93,10 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
     await checked<Page>(await exported(first.nextCursor,first.snapshot));
     const all: CanonicalRow[] = [...first.rows];let next = first.nextCursor;
     while (next) { const page = await checked<Page>(await exported(next,first.snapshot));all.push(...page.rows);next=page.nextCursor; }
+    for (const source of [...privateNative,pendingNative]) {
+      const archive = all.find(row => row.sourceId===`source:${importDigest(source)}`);
+      expect(archive?.raw.source).toEqual(source);
+    }
     const own = await upload(all);await resolve(own.id,all);await checked(await apply(own.id));
     expect((await sessions()).length).toBe(1);
     expect((await stack.contentPool.query("SELECT count(*)::integer AS n FROM reader.library_import_source WHERE agent=$1 AND source->>'kind'='source'",[agent])).rows[0].n).toBe(1);
@@ -88,7 +105,10 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
       const page = await checked<Page>(await exported(selfCursor,selfSnapshot));selfSnapshot ??= page.snapshot;
       selfRows.push(...page.rows);selfCursor=page.nextCursor;
     } while (selfCursor);
-    expect(selfRows.filter(row => row.sourceId===all.find(row => row.sourceId.startsWith('source:'))!.sourceId)).toHaveLength(1);
+    for (const source of [finished,...privateNative,pendingNative]) {
+      const copies = selfRows.filter(row => row.sourceId===`source:${importDigest(source)}`);
+      expect(copies).toHaveLength(1);expect(copies[0]!.raw.source).toEqual(source);
+    }
     // A portable archive may contain two real attempts with identical dates.
     const attempt = { ...emptyRow(`https://rezics.com/id/${randomUUID()}`,'',{}),kind: 'session' as const,work: book.work,
       session: { target: book.work,state: 'finished' as const,startedOn: '2024-01-01',finishedOn: '2024-02-01',selections: [{ target: book.work }],locators: [] } };
@@ -116,6 +136,12 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
     expect((await sessions()).length).toBe(4);
     const badOutcome = (await stack.contentPool.query('SELECT outcome FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number=0',[agent,failed.id])).rows[0].outcome;
     expect(badOutcome.issues).toContain('session-failed');
+    const failedRows: CanonicalRow[] = [];let failedCursor: string | null = null,failedSnapshot: string | undefined;
+    do {
+      const page = await checked<Page>(await exported(failedCursor,failedSnapshot));failedSnapshot ??= page.snapshot;
+      failedRows.push(...page.rows);failedCursor=page.nextCursor;
+    } while (failedCursor);
+    expect(failedRows.find(row => row.sourceId===`source:${importDigest(bad)}`)?.raw.source).toEqual(bad);
     const deletePath = `/v1/me/library-imports/${initial.id}?actingSubject=${encodeURIComponent(agent)}`, deleteKey = randomUUID();
     expect((await call('DELETE',deletePath,undefined,deleteKey,home.author.token)).status).toBe(403);
     await checked(await call('DELETE',deletePath,undefined,deleteKey));await checked(await call('DELETE',deletePath,undefined,deleteKey));

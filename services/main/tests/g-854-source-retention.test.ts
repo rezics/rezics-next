@@ -45,4 +45,9 @@ test('G-854 review: portable source envelopes share canonical bytes and retain t
   expect(held.source).toEqual(original);
   expect(held.view?.raw).toEqual({ outcome: { issues: [] },extension: 'Kept' });
   expect(storedImportSource({ ...archive,sourceId: `source:${'0'.repeat(64)}` }).source).toEqual({ ...archive,sourceId: `source:${'0'.repeat(64)}` });
+  for (const kind of ['entry','session','shelf'] as const) {
+    const native = { ...original,kind },nativeDigest = importDigest(native);
+    const nativeArchive = { ...archive,sourceId: `source:${nativeDigest}`,raw: { source: native,outcome: { applied: ['private-source'],issues: [] } } };
+    expect(storedImportSource(nativeArchive)).toMatchObject({ digest: nativeDigest,source: native,view: { raw: { outcome: nativeArchive.raw.outcome } } });
+  }
 });

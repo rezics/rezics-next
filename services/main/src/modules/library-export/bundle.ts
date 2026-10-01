@@ -116,18 +116,18 @@ export class LibraryBundleExporter {
         review: { text: r.body,language: r.language,spoiler: r.spoiler } } }));
     }
     if (phase === 3) {
-      const result = await this.content.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(`
-        SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.match,r.resolution,r.outcome
+      const result = await this.content.query<{ key: string; source: CanonicalRow; source_view: CanonicalRow | null; archive_needed: boolean; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(`
+        SELECT s.digest AS key,s.source,s.private_extras,r.source_view,r.archive_needed,r.match,r.resolution,r.outcome
         FROM reader.library_import_source s
-        JOIN LATERAL (SELECT r.source_view,r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
+        JOIN LATERAL (SELECT r.source_view,r.archive_needed,r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
           JOIN reader.library_import_file f ON f.agent=r.agent AND f.id=r.file_id
           WHERE r.agent=s.agent AND r.source_digest=s.digest AND f.expires_at>clock_timestamp()
-          ORDER BY r.file_id,r.row_number LIMIT 1) r ON true
-        WHERE s.agent=$1 AND (s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb)
+          ORDER BY r.archive_needed DESC,r.file_id,r.row_number LIMIT 1) r ON true
+        WHERE s.agent=$1 AND (r.archive_needed OR s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb)
           AND s.digest>$2 ORDER BY s.digest LIMIT $3`,[agent,after,limit]);
       return result.rows.map(s => ({ key: s.key,row: s.source_view ? { ...s.source_view,raw: { ...s.source_view.raw,source: s.source } }
         : s.source.kind === 'retained' ? s.source
-        : s.source.kind !== 'source' ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
+        : s.source.kind !== 'source' && !s.archive_needed ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
           raw: { sourceId: s.source.sourceId,fields: s.private_extras } }
         : { ...row('retained',`source:${s.key}`,s.source.work),title: s.source.title,
           // Search suggestions are reproducible catalogue data, not the reader's

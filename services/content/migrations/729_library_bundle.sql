@@ -40,6 +40,12 @@ CREATE TABLE reader.library_import_source_row (
   match jsonb,
   resolution jsonb,
   outcome jsonb,
+  -- Owner snapshots cannot represent private, pending or failed applications.
+  -- Retain their full source, including after a portable envelope re-import.
+  archive_needed boolean GENERATED ALWAYS AS (
+    source_view IS NOT NULL OR coalesce(resolution->>'choice'='private',false)
+    OR outcome IS NULL OR coalesce(jsonb_array_length(outcome->'issues')>0,false)
+  ) STORED,
   version bigint NOT NULL DEFAULT 1,
   PRIMARY KEY (agent, file_id, row_number),
   FOREIGN KEY (agent, file_id) REFERENCES reader.library_import_file(agent, id) ON DELETE CASCADE,
@@ -77,11 +83,8 @@ CREATE TABLE reader.library_import_review_command (
 );
 CREATE INDEX library_import_pending ON reader.library_import_source_row(agent, file_id, row_number)
   WHERE outcome IS NULL;
-CREATE INDEX library_import_source_lookup ON reader.library_import_source_row(agent,source_digest,file_id,row_number);
+CREATE INDEX library_import_source_lookup ON reader.library_import_source_row(agent,source_digest,archive_needed DESC,file_id,row_number);
 CREATE INDEX library_import_expiry ON reader.library_import_file(expires_at,agent,id);
-CREATE INDEX library_import_export_key ON reader.library_import_source
-  (agent, digest)
-  WHERE source->>'kind' IN ('source','retained') OR private_extras <> '{}'::jsonb;
 CREATE TABLE reader.library_bundle_fence (
   agent text PRIMARY KEY,
   version bigint NOT NULL DEFAULT 0

@@ -34,7 +34,7 @@ export const fileIdentity = (agent: string, key: string) => {
 // second copy of its bytes. Validate its digest before sharing the owner row.
 export function storedImportSource(row: CanonicalRow) {
   const original = row.kind==='retained' && /^source:[0-9a-f]{64}$/.test(row.sourceId) ? row.raw.source : null;
-  if (original && Value.Check(canonicalRow,original) && original.kind==='source'
+  if (original && Value.Check(canonicalRow,original) && original.kind!=='retained'
     && row.sourceId===`source:${importDigest(original)}`) {
     const { source: _source,...raw } = row.raw;
     return { digest: importDigest(original),source: original,view: { ...row,raw } };
