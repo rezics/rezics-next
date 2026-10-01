@@ -10,9 +10,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
-import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { type Catalogue, seedCatalogue } from './g-838-catalogue.ts';
+import { globalRatingContext } from './global-rating-context.ts';
 
 export interface Hub extends Catalogue { review: { text: string; reviewer: string } }
 
@@ -41,9 +41,7 @@ try {
   // The question everyone's ratings answer, and a reader who rated the series and reviewed it. Reviews and the
   // person Agent they need are written through their own owners, which the stack's default app leaves out.
   const owner = await stack.member('hub-context');
-  await owner.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
-  const global = await created<{ context: string }>(await owner.send('POST', '/v1/global-rating-contexts',
-    { profile: 'global-rating-standing-context-v1', question: 'How good is this Work overall?', actingSubject: owner.actor }));
+  const global = { context: await globalRatingContext(owner, series.work, 'How good is this Work overall?') };
   const account = await stack.member('hub-reviewer');
   const principals = new Map<string, typeof account.principal>([[account.token, account.principal]]);
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,

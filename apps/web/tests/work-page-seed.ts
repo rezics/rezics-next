@@ -14,7 +14,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
-import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
+import { globalRatingContext } from './global-rating-context.ts';
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
@@ -103,9 +103,7 @@ try {
     GRAPH ${iri(GRAPHS.revisions)} { ${credit.revision} } }`);
 
   await a!.grant(`rating:context:${realm.realm}`, 'rating.context.create');
-  await a!.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
-  const global = await created<{ context: string }>(await a!.send('POST', '/v1/global-rating-contexts',
-    { profile: 'global-rating-standing-context-v1', question: 'How good is this Work overall?', actingSubject: a!.actor }));
+  const global = { context: await globalRatingContext(a!, work.work, 'How good is this Work overall?') };
   const local = await created<{ context: string }>(await a!.send('POST', '/v1/rating-contexts',
     { profile: 'realm-standing-rating-context-v1', realm: realm.realm, question: 'How well does it fit Tidewater Readers?',
       actingSubject: a!.actor }));
