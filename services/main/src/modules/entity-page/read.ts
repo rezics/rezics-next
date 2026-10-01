@@ -8,13 +8,14 @@ import { admittedTypes } from '../types/registry.ts';
 import { readWorkHeader } from '../work/read-header.ts';
 import { readWorkRating } from '../work/read-rating.ts';
 import {
-  WorkReadMissing,
+  decodeReadCursor, encodeReadCursor, WorkReadMissing,
   WorkReadInvalid,
   WorkReadMoved,
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { entitySection, type SectionId } from './contract.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
 
 // Stable anchors follow the Work hub order. Structural ownership binds sections;
@@ -137,7 +138,7 @@ export async function readEntityPage(
     try {
       const principal = await session.deps.account.verify(session.request, ['work:edit']);
       if (
-        await session.deps.access.canEditWork(principal, session.options.actingSubject, resource)
+        await session.deps.access.canEditWork(principal, session.options.actingSubject, target.resource)
       ) {
         for (const section of sections)
           if (['contents', 'releases'].includes(section.id)) {
@@ -148,6 +149,7 @@ export async function readEntityPage(
       if (!(error instanceof AccountAssertionDenied)) throw error;
     }
   }
+  const mergedFacts = target.base === 'work' ? await readMergedFacts(session,target,mountedReads) : undefined;
   await resolveTargets(session, [target.resource], 'discussion');
   await boundary.fence();
   return {
@@ -157,6 +159,7 @@ export async function readEntityPage(
     registry,
     work,
     sections,
+    ...(mergedFacts ? { mergedFacts } : {}),
     sourcePosition: session.position,
   };
 }
@@ -237,4 +240,26 @@ export async function visibleResourceReferences(
       if (summary.status === 'available') visible.add(summary.reference);
   }
   return visible;
+}
+
+/** Retained facts keep their subjects, revisions and owners. A bounded page
+ * includes each disclosed original header and its native fact inventories;
+ * source links never transfer grants or creator rights to the survivor. */
+async function readMergedFacts(session: WorkReadSession,target: ResolvedTarget,mountedReads: ReadonlySet<string>) {
+  const binding = { owner: 'merged-facts-v1',target: target.resource },limit = session.options.limit ?? 4;
+  const cursor = decodeReadCursor(session.options.cursor,binding,session.position);
+  const rows = await session.query(`SELECT DISTINCT ?origin WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ?origin rv:mergedInto+ ${iri(target.resource)} ; a schema:CreativeWork .
+    ${cursor ? `FILTER(STR(?origin) > ${JSON.stringify(cursor.after)})` : ''}
+  } } ORDER BY STR(?origin) LIMIT ${limit + 1}`,limit + 1);
+  const sources = rows.slice(0,limit).map(row => row.origin!.value);
+  const visible = await visibleResourceReferences(session,sources);
+  const origins = [];
+  for (const resource of sources) if (visible.has(resource)) {
+    await readingBoundary(session).require(resource);
+    const work = await readWorkHeader(session,resource);
+    origins.push({ resource,work,sections: pageSections({ ...target,resource },mountedReads)
+      .filter(section => !['ratings','reviews','discussion'].includes(section.id)) });
+  }
+  return { origins,nextCursor: rows.length > limit ? encodeReadCursor(binding,session.position,sources.at(-1)!) : null };
 }

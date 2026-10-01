@@ -21,8 +21,8 @@ import { REALM_STANDING_RATING_CONTEXT_PROFILE, RATING_STANDING_CADENCE,
 import { setAdmittedStandingRating } from '../modules/rating/observation-admitted.ts';
 import { sameRatingInstant, standingRatingSlotIri, STANDING_RATING_OBSERVATION_PROFILE }
   from '../modules/rating/observation.ts';
-import { queryStandingRatingAggregate, RatingAggregateUnavailable }
-  from '../modules/rating/aggregate.ts';
+import { RatingAggregateUnavailable } from '../modules/rating/aggregate.ts';
+import { queryRealmStandingAggregate } from '../modules/rating/global-aggregate.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, dailyRatingContextWriteResult, dailyRatingContextReadResult,
   dailyRatingObservationWriteResult, dailyRatingObservationReadResult,
@@ -102,7 +102,11 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               ? classifyRatingGrain(work.environment, body.context, 'MainVersion', error) : Promise.reject(error));
           return Response.json(result, { headers: { 'cache-control': 'no-store' } });
         }
-        const result = await queryStandingRatingAggregate(work.environment,
+        if (!work.access.readRatingAggregateInventory || !work.access.checkRatingAggregateFence) {
+          throw new RatingAggregateUnavailable('Rating inventory is unavailable');
+        }
+        const result = await queryRealmStandingAggregate(work.environment,
+          work.access as Required<MainWorkDependencies['access']>,
           { context: body.context, work: body.work, mainVersion: body.mainVersion })
           .catch(error => error instanceof RatingAggregateUnavailable
             ? classifyRatingGrain(work.environment, body.context, 'MainVersion', error) : Promise.reject(error));

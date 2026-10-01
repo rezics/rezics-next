@@ -126,6 +126,7 @@ export function fixture(size = 5) {
   const runtime: MergeTaskRuntime<unknown> = { dependencies: {}, dataEpoch: 'epoch-a',
     checkDeadline() {},
     async begin() { reserves++; },
+    identityReceipt: async task => reserves ? `urn:fixture:identity:${task.key}` : null,
     async finish(wantedTask, key) {
       if (finalReceipts.has(key)) return clone(finalReceipts.get(key)!);
       finalizations++;

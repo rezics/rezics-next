@@ -1,3 +1,4 @@
+import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable } from '../modules/access/topology-control.ts';
 import { batchFollowCommand, batchFollowResult, followCommand, followedAuthorsPage, followedAuthorsQuery,
@@ -30,6 +31,9 @@ export const openApiOperations = {
 const stateQuery = { language: t.Optional(readLanguage), actingSubject: t.Optional(readId) };
 
 export function followsRoutes(work: MainWorkDependencies) {
+  const canonicalWork = (request: Request, target: string, kind: FollowKind) => kind === 'work'
+    ? workRead(work, new Request(request.url), {}, async session => (await resolveTargets(session, [target], 'discussion'))[0]!.resource)
+    : Promise.resolve(target);
   /** Followers of a target, and with a bearer whether the reader follows it. Only the count is public. */
   const state = async (request: Request, target: string, kind: FollowKind,
     query: { language?: string; actingSubject?: string }) => {
@@ -38,7 +42,8 @@ export function followsRoutes(work: MainWorkDependencies) {
       const principal = request.headers.has('authorization') ? await work.account.verify(request, ['follow:read']) : null;
       if (!!principal !== !!query.actingSubject) throw new ControlInvalid('Authentication and actingSubject are required together');
       return Response.json(await workRead(work, new Request(request.url), { language: query.language }, async session => {
-        const described = await readFollowTarget(session, target, kind);
+        const canonical = kind === 'work' ? (await resolveTargets(session,[target],'discussion'))[0]!.resource : target;
+        const described = await readFollowTarget(session, canonical, kind);
         const current = await work.follows!.state(described.id, principal ? { principal, agent: query.actingSubject! } : undefined);
         await readFollowTarget(session, described.id, kind);
         return { profile: 'follow-state-v1' as const, target: described, ...current };
@@ -82,9 +87,10 @@ export function followsRoutes(work: MainWorkDependencies) {
         try {
           if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
           const principal = await work.account.verify(request, ['follow:write']);
-          const result = await work.follows.set(principal, body, request.headers.get('idempotency-key') ?? '',
+          const target = await canonicalWork(request, body.target, body.kind);
+          const result = await work.follows.set(principal, { ...body, target }, request.headers.get('idempotency-key') ?? '',
             () => workRead(work, new Request(request.url), {}, async session => {
-              await readFollowTarget(session, body.target, body.kind);
+              await readFollowTarget(session, target, body.kind);
             }));
           return Response.json(result, { headers: homeHeaders });
         } catch (error) { return homeError(error); }
@@ -95,7 +101,8 @@ export function followsRoutes(work: MainWorkDependencies) {
       try {
         if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
         const principal = await work.account.verify(request, ['follow:write']);
-        return Response.json(await work.follows.batch(principal, body,
+        const targets = await Promise.all(body.targets.map(async item => ({ ...item, target: await canonicalWork(request, item.target, item.kind) })));
+        return Response.json(await work.follows.batch(principal, { ...body, targets },
           request.headers.get('idempotency-key') ?? '', (target, kind) => workRead(work,
             new Request(request.url), {}, async session => { await readFollowTarget(session, target, kind); })),
         { headers: homeHeaders });

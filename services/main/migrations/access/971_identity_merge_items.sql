@@ -114,3 +114,32 @@ CREATE TABLE access.follow_merge_receipt (
 );
 CREATE TRIGGER follow_merge_receipt_immutable BEFORE UPDATE OR DELETE ON access.follow_merge_receipt
   FOR EACH ROW EXECUTE FUNCTION access.editorial_immutable();
+
+-- Effective vote selection keeps native observations and their original sealed
+-- receipts intact. An ordinary survivor rating takes precedence over this row.
+CREATE TABLE access.rating_merge_selection (
+  context text NOT NULL, work text NOT NULL, main_version text NOT NULL,
+  principal_id uuid NOT NULL REFERENCES access.principal(id) ON DELETE CASCADE,
+  origin_main_version text NOT NULL, origin_slot text NOT NULL,
+  task_key text NOT NULL REFERENCES access.identity_merge_task(task_key),
+  revision uuid NOT NULL DEFAULT gen_random_uuid(),
+  PRIMARY KEY (context,work,principal_id),
+  UNIQUE (context,main_version,principal_id)
+);
+CREATE INDEX rating_merge_selection_inventory ON access.rating_merge_selection(work,principal_id,context COLLATE "C");
+CREATE INDEX rating_merge_native_inventory ON access.rating_aggregate_head(work,principal_id,context COLLATE "C") WHERE target_release IS NULL;
+CREATE INDEX review_merge_inventory ON access.reader_review(work,id) WHERE NOT deleted;
+CREATE TABLE access.person_state_merge_receipt (
+  command_key text PRIMARY KEY CHECK (command_key ~ '^merge:[0-9a-f]{64}$'),
+  task_key text NOT NULL REFERENCES access.identity_merge_task(task_key), owner text NOT NULL,
+  item_key text NOT NULL, request_digest text NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
+  result jsonb NOT NULL CHECK (jsonb_typeof(result)='object' AND octet_length(result::text)<=65536
+    AND (result->>'outcome') IN ('moved','history','retained','ambiguous')
+    AND (result->>'outcome') IS NOT NULL
+    AND (result->>'receipt') IS NOT DISTINCT FROM ('urn:rezics:person-state:' || command_key)
+    AND (result->>'commandKey') IS NOT DISTINCT FROM command_key),
+  FOREIGN KEY(task_key,owner,item_key) REFERENCES access.identity_merge_item(task_key,owner,item_key),
+  CHECK (command_key=access.identity_merge_command_key(task_key,owner,item_key))
+);
+CREATE TRIGGER person_state_merge_receipt_immutable BEFORE UPDATE OR DELETE ON access.person_state_merge_receipt
+  FOR EACH ROW EXECUTE FUNCTION access.editorial_immutable();

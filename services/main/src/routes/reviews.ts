@@ -1,3 +1,4 @@
+import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable }
@@ -59,13 +60,14 @@ export function reviewRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['rating:submit']);
         const key = request.headers.get('idempotency-key') ?? '';
         const result = await workRead(work, request, { actingSubject: body.actingSubject }, async session => {
-          const proof = await reviewTarget(session, body.context, body.target);
+          const target = (await resolveTargets(session,[body.target],'review'))[0]!.resource;
+          const proof = await reviewTarget(session, body.context, target);
           const shelf = work.libraryStatus && !proof.generic
-            ? (await work.libraryStatus.batch(body.actingSubject, [body.target]))[0] : null;
+            ? (await work.libraryStatus.batch(body.actingSubject, [target]))[0] : null;
           const dates = shelf?.status === 'read'
             ? { startedOn: shelf.startedOn, finishedOn: shelf.finishedOn }
             : { startedOn: null, finishedOn: null };
-          const { target, ...intent } = body;
+          const { target: _original, ...intent } = body;
           return work.reviews!.write(principal, { ...intent, work: target }, key,
             (head, principalId) => proveReviewRating(session, principalId, body.context, target, head,
               body.rating === undefined), dates, proof);

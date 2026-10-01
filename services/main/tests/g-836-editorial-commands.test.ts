@@ -25,7 +25,7 @@ test('G836: merge stages use G846 ordered applications, resume one native effect
     validate() { throw new Error('Not used by this delivery check'); }, preview: () => Promise.resolve([]),
     apply() { throw new Error('The legacy application port must not deliver ordered merge stages'); },
     commands: next => Promise.resolve(mergeEditorialCommands(next, f.wanted, f.journal, handlers, f.runtime)),
-    complete: next => Promise.resolve(ownerReceipt(next, 'urn:fixture:final', resource(999), { task: f.wanted.key })),
+    complete: async next => { await f.runtime.finish(f.wanted, 'final'); return ownerReceipt(next, 'urn:fixture:final', resource(999), { task: f.wanted.key }); },
     compensate() { throw new Error('Compensation planning has its own owner contract'); } };
   f.lose();
   await expect(applyOrderedCommands(adapter, input)).rejects.toThrow('lost owner acknowledgement');
@@ -41,8 +41,8 @@ test('G836: merge stages use G846 ordered applications, resume one native effect
   if (result.outcome !== 'applied') throw new Error('Expected completion');
   expect(result.receipt.commands?.map(command => command.outcome)).toEqual(['applied', 'applied', 'applied']);
   expect(f.writes()).toBe(65); expect(second.writes()).toBe(3); expect(f.finalizations()).toBe(1);
-  expect((await input.commands!.read(input, 0)).binding).toEqual(mergeOwnerBinding(f.wanted, 'fixture'));
-  expect((await input.commands!.read(input, 1)).binding).toEqual(mergeOwnerBinding(f.wanted, 'second'));
+  expect((await input.commands!.read(input, 0)).binding).toEqual(mergeOwnerBinding(f.wanted, 'identity-merge'));
+  expect((await input.commands!.read(input, 1)).binding).toEqual(mergeOwnerBinding(f.wanted, 'fixture'));
   expect((await applyOrderedCommands(adapter, { ...input, resumeDelivery: false })).outcome).toBe('applied');
   expect(f.writes()).toBe(65); expect(f.finalizations()).toBe(1);
   expect(() => mergeEditorialCommands({ ...input, operationKey: 'another' }, f.wanted, f.journal, handlers, f.runtime))

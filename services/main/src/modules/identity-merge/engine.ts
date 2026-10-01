@@ -5,19 +5,15 @@ import { checkedItem, checkedOutcome, checkedPlan, InvalidMerge, itemCommandKey,
 import { checkedHandlers } from './handlers.ts';
 import { checkedPage, checkedTask, type MergeJournal, type MergeJournalScope } from './journal.ts';
 
-/** Runtime binding must reserve BOTH identity heads, prevent new references to
- * the source while reconciling, and independently validate G-865's current
- * two-human-review permit in each native owner effect. This kernel supplies no
- * approval policy and is deliberately not a public editorial adapter. */
+/** Ordered review supplies current authority; the first Work command changes
+ * navigation before bounded person-state reconciliation. */
 export interface MergeTaskRuntime<Dependencies> {
   dependencies: Dependencies;
   dataEpoch: string;
-  /** Idempotent owner reservation; recover its receipt before checking heads.
-   * Includes disclosure, controlled-Agent, grain and cyclic/stale guards.
-   * Caller-owned timeouts/AbortSignal must reach every owner operation. */
+  /** Idempotent first identity command; receipt lookup precedes head checks. */
+  identityReceipt?(task: MergeTask): Promise<string | null>;
   begin(task: MergeTask): Promise<void>;
-  /** Final identity CAS/receipt projects/removes mergedInto only after all item
-   * outcomes. It retains both native identities and exact old revisions. */
+  /** Retain completion only after all owner stages. No further graph effect. */
   finish(task: MergeTask, commandKey: string): Promise<TaskCompletion>;
   checkDeadline(): void;
 }
@@ -126,8 +122,7 @@ export async function runMergeTask<Dependencies>(wanted: MergeTask, journal: Mer
     if (completed) return { key: wanted.key, state: 'complete', processed: 0, completion: completed };
     await checkOriginal(scope, wanted);
     runtime.checkDeadline();
-    // Retain the decision binding BEFORE reserving/delivering a cross-owner
-    // effect, so a killed process never leaves an unlocatable reservation.
+    // Retain the decision before the first replayable identity command.
     if (!old) await scope.prepare(wanted);
     await runtime.begin(wanted);
     const budget = { processed: 0 };

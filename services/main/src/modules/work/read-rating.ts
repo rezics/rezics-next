@@ -17,7 +17,7 @@ async function ratingTarget(session: WorkReadSession, work: string) {
     ?main a rv:MainVersion ; rv:work ${iri(target!.resource)} .
   } } LIMIT 2`, 2);
   if (rows.length !== 1 || !rows[0]?.main) throw new WorkReadUnavailable('Rating target is ambiguous');
-  return { mainVersion: rows[0].main.value, revision: target!.revision };
+  return { work: target!.resource, mainVersion: rows[0].main.value, revision: target!.revision };
 }
 
 async function fenceRatingTarget(session: WorkReadSession, work: string, revision: string) {
@@ -82,7 +82,7 @@ export async function readWorkRating(session: WorkReadSession, work: string, sel
   const result = await queryWorkStandingRating(session.deps.environment, {
     readRatingAggregateInventory: (ctx, main, signal) => access.readRatingAggregateInventory!(ctx, main, signal),
     checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
-  }, { kind: scope.kind === 'realm' ? 'realm' : 'global', context, work, mainVersion: basis.mainVersion,
+  }, { kind: scope.kind === 'realm' ? 'realm' : 'global', context, work: basis.work, mainVersion: basis.mainVersion,
     ...(principal ? { onlySlot: standingRatingSlotIri(principal, context, basis.mainVersion) } : {}) });
   if (result.sourcePosition.sequence !== session.position.sequence
     || result.sourcePosition.dataEpoch !== session.position.dataEpoch) throw new WorkReadUnavailable('Rating basis moved');

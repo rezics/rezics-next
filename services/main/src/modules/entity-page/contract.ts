@@ -62,6 +62,11 @@ export const entityPage = t.Object(
     registry: typeDefinition,
     work: t.Nullable(workHeader),
     sections: t.Array(entitySection, { maxItems: sectionIds.length, uniqueItems: true }),
+    mergedFacts: t.Optional(t.Object({
+      origins: t.Array(t.Object({ resource: readId,work: workHeader,
+        sections: t.Array(entitySection, { maxItems: sectionIds.length }) },closed), { maxItems: 4 }),
+      nextCursor: t.Nullable(t.String()),
+    },closed)),
     sourcePosition: readPosition,
   },
   closed,
@@ -148,6 +153,7 @@ export const subjectStatementPage = t.Object(
  * Counts reuse the rating owner only when installed; no inventory-wide COUNT. */
 export const ENTITY_PAGE_COST = {
   targets: 1,
+  mergedOrigins: 4,
   maxSections: sectionIds.length,
   registryReads: 0,
   ratingReads: 1,

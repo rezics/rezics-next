@@ -1,3 +1,4 @@
+import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
@@ -202,9 +203,11 @@ export function libraryRoutes(work: MainWorkDependencies) {
         const workId = `https://rezics.com/id/${params.id}`;
         const basis = await workRead(work, request, { actingSubject: body.actingSubject },
           async session => {
-            const parent = (await canonicalChapterWorks(session, [workId])).get(workId) ?? workId;
-            const basis = await readWorkBasis(session, parent);
-            return { work: parent, title: basis.card.title.value };
+            const canonical = (await resolveTargets(session, [workId], 'discussion'))[0]!.resource;
+            const parent = (await canonicalChapterWorks(session, [canonical])).get(canonical) ?? canonical;
+            const book = parent === canonical ? parent : (await resolveTargets(session,[parent],'discussion'))[0]!.resource;
+            const basis = await readWorkBasis(session, book);
+            return { work: book, title: basis.card.title.value };
           });
         const result = await work.libraryStatus.write({ agent: body.actingSubject, work: basis.work,
           status: body.status, titleKey: basis.title, startedOn: body.startedOn, finishedOn: body.finishedOn,
@@ -282,9 +285,11 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
-        await workRead(work, request, { actingSubject: body.actingSubject },
-          session => readWorkBasis(session, workId));
-        return Response.json(await work.libraryStatus.putPrivateReview({ agent: body.actingSubject, work: workId,
+        const canonical = await workRead(work, request, { actingSubject: body.actingSubject },async session => {
+          const target = (await resolveTargets(session,[workId],'discussion'))[0]!.resource;
+          await readWorkBasis(session,target); return target;
+        });
+        return Response.json(await work.libraryStatus.putPrivateReview({ agent: body.actingSubject, work: canonical,
           text: body.text, language: body.language, spoiler: body.spoiler,
           expectedVersion: body.expectedVersion, idempotencyKey }), { headers: privateHeaders });
       } catch (error) { return failure(error); }

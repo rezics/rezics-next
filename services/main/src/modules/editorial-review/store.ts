@@ -338,44 +338,6 @@ export class EditorialReviewStore {
       resolution.outcome === 'applied' ? resolution.receipt : undefined);
     await client.query('COMMIT'); return result;
   }
-  private async resume(client: PoolClient, row: ProposalRow, adapter: EditorialAdapter, application: Application,
-    call: EditorialCall, principal: string, key: string, requestDigest: string): Promise<CommandResult> {
-    if (!adapter.resume || application.principal !== principal || application.actor !== call.actingSubject) {
-      throw new EditorialBlocked({ code: 'apply_pending', operationKey: application.operation_key });
-    }
-    await this.begin(client);
-    const proposal = rowToProposal(row), revision = await this.revision(client, row.id, application.revision);
-    const prospective = application.approve ? { principal, review: { id: application.id, proposal: row.id,
-      revision: revision.n, reviewer: application.actor, reviewerKey: independenceKey(row.id, principal),
-      outcome: 'approve' as const, message: application.message, sequence: '0' } } : undefined;
-    await requireReview(client, proposal, principal, call.actingSubject, call.work.environment.fuseki);
-    const fresh = await reviewBasis(client, proposal, application.required, call.work.environment.fuseki, prospective);
-    const viewer = await viewerFor(client, proposal, principal, call.actingSubject, call.work.environment.fuseki);
-    try {
-      const decision = await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
-        callsLeft: EDITORIAL_STORE_COST.graphCalls, bytesLeft: EDITORIAL_STORE_COST.graphBytes },
-      () => applyReviewedRevision({ ...adapter, apply: adapter.resume!.bind(adapter) }, proposal,
-        this.applyInput(proposal, revision, application), fresh.reviews, fresh.authority, viewer, row.reverts));
-      const result = await this.finish(client, row, revision, application, 'applied', decision.receipt!);
-      if (key !== application.command_key) await this.save(client, principal, key, requestDigest, result);
-      await client.query('COMMIT'); return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      if (error instanceof EditorialBlocked && error.blocker.code === 'stale_base') {
-        await this.begin(client);
-        await this.finish(client, row, revision, application, 'stale_base', undefined, error.blocker);
-        await client.query('COMMIT'); throw error;
-      }
-      const recovered = await this.recover(client, row, adapter, application);
-      if (recovered) {
-        if (key !== application.command_key) {
-          await this.begin(client); await this.save(client, principal, key, requestDigest, recovered); await client.query('COMMIT');
-        }
-        return recovered;
-      }
-      return { proposal: row.id, revision: revision.n, outcome: 'apply_pending', replayed: false };
-    }
-  }
   async decide(call: EditorialCall, id: string, input: DecisionInput, key: string): Promise<CommandResult> {
     keyCheck(key); messageCheck(input.message);
     const requestDigest = digest({ operation: 'decide',id,input,actor: call.actingSubject });
@@ -397,9 +359,6 @@ export class EditorialReviewStore {
           && input.outcome === 'applied' && input.revision === application.revision) {
           await this.begin(client); await this.save(client, principal, key, requestDigest, recovered); await client.query('COMMIT');
           return { ...recovered, replayed: true };
-        }
-        if (!recovered && !adapter.commands && adapter.resume && input.outcome === 'applied' && input.revision === application.revision) {
-          return this.resume(client, row, adapter, application, call, principal, key, requestDigest);
         }
         if (!recovered && application.command_key === key && application.principal === principal
           && application.actor === call.actingSubject && application.command_digest === requestDigest) {

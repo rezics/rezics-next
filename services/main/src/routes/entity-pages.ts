@@ -11,7 +11,7 @@ import {
 } from '../modules/statement/subject-read.ts';
 import { TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts';
 import { RevisionCorrupt } from '../modules/work/history.ts';
-import { pageQuery, readQuery, readUuid } from '../modules/work/read-contract.ts';
+import { pageQuery, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -52,7 +52,7 @@ export function entityPageRoutes(work: MainWorkDependencies) {
       {
         params,
         detail,
-        query: t.Object({ ...readQuery, position: readingPositionQuery }, { additionalProperties: false }),
+        query: t.Object({ ...pageQuery, limit: t.Optional(t.Integer({ minimum: 1,maximum: 4 })),position: readingPositionQuery }, { additionalProperties: false }),
         response: { 200: entityPage, ...workReadProblems },
       },
       async ({ request, params: path, query }) => {

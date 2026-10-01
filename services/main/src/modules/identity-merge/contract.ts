@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
-import { canonicalCandidate, type Json } from '../editorial-review/contract.ts';
+import { EditorialInvalid, canonicalCandidate, type Json } from '../editorial-review/contract.ts';
 import { targetRef, targetRevision } from '../target/contract.ts';
 import { MAX_WORK_REDIRECT_HOPS } from '../address/contract.ts';
 
@@ -27,7 +27,7 @@ export type MergePlan = Static<typeof mergePlan>;
 export type UnmergePlan = Static<typeof unmergePlan>;
 export type IdentityPlan = MergePlan | UnmergePlan;
 export type IdentityPin = MergePlan['source'];
-export class InvalidMerge extends Error {}
+export class InvalidMerge extends EditorialInvalid {}
 export class MergeUnavailable extends Error {}
 export class MergeConflict extends Error {}
 export class MergePending extends Error {}
@@ -84,13 +84,12 @@ export interface TaskProgress {
 }
 export interface MergeHandler<Dependencies = unknown> {
   owner: string; version: string;
-  /** Table/predicate coverage is exact. Authority and immutable provenance
+  /** SQL person-state coverage is exact. Authority and immutable provenance
    * exclusions belong to the reference inventory, never a wildcard handler. */
   references: string[];
   cost: { page: number; callsPerItem: number; bytesPerItem: number };
   preview(plan: IdentityPlan, dependencies: Dependencies): Promise<OwnerCount>;
-  /** Indexed, bytewise keyset order. The runtime's identity reservation fences
-   * incoming references for the lifetime of this inventory. */
+  /** Indexed, bytewise keyset order. Ordinary Work writes resolve the first identity link. */
   plan(task: MergeTask, after: string | null, limit: number, dependencies: Dependencies): Promise<OwnerPage>;
   /** Resolve the key's receipt BEFORE checking the head. Receipt and effect
    * must commit together in the owner; retry after a lost response is one effect. */

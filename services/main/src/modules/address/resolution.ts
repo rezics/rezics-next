@@ -70,11 +70,11 @@ export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: 
   if (row.mergedInto && row.state.value !== `${RV}Retired`) {
     const resolution = await disclosedAddressMerge(env, row.work.value, row.sequence.value);
     if (!resolution) throw new AddressClaimUnavailable('Work identity merge changed');
-    return { state: 'merged' as const, profile: 'work-address-merged-v1' as const,
+    if (!row.main) throw new AddressClaimUnavailable('Original Work is unavailable');
+    return { state: 'current' as const, profile: 'work-address-v1' as const,
       namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
       address: row.address.value, revision: row.revision.value,
-      originalWork: row.work.value, targetWork: resolution.survivor, resolution,
-      href: `/v1/resources/${resolution.survivor.slice(-36)}` };
+      work: row.work.value, mainVersion: row.main.value, resolution };
   }
   if (row.state.value === `${RV}Current`) {
     if (!row.main || row.redirectWork) return null;
@@ -127,10 +127,11 @@ export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: 
       const resolution = await disclosedAddressMerge(env, work, row.sequence.value,
         MAX_WORK_REDIRECT_HOPS - hop - 1, new Set([...seen].filter(value => value !== work)));
       if (!resolution) throw new AddressClaimUnavailable('Work identity merge changed');
-      return { state: 'merged' as const, profile: 'work-address-merged-v1' as const,
+      if (!row.main) throw new AddressClaimUnavailable('Original Work is unavailable');
+      return { state: 'current' as const, profile: 'work-address-v1' as const,
         namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-        address: row.address.value, revision: row.revision.value, originalWork: row.work.value,
-        targetWork: resolution.survivor, resolution, href: `/v1/resources/${resolution.survivor.slice(-36)}` };
+        address: row.address.value, revision: row.revision.value,
+        work: row.work.value, mainVersion: row.main.value, resolution };
     }
     if (nextRows.length !== 1 || !next?.address || !next.revision || !next.slug
       || !next.state || next.sequence?.value !== row.sequence.value) {

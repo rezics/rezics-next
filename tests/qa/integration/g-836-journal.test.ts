@@ -6,7 +6,7 @@ import { canonicalCandidate, type Json } from '../../../services/main/src/module
 import { runMergeTask, type MergeTaskRuntime } from '../../../services/main/src/modules/identity-merge/engine.ts';
 import { AccessMergeJournal } from '../../../services/main/src/modules/identity-merge/journal.ts';
 import { assertMergeCoverage } from '../../../services/main/src/modules/identity-merge/handlers.ts';
-import { discoverGraphIdentityReferences, discoverOwnerIdentityReferences }
+import { discoverOwnerIdentityReferences }
   from '../../../services/main/src/modules/identity-merge/reference-discovery.ts';
 import { itemCommandKey, MergeConflict, MergePending, type ItemOutcome, type MergeHandler, type MergeTask,
   type TaskCompletion } from '../../../services/main/src/modules/identity-merge/contract.ts';
@@ -14,7 +14,7 @@ import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activat
 
 /** This is real PostgreSQL journal/recovery evidence with a transactional probe
  * owner. It is deliberately not the public SAO merge acceptance journey; native
- * catalogue owner commands and G-865's human-only policy are not installed yet. */
+ * catalogue owner execution is exercised in g-836-sao-public-api.test.ts. */
 test('G836: Access task/item ledger survives delivery loss, races, paging and exact compensating ambiguity', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
   const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
@@ -200,32 +200,17 @@ test('G836: Access task/item ledger survives delivery loss, races, paging and ex
   }
 }, 120_000);
 
-test('G836: class discovery sees empty native-reference tables, nested JSON candidates and new graph predicates', async () => {
-  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
+test('G836: SQL person-state discovery sees an empty new owner table and rejects missing policy', async () => {
   const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
-  const graph = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
   const schema = `g836_coverage_${randomUUID().replaceAll('-', '')}`;
-  const predicate = `${RV}g836Probe${randomUUID().replaceAll('-', '')}`;
-  const subject = `https://rezics.com/id/${randomUUID()}`, object = `https://rezics.com/id/${randomUUID()}`;
-  const references = [`table:${schema}.item.target`, `table:${schema}.item.payload`, `predicate:${predicate}`];
-  const handler = { owner: 'probe', version: 'v1', references: ['table:probe.original.target'],
-    cost: { page: 1, callsPerItem: 1, bytesPerItem: 1 }, preview: async () => ({ owner: 'probe', count: 0, complete: true }),
-    plan: async () => ({ items: [], next: null }), apply: async () => { throw new Error('unreachable'); },
-    compensate: async () => { throw new Error('unreachable'); } } satisfies MergeHandler;
   try {
-    await pool.query(`CREATE SCHEMA ${schema}; CREATE TABLE ${schema}.item (
-      id uuid PRIMARY KEY,target text CHECK (target ~ '^https://rezics[.]com/id/[0-9a-f-]{36}$'),payload jsonb)`);
-    expect(await discoverOwnerIdentityReferences(pool)).toEqual(expect.arrayContaining(references.slice(0, 2)));
-    await graph.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(subject)} <${predicate}> ${iri(object)} } }`);
-    expect(await discoverGraphIdentityReferences(graph)).toContain(references[2]!);
-    for (const ref of references) expect(() => assertMergeCoverage([ref], [handler], {})).toThrow('lack merge coverage');
-    // An exact exclusion is distinguishable from moving an authority reference.
-    expect(() => assertMergeCoverage(references, [handler], Object.fromEntries(references.map(ref =>
-      [ref, 'Synthetic guard probe; excluded from production reconciliation'])))).not.toThrow();
-  } finally {
-    try {
-      await graph.update(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(subject)} <${predicate}> ${iri(object)} } }`);
-      await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
-    } finally { await pool.end(); }
-  }
-}, 60_000);
+    await pool.query(`CREATE SCHEMA ${schema}; CREATE TABLE ${schema}.item (principal_id uuid,target text)`);
+    const reference = `table:${schema}.item.target`;
+    expect(await discoverOwnerIdentityReferences(pool)).toContain(reference);
+    const handler = { owner: 'probe',version: 'v1',references: ['table:probe.work'],cost: { page: 1,callsPerItem: 1,bytesPerItem: 1 },
+      preview: async () => ({ owner: 'probe',count: 0,complete: true }),plan: async () => ({ items: [],next: null }),
+      apply: async () => { throw new Error('unused'); },compensate: async () => { throw new Error('unused'); } } satisfies MergeHandler;
+    expect(() => assertMergeCoverage([reference],[handler],{})).toThrow('lack merge coverage');
+    expect(() => assertMergeCoverage([reference],[handler],{ [reference]: 'Synthetic excluded exact attempt' })).not.toThrow();
+  } finally { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
+});

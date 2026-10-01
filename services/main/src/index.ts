@@ -357,6 +357,7 @@ const app = createMainApp(fuseki, {
   mcp: { issuer: config.ACCOUNT_ISSUER, resource: config.ACCOUNT_MAIN_RESOURCE },
   wikiQuotations: new WikiQuotationStore(contentPool),
   wikiEvidence: new WikiEvidenceStore(contentPool),
+  identityMerge: { accessPool: pool, contentPool },
   editorialReview: new EditorialReviewStore(pool),
   types,
   suitability: new SuitabilityStore(pool, access),

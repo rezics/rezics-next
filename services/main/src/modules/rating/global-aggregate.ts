@@ -49,8 +49,9 @@ function contextPattern(kind: Kind, context: string): string {
 /** One read transaction for every component: each root plus at most 101 candidates.
  * Candidates do not require a head, so damaged or unsealed slots stay detectable. */
 function standingComponentsSelect(env: WorkActivationEnvironment,
-  components: readonly { kind: Kind; context: string }[], target: Target): string {
-  const branches = components.flatMap(({ kind, context }) => {
+  components: readonly { kind: Kind; context: string }[], target: Target, inventories?: readonly RatingAggregateInventory[]): string {
+  const branches = components.flatMap(({ kind, context }, index) => {
+    const inherited = inventories?.[index]?.heads.filter(head => head.originWork) ?? [];
     const spec = KINDS[kind];
     return [`{
       BIND("context" AS ?kind) BIND("${kind}" AS ?component)
@@ -66,9 +67,11 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
         rv:ratingContextRevision ?contextRevision ; rv:operation ?contextOperation ; rv:outcome rv:Succeeded . }
     }`, `{
       BIND("observation" AS ?kind) BIND("${kind}" AS ?component)
-      { SELECT ?observation WHERE { GRAPH ${iri(GRAPHS.current)} {
-        ?observation rv:ratingContext ${iri(context)} ; rv:targetMainVersion ${iri(target.mainVersion)} .
-      } } LIMIT 101 }
+      { SELECT DISTINCT ?observation WHERE {
+        { GRAPH ${iri(GRAPHS.current)} { ?observation rv:ratingContext ${iri(context)} ; rv:targetMainVersion ${iri(target.mainVersion)} } }
+        ${inherited.length ? `UNION { VALUES (?observation ?origin) { ${inherited.map(head => `(${iri(head.observation)} ${iri(head.originWork!)})`).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} { ?origin rv:mergedInto+ ${iri(target.work)} } }` : ''}
+      } LIMIT ${101 + inherited.length} }
       OPTIONAL {
         GRAPH ${iri(GRAPHS.current)} { ?observation a ${spec.observationType} ;
           rv:ratingSlot ?slot ; rv:observationHead ?head . }
@@ -96,12 +99,12 @@ function standingComponentsSelect(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
     }
     ${branches.join(' UNION ')}
-  } LIMIT ${components.length * 102 + 1}`;
+  } LIMIT ${components.length * 102 + (inventories?.reduce((count,inventory) => count + inventory.heads.filter(head => head.originWork).length,0) ?? 0) + 1}`;
 }
 
 export function standingComponentsQuery(env: WorkActivationEnvironment,
-  components: readonly { kind: Kind; context: string }[], target: Target): string {
-  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>\n${standingComponentsSelect(env, components, target)}`;
+  components: readonly { kind: Kind; context: string }[], target: Target, inventories?: readonly RatingAggregateInventory[]): string {
+  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>\n${standingComponentsSelect(env, components, target, inventories)}`;
 }
 
 /** Compare one Context's sealed Access inventory with the shared graph snapshot. */
@@ -154,17 +157,17 @@ function verifyComponent(env: WorkActivationEnvironment, kind: Kind, context: st
     if (state.observation !== head.observation || state.revision !== head.revision || state.slot !== head.slot
       || state.context !== context || state.contextRevision !== inventory.contextRevision
       || (kind === 'global' ? state.populationOwner !== inventory.realm : state.realm !== inventory.realm)
-      || state.work !== target.work || state.mainVersion !== target.mainVersion
+      || state.work !== (head.originWork ?? target.work) || state.mainVersion !== (head.originMainVersion ?? target.mainVersion)
       || state.availability !== availability || state.value !== value
       || state.predecessor !== (row.predecessor?.value ?? null)
       || !sameRatingInstant(state.evaluatedAt, row.evaluatedAt?.value)
       || !sameRatingInstant(state.originalSubmissionAt, row.originalSubmissionAt?.value)
       || !sameRatingInstant(state.submittedAt, row.submittedAt?.value)
       || !sameRatingInstant(state.revisedAt, row.revisedAt?.value)) unavailable();
-    const intent = { context, work: target.work, mainVersion: target.mainVersion, value,
+    const intent = { context, work: head.originWork ?? target.work, mainVersion: head.originMainVersion ?? target.mainVersion, value,
       expectedRevisionHead: state.predecessor as string | null, actingSubject: head.actingSubject };
     if ((kind === 'global' ? globalRatingDigest(intent) : standingRatingDigest(intent)) !== head.requestDigest) unavailable();
-    if (onlySlot === undefined || head.slot === onlySlot) values.push(value);
+    if (onlySlot === undefined || (head.effectiveSlot ?? head.slot) === onlySlot) values.push(value);
   }
   return { context, populationOwner: inventory.realm, contextProfile: spec.contextProfile.split('/').at(-1)!,
     populationPolicy: spec.populationPolicy, cadence: 'standing' as const,
@@ -188,7 +191,7 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
   }
   if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
   signal.throwIfAborted();
-  const result = await env.fuseki.query(standingComponentsQuery(env, components, target),
+  const result = await env.fuseki.query(standingComponentsQuery(env, components, target, inventories),
     GLOBAL_AGGREGATE_BUDGET.graphBytes);
   const rows = result.results?.bindings ?? [];
   const root = rows[0];
@@ -255,6 +258,21 @@ export async function queryWorkStandingRating(env: WorkActivationEnvironment, ac
   return { ...result.components[0]!, sourcePosition: result.sourcePosition };
 }
 
+/** Preserve the public Realm aggregate contract while using the same effective
+ * person inventory as Work pages and Realm/global synthesis. */
+export async function queryRealmStandingAggregate(env: WorkActivationEnvironment,access: InventoryAccess,
+  input: { context: string } & Target) {
+  const result = await queryWorkStandingRating(env,access,{ ...input,kind: 'realm' });
+  return { profile: 'realm-standing-latest-mean-v1' as const,complete: true,
+    context: input.context,realm: result.populationOwner,work: input.work,mainVersion: input.mainVersion,
+    targetGrain: 'mainVersion' as const,scale: result.scale,cadence: 'standing' as const,
+    populationPolicy: 'account-principal' as const,aggregationPolicy: 'latest-per-rater-mean' as const,
+    population: result.population,count: result.count,withdrawnCount: result.withdrawnCount,
+    histogram: result.histogram,sum: result.sum,mean: result.mean,
+    precision: result.count ? { kind: 'exact-rational' as const,numerator: result.sum,denominator: result.count }
+      : { kind: 'no-data' as const },sourcePosition: result.sourcePosition };
+}
+
 /** Search's page adapter preserves the single-Work sealed-inventory verifier.
  * One graph transaction for <=64 targets, <=100 slots per target, one shared
  * 1 MiB graph / 512 KiB manifest budget and one recovery fence. Access still
@@ -282,11 +300,11 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
       inventories.push(inventory);
     }
     if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
-    const branches = input.targets.map(target => `{ {
-      ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target)}
+    const branches = input.targets.map((target,index) => `{ {
+      ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target, [inventories[index]!])}
     } BIND(${iri(target.work)} AS ?targetWork) }`);
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      SELECT * WHERE { ${branches.join(' UNION ')} } LIMIT ${input.targets.length * 103 + 1}`,
+      SELECT * WHERE { ${branches.join(' UNION ')} } LIMIT ${input.targets.length * 203 + 1}`,
     GLOBAL_AGGREGATE_BUDGET.graphBytes)).results?.bindings ?? [];
     const root = rows[0];
     if (!root?.epoch || !/^\d+$/.test(root.sequence?.value ?? '')) unavailable();

@@ -1,3 +1,5 @@
+import { workRead } from '../modules/work/read-session.ts';
+import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
@@ -90,7 +92,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
             .some(variant => variant.revision === selectedRevision);
       if (!selected) throw new CompositionUnavailable('selected Content revision is unavailable');
     }
-    return { principal, work: header.work };
+    const canonical = await workRead(work, request, { actingSubject }, async session =>
+      (await resolveTargets(session, [header.work], 'discussion'))[0]!.resource);
+    return { principal, work: canonical };
   };
   return new Elysia()
     .get('/v1/compositions/:id/occurrences/:occurrence/progress', {

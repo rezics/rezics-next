@@ -44,9 +44,9 @@ test('G836: public old IDs, slugs and retained revisions explain a merge without
     expect(batch.summaries).toHaveLength(3);
     expect(batch.summaries[0]).toMatchObject({ reference: source.work, status: 'available', resolution });
     expect(batch.summaries[2]).toEqual(batch.summaries[0]);
-    const route = await f.json<{ state: string; originalWork: string; targetWork: string; resolution: MergedIdentity }>(
+    const route = await f.json<{ state: string; work: string; resolution: MergedIdentity }>(
       await anonymous(`/v1/addresses/work/${slug}`), 200);
-    expect(route).toMatchObject({ state: 'merged', originalWork: source.work, targetWork: survivor.work, resolution });
+    expect(route).toMatchObject({ state: 'current', work: source.work, resolution });
     // Survivor deliberately has no slug: identity resolution still succeeds.
     expect(await f.json(await anonymous(`/v1/addresses/work/${slug}/revisions/${shortId(address.revision)}`), 200))
       .toEqual({ ...originalAddress, resolution });

@@ -1,3 +1,4 @@
+import { standingRatingSlotIri } from '../rating/observation.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { GraphTerminalProof } from './admission.ts';
@@ -120,7 +121,8 @@ export async function recordRatingAggregateHead(client: PoolClient,
 }
 
 export interface RatingInventoryHead {
-  slot: string; work: string; mainVersion?: string; observation: string; revision: string;
+  slot: string; work: string; mainVersion?: string;
+  originWork?: string; originMainVersion?: string; effectiveSlot?: string; observation: string; revision: string;
   /** Opaque, scoped to Context/target, and never returned by the public API. */
   raterKey: string;
   evaluatedAt: string; submittedAt: string; actingSubject: string;
@@ -157,6 +159,7 @@ function inventorySql(release: boolean | 'target'): string { return `SELECT c.re
     f.open, f.generation, ca.state AS context_state, ca.graph_outcome AS context_outcome,
     ca.graph_receipt AS context_receipt, ca.graph_data_epoch AS context_epoch,
     ca.graph_sequence AS context_sequence,
+    ${release === false ? 'h.effective_work,h.effective_main_version,' : ''}
     h.slot, ${release === 'target' ? 'h.target AS work, NULL AS main_version, NULL AS target_release, h.target' : 'h.work, h.main_version, h.target_release'}, h.observation, h.revision, h.principal_id,
     a.registered_at AS submitted_at, a.acting_subject, a.request_digest,
     a.state, a.graph_outcome, a.graph_receipt, a.graph_data_epoch, a.graph_sequence,
@@ -168,9 +171,17 @@ function inventorySql(release: boolean | 'target'): string { return `SELECT c.re
   FROM access.rating_aggregate_context c
   JOIN access.admission ca ON ca.id = c.admission_id
   CROSS JOIN access.recovery_fence f
-  LEFT JOIN LATERAL (SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
-    WHERE context = c.context AND ${release === 'target' ? 'target = $2' : release ? 'target_release = $2' : 'main_version = $2 AND target_release IS NULL'}
-    ORDER BY slot LIMIT 101) h ON true
+  LEFT JOIN LATERAL (${release === false ? `SELECT * FROM (
+    SELECT h.*,NULL::text AS effective_work,NULL::text AS effective_main_version FROM access.rating_aggregate_head h
+      WHERE context=c.context AND main_version=$2 AND target_release IS NULL
+    UNION ALL SELECT h.*,s.work AS effective_work,s.main_version AS effective_main_version
+      FROM access.rating_merge_selection s JOIN access.rating_aggregate_head h
+        ON h.context=s.context AND h.main_version=s.origin_main_version AND h.slot=s.origin_slot AND h.principal_id=s.principal_id
+      WHERE s.context=c.context AND s.main_version=$2 AND h.target_release IS NULL
+        AND NOT EXISTS (SELECT 1 FROM access.rating_aggregate_head native WHERE native.context=s.context
+          AND native.main_version=s.main_version AND native.principal_id=s.principal_id AND native.target_release IS NULL)
+    ) selected ORDER BY slot LIMIT 101` : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
+    WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ORDER BY slot LIMIT 101`}) h ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id LIMIT 1) a ON true
   LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.original_admission_id LIMIT 1) original ON true
   WHERE c.context = $1 AND f.id = true`; }
@@ -214,7 +225,9 @@ async function readInventory(pool: Pool, context: string, target: string,
       if (release === 'target' ? row.target !== target : release ? row.target_release !== target : row.target_release !== null) {
         throw new RatingInventoryConflict('Rating inventory target differs');
       }
-      return { slot: row.slot, work: row.work, mainVersion: row.main_version,
+      return { slot: row.slot, work: row.effective_work ?? row.work, mainVersion: row.effective_main_version ?? row.main_version,
+        ...(row.effective_work ? { originWork: row.work,originMainVersion: row.main_version,
+          effectiveSlot: standingRatingSlotIri(row.principal_id,context,target) } : {}),
         observation: row.observation, revision: row.revision,
         raterKey: createHash('sha256').update(JSON.stringify({ family: 'rating-private-rater-v1',
           principalId: row.principal_id, context, target })).digest('hex'),

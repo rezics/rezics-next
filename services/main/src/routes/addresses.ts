@@ -22,7 +22,7 @@ const addressResult = t.Object({ profile: t.Literal('work-address-v1'),
   state: t.Literal('current'),
   namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
   slug: t.String(), address: groupAgent, revision: groupAgent, work: groupAgent,
-  mainVersion: groupAgent });
+  mainVersion: groupAgent, resolution: t.Optional(mergedIdentity) });
 
 const addressRedirectResult = t.Object({ profile: t.Literal('work-address-redirect-v1'),
   state: t.Literal('redirected'), namespace: t.Literal('work'),
@@ -50,11 +50,6 @@ const addressExactResult = t.Object({ profile: t.Literal('work-address-revision-
   state: t.Union([t.Literal('current'), t.Literal('redirected'), t.Literal('retired')]),
   redirectWork: t.Optional(groupAgent),
   disposition: t.Optional(t.Union([t.Literal('merged'), t.Literal('retired')])) });
-
-const addressMergedResult = t.Object({ profile: t.Literal('work-address-merged-v1'),
-  state: t.Literal('merged'), namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
-  slug: t.String(), address: groupAgent, revision: groupAgent, originalWork: groupAgent,
-  targetWork: groupAgent, resolution: mergedIdentity, href: t.String() }, { additionalProperties: false });
 
 const addressClaimResult = t.Object({ profile: t.Literal('work-address-claim-v1'),
   namespace: t.Literal('work'), normalization: t.Literal('ascii-lower-v1'),
@@ -171,7 +166,7 @@ export function addressRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/addresses/work/:slug', {
       params: t.Object({ slug: addressSlug }),
-      response: { 200: t.Union([addressResult, addressMergedResult]), 308: addressRedirectResult,
+      response: { 200: addressResult, 308: addressRedirectResult,
         410: addressRetiredResult, ...readProblems },
     }, async ({ params }) => {
       try {
