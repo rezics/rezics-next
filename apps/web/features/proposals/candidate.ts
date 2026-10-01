@@ -40,6 +40,15 @@ export function headerCandidate(state: HeaderState, language: string, fields: Fi
   return { command: 'work-metadata' as const, state: { ...state, localized } };
 }
 
+/**
+ * The languages a correction can be written in: those the header has facts in, then the Work's own (its original
+ * title's, and the `own` ones the caller knows), so a Work with no localized row still offers the language it is in.
+ */
+export function languagesOf(state: HeaderState, ...own: readonly (string | null | undefined)[]): string[] {
+  return [...new Set([...state.localized.map(row => row.language), state.originalTitle?.language,
+    ...own].filter((tag): tag is string => !!tag))];
+}
+
 /** The languages a header has facts in, then the one to start from: the reader's when present. */
 export function startLanguage(state: HeaderState, preferred: readonly string[], fallback: string): string {
   const have = state.localized.map(row => row.language);

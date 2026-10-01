@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { startLanguage } from './candidate.ts';
+import { languagesOf, startLanguage } from './candidate.ts';
 import { bffCreate, type CreateApi } from './commands.ts';
 import { CorrectionEditor } from './correction-editor.tsx';
 import type { ProposalMessages } from './messages.ts';
@@ -47,7 +47,7 @@ function Editor({ basis, actingSubject, languages, create: givenCreate, signInHr
   const { target, baseHeads, state, name } = basis.data;
   return <div className="grid gap-4">
     {name ? <p className="text-muted-foreground text-sm">{t.proposeFor({ name: name.value })}</p> : null}
-    <CorrectionEditor state={state} language={startLanguage(state, languages, name?.language ?? locale)}
+    <CorrectionEditor state={state} languages={languagesOf(state, name?.language)} language={startLanguage(state, languages, name?.language ?? locale)}
       submitLabel={t.submitProposal} locale={locale} messages={messages}
       {...onCancel ? { onCancel } : {}}
       onSubmit={async (candidate, evidence, key) => {

@@ -69,7 +69,7 @@ const overflows = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 /** One screenshot per viewport, none with horizontal overflow: the files are what a reviewer reads. */
-async function shoot(page: Page, name: string, info: TestInfo, known?: string) {
+async function shoot(page: Page, name: string, info: TestInfo) {
   mkdirSync('.temp/g704-shots', { recursive: true });
   for (const [label, viewport] of [
     ['desktop', desktop],
@@ -77,18 +77,23 @@ async function shoot(page: Page, name: string, info: TestInfo, known?: string) {
   ] as const) {
     await page.setViewportSize(viewport);
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-    // A page the finding makes thousands of pixels tall is read from its top.
-    const fullPage = !known;
-    await page.screenshot({ path: info.outputPath(`${name}-${label}.png`), fullPage });
-    await page.screenshot({ path: `.temp/g704-shots/${name}-${label}.png`, fullPage });
-    // A page that overflows is a defect to report, never a screenshot to skip: `known` names the finding that records it.
-    if (known && (await overflows(page)))
-      info.annotations.push({
-        type: 'finding',
-        description: `${known}: ${name} overflows on a ${label}`,
-      });
-    else expect(await overflows(page), `${name} ${label}`).toBe(false);
+    await page.screenshot({ path: info.outputPath(`${name}-${label}.png`), fullPage: true });
+    await page.screenshot({ path: `.temp/g704-shots/${name}-${label}.png`, fullPage: true });
+    expect(await overflows(page), `${name} ${label}`).toBe(false);
   }
+  await page.setViewportSize(desktop);
+}
+
+/**
+ * A wiki proposal is read by a reviewer, so the page carries what they judge by (a name, a value, a position in the work)
+ * and none of the candidate's paths or hashes, and on a phone it is a page, not a scroll of leaves.
+ */
+async function readsAsProposal(page: Page, name: string) {
+  const text = await page.locator('main').innerText();
+  expect(text, `${name} paths`).not.toMatch(/›|[0-9a-f]{32}|rezics\.com\/id\//);
+  await page.setViewportSize(phone);
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  expect(height, `${name} height on a phone`).toBeLessThan(6_000);
   await page.setViewportSize(desktop);
 }
 
@@ -363,7 +368,11 @@ test('CLP02/CLP04: a steward reviews an assistant’s wiki bundle, sees an appro
   await expect(page.getByText('Wiki bundle', { exact: true })).toBeVisible();
   await expect(page.getByText('Proposed by Assistant Ada')).toBeVisible();
   expect(await actions(page)).toEqual(await allowed(page, bundle));
-  await shoot(page, 'clp02-1-bundle-proposed', info, 'F1 a wiki bundle is shown as raw leaf paths');
+  await expect(page.getByText('Elizabeth Bennet').first()).toBeVisible();
+  await expect(page.getByText('Revealed in Chapter 1').first()).toBeVisible();
+  await expect(page.getByText('The Bennet family')).toBeVisible();
+  await readsAsProposal(page, 'bundle');
+  await shoot(page, 'clp02-1-bundle-proposed', info);
 
   // Review: the steward asks for changes through the dialog.
   const dialog = page.getByRole('dialog');
@@ -421,12 +430,7 @@ test('CLP02/CLP04: a steward reviews an assistant’s wiki bundle, sees an appro
   ).toBeVisible();
   expect(await actions(page)).toEqual(await allowed(page, bundle));
   expect(await actions(page)).not.toContain('apply');
-  await shoot(
-    page,
-    'clp04-3-bundle-approval-no-longer-counts',
-    info,
-    'F1 a wiki bundle is shown as raw leaf paths',
-  );
+  await shoot(page, 'clp04-3-bundle-approval-no-longer-counts', info);
 
   // Publish: the steward's own approval applies revision 3 once, and the wiki then shows its reviewed claims.
   await controls(page).and(page.locator('[data-action="approve-and-apply"]')).click();
@@ -445,7 +449,7 @@ test('CLP02/CLP04: a steward reviews an assistant’s wiki bundle, sees an appro
       )
     ).json()) as { claims: { claim: string; revision: string }[]; revisions: unknown };
   expect((await history()).claims).toHaveLength(2);
-  await shoot(page, 'clp02-2-bundle-applied', info, 'F1 a wiki bundle is shown as raw leaf paths');
+  await shoot(page, 'clp02-2-bundle-applied', info);
 });
 
 type Read = {
@@ -573,7 +577,8 @@ test('CLP03/CLP05/CLP06: a chapter delta is reviewed and reverted in the browser
       { timeout: 2_000 },
     );
   });
-  await shoot(page, 'clp03-1-delta-proposed', info, 'F1 a wiki bundle is shown as raw leaf paths');
+  await readsAsProposal(page, 'delta');
+  await shoot(page, 'clp03-1-delta-proposed', info);
   await approveAndApply();
   await expect(async () => {
     const recover = controls(page).and(page.locator('[data-action="recover"]'));
@@ -585,19 +590,14 @@ test('CLP03/CLP05/CLP06: a chapter delta is reviewed and reverted in the browser
   await expect
     .poll(async () => (await history()).claims.map((claim) => claim.claim), { timeout: 60_000 })
     .toEqual([pinned.claims[1]!.claim]);
-  await shoot(page, 'clp03-2-delta-applied', info, 'F1 a wiki bundle is shown as raw leaf paths');
+  await shoot(page, 'clp03-2-delta-applied', info);
 
   // The competing delta was written against a base that has moved: Main refuses it and the page says so.
   await page.goto(`/en${proposalPath(contender)}`);
   await approveAndApply();
   await expect(dialog.getByRole('alert').or(page.getByRole('alert')).first()).toBeVisible();
   await expect(page.getByText('Applied', { exact: true })).toHaveCount(0);
-  await shoot(
-    page,
-    'clp03-3-competing-delta-refused',
-    info,
-    'F1 a wiki bundle is shown as raw leaf paths',
-  );
+  await shoot(page, 'clp03-3-competing-delta-refused', info);
 
   // Revert from the applied delta's page restores what it ended.
   await page.goto(`/en${proposalPath(first)}`);
@@ -708,7 +708,7 @@ test('CLP03/CLP05/CLP06: a chapter delta is reviewed and reverted in the browser
     409,
   );
   expect((await makeExport()).manifestDigest).not.toBe(exported.manifestDigest);
-  await shoot(page, 'clp05-1-quote-withheld', info, 'F1 a wiki bundle is shown as raw leaf paths');
+  await shoot(page, 'clp05-1-quote-withheld', info);
 
   // CLP06: the assistant's credential ends; what it proposed and what was applied from it stay, attributed.
   actOk({ revoke: 'assistant' });
@@ -717,15 +717,10 @@ test('CLP03/CLP05/CLP06: a chapter delta is reviewed and reverted in the browser
   await expect(page.getByText('Applied', { exact: true }).first()).toBeVisible();
   expect(await actions(page)).toEqual(await allowed(page, first));
   expect(await history(pin)).toEqual(await history(pin));
-  await shoot(
-    page,
-    'clp06-1-revoked-assistant-work-remains',
-    info,
-    'F1 a wiki bundle is shown as raw leaf paths',
-  );
+  await shoot(page, 'clp06-1-revoked-assistant-work-remains', info);
   await page.goto(`/ja${proposalPath(bundle)}`);
   await expect(page.getByText('適用済み', { exact: true }).first()).toBeVisible();
-  await shoot(page, 'clp06-2-bundle-ja', info, 'F1 a wiki bundle is shown as raw leaf paths');
+  await shoot(page, 'clp06-2-bundle-ja', info);
 });
 
 /** What M7 keeps closed: a word of it in a link or on a page is an entry point with nothing behind it. */

@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { agents, headerNow, ids, now, proposalApi, staleBase, target, views } from './fixtures.ts';
+import { agents, headerNow, ids, now, proposalApi, staleBase, target, views, wikiBundleView, wikiDeltaView,
+  wikiUndoView } from './fixtures.ts';
 import { messages } from './messages.ts';
+import ja from './messages/ja.ts';
 import zhHant from './messages/zh-Hant.ts';
 import { ProposalPage } from './proposal-page.tsx';
 
@@ -226,6 +228,67 @@ export const ChineseDarkPhone: Story = {
   globals: { theme: 'dark', locale: 'zh-Hant', viewport: { value: 'phone' } },
   parameters: Chinese.parameters,
   async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+/** A wiki bundle reads as entities, claims and citations; nothing in it is a path or a hash. */
+export const WikiBundle: Story = {
+  args: { initial: wikiBundleView, api: proposalApi(wikiBundleView) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Elizabeth Bennet', { selector: 'span' })).toBeVisible();
+    await expect(canvas.getByText('Lizzy')).toBeVisible();
+    await expect(canvas.getByText('Existing entity')).toBeVisible();
+    await expect(canvas.getByText('Relation: Elizabeth Bennet → Jane Bennet')).toBeVisible();
+    await expect(canvas.getByText('“Bennet family”')).toBeVisible();
+    await expect(canvas.getByText('Narrated · Revealed in Chapter 1')).toBeVisible();
+    await expect(canvas.getByText('The Bennet family')).toBeVisible();
+    await expect(canvas.getByText('The quotation is withheld.')).toBeVisible();
+    await expect(canvasElement.textContent).not.toMatch(/claims|evidence › |[0-9a-f]{32}/);
+    // A group folds away and opens again.
+    await userEvent.click(canvas.getByRole('button', { name: /Entities/ }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: /Entities/ })).toHaveAttribute('aria-expanded', 'false'));
+  },
+};
+
+/** A delta shows each correction against the claim it changes, with the reason and what replaces it. */
+export const WikiDelta: Story = {
+  args: { initial: wikiDeltaView, api: proposalApi(wikiDeltaView) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Replaces a published claim')).toBeVisible();
+    await expect(canvas.getByText('Retracts a published claim')).toBeVisible();
+    await expect(canvas.getByText('Reason: The relation was a misreading')).toBeVisible();
+    await expect(canvas.getByText('“Bennet household”')).toBeVisible();
+    await expect(canvas.getByText('“Bennet family”')).toBeVisible();
+    await expect(canvas.getByText('Cited for the retraction')).toBeVisible();
+  },
+};
+
+/** The reversal of a wiki proposal names the proposal it undoes and links to it. */
+export const WikiUndo: Story = {
+  args: { initial: wikiUndoView, api: proposalApi(wikiUndoView) },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'Open that proposal' })).toHaveAttribute('href',
+      expect.stringContaining(`/proposals/${ids.proposal}`));
+  },
+};
+
+export const WikiDeltaDarkPhone: Story = {
+  args: WikiDelta.args,
+  globals: { theme: 'dark', viewport: { value: 'phone' } },
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const WikiBundleJapanesePhone: Story = {
+  args: { ...WikiBundle.args, locale: 'ja', messages: { ...messages, ...ja } },
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+  parameters: { route: { pathname: `/ja/proposals/${ids.proposal}` } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText('関係: Elizabeth Bennet → Jane Bennet')).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };

@@ -10,6 +10,8 @@ import type { AgentSummary } from '../manage/types.ts';
 import { webHref } from './candidate.ts';
 import { blockerKey } from './blockers.ts';
 import { type Leaf, leaves } from './diff.ts';
+import { wikiView } from './wiki.ts';
+import { WikiPreview } from './wiki-preview.tsx';
 import { eventMessage, factKey, reviewKey, stateKey, stateTone } from './labels.ts';
 import type { ProposalMessages } from './messages.ts';
 import type { Blocker, Change, Evidence, ProposalState, ProposalRead, TimelineEntry } from './types.ts';
@@ -36,11 +38,12 @@ function factLabel(leaf: Leaf, t: T): string {
 
 function Value({ text, language, label, unset, tone }: { text: string | null; language: string | null; label: string;
   unset: string; tone: 'before' | 'after' }) {
-  return <div className={cn('grid gap-1 rounded-xl px-3 py-2.5 text-sm',
+  return <div className={cn('grid min-w-0 gap-1 rounded-xl px-3 py-2.5 text-sm',
     tone === 'before' ? 'bg-muted/60' : 'bg-primary/10')}>
     <span className="font-medium text-muted-foreground text-xs">{label}</span>
     {text === null ? <span className="text-muted-foreground">{unset}</span>
-      : <span dir="auto" {...language ? { lang: language } : {}} className="whitespace-pre-line text-pretty">{text}</span>}
+      : <span dir="auto" {...language ? { lang: language } : {}}
+        className="whitespace-pre-line text-pretty [overflow-wrap:anywhere]">{text}</span>}
   </div>;
 }
 
@@ -50,10 +53,12 @@ function Value({ text, language, label, unset, tone }: { text: string | null; la
  * The page does not know kinds; it shows the changed leaves of any preview.
  */
 export function ChangeList({ changes, locale, t }: { changes: readonly Change[]; locale: UiLocale; t: T }) {
+  const wiki = wikiView(changes);
+  if (wiki) return <WikiPreview view={wiki} locale={locale} t={t} />;
   const rows = leaves(changes);
   if (!rows.length) return <p className="text-muted-foreground text-sm">{t.changesEmpty}</p>;
   return <ul className="grid gap-4">
-    {rows.map(leaf => <li key={leaf.key} className="grid gap-2">
+    {rows.map(leaf => <li key={leaf.key} className="grid min-w-0 gap-2">
       <h3 className="font-medium text-sm">{factLabel(leaf, t)}{leaf.language
         ? <span className="font-normal text-muted-foreground"> · {t.inLanguage({ language: languageName(leaf.language, locale) })}</span>
         : null}</h3>

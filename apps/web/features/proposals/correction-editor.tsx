@@ -9,7 +9,7 @@ import { Textarea } from '@rezics/ui/textarea';
 import { materializeData } from 'native-i18n';
 import { useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { changed, evidenceOf, type Fields, fieldsOf, headerCandidate, type Source } from './candidate.ts';
+import { changed, evidenceOf, languagesOf, type Fields, fieldsOf, headerCandidate, type Source } from './candidate.ts';
 import { newKey, type Outcome } from './commands.ts';
 import { failureKey } from './labels.ts';
 import type { ProposalMessages } from './messages.ts';
@@ -36,7 +36,7 @@ export function CorrectionEditor({ state, language: start, languages, initial, r
   onCancel?: () => void; locale: UiLocale; messages: ProposalMessages;
 }) {
   const t = materializeData(messages, { locale });
-  const tags = languages ?? state.localized.map(row => row.language);
+  const tags = languages ?? languagesOf(state);
   const [selected, setSelected] = useState(tags.includes(start) || !tags.length ? start : tags[0]!);
   const [custom, setCustom] = useState('');
   const [fields, setFields] = useState<Fields>(initial?.fields ?? fieldsOf(state, selected));

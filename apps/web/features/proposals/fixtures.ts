@@ -84,6 +84,62 @@ export const views = {
   pending: proposalView('approved', ['recover'], { blockers: [{ code: 'apply_pending', operationKey: 'editorial:x:2' }] }),
 } satisfies Record<string, ProposalRead>;
 
+// A wiki bundle and a delta as Main previews them (`wiki-bundle-adapter.ts`): a bundle as one entry per part, a delta as one.
+const locator = (quote: string | null) => ({ version: 'rezics-locator-v1',
+  source: { type: 'external', representationSha256: 'a'.repeat(64), mediaType: 'text/plain' },
+  selector: { type: 'TextQuoteSelector', exact: quote } });
+const citation = (quote: string | null) => ({ locator: locator(quote), quote });
+const wikiClaims = [
+  { subject: 'elizabeth', predicate: iri(501), object: { kind: 'literal', value: 'Bennet family' }, modality: 'narrated',
+    continuity: ids.work, revealedAt: 'ch1', evidence: [citation('The Bennet family')] },
+  { subject: 'elizabeth', predicate: iri(502), object: { kind: 'entity', ref: 'jane' }, modality: 'said',
+    continuity: ids.work, revealedAt: 'ch3', evidence: [citation('Elizabeth and Jane'), citation(null)] }];
+const wikiBundle = {
+  profile: 'wiki-extraction-v1', target: ids.work, zone: iri(600), continuity: ids.work,
+  source: { representationSha256: 'a'.repeat(64), mediaType: 'text/plain', language: 'en', rightsBasis: 'public_domain',
+    method: { agent: 'Assistant extraction agent', model: 'local', inference: 'local' } },
+  units: [1, 2, 3].map(n => ({ id: `ch${n}`, ordinal: n - 1, label: `Chapter ${n}`, occurrence: null })),
+  entities: [
+    { id: 'elizabeth', type: 'https://rezics.com/ns/Character', names: [
+      { value: 'Elizabeth Bennet', language: 'en', kind: 'primary', revealedAt: 'ch1' },
+      { value: 'Lizzy', language: 'en', kind: 'alias', revealedAt: 'ch2' }] },
+    { id: 'jane', type: 'https://rezics.com/ns/Character', match: iri(700), names: [
+      { value: 'Jane Bennet', language: 'en', kind: 'primary', revealedAt: 'ch1' }] }],
+  claims: wikiClaims };
+const wikiRevision = (candidate: unknown, before: unknown) => ({ ...proposalView('open', []).revision, candidate, before });
+const wikiProposal = (kind: string) => ({ ...proposalView('open', []).proposal, kind });
+
+/** A bundle proposed by an assistant: new entities and claims, each with its names, value, citation and position. */
+export const wikiBundleView: ProposalRead = proposalView('open', ['review', 'approve-and-apply', 'reject'], {
+  proposal: wikiProposal('wiki-bundle'), revision: wikiRevision(wikiBundle, {}),
+  blockers: [needsApproval],
+  preview: [{ path: 'entities', before: null, after: wikiBundle.entities }, { path: 'claims', before: null, after: wikiClaims },
+    { path: 'units', before: null, after: wikiBundle.units }, { path: 'source', before: null, after: wikiBundle.source }] });
+
+/** A delta: it retracts one accepted claim, replaces another and adds nothing else; one quotation is withheld. */
+const delta = { profile: 'wiki-delta-v1', base: { profile: 'wiki-revision-set-v1', through: null, digest: 'b'.repeat(64) },
+  bundle: { ...wikiBundle, entities: [wikiBundle.entities[0]!, wikiBundle.entities[1]!], claims: wikiClaims },
+  changes: [
+    { claim: iri(801), revision: iri(802), operation: 'amend', reason: 'Chapter four names the family differently',
+      evidenceClaim: 0 },
+    { claim: iri(803), revision: iri(804), operation: 'retract', reason: 'The relation was a misreading',
+      evidenceClaim: 1 }] };
+const removed = (claim: string, revision: string, value: unknown) => ({ claim, revision, proposal: ids.proposal, index: 0,
+  evidence: ['e1'], value });
+const wikiRemoved = [
+  removed(iri(801), iri(802), { ...wikiClaims[0]!, object: { kind: 'literal', value: 'Bennet household' },
+    evidence: [{ ...citation(null), quoteWithheld: true }] }),
+  removed(iri(803), iri(804), wikiClaims[1]!)];
+export const wikiDeltaView: ProposalRead = proposalView('open', ['review', 'approve-and-apply', 'reject'], {
+  proposal: wikiProposal('wiki-bundle'), revision: wikiRevision(delta, { removed: wikiRemoved }), blockers: [needsApproval],
+  preview: [{ path: 'delta', before: { removed: wikiRemoved }, after: delta }] });
+
+/** The reversal of an applied wiki bundle: one entry naming the proposal it undoes. */
+export const wikiUndoView: ProposalRead = proposalView('open', ['review', 'reject'], {
+  proposal: wikiProposal('wiki-bundle'),
+  preview: [{ path: 'retraction', before: { profile: 'wiki-retraction-prestate-v1', proposal: ids.proposal },
+    after: { profile: 'wiki-retraction-v1', proposal: ids.proposal } }] });
+
 /** What Main answers to a revision written against a header that has since moved. */
 export const staleBase: Outcome<never> = { ok: false, failure: 'stale', blocker: { code: 'stale_base',
   expectedHeads: [{ component, head: iri(401) }], actualHeads: [{ component, head: iri(402) }] } };

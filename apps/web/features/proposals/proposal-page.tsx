@@ -186,8 +186,8 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
           linked: String(linkedRevision), latest: String(latest) })}</AlertDescription></Alert> : null}
     </header>
 
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
-      <div className="order-2 grid gap-6 lg:order-1">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+      <div className="order-2 grid min-w-0 gap-6 lg:order-1">
         <section aria-labelledby="changes-heading" className="grid gap-3 rounded-2xl border border-border/60 bg-card p-5">
           <h2 id="changes-heading" className="font-semibold text-lg">{t.changesHeading}</h2>
           <ChangeList changes={view.preview} locale={locale} t={t} />
