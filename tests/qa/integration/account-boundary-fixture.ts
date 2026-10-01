@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect } from 'bun:test';
@@ -73,7 +74,7 @@ export async function startAccount(input: { pool: PoolConfig; secret: string; re
   const signUp = async (name: string): Promise<Member> => {
     const email = `${name}-${randomUUID()}@example.test`;
     const password = randomBytes(24).toString('base64url');
-    const response = await post('/api/auth/sign-up/email', { name, email, password });
+    const response = await post('/api/auth/sign-up/email', { ...signupPolicyFixture, name, email, password });
     expect(response.status).toBe(200);
     return { id: (await response.json() as { user: { id: string } }).user.id, email, password,
       cookie: response.headers.get('set-cookie')! };

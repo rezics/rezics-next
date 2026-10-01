@@ -110,7 +110,7 @@ test('G205 email: sender failure is private; concurrent delivery claims once and
   try {
     const member = await f.signup('delivery@example.test');
     let attempts = 0;
-    const queue = accountEmailQueue(f.pool, f.secret, async () => { attempts++; throw new Error('uncertain DATA'); });
+    const queue = accountEmailQueue(f.pool, f.secret, async () => { attempts++; throw new Error('uncertain DATA'); }, f.baseURL);
     await queue.enqueue({ userId: member.id, to: member.email, url: `${f.baseURL}/reset-password`, purpose: 'reset', locale: 'en' });
     await Promise.all([queue.drain(), queue.drain()]);
     expect(attempts).toBe(1);

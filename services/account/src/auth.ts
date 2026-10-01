@@ -44,6 +44,8 @@ export interface AccountConfig {
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
   /** Embedded fixtures can exercise a material policy update. */
   policyVersions?: readonly PolicyVersion[];
+  /** Enable only after the Accounts re-acceptance page is available. */
+  policyAcceptanceEnforced?: boolean;
 }
 
 type EmailUser = { id: string; email: string; locale?: unknown };
@@ -85,9 +87,6 @@ export function accountAuthOptions(config: AccountConfig) {
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0 },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
-      if (ctx.path === '/update-user' && ctx.body && 'birthMonth' in ctx.body) {
-        throw new APIError('BAD_REQUEST', { code: 'birth_month_signup_only', message: 'Birth month is a registration input' });
-      }
       if (ctx.path === '/sign-up/email') {
         try { signupPolicyInput(ctx.body as Record<string, unknown>,
           ctx.headers?.get('x-rezics-request-country'), config.policyVersions); }
@@ -97,7 +96,7 @@ export function accountAuthOptions(config: AccountConfig) {
             minimumAge: error.minimumAge, message: error.reason });
         }
       }
-      if (ctx.path === '/oauth2/authorize') {
+      if (config.policyAcceptanceEnforced && ctx.path === '/oauth2/authorize') {
         const session = await getSessionFromCtx(ctx);
         if (session && await policyAcceptanceRequired(config.pool, session.user.id, config.policyVersions)) {
           throw new APIError('FORBIDDEN', { code: 'policy_acceptance_required', message: 'Accept the current policies' });
@@ -167,7 +166,7 @@ export function accountAuthOptions(config: AccountConfig) {
     // emailChangeApi owns the durable two-mailbox flow. Provider change tokens
     // carry mutable email addresses and cannot be revoked with account recovery.
     user: { additionalFields: { locale: localeField,
-      birthMonth: { type: 'string', fieldName: 'birth_month', required: false, input: true, returned: false } as const,
+      registrationPolicyVersion: { type: 'string', fieldName: 'registration_policy_version', required: false, input: false, returned: false } as const,
       signupPolicies: { type: 'json', fieldName: 'signup_policies', required: false, input: false, returned: false } as const,
     }, changeEmail: { enabled: false },
       deleteUser: { enabled: !!config.accessDeletionFence,

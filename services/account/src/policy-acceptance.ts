@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import type { Pool } from 'pg';
 import { accountFailure, accountJson, accountSession, type AccountAuth } from './http.ts';
 import { POLICY_VERSIONS, type PolicyVersion } from './policy-versions.ts';
-import { admitBirthMonth, SignupPolicyProblem } from './market-policy.ts';
+import { admitBirthMonth, MARKET_POLICY_VERSION, SignupPolicyProblem } from './market-policy.ts';
 
 export type PolicyAcceptance = { policyId: 'terms' | 'privacy'; versionDigest: string };
 export const policyAcceptanceSchema = t.Object(
@@ -48,8 +48,11 @@ export function signupPolicyInput(
   country?: string | null,
   policies: readonly PolicyVersion[] = POLICY_VERSIONS,
 ) {
+  // The declaration serves this one admission decision. Retain its policy
+  // version, never the birth month or request country.
+  admitBirthMonth(body.birthMonth, country);
   return {
-    birthMonth: admitBirthMonth(body.birthMonth, country),
+    registrationPolicyVersion: MARKET_POLICY_VERSION,
     // pg serializes objects as JSON; a bare JS array becomes a PostgreSQL array.
     signupPolicies: { acceptedPolicies: validatePolicyAcceptance(body.acceptedPolicies, policies) },
   };

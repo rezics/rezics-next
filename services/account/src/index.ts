@@ -36,6 +36,7 @@ const deliveryTimer = setInterval(() => {
     .finally(() => { delivering = false; });
 }, 1_000);
 createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
+  policyAcceptanceEnforced: config.ACCOUNT_POLICY_ACCEPTANCE_ENFORCED,
   turnstileSecretKey: config.ACCOUNT_TURNSTILE_SECRET_KEY,
   turnstileMode: config.ACCOUNT_TURNSTILE_MODE as 'local' | 'cloudflare',
   accessDeletionFence: access ? async subject => {

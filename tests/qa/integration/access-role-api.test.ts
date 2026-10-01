@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -51,7 +52,7 @@ test('IAM05/IAM30/IAM33: pinned role revision grants one saved work.create path'
       const password = randomBytes(24).toString('base64url');
       const response = await account.handle(new Request(`${base}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }),
       }));
       expect(response.status).toBe(200);
       const body = await response.json() as { user: { id: string } };

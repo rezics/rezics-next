@@ -37,10 +37,10 @@ suppression. Expired or altered URLs are refused. A link for an old mailbox
 does not suppress its replacement.
 
 Suppression is checked before digest intake, during queue insertion and again
-under a mailbox lock before SMTP. Digest intake returns `409 mail_suppressed`;
-already queued digests expire without sending. A suppression waits for an
-already running SMTP call, so its acknowledgement means no later optional
-delivery can start. Main retains topic preferences and owns their UI; these
+immediately before SMTP. Suppressed digest intake returns 204 without queuing;
+already queued digests expire without sending. No database lock spans SMTP;
+suppression that arrives after the final check takes effect on subsequent sends.
+Main retains topic preferences and owns their UI; these
 links do not unsubscribe individual topics.
 
 ## Provider event wiring
@@ -58,8 +58,10 @@ UTF-8 JSON bytes:
 `type` is `hard_bounce` or `complaint`; soft bounces are not suppressions. Both
 source and event ID are 1–128 characters from letters, digits, underscore,
 period, colon and hyphen. Requests are bounded to 4096 bytes. Keep the same
-source/event ID on retry, with a fresh timestamp and signature. The receipt and
-suppression commit together; duplicate events return 204 without another effect.
+source/event ID on retry, with a fresh timestamp and signature. The source and
+event ID are retained on the suppression record. Suppression is idempotent by
+mailbox and purpose; retries return 204 without another effect or timestamp
+change. No separate event journal is retained.
 
 Send `X-Rezics-Mail-Timestamp` as Unix seconds and
 `X-Rezics-Mail-Signature` as base64url HMAC-SHA256. Derive the signing key with

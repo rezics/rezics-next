@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -81,7 +82,7 @@ test('G-865: durable API lifecycle binds current independent review to header an
     const email = `g865-${randomUUID()}@example.test`, password = randomBytes(24).toString('base64url');
     const signup = await fetch(`${f.account.issuer}/sign-up/email`,{ method: 'POST',
       headers: { 'content-type': 'application/json',origin: f.account.issuer.replace('/api/auth','') },
-      body: JSON.stringify({ name: 'Second reviewer',email,password }) });
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Second reviewer',email,password }) });
     const third = await json<{ user: { id: string } }>(signup);
     await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1',[third.user.id]);
     const tokenC = await f.account.tokenFor({ email,password },'openid work:read work:correct work:review');

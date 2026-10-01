@@ -15,8 +15,7 @@ function matches(received: string, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** The address binds the mailbox at issuance, so an old link cannot suppress a
- * replacement address. No account lookup or session is needed by a receiver. */
+/** Bind the mailbox without putting its address in proxy or browser URL logs. */
 export function unsubscribeToken(
   secret: string,
   userId: string,
@@ -24,7 +23,12 @@ export function unsubscribeToken(
   issuedAt = Math.floor(Date.now() / 1_000),
 ): string {
   const payload = Buffer.from(
-    JSON.stringify({ userId, address: normalizeMailAddress(address), purpose: 'digest', issuedAt }),
+    JSON.stringify({
+      userId,
+      addressHash: sign(secret, 'account-mail-address-v1', normalizeMailAddress(address)),
+      purpose: 'digest',
+      issuedAt,
+    }),
   ).toString('base64url');
   return `${payload}.${sign(secret, 'account-mail-unsubscribe-v1', payload)}`;
 }
@@ -32,7 +36,7 @@ export function readUnsubscribeToken(
   secret: string,
   token: string,
   now = Math.floor(Date.now() / 1_000),
-): { userId: string; address: string; purpose: 'digest'; issuedAt: number } | null {
+): { userId: string; addressHash: string; purpose: 'digest'; issuedAt: number } | null {
   if (token.length > 2_048) return null;
   const parts = token.split('.');
   if (
@@ -45,9 +49,8 @@ export function readUnsubscribeToken(
     if (
       typeof data.userId !== 'string' ||
       !data.userId ||
-      typeof data.address !== 'string' ||
-      data.address.length > 320 ||
-      !data.address.includes('@') ||
+      typeof data.addressHash !== 'string' ||
+      !/^[A-Za-z0-9_-]{43}$/.test(data.addressHash) ||
       data.purpose !== 'digest' ||
       !Number.isSafeInteger(data.issuedAt) ||
       data.issuedAt > now ||
@@ -93,41 +96,15 @@ export async function suppressOptionalMail(
 ) {
   await db.query(
     `INSERT INTO rezics_mail_suppression (address, purpose, reason, source)
-    SELECT $1, 'digest', $2, $3 FROM
-      (SELECT pg_advisory_xact_lock(hashtextextended('mail-digest:' || $1, 0))) locked
+    VALUES ($1, 'digest', $2, $3)
     ON CONFLICT (address, purpose) DO NOTHING`,
     [normalizeMailAddress(address), reason, source],
   );
 }
 
-/** Delivery and suppression serialize by mailbox. Once suppression commits,
- * another sender cannot start optional delivery; already-running SMTP finishes.
- * One connection and one keyed lock held for the bounded SMTP timeout. */
-export async function deliverOptionalMail(
-  pool: Pool,
-  address: string,
-  deliver: () => Promise<void>,
-): Promise<boolean> {
-  const db = await pool.connect();
-  try {
-    await db.query('BEGIN');
-    await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('mail-digest:' || $1, 0))`, [
-      normalizeMailAddress(address),
-    ]);
-    const suppressed = await optionalMailSuppressed(db, address);
-    if (!suppressed) await deliver();
-    await db.query('COMMIT');
-    return !suppressed;
-  } catch (error) {
-    await db.query('ROLLBACK');
-    throw error;
-  } finally {
-    db.release();
-  }
-}
-
 /** Provider adapters sign the exact UTF-8 request body and timestamp, never a
- * reserialized object. Five-minute freshness plus durable IDs bounds replay. */
+ * reserialized object. Five-minute freshness bounds replay; suppression itself
+ * is idempotent by mailbox and purpose, without a separate event journal. */
 export function mailEventSignature(secret: string, timestamp: string, body: string): string {
   return sign(secret, 'account-mail-events-v1', `${timestamp}\n${body}`);
 }
@@ -201,7 +178,20 @@ export function mailSuppressionApi(pool: Pool, accountSecret: string, eventsSecr
       }
       if (oneClick !== 'One-Click')
         return Response.json({ error: 'invalid_request' }, { status: 400 });
-      await suppressOptionalMail(pool, value.address, 'unsubscribe', 'signed-link');
+      const user = (
+        await pool.query<{ email: string }>('SELECT email FROM "user" WHERE id = $1', [
+          value.userId,
+        ])
+      ).rows[0];
+      if (
+        user &&
+        matches(
+          value.addressHash,
+          sign(accountSecret, 'account-mail-address-v1', normalizeMailAddress(user.email)),
+        )
+      ) {
+        await suppressOptionalMail(pool, user.email, 'unsubscribe', 'signed-link');
+      }
       return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
     });
   if (!eventsSecret) return app;
@@ -241,23 +231,8 @@ export function mailSuppressionApi(pool: Pool, accountSecret: string, eventsSecr
     ) {
       return Response.json({ error: 'invalid_request' }, { status: 400 });
     }
-    const db = await pool.connect();
-    try {
-      await db.query('BEGIN');
-      const receipt = await db.query(
-        `INSERT INTO rezics_mail_event (source, event_id) VALUES ($1, $2)
-        ON CONFLICT DO NOTHING RETURNING event_id`,
-        [body.source, body.eventId],
-      );
-      if (receipt.rowCount) await suppressOptionalMail(db, body.address, body.type, body.source);
-      await db.query('COMMIT');
-      return new Response(null, { status: 204 });
-    } catch (error) {
-      await db.query('ROLLBACK');
-      throw error;
-    } finally {
-      db.release();
-    }
+    await suppressOptionalMail(pool, body.address, body.type, `${body.source}:${body.eventId}`);
+    return new Response(null, { status: 204 });
   });
 }
 

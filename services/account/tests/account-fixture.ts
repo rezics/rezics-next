@@ -8,10 +8,8 @@ import { accountAuthOptions, createAccountAuth, type AccountConfig } from '../sr
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { accountEmailQueue } from '../src/email.ts';
-import { POLICY_VERSIONS } from '../src/policy-versions.ts';
-
-export const signupPolicyFixture = { birthMonth: '1990-01',
-  acceptedPolicies: POLICY_VERSIONS.map(({ policyId, versionDigest }) => ({ policyId, versionDigest })) };
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+export { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 
 export async function freePort(): Promise<number> {
   const server = createServer();
@@ -38,7 +36,7 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
   const baseURL = `http://${hostname}:${accountPort}`;
   const secret = 'account-g205-integration-secret-at-least-32';
   const messages: { id: string; to: string; text: string; html: string; subject: string }[] = [];
-  const email = accountEmailQueue(pool, secret, async mail => { messages.push(mail); });
+  const email = accountEmailQueue(pool, secret, async mail => { messages.push(mail); }, baseURL);
   const operators = new Set<string>();
   const displayPreferenceClientIds = new Set<string>();
   const config = { baseURL, secret, resource: 'https://main.rezics.test', pool,

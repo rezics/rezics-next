@@ -11,11 +11,11 @@ import {
   readUnsubscribeToken,
   unsubscribeToken,
   UNSUBSCRIBE_SECONDS,
-  suppressOptionalMail,
-  deliverOptionalMail,
 } from '../src/mail-suppression.ts';
 import { policyAcceptanceRequired } from '../src/policy-acceptance.ts';
+import { MARKET_POLICY_VERSION } from '../src/market-policy.ts';
 import { oauthFixture } from './oauth-fixture.ts';
+import { accountRecoveryCoverage } from '../src/recovery-coverage.ts';
 
 const acceptedPolicies = POLICY_VERSIONS.map(({ policyId, versionDigest }) => ({
   policyId,
@@ -92,14 +92,25 @@ test('G-731 API: country minimum boundaries, missing birth, unavailable market a
       acceptedPolicies: [],
     });
     expect(await noAcceptance.json()).toMatchObject({ reason: 'policy_acceptance_required' });
-    const { rows } = await f.pool.query('SELECT birth_month, signup_policies FROM "user"');
+    const { rows } = await f.pool.query(
+      'SELECT registration_policy_version, signup_policies FROM "user"',
+    );
     expect(rows).toHaveLength(3);
     expect(
-      rows.every((row) => row.birth_month && row.signup_policies.acceptedPolicies.length === 2),
+      rows.every(
+        (row) =>
+          row.registration_policy_version === MARKET_POLICY_VERSION && row.signup_policies === null,
+      ),
     ).toBe(true);
     expect(
       Number((await f.pool.query('SELECT count(*) FROM rezics_policy_acceptance')).rows[0].count),
     ).toBe(6);
+    expect(
+      (
+        await f.pool.query(`SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'user' AND column_name = 'birth_month'`)
+      ).rowCount,
+    ).toBe(0);
   } finally {
     await proxy.stop();
     await f.close();
@@ -113,7 +124,11 @@ test('G-731 API: durable receipts, material update, stale/denied acceptance, rep
       ? { ...policy, versionDigest: 'a'.repeat(64), acceptanceDigests: ['a'.repeat(64)] }
       : policy,
   );
-  const auth = createAccountAuth({ ...f.config, policyVersions: changed });
+  const auth = createAccountAuth({
+    ...f.config,
+    policyVersions: changed,
+    policyAcceptanceEnforced: true,
+  });
   const app = createAccountApp(auth, f.pool).listen({
     hostname: '127.0.0.1',
     port: await freePort(),
@@ -128,6 +143,14 @@ test('G-731 API: durable receipts, material update, stale/denied acceptance, rep
     const user = await f.signup('policy@example.test');
     const oauth = await oauthFixture(f);
     const client = await oauth.createClient(true);
+    const legacy = await f.signup('legacy-policy@example.test');
+    await f.pool.query('DELETE FROM rezics_policy_acceptance WHERE user_id = $1', [legacy.id]);
+    expect(await policyAcceptanceRequired(f.pool, legacy.id)).toBe(true);
+    // With enforcement off by default, a pre-journal account can still finish
+    // authorization while G-736 builds the re-acceptance page.
+    expect(
+      await oauth.introspect((await oauth.issue(client.client_id, legacy.cookie)).access_token),
+    ).toMatchObject({ active: true });
     const tokens = await oauth.issue(client.client_id, user.cookie);
     const introspection = (await oauth.introspect(tokens.access_token)) as Record<string, unknown>;
     expect(introspection.active).toBe(true);
@@ -156,12 +179,10 @@ test('G-731 API: durable receipts, material update, stale/denied acceptance, rep
       await f.request('/api/auth/get-session', undefined, user.cookie)
     ).json()) as { user: Record<string, unknown> };
     expect(session.user.birthMonth).toBeUndefined();
+    expect(session.user.registrationPolicyVersion).toBeUndefined();
     expect(session.user.signupPolicies).toBeUndefined();
     expect(session.user.ageBand).toBeUndefined();
     expect(session.user.adultAvailable).toBeUndefined();
-    expect(
-      (await f.request('/api/auth/update-user', { birthMonth: '1980-01' }, user.cookie)).status,
-    ).toBe(400);
     expect(
       await (await request('/api/account/policies', undefined, user.cookie)).json(),
     ).toMatchObject({ acceptanceRequired: true });
@@ -279,6 +300,7 @@ test('G-731 API: signed one-click, GET confirmation, expired/tampered/replayed t
     expect(sent[0]!.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
     const link = sent[0]!.headers!['List-Unsubscribe']!.slice(1, -1);
     const token = new URL(link).searchParams.get('token')!;
+    expect(Buffer.from(token.split('.')[0]!, 'base64url').toString()).not.toContain(user.email);
     expect(readUnsubscribeToken(f.secret, token)).toMatchObject({
       userId: user.id,
       purpose: 'digest',
@@ -312,9 +334,13 @@ test('G-731 API: signed one-click, GET confirmation, expired/tampered/replayed t
         )
       ).status,
     ).toBe(400);
+    const beforeSuppression = await accountRecoveryCoverage(f.pool);
     const concurrent = await Promise.all([unsubscribe(token), unsubscribe(token)]);
     expect(concurrent.map((r) => r.status)).toEqual([204, 204]);
     expect(await optionalMailSuppressed(f.pool, user.email.toUpperCase())).toBe(true);
+    const afterSuppression = await accountRecoveryCoverage(f.pool);
+    expect(BigInt(afterSuppression.rowCount)).toBe(BigInt(beforeSuppression.rowCount) + 1n);
+    expect(afterSuppression.rowDigest).not.toBe(beforeSuppression.rowDigest);
     await queue.drain();
     await queue.enqueue(digest);
     await queue.drain();
@@ -332,7 +358,7 @@ test('G-731 API: signed one-click, GET confirmation, expired/tampered/replayed t
         }),
       },
     );
-    expect(intake.status).toBe(409);
+    expect(intake.status).toBe(204);
     expect(
       (await f.request('/api/auth/request-password-reset', { email: user.email })).status,
     ).toBe(200);
@@ -362,13 +388,46 @@ test('G-731 API: signed one-click, GET confirmation, expired/tampered/replayed t
     });
     await queue.drain();
     expect(sent).toHaveLength(5);
+    // An already-started SMTP call may finish, but it must not delay an
+    // unsubscribe acknowledgement by holding a mailbox/database lock.
+    const smtpStarted = Promise.withResolvers<void>();
+    const resumeSmtp = Promise.withResolvers<void>();
+    const stalledQueue = accountEmailQueue(
+      f.pool,
+      f.secret,
+      async () => {
+        smtpStarted.resolve();
+        await resumeSmtp.promise;
+      },
+      f.baseURL,
+    );
+    await stalledQueue.enqueue({ ...digest, to: 'replacement@example.test' });
+    const draining = stalledQueue.drain();
+    try {
+      await smtpStarted.promise;
+      const replacementToken = unsubscribeToken(f.secret, user.id, 'replacement@example.test');
+      const response = await fetch(
+        `${f.baseURL}/api/account/mail/unsubscribe?token=${replacementToken}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: 'List-Unsubscribe=One-Click',
+          signal: AbortSignal.timeout(5_000),
+        },
+      );
+      expect(response.status).toBe(204);
+      expect(await optionalMailSuppressed(f.pool, 'replacement@example.test')).toBe(true);
+    } finally {
+      resumeSmtp.resolve();
+      await draining;
+    }
   } finally {
     await app.stop();
     await f.close();
   }
 }, 60_000);
 
-test('G-731 API: authenticated hard bounce/complaint, forged/stale events, durable dedupe and disabled intake', async () => {
+test('G-731 API: authenticated hard bounce/complaint, forged/stale events, idempotent suppression and disabled intake', async () => {
   const f = await accountFixture();
   const secret = 'mail-events-secret-at-least-32-characters';
   const app = createAccountApp(f.auth, f.pool, { mailEventsSecret: secret }).listen({
@@ -417,12 +476,15 @@ test('G-731 API: authenticated hard bounce/complaint, forged/stale events, durab
     expect((await Promise.all([send(), send()])).map((r) => r.status)).toEqual([204, 204]);
     expect(await optionalMailSuppressed(f.pool, 'bounce@example.test')).toBe(true);
     expect(
-      Number((await f.pool.query('SELECT count(*) FROM rezics_mail_event')).rows[0].count),
-    ).toBe(1);
+      (await f.pool.query(`SELECT to_regclass('public.rezics_mail_event') AS name`)).rows[0].name,
+    ).toBeNull();
     expect(
-      (await send(JSON.stringify({ ...event, address: 'replay-other@example.test' }))).status,
-    ).toBe(204);
-    expect(await optionalMailSuppressed(f.pool, 'replay-other@example.test')).toBe(false);
+      (
+        await f.pool.query(
+          `SELECT source, suppressed_at FROM rezics_mail_suppression WHERE address = 'bounce@example.test'`,
+        )
+      ).rows[0].source,
+    ).toBe('smtp-adapter:bounce-1');
     expect(
       (
         await send(
@@ -442,21 +504,6 @@ test('G-731 API: authenticated hard bounce/complaint, forged/stale events, durab
         { reason: 'hard_bounce', count: '1' },
       ],
     });
-    // A suppression already holding the mailbox lock blocks a later sender.
-    const db = await f.pool.connect();
-    try {
-      await db.query('BEGIN');
-      await suppressOptionalMail(db, 'concurrent@example.test', 'complaint', 'test');
-      let delivered = false;
-      const pending = deliverOptionalMail(f.pool, 'concurrent@example.test', async () => {
-        delivered = true;
-      });
-      await db.query('COMMIT');
-      expect(await pending).toBe(false);
-      expect(delivered).toBe(false);
-    } finally {
-      db.release();
-    }
   } finally {
     await app.stop();
     await f.close();

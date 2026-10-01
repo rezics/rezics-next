@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -88,7 +89,7 @@ export async function startAccount(scope: string) {
       const password = randomBytes(24).toString('base64url');
       const response = await app.handle(new Request(`${base}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }),
       }));
       expect(response.status).toBe(200);
       const body = await response.json() as { user: { id: string } };

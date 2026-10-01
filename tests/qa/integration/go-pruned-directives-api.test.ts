@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect, test } from 'bun:test';
@@ -46,7 +47,7 @@ test('PKG05/PKG12/PKG13/IAM10: real Account and Access protect pruned Go directi
     const signUp = async (name: string) => {
       const response = await fetch(`${base}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email: `go-${name}-${randomUUID()}@example.test`,
+        body: JSON.stringify({ ...signupPolicyFixture, name, email: `go-${name}-${randomUUID()}@example.test`,
           password: randomBytes(24).toString('base64url') }),
       });
       expect(response.status).toBe(200);

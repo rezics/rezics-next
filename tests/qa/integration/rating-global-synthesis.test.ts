@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -40,7 +41,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     const third = { email: `rating-c-${randomUUID()}@example.test`, password: randomBytes(24).toString('base64url') };
     const signUp = await fetch(`${base}/api/auth/sign-up/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: base },
-      body: JSON.stringify({ name: 'c', ...third }) });
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'c', ...third }) });
     expect(signUp.status).toBe(200);
     const thirdId = (await signUp.json() as { user: { id: string } }).user.id;
     const tokenC = await identity.tokenFor(third);

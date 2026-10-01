@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { readTitleControl } from '../../../services/main/src/modules/work/title-control.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -79,7 +80,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13/PKG01/PKG02/PKG03/PKG04/PKG05/PKG
       const password = randomBytes(24).toString('base64url');
       const response = await fetch(`${base}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }),
       });
       expect(response.status).toBe(200);
       return { id: (await response.json() as { user: { id: string } }).user.id,

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test } from '@playwright/test';
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 
 // The operator journeys against a live Accounts app and its stack:
 // REZICS_WEB_AUTH_PRIVATE_PATH names the stack's web-auth private.json, whose
@@ -43,7 +44,7 @@ async function setUp(page: Page, origin: string, admin: Operator, count = 1) {
   const members = Array.from({ length: count }, (_, index) => ({ name: `Mallory ${id}${index ? ` ${index + 1}` : ''}`,
     email: `mallory-${id}-${index}@example.test`, password: `pass phrase ${id}` }));
   for (const member of members) {
-    expect((await page.request.post('/api/auth/sign-up/email', { headers: { origin }, data: member })).ok()).toBe(true);
+    expect((await page.request.post('/api/auth/sign-up/email', { headers: { origin }, data: { ...signupPolicyFixture, ...member } })).ok()).toBe(true);
   }
   expect((await page.request.post('/api/auth/sign-in/email', { headers: { origin },
     data: { email: admin.email, password: admin.password } })).ok()).toBe(true);

@@ -42,7 +42,7 @@ export function notificationDigestApi(pool: Pool, accountSecret: string, mainSec
     const user = (await pool.query<{ email: string; emailVerified: boolean; locale: string | null; signup_locale: string | null }>(
       'SELECT email, "emailVerified", locale, signup_locale FROM "user" WHERE id = $1', [input.userId])).rows[0];
     if (!user?.emailVerified) return new Response(null, { status: 204 });
-    if (await optionalMailSuppressed(pool, user.email)) return Response.json({ error: 'mail_suppressed' }, { status: 409 });
+    if (await optionalMailSuppressed(pool, user.email)) return new Response(null, { status: 204 });
     const signup = accountLocales.includes(user.signup_locale as AccountLocale) ? user.signup_locale as AccountLocale : null;
     const locale = emailLocale(user) ?? signup;
     if (!locale) {

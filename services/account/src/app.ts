@@ -214,11 +214,13 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   const app = new Elysia({ introspect: true })
     .request(({ request, server }) => {
       const peer = server?.requestIP(request)?.address;
-      const forwarded = request.headers.get('x-forwarded-for')?.trim();
-      const address = peer && options.trustedProxyPeers?.has(peer) && forwarded && isIP(forwarded)
-        ? forwarded : peer;
-      request.headers.delete('x-rezics-client-ip');
-      if (address) request.headers.set('x-rezics-client-ip', address);
+      if (new URL(request.url).pathname === '/api/auth/oauth2/register') {
+        const forwarded = request.headers.get('x-forwarded-for')?.trim();
+        const address = peer && options.trustedProxyPeers?.has(peer) && forwarded && isIP(forwarded)
+          ? forwarded : peer;
+        request.headers.delete('x-rezics-client-ip');
+        if (address) request.headers.set('x-rezics-client-ip', address);
+      }
       // Only our configured ingress can assert Cloudflare request country.
       // The Accounts Worker must replace CF-IPCountry, never copy a client header.
       const country = request.headers.get('cf-ipcountry');

@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
@@ -99,7 +100,7 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
     for (const name of ['ordinary', 'editor', 'author']) {
       const password = randomBytes(24).toString('base64url');
       const email = `g508-${name}-${randomUUID()}@example.test`;
-      const result = await h.auth.api.signUpEmail({ body: { name, email, password } });
+      const result = await h.auth.api.signUpEmail({ body: { ...signupPolicyFixture, name, email, password } });
       people.push(await person(name, { ...h.user, id: result.user.id, email, password }));
     }
     const ordinary = people[1]!, editor = people[2]!, author = people[3]!;

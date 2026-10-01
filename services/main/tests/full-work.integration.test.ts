@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { test, expect } from 'bun:test';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -115,7 +116,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     const metadata = await discovery.json() as { issuer: string; jwks_uri: string };
     const operatorSignUp = await fetch(`${accountBase}/api/auth/sign-up/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: accountBase },
-      body: JSON.stringify({ name: 'Account Operator', email: 'operator@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Account Operator', email: 'operator@example.test',
         password: 'correct horse battery staple' }) });
     expect(operatorSignUp.status).toBe(200);
     const operatorCookie = operatorSignUp.headers.get('set-cookie')!;
@@ -123,7 +124,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     operators.add(operator.user.id);
     const signUp = await fetch(`${accountBase}/api/auth/sign-up/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: accountBase },
-      body: JSON.stringify({ name: 'Full Work User', email: 'full-work@example.test', password: 'correct horse battery staple' }) });
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Full Work User', email: 'full-work@example.test', password: 'correct horse battery staple' }) });
     expect(signUp.status).toBe(200);
     const cookie = signUp.headers.get('set-cookie')!;
     const user = await signUp.json() as { user: { id: string } };
@@ -1276,7 +1277,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       availability: 'withdrawn', predecessor: correction.observationRevision });
     const secondRaterSignUp = await fetch(`${accountBase}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: accountBase },
-      body: JSON.stringify({ name: 'Second Rater', email: 'second-rater@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Second Rater', email: 'second-rater@example.test',
         password: 'correct horse battery staple' }) });
     expect(secondRaterSignUp.status).toBe(200);
     const secondRater = await secondRaterSignUp.json() as { user: { id: string } };

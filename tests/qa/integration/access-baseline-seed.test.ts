@@ -46,7 +46,7 @@ test('baseline seed steps: verified signups, native Works, contributions, Spaces
   const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`, 'compose.env'));
   const email = accountEmailQueue(h.accountPool, Bun.env.ACCOUNT_SECRET!, smtpSender({
     host: '127.0.0.1', port: Number(compose.MAILPIT_SMTP_PORT), secure: false,
-    requireTLS: false, user: '', password: '', from: 'REZICS QA <qa@example.test>' }));
+    requireTLS: false, user: '', password: '', from: 'REZICS QA <qa@example.test>' }), h.base);
   let delivering: Promise<void> | undefined;
   const timer = setInterval(() => {
     delivering ??= email.drain().finally(() => { delivering = undefined; });

@@ -1,5 +1,4 @@
-ALTER TABLE public."user" ADD COLUMN IF NOT EXISTS birth_month text
-  CHECK (birth_month ~ '^\d{4}-(0[1-9]|1[0-2])$');
+ALTER TABLE public."user" ADD COLUMN IF NOT EXISTS registration_policy_version text;
 -- Private initial receipt supplied by the user-create hook; the trigger journals
 -- acceptance in the same transaction as creation, including rollback on failure.
 ALTER TABLE public."user" ADD COLUMN IF NOT EXISTS signup_policies jsonb;
@@ -15,6 +14,7 @@ LANGUAGE plpgsql AS $$ BEGIN
   INSERT INTO public.rezics_policy_acceptance (user_id, policy_id, version_digest)
     SELECT NEW.id, item->>'policyId', item->>'versionDigest'
     FROM jsonb_array_elements(COALESCE(NEW.signup_policies->'acceptedPolicies', '[]'::jsonb)) item;
+  UPDATE public."user" SET signup_policies = NULL WHERE id = NEW.id;
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS rezics_signup_policy_receipt ON public."user";

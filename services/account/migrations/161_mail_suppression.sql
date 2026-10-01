@@ -6,9 +6,3 @@ CREATE TABLE IF NOT EXISTS public.rezics_mail_suppression (
   suppressed_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (address, purpose)
 );
-CREATE TABLE IF NOT EXISTS public.rezics_mail_event (
-  source text NOT NULL,
-  event_id text NOT NULL,
-  received_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (source, event_id)
-);

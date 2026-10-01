@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -139,7 +140,7 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
       const password = randomBytes(24).toString('base64url');
       const response = await fetch(`${base}/api/auth/sign-up/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email, password }) });
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }) });
       expect(response.status).toBe(200);
       return { id: (await response.json() as { user: { id: string } }).user.id,
         email, password, cookie: response.headers.get('set-cookie')! };

@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { test, expect } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
@@ -226,7 +227,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       const password = randomBytes(24).toString('base64url');
       const response = await fetch(`${accountBase}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: accountBase },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }),
       });
       expect(response.status).toBe(200);
       return { id: (await response.json() as { user: { id: string } }).user.id,

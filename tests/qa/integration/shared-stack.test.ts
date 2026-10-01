@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -29,7 +30,7 @@ test('OPS01/IAM01: partial shared QA stack serves Main, Account and Fuseki', asy
     expect(graph.boolean).toBe(true);
     const signup = await account.handle(new Request(`${Bun.env.ACCOUNT_BASE_URL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: Bun.env.ACCOUNT_BASE_URL! },
-      body: JSON.stringify({ name: 'QA Smoke', email: `${Bun.env.REZICS_QA_RUN_ID}@example.test`,
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'QA Smoke', email: `${Bun.env.REZICS_QA_RUN_ID}@example.test`,
         password: 'correct horse battery staple' }),
     }));
     expect(signup.status).toBe(200);

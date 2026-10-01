@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { assertSeedRequest } from './request-schema.ts';
 
@@ -74,7 +75,7 @@ export class SeedApi {
     if ([400, 401, 404].includes(response.status) && user.name) {
       await response.body?.cancel();
       const registration = await fetch(`${account}/api/auth/sign-up/email`, { method: 'POST', headers,
-        body: JSON.stringify({ name: user.name, email: user.email, password: user.password }) });
+        body: JSON.stringify({ ...signupPolicyFixture, name: user.name, email: user.email, password: user.password }) });
       await payload<unknown>(registration, `Account sign-up ${user.email}`);
       response = await signIn();
     }
@@ -86,6 +87,12 @@ export class SeedApi {
     const data = await payload<{ user?: { id?: string } }>(response, `Account sign-in ${user.email}`);
     const cookie = response.headers.get('set-cookie');
     if (!cookie || !data.user?.id) throw new Error(`Account sign-in ${user.email}: missing session`);
+    // Demo accounts may predate the policy journal; record current acceptance
+    // through the authenticated API when reusing them, never by database edits.
+    await payload<unknown>(await fetch(`${account}/api/account/policies/acceptance`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: account, cookie },
+      body: JSON.stringify({ acceptedPolicies: signupPolicyFixture.acceptedPolicies }),
+    }), `Account policy acceptance ${user.email}`);
     return { cookie, id: data.user.id };
   }
 

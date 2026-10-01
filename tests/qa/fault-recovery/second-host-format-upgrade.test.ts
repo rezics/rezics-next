@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -53,7 +54,7 @@ async function seedOwners(source: StackOptions): Promise<RecoverySamples> {
       resource: apps.ACCOUNT_MAIN_RESOURCE!, pool: accountPool, operatorUserIds: new Set() }), accountPool);
     const signed = await account.handle(new Request(`${apps.ACCOUNT_BASE_URL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: apps.ACCOUNT_BASE_URL! },
-      body: JSON.stringify({ name: 'Recovery Sample', email, password: 'correct horse battery staple' }),
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Recovery Sample', email, password: 'correct horse battery staple' }),
     }));
     expect(signed.status).toBe(200);
     const principalId = randomUUID();

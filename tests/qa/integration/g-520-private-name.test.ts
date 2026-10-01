@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
@@ -40,7 +41,7 @@ test('G-520: private Account names never provision or appear in public Person, h
     const signedUp = await json<{ user: { id: string; name: string } }>(await h.accountApp.handle(
       new Request(`${h.base}/api/auth/sign-up/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: h.base },
-        body: JSON.stringify({ name: marker, email, password }) })));
+        body: JSON.stringify({ ...signupPolicyFixture, name: marker, email, password }) })));
     expect(signedUp.user.name).toBe(marker);
     // Membership eligibility is a separate Account assertion, not a public name.
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [signedUp.user.id]);

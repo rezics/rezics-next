@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { openSync, closeSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { chromium } from '@playwright/test';
-import { accountFixture, freePort } from './account-fixture.ts';
+import { accountFixture, freePort, signupPolicyFixture } from './account-fixture.ts';
 
 test('G-543: offline enrollment works at localhost and permits direct admin setup', async () => {
   const root = resolve(import.meta.dir, '../../..');
@@ -36,12 +36,12 @@ test('G-543: offline enrollment works at localhost and permits direct admin setu
     expect(ready).toBe(true);
     await page.goto(`${origin}/sign-up`);
     await page.getByRole('heading', { name: 'Create your REZICS Account' }).waitFor();
-    const missing = await page.evaluate(async () => {
+    const missing = await page.evaluate(async (policy) => {
       const response = await fetch('/api/auth/sign-up/email', { method: 'POST',
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'No token',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...policy, name: 'No token',
           email: 'missing-browser@example.test', password: 'a long secure password' }) });
       return response.status;
-    });
+    }, signupPolicyFixture);
     expect(missing).toBe(200);
     expect((await f.pool.query('SELECT id FROM "user"')).rowCount).toBe(1);
     await page.waitForFunction(() => !!document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value,

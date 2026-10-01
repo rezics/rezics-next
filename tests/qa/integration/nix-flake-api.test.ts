@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -56,7 +57,7 @@ test('PKG06/IAM10: native Nix receipts cross real Account, Access, Main and Cont
       const signUp = async (name: string) => {
         const response = await fetch(`${base}/api/auth/sign-up/email`, { method: 'POST',
           headers: { 'content-type': 'application/json', origin: base },
-          body: JSON.stringify({ name, email: `nix-${name}-${randomUUID()}@example.test`,
+          body: JSON.stringify({ ...signupPolicyFixture, name, email: `nix-${name}-${randomUUID()}@example.test`,
             password: randomBytes(24).toString('base64url') }) });
         expect(response.status).toBe(200);
         return { id: (await response.json() as { user: { id: string } }).user.id,

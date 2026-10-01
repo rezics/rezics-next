@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect, test } from 'bun:test';
@@ -60,7 +61,7 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
       const password = randomBytes(24).toString('base64url');
       const response = await fetch(`${base}/api/auth/sign-up/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email, password }) });
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }) });
       expect(response.status).toBe(200);
       const body = await response.json() as { user: { id: string } };
       return { id: body.user.id, email, password, cookie: response.headers.get('set-cookie')! };

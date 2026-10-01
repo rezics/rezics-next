@@ -1,3 +1,4 @@
+import { signupPolicyFixture } from './signup-policy-fixture.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -95,7 +96,7 @@ async function signUp(app: ReturnType<typeof createAccountApp>, base: string,
   const password = randomBytes(32).toString('base64url');
   const response = await app.handle(new Request(`${base}/api/auth/sign-up/email`, {
     method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-    body: JSON.stringify({ name: `Local ${role}`, email, password }),
+    body: JSON.stringify({ ...signupPolicyFixture, name: `Local ${role}`, email, password }),
   }));
   const cookie = response.headers.get('set-cookie');
   const body = await response.json() as { user?: { id?: string } };
@@ -136,7 +137,14 @@ async function signInOperator(app: ReturnType<typeof createAccountApp>, base: st
   }));
   const cookie = response.headers.get('set-cookie');
   await response.body?.cancel();
-  return response.status === 200 && cookie ? { ...operator, cookie } : undefined;
+  if (response.status !== 200 || !cookie) return undefined;
+  const accepted = await app.handle(new Request(`${base}/api/account/policies/acceptance`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie },
+    body: JSON.stringify({ acceptedPolicies: signupPolicyFixture.acceptedPolicies }),
+  }));
+  if (!accepted.ok) throw new Error(`Local operator policy acceptance failed with HTTP ${accepted.status}`);
+  await accepted.body?.cancel();
+  return { ...operator, cookie };
 }
 
 async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,

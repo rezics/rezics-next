@@ -15,6 +15,8 @@ export const accountCoreSpec = {
 /** The Account HTTP process (`services/account/src/index.ts`). */
 export const accountSpec = {
   ...accountCoreSpec,
+  ACCOUNT_POLICY_ACCEPTANCE_ENFORCED: bool({ default: false,
+    desc: 'Require existing sessions to accept current policies before OAuth authorization; enable only after the Accounts acceptance page ships.' }),
   ACCOUNT_TURNSTILE_MODE: str({ choices: ['local', 'cloudflare'], default: 'cloudflare', devDefault: 'local',
     desc: 'Enrollment verifier: cloudflare in production; local always-pass mode permits offline dev/test API clients.' }),
   ACCOUNT_TURNSTILE_SECRET_KEY: str({ default: '',

@@ -3,7 +3,7 @@ import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import nodemailer from 'nodemailer';
 import type { Pool, PoolClient } from 'pg';
 import { emailCopy } from './email-copy/index.ts';
-import { deliverOptionalMail, optionalMailSuppressed, unsubscribeHeaders } from './mail-suppression.ts';
+import { optionalMailSuppressed, unsubscribeHeaders } from './mail-suppression.ts';
 
 export type AccountLocale = 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'fr' | 'es';
 export type EmailPurpose = 'verify' | 'reset' | 'change-email' | 'notice' | 'digest';
@@ -81,7 +81,7 @@ export function smtpSender(config: { host: string; port: number; secure: boolean
 /** SMTP is at-least-once at best. A crash after DATA is ambiguous, so stale
  * sending rows become uncertain and are not automatically sent again. Links
  * are short-lived and encrypted at rest; no SMTP call runs in an auth request. */
-export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<typeof smtpSender>, baseURL?: string) {
+export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<typeof smtpSender>, baseURL: string) {
   return {
     async enqueue(input: Parameters<AccountEmail['enqueue']>[0]) {
       await enqueueAccountEmail(pool, secret, input);
@@ -119,12 +119,13 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
           const mail = { id: row.id, to: input.to,
             ...renderAccountEmail(input.purpose, input.locale, input.url, input.message) };
           if (input.purpose === 'digest') {
-            const delivered = await deliverOptionalMail(pool, input.to, () => send({ ...mail,
-              headers: unsubscribeHeaders(baseURL ?? input.url, secret, input.userId, input.to) }));
-            if (!delivered) {
+            if (await optionalMailSuppressed(pool, input.to)) {
               await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
               continue;
             }
+            // Do not hold a database transaction across SMTP. Suppression that
+            // arrives after this final check takes effect on subsequent sends.
+            await send({ ...mail, headers: unsubscribeHeaders(baseURL, secret, input.userId, input.to) });
           } else await send(mail);
           await pool.query(`UPDATE rezics_account_email SET state = 'sent', payload = NULL WHERE id = $1`, [row.id]);
         } catch {
