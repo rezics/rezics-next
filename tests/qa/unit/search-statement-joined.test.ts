@@ -24,9 +24,8 @@ function fixture(candidateCount = 1, includeMatch = true, hiddenPin = false) {
     if (sparql.includes('ASK {')) return { boolean: true };
     if (sparql.includes('?probeScore')) return { results: { bindings: [{
       epoch: value('epoch'), sequence: value('7'), generation: value(generation) }] } };
-    if (sparql.includes('"body:*"')) return { results: { bindings: [{
-      epoch: value('epoch'), sequence: value('7'), generation: value(generation),
-      population: value('1'), indexed: value('1'), uniqueIndexed: value('1'), valid: value('1'),
+    if (sparql.includes('rv:publicTextInventory()')) return { results: { bindings: [{
+      population: value('1'),
     }] } };
     if (sparql.includes('VALUES (?main ?key ?decision ?context)')) {
       return { results: { bindings: [{ epoch: value('epoch'), sequence: value('7'),

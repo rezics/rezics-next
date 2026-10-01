@@ -21,7 +21,7 @@ export const opsCapacityCases: CaseDeclarations = {
   SEARCH18: [{
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',
-    name: 'SEARCH18: a failed delta proof retains the last qualified membership for retry',
+    name: 'SEARCH18: an exhausted native qualification can retry without a corpus fallback',
   }, {
     tier: 'load',
     file: 'tests/qa/load/fixture-public-corpus.test.ts',

@@ -34,10 +34,8 @@ class SearchFuseki extends FusekiClient {
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation) }] } };
     }
-    if (sparql.includes('SELECT ?epoch ?sequence ?generation ?population')) {
-      return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
-        generation: binding(generation), population: binding('1'), indexed: binding('1'),
-        uniqueIndexed: binding('1'), valid: binding('1') }] } };
+    if (sparql.includes('rv:publicTextInventory()')) {
+      return { results: { bindings: [{ population: binding('1') }] } };
     }
     if (sparql.includes('SELECT ?epoch ?sequence ?generation ?declared')) {
       this.contentAudits++;

@@ -13,7 +13,7 @@ import { queryPublicContentPhrase }
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { ContentCore } from '../../../services/content/src/core.ts';
 import type { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
-import { assertPublicTextReady, assertQuerySnapshotMoved, SearchIndexBudgetExceeded,
+import { assertPublicTextReady, assertQuerySnapshotMoved,
   SearchIndexUnavailable, SearchRequestTimedOut,
   SearchSnapshotMoved, withStableSearchSnapshot, type SearchAttemptDiagnostic }
   from '../../../services/main/src/modules/work/search-readiness.ts';
@@ -33,13 +33,12 @@ function fake(initialPopulation = 102) {
   let instanceId = '11111111-1111-4111-8111-111111111111';
   let publicSearchWriteEpoch = 0;
   let publicSearchWriteActive = false;
-  let deltaAvailable = false;
+  let deltaAvailable = true;
   let nativeProofValid = true;
   let ordinal = 0;
-  let nativeDeltas: { ordinal: string; dataEpoch: string; sequence: string; generation: string;
-    writeEpoch: string; changes: { unit: string; before: boolean; after: boolean }[] }[] = [];
+  const proofRequests: string[] = [];
   let deltaCalls = 0;
-  let deltaGap = false;
+  let qualifiedWriteEpoch = 0;
   let candidateCount = 513;
   let inventories = 0;
   let controls = 0;
@@ -53,25 +52,24 @@ function fake(initialPopulation = 102) {
   },
     searchDeltaSince: async (since: string) => {
       deltaCalls++;
-      return { available: deltaAvailable && nativeProofValid, ordinal: String(ordinal), dataEpoch: 'epoch',
+      proofRequests.push(since);
+      const qualified = nativeProofValid && indexed === population && qualifiedWriteEpoch === publicSearchWriteEpoch;
+      return { available: deltaAvailable && qualified, ordinal: String(ordinal), dataEpoch: 'epoch',
         sequence, generation: generationCurrent, writeEpoch: String(publicSearchWriteEpoch), luceneGeneration: '1',
-        deltas: since === '-1' ? [] : nativeDeltas.filter(delta => Number(delta.ordinal) > Number(since))
-          .map(delta => deltaGap ? { ...delta, ordinal: String(Number(delta.ordinal) + 1) } : delta) };
+        qualifiedPopulation: qualified ? String(population) : undefined, deltas: [] };
     },
     query: async (sparql: string): Promise<SparqlResult> => {
     queryCalls++;
     if (sparql.includes('ASK {')) return { boolean: true };
-    if (sparql.includes('?probeScore')) {
+    if (sparql.includes('SELECT ?epoch ?sequence ?generation WHERE')) {
       controls++;
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
         generation: binding(generationCurrent) }] } };
     }
-    if (sparql.includes('"body:*"')) {
+    if (sparql.includes('rv:publicTextInventory()')) {
       inventories++;
-      return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
-        generation: binding(generationCurrent), population: binding(String(population)),
-        indexed: binding(String(indexed)), uniqueIndexed: binding(String(indexed)),
-        valid: binding(String(indexed)) }] } };
+      if (indexed !== population) throw new Error('native index differs from RDF membership');
+      return { results: { bindings: [{ population: binding(String(population)) }] } };
     }
     if (sparql.includes('?ratingPopulation') && sparql.includes('text:query')) {
       return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding(sequence),
@@ -100,24 +98,23 @@ function fake(initialPopulation = 102) {
     throw new Error('unexpected SPARQL');
   } } as FusekiClient;
   return { fuseki, counts: () => ({ inventories, controls, healthCalls, queryCalls, deltaCalls }),
-    enableDelta: () => { deltaAvailable = true; },
     disableDelta: () => { deltaAvailable = false; },
     invalidateNativeProof: () => { nativeProofValid = false; },
-    gapDelta: () => { deltaGap = true; },
+    proofRequests: () => [...proofRequests],
     commitDelta: (changes: { unit: string; before: boolean; after: boolean }[]) => {
       sequence = String(Number(sequence) + 1);
       publicSearchWriteEpoch += 2;
       ordinal++;
-      nativeDeltas.push({ ordinal: String(ordinal), dataEpoch: 'epoch', sequence,
-        generation: generationCurrent, writeEpoch: String(publicSearchWriteEpoch), changes });
+      qualifiedWriteEpoch = publicSearchWriteEpoch;
       population += changes.reduce((sum, change) => sum + Number(change.after) - Number(change.before), 0);
       indexed = population;
     },
     advance: () => { sequence = String(Number(sequence) + 1); },
-    mutateIndex: () => { sequence = String(Number(sequence) + 1); publicSearchWriteEpoch += 2; },
+    mutateIndex: () => { sequence = String(Number(sequence) + 1); publicSearchWriteEpoch += 2;
+      qualifiedWriteEpoch = publicSearchWriteEpoch; },
     abortIndexWrite: () => { publicSearchWriteEpoch += 2; },
     beginIndexWrite: () => { publicSearchWriteEpoch++; publicSearchWriteActive = true; },
-    endIndexWrite: () => { publicSearchWriteEpoch++; publicSearchWriteActive = false; },
+    endIndexWrite: () => { publicSearchWriteEpoch++; publicSearchWriteActive = false; qualifiedWriteEpoch = publicSearchWriteEpoch; },
     restart: () => { instanceId = '22222222-2222-4222-8222-222222222222'; },
     changeGeneration: () => { generationCurrent =
       'urn:rezics:text-index-generation:22222222-2222-4222-8222-222222222222'; },
@@ -126,28 +123,25 @@ function fake(initialPopulation = 102) {
   };
 }
 
-test('SEARCH15/SEARCH18: readiness singleflight is position and JVM-bound', async () => {
+test('SEARCH15/SEARCH18: each readiness proof is position and JVM-bound without a corpus scan', async () => {
   const source = fake();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   const first = await Promise.all(Array.from({ length: 5 },
     () => assertPublicTextReady(source.fuseki, lineage)));
   expect(first.every(value => value.population === 102 && value.sequence === '7')).toBe(true);
-  expect(source.counts()).toMatchObject({ inventories: 1, controls: 5,
-    healthCalls: 10, queryCalls: 6 });
-  await assertPublicTextReady(source.fuseki, lineage);
-  expect(source.counts()).toMatchObject({ inventories: 1, controls: 6,
-    healthCalls: 12, queryCalls: 7 });
+  expect(source.counts()).toEqual({ inventories: 0, controls: 5,
+    healthCalls: 10, queryCalls: 5, deltaCalls: 5 });
   source.restart();
+  const restarted = await assertPublicTextReady(source.fuseki, lineage);
+  expect(restarted.serverInstanceId).toBe('22222222-2222-4222-8222-222222222222');
   source.breakIndex();
   await expect(assertPublicTextReady(source.fuseki, lineage))
     .rejects.toBeInstanceOf(SearchIndexUnavailable);
-  expect(source.counts()).toMatchObject({ inventories: 2, controls: 7,
-    healthCalls: 13, queryCalls: 9 });
   source.advance();
   await expect(assertPublicTextReady(source.fuseki, lineage))
     .rejects.toBeInstanceOf(SearchIndexUnavailable);
-  expect(source.counts()).toMatchObject({ inventories: 3, controls: 8,
-    healthCalls: 14, queryCalls: 11 });
+  expect(source.counts().inventories).toBe(0);
+  expect(source.proofRequests()).toEqual(Array(8).fill('-1'));
 });
 
 test('SEARCH15/SEARCH18: empty readiness control retries only across a native write epoch', async () => {
@@ -166,7 +160,7 @@ test('SEARCH15/SEARCH18: empty readiness control retries only across a native wr
   await expect(assertPublicTextReady(fuseki, lineage)).rejects.toBeInstanceOf(SearchIndexUnavailable);
 });
 
-test('SEARCH15/SEARCH18: metadata sequence reuse keeps the full index proof, public write invalidates it', async () => {
+test('SEARCH15/SEARCH18: metadata and completed writes require a coherent native qualification', async () => {
   const source = fake();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   const first = await assertPublicTextReady(source.fuseki, lineage);
@@ -174,14 +168,16 @@ test('SEARCH15/SEARCH18: metadata sequence reuse keeps the full index proof, pub
   source.advance();
   const metadata = await assertPublicTextReady(source.fuseki, lineage);
   expect(metadata.sequence).toBe('8');
-  expect(source.counts().inventories).toBe(1);
+  expect(source.counts().deltaCalls).toBe(2);
   source.beginIndexWrite();
   await expect(assertPublicTextReady(source.fuseki, lineage))
     .rejects.toBeInstanceOf(SearchSnapshotMoved);
+  expect(source.counts().deltaCalls).toBe(2);
   source.endIndexWrite();
   const changed = await assertPublicTextReady(source.fuseki, lineage);
   expect(changed.publicSearchWriteEpoch).toBe('2');
-  expect(source.counts().inventories).toBe(2);
+  expect(source.counts().deltaCalls).toBe(3);
+  expect(source.counts().inventories).toBe(0);
 });
 
 test('SEARCH18: simple Main and Realm phrases accept a later coherent metadata snapshot', async () => {
@@ -210,7 +206,7 @@ test('SEARCH18: simple Main and Realm phrases accept a later coherent metadata s
     expect(result.complete).toBe(true);
     expect(result.total).toBe(1);
     expect(result.sourcePosition.sequence).toBe('8');
-    expect(source.counts().inventories).toBe(1);
+    expect(source.counts().inventories).toBe(0);
   }
 });
 
@@ -271,112 +267,100 @@ test('SEARCH18: Content audits a later metadata cut and pins its phrase to that 
   expect(result.contentPosition).toEqual(position);
 });
 
-test('SEARCH07/SEARCH15/SEARCH18: certified affected-unit replay avoids a corpus inventory', async () => {
+test('SEARCH07/SEARCH15/SEARCH18: qualified native writes avoid request-time corpus inventories', async () => {
   const source = fake();
-  source.enableDelta();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
-  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 1 });
   source.commitDelta([{ unit: 'urn:rezics:match:old', before: true, after: false },
     { unit: 'urn:rezics:match:new', before: false, after: true }]);
   expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
-  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 2 });
-  source.commitDelta([{ unit: 'urn:rezics:match:new', before: true, after: true }]);
-  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
-  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 3 });
+  source.commitDelta([{ unit: 'urn:rezics:match:added', before: false, after: true }]);
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(103);
+  expect(source.counts()).toEqual({ inventories: 0, deltaCalls: 3,
+    healthCalls: 6, queryCalls: 3, controls: 3 });
+  expect(source.proofRequests()).toEqual(['-1', '-1', '-1']);
 });
 
-test('SEARCH18: a failed delta proof retains the last qualified membership for retry', async () => {
+test('SEARCH18: an exhausted native qualification can retry without a corpus fallback', async () => {
   const source = fake(10_000);
-  source.enableDelta();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   await assertPublicTextReady(source.fuseki, lineage);
   source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
   const original = source.fuseki.searchDeltaSince.bind(source.fuseki);
-  let moveOnce = true;
+  let exhaustOnce = true;
   source.fuseki.searchDeltaSince = async (since: string) => {
-    if (moveOnce && since !== '-1') {
-      moveOnce = false;
-      throw new FusekiReadBudgetExceeded('journal call exhausted its bounded request');
+    if (exhaustOnce) {
+      exhaustOnce = false;
+      throw new FusekiReadBudgetExceeded('qualification call exhausted its bounded request');
     }
     return original(since);
   };
   await expect(assertPublicTextReady(source.fuseki, lineage))
     .rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
   expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(10_001);
-  expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 2 });
+  expect(source.counts()).toMatchObject({ inventories: 0, deltaCalls: 2 });
 });
 
-test('SEARCH07/SEARCH10: replay work is fixed by affected units across unrelated corpus sizes', async () => {
+test('SEARCH07/SEARCH10: readiness work stays fixed across corpus and native write sizes', async () => {
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
-  for (const corpus of [100, 1_000, 10_000]) {
-    for (const affected of [1, 8, 64]) {
+  for (const corpus of [100, 1_000, 10_000, 20_001, 100_000_000]) {
+    for (const affected of [1, 8, 64, 65]) {
       const source = fake(corpus);
-      source.enableDelta();
       expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(corpus);
       source.commitDelta(Array.from({ length: affected }, (_, index) => ({
         unit: `urn:rezics:match:changed-${corpus}-${affected}-${index}`,
         before: true, after: true,
       })));
       expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(corpus);
-      expect(source.counts()).toMatchObject({ inventories: 1, deltaCalls: 2 });
+      expect(source.counts()).toEqual({ inventories: 0, deltaCalls: 2,
+        controls: 2, queryCalls: 2, healthCalls: 4 });
+      expect(source.proofRequests()).toEqual(['-1', '-1']);
     }
   }
-  const overAffected = fake(10_000);
-  overAffected.enableDelta();
-  await assertPublicTextReady(overAffected.fuseki, lineage);
-  overAffected.commitDelta(Array.from({ length: 65 }, (_, index) => ({
-    unit: `urn:rezics:match:over-${index}`, before: true, after: true,
-  })));
-  await assertPublicTextReady(overAffected.fuseki, lineage);
-  expect(overAffected.counts()).toMatchObject({ inventories: 2, deltaCalls: 3 });
-  await expect(assertPublicTextReady(fake(20_001).fuseki, lineage))
-    .rejects.toBeInstanceOf(SearchIndexBudgetExceeded);
 });
 
-test('SEARCH15/SEARCH17/SEARCH18: gap, bypass gate, restart and generation force a full audit', async () => {
+test('SEARCH15/SEARCH17/SEARCH18: bypass datasets audit each read while qualified generations never scan', async () => {
   const source = fake();
-  source.enableDelta();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   await assertPublicTextReady(source.fuseki, lineage);
-  source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
-  source.gapDelta();
-  await assertPublicTextReady(source.fuseki, lineage);
-  expect(source.counts().inventories).toBe(2);
-  source.disableDelta();
-  source.commitDelta([{ unit: 'urn:rezics:match:other', before: false, after: true }]);
-  await assertPublicTextReady(source.fuseki, lineage);
-  expect(source.counts().inventories).toBe(3);
   source.restart();
   await assertPublicTextReady(source.fuseki, lineage);
-  expect(source.counts().inventories).toBe(4);
   source.changeGeneration();
   await assertPublicTextReady(source.fuseki, lineage);
-  expect(source.counts().inventories).toBe(5);
+  expect(source.counts()).toMatchObject({ inventories: 0, deltaCalls: 3 });
+  source.disableDelta();
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(102);
+  expect(source.counts()).toMatchObject({ inventories: 2, deltaCalls: 3 });
+  source.breakIndex();
+  await expect(assertPublicTextReady(source.fuseki, lineage))
+    .rejects.toBeInstanceOf(SearchIndexUnavailable);
+  expect(source.counts().inventories).toBe(3);
 });
 
-test('SEARCH15: a failed exact-subject native proof cannot report a complete result', async () => {
+test('SEARCH15: an unavailable native qualification cannot report a complete result', async () => {
   const source = fake();
-  source.enableDelta();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   await assertPublicTextReady(source.fuseki, lineage);
   source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
   source.invalidateNativeProof();
-  source.breakIndex();
   await expect(assertPublicTextReady(source.fuseki, lineage))
     .rejects.toBeInstanceOf(SearchIndexUnavailable);
-  expect(source.counts().inventories).toBe(2);
+  expect(source.counts().inventories).toBe(0);
+  expect(source.counts().deltaCalls).toBe(2);
 });
 
-test('SEARCH15: an intervening aborted text write prevents delta replay', async () => {
+test('SEARCH15: an aborted text write invalidates native qualification until repaired', async () => {
   const source = fake();
-  source.enableDelta();
   const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
   await assertPublicTextReady(source.fuseki, lineage);
   source.abortIndexWrite();
+  await expect(assertPublicTextReady(source.fuseki, lineage))
+    .rejects.toBeInstanceOf(SearchIndexUnavailable);
+  expect(source.counts().inventories).toBe(0);
   source.commitDelta([{ unit: 'urn:rezics:match:new', before: false, after: true }]);
-  await assertPublicTextReady(source.fuseki, lineage);
-  expect(source.counts().inventories).toBe(2);
+  expect((await assertPublicTextReady(source.fuseki, lineage)).population).toBe(103);
+  expect(source.counts().inventories).toBe(0);
 });
 
 test('SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty result', async () => {
@@ -386,7 +370,7 @@ test('SEARCH02/SEARCH10: a 513th raw hit cannot become a false complete empty re
     objectDirectory: '/unused' } as WorkActivationEnvironment;
   await expect(queryPublicMainPhrase(env, { phrase: 'late match', language: 'en' }))
     .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
-  expect(source.counts()).toMatchObject({ inventories: 1, healthCalls: 3, queryCalls: 4 });
+  expect(source.counts()).toMatchObject({ inventories: 0, deltaCalls: 1, healthCalls: 3, queryCalls: 3 });
 });
 
 test('SEARCH04/SEARCH10: the rated Realm join rejects an over-budget raw hit set before dedupe', async () => {
@@ -398,7 +382,7 @@ test('SEARCH04/SEARCH10: the rated Realm join rejects an over-budget raw hit set
     { context: { kind: 'realm-local', id: work }, phrase: 'late match', language: 'en',
       sense, ratingContext: main, minimumMeanTimes10: 80 }))
     .rejects.toBeInstanceOf(PublicQueryBudgetExceeded);
-  expect(source.counts()).toMatchObject({ inventories: 1, healthCalls: 3, queryCalls: 5 });
+  expect(source.counts()).toMatchObject({ inventories: 0, deltaCalls: 1, healthCalls: 3, queryCalls: 4 });
 });
 
 test('SEARCH10: batched classification fails closed on a present application without a decision', async () => {

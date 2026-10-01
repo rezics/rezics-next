@@ -8,11 +8,11 @@ export const searchProjectionCases: CaseDeclarations = {
   }, {
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',
-    name: 'SEARCH15/SEARCH18: readiness singleflight is position and JVM-bound',
+    name: 'SEARCH15/SEARCH18: each readiness proof is position and JVM-bound without a corpus scan',
   }, {
     tier: 'unit',
     file: 'tests/qa/unit/search-budgets.test.ts',
-    name: 'SEARCH15: an intervening aborted text write prevents delta replay',
+    name: 'SEARCH15: an aborted text write invalidates native qualification until repaired',
   }],
   SEARCH19: [{
     tier: 'integration',

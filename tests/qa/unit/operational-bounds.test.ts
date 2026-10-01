@@ -155,7 +155,7 @@ test('OPS06: saturated object uploads are refused at the Main boundary and none 
   const post = (key: string) => app.handle(new Request('http://main.local/v1/works', {
     method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': key,
       authorization: 'Bearer a.b.c' },
-    body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Held', language: 'en', actingSubject: agent }) }));
+    body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work', title: 'Held', language: 'en', actingSubject: agent }) }));
   const read = async () => (await (await app.handle(
     new Request('http://main.local/v1/operations/backpressure'))).json()) as {
     lanes: [unknown, unknown, { state: string; counters: Record<string, number> }] };

@@ -9,7 +9,7 @@ export const govProposalCases: CaseDeclarations = {
     { tier: 'integration', file: 'tests/qa/integration/governance-report.test.ts',
       name: 'GOV02: a Content head changing after preflight makes the decision stale' },
     { tier: 'integration', file: 'tests/qa/integration/governance-report.test.ts',
-      name: 'GOV02: partial Content acceptance and stale graph CAS leave Access unchanged' },
+      name: 'GOV02: partial Content acceptance preserves its receipt and fence after stale graph CAS' },
   ],
   GOV23: [
     { tier: 'integration', file: 'tests/qa/integration/poll-template.test.ts',

@@ -15,7 +15,7 @@ export const searchGrowthCases: CaseDeclarations = {
     {
       tier: 'unit',
       file: 'tests/qa/unit/search-budgets.test.ts',
-      name: 'SEARCH07/SEARCH15/SEARCH18: certified affected-unit replay avoids a corpus inventory',
+      name: 'SEARCH07/SEARCH15/SEARCH18: qualified native writes avoid request-time corpus inventories',
     },
     {
       tier: 'integration',

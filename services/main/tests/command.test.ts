@@ -116,11 +116,15 @@ test('SYS02 Main readiness accepts the pinned command module and rejects an olde
       publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
       profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, value]) => [id, value.sha256])) }; }
   }
-  const work = { environment: { lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' } } } as unknown as MainWorkDependencies;
-  const ready = await createMainApp(new ReadyFuseki(COMMAND_MODULE_VERSION), work)
+  const dependencies = (fuseki: FusekiClient) => ({ environment: { fuseki,
+    lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' }, objectDirectory: '.temp/unused',
+  } }) as MainWorkDependencies;
+  const pinned = new ReadyFuseki(COMMAND_MODULE_VERSION);
+  const ready = await createMainApp(pinned, dependencies(pinned))
     .handle(new Request('http://localhost/health/ready'));
   expect(ready.status).toBe(200);
-  const old = await createMainApp(new ReadyFuseki('0.5.23'), work)
+  const outdated = new ReadyFuseki('0.5.23');
+  const old = await createMainApp(outdated, dependencies(outdated))
     .handle(new Request('http://localhost/health/ready'));
   expect(old.status).toBe(503);
 });
