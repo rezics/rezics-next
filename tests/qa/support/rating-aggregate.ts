@@ -396,7 +396,7 @@ export async function exerciseRatingAggregates(f: Fixture) {
   }
   for (const plan of plans as { Plan: Record<string, unknown> }[][]) {
     const inventoryNodes = nodes(plan[0]!.Plan).filter(node => node['Relation Name'] === 'rating_aggregate_head');
-    expect(inventoryNodes).toHaveLength(1);
+    expect(inventoryNodes, JSON.stringify(inventoryNodes)).toHaveLength(1);
     expect(inventoryNodes[0]!['Index Name']).toBe('rating_aggregate_head_pkey');
     expect(inventoryNodes[0]!['Actual Rows']).toBe(6);
     expect(inventoryNodes[0]!['Rows Removed by Filter'] ?? 0).toBe(0);
