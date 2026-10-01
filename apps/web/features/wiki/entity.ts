@@ -12,7 +12,7 @@ import { idOf } from '../work-page/route.ts';
 import { memberHref, zoneLink, type ZoneSite } from './links.ts';
 import { readEvidence, type ChooserItem } from './read.ts';
 import { firstSeen, revealedAt } from './reveal.ts';
-import { itemLabel, type PositionState } from './state.ts';
+import { itemLabel, occurrenceName, type PositionState } from './state.ts';
 
 // A wiki page's data for a package's `entity` slot: the page projection, the statements and relations Main returned
 // for the reader's position, and the evidence those cite. Everything shown was in an answer; a read that failed
@@ -80,7 +80,8 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
     statementsSection ? readStatements(statementsSection, undefined, main) : null,
     relationsSection ? readRelations(relationsSection, undefined, main) : null]);
 
-  const own = zoneText(summary.name);
+  // A chapter's summary is named after its Work; the name the story gives it is the label its composition wrote.
+  const own = (state && projection.target.base === 'occurrence' ? occurrenceName(state, projection.target.resource, locale) : null) ?? zoneText(summary.name);
   const aliases: ZoneText[] = [];
   const facts: ZoneFact[] = [];
   const claims: { ids: string[]; supports: string }[] = [];
@@ -153,17 +154,17 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
   const [chapter, seen] = await Promise.all([
     asChapter ? chapterOf({ id, site, state, mount, locale, lists }) : null,
     state && !asChapter ? firstSeen(id, state) : null]);
-  const firstSeenAt = seen && state ? await positionLink(site, state, seen, mount) : null;
+  const firstSeenAt = seen && state ? await positionLink(site, state, seen, locale) : null;
   return { id, kind: entryLabel(projection.registry, locale), name: own, aliases, facts, relationships, evidence,
     firstSeen: firstSeenAt, more: more || claims.reduce((count, claim) => count + claim.ids.length, 0) > EVIDENCE_LIMIT,
     fullPage, chapter };
 }
 
 /** A position in the story as a link: its name and, when the Zone lists chapters, its page. */
-async function positionLink(site: ZoneSite, state: PositionState, occurrence: string, _mount: string | null):
+async function positionLink(site: ZoneSite, state: PositionState, occurrence: string, locale: string):
   Promise<{ name: ZoneText; href: string | null } | null> {
   const item = state.chooser.items.find(candidate => candidate.occurrence === occurrence);
-  const name = item ? itemLabel(state, item) : null;
+  const name = item ? itemLabel(state, item, locale) : null;
   return name ? { name, href: await zoneLink(site, occurrence, 'occurrence') } : null;
 }
 
@@ -178,7 +179,7 @@ async function chapterOf({ id, site, state, mount, locale, lists }: {
     : state.at ? ordered.findIndex(item => item.occurrence === state.at) : -1;
   const reached = index <= reachedIndex;
   const neighbour = (item: ChooserItem | undefined): ZoneNeighbour | null => {
-    const name = item ? itemLabel(state, item) : null;
+    const name = item ? itemLabel(state, item, locale) : null;
     return item && name ? { name, href: memberHref(site, mount, item.occurrence) } : null;
   };
   const reveals = reached ? (await Promise.all(lists.filter(list => list.segment !== mount).map(async list => ({

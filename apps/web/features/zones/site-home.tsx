@@ -37,11 +37,11 @@ export async function ZoneSiteHome({ view, search }: { view: RealmView; search: 
     const others = items.filter(item => !('title' in item));
     return { segment: mount.segment, name: zoneText(mount.name),
       href: withPosition(`/r/${encodeURIComponent(ref)}/${encodeURIComponent(mount.segment)}`, choice),
-      works: works.slice(0, HOME_ITEMS), members: await readMembers(site, mount.segment, others.slice(0, HOME_ITEMS), locale),
+      works: works.slice(0, HOME_ITEMS), members: await readMembers(site, mount.segment, others.slice(0, HOME_ITEMS), locale, state),
       more: items.length > HOME_ITEMS || read.data.nextCursor !== null };
   }))).flatMap(section => section ?? []);
   return <SlotBoundary slot="home" fallback={null}>
-    <Home zone={view.zone} sections={sections} position={positionNote(state, `/r/${encodeURIComponent(ref)}`)}
+    <Home zone={view.zone} sections={sections} position={positionNote(state, `/r/${encodeURIComponent(ref)}`, locale)}
       fallback={null} Link={LocalizedLink} {...workRenderers(card, locale, view.zoneMessages)} />
   </SlotBoundary>;
 }

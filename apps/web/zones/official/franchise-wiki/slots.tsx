@@ -76,7 +76,10 @@ export function WikiHome({ zone, sections, position, card, Link }: HomeSlotProps
       const empty = !section.works.length && !section.members.length;
       return <section key={section.segment} aria-labelledby={id} data-wiki-section={section.segment} className="fw-section">
         <header className="fw-section-head">
-          <h2 id={id} className="fw-title">{headingFor(section.segment, section.name, t)}</h2>
+          <h2 id={id} className="fw-title">{headingFor(section.segment, section.name, t)}
+            {!empty ? <> <span data-wiki-count={section.works.length + section.members.length} className="fw-count">
+              {new Intl.NumberFormat(zone.locale).format(section.works.length + section.members.length)}{section.more ? '+' : ''}
+            </span></> : null}</h2>
           {!empty ? <Link href={section.href} className="fw-all">{t.seeAll}</Link> : null}
         </header>
         {section.works.length ? <ul className="fw-works">{section.works.map(work => <li key={work.id}>

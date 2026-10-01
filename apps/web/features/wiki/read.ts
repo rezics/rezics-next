@@ -22,7 +22,7 @@ export const readPositionedRoute = cache(async (zone: string, path: string, curs
 });
 
 /** One occurrence of the chooser: Main's order, with the Work it belongs to (a volume, or the franchise itself). */
-export interface ChooserItem { occurrence: string; work: string; role: 'part' | 'chapter' | 'group' }
+export interface ChooserItem { occurrence: string; work: string; structure: string; role: 'part' | 'chapter' | 'group' }
 export interface Chooser {
   /** The Work the occurrences are positions in. */
   work: string;
@@ -49,7 +49,7 @@ export const readChooser = cache(async (work: string, position: string | undefin
     cursor);
     if (!read.ok) return read;
     resolved = read.data.resolved;
-    items.push(...read.data.items.map(({ occurrence, work: owner, role }) => ({ occurrence, work: owner, role })));
+    items.push(...read.data.items.map(({ occurrence, work: owner, structure, role }) => ({ occurrence, work: owner, structure, role })));
     cursor = read.data.next ?? undefined;
     if (!cursor) return { ok: true, data: { work, resolved, items, more: false } };
   }
@@ -60,4 +60,26 @@ export const readChooser = cache(async (work: string, position: string | undefin
 export const readEvidence = cache(async (id: string, position: string | undefined): Promise<Loaded<Evidence>> => {
   const { main, actingSubject } = await reader();
   return settle(() => main.v1.wiki.evidence({ id }).get({ query: { actingSubject, position } }));
+});
+
+/** A label a composition gives an occurrence, in the language it was written in. */
+export interface OccurrenceLabel { language: string; value: string }
+
+/** At most this many pages of a composition are read for its labels (Main's pages are 100 occurrences). */
+const LABEL_PAGES = 10;
+
+/** The labels of a composition's occurrences (`Chapter 3`), by occurrence IRI. A resource summary names a chapter after its Work. */
+export const readLabels = cache(async (structure: string): Promise<Map<string, OccurrenceLabel[]>> => {
+  const { main, actingSubject } = await reader();
+  const labels = new Map<string, OccurrenceLabel[]>();
+  const id = structure.slice(-36);
+  let after: string | undefined;
+  for (let page = 0; page < LABEL_PAGES; page++) {
+    const read = await settle(() => main.v1.compositions({ id }).get({ query: { actingSubject, after, limit: 100 } }), after);
+    if (!read.ok) break;
+    for (const item of read.data.occurrences) if (item.state === 'active') labels.set(item.occurrence, item.labels);
+    after = read.data.next ?? undefined;
+    if (!after) break;
+  }
+  return labels;
 });

@@ -19,7 +19,7 @@ import { readEntityProjection } from '../entity-page/read.ts';
 import { readMembers } from '../wiki/members.ts';
 import { type PositionChoice, parsePosition, positionParam, withPosition } from '../wiki/position.ts';
 import { readPositionedRoute } from '../wiki/read.ts';
-import { positionNote, positionOf } from '../wiki/state.ts';
+import { occurrenceName, positionNote, positionOf } from '../wiki/state.ts';
 import type { ZoneSite } from '../wiki/links.ts';
 import { loadWork, readText, resolveWork } from '../work-page/read.ts';
 import { idOf, shortId, type WorkTab } from '../work-page/route.ts';
@@ -139,7 +139,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     case 'index': {
       const name = mountName(route.mount.segment) ?? { value: route.mount.segment, lang: '', dir: 'ltr' as const };
       const card = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
-      const members = await readMembers(site, route.mount.segment, route.items, locale);
+      const members = await readMembers(site, route.mount.segment, route.items, locale, state);
       const Slot = view.pkg?.slots.index;
       const arrange = Slot ? (works: ZoneWork[], grid: ReactNode) => <SlotBoundary slot="index" fallback={grid}>
         <Slot zone={view.zone} works={works} fallback={grid} Link={LocalizedLink}
@@ -148,7 +148,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       const arrangeMembers = MembersSlot ? (named: ZoneMember[], list: ReactNode) => <SlotBoundary slot="memberIndex"
         fallback={list}>
         <MembersSlot zone={view.zone} members={named} mount={{ segment: route.mount.segment, name }}
-          position={positionNote(state, siteHref(locale, ref, path))} more={route.nextCursor !== null}
+          position={positionNote(state, siteHref(locale, ref, path), locale)} more={route.nextCursor !== null}
           fallback={list} Link={LocalizedLink} /></SlotBoundary> : undefined;
       return frame(<IndexPage route={route} cursor={cursor} context={view.context} card={card} locale={locale}
         messages={view.messages} arrange={arrange} arrangeMembers={arrangeMembers} members={members} query={{ position: positionParam(choice) }}
@@ -176,8 +176,9 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
         [home, ...mount ? [mount] : [], { label: title, href: null }]);
       }
       const summary = projection.data.summary;
-      const title = summary.status === 'available' ? zoneText(summary.name)
-        : { value: shortId(id), lang: '', dir: 'ltr' as const };
+      const chapter = state && projection.data.target.base === 'occurrence' ? occurrenceName(state, route.resource.id, locale) : null;
+      const title = chapter ?? (summary.status === 'available' ? zoneText(summary.name)
+        : { value: shortId(id), lang: '', dir: 'ltr' as const });
       return frame(<ZoneEntityPage view={view} id={id} projection={projection.data} locale={locale} search={search}
         site={site} state={state} mount={route.mount?.segment ?? null}
         path={`/r/${encodeURIComponent(ref)}/${path.map(encodeURIComponent).join('/')}`} />,

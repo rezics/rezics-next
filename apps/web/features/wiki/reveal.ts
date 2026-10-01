@@ -68,6 +68,6 @@ export async function revealedAt(site: ZoneSite, state: PositionState, chapter: 
   const [now, before] = await Promise.all([itemsAt(here, segment, here.main),
     index ? itemsAt(here, segment, ordered[index - 1]!.occurrence) : { items: [], complete: true }]);
   const earlier = new Set(before.items.map(item => item.id));
-  return { members: await readMembers(here, segment, now.items.filter(item => !earlier.has(item.id)), locale),
+  return { members: await readMembers(here, segment, now.items.filter(item => !earlier.has(item.id)), locale, state),
     complete: now.complete && before.complete };
 }

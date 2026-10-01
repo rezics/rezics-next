@@ -18,9 +18,9 @@ export function PositionBar({ state, here, locale }: { state: PositionState; her
       progressOption: t.progressOption, progressNote: t.progressNote, progressNoneNote: t.progressNoneNote,
       everythingOption: t.everythingOption, everythingNote: t.everythingNote, moreChapters: t.moreChapters,
       close: t.close }}
-    at={state.mode === 'all' ? { kind: 'all' } : { kind: 'position', label: positionLabel(state), note }}
-    options={positionOptions(state, here)}
-    progress={{ href: choice({ kind: 'default' }), current: state.mode === 'default', resolved: progressLabel(state) }}
+    at={state.mode === 'all' ? { kind: 'all' } : { kind: 'position', label: positionLabel(state, locale), note }}
+    options={positionOptions(state, here, locale)}
+    progress={{ href: choice({ kind: 'default' }), current: state.mode === 'default', resolved: progressLabel(state, locale) }}
     everything={{ href: choice({ kind: 'all' }), current: state.mode === 'all' }}
     more={state.chooser.more} />;
 }

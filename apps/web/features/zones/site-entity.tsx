@@ -50,7 +50,7 @@ export async function ZoneEntityPage({ view, id, projection, locale, search, sit
   const rest = <EntityPage resource={id} locale={locale} frame={false} hrefFor={hrefFor} cursors={cursors}
     position={site.main} header={false} sections={['ratings', 'reviews', 'discussion']} />;
   return <SlotBoundary slot="entity" fallback={generic}>
-    <Slot zone={view.zone} entity={entity} position={positionNote(state, path)} mount={here} rest={rest}
+    <Slot zone={view.zone} entity={entity} position={positionNote(state, path, locale)} mount={here} rest={rest}
       fallback={generic} Link={LocalizedLink} />
   </SlotBoundary>;
 }
