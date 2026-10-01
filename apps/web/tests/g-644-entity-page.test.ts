@@ -8,6 +8,7 @@ import { continueHref, entityHref, parseEntityCursors, parseEntityRef, standalon
 import type { TargetBase } from '../features/entity-page/types.ts';
 import { drawnSections } from '../features/entity-page/views.tsx';
 import { newPostProgress, submitPost } from '../features/post-composer/api.ts';
+import { isPublicPagePath, localizedPath } from '../i18n/locale.ts';
 
 const id = '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d';
 const iri = (uuid: string) => `https://rezics.com/id/${uuid}`;
@@ -30,6 +31,14 @@ describe('G-644 /e addresses', () => {
     expect(parseEntityRef('sword-art-online')).toBeNull();
     expect(parseEntityRef('')).toBeNull();
     expect(entityHref(iri(id))).toBe(`/e/${id}`);
+  });
+
+  test('/e and the composer it leads to are locale pages, so a link keeps the reader’s language', () => {
+    expect(isPublicPagePath(`/zh-Hant/e/${id}`)).toBe(true);
+    expect(isPublicPagePath('/en/submit')).toBe(true);
+    expect(localizedPath(`/e/${id}`, 'zh-Hant')).toBe(`/zh-Hant/e/${id}`);
+    expect(localizedPath(`/submit?target=${id}`, 'ja')).toBe(`/ja/submit?target=${id}`);
+    expect(isPublicPagePath('/eventually')).toBe(false);
   });
 
   test('list cursors are single, bounded values; anything else is refused', () => {

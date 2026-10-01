@@ -67,4 +67,8 @@ export const statements = (next: string | null = null): StatementPage => ({
       statement(5, 'https://schema.org/memberOf', { kind: 'resource', iri: iri('c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c') })] },
   ],
   nextCursor: next, sourcePosition: position, count: { value: 5, kind: 'exact-page', total: null } });
+/** A component's own property (a semantic resource's name), as the owner keeps it. */
+export const componentStatements: StatementPage = { ...statements(), groups: [{ predicate: 'https://schema.org/name',
+  items: [{ kind: 'component-property', revision: revision(7), predicate: 'https://schema.org/name', qualifiers, sources: [],
+    value: { kind: 'language-string', lexical: 'معرض الهولوغرام', language: 'ar', direction: 'rtl' } }] }] };
 export const noStatements: StatementPage = { ...statements(), groups: [], count: { value: 0, kind: 'exact-page', total: null } };

@@ -62,6 +62,12 @@ function Value({ item, names, hrefFor, t }: {
   item: StatementItem; names: Names; hrefFor: HrefFor; t: Copy;
 }) {
   if (item.kind === 'component-property') {
+    // An owner's typed value: text keeps its own language and direction; anything else is shown as Main recorded it.
+    const { lexical, language, direction } = item.value as { lexical?: unknown; language?: unknown; direction?: unknown };
+    if (typeof lexical === 'string') {
+      return <span lang={typeof language === 'string' ? language : undefined}
+        dir={direction === 'rtl' || direction === 'ltr' ? direction : 'auto'} className="break-words">{lexical}</span>;
+    }
     return <code className="break-all text-sm">{JSON.stringify(item.value)}</code>;
   }
   const value = item.value;

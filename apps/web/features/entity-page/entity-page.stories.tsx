@@ -10,7 +10,7 @@ import { EntityHeader } from './header.tsx';
 import { drawnSections } from './views.tsx';
 import { copyOf } from './messages.ts';
 import { DiscussionView, RelationsView, StatementsView } from './views.tsx';
-import { baseSections, projectionFor, noStatements, statements } from './fixtures.ts';
+import { baseSections, componentStatements, noStatements, projectionFor, statements } from './fixtures.ts';
 import { standaloneHrefFor } from './route.ts';
 import type { TargetBase } from './types.ts';
 
@@ -48,11 +48,22 @@ export const Statements: Story = {
     // A right-to-left value keeps its own direction inside the left-to-right page.
     await expect(canvas.getByText('الشبح الأسود')).toHaveAttribute('dir', 'auto');
     await expect(canvas.getByRole('link', { name: 'Aincrad guild' })).toHaveAttribute('href',
-      '/e/c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c');
+      '/en/e/c1e3a5f7-9b2d-4f6e-8c0a-2d4f6b8e0a1c');
     await expect(canvas.getByText('Unknown value')).toBeVisible();
     // The list continues by Main's cursor, on the same address.
     await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
-      '/e/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d?statements=next#statements');
+      '/en/e/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d?statements=next#statements');
+  },
+};
+
+export const ComponentProperties: Story = {
+  render: () => <Page><StatementsView page={{ ok: true, data: componentStatements }} names={new Map()} cursor={undefined}
+    {...common('en')} /></Page>,
+  async play({ canvasElement }) {
+    const name = within(canvasElement).getByText('معرض الهولوغرام');
+    // The owner's text keeps its own language and direction rather than appearing as a serialized record.
+    await expect(name).toHaveAttribute('dir', 'rtl');
+    await expect(name).toHaveAttribute('lang', 'ar');
   },
 };
 
@@ -72,7 +83,7 @@ export const StatementsFailedOnAStaleCursor: Story = {
     await expect(canvas.getByRole('alert')).toHaveTextContent('Statements could not be loaded.');
     // A stale cursor restarts from the first page rather than retrying the same one.
     await expect(canvas.getByRole('link', { name: 'First page' })).toHaveAttribute('href',
-      '/e/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d#statements');
+      '/en/e/0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d#statements');
   },
 };
 
@@ -109,7 +120,7 @@ export const Discussion: Story = {
     const canvas = within(canvasElement);
     // The same action on every page: it names the resource's kind and leads to the composer with it as the target.
     const discuss = canvas.getAllByRole('link', { name: 'Discuss this character' })[0]!;
-    await expect(discuss).toHaveAttribute('href', '/submit?target=0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d');
+    await expect(discuss).toHaveAttribute('href', '/en/submit?target=0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d');
     await expect(canvas.getAllByRole('article').length).toBeGreaterThan(0);
   },
 };
