@@ -126,7 +126,8 @@ function Evidence({ item, t }: { item: ZoneEvidence; t: Strings }) {
 
 function Infobox({ entity, t, Link }: { entity: ZoneEntity; t: Strings; Link: Link }) {
   const rows: [string, ReactNode][] = [];
-  if (entity.kind) rows.push([t.kind, entity.kind]);
+  // A chapter is a position in the story, not a kind of thing; its registry word ("List item") says nothing.
+  if (entity.kind && !entity.chapter) rows.push([t.kind, entity.kind]);
   for (const fact of entity.facts) rows.push([fact.label, <ul key={fact.label} className="fw-values">
     {fact.values.map((value, index) => <li key={index}>{value.href
       ? <Link href={value.href}><Text text={value.text} /></Link> : <Text text={value.text} />}</li>)}</ul>]);
