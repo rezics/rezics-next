@@ -13,7 +13,7 @@ test('G-854 review: import matching consumes writes, export consumes reads, and 
 });
 
 import { findImportSession } from '../src/modules/library-import/session-import.ts';
-import { importDigest } from '../src/modules/library-import/file-store.ts';
+import { importDigest, storedImportSource } from '../src/modules/library-import/file-store.ts';
 import { emptyRow } from '../src/modules/library-import/formats/contract.ts';
 import type { ReaderLibraryImportStore } from '../src/modules/library-import/reader-import.ts';
 
@@ -34,4 +34,15 @@ test('G-854 review: an earlier matching page cannot replace a source-bound attem
     agent,{ ...emptyRow('source-one','Book',{}),work },'rezics',desired);
   expect(calls).toBe(2);
   expect(found).toMatchObject({ session: { id: original.id,state: 'paused' },replay: true });
+});
+
+test('G-854 review: portable source envelopes share canonical bytes and retain their private view fields', () => {
+  const original = emptyRow('external-row','Original book',{ note: 'Private evidence' });
+  const digest = importDigest(original);
+  const archive = { ...emptyRow(`source:${digest}`,'Original book',{ source: original,outcome: { issues: [] },extension: 'Kept' }),kind: 'retained' as const };
+  const held = storedImportSource(archive);
+  expect(held.digest).toBe(digest);
+  expect(held.source).toEqual(original);
+  expect(held.view?.raw).toEqual({ outcome: { issues: [] },extension: 'Kept' });
+  expect(storedImportSource({ ...archive,sourceId: `source:${'0'.repeat(64)}` }).source).toEqual({ ...archive,sourceId: `source:${'0'.repeat(64)}` });
 });

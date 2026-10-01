@@ -82,6 +82,13 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
     while (next) { const page = await checked<Page>(await exported(next,first.snapshot));all.push(...page.rows);next=page.nextCursor; }
     const own = await upload(all);await resolve(own.id,all);await checked(await apply(own.id));
     expect((await sessions()).length).toBe(1);
+    expect((await stack.contentPool.query("SELECT count(*)::integer AS n FROM reader.library_import_source WHERE agent=$1 AND source->>'kind'='source'",[agent])).rows[0].n).toBe(1);
+    const selfRows: CanonicalRow[] = [];let selfCursor: string | null = null,selfSnapshot: string | undefined;
+    do {
+      const page = await checked<Page>(await exported(selfCursor,selfSnapshot));selfSnapshot ??= page.snapshot;
+      selfRows.push(...page.rows);selfCursor=page.nextCursor;
+    } while (selfCursor);
+    expect(selfRows.filter(row => row.sourceId===all.find(row => row.sourceId.startsWith('source:'))!.sourceId)).toHaveLength(1);
     // A portable archive may contain two real attempts with identical dates.
     const attempt = { ...emptyRow(`https://rezics.com/id/${randomUUID()}`,'',{}),kind: 'session' as const,work: book.work,
       session: { target: book.work,state: 'finished' as const,startedOn: '2024-01-01',finishedOn: '2024-02-01',selections: [{ target: book.work }],locators: [] } };

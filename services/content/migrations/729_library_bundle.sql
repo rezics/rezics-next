@@ -35,6 +35,8 @@ CREATE TABLE reader.library_import_source_row (
   file_id uuid NOT NULL,
   row_number integer NOT NULL CHECK (row_number BETWEEN 0 AND 4999),
   source_digest text NOT NULL,
+  -- Portable source envelopes reference the same canonical evidence bytes.
+  source_view jsonb CHECK (source_view IS NULL OR jsonb_typeof(source_view)='object'),
   match jsonb,
   resolution jsonb,
   outcome jsonb,

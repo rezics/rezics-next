@@ -199,7 +199,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     expect((await home.deps.libraryStatus.privateReviews(agent,[first.work]))[0]).toMatchObject({ text: 'Private imported review',spoiler: true });
     sessions = (await stack.contentPool.query('SELECT state FROM reader.consumption_session WHERE agent=$1 ORDER BY attempt_order',[agent])).rows.map(r => r.state);
     expect(sessions.filter(s => s.state === 'finished')).toHaveLength(2);
-    expect(sessions.at(-2)).toMatchObject({ state: 'paused',startedOn: '2026-09-01' });
+    expect(sessions.at(-1)).toMatchObject({ state: 'paused',startedOn: '2026-09-01' });
     const extension = { ...emptyRow('native-private-extra','',{ privateJournal: { chapter: 'c123',note: 'Retain this' } }),
       kind: 'session' as const,work: first.work,session: { target: first.work,state: 'planned' as const,
         startedOn: null,finishedOn: null,selections: [{ target: first.work }],locators: [] } };

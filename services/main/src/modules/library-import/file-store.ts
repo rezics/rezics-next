@@ -1,6 +1,7 @@
+import { Value } from 'typebox/value';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { FILE_IMPORT_COST, type CanonicalRow, type LibraryFileFormat } from './formats/contract.ts';
+import { FILE_IMPORT_COST, canonicalRow, type CanonicalRow, type LibraryFileFormat } from './formats/contract.ts';
 import { ReaderImportConflict } from './reader-import.ts';
 import { deleteLibraryUploads } from './privacy.ts';
 
@@ -28,6 +29,20 @@ export const fileIdentity = (agent: string, key: string) => {
   const h = importDigest([agent, key]);
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 };
+
+// A portable source envelope is a view of the original evidence, not a
+// second copy of its bytes. Validate its digest before sharing the owner row.
+export function storedImportSource(row: CanonicalRow) {
+  const original = row.kind==='retained' && /^source:[0-9a-f]{64}$/.test(row.sourceId) ? row.raw.source : null;
+  if (original && Value.Check(canonicalRow,original) && original.kind==='source'
+    && row.sourceId===`source:${importDigest(original)}`) {
+    const { source: _source,...raw } = row.raw;
+    return { digest: importDigest(original),source: original,view: { ...row,raw } };
+  }
+  return { digest: importDigest(row),source: row,view: undefined };
+}
+const sourceView = `CASE WHEN r.source_view IS NULL THEN s.source ELSE r.source_view ||
+  jsonb_build_object('raw',r.source_view->'raw' || jsonb_build_object('source',s.source)) END AS source`;
 
 /** One bulk insert; pages and apply use the (agent,file,row) keyset. All review
  * mutations lock the file before rows, so apply seals one immutable intent. */
@@ -57,13 +72,13 @@ export class LibraryFileStore {
       if (prior.rows[0]?.request_digest !== digest) throw new ReaderImportConflict('Import key belongs to another file or mapping');
       await client.query(`INSERT INTO reader.library_import_file(agent,id,import_key,format,file_digest)
         VALUES ($1,$2,$3,$4,$5)`, [agent,id,key,format,digest]);
-      const sources = rows.map(source => ({ digest: importDigest(source),source }));
+      const sources = rows.map(storedImportSource);
       await client.query(`INSERT INTO reader.library_import_source(agent,digest,source)
         SELECT $1,value->>'digest',value->'source' FROM jsonb_array_elements($2::jsonb)
-        ON CONFLICT DO NOTHING`,[agent,JSON.stringify(sources)]);
-      await client.query(`INSERT INTO reader.library_import_source_row(agent,file_id,row_number,source_digest)
-        SELECT $1,$2,(ordinal-1)::integer,value->>'digest' FROM jsonb_array_elements($3::jsonb) WITH ORDINALITY AS r(value,ordinal)`,
-      [agent,id,JSON.stringify(sources.map(({ digest }) => ({ digest })))]);
+        ON CONFLICT DO NOTHING`,[agent,JSON.stringify(sources.map(({ digest,source }) => ({ digest,source })))]);
+      await client.query(`INSERT INTO reader.library_import_source_row(agent,file_id,row_number,source_digest,source_view)
+        SELECT $1,$2,(ordinal-1)::integer,value->>'digest',value->'view' FROM jsonb_array_elements($3::jsonb) WITH ORDINALITY AS r(value,ordinal)`,
+      [agent,id,JSON.stringify(sources.map(({ digest,view }) => ({ digest,view })))]);
       await client.query(`INSERT INTO reader.library_import_upload_command(agent,idempotency_key,request_digest,file_id)
         VALUES ($1,$2,$3,$4)`,[agent,key,digest,id]);
       await client.query('COMMIT');
@@ -78,7 +93,7 @@ export class LibraryFileStore {
   }
   async page(agent: string, id: string, after: number, limit = FILE_IMPORT_COST.page as number) {
     await this.file(agent,id);
-    const result = await this.pool.query<SourceRecord>(`SELECT r.row_number,s.source,r.match,r.resolution,r.outcome,r.version::text
+    const result = await this.pool.query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
       FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
       WHERE r.agent=$1 AND r.file_id=$2 AND r.row_number>$3 ORDER BY r.row_number LIMIT $4`, [agent,id,after,limit+1]);
     return { rows: result.rows.slice(0,limit).map(unpack), more: result.rows.length>limit };
@@ -103,7 +118,7 @@ export class LibraryFileStore {
         WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp() FOR UPDATE`, [agent,id]);
       if (!file.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
       if (file.rows[0].apply_intent) throw new ReaderImportConflict('Application has started; row choices are sealed');
-      const row = await client.query<SourceRecord>(`SELECT r.row_number,s.source,r.match,r.resolution,r.outcome,r.version::text
+      const row = await client.query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
         FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
         WHERE r.agent=$1 AND r.file_id=$2 AND r.row_number=$3 FOR UPDATE OF r`, [agent,id,index]);
       if (!row.rows[0]) throw new LibraryFileMissing('Import row is unavailable');
@@ -137,7 +152,7 @@ export class LibraryFileStore {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }
   async pending(agent: string, id: string) {
-    const rows = await this.pool.query<SourceRecord>(`SELECT r.row_number,s.source,r.match,r.resolution,r.outcome,r.version::text
+    const rows = await this.pool.query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
       FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
       WHERE r.agent=$1 AND r.file_id=$2 AND r.outcome IS NULL ORDER BY r.row_number LIMIT ${FILE_IMPORT_COST.page}`, [agent,id]);
     return rows.rows.map(unpack);
