@@ -4,6 +4,7 @@ import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { EyeIcon, EyeOffIcon, MessageCircleIcon, ReplyIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { discussionTarget } from '../safety/report.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { FollowRealmButton, ShareButton, type VoteTarget, VoteControl } from './actions.tsx';
 import { announcesSpoilers } from './discussion.ts';
@@ -75,7 +76,7 @@ export function DiscussionCard({ post, menu, position, total }: { post: Discussi
     post.kind === 'reply' && 'text-foreground')}>{body}</span> : null;
   const identity = useIdentity({ lead: post.lead ?? 'realm', realm: post.realm,
     people: post.author ? [post.author] : [], someone: t.someone });
-  return <PostRow kind={post.kind} href={post.href} position={position} total={total}
+  return <PostRow kind={post.kind} href={post.href} report={discussionTarget(post.href)} position={position} total={total}
     meta={<MetaLine icon={identity.icon} parts={[
       ...identity.parts, { keep: true, node: <PostTime time={post.time} /> },
       post.kind === 'reply' ? { node: t.replied } : null,

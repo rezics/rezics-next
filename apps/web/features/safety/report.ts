@@ -73,23 +73,27 @@ export const credentialFromHash = (hash: string): string | null => {
 };
 export const casePath = (caseId: string, credential: string) => `/report/${caseId}#${credential}`;
 
-/** The report page for a target: a REZICS ID, or the site path of a page that has no ID of its own. */
+/** The report page for a target: the REZICS ID of what is reported (Main resolves only IDs and its own addresses). */
 export function reportHref(target: string, realm?: string | null): string {
   const query = new URLSearchParams({ target });
   if (realm) query.set('realm', realm);
   return `/report?${query}`;
 }
 
-/** What Main resolves: an ID passes as it is, and a page path becomes this site's address for it. */
-export function targetAddress(target: string, origin: string): string {
-  const value = target.trim();
-  return value.startsWith('/') && !value.startsWith('//') ? new URL(value, origin).href : value;
+const ID = 'https://rezics.com/id/';
+/**
+ * The ID Main can resolve for a page this site shows a post on, or null when
+ * the page's address carries none. Only discussion and reply pages do:
+ * `/r/{realm}/discussions/{reply}` names a reply by its UUID.
+ */
+export function discussionTarget(href: string): string | null {
+  const reply = /\/discussions\/([0-9a-f-]{36})(?:[/?#]|$)/.exec(href)?.[1];
+  return reply ? ID + reply : null;
 }
 
-/** Whether `value` looks like something Main can resolve: a REZICS ID or a web address. */
+/** Whether `value` looks like something Main can resolve: a REZICS ID or a web address. Main decides which. */
 export function plausibleTarget(value: string): boolean {
   const text = value.trim();
   if (!text || text.length > 2048) return false;
-  if (/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(text)) return true;
-  try { return ['http:', 'https:'].includes(new URL(text, 'https://rezics.invalid').protocol); } catch { return false; }
+  try { return ['http:', 'https:'].includes(new URL(text).protocol); } catch { return false; }
 }

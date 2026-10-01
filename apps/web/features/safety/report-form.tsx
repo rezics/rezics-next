@@ -9,13 +9,13 @@ import { RadioGroup, RadioGroupItem, RadioGroupLabel } from '@rezics/ui/radio-gr
 import { Textarea } from '@rezics/ui/textarea';
 import { CircleAlertIcon, ShieldAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { type Failure, submitReport } from './report-api.ts';
 import { casePath, type CopyrightDeclaration, categoriesFor, declarationOf, fill, isUrgent, keyed, needsEmail,
-  type NciiDeclaration, plausibleTarget, type ReportCategory, targetAddress, textFor, waitText } from './report.ts';
+  type NciiDeclaration, plausibleTarget, type ReportCategory, textFor, waitText } from './report.ts';
 
 type Problem = 'target' | 'category' | 'statement' | 'email' | 'declarations';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,6 +67,9 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const attempt = useRef<{ body: string; key: string } | null>(null);
+  // Until the page is interactive a native submit would put the report in the address; the button waits.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const declaration = category ? declarationOf(category) : null;
   const emailRequired = category ? needsEmail(category) : false;
 
@@ -85,7 +88,7 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
     setProblems(found);
     if (found.size || !category) return;
     const body = {
-      target: targetAddress(target, location.origin), category, statement: statement.trim(), contentLanguage: language,
+      target: target.trim(), category, statement: statement.trim(), contentLanguage: language,
       ...(email.trim() ? { contactEmail: email.trim() } : {}),
       ...(category === 'realm_rules' && realm ? { realm } : {}),
       ...(declaration === 'ncii' ? { ncii: { signature: ncii.signature.trim(), depictedPersonOrAuthorized: true as const,
@@ -115,7 +118,7 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
       {problems.has('target') ? <FieldError>{t.targetInvalid}</FieldError> : <FieldHelper>{t.targetHelp}</FieldHelper>}
     </Field>
 
-    <Field invalid={problems.has('category')}>
+    <div className="grid gap-2">
       <RadioGroup value={category ?? ''} onValueChange={details => setCategory((details.value || null) as ReportCategory | null)}
         className="gap-2">
         <RadioGroupLabel>{t.categoryLabel}</RadioGroupLabel>
@@ -126,8 +129,8 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
           </span>
         </RadioGroupItem>)}
       </RadioGroup>
-      {problems.has('category') ? <FieldError>{t.categoryRequired}</FieldError> : null}
-    </Field>
+      {problems.has('category') ? <p role="alert" className="text-destructive-foreground text-sm">{t.categoryRequired}</p> : null}
+    </div>
 
     {declaration === 'ncii' ? <section aria-labelledby="ncii-heading" className="grid gap-4 rounded-2xl bg-muted/60 p-4">
       <h2 id="ncii-heading" className="flex items-center gap-2 font-semibold">
@@ -196,6 +199,6 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
       <AlertDescription>{failure.reason === 'limited' ? fill(t.retryIn, { time: waitText(failure.retryAfter, locale) })
         : failure.reason === 'invalid' ? t.refused : failure.reason === 'denied' ? t.targetUnknown : t.failed}
       </AlertDescription></Alert> : null}
-    <div><Button type="submit" isLoading={busy} disabled={busy}>{busy ? t.sending : t.submit}</Button></div>
+    <div><Button type="submit" isLoading={busy} disabled={busy || !hydrated}>{busy ? t.sending : t.submit}</Button></div>
   </form>;
 }

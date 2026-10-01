@@ -5,8 +5,8 @@ import { isPublicPagePath, isReportPath, localizedPath } from '../i18n/locale.ts
 import { uploadCommunityImage, ImageRefused } from '../features/communities/images.ts';
 import { saveAgentProfile, profileSaveInput, type AvatarReport } from '../features/settings/profile-api.ts';
 import { listReports, readCase, retryAfterSeconds, submitReport, writeCase } from '../features/safety/report-api.ts';
-import { casePath, categoriesFor, credentialFromHash, declarationOf, fill, keyed, needsEmail, plausibleTarget,
-  reportHref, targetAddress, textFor, waitText } from '../features/safety/report.ts';
+import { casePath, categoriesFor, credentialFromHash, declarationOf, discussionTarget, fill, keyed, needsEmail,
+  plausibleTarget, reportHref, textFor, waitText } from '../features/safety/report.ts';
 import { CASE_CREDENTIAL_HEADER, relays, withCredential } from '../features/safety/relay.ts';
 import { safetyText } from '../features/safety/messages.ts';
 import { clearanceOf, nextCheckSeconds, uploadErrorText } from '../features/safety/upload-state.ts';
@@ -18,26 +18,30 @@ const CREDENTIAL = 'A'.repeat(43);
 const AGENT = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000aa';
 
 // The class guard: every surface that shows people's contributions, in one table. A surface that lacks the
-// shared Report action fails here. G-850 (Work hub), the Zone and wiki areas add their rows when they place it.
+// shared Report action (or, for a row of posts, the ID it reports) fails here. G-850 (Work hub), the Zone and
+// wiki areas add their rows when they place it.
 const surfaces = [
-  { surface: 'profile', file: '../features/profile/profile-page.tsx', kind: 'profile' },
-  { surface: 'post', file: '../features/feed/post-row.tsx', kind: 'post' },
-  { surface: 'reply', file: '../features/feed/reply-tree.tsx', kind: 'reply' },
+  { surface: 'profile', file: '../features/profile/profile-page.tsx', places: /<ReportAction[^>]*kind="profile"/ },
+  { surface: 'every post row', file: '../features/feed/post-row.tsx', places: /<ReportAction[^>]*kind="post"/ },
+  { surface: 'feed posts', file: '../features/feed/card.tsx', places: /<PostRow[^>]*report=\{/ },
+  { surface: 'discussions and replies as posts', file: '../features/feed/discussion-card.tsx', places: /<PostRow[^>]*report=\{/ },
+  { surface: 'reply thread', file: '../features/feed/reply-tree.tsx', places: /<ReportAction[^>]*kind="reply"/ },
 ] as const;
 
-test('G-820 every reportable surface places the shared ReportAction for its kind', () => {
-  for (const { surface, file, kind } of surfaces) {
-    const code = source(file);
-    expect(code, `${surface} must import ReportAction`).toContain("from '../safety/report-action.tsx'");
-    expect(code, `${surface} must place <ReportAction kind="${kind}">`).toMatch(
-      new RegExp(`<ReportAction[^>]*kind="${kind}"`));
+test('G-820 every reportable surface places the shared ReportAction', () => {
+  for (const { surface, file, places } of surfaces) {
+    expect(source(file), `${surface} must place the ReportAction (${file})`).toMatch(places);
+  }
+  for (const file of ['../features/profile/profile-page.tsx', '../features/feed/post-row.tsx',
+    '../features/feed/reply-tree.tsx']) {
+    expect(source(file)).toContain("from '../safety/report-action.tsx'");
   }
 });
 
 test('G-820 a report needs no account: the page is public and its target comes from the link', () => {
   expect(isPublicPagePath('/report')).toBe(true);
   expect(isPublicPagePath('/ja/report/0198a1b2')).toBe(true);
-  expect(localizedPath(reportHref('/en/r/abc', 'https://rezics.com/id/x'), 'ja')).toStartWith('/ja/report?target=');
+  expect(localizedPath(reportHref(AGENT, 'https://rezics.com/id/x'), 'ja')).toStartWith('/ja/report?target=');
   expect(reportHref(AGENT)).toBe(`/report?target=${encodeURIComponent(AGENT)}`);
   const action = source('../features/safety/report-action.tsx');
   expect(action).not.toContain('useSession');
@@ -45,12 +49,15 @@ test('G-820 a report needs no account: the page is public and its target comes f
   expect(source('../app/[locale]/report/page.tsx')).not.toContain('signInPath');
 });
 
-test('G-820 a page path becomes this site\'s address, and an ID passes through', () => {
-  expect(targetAddress('/en/r/abc', 'https://rezics.test')).toBe('https://rezics.test/en/r/abc');
-  expect(targetAddress(AGENT, 'https://rezics.test')).toBe(AGENT);
-  expect(targetAddress('//evil.test/x', 'https://rezics.test')).toBe('//evil.test/x');
+test('G-820 Main resolves IDs, so a post names the ID of what it is about', () => {
+  expect(discussionTarget('/en/r/01a0e914-1857-74d8-8763-6628387b7f39/discussions/ee9b727b-300f-406f-aa16-dbd535efde0d'))
+    .toBe('https://rezics.com/id/ee9b727b-300f-406f-aa16-dbd535efde0d');
+  expect(discussionTarget('/en/r/rain/discussions/ee9b727b-300f-406f-aa16-dbd535efde0d#reply'))
+    .toBe('https://rezics.com/id/ee9b727b-300f-406f-aa16-dbd535efde0d');
+  expect(discussionTarget('/en/w/01a0e909-2857-70fc-b300-8091dc9a973f')).toBeNull();
   expect(plausibleTarget(AGENT)).toBe(true);
-  expect(plausibleTarget('https://rezics.test/en/r/abc')).toBe(true);
+  expect(plausibleTarget('https://rezics.com/works/01a0e909-2857-70fc-b300-8091dc9a973f')).toBe(true);
+  expect(plausibleTarget('/en/r/abc')).toBe(false);
   expect(plausibleTarget('javascript:alert(1)')).toBe(false);
   expect(plausibleTarget('   ')).toBe(false);
 });

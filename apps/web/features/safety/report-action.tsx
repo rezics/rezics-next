@@ -16,8 +16,8 @@ export type ReportKind = keyof typeof kinds;
  * The one way to report something: a link to the report page with the target
  * filled in. It needs no account and no script, so it works signed out and on
  * a page that has not hydrated. Every surface that shows people's
- * contributions places this one component, with the target's ID (or the
- * page's path where it has none) and what it is.
+ * contributions places this one component, with the REZICS ID of the target
+ * (Main resolves IDs, not this site's page addresses) and what it is.
  *
  * `className` restyles the link to sit in a host's own row of actions; without
  * it the link is a quiet outline button. `iconOnly` keeps the name for assistive
