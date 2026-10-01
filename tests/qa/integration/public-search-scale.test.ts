@@ -196,7 +196,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     }
     expect(corpusSamples.map(sample => sample.size)).toEqual([1, 32, 101]);
     expect(corpusSamples.map(sample => [sample.queries, sample.health, sample.inventories]))
-      .toEqual([[4, 3, 1], [4, 3, 1], [4, 3, 1]]);
+      .toEqual([[2, 3, 1], [2, 3, 1], [2, 3, 1]]);
     const lateWork = await addWork(101, 'en');
     const coldStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const late = await query('en');

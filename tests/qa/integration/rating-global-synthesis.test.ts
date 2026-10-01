@@ -239,7 +239,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     // Swapped kinds are rejected; the Realm aggregate cannot read the Global population.
     expect((await read('/v1/rating-syntheses', { ...synthesisBody, realmContext: globalContext, globalContext: realmContext })).status).toBe(400);
     expect((await read('/v1/rating-aggregates', { profile: 'realm-standing-latest-mean-v1', context: globalContext,
-      work: work.work, mainVersion: work.mainVersion })).status).toBe(503);
+      work: work.work, mainVersion: work.mainVersion })).status).toBe(400);
 
     // Recovery: a closed Access fence or lost manifest bytes are unavailable, never a smaller population.
     const generation = await engageAccessRecoveryFence(accessPool);

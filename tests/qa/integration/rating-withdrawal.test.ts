@@ -1,97 +1,76 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { createMainApp } from '../../../services/main/src/app.ts';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
-import { createRatingContext, ratingContextDigest }
-  from '../../../services/main/src/modules/rating/context.ts';
-import { setStandingRating, standingRatingDigest }
-  from '../../../services/main/src/modules/rating/observation.ts';
 import { createRealmSpace, spaceCreationDigest }
   from '../../../services/main/src/modules/space/create.ts';
-import { activateMetadataWork, ID, iri, metadataWorkRequestDigest,
-  type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { iri } from '../../../services/main/src/modules/work/activate.ts';
+import { startMediaStack } from './media-support.ts';
 
-const root = resolve(import.meta.dir, '../../..');
+interface Opinion {
+  observation: string;
+  observationRevision: string;
+  predecessor: string | null;
+  availability: 'available' | 'withdrawn';
+  value: number | null;
+}
 
 test('RATE04: a withdrawn latest opinion keeps earlier immutable revisions without resurrecting their values', async () => {
-  if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
-    || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH) {
-    throw new Error('Run through the isolated QA integration tier');
-  }
-  const state = join(root, '.temp', `rating-withdrawal-${randomUUID()}`);
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = {
-    fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
-      routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(state, 'objects'),
-  };
-  const actor = ID + randomUUID();
-  const raterA = randomUUID(), raterB = randomUUID();
-  function admission(scope: string, action: string, digest: string,
-    principalId = raterA): RegisteredAdmission {
-    const id = randomUUID();
-    return { id, principalId, actingSubject: actor, scope, action,
-      idempotencyKey: `rating-${id}`, requestDigest: digest,
-      authorityEpoch: '0', expiresAt: new Date(Date.now() + 20 * 60_000).toISOString(),
-      state: 'claimed', dispatchEligible: true, replayed: false };
-  }
+  const stack = await startMediaStack('rating-withdrawal');
+  const { fuseki, env } = stack;
   async function aggregate(context: string, work: string, mainVersion: string) {
-    const app = createMainApp(fuseki, { environment: env,
-      account: { verify: async () => { throw new Error('not an authority request'); } },
-      access: {} as never });
-    const response = await app.handle(new Request('http://main.local/v1/rating-aggregates', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ profile: 'realm-standing-latest-mean-v1',
-        context, work, mainVersion }),
-    }));
-    expect(response.status).toBe(200);
+    const response = await stack.call('POST', '/v1/rating-aggregates', {
+      body: { profile: 'realm-standing-latest-mean-v1', context, work, mainVersion },
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
     return response.json() as Promise<{ population: number; count: number;
       withdrawnCount: number; sum: number; mean: number | null;
       histogram: number[] }>;
   }
   try {
-    const workTitle = `Withdrawn rating ${randomUUID()}`;
-    const work = await activateMetadataWork(env, { title: workTitle,
-      admission: admission('work:create:root', 'work.create',
-        metadataWorkRequestDigest(workTitle)) });
-    if (!work.work || !work.mainVersion) throw new Error('Work activation failed');
-    const spaceInput = { name: `Rating Realm ${randomUUID()}`, actingSubject: actor };
+    const raterA = await stack.member('rating-withdrawal-a');
+    const raterB = await stack.member('rating-withdrawal-b');
+    const work = await stack.publicWork(raterA.actor);
+    const spaceInput = { name: `Rating Realm ${randomUUID()}`, actingSubject: raterA.actor };
     const space = await createRealmSpace(env,
-      admission('space:create:root', 'space.create', spaceCreationDigest(spaceInput)),
-      spaceInput);
+      stack.admission(raterA.actor, 'space:create:root', 'space.create',
+        spaceCreationDigest(spaceInput)), spaceInput);
     if (!space.realm) throw new Error('Realm activation failed');
-    const contextInput = { realm: space.realm, question: 'Current quality',
-      actingSubject: actor };
-    const ratingContext = await createRatingContext(env,
-      admission(`rating:context:${space.realm}`, 'rating.context.create',
-        ratingContextDigest(contextInput)), contextInput);
-    if (!ratingContext.context) throw new Error('Rating Context activation failed');
-    const context = ratingContext.context;
+    await raterA.grant(`rating:context:${space.realm}`, 'rating.context.create');
+    const contextResponse = await raterA.send('POST', '/v1/rating-contexts', {
+      profile: 'realm-standing-rating-context-v1', realm: space.realm,
+      question: 'Current quality', actingSubject: raterA.actor,
+    });
+    expect(contextResponse.status, await contextResponse.clone().text()).toBe(201);
+    const { context } = await contextResponse.json() as { context: string };
+    await raterA.grant(`rating:observe:${context}`, 'rating.observation.set');
+    await raterB.grant(`rating:observe:${context}`, 'rating.observation.set');
     async function set(value: number | null, expectedRevisionHead: string | null,
-      principalId = raterA) {
-      const input = { context, work: work.work!, mainVersion: work.mainVersion!,
-        expectedRevisionHead, value, actingSubject: actor };
-      return setStandingRating(env,
-        admission(`rating:observe:${context}`, 'rating.observation.set',
-          standingRatingDigest(input), principalId), input);
+      rater = raterA): Promise<Opinion> {
+      const key = `rating-withdrawal-${randomUUID()}`;
+      const response = await rater.send('POST', '/v1/rating-observations', {
+        profile: 'realm-standing-rating-observation-v1', context,
+        work: work.work, mainVersion: work.mainVersion, expectedRevisionHead,
+        value, actingSubject: rater.actor,
+      }, key);
+      expect(response.status, await response.clone().text()).toBe(201);
+      // The API seals the native receipt and the exact inventory before reads.
+      const sealed = await stack.accessPool.query(`SELECT state, graph_outcome
+        FROM access.admission WHERE principal_id = $1 AND action = $2
+          AND idempotency_key = $3`, [rater.principalId, 'rating.observation.set', key]);
+      expect(sealed.rows).toEqual([{ state: 'sealed', graph_outcome: 'succeeded' }]);
+      return response.json() as Promise<Opinion>;
     }
     const first = await set(2, null);
     const other = await set(6, null, raterB);
-    expect(first.outcome).toBe('succeeded');
-    expect(other.outcome).toBe('succeeded');
+    expect(other.observation).not.toBe(first.observation);
     expect(await aggregate(context, work.work, work.mainVersion)).toMatchObject({
       population: 2, count: 2, withdrawnCount: 0, sum: 8, mean: 4 });
-    const correction = await set(8, first.revision!);
+    const correction = await set(8, first.observationRevision);
     expect(correction.observation).toBe(first.observation);
     expect(await aggregate(context, work.work, work.mainVersion)).toMatchObject({
       population: 2, count: 2, withdrawnCount: 0, sum: 14, mean: 7 });
-    const withdrawn = await set(null, correction.revision!);
-    expect(withdrawn).toMatchObject({ outcome: 'succeeded',
-      observation: first.observation, predecessor: correction.revision,
+    const withdrawn = await set(null, correction.observationRevision);
+    expect(withdrawn).toMatchObject({
+      observation: first.observation, predecessor: correction.observationRevision,
       availability: 'withdrawn', value: null });
     const current = await aggregate(context, work.work, work.mainVersion);
     expect(current).toMatchObject({ population: 2, count: 1,
@@ -102,18 +81,18 @@ test('RATE04: a withdrawn latest opinion keeps earlier immutable revisions witho
         GRAPH <urn:rezics:graph:current> {
           ${iri(first.observation!)} rv:observationHead ?head . }
         GRAPH <urn:rezics:graph:revisions> {
-          ${iri(first.revision!)} rv:ratingValue ?oldValue .
-          ${iri(correction.revision!)} rv:ratingValue ?correctedValue . }
+          ${iri(first.observationRevision)} rv:ratingValue ?oldValue .
+          ${iri(correction.observationRevision)} rv:ratingValue ?correctedValue . }
       }`);
     expect(previous.results?.bindings).toHaveLength(1);
-    expect(previous.results?.bindings[0]?.head?.value).toBe(withdrawn.revision);
+    expect(previous.results?.bindings[0]?.head?.value).toBe(withdrawn.observationRevision);
     expect(previous.results?.bindings[0]?.oldValue?.value).toBe('2');
     expect(previous.results?.bindings[0]?.correctedValue?.value).toBe('8');
-    const restored = await set(9, withdrawn.revision!);
+    const restored = await set(9, withdrawn.observationRevision);
     expect(restored.observation).toBe(first.observation);
     expect(await aggregate(context, work.work, work.mainVersion)).toMatchObject({
       population: 2, count: 2, withdrawnCount: 0, sum: 15, mean: 7.5 });
   } finally {
-    rmSync(state, { recursive: true, force: true });
+    await stack.stop();
   }
 }, 120_000);
