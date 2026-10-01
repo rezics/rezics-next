@@ -103,7 +103,7 @@ restart deadlines.
 
 ## Staff decisions and recovery
 
-Migrations 932–934 add the platform queue, persistent exclusive claims, private
+Access migrations 932–934 add the platform queue, persistent exclusive claims, private
 mandatory party notices and per-target effect progress. `/v1/safety-cases` filters
 urgency, category, original content language and due time; case reports and queue
 pages have continuations. Urgent evidence, claims, decisions, replay, cancellation and holds
@@ -129,9 +129,13 @@ and client-driven continuation because this milestone excludes a job runner and
 generic operations service. The local state-machine and real owner tests, rather
 than those source patterns, establish receipt and cancellation behavior here.
 
-G-571's identical-copy marker is immutable in Content migration 601 and delivery
-always rejects a marked digest. A successful NCII appeal therefore still needs a
-Content-owner migration and a reversal primitive to lift that marker and restore
-eligible copies. G-565 leaves such an effect unconfirmed instead of asserting
-restoration. Account suspension remains an Accounts administration action with
-the case ID in its reason note.
+Content migration 740 preserves immutable suppression audit rows and adds one
+append-only lift per suppression. An NCII reversal must answer a retained appeal
+and pin the reversed decision's suppression. The lift commits with its exact
+receipt and outbox event; eligible copy histories restore in batches of at most
+100. Deleted/erased assets and unrelated staff clearance stay fenced. A later
+report appends a new suppression that the previous lift and its replay cannot
+clear. All media positions use `advanceContentSequence` so the Content relay
+receives every advanced position. Preservation holds continue to prevent erasure.
+Account suspension remains an Accounts administration action with the case ID
+in its reason note.

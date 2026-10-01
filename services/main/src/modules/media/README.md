@@ -174,12 +174,22 @@ image held and retries later. G-565 supplies staff authority and decisions;
 `MediaScreenStore.reviewOriginal` applies its exact original CAS and records the
 staff decision. It never grants that authority.
 
-`suppressIdenticalCopies(originalDigest, after?, limit?)` writes a permanent
-SHA-256 marker before advancing at most 100 asset histories per call. Its asset
+`suppressIdenticalCopies(originalDigest, after?, limit?, decisionBasis?)` appends an immutable
+SHA-256 suppression before advancing at most 100 asset histories per call. Its asset
 cursor continues large sets; repeating a call skips already suppressed assets.
-Every delivery lookup consults that marker, so unfinished batches cannot serve
+Every delivery lookup checks suppressions without a lift, so unfinished batches cannot serve
 copies. Later originals of the bytes activate rejected and suppressed without
 queuing a classifier. There is no perceptual hash or cross-asset byte deduplication.
+
+Content migration 740 gives each suppression its own identity. Only an NCII
+reversal answering a retained appeal supplies the lift basis to `moderateOriginal`.
+The append-only `suppression_lift` binds the suppression, case and upheld decision
+to its Content receipt/outbox event in the same transaction. Replaying reconciles
+that receipt before testing the saved asset state. `restoreIdenticalCopies` then
+restores at most 100 eligible histories per call; it leaves other staff decisions,
+held clearance and deleted/erased assets alone. A later suppression has a new
+identity, so the previous lift cannot admit newly restricted bytes. Preservation
+holds still prevent erasure. All MediaStore positions use `advanceContentSequence`.
 
 | Internal operation | Bound and lookup |
 | --- | --- |
@@ -188,6 +198,7 @@ queuing a classifier. There is no perceptual hash or cross-asset byte deduplicat
 | Review intake retry | At most eight jobs per tick through pending retry index; one governance case/report/evidence transaction per job |
 | Staff clearance | One original CAS, decision, receipt/outbox and no avatar-slot fan-out |
 | Copy suppression | One digest marker plus at most 100 distinct asset probes/state histories; digest-and-asset index, returned continuation |
+| Appeal lift / copy restoration | One exact suppression and receipt/outbox; digest lock plus at most 100 distinct asset probes/state histories, returned continuation |
 
 ## Recovery obligations
 
