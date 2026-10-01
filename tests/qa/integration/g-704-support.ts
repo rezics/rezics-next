@@ -41,20 +41,30 @@ export interface ProposalRead {
 
 /** The contribution loop's roles on one isolated stack: a contributor, a steward, a second reviewer
  * and an assistant whose credential is a separate bearer that Access represents. */
-export async function loopStack(label: string) {
+export interface MemberState { name: string; actor: string; principalId: string; issuer: string; subject: string }
+export const memberState = (member: Member): MemberState => ({ name: member.name, actor: member.actor,
+  principalId: member.principalId, issuer: member.principal.issuer, subject: member.principal.subject });
+/** The four roles a journey needs, made once or, in a later process of the same stack, reattached by their state. */
+export type Roles = Record<'holder' | 'steward' | 'second' | 'assistant', MemberState>;
+
+export async function loopStack(label: string, attach?: Roles) {
   const f = await startMediaStack(label, { profileCredits: true, rights: true });
-  const holder = await f.member('contributor');
-  const steward = await f.member('steward');
-  const second = await f.member('second-reviewer');
-  const assistant = await f.member('assistant');
+  const reattached = (state: MemberState) => ({ name: state.name, actor: state.actor, principalId: state.principalId,
+    principal: { issuer: state.issuer, subject: state.subject }, token: randomUUID() }) as unknown as Member;
+  const holder = attach ? reattached(attach.holder) : await f.member('Contributor Cleo');
+  const steward = attach ? reattached(attach.steward) : await f.member('Steward Sam');
+  const second = attach ? reattached(attach.second) : await f.member('Second Reviewer Rae');
+  const assistant = attach ? reattached(attach.assistant) : await f.member('Assistant Ada');
   const members = [holder, steward, second, assistant];
-  // Each credential's Account principal controls its own Agent; replacing a credential changes this row.
-  for (const member of members) await f.accessPool.query(
-    `INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
-     VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), member.principalId, member.actor]);
-  // The contributor is the assistant's operator too: a controller of the proposer is never an independent reviewer.
-  await f.accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
-    VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), holder.principalId, assistant.actor]);
+  if (!attach) {
+    // Each credential's Account principal controls its own Agent; replacing a credential changes this row.
+    for (const member of members) await f.accessPool.query(
+      `INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+       VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), member.principalId, member.actor]);
+    // The contributor is the assistant's operator too: a controller of the proposer is never an independent reviewer.
+    await f.accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), holder.principalId, assistant.actor]);
+  }
   const tokenPrincipals = new Map(members.map((member) => [member.token, member.principal]));
   const actorOf = new Map(members.map((member) => [member.token, member.actor]));
   const objects = f.objects('semantic/structure/');

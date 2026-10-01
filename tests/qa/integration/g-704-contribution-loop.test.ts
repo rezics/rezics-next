@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
 import type { WikiDelta } from '../../../services/main/src/modules/wiki/delta.ts';
 import type { WikiExtraction } from '../../../services/main/src/modules/wiki/protocol.ts';
@@ -9,7 +10,7 @@ import { type Command, type History, type Loop, loopStack, type Member, type Pro
 /** The language of a Swedish catalogue Work: none of the eight interface locales, so nothing may borrow the UI's. */
 const SV = 'sv';
 
-test('CLP01: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted', async () => {
+test('CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted', async () => {
   const L = await loopStack('g-704-catalogue');
   const { holder, steward, second, call, json, read, review, decide, revise, withdraw, revert, inbox, header, correction } = L;
   try {
@@ -152,7 +153,7 @@ async function appliedBundle(L: Loop, world: WikiWorld) {
   return { proposal, receipt };
 }
 
-test('CLP02: an assistant proposes a wiki bundle, reviewers revise and decide it, and everyone concerned is notified', async () => {
+test('CLP02/CLP04: an assistant proposes a wiki bundle, reviewers revise and decide it, and everyone concerned is notified', async () => {
   const L = await loopStack('g-704-bundle');
   const { steward, second, assistant, holder, json, read, review, revise } = L;
   try {
@@ -202,7 +203,7 @@ test('CLP02: an assistant proposes a wiki bundle, reviewers revise and decide it
   }
 }, 300_000);
 
-test('CLP03: a chapter delta retracts one claim without deleting what it omits, resumes after interruption and reverts', async () => {
+test('CLP03/CLP04: a chapter delta retracts one claim without deleting what it omits, resumes after interruption and reverts', async () => {
   const L = await loopStack('g-704-delta');
   const { steward, assistant, json, read, revise } = L;
   try {
@@ -388,3 +389,23 @@ test('CLP06: a replaced or revoked assistant credential keeps the artifacts it w
     await L.close();
   }
 }, 300_000);
+
+/** What M7 keeps closed. A word here that reaches a public route, operation or tag is a fake entry point. */
+const CLOSED = /distribut(?:e|ion)|world-?build|recogni[sz]|block-?note|agent-?mode|prose-?wiki|developer-?(?:portal|extras?)/i;
+
+test('CLP07: the public API has no operation for the capabilities M7 keeps closed', () => {
+  const spec = JSON.parse(readFileSync('generated/openapi/main/public.json', 'utf8')) as {
+    paths: Record<string, Record<string, { operationId?: string; tags?: string[]; summary?: string }>>;
+    tags?: { name: string }[];
+  };
+  const words = new Set<string>();
+  for (const [path, methods] of Object.entries(spec.paths)) {
+    words.add(path);
+    for (const operation of Object.values(methods)) {
+      for (const word of [operation.operationId, operation.summary, ...(operation.tags ?? [])]) if (word) words.add(`${path} ${word}`);
+    }
+  }
+  for (const tag of spec.tags ?? []) words.add(tag.name);
+  expect([...words].filter((word) => CLOSED.test(word))).toEqual([]);
+  expect(Object.keys(spec.paths).length).toBeGreaterThan(300);
+});
