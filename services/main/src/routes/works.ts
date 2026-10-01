@@ -2,10 +2,8 @@ import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { createAdmittedMetadataWork } from '../modules/work/create-admitted.ts';
 import { candidateText, declaredGrain, grainOwner, CatalogueInvalid, CataloguePendingLimit, CatalogueUnavailable } from '../modules/catalogue-intake/schema.ts';
-import { createAdmittedTranslationLink, readTranslationLinks, validateTranslationLink }
-  from '../modules/work/translation-links.ts';
-import { createAdmittedWorkDerivation, readWorkDerivations, validateWorkDerivation }
-  from '../modules/work/derivations.ts';
+import { readTranslationLinks } from '../modules/work/translation-links.ts';
+import { readWorkDerivations } from '../modules/work/derivations.ts';
 import { createAdmittedFixedRelease, readFixedRelease, type FixedRelease } from '../modules/work/fixed-release.ts';
 import { setAdmittedWorkScalar } from '../modules/work/edit-admitted.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionCorrupt }
@@ -31,11 +29,6 @@ const translationLinkRef = t.Object({ link: t.String(), targetWork: t.String(),
   evidence: t.String(), authorizingParty: t.Nullable(t.String()),
   authorizationScope: t.Nullable(t.String()), authorizationEpoch: t.Nullable(t.String()) });
 
-const translationLinkWrite = t.Object({ profile: t.Literal('translation-link-v1'),
-  ...translationLinkRef.properties, receipt: t.String(), sourcePosition: t.Object({
-    datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
-  replayed: t.Boolean() });
-
 const workDerivationRef = t.Object({ derivation: t.String(), targetWork: t.String(),
   targetMainVersion: t.String(), targetMainRevision: t.String(),
   sourceWork: t.String(), sourceMainVersion: t.Nullable(t.String()),
@@ -45,11 +38,6 @@ const workDerivationRef = t.Object({ derivation: t.String(), targetWork: t.Strin
     t.Literal('software-fork')]), evidence: t.String(), linkedBy: t.String(),
   corrects: t.Nullable(t.String()), supersededBy: t.Nullable(t.String()),
   status: t.Union([t.Literal('effective'), t.Literal('superseded')]) });
-
-const workDerivationWrite = t.Object({ profile: t.Literal('work-derivation-v1'),
-  ...workDerivationRef.properties, receipt: t.String(), sourcePosition: t.Object({
-    datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() }),
-  replayed: t.Boolean() });
 
 const fixedReleaseRead = t.Object({ profile: t.Literal('fixed-native-text-release-v1'),
   release: t.String(), work: t.String(), mainVersion: t.String(), mainRevision: t.String(),
@@ -155,44 +143,6 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return commandError(error);
       }
     })
-    .post('/v1/translation-links', {
-      body: t.Object({ profile: t.Literal('translation-link-v1'),
-        targetWork: t.String(), targetMainVersion: t.String(), targetMainRevision: t.String(),
-        sourceWork: t.String(), sourceMainVersion: t.String(), sourceMainRevision: t.Nullable(t.String()),
-        status: t.Union([t.Literal('official'), t.Literal('third-party')]),
-        contentLanguage: t.String(), translator: t.String(), publisher: t.String(),
-        evidence: t.String(), actingSubject: t.String(),
-      }, { additionalProperties: false }),
-      response: { 200: translationLinkWrite, 201: translationLinkWrite, 202: pendingOperation,
-        400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
-        404: problemResult(404), 409: problemResult(409),
-        500: problemResult(500), 503: problemResult(503) },
-    }, async ({ request, body }) => {
-      const idempotencyKey = request.headers.get('idempotency-key');
-      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
-        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
-      }
-      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
-      try {
-        const input = { targetWork: body.targetWork, targetMainVersion: body.targetMainVersion,
-          targetMainRevision: body.targetMainRevision, sourceWork: body.sourceWork,
-          sourceMainVersion: body.sourceMainVersion, sourceMainRevision: body.sourceMainRevision,
-          status: body.status, contentLanguage: body.contentLanguage,
-          translator: body.translator, publisher: body.publisher, evidence: body.evidence,
-          actingSubject: body.actingSubject, idempotencyKey };
-        validateTranslationLink(input);
-        const receipt = await createAdmittedTranslationLink(work.environment, work.account,
-          work.access, request, input, work.rights?.store);
-        const links = await readTranslationLinks(work.environment,
-          input.targetMainVersion, input.targetMainRevision);
-        const linked = links.find(item => item.link === receipt.link);
-        if (!linked) return problem(503, 'dependency_unavailable', 'Committed translation link is unavailable');
-        return Response.json({ profile: 'translation-link-v1', ...linked,
-          receipt: receipt.receipt, sourcePosition: { datasetId: 'product',
-            dataEpoch: receipt.dataEpoch, sequence: receipt.sequence }, replayed: receipt.replayed },
-        { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
-    })
     .get('/v1/main-versions/:mainVersion/revisions/:revision/translation-links', {
       params: t.Object({ mainVersion: t.String(), revision: t.String() }),
       response: { 200: t.Object({ profile: t.Literal('translation-links-v1'),
@@ -208,44 +158,6 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const links = await readTranslationLinks(work.environment, mainVersion, revision);
         return Response.json({ profile: 'translation-links-v1', mainVersion, revision,
           complete: true, links }, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
-    })
-    .post('/v1/work-derivations', {
-      body: t.Object({ profile: t.Literal('work-derivation-v1'),
-        targetWork: t.String(), targetMainVersion: t.String(), expectedTargetHead: t.String(),
-        sourceWork: t.String(), sourceMainVersion: t.Nullable(t.String()),
-        sourceMainRevision: t.Nullable(t.String()),
-        kind: t.Union([t.Literal('adaptation'), t.Literal('new-recording'),
-          t.Literal('software-fork')]), evidence: t.String(), actingSubject: t.String(),
-        corrects: t.Optional(t.String()),
-      }, { additionalProperties: false }),
-      response: { 200: workDerivationWrite, 201: workDerivationWrite, 202: pendingOperation,
-        400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
-        404: problemResult(404), 409: problemResult(409),
-        500: problemResult(500), 503: problemResult(503) },
-    }, async ({ request, body }) => {
-      const idempotencyKey = request.headers.get('idempotency-key');
-      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
-        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
-      }
-      if (!work) return problem(503, 'dependency_unavailable', 'Work service is unavailable');
-      try {
-        const input = { targetWork: body.targetWork, targetMainVersion: body.targetMainVersion,
-          expectedTargetHead: body.expectedTargetHead, sourceWork: body.sourceWork,
-          sourceMainVersion: body.sourceMainVersion, sourceMainRevision: body.sourceMainRevision,
-          kind: body.kind, evidence: body.evidence, actingSubject: body.actingSubject,
-          ...(body.corrects === undefined ? {} : { corrects: body.corrects }), idempotencyKey };
-        validateWorkDerivation(input);
-        const receipt = await createAdmittedWorkDerivation(work.environment, work.account,
-          work.access, request, input);
-        const relations = await readWorkDerivations(work.environment,
-          input.targetMainVersion, input.expectedTargetHead);
-        const relation = relations.find(item => item.derivation === receipt.derivation);
-        if (!relation) return problem(503, 'dependency_unavailable', 'Committed derivation is unavailable');
-        return Response.json({ profile: 'work-derivation-v1', ...relation,
-          receipt: receipt.receipt, sourcePosition: { datasetId: 'product',
-            dataEpoch: receipt.dataEpoch, sequence: receipt.sequence }, replayed: receipt.replayed },
-        { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
     .get('/v1/main-versions/:mainVersion/revisions/:revision/work-derivations', {

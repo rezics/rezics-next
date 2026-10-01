@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from './media-support.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import type { ReleaseView } from '../../../services/main/src/modules/release/read.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
 import type { ReleaseV2Write, ReleaseWrite } from '../../../services/main/src/modules/release/schema.ts';
@@ -324,15 +324,22 @@ test('G833: v1 reads as unknown realization coverage; legacy translations retain
     const work = await stack.publicWork(editor.actor, ['ja'], 'Legacy source');
     await editor.grant(`work:edit:${work.work}`, 'work.edit');
     const target = await stack.publicWork(editor.actor, ['zh-Hant'], 'Legacy translation');
-    await editor.grant(`translation:link:${target.work}`, 'translation.link');
     const mainRevision = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(target.mainVersion)} rv:head ?head } } LIMIT 2`)).results!.bindings[0]!.head!.value;
-    const linked = await json<{ link: string }>(await editor.send('POST', '/v1/translation-links', {
-      profile: 'translation-link-v1', targetWork: target.work, targetMainVersion: target.mainVersion,
-      targetMainRevision: mainRevision, sourceWork: work.work, sourceMainVersion: work.mainVersion,
-      sourceMainRevision: null, status: 'third-party', contentLanguage: 'zh-Hant', translator: editor.actor,
-      publisher: editor.actor, evidence: 'https://example.com/legacy-source', actingSubject: editor.actor,
-    }), 201);
+    const linked = { link: id() };
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(linked.link)} a rv:TranslationLink ;
+        rv:targetWork ${iri(target.work)} ; rv:targetMainVersion ${iri(target.mainVersion)} ;
+        rv:targetMainRevision ${iri(mainRevision)} ; rv:sourceWork ${iri(work.work)} ;
+        rv:sourceMainVersion ${iri(work.mainVersion)} ; rv:sourceVersionStatus rv:Unresolved ;
+        rv:translationStatus rv:ThirdParty ; rv:contentLanguage ${lit('zh-Hant')} ;
+        rv:translator ${iri(editor.actor)} ; rv:publisher ${iri(editor.actor)} ;
+        rv:evidence ${lit('https://example.com/legacy-source')} ; rv:linkedBy ${iri(editor.actor)} ;
+        rv:modelRevision <https://rezics.com/definition/translation-link-v1> ;
+        rv:shapeRevision <https://rezics.com/definition/translation-link-v1> ;
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ;
+        rv:sequence 1 .
+    } }`);
     const native = text(editor, work.work, 'en');
     await json(await saveText(editor, work.work, native));
     const all = await json<{ items: { id: string; legacy: object | null }[] }>(await stack.call('GET', `${root(work.work)}/realizations`));

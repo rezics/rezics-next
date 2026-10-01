@@ -211,11 +211,8 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     expect(queries.filter(query => query.includes('SELECT ?presentation ?head ?language'))).toHaveLength(3);
     expect(queries.length).toBeLessThan(64);
     const legacyTarget = await work('Legacy adaptation');
-    await f.grant(`derivation:link:${legacyTarget.work}`, 'work.derive');
-    const legacy = await f.json<Derivation>(await f.call('POST', '/v1/work-derivations', {
-      profile: 'work-derivation-v1', targetWork: legacyTarget.work, targetMainVersion: legacyTarget.mainVersion,
-      expectedTargetHead: legacyTarget.mainRevision, sourceWork: web.work, sourceMainVersion: web.mainVersion,
-      sourceMainRevision: web.mainRevision, kind: 'adaptation', evidence: 'https://example.com/legacy', actingSubject: f.actor }), 201);
+    await f.grant(`work:edit:${legacyTarget.work}`, 'work.edit');
+    const legacy = await f.json<Derivation>(await derive(legacyTarget, web, 'adaptation'), 201);
     expect((await page(legacyTarget.work)).items[0]?.rendering?.meaning.definition).toBe(definitions.get('adaptation')!.component);
     expect((await page(web.work)).items.some(item => item.relation === legacy.derivation)).toBe(true);
     const sixth = await f.json<Changed>(await f.call('POST', '/v1/semantic/changes', { profile: 'semantic-change-v1',

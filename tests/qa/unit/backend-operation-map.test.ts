@@ -26,7 +26,7 @@ test('OPS01: every frozen backend case has one checked owner API operation targe
     .update(JSON.stringify(backendOperationMappings.map(({ ids, targets }) => ({ ids, targets }))))
     .digest('hex');
   // Snapshot of the 130 E/P route groups before retiring the Markdown matrix.
-  expect(targetDigest).toBe('60f6a67e3203cc89ee47474ad6f8cae7560789b4c22472aff3026ec33e89fe69');
+  expect(targetDigest).toBe('040e7653e970bb04f2adf503994568c544f1f9622c81692378d71c5ddfc5c2db');
   for (const group of backendOperationMappings) {
     expect(group.ids.length).toBeGreaterThan(0);
     expect(group.targets.length).toBeGreaterThan(0);

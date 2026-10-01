@@ -486,7 +486,6 @@ export const backendOperationMappings: readonly OperationMapping[] = [
         method: 'GET',
         path: '/v1/contributions/{contribution}/drafts/{revision}',
       },
-      { status: 'existing', method: 'POST', path: '/v1/translation-links' },
       {
         status: 'existing',
         method: 'GET',
@@ -509,7 +508,7 @@ export const backendOperationMappings: readonly OperationMapping[] = [
       },
     ],
     context:
-      'E `POST /v1/works`; E `POST /v1/contributions`; E `POST /v1/contribution-publications`; E `POST /v1/contribution-edits`; E `GET /v1/contributions/{contribution}/drafts/{revision}`; E `POST /v1/translation-links`; E `GET /v1/main-versions/{mainVersion}/revisions/{revision}/translation-links`; E `GET /v1/main-versions/{mainVersion}/native-variants`; E `PUT /v1/me/main-versions/{mainVersion}/variant-preference`; E `PUT /v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation`.',
+      'E `POST /v1/works`; E `POST /v1/contributions`; E `POST /v1/contribution-publications`; E `POST /v1/contribution-edits`; E `GET /v1/contributions/{contribution}/drafts/{revision}`; E `GET /v1/main-versions/{mainVersion}/revisions/{revision}/translation-links`; E `GET /v1/main-versions/{mainVersion}/native-variants`; E `PUT /v1/me/main-versions/{mainVersion}/variant-preference`; E `PUT /v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation`.',
   },
   {
     ids: ['WORK03', 'WORK04'],
@@ -521,7 +520,6 @@ export const backendOperationMappings: readonly OperationMapping[] = [
         path: '/v1/realms/{realm}/main-versions/{mainVersion}/selection',
       },
       { status: 'existing', method: 'GET', path: '/v1/main-versions/{mainVersion}/selection' },
-      { status: 'existing', method: 'POST', path: '/v1/work-derivations' },
       {
         status: 'existing',
         method: 'GET',
@@ -534,7 +532,7 @@ export const backendOperationMappings: readonly OperationMapping[] = [
       },
     ],
     context:
-      'E `POST /v1/publication-selections`; E `GET /v1/realms/{realm}/main-versions/{mainVersion}/selection`; E `GET /v1/main-versions/{mainVersion}/selection`; E `POST /v1/work-derivations`; E `GET /v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations`; E `GET /v1/main-versions/{mainVersion}/revisions/{revision}`.',
+      'E `POST /v1/publication-selections`; E `GET /v1/realms/{realm}/main-versions/{mainVersion}/selection`; E `GET /v1/main-versions/{mainVersion}/selection`; E `GET /v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations`; E `GET /v1/main-versions/{mainVersion}/revisions/{revision}`.',
   },
   {
     ids: ['WORK05'],

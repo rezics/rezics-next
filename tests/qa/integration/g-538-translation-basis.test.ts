@@ -138,12 +138,21 @@ test('G-538: translation publication basis guards Works and chapters in both ord
         sourceMainRevision: source.mainRevision, status: 'third-party', contentLanguage: 'en',
         translator, publisher: actor, evidence: 'https://example.test/g-538/translation', actingSubject: actor };
     }
+    async function installLink(target: WorkActivationReceipt, source: WorkActivationReceipt) {
+      const linkId = id();
+      await graph.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(linkId)} a rv:TranslationLink ;
+          rv:targetWork ${iri(target.work)} ; rv:sourceWork ${iri(source.work)} . } }`);
+    }
+    async function removed(response: Response) {
+      expect(response.status, await response.clone().text()).toBe(404);
+    }
     const source = await work(author);
     await success(await send('/v1/content-search-eligibility', await publication(source, author)));
 
     // Link first: even verified original-author draft provenance cannot publish the translation.
     const linkedFirst = await work(translator);
-    await success(await send('/v1/translation-links', link(linkedFirst, source)));
+    await installLink(linkedFirst, source);
     const blocked = await publication(linkedFirst, translator);
     const blockedKey = randomUUID();
     await denied(await send('/v1/content-search-eligibility', blocked, blockedKey));
@@ -154,9 +163,9 @@ test('G-538: translation publication basis guards Works and chapters in both ord
     const published = await publication(publishedFirst, translator);
     await success(await send('/v1/content-search-eligibility', published));
     const linkKey = randomUUID();
-    await denied(await send('/v1/translation-links', link(publishedFirst, source), linkKey));
-    await denied(await send('/v1/translation-links', link(publishedFirst, source), linkKey));
-    await denied(await send('/v1/translation-links', { ...link(publishedFirst, source), sourceMainRevision: null }));
+    await removed(await send('/v1/translation-links', link(publishedFirst, source), linkKey));
+    await removed(await send('/v1/translation-links', link(publishedFirst, source), linkKey));
+    await removed(await send('/v1/translation-links', { ...link(publishedFirst, source), sourceMainRevision: null }));
     const state = await graph.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
       ?link a rv:TranslationLink ; rv:targetWork ${iri(publishedFirst.work)} . } }`);
     expect(state.boolean).toBe(false);
@@ -169,11 +178,11 @@ test('G-538: translation publication basis guards Works and chapters in both ord
         for (let level = 0; level < depth; level++) part = await chapter(part, translator);
         const eligibility = await publication(part, translator);
         if (first === 'link') {
-          await success(await send('/v1/translation-links', link(book, source)));
+          await installLink(book, source);
           await denied(await send('/v1/content-search-eligibility', eligibility));
         } else {
           await success(await send('/v1/content-search-eligibility', eligibility));
-          await denied(await send('/v1/translation-links', link(book, source)));
+          await removed(await send('/v1/translation-links', link(book, source)));
         }
       }
     }
@@ -181,7 +190,7 @@ test('G-538: translation publication basis guards Works and chapters in both ord
     // Link certifiers cannot substitute their own source authorship for the Content author's.
     await grant(author, `translation:authorize:${source.work}:${source.mainRevision}`, 'translation.authorize');
     await grant(author, `translation:link:${publishedFirst.work}`, 'translation.link');
-    await denied(await send('/v1/translation-links', { ...link(publishedFirst, source, author), status: 'official' }));
+    await removed(await send('/v1/translation-links', { ...link(publishedFirst, source, author), status: 'official' }));
 
     // The author may translate their own Work in either order.
     for (const first of ['link', 'publication']) {
@@ -190,7 +199,7 @@ test('G-538: translation publication basis guards Works and chapters in both ord
         const target = withChapter ? await chapter(own, author) : own;
         const eligibility = await publication(target, author);
         if (first === 'publication') await success(await send('/v1/content-search-eligibility', eligibility));
-        await success(await send('/v1/translation-links', link(own, source, author)));
+        await installLink(own, source);
         if (first === 'link') await success(await send('/v1/content-search-eligibility', eligibility));
       }
     }
@@ -207,7 +216,7 @@ test('G-538: translation publication basis guards Works and chapters in both ord
         const target = withChapter ? await chapter(book, translator) : book;
         const eligibility = await publication(target, translator);
         if (first === 'publication') await success(await send('/v1/content-search-eligibility', eligibility));
-        await success(await send('/v1/translation-links', link(book, pdSource)));
+        await installLink(book, pdSource);
         if (first === 'link') await success(await send('/v1/content-search-eligibility', eligibility));
         // A second variant on the linked translation follows the same source basis.
         await success(await send('/v1/content-search-eligibility', await publication(target, translator)));
@@ -218,8 +227,8 @@ test('G-538: translation publication basis guards Works and chapters in both ord
     // Every inherited source must be eligible; one PD source cannot waive another.
     const mixedBook = await work(translator);
     const mixedChapter = await chapter(mixedBook, translator);
-    await success(await send('/v1/translation-links', link(mixedBook, pdSource)));
-    await success(await send('/v1/translation-links', link(mixedChapter, source)));
+    await installLink(mixedBook, pdSource);
+    await installLink(mixedChapter, source);
     await denied(await send('/v1/content-search-eligibility', await publication(mixedChapter, translator)));
 
     // Multiple PD sources are pinned independently, including inherited links.
@@ -227,14 +236,14 @@ test('G-538: translation publication basis guards Works and chapters in both ord
     await success(await send('/v1/content-search-eligibility', await publication(secondPdSource, author, true)));
     const multiPdBook = await work(translator);
     const multiPdChapter = await chapter(multiPdBook, translator);
-    await success(await send('/v1/translation-links', link(multiPdBook, pdSource)));
-    await success(await send('/v1/translation-links', link(multiPdChapter, secondPdSource)));
+    await installLink(multiPdBook, pdSource);
+    await installLink(multiPdChapter, secondPdSource);
     await success(await send('/v1/content-search-eligibility', await publication(multiPdChapter, translator)));
 
     // Pin the source graph decision used by preflight, so replacing its head
     // before the eligibility transaction cannot retain a stale PD exemption.
     const pinTarget = await work(translator);
-    await success(await send('/v1/translation-links', link(pinTarget, pdSource)));
+    await installLink(pinTarget, pdSource);
     const pinEligibility = await publication(pinTarget, translator);
     let pinnedUpdate = '';
     graph.beforeCommand = async envelope => {
@@ -259,7 +268,7 @@ test('G-538: translation publication basis guards Works and chapters in both ord
       idempotencyKey: randomUUID() });
     const staleSourceTranslation = await work(translator);
     await success(await send('/v1/content-search-eligibility', await publication(staleSourceTranslation, translator)));
-    await denied(await send('/v1/translation-links', link(staleSourceTranslation, pdSource)));
+    await removed(await send('/v1/translation-links', link(staleSourceTranslation, pdSource)));
     for (const target of linkedToPd) {
       await denied(await send('/v1/content-search-eligibility', await publication(target, translator)));
     }
@@ -271,17 +280,13 @@ test('G-538: translation publication basis guards Works and chapters in both ord
       const raceEligibility = await publication(publishTarget, translator);
       graph.beforeCommand = async envelope => {
         expect(envelope.update).toContain('rv:ContentSearchEligibilityDecision');
-        await success(await send('/v1/translation-links', link(racePublish, source)));
+        await installLink(racePublish, source);
       };
       await denied(await send('/v1/content-search-eligibility', raceEligibility));
       const raceLink = await work(translator);
-      const linkTarget = withChapter ? await chapter(raceLink, translator) : raceLink;
-      const racePublic = await publication(linkTarget, translator);
-      graph.beforeCommand = async envelope => {
-        expect(envelope.update).toContain('a rv:TranslationLink');
-        await success(await send('/v1/content-search-eligibility', racePublic));
-      };
-      await denied(await send('/v1/translation-links', link(raceLink, source)));
+      await removed(await send('/v1/translation-links', link(raceLink, source)));
+      expect((await graph.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+        ?link a rv:TranslationLink ; rv:targetWork ${iri(raceLink.work)} . } }`)).boolean).toBe(false);
     }
   } finally {
     await Promise.all([accessPool.end(), contentPool.end()]);

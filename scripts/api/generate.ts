@@ -15,7 +15,7 @@ const commands = [
   '/v1/classification-propositions', '/v1/classification-contexts', '/v1/spaces',
   '/v1/publication-selections', '/v1/publication-rejections',
   '/v1/contribution-publications', '/v1/contribution-edits', '/v1/contributions',
-  '/v1/works', '/v1/works/{id}/scalar-value', '/v1/translation-links', '/v1/content-edits',
+  '/v1/works', '/v1/works/{id}/scalar-value', '/v1/content-edits',
   '/v1/access/group-changes', '/v1/access/group-impact-proposals',
   '/v1/access/group-impact-approvals',
   '/v1/access/grant-changes',

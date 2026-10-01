@@ -134,11 +134,11 @@ test('G-591: text contribution publication requires the source basis, including 
         rightsBasis: publicDomain ? 'public-domain' : 'original-contribution',
         ...(accepted ? { assessmentId: accepted.assessmentId } : {}) };
     }
-    function link(target: WorkActivationReceipt, source: WorkActivationReceipt, actor = translator) {
-      return { profile: 'translation-link-v1', targetWork: target.work, targetMainVersion: target.mainVersion,
-        targetMainRevision: target.mainRevision, sourceWork: source.work, sourceMainVersion: source.mainVersion,
-        sourceMainRevision: source.mainRevision, status: 'third-party', contentLanguage: 'en',
-        translator, publisher: actor, evidence: 'https://example.test/g-591/translation', actingSubject: actor };
+    async function installLink(target: WorkActivationReceipt, source: WorkActivationReceipt) {
+      const linkId = id();
+      await graph.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(linkId)} a rv:TranslationLink ;
+          rv:targetWork ${iri(target.work)} ; rv:sourceWork ${iri(source.work)} . } }`);
     }
     async function contribution(target: WorkActivationReceipt, actor: string) {
       const input = { work: target.work, language: 'zh', body: '译文正文', actingSubject: actor };
@@ -165,7 +165,7 @@ test('G-591: text contribution publication requires the source basis, including 
     for (const withChapter of [false, true]) {
       const book = await work(translator);
       const target = withChapter ? await chapter(book, translator) : book;
-      await success(await send('/v1/translation-links', link(book, source)));
+      await installLink(book, source);
       const input = await contribution(target, translator);
       const key = randomUUID();
       await denied(await send('/v1/contribution-publications', input, key));
@@ -174,7 +174,7 @@ test('G-591: text contribution publication requires the source basis, including 
     }
     // The same author can translate their own work; replay uses the terminal receipt.
     const own = await work(author);
-    await success(await send('/v1/translation-links', link(own, source, author)));
+    await installLink(own, source);
     const ownText = await contribution(own, author);
     const ownKey = randomUUID();
     const published = await success<{ publicationDecision: string }>(await send('/v1/contribution-publications', ownText, ownKey));
@@ -189,11 +189,11 @@ test('G-591: text contribution publication requires the source basis, including 
     const pdEligibility = await publication(pdSource, author, true);
     const pdDecision = await success<{ decision: string }>(await send('/v1/content-search-eligibility', pdEligibility));
     const pdTarget = await work(translator);
-    await success(await send('/v1/translation-links', link(pdTarget, pdSource)));
+    await installLink(pdTarget, pdSource);
     await success(await send('/v1/contribution-publications', await contribution(pdTarget, translator)));
     const pdBook = await work(translator);
     const pdChapter = await chapter(pdBook, translator);
-    await success(await send('/v1/translation-links', link(pdBook, pdSource)));
+    await installLink(pdBook, pdSource);
     await success(await send('/v1/contribution-publications', await contribution(pdChapter, translator)));
 
     // A link added after preflight is checked inside the contribution transaction.
@@ -201,14 +201,14 @@ test('G-591: text contribution publication requires the source basis, including 
     const raceText = await contribution(raced, translator);
     graph.beforeCommand = async envelope => {
       expect(envelope.update).toContain('a rv:PublicationDecision');
-      await success(await send('/v1/translation-links', link(raced, source)));
+      await installLink(raced, source);
     };
     await denied(await send('/v1/contribution-publications', raceText));
     await remainsPrivate(raceText.contribution);
 
     // Replacing the PD graph head invalidates the exact source basis pinned by preflight.
     const pinned = await work(translator);
-    await success(await send('/v1/translation-links', link(pinned, pdSource)));
+    await installLink(pinned, pdSource);
     const pinText = await contribution(pinned, translator);
     graph.beforeCommand = async envelope => {
       expect(envelope.update).toContain(iri(pdDecision.decision));
@@ -222,7 +222,7 @@ test('G-591: text contribution publication requires the source basis, including 
       ${iri(pdEligibility.variantId)} rv:publicSearchEligibilityHead ${iri(pdDecision.decision)} . } }`);
     // Losing a response after the graph commit still replays the publication receipt.
     const recoveryTarget = await work(author);
-    await success(await send('/v1/translation-links', link(recoveryTarget, source, author)));
+    await installLink(recoveryTarget, source);
     const recoveryText = await contribution(recoveryTarget, author);
     const command = graph.commandWithReceipt.bind(graph);
     graph.commandWithReceipt = async envelope => {

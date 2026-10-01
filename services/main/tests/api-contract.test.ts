@@ -20,7 +20,6 @@ type ContentPublicationPost = Routes['v1']['content-publications']['post'];
 type ContentEligibilityPost = Routes['v1']['content-search-eligibility']['post'];
 type QueryPost = Routes['v1']['queries']['post'];
 type QueryPagePost = Routes['v1']['queries']['page']['post'];
-type TranslationPost = Routes['v1']['translation-links']['post'];
 type TranslationGet = Routes['v1']['main-versions'][':mainVersion']['revisions'][':revision']['translation-links']['get'];
 type RealmRecommendationPut = Routes['v1']['realms'][':realm']['main-versions'][':mainVersion'][
   'variant-recommendation']['put'];
@@ -92,11 +91,6 @@ type _QueryPageShape = Assert<QueryPagePost['response'][200] extends {
   relationComplete: true; results: unknown[]; next: unknown
 } ? true : false>;
 type _QueryPageRestart = Assert<409 extends keyof QueryPagePost['response'] ? true : false>;
-type _TranslationInput = Assert<TranslationPost['body']['sourceMainRevision'] extends string | null ? true : false>;
-type _TranslationWrite = Assert<TranslationPost['response'][201] extends {
-  sourceVersionStatus: 'exact' | 'unresolved'; sourceMainRevision: string | null;
-  authorizationScope: string | null; receipt: string
-} ? true : false>;
 type _TranslationRead = Assert<TranslationGet['response'][200] extends {
   complete: true; links: unknown[]
 } ? true : false>;
@@ -288,7 +282,6 @@ describe('Main typed route contracts', () => {
     };
     // New owner profiles add paths; verify the retained contract below without freezing their count.
     expect(Object.keys(spec.paths).length).toBeGreaterThanOrEqual(46);
-    expect(spec.paths['/v1/work-derivations']?.post).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations']?.get)
       .toBeDefined();
     expect(Object.keys(spec.paths).every(path => /^\/v[1-9]\d*\//.test(path))).toBe(true);
@@ -310,7 +303,6 @@ describe('Main typed route contracts', () => {
     expect(realmRecommendation?.security).toEqual([{ bearerAuth: [] }]);
     expect(realmRecommendation?.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
       && parameter.in === 'header')).toBe(true);
-    expect(spec.paths['/v1/translation-links']?.post).toBeDefined();
     expect(spec.paths['/v1/content-publications']?.post?.security).toBeDefined();
     expect(spec.paths['/v1/content-search-eligibility']?.post?.security).toBeDefined();
     expect(spec.paths['/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links']?.get)
@@ -328,10 +320,6 @@ describe('Main typed route contracts', () => {
     const create = spec.paths['/v1/works']!.post!;
     expect(create.security).toEqual([{ bearerAuth: [] }]);
     expect(create.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
-      && parameter.in === 'header')).toBe(true);
-    const translation = spec.paths['/v1/translation-links']!.post!;
-    expect(translation.security).toEqual([{ bearerAuth: [] }]);
-    expect(translation.parameters?.some(parameter => parameter.name === 'Idempotency-Key'
       && parameter.in === 'header')).toBe(true);
     expect(spec.paths['/v1/queries']!.post!.security).toBeUndefined();
     expect(spec.paths['/v1/queries/page']!.post!.security).toBeUndefined();

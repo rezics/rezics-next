@@ -1,13 +1,5 @@
-import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
-  type RegisteredAdmission } from '../access/admission.ts';
-import { CommandRejected } from '../../infrastructure/fuseki.ts';
-import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
-import { profileValidations } from '../../infrastructure/profile.ts';
-import { DATASET, GRAPHS, ID, RV, hash, iri, lit, IdempotencyConflict,
-  type WorkActivationEnvironment } from './activate.ts';
-import { PendingAdmittedWork } from './create-admitted.ts';
-import { assertGraphAdmissionOpen } from './restore-lineage.ts';
+import type { RegisteredAdmission } from '../access/admission.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import type { RightsStore } from '../rights/store.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -16,7 +8,6 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const language = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const evidenceUrl = /^https:\/\/[^\s<>"{}|\\^`]{1,2040}$/;
 const PROFILE = 'https://rezics.com/definition/translation-link-v1';
-const LINK_SHAPE = `${PROFILE}/link-shape`;
 
 export class InvalidTranslationLink extends Error {}
 export class TranslationSourceUnavailable extends Error {}
@@ -64,20 +55,6 @@ export async function assertTranslationOriginalBasis(env: WorkActivationEnvironm
     ${translationOriginalBasisConflictPattern(work, actor, publicDomain)}
   }`);
   if (result.boolean === true) throw new TranslationBasisRequired();
-}
-
-/** Include Content on every part of the target, including the target itself.
- * Cost is O(descendant variants), independent of unrelated catalogue content. */
-function publicOriginalContentPattern(target: string, source: string): string {
-  return `GRAPH ${iri(GRAPHS.current)} {
-    ?basisResource <https://schema.org/isPartOf>* ${iri(target)} .
-    ?basisVariant a rv:ContentVariant ; rv:resource ?basisResource ;
-      rv:contentPublicationHead ?basisPublication ; rv:publicSearchEligibilityHead ?basisDecision . }
-    GRAPH ${iri(GRAPHS.revisions)} {
-      ?basisDecision a rv:ContentSearchEligibilityDecision ; rv:resource ?basisResource ;
-        rv:variant ?basisVariant ; rv:publicationDecision ?basisPublication ;
-        rv:rightsBasis rv:OriginalContribution ; rv:disclosure rv:Public ; rv:actingSubject ?basisActor . }
-    FILTER NOT EXISTS { ${sourceAuthorPattern(iri(source), '?basisActor')} }`;
 }
 
 interface SourcePublicDomainBasis { variant: string; decision: string; assessment: string }
@@ -135,20 +112,6 @@ export async function resolveTranslationOriginalPublicDomainBases(env: WorkActiv
   return bases;
 }
 
-async function linkPublicationBasisConflicts(env: WorkActivationEnvironment, input: TranslationLinkInput,
-  publicDomain?: SourcePublicDomainBasis): Promise<boolean> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    ${publicOriginalContentPattern(input.targetWork, input.sourceWork)}
-    ${publicDomain ? `FILTER NOT EXISTS { ${sourcePublicDomainPattern(input.sourceWork, publicDomain)} }` : ''}
-  }`);
-  return result.boolean === true;
-}
-
-async function assertLinkPublicationBasis(env: WorkActivationEnvironment, input: TranslationLinkInput,
-  publicDomain?: SourcePublicDomainBasis): Promise<void> {
-  if (await linkPublicationBasisConflicts(env, input, publicDomain)) throw new TranslationBasisRequired();
-}
-
 export interface TranslationLinkInput {
   targetWork: string;
   targetMainVersion: string;
@@ -170,14 +133,6 @@ export interface TranslationLink extends Omit<TranslationLinkInput, 'actingSubje
   authorizingParty: string | null;
   authorizationScope: string | null;
   authorizationEpoch: string | null;
-}
-
-export interface TranslationLinkReceipt {
-  link: string;
-  receipt: string;
-  dataEpoch: string;
-  sequence: string;
-  replayed: boolean;
 }
 
 export function validateTranslationLink(input: TranslationLinkInput): void {
@@ -216,39 +171,6 @@ export function translationAuthorizationScope(input: TranslationLinkInput): stri
   validateTranslationLink(input);
   if (!input.sourceMainRevision) throw new InvalidTranslationLink('exact source revision is required');
   return `translation:authorize:${input.sourceWork}:${input.sourceMainRevision}`;
-}
-
-async function sourceAndTargetExist(env: WorkActivationEnvironment, input: TranslationLinkInput): Promise<{
-  target: boolean; source: boolean; linked: boolean;
-}> {
-  const target = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.current)} {
-      ${iri(input.targetWork)} rv:mainVersion ${iri(input.targetMainVersion)} .
-      ${iri(input.targetMainVersion)} a rv:MainVersion ; rv:work ${iri(input.targetWork)} ;
-        rv:head ${iri(input.targetMainRevision)} .
-    }
-    GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(input.targetMainRevision)} a rv:RevisionAnchor ;
-        rv:component ${iri(input.targetMainVersion)} .
-    }
-  }`);
-  const source = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.current)} {
-      ${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
-      ${iri(input.sourceMainVersion)} a rv:MainVersion ; rv:work ${iri(input.sourceWork)} .
-    }
-    ${input.sourceMainRevision ? `GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
-        rv:component ${iri(input.sourceMainVersion)} .
-    }` : ''}
-  }`);
-  const linked = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.revisions)} {
-      ?link a rv:TranslationLink ; rv:targetMainRevision ${iri(input.targetMainRevision)} .
-    }
-  }`);
-  return { target: target.boolean === true, source: source.boolean === true,
-    linked: linked.boolean === true };
 }
 
 export interface TerminalLink {
@@ -296,20 +218,6 @@ export async function readTranslationLinkTerminal(env: WorkActivationEnvironment
     ...(row.rejectionKind ? { rejectionKind: row.rejectionKind.value } : {}) };
 }
 
-function checkedTerminal(terminal: TerminalLink, registered: RegisteredAdmission,
-  digest: string): TranslationLinkReceipt {
-  if (terminal.requestDigest !== digest || terminal.admissionId !== registered.id
-    || terminal.scope !== registered.scope || terminal.authorityEpoch !== registered.authorityEpoch) {
-    throw new IdempotencyConflict('translation link receipt differs from admission');
-  }
-  if (terminal.outcome !== 'succeeded' || !terminal.link) {
-    if (terminal.rejectionKind === `${RV}TranslationBasisRequired`) throw new TranslationBasisRequired();
-    throw new TranslationLinkConflict('translation link admission was cancelled');
-  }
-  return { link: terminal.link, receipt: terminal.receipt,
-    dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed: registered.replayed };
-}
-
 async function sealCancelled(env: WorkActivationEnvironment, registered: RegisteredAdmission,
   translationBasisRequired = false): Promise<void> {
   const receipt = translationLinkReceiptIri(registered.id);
@@ -353,177 +261,6 @@ export async function sealTranslationLinkAdmission(env: WorkActivationEnvironmen
     throw new Error('translation link cancellation outcome is unavailable');
   }
   return terminal;
-}
-
-async function activateLink(env: WorkActivationEnvironment, registered: RegisteredAdmission,
-  input: TranslationLinkInput, digest: string, publicDomain?: SourcePublicDomainBasis): Promise<void> {
-  const link = ID + Bun.randomUUIDv7();
-  const receipt = translationLinkReceiptIri(registered.id);
-  const batch = `urn:rezics:outbox:${hash(receipt)}`;
-  const event = `urn:rezics:event:${hash(`${receipt}\0translation-linked`)}`;
-  const sourceRevision = input.sourceMainRevision
-    ? `; rv:sourceMainRevision ${iri(input.sourceMainRevision)}` : '';
-  const authorizing = input.status === 'official'
-    ? `; rv:authorizingParty ${iri(input.actingSubject)} ;
-        rv:authorizationScope ${lit(registered.scope)} ;
-        rv:authorizationEpoch ${lit(registered.authorityEpoch)}` : '';
-  const update = `PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
-    INSERT {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(link)} a rv:TranslationLink ; rv:targetWork ${iri(input.targetWork)} ;
-          rv:targetMainVersion ${iri(input.targetMainVersion)} ;
-          rv:targetMainRevision ${iri(input.targetMainRevision)} ;
-          rv:sourceWork ${iri(input.sourceWork)} ;
-          rv:sourceMainVersion ${iri(input.sourceMainVersion)} ${sourceRevision} ;
-          rv:sourceVersionStatus rv:${input.sourceMainRevision ? 'Exact' : 'Unresolved'} ;
-          rv:translationStatus rv:${input.status === 'official' ? 'Official' : 'ThirdParty'} ;
-          rv:contentLanguage ${lit(input.contentLanguage)} ;
-          rv:translator ${iri(input.translator)} ; rv:publisher ${iri(input.publisher)} ;
-          rv:evidence ${lit(input.evidence)} ; rv:linkedBy ${iri(input.actingSubject)}
-          ${authorizing} ; rv:modelRevision ${iri(PROFILE)} ;
-          rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-      }
-      GRAPH ${iri(GRAPHS.receipts)} {
-        ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
-          rv:admissionId ${lit(registered.id)} ; rv:admittedScope ${lit(registered.scope)} ;
-          rv:authorityEpoch ${lit(registered.authorityEpoch)} ; rv:outcome rv:Succeeded ;
-          rv:translationLink ${iri(link)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-      }
-      GRAPH ${iri(GRAPHS.outbox)} {
-        ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-          rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:TranslationLinkedEvent ; rv:ordinal 0 ;
-          rv:action ${lit(registered.action)} ; rv:receipt ${iri(receipt)} ;
-          rv:translationLink ${iri(link)} .
-      }
-    } WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-      GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.targetWork)} rv:mainVersion ${iri(input.targetMainVersion)} .
-        ${iri(input.targetMainVersion)} a rv:MainVersion ; rv:work ${iri(input.targetWork)} ;
-          rv:head ${iri(input.targetMainRevision)} .
-        ${iri(input.sourceWork)} rv:mainVersion ${iri(input.sourceMainVersion)} .
-        ${iri(input.sourceMainVersion)} a rv:MainVersion ; rv:work ${iri(input.sourceWork)} .
-      }
-      GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(input.targetMainRevision)} a rv:RevisionAnchor ;
-          rv:component ${iri(input.targetMainVersion)} .
-        ${input.sourceMainRevision ? `${iri(input.sourceMainRevision)} a rv:RevisionAnchor ;
-          rv:component ${iri(input.sourceMainVersion)} .` : ''}
-      }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} {
-        ?prior a rv:TranslationLink ; rv:targetMainRevision ${iri(input.targetMainRevision)} . } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      FILTER NOT EXISTS {
-        ${publicOriginalContentPattern(input.targetWork, input.sourceWork)}
-        ${publicDomain ? `FILTER NOT EXISTS { ${sourcePublicDomainPattern(input.sourceWork, publicDomain)} }` : ''}
-      }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      BIND(?n + 1 AS ?next)
-    }`;
-  const validations = await profileValidations(env.fuseki, 'translation-link-v1', [{
-    shape: LINK_SHAPE, focus: [link],
-    graphs: [GRAPHS.current, GRAPHS.revisions, GRAPHS.receipts, GRAPHS.control],
-  }], {
-    link, 'target-work': input.targetWork, 'target-main': input.targetMainVersion,
-    'target-revision': input.targetMainRevision, 'source-work': input.sourceWork,
-    'source-main': input.sourceMainVersion,
-    ...(input.sourceMainRevision ? { 'source-revision': input.sourceMainRevision } : {}),
-    status: input.status, language: input.contentLanguage,
-    translator: input.translator, publisher: input.publisher,
-    evidence: input.evidence, actor: input.actingSubject, receipt,
-    scope: registered.scope, epoch: registered.authorityEpoch,
-  });
-  const result = await validatedCommand(env, { receipt, digest, update,
-    validations, deadlineMs: 10_000 }, registered);
-  if (result.status === 'invalid' || result.status === 'unknown-profile'
-    || result.status === 'conflict') throw new CommandRejected(result);
-}
-
-/** A source-specific Access admission is the official authority witness. */
-export async function createAdmittedTranslationLink(env: WorkActivationEnvironment,
-  account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'
-    | 'canLinkTranslation'>,
-  request: Request, input: TranslationLinkInput & { idempotencyKey: string },
-  rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>,
-): Promise<TranslationLinkReceipt> {
-  const digest = translationLinkDigest(input);
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const principal = await account.verify(request, ['work:edit']);
-  if (input.status === 'official'
-    && !await access.canLinkTranslation(principal, input.actingSubject, input.targetWork)) {
-    throw new AdmissionDenied('target Work translation permission is not granted');
-  }
-  const scope = input.status === 'official'
-    ? translationAuthorizationScope(input) : `translation:link:${input.targetWork}`;
-  const action = input.status === 'official' ? 'translation.authorize' : 'translation.link';
-  const registered = await access.register({ principal, actingSubject: input.actingSubject,
-    ...(input.status !== 'official' ? { baselineRelatedWork: input.sourceWork } : {}),
-    scope, action, idempotencyKey: input.idempotencyKey, requestDigest: digest });
-  try {
-    let admission = registered;
-    if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await access.claim(registered.id, digest, principal); }
-      catch (error) {
-        if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
-      }
-    }
-    if (admission.state !== 'sealed') {
-      if (!admission.dispatchEligible || admission.state === 'registered') {
-        await sealTranslationLinkAdmission(env, admission);
-      } else {
-        const state = await sourceAndTargetExist(env, input);
-        if (!state.target || !state.source || state.linked) {
-          await sealTranslationLinkAdmission(env, admission);
-          const cancelled = await readTranslationLinkTerminal(env, registered.id);
-          if (cancelled) await access.recordGraphOutcome(registered.id, cancelled);
-          if (!state.target) throw new TranslationTargetUnavailable('target Main Version revision is unavailable');
-          if (!state.source) throw new TranslationSourceUnavailable('source Main Version revision is unavailable');
-          throw new TranslationLinkConflict('target revision already has a translation link');
-        }
-        try {
-          // Private links and the source author's own Content need no rights-owner probe.
-          const publicDomain = await linkPublicationBasisConflicts(env, input)
-            ? await sourcePublicDomainBasis(env, input.sourceWork, rights) : undefined;
-          await assertLinkPublicationBasis(env, input, publicDomain);
-          await activateLink(env, admission, input, digest, publicDomain);
-          // A concurrent eligibility command can win after the preflight.
-          if (!await readTranslationLinkTerminal(env, registered.id)) {
-            await assertLinkPublicationBasis(env, input, publicDomain);
-          }
-        }
-        catch (error) {
-          if (error instanceof IdempotencyConflict) throw error;
-          if (error instanceof TranslationBasisRequired) {
-            await sealCancelled(env, admission, true);
-            const terminal = await readTranslationLinkTerminal(env, registered.id);
-            if (!terminal) throw new PendingAdmittedWork(registered.id, 'translation-link');
-            await access.recordGraphOutcome(registered.id, terminal);
-            return checkedTerminal(terminal, registered, digest);
-          }
-          const state = await sourceAndTargetExist(env, input);
-          if (!state.target || !state.source || state.linked) {
-            await sealTranslationLinkAdmission(env, admission);
-          }
-        }
-      }
-    }
-    const terminal = await readTranslationLinkTerminal(env, registered.id);
-    if (!terminal) throw new PendingAdmittedWork(registered.id, 'translation-link');
-    await access.recordGraphOutcome(registered.id, terminal);
-    return checkedTerminal(terminal, registered, digest);
-  } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof TranslationLinkConflict
-      || error instanceof TranslationBasisRequired
-      || error instanceof TranslationSourceUnavailable || error instanceof TranslationTargetUnavailable) throw error;
-    throw new PendingAdmittedWork(registered.id, 'translation-link');
-  }
 }
 
 /** Exact revision query: a newer target head never inherits this provenance. */
