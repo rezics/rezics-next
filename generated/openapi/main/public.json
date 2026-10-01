@@ -394454,6 +394454,18 @@
             },
             "description": "Response for status 503"
           }
+        },
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Read a resource summary and available content with current disclosure. Supply the selected actingSubject for authenticated reads.",
+            "scopes": [
+              "work:read",
+              "context:read"
+            ],
+            "title": "Read a resource",
+            "tool": "read_resource"
+          }
         }
       }
     },
@@ -400688,6 +400700,17 @@
             },
             "description": "Response for status 503"
           }
+        },
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Read visible resource relations, exact revisions and evidence. Continue with the returned cursor and preserve the reading position.",
+            "scopes": [
+              "work:read"
+            ],
+            "title": "Read resource relations",
+            "tool": "resource_relations"
+          }
         }
       }
     },
@@ -403231,6 +403254,18 @@
               }
             },
             "description": "Response for status 503"
+          }
+        },
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Read a bounded batch of resource summaries. Each item reports available or unavailable with current disclosure and its generation.",
+            "scopes": [
+              "work:read",
+              "context:read"
+            ],
+            "title": "Read resource summaries",
+            "tool": "resource_summaries"
           }
         }
       }
@@ -417985,6 +418020,17 @@
               }
             },
             "description": "Response for status 503"
+          }
+        },
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Find public Works by a phrase in selected text. Results are ranked and continue with a cursor; counts state their precision. An optional Realm restricts results to its adoptions.",
+            "scopes": [
+              "work:read"
+            ],
+            "title": "Search the catalogue",
+            "tool": "search_catalogue"
           }
         }
       }
@@ -472258,7 +472304,18 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Find exact name and alias candidates in a Work’s wiki collections.",
+            "scopes": [
+              "wiki:propose"
+            ],
+            "title": "Match extracted wiki names",
+            "tool": "wiki_candidates"
+          }
+        }
       }
     },
     "/v1/wiki/validations": {
@@ -475636,7 +475693,18 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Preview entities, facts, alignment and quotation use before submitting an extraction.",
+            "scopes": [
+              "wiki:propose"
+            ],
+            "title": "Validate a wiki extraction",
+            "tool": "wiki_validate"
+          }
+        }
       }
     },
     "/v1/work-maintainer-changes": {
@@ -502212,7 +502280,18 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Read releases and editions of a Work, their identifiers, languages and coverage. Continue with the returned cursor.",
+            "scopes": [
+              "work:read"
+            ],
+            "title": "Read editions of a Work",
+            "tool": "work_editions"
+          }
+        }
       }
     },
     "/v1/works/{id}/releases/{release}": {
