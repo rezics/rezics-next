@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { clean } from './g-855-library.ts';
 interface Seed {
+  realm: string;
+  zone: string;
   thai: { work: string };
   arabic: { work: string };
   work: string;
@@ -10,8 +12,10 @@ interface Seed {
   facts: { statement: string; text: string; continuity: string; position: string }[];
 }
 let seed: Seed;
+const main = (path: string) => `http://127.0.0.1:${process.env.MAIN_PORT}${path}`;
+const uuid = (iri: string) => iri.slice(-36);
 test.use({ actionTimeout: 20_000 });
-test.beforeAll(() => {
+test.beforeAll(async () => {
   test.setTimeout(300_000);
   const cache = `.temp/g856-q7-${process.env.REZICS_QA_RUN_ID}.json`;
   if (existsSync(cache)) seed = JSON.parse(readFileSync(cache, 'utf8')) as Seed;
@@ -28,6 +32,42 @@ test.beforeAll(() => {
     mkdirSync('.temp', { recursive: true });
     writeFileSync(cache, JSON.stringify(seed));
   }
+  // Main keeps processing the seed's events for a while, moving the graph under every read (409).
+  let last = '';
+  let still = 0;
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline && still < 4;) {
+    const response = await fetch(main(`/v1/works/${uuid(seed.work)}`)).catch(() => null);
+    const position = response?.ok
+      ? JSON.stringify(((await response.json()) as { sourcePosition: unknown }).sourcePosition)
+      : '';
+    still = position && position === last ? still + 1 : 0;
+    last = position;
+    await new Promise((done) => setTimeout(done, 500));
+  }
+  if (still < 4) throw new Error('Main’s graph kept moving for two minutes after the seed');
+  // The Zone is read through its route segment, and its package runs only once Main reports it approved.
+  let state = '';
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline && state !== 'package';) {
+    const zone = await fetch(main('/v1/zones/by-segment/franchise-wiki')).catch(() => null);
+    const id = zone?.ok ? ((await zone.json()) as { zone: string }).zone.slice(-36) : null;
+    const presentation = id
+      ? await fetch(main(`/v1/zones/${id}/presentation`)).catch(() => null)
+      : null;
+    state = presentation?.ok
+      ? ((await presentation.json()) as { execution: { state: string } }).execution.state
+      : '';
+    if (state !== 'package') await new Promise((done) => setTimeout(done, 1000));
+  }
+  if (state !== 'package')
+    throw new Error('The franchise wiki Zone never reported its package approved');
+  // The Realm's public header comes from a projection that can trail the Zone.
+  let found = false;
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline && !found;) {
+    const header = await fetch(main(`/v1/realms/${uuid(seed.realm)}`)).catch(() => null);
+    found = Boolean(header?.ok);
+    if (!found) await new Promise((done) => setTimeout(done, 1000));
+  }
+  if (!found) throw new Error('The Realm never became readable');
 });
 for (const viewport of [
   { width: 390, height: 844 },
