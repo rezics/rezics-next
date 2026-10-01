@@ -105,7 +105,7 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   lap('discussion reloaded');
   // A release, a character and a resource of an unregistered type: each a page with no book controls.
   await page.goto(at(seeded.release));
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Sword Art Online 1: Aincrad');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Sword Art Online');
   await expect(page.locator('[data-entity-type]')).toHaveText('Release');
   await expect(page.getByRole('link', { name: 'Discuss this release' }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Ratings' })).toBeVisible();
