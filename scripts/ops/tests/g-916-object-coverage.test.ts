@@ -15,7 +15,52 @@ import {
 } from '../../../services/main/src/modules/owner/object-coverage.ts';
 import { GRAPHS } from '../../../services/main/src/modules/work/activate.ts';
 import { graphContentReferences } from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
+import type { Pool } from 'pg';
+import {
+  advancePgRecoveryFrontier,
+  assertPgRecoveryFrontier,
+} from '../../../services/main/src/modules/work/pg-recovery-frontier.ts';
 import { RecoveryBudget } from '../recovery-set.ts';
+
+test('G-916: capture retains an advancing WAL floor but rejects source regression and short replay', async () => {
+  const before = {
+    systemIdentifier: '1234',
+    flushedLsn: '0/FFFFFFF0',
+    walFile: '0000000100000000000000FF',
+  };
+  const after = {
+    systemIdentifier: '1234',
+    flushedLsn: '1/10',
+    walFile: '000000010000000100000000',
+  };
+  const retained = advancePgRecoveryFrontier(before, after);
+  expect(retained).toBe(after);
+  expect(advancePgRecoveryFrontier(after, after)).toBe(after);
+  expect(() => advancePgRecoveryFrontier(after, before)).toThrow('regressed');
+  expect(() => advancePgRecoveryFrontier(before, { ...after, systemIdentifier: '5678' })).toThrow(
+    'identity',
+  );
+  expect(() =>
+    advancePgRecoveryFrontier(before, { ...after, walFile: '000000020000000100000000' }),
+  ).toThrow('timeline');
+  expect(() => advancePgRecoveryFrontier(before, { ...after, flushedLsn: 'malformed' })).toThrow(
+    'invalid',
+  );
+  const queries: unknown[][] = [];
+  let covered = false;
+  const pool = {
+    query: async (_query: string, parameters: unknown[]) => {
+      queries.push(parameters);
+      return {
+        rows: [{ system_identifier: '1234', recovering: false, replay_lsn: '1/0', covered }],
+      };
+    },
+  } as unknown as Pool;
+  await expect(assertPgRecoveryFrontier(pool, retained)).rejects.toThrow('retained WAL frontier');
+  covered = true;
+  await assertPgRecoveryFrontier(pool, retained);
+  expect(queries).toEqual([['1/10'], ['1/10']]);
+});
 
 const uri = (value: string) => ({ type: 'uri', value });
 type Rows = NonNullable<SparqlResult['results']>['bindings'];
@@ -149,7 +194,7 @@ test('G-916: predicate scans preserve absent, multivalued and graph-local metada
   await expect(graphObjectReferences(invalid.fuseki)).rejects.toThrow('not an IRI');
 });
 
-function objectsFixture() {
+function objectsFixture(manifestCount = 40) {
   const bytes = new Map<string, Uint8Array>();
   const rows = {
     manifest: [] as Rows,
@@ -163,7 +208,7 @@ function objectsFixture() {
     bytes.set(sha, body);
     return sha;
   };
-  for (let index = 0; index < 40; index++) {
+  for (let index = 0; index < manifestCount; index++) {
     const component = `urn:rezics:component:${Math.floor(index / 2)}`;
     const payload = put({
       format: 'rezics-component-v1',
@@ -244,7 +289,7 @@ test('G-916: overlapping object reads retain the complete serial cut and fetch e
 });
 
 test('G-916: a corrupt parallel read fails closed after all started reads settle', async () => {
-  const fixture = objectsFixture();
+  const fixture = objectsFixture(100);
   fixture.corrupt([...fixture.bytes.keys()][3]!);
   await expect(
     captureObjectRecoveryCoverage(fixture.fuseki, {
@@ -254,7 +299,7 @@ test('G-916: a corrupt parallel read fails closed after all started reads settle
     }),
   ).rejects.toThrow('immutable object is corrupt');
   expect(fixture.active()).toBe(0);
-  expect(fixture.reads.size).toBeLessThan(60);
+  expect(fixture.reads.size).toBeLessThan(fixture.bytes.size);
   await expect(
     captureObjectRecoveryCoverage(fixture.fuseki, {
       directory: '.temp/unused',

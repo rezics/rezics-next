@@ -16,7 +16,7 @@ import { assertDeletionRecoverySet, type DeletionRecoverySet } from
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
   type AccountRecoveryCoverage } from '../../../../account/src/recovery-coverage.ts';
-import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
+import { advancePgRecoveryFrontier, assertPgRecoveryFrontier, capturePgRecoveryFrontier,
   type PgRecoveryFrontier } from './pg-recovery-frontier.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   graphContentReferences, type ContentRecoveryCoverage } from './content-recovery-coverage.ts';
@@ -109,6 +109,12 @@ export async function captureGraphRecoveryCoverage(
   const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter);
   const commerceAfter = await captureCommerceRecoveryCoverage(accessPool);
   const objectsAfter = objectStore ? await captureObjectRecoveryCoverage(fuseki, objectStore) : undefined;
+  // The cluster can emit checkpoint/hint-bit WAL while every owner row stays
+  // fixed. Keep the latest replay floor after both full comparisons, rather
+  // than recapturing every immutable object for background WAL alone.
+  // https://www.postgresql.org/docs/18/runtime-config-wal.html#GUC-WAL-LOG-HINTS
+  const retainedPg = advancePgRecoveryFrontier(
+    advancePgRecoveryFrontier(accountPg, accountPgAfter), await capturePgRecoveryFrontier(accountPool));
   const fenceAfter = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   const moved = [
@@ -119,9 +125,6 @@ export async function captureGraphRecoveryCoverage(
       ? 'Access outbox' : null,
     state.count !== stateAfter.count || state.digest !== stateAfter.digest
       ? 'Access state' : null,
-    accountPg.systemIdentifier !== accountPgAfter.systemIdentifier
-      || accountPg.flushedLsn !== accountPgAfter.flushedLsn
-      || accountPg.walFile !== accountPgAfter.walFile ? 'Account WAL frontier' : null,
     account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
       ? 'Account rows' : null,
     JSON.stringify(relay) !== JSON.stringify(relayAfter) ? 'relay' : null,
@@ -135,7 +138,7 @@ export async function captureGraphRecoveryCoverage(
     throw new RestoreLineageConflict(`owner or graph moved during recovery capture: ${moved.join(', ')}`);
   }
   return { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
-    accountPg, account,
+    accountPg: retainedPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
     accessStateCount: state.count, accessStateDigest: state.digest, relay,
     content, commerce, ...(objects ? { objects } : {}) };

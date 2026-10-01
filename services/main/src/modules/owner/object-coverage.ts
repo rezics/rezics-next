@@ -256,16 +256,28 @@ export async function captureObjectRecoveryCoverage(
     checkedStructureRoots.add(key);
   };
   // Unique Work manifests share payload promises; Structure's paged traversal
-  // keeps its own serial validation. Settle a failed window before cleanup.
+  // keeps its own serial validation. Refill each bounded worker immediately;
+  // after a failure, stop scheduling and settle every read already started.
   const workDigests = [...new Set(references
     .filter(ref => ref.model !== 'https://rezics.com/definition/structure-composition-v1')
     .map(ref => ref.manifest.slice(-64)))];
-  if (concurrency > 1) for (let offset = 0; offset < workDigests.length; offset += concurrency) {
-    const results = await Promise.allSettled(workDigests.slice(offset, offset + concurrency).map(async digest => {
-      const manifest = await manifestObject(digest);
-      if (typeof manifest.payload === 'string' && /^sha256:[0-9a-f]{64}$/.test(manifest.payload))
-        await payloadObject(manifest.payload.slice(7));
-    }));
+  if (concurrency > 1) {
+    let next = 0;
+    let failed = false;
+    const results = await Promise.allSettled(Array.from(
+      { length: Math.min(concurrency, workDigests.length) }, async () => {
+        while (!failed && next < workDigests.length) {
+          const digest = workDigests[next++]!;
+          try {
+            const manifest = await manifestObject(digest);
+            if (typeof manifest.payload === 'string' && /^sha256:[0-9a-f]{64}$/.test(manifest.payload))
+              await payloadObject(manifest.payload.slice(7));
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        }
+      }));
     const failure = results.find(result => result.status === 'rejected');
     if (failure?.status === 'rejected') throw failure.reason;
   }

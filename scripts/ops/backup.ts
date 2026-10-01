@@ -290,51 +290,17 @@ export async function backupRecoverySet(
     });
     if (!generation) throw new Error('Source recovery fence generation is unavailable');
     const capturedGeneration = generation;
-    await budget.phase('postgres-read-settle', async () => {
-      // With data checksums, even read-only scans can WAL-log visibility hint
-      // bits. Read owner rows and flush that WAL before comparing the fenced cut,
-      // so a first read cannot trigger a full immutable-object capture retry.
-      // https://www.postgresql.org/docs/18/runtime-config-wal.html#GUC-WAL-LOG-HINTS
-      for (const pool of Object.values(pools)) {
-        budget.remaining();
-        await captureDatabaseRows(pool);
-      }
-      const checkpoint = new Pool({
-        connectionString: administratorUrl(context.saved, 'account'),
-        max: 1,
-        statement_timeout: budget.remaining(),
-      });
-      try {
-        await checkpoint.query('CHECKPOINT');
-      } finally {
-        await checkpoint.end();
-      }
-    });
-    const coverage = await budget.phase('coverage', async () => {
-      // PostgreSQL background WAL can advance once as sessions drain. Retry only
-      // that diagnosed movement; owner/graph mismatches remain fatal.
-      for (let attempt = 0; ; attempt++) {
-        try {
-          return await captureGraphRecoveryCoverage(
-            fuseki,
-            pools.account,
-            pools.access,
-            pools.relay,
-            context.apps.MAIN_RELAY_CONSUMER!,
-            pools.content,
-            objectStore(context.apps, budget),
-          );
-        } catch (error) {
-          if (
-            attempt >= 4 ||
-            !(error instanceof Error) ||
-            !error.message.includes('Account WAL frontier')
-          )
-            throw error;
-          await Bun.sleep(200);
-        }
-      }
-    });
+    const coverage = await budget.phase('coverage', () =>
+      captureGraphRecoveryCoverage(
+        fuseki,
+        pools.account,
+        pools.access,
+        pools.relay,
+        context.apps.MAIN_RELAY_CONSUMER!,
+        pools.content,
+        objectStore(context.apps, budget),
+      ),
+    );
     const sealedCoverage = seal(coverage, options.key, 'graph-recovery-coverage');
     await retainRecoveryCoverageHead(pools.relay, sealedCoverage, options.key);
     const deletions = await pools.access.query<{ account_issuer: string; account_subject: string }>(

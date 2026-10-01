@@ -9,6 +9,25 @@ export interface PgRecoveryFrontier {
   walFile: string;
 }
 
+/** Retain the later replay floor; background WAL does not mean owner rows moved. */
+export function advancePgRecoveryFrontier(before: PgRecoveryFrontier,
+  after: PgRecoveryFrontier): PgRecoveryFrontier {
+  const position = (lsn: string): bigint => {
+    if (!/^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$/i.test(lsn))
+      throw new PgRecoveryFrontierConflict('invalid PostgreSQL capture frontier');
+    const [high, low] = lsn.split('/');
+    return (BigInt(`0x${high}`) << 32n) + BigInt(`0x${low}`);
+  };
+  if (!/^[0-9]+$/.test(before.systemIdentifier)
+    || !/^[0-9A-F]{24}$/i.test(before.walFile) || !/^[0-9A-F]{24}$/i.test(after.walFile)
+    || before.systemIdentifier !== after.systemIdentifier
+    || before.walFile.slice(0, 8).toUpperCase() !== after.walFile.slice(0, 8).toUpperCase()
+    || position(after.flushedLsn) < position(before.flushedLsn)) {
+    throw new PgRecoveryFrontierConflict('PostgreSQL capture identity, timeline or WAL frontier regressed');
+  }
+  return after;
+}
+
 /** Capture only after the owner is quiesced; store this outside its PostgreSQL backup. */
 export async function capturePgRecoveryFrontier(pool: Pool): Promise<PgRecoveryFrontier> {
   const result = await pool.query<{ system_identifier: string; flushed_lsn: string; wal_file: string }>(
