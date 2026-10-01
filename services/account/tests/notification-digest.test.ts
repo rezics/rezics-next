@@ -51,6 +51,7 @@ test('digest does not invent English when the account has no language', async ()
   const statements: string[] = [];
   const pool = { query: async (sql: string) => {
     statements.push(sql);
+    if (sql.includes('rezics_mail_suppression')) return { rows: [] };
     return { rows: [{ email: 'daniel@example.test', emailVerified: true, locale: null, signup_locale: null }] };
   } } as unknown as Pool;
   const errors: unknown[][] = [];

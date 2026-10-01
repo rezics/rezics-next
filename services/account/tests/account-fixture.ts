@@ -8,6 +8,10 @@ import { accountAuthOptions, createAccountAuth, type AccountConfig } from '../sr
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { accountEmailQueue } from '../src/email.ts';
+import { POLICY_VERSIONS } from '../src/policy-versions.ts';
+
+export const signupPolicyFixture = { birthMonth: '1990-01',
+  acceptedPolicies: POLICY_VERSIONS.map(({ policyId, versionDigest }) => ({ policyId, versionDigest })) };
 
 export async function freePort(): Promise<number> {
   const server = createServer();
@@ -56,7 +60,9 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
       fetch(new URL(path, baseURL), { method: body === undefined ? 'GET' : 'POST',
         redirect: 'manual', headers: { origin: baseURL, 'content-type': 'application/json',
           ...(cookie ? { cookie } : {}), ...extra },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+        ...(body === undefined ? {} : { body: JSON.stringify(new URL(path, baseURL).pathname === '/api/auth/sign-up/email'
+          ? { ...signupPolicyFixture,
+            ...body as Record<string, unknown> } : body) }) });
     const signup = async (address: string) => {
       const password = 'correct horse battery staple';
       const response = await request('/api/auth/sign-up/email', { email: address, name: 'Account Test', password });

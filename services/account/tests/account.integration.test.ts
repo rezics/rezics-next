@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -78,7 +79,7 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     expect(keySet.keys.length).toBeGreaterThan(0);
     const signUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Local Test User', email: 'local@example.test', password: 'correct horse battery staple' }),
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Local Test User', email: 'local@example.test', password: 'correct horse battery staple' }),
     });
     expect(signUp.status).toBe(200);
     const cookie = signUp.headers.get('set-cookie');
@@ -143,7 +144,7 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     });
     const memberSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Member', email: 'member@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Member', email: 'member@example.test',
         password: 'correct horse battery staple' }),
     });
     expect(memberSignUp.status).toBe(200);
@@ -246,7 +247,7 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     expect(clientOwnerDelete.status).toBe(409);
     const blockedSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Blocked', email: 'blocked@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Blocked', email: 'blocked@example.test',
         password: 'correct horse battery staple' }),
     });
     expect(blockedSignUp.status).toBe(200);

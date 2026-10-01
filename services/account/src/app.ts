@@ -21,6 +21,8 @@ import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
 import { emailChangeApi } from './email-change.ts';
 import { notificationDigestApi } from './notification-digest.ts';
+import { mailSuppressionApi } from './mail-suppression.ts';
+import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
 import { bootstrapOperators, requireOperator } from './operators.ts';
 import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
@@ -37,6 +39,7 @@ export interface AccountAppOptions {
   /** First-party web OAuth client IDs admitted to account display preferences. */
   displayPreferenceClientIds?: ReadonlySet<string>;
   notificationDigest?: { accountSecret: string; mainSecret: string };
+  mailEventsSecret?: string;
 }
 
 const installationView = t.Object({ installationId: t.String(), clientId: t.String(),
@@ -210,13 +213,20 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
   };
   const app = new Elysia({ introspect: true })
     .request(({ request, server }) => {
-      if (new URL(request.url).pathname !== '/api/auth/oauth2/register') return;
       const peer = server?.requestIP(request)?.address;
       const forwarded = request.headers.get('x-forwarded-for')?.trim();
       const address = peer && options.trustedProxyPeers?.has(peer) && forwarded && isIP(forwarded)
         ? forwarded : peer;
       request.headers.delete('x-rezics-client-ip');
       if (address) request.headers.set('x-rezics-client-ip', address);
+      // Only our configured ingress can assert Cloudflare request country.
+      // The Accounts Worker must replace CF-IPCountry, never copy a client header.
+      const country = request.headers.get('cf-ipcountry');
+      request.headers.delete('x-rezics-request-country');
+      request.headers.delete('cf-ipcountry');
+      if (peer && options.trustedProxyPeers?.has(peer) && country && /^[A-Z]{2}$/.test(country)) {
+        request.headers.set('x-rezics-request-country', country);
+      }
     })
     .error(({ error }) => {
       if (error instanceof ValidationError || error instanceof ParseError) return Response.json({ error: 'invalid_request' }, { status: 400 });
@@ -251,6 +261,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .use(options.notificationDigest ? notificationDigestApi(pool,
       options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
+    .use(policyAcceptanceApi(auth, pool, auth.options.policyVersions))
+    .use(mailSuppressionApi(pool, String(auth.options.secret), options.mailEventsSecret))
     .use(consentApi(auth, pool))
     .use(methodsApi(auth, pool))
     .use(emailChangeApi(auth, pool))

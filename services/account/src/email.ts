@@ -3,6 +3,7 @@ import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import nodemailer from 'nodemailer';
 import type { Pool, PoolClient } from 'pg';
 import { emailCopy } from './email-copy/index.ts';
+import { deliverOptionalMail, optionalMailSuppressed, unsubscribeHeaders } from './mail-suppression.ts';
 
 export type AccountLocale = 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 'fr' | 'es';
 export type EmailPurpose = 'verify' | 'reset' | 'change-email' | 'notice' | 'digest';
@@ -14,6 +15,7 @@ export interface AccountEmail {
 
 export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string,
   input: Parameters<AccountEmail['enqueue']>[0], id: string = randomUUID()) {
+  if (input.purpose === 'digest' && await optionalMailSuppressed(db, input.to)) return;
   const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
   await db.query(`INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
     VALUES ($1, $2, $3, now() + ($4::int * interval '1 minute')) ON CONFLICT (id) DO NOTHING`,
@@ -68,7 +70,8 @@ export function smtpSender(config: { host: string; port: number; secure: boolean
     auth: config.user ? { user: config.user, pass: config.password } : undefined,
     connectionTimeout: 5_000, greetingTimeout: 5_000, socketTimeout: 10_000,
     disableFileAccess: true, disableUrlAccess: true });
-  return async (mail: { id: string; to: string; subject: string; text: string; html: string }) => {
+  return async (mail: { id: string; to: string; subject: string; text: string; html: string;
+    headers?: Record<string, string> }) => {
     const result = await transport.sendMail({ ...mail, from: config.from,
       messageId: `<${mail.id}@${config.from.split('@').at(-1)?.replace(/[<>]/g, '')}>` });
     if (!result.accepted.length) throw new Error('SMTP recipient rejected');
@@ -78,7 +81,7 @@ export function smtpSender(config: { host: string; port: number; secure: boolean
 /** SMTP is at-least-once at best. A crash after DATA is ambiguous, so stale
  * sending rows become uncertain and are not automatically sent again. Links
  * are short-lived and encrypted at rest; no SMTP call runs in an auth request. */
-export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<typeof smtpSender>) {
+export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<typeof smtpSender>, baseURL?: string) {
   return {
     async enqueue(input: Parameters<AccountEmail['enqueue']>[0]) {
       await enqueueAccountEmail(pool, secret, input);
@@ -113,7 +116,16 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
             await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
             continue;
           }
-          await send({ id: row.id, to: input.to, ...renderAccountEmail(input.purpose, input.locale, input.url, input.message) });
+          const mail = { id: row.id, to: input.to,
+            ...renderAccountEmail(input.purpose, input.locale, input.url, input.message) };
+          if (input.purpose === 'digest') {
+            const delivered = await deliverOptionalMail(pool, input.to, () => send({ ...mail,
+              headers: unsubscribeHeaders(baseURL ?? input.url, secret, input.userId, input.to) }));
+            if (!delivered) {
+              await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
+              continue;
+            }
+          } else await send(mail);
           await pool.query(`UPDATE rezics_account_email SET state = 'sent', payload = NULL WHERE id = $1`, [row.id]);
         } catch {
           // Do not log a transport exception: it can contain recipient or link data.

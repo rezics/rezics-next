@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync,
@@ -110,7 +111,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     const { auth } = startAccount(primary);
     const signUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Recovery User', email: 'recovery@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Recovery User', email: 'recovery@example.test',
         password: 'correct horse battery staple' }),
     });
     expect(signUp.status).toBe(200);
@@ -164,7 +165,7 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     expect((await verifier.verify(userRequest, ['work:create'])).subject).toBe(signedUp.user.id);
     const memberSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Recovery Member', email: 'recovery-member@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Recovery Member', email: 'recovery-member@example.test',
         password: 'correct horse battery staple' }),
     });
     expect(memberSignUp.status).toBe(200);

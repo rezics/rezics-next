@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -61,7 +62,7 @@ test('IAM09: withdrawn consent fences old refresh and Main access across clients
       const password = randomBytes(24).toString('base64url');
       const response = await fetch(`${baseURL}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ ...signupPolicyFixture, name, email, password }),
       });
       expect(response.status).toBe(200);
       return { id: (await response.json() as { user: { id: string } }).user.id,

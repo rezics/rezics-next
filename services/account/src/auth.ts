@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
 import { oauthProvider } from '@better-auth/oauth-provider';
@@ -21,6 +21,9 @@ import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
 import { operatorAuthHooks } from './operator-auth-hooks.ts';
 import { beforeSessionDelete } from './first-party-session.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
+import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance.ts';
+import { SignupPolicyProblem } from './market-policy.ts';
+import type { PolicyVersion } from './policy-versions.ts';
 
 export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
 
@@ -39,6 +42,8 @@ export interface AccountConfig {
   /** Embedded tests can substitute a local verifier; never configured by the HTTP process. */
   turnstileVerifyURL?: string;
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
+  /** Embedded fixtures can exercise a material policy update. */
+  policyVersions?: readonly PolicyVersion[];
 }
 
 type EmailUser = { id: string; email: string; locale?: unknown };
@@ -71,6 +76,7 @@ export function accountAuthOptions(config: AccountConfig) {
     throw new Error('ACCOUNT_RESOURCE must be an absolute HTTP(S) URL without a fragment');
   }
   return {
+    policyVersions: config.policyVersions,
     baseURL: config.baseURL,
     secret: config.secret,
     database: config.pool,
@@ -79,6 +85,24 @@ export function accountAuthOptions(config: AccountConfig) {
     // provider's age-only check cannot recognize that proof after step-up.
     session: { freshAge: 0 },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
+      if (ctx.path === '/update-user' && ctx.body && 'birthMonth' in ctx.body) {
+        throw new APIError('BAD_REQUEST', { code: 'birth_month_signup_only', message: 'Birth month is a registration input' });
+      }
+      if (ctx.path === '/sign-up/email') {
+        try { signupPolicyInput(ctx.body as Record<string, unknown>,
+          ctx.headers?.get('x-rezics-request-country'), config.policyVersions); }
+        catch (error) {
+          if (!(error instanceof SignupPolicyProblem)) throw error;
+          throw new APIError('BAD_REQUEST', { code: error.reason, reason: error.reason,
+            minimumAge: error.minimumAge, message: error.reason });
+        }
+      }
+      if (ctx.path === '/oauth2/authorize') {
+        const session = await getSessionFromCtx(ctx);
+        if (session && await policyAcceptanceRequired(config.pool, session.user.id, config.policyVersions)) {
+          throw new APIError('FORBIDDEN', { code: 'policy_acceptance_required', message: 'Accept the current policies' });
+        }
+      }
       if (ctx.path === '/oauth2/register') {
         const body = ctx.body as Record<string, unknown>;
         const grants = body.grant_types ?? ['authorization_code'];
@@ -102,9 +126,14 @@ export function accountAuthOptions(config: AccountConfig) {
       }
       await operatorHooks.before(ctx);
     }) },
-    databaseHooks: { user: { create: { after: async (user: { id: string }, context: { request?: Request } | null) => {
-      const locale = takeSignupRequestLocale(user.id, context?.request);
-      await config.pool.query(`UPDATE "user" SET signup_locale = $2 WHERE id = $1 AND signup_locale IS NULL`, [user.id, locale]);
+    databaseHooks: { user: { create: {
+      before: async (user: Record<string, unknown>, context: { path?: string; body?: Record<string, unknown>; headers?: Headers } | null) => {
+        if (context?.path !== '/sign-up/email') return { data: user };
+        return { data: { ...user, ...signupPolicyInput(context.body ?? {},
+          context.headers?.get('x-rezics-request-country'), config.policyVersions) } };
+      }, after: async (user: { id: string }, context: { request?: Request } | null) => {
+        const locale = takeSignupRequestLocale(user.id, context?.request);
+        await config.pool.query(`UPDATE "user" SET signup_locale = $2 WHERE id = $1 AND signup_locale IS NULL`, [user.id, locale]);
     } } }, session: { create: { before: async (session: { userId: string }) => {
       const blocked = await config.pool.query(`SELECT 1 FROM rezics_account_security WHERE user_id = $1
         AND (deletion_started_at IS NOT NULL OR password_reset_required OR (suspended_at IS NOT NULL AND (suspended_until IS NULL OR suspended_until > now())))`, [session.userId]);
@@ -137,7 +166,10 @@ export function accountAuthOptions(config: AccountConfig) {
     },
     // emailChangeApi owns the durable two-mailbox flow. Provider change tokens
     // carry mutable email addresses and cannot be revoked with account recovery.
-    user: { additionalFields: { locale: localeField }, changeEmail: { enabled: false },
+    user: { additionalFields: { locale: localeField,
+      birthMonth: { type: 'string', fieldName: 'birth_month', required: false, input: true, returned: false } as const,
+      signupPolicies: { type: 'json', fieldName: 'signup_policies', required: false, input: false, returned: false } as const,
+    }, changeEmail: { enabled: false },
       deleteUser: { enabled: !!config.accessDeletionFence,
       beforeDelete: async (user: { id: string }) => {
         if (await operatorRole(config.pool, user.id)) {

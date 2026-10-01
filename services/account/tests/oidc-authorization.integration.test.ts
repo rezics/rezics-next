@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -58,7 +59,7 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
     const signUp = async (name: string) => {
       const response = await fetch(`${base}/api/auth/sign-up/email`, {
         method: 'POST', headers: { 'content-type': 'application/json', origin: base },
-        body: JSON.stringify({ name, email: `${name}-${randomUUID()}@example.test`,
+        body: JSON.stringify({ ...signupPolicyFixture, name, email: `${name}-${randomUUID()}@example.test`,
           password: randomBytes(24).toString('base64url') }),
       });
       expect(response.status).toBe(200);

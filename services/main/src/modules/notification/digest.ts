@@ -76,7 +76,11 @@ export class NotificationDigestWorker {
           const response = await fetch(this.accountUrl, { method: 'POST',
             headers: { authorization: `Bearer ${this.clientSecret}`, 'content-type': 'application/json' },
             body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
-          if (response.status !== 204) throw new Error('Account digest intake unavailable');
+          // Suppression is a terminal refusal, not an outage. Retrying this
+          // oldest day forever would prevent everybody else's digests.
+          const suppressed = response.status === 409
+            && (await response.json().catch(() => null))?.error === 'mail_suppressed';
+          if (response.status !== 204 && !suppressed) throw new Error('Account digest intake unavailable');
         }
       }
       await this.access.query(`DELETE FROM access.notification_digest_candidate

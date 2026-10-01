@@ -448,6 +448,11 @@ tasks:
     cmds:
       - ../../node_modules/.bin/tsc --noEmit
 
+  account:mail-report:
+    desc: Report uncertain Account mail and optional-mail suppression counts; never resend.
+    cmds:
+      - bun scripts/operations/account-mail-report.ts
+
   content:typecheck:
     desc: Type-check Content.
     dir: services/content

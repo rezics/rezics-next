@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test';
+import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, mkdirSync,
   openSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -265,7 +266,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       .listen({ hostname: '127.0.0.1', port: accountPort });
     const signUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Two-owner member', email: 'two-owner@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Two-owner member', email: 'two-owner@example.test',
         password: 'correct horse battery staple' }),
     });
     expect(signUp.status).toBe(200);
@@ -273,7 +274,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const subject = (await signUp.json() as { user: { id: string } }).user.id;
     const unboundSignUp = await fetch(`${baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: baseURL },
-      body: JSON.stringify({ name: 'Unbound member', email: 'unbound@example.test',
+      body: JSON.stringify({ ...signupPolicyFixture, name: 'Unbound member', email: 'unbound@example.test',
         password: 'correct horse battery staple' }),
     });
     expect(unboundSignUp.status).toBe(200);

@@ -6,6 +6,10 @@ import { recoveryBasisActive } from './recovery-claim.ts';
 import { accountBasisActive } from './account-fence.ts';
 import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } from './signing-keys.ts';
 
+// Launch introspection deliberately has no age-band or adult-eligibility claim.
+// A declared birth month gates registration only; Main withholds all assessed
+// r15/r18/r18g targets from every reader without age assurance.
+
 /** The provider authenticates the introspection caller and verifies the token
  * against its JWKS cache first; that cache can hold a retired key for minutes.
  * This second decision makes the token's signing key generation, installation

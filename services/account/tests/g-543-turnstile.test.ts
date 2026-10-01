@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { accountFixture } from './account-fixture.ts';
+import { accountFixture, signupPolicyFixture } from './account-fixture.ts';
 import { proxyAccountRequest } from '../../../apps/accounts/features/proxy/account-proxy.ts';
 import { accountsConfig, enrollmentSiteKey } from '../../../apps/accounts/features/config/env.ts';
 
@@ -70,7 +70,7 @@ test('G-543: enrollment refuses absent, invalid and unavailable challenges befor
     // header a successful browser widget would still be rejected by Account.
     const signup = await proxyAccountRequest(new Request(`${f.baseURL}/api/auth/sign-up/email`, {
       method: 'POST', headers: { origin: f.baseURL, 'content-type': 'application/json', 'x-captcha-response': 'test-token' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...signupPolicyFixture, ...body }),
     }), { serviceOrigin: f.baseURL, publicOrigin: f.baseURL });
     expect(signup.status).toBe(200);
     expect(await signup.json()).toEqual({ status: true });

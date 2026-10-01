@@ -366,6 +366,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task account:dev` | Run Account in watch mode. |
 | `task account:test` | Run Account unit tests. |
 | `task account:typecheck` | Type-check Account. |
+| `task account:mail-report` | Report uncertain Account mail and optional-mail suppression counts; never resend. |
 | `task content:typecheck` | Type-check Content. |
 | `task content:test` | Run Content unit tests. |
 | `task main:dev` | Run Main in watch mode. |
