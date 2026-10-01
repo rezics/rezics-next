@@ -1,10 +1,10 @@
-import type { Editions, Relations, SeriesSummary, Session } from './types.ts';
+import type { Editions, Realization, Release, Relations, SeriesSummary, Session, WorkSummary } from './types.ts';
 
 // Records in the shape Main answers, for stories and tests: Sword Art Online volume 1 with a print
 // and an audiobook release, and the Index "Original" series as it stands in zh-Hant.
 
 export const iri = (id: string) => `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`;
-export const position = { dataEpoch: 'epoch', sequence: '1' };
+export const position = { datasetId: 'product' as const, dataEpoch: 'epoch', sequence: '1' };
 
 export const saoOne = iri('1');
 export const saoOneTitle = 'Sword Art Online, Vol. 1';
@@ -17,17 +17,23 @@ export const session = (overrides: Partial<Session> = {}): Session => ({
   selections: [{ target: target(saoOne, 'work'), language: null, format: null, progress: 'locator' }], locators: [],
   completedAt: null, version: 1, createdAt: '2026-09-01T00:00:00.000Z', changedAt: '2026-09-01T00:00:00.000Z', ...overrides });
 
+const realization = (id: string, language: string, kind: Realization['kind']) => ({
+  profile: 'realization-v1', id: iri(id), work: saoOne, revision: iri(`${id}9`), language, kind, translators: [], publishers: [],
+  source: { kind: 'unresolved', work: saoOne }, status: 'official', verification: 'verified', evidence: null, legacy: null,
+}) satisfies Realization;
+
+const release = (id: string, title: string, platform: string) => ({
+  profile: 'release-v2', id: iri(id), revision: iri(`${id}9`), kind: 'formal', status: 'official', contentLanguages: ['en'],
+  isTranslation: true, originalLanguages: ['ja'], titleLanguage: 'en', tracklistLanguage: null, title: { value: title, language: 'en' },
+  isbn13: null, editionStatement: null, publisher: 'Yen Press', publicationYear: 2014, originalUrl: null, fixedRelease: null,
+  identifiers: [], platform, territory: 'US',
+  coverage: [{ realization: iri('r2'), revision: iri('r29'), work: saoOne, mainVersion: iri('mv1'), language: 'en', completeness: 'complete' }],
+  legacyCoverage: null, snapshots: [],
+}) satisfies Release;
+
 export const editions: Editions = {
-  realizations: [
-    { id: iri('r1'), revision: iri('r19'), language: 'ja', kind: 'original' },
-    { id: iri('r2'), revision: iri('r29'), language: 'en', kind: 'translation' },
-  ] as unknown as Editions['realizations'],
-  releases: [
-    { id: iri('p1'), revision: iri('p19'), title: { value: 'Sword Art Online 1: Aincrad', language: 'en' }, platform: 'paperback',
-      contentLanguages: ['en'] },
-    { id: iri('p2'), revision: iri('p29'), title: { value: 'Sword Art Online 1 (audiobook)', language: 'en' }, platform: 'audiobook',
-      contentLanguages: ['en'] },
-  ] as unknown as Editions['releases'],
+  realizations: [realization('r1', 'ja', 'original'), realization('r2', 'en', 'translation')],
+  releases: [release('p1', 'Sword Art Online 1: Aincrad', 'paperback'), release('p2', 'Sword Art Online 1 (audiobook)', 'audiobook')],
   more: false,
 };
 
@@ -69,16 +75,28 @@ export const equivalentDefinition = iri('d1');
 const web = iri('w1');
 const book = iri('w2');
 
-/** Web Spider's relations: the book is recorded as its equivalent counterpart, a partial one is another Work. */
-export const spiderRelations = (counterpart = book, title = 'So I’m a Spider, So What? (book)'): Relations => ({
+// Main's resource `type` is a registry-defined union that the contract types as `never`; 'work' is what it answers.
+/** Web Spider's relations: the book is recorded as its equivalent counterpart. */
+export const spiderRelations = (counterpart = book, title = 'So I’m a Spider, So What? (book)') => ({
   profile: 'resource-relations-v1', resource: web, next: null, sourcePosition: position,
   items: [{ relation: iri('x1'), kind: 'occurrence', revision: iri('x19'), evidence: null,
-    counterparts: [{ reference: counterpart, status: 'available', type: 'work', base: 'work', work: counterpart, disclosure: 'public',
-      name: { value: title, language: 'en', direction: 'ltr' }, avatar: null }],
+    counterparts: [{ reference: counterpart, status: 'available', type: 'work' as never, base: 'work', work: counterpart, disclosure: 'public',
+      name: { value: title, language: 'en', direction: 'ltr', basis: 'requested' },
+      avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: counterpart, resourceType: 'work' as never } }],
     rendering: { profile: 'relation-rendering-v1', meaning: { definition: equivalentDefinition, revision: iri('d19'), lifecycle: 'active', roles: [] },
       occurrence: null, viewingRole: 'source', bindings: [],
-      projections: [{ fromRole: 'source', toRole: 'target', arguments: [{ role: 'target', type: 'resource',
-        value: { kind: 'resource', ref: counterpart } }] }] } }],
-}) as unknown as Relations;
+      projections: [{ fromRole: 'source', toRole: 'target', presentation: null, labels: null, language: null, script: null,
+        direction: null, reviewStatus: null, source: null, licence: null, fallback: null,
+        arguments: [{ role: 'target', type: 'resource', value: { kind: 'resource', ref: counterpart } }] }] } }],
+}) satisfies Relations;
+
+/** A Work with no composition, as Main answers for it: its own status, no parts. */
+export const standaloneSummary = (status: WorkSummary['status']) => ({
+  resource: web, scope: 'work', policy: 'composition-progress-v2', language: null, status,
+  counts: { completed: status === 'finished' ? 1 : 0, required: 1, completedRequired: status === 'finished' ? 1 : 0 },
+  states: { correspondenceUnresolved: false }, partial: false, preference: null,
+  revisions: { work: { resource: web, revision: iri('w19') }, sessions: [], library: [], selections: [], graph: position },
+  continuation: { sessions: null, releases: null },
+}) satisfies WorkSummary;
 
 export const spider = { web, book };

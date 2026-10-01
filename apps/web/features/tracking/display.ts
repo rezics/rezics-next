@@ -10,8 +10,8 @@ export function stateLabel(state: SessionState, t: Copy): string {
     : state === 'dnf' ? t.stateDnf : t.stateFinished;
 }
 
-export function moveLabel(state: SessionState, t: Copy): string {
-  return state === 'active' ? t.moveActive : state === 'paused' ? t.movePaused : state === 'dnf' ? t.moveDnf
+export function moveLabel(state: SessionState, from: SessionState, t: Copy): string {
+  return state === 'active' ? (from === 'planned' ? t.startReading : t.moveActive) : state === 'paused' ? t.movePaused : state === 'dnf' ? t.moveDnf
     : state === 'finished' ? t.moveFinished : stateLabel(state, t);
 }
 

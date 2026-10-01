@@ -2,7 +2,7 @@ import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
 import { failureOf, type Loaded, type ReadFailure, settle, uuidOf } from '../feed/types.ts';
-import type { EditionChoice, EditionPreference, Editions, Relations, SeriesSummary, Session, SessionChanges,
+import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Relations, Session, SessionChanges,
   SessionPage } from './types.ts';
 
 // The browser side of tracking. Every call acts as the session's Agent and the BFF adds the bearer
@@ -34,7 +34,7 @@ export interface TrackingApi {
   change(session: string, expectedVersion: number, changes: SessionChanges): Promise<AttemptWrite>;
   editions(work: string): Promise<Loaded<Editions>>;
   /** Main's series progress for a Work's composition, in the chosen language (the preference's when unset). */
-  series(resource: string, language?: string): Promise<Loaded<SeriesSummary>>;
+  series(resource: string, language?: string): Promise<Loaded<ProgressSummary>>;
   relations(resource: string): Promise<Loaded<Relations>>;
   /** The definition Main holds for a relation key, to tell which entries are that kind. */
   definition(key: string): Promise<Loaded<{ definition: string }>>;
@@ -42,6 +42,7 @@ export interface TrackingApi {
   setPreference(work: string, expectedVersion: number, choice: EditionChoice): Promise<PreferenceWrite>;
 }
 
+const RELATION_PAGES = 5;
 const headers = () => ({ headers: { 'idempotency-key': commandKey() } });
 
 interface Failed { status: number; value: unknown }
@@ -88,8 +89,19 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
     },
     series: (resource, language) => settle(() => main().v1.me['progress-summaries']({ resource: uuidOf(resource) }).get({
       query: { actingSubject, ...(language ? { language } : {}) } })),
-    relations: resource => settle(() => main().v1.resources({ resource: uuidOf(resource) }).relations.get({ query: {
-      actingSubject, limit: 20 } })),
+    async relations(resource) {
+      // Follow Main's pages up to a bound; a Work with more relations than that offers no more than it has read.
+      let all: Relations | null = null;
+      for (let page = 0, after: string | undefined; page < RELATION_PAGES; page++) {
+        const read = await settle(() => main().v1.resources({ resource: uuidOf(resource) }).relations.get({ query: {
+          actingSubject, limit: 20, ...(after ? { after } : {}) } }));
+        if (!read.ok) return all ? { ok: true, data: all } : read;
+        all = all ? { ...read.data, items: [...all.items, ...read.data.items] } : read.data;
+        if (!read.data.next) break;
+        after = read.data.next;
+      }
+      return all ? { ok: true, data: all } : { ok: false, failure: 'unavailable' };
+    },
     definition: key => settle(() => main().v1.lexicon.definitions({ key }).get({ query: { actingSubject } })),
     preference: work => settle(() => main().v1.me['edition-preferences']({ work: uuidOf(work) }).get({
       query: { actingSubject } })),

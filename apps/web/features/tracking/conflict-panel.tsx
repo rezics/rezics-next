@@ -44,17 +44,22 @@ export function ConflictPanel({ rows, current, editions, locale, t, busy, failed
     <AlertTitle>{t.conflictTitle}</AlertTitle>
     <AlertDescription className="grid gap-3">
       <p>{t.conflictBody}</p>
-      <dl className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1 text-sm">
-        <dt className="sr-only">{t.status}</dt>
-        <dd className="col-start-2 font-medium text-xs">{t.conflictMine}</dd>
-        <dd className="font-medium text-xs">{t.conflictTheirs}</dd>
-        {rows.map(row => {
-          const cell = cells(row, editions, locale, t);
-          return <div key={`${row.field}:${'target' in row ? row.target : ''}`} className="contents" data-conflict-field={row.field}>
-            <dt className="text-muted-foreground">{cell.label}</dt><dd>{cell.mine}</dd><dd>{cell.theirs}</dd>
-          </div>;
-        })}
-      </dl>
+      <table className="w-full text-start text-sm">
+        <thead className="text-xs">
+          <tr><th scope="col" className="sr-only">{t.status}</th>
+            <th scope="col" className="pe-3 text-start font-medium">{t.conflictMine}</th>
+            <th scope="col" className="text-start font-medium">{t.conflictTheirs}</th></tr>
+        </thead>
+        <tbody>
+          {rows.map(row => {
+            const cell = cells(row, editions, locale, t);
+            return <tr key={`${row.field}:${'target' in row ? row.target : ''}`} data-conflict-field={row.field}>
+              <th scope="row" className="py-0.5 pe-3 text-start font-normal text-muted-foreground">{cell.label}</th>
+              <td className="pe-3">{cell.mine}</td><td>{cell.theirs}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
       {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.conflictFailed}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" disabled={busy} onClick={onKeep}>{t.keepMine}</Button>

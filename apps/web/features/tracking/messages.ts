@@ -1,4 +1,4 @@
-import { insert, materializeData } from 'native-i18n';
+import { asValue, insert, materializeData, number, plural } from 'native-i18n';
 import { defineMessages, type UiLocale, withEnglish } from '../../i18n/define.ts';
 import de from './messages/de.ts';
 import es from './messages/es.ts';
@@ -58,13 +58,18 @@ const en = {
   conflictStarted: 'Started', conflictFinished: 'Finished on', conflictPosition: 'Position',
   conflictEdition: insert('Add {{edition}}', { edition: String }),
 
+  workProgress: 'Your progress', notStarted: 'Not started',
   seriesProgress: 'Series progress', seriesUnavailable: 'Series progress could not be loaded.',
   stateCaughtUp: 'Caught up with available material', stateFinishedParts: 'Finished the published parts',
   stateConcluded: 'Series concluded', stateCorrespondence: 'Correspondence unresolved',
   yes: 'Yes', no: 'No', unknown: 'Unknown',
   partialNote: 'This series has more parts than one page holds, so whether you are caught up or finished is not known here.',
-  countsLine: insert('{{completedRequired}} of {{required}} required parts finished', { completedRequired: String, required: String }),
-  partsFinished: insert('{{completed}} parts finished in all', { completed: String }),
+  countsLine: plural({
+    one: insert('{{completedRequired}} of {{count}} required part finished'),
+    other: insert('{{completedRequired}} of {{count}} required parts finished'),
+  }, { count: asValue(number()), completedRequired: String }),
+  partsFinished: plural({ one: insert('{{count}} part finished in all'), other: insert('{{count}} parts finished in all') },
+    { count: asValue(number()) }),
   nextPart: 'Next part', noNext: 'Nothing left to read.',
   reasonNextAvailable: 'The next required part you can read in this language.',
   reasonAwaiting: 'The next required part, which has no text in this language yet.',

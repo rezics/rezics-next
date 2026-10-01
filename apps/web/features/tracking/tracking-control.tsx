@@ -2,11 +2,12 @@
 
 import { Button } from '@rezics/ui/button';
 import { ListChecksIcon } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
 import { copyOf } from './messages.ts';
-import { TrackingSheet } from './tracking-sheet.tsx';
+
+const TrackingSheet = lazy(() => import('./tracking-sheet.tsx').then(module => ({ default: module.TrackingSheet })));
 
 /**
  * "Details" as a button of its own, for pages that embed tracking beside their other actions (the hub
@@ -18,10 +19,13 @@ export function TrackingControl({ work, title, locale, size = 'md', variant = 'o
 }) {
   const actions = useReaderActions();
   const [open, setOpen] = useState(false);
+  const [asked, setAsked] = useState(false);
   if (actions.kind !== 'ready' || !actions.tracking) return null;
   return <>
-    <Button size={size} variant={variant} pill className={className} onClick={() => setOpen(true)}>
+    <Button size={size} variant={variant} pill className={className} onClick={() => { setAsked(true); setOpen(true); }}>
       <ListChecksIcon aria-hidden="true" />{copyOf(locale).details}</Button>
-    <TrackingSheet work={work} title={title} api={actions.tracking} locale={locale} open={open} onOpenChange={setOpen} />
+    {asked ? <Suspense fallback={null}>
+      <TrackingSheet work={work} title={title} api={actions.tracking} locale={locale} open={open} onOpenChange={setOpen} />
+    </Suspense> : null}
   </>;
 }

@@ -8,9 +8,6 @@ import type { Catalogue } from './g-838-catalogue.ts';
 let catalogue: Catalogue;
 // Playwright's actions wait as long as the test does unless bounded; a stuck step should fail in seconds, with its error.
 test.use({ actionTimeout: 15_000 });
-// The QA tier gives the whole Playwright run 300 s; these marks show where it goes.
-const began = Date.now();
-const mark = (step: string) => console.log(`[g-838] ${step} at ${Math.round((Date.now() - began) / 1000)}s`);
 test.beforeAll(async () => {
   test.setTimeout(300_000);
   const result = spawnSync('bun', ['apps/web/tests/g-838-seed.ts'], { cwd: process.cwd(), env: process.env,
@@ -19,7 +16,6 @@ test.beforeAll(async () => {
     throw new Error(`G-838 seed failed: ${result.stderr || result.error?.message || result.status}`);
   }
   catalogue = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Catalogue;
-  mark('seeded');
   // Main keeps processing the seed's events for a while, moving the graph under every read (409).
   const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(catalogue.sao.series.work)}`;
   let last = '';
@@ -32,7 +28,6 @@ test.beforeAll(async () => {
     await new Promise(done => setTimeout(done, 500));
   }
   if (still < 4) throw new Error('Main’s graph kept moving for 90 seconds after the seed');
-  mark('settled');
 });
 
 const uuid = (iri: string) => iri.slice(-36);
@@ -109,7 +104,6 @@ test('attempts on two devices, series progress and the offered correspondence', 
   const a = await device(browser, info, desktop, at(volume));
   const b = await device(browser, info, phone, at(volume));
 
-  mark('signed in');
   // Device A starts an attempt on volume 1 in print, then adds the audiobook.
   let sheetA = await openDetails(a);
   await expect(sheetA.getByText('No attempts recorded yet.')).toBeVisible();
@@ -136,7 +130,6 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(position).toContainText('Furthest page 200');
   await shot(a, info, 'attempt-desktop');
 
-  mark('first attempt');
   // Device B loads the same attempt; A then pauses it, so B's version is stale.
   await b.reload();
   const sheetB = await openDetails(b);
@@ -157,7 +150,6 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(firstB.getByText('Finished', { exact: true })).toBeVisible();
   await expect(conflict).toHaveCount(0);
 
-  mark('conflict kept');
   // A, still on Paused, resumes: stale again; A takes the other device's version.
   await first.getByRole('button', { name: 'Resume' }).click();
   const conflictA = sheetA.getByRole('alert').filter({ hasText: 'Changed on another device' });
@@ -175,8 +167,9 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await second.getByRole('button', { name: 'Mark finished' }).click();
   await expect(second.getByText('Finished', { exact: true })).toBeVisible();
   await a.keyboard.press('Escape');
+  // The shelf followed the attempt without a reload.
+  await expect(a.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
 
-  mark('reread');
   // Both the volume and the omnibus that covers it are finished, and each Work counts once.
   await a.goto(at(sao.series, '/connections'));
   const saoPanel = a.getByRole('region', { name: 'Series progress' });
@@ -186,7 +179,6 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(saoPanel).toContainText('3 parts finished in all');
   await shot(a, info, 'series-sao-desktop', saoPanel);
 
-  mark('sao panel');
   // Index in Traditional Chinese: volumes 1 and 2 are finished (in any language), volume 3 has no such text.
   const { actingSubject } = credentials();
   for (const finished of index.volumes.slice(0, 2)) {
@@ -211,25 +203,25 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(b.getByRole('region', { name: 'Series progress' })).toBeVisible();
   await shot(b, info, 'series-index-phone');
 
-  mark('index panel');
   // Spider: finishing the web serial leaves the book unstarted until the reader accepts the offer.
   await a.goto(at(spider.book));
   await expect(a.getByRole('button', { name: 'Want to read' })).toBeVisible();
-  await a.goto(at(spider.web));
+  await a.goto(at(spider.web, '/connections'));
+  await expect(a.getByRole('region', { name: 'Your progress' })).toHaveCount(0);
+  // Shelving it Read on this page brings the offer up without a reload.
   await a.getByRole('button', { name: 'More shelves' }).click();
   await a.getByRole('menuitemradio', { name: 'Read', exact: true }).click();
   await expect(a.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
-  await a.goto(at(spider.web, '/connections'));
-  const spiderPanel = a.getByRole('region', { name: 'Series progress' });
+  const spiderPanel = a.getByRole('region', { name: 'Your progress' });
   await expect(spiderPanel).toContainText('Nothing is marked until you choose');
-  await a.goto(at(spider.book));
-  await expect(a.getByRole('button', { name: 'Want to read' })).toBeVisible();
-  await a.goto(at(spider.web, '/connections'));
-  await shot(a, info, 'spider-offer-desktop', a.getByRole('region', { name: 'Series progress' }));
+  await shot(a, info, 'spider-offer-desktop', spiderPanel);
+  const book = await a.context().newPage();
+  await book.goto(at(spider.book));
+  await expect(book.getByRole('button', { name: 'Want to read' })).toBeVisible();
   await a.getByRole('button', { name: /^Also mark .* as read$/ }).click();
   await expect(a.getByText(/is marked as read\.$/)).toBeVisible();
-  await a.goto(at(spider.book));
-  await expect(a.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
+  await book.reload();
+  await expect(book.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
 
   // The same panel in Simplified Chinese.
   await a.goto(`/zh-Hans/w/${uuid(index.series.work)}/connections`);

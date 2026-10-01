@@ -19,7 +19,10 @@ export type SessionCreate = Body<Me['sessions']['post']>;
 export type SessionChanges = Omit<SessionCreate, 'actingSubject' | 'expectedVersion' | 'target'>;
 export type SelectionInput = NonNullable<SessionChanges['addSelections']>[number];
 
-export type SeriesSummary = Ok<ReturnType<Me['progress-summaries']>['get']>;
+/** Main's answer for a Work: a series' progress through its composition, or a standalone Work's own status. */
+export type ProgressSummary = Ok<ReturnType<Me['progress-summaries']>['get']>;
+export type SeriesSummary = Extract<ProgressSummary, { scope: 'disclosed-composition' }>;
+export type WorkSummary = Extract<ProgressSummary, { scope: 'work' }>;
 export type SeriesPart = SeriesSummary['completedParts'][number];
 export type EditionPreference = NonNullable<Ok<ReturnType<Me['edition-preferences']>['get']>>;
 export type EditionChoice = Pick<EditionPreference, 'language' | 'edition'>;

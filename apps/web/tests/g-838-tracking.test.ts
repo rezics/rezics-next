@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { MainClient } from '../features/discover/types.ts';
 import { mainTrackingApi } from '../features/tracking/api.ts';
 import * as fixture from '../features/tracking/fixtures.ts';
+import { shelfFollowing } from '../features/catalogue/reader-store.ts';
 import { createMemoryMain, memoryTracking } from '../features/tracking/memory.ts';
 import { copyOf, englishMessages, messages } from '../features/tracking/messages.ts';
 import { conflictRows, dateText, editionOptions, hasEnded, isOpen, movesFrom, numbered, parsePosition, parseTime,
@@ -186,5 +187,43 @@ describe('G-838 catalogs', () => {
     for (const locale of uiLocales) {
       expect(Object.keys(messages[locale]).sort()).toEqual(Object.keys(englishMessages).sort());
     }
+  });
+});
+
+describe('G-838 counts agree with their numbers in every language', () => {
+  test('one part and many parts take their own forms where the language has them', () => {
+    const en = copyOf('en');
+    expect(en.partsFinished(1)).toBe('1 part finished in all');
+    expect(en.partsFinished(3)).toBe('3 parts finished in all');
+    expect(en.countsLine({ count: 1, completedRequired: '1' })).toBe('1 of 1 required part finished');
+    expect(en.countsLine({ count: 4, completedRequired: '2' })).toBe('2 of 4 required parts finished');
+    expect(copyOf('de').partsFinished(1)).toBe('Insgesamt 1 Teil gelesen');
+    expect(copyOf('es').partsFinished(2)).toBe('2 partes terminadas en total');
+    expect(copyOf('fr').countsLine({ count: 1, completedRequired: '0' })).toBe('0 partie obligatoire sur 1 terminée');
+  });
+});
+
+describe('G-838 the shelf follows a write that took', () => {
+  test('a started or changed attempt reads the Work’s shelf again; a refused write does not', async () => {
+    const main = createMemoryMain({ editions: fixture.editions });
+    const changed: string[] = [];
+    const api = shelfFollowing(memoryTracking(main), work => changed.push(work));
+    const started = await api.start(fixture.saoOne, { state: 'active' });
+    if (!started.ok) throw new Error('start refused');
+    expect(changed).toEqual([fixture.saoOne]);
+    await api.change(started.data.id, 1, { state: 'finished' });
+    expect(changed).toEqual([fixture.saoOne, fixture.saoOne]);
+    const refused = await api.change(started.data.id, 1, { state: 'paused' });
+    expect(refused.ok).toBe(false);
+    expect(changed).toHaveLength(2);
+  });
+});
+
+describe('G-838 a Work without a composition', () => {
+  test('is answered with its own status and no parts, so no series is drawn for it', () => {
+    const summary = fixture.standaloneSummary('not-started');
+    expect(summary.scope).toBe('work');
+    expect('next' in summary).toBe(false);
+    expect('completedParts' in summary).toBe(false);
   });
 });

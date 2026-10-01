@@ -1,7 +1,9 @@
+import type { ReaderActions, ReadingStatus } from '../catalogue/reader-actions.tsx';
+import { shelfFollowing } from '../catalogue/reader-store.ts';
 import type { AttemptWrite, StartInput, StaleChange, TrackingApi } from './api.ts';
 import { equivalentDefinition, iri, session as sessionOf } from './fixtures.ts';
 import { movesFrom } from './model.ts';
-import type { Editions, EditionChoice, EditionPreference, Relations, SelectionInput, SeriesSummary, Session,
+import type { Editions, EditionChoice, EditionPreference, Relations, SelectionInput, ProgressSummary, Session,
   SessionChanges } from './types.ts';
 
 // Main in memory, for stories and tests: attempts with the same compare-and-set versions, pinned
@@ -13,7 +15,7 @@ export interface MemoryMain {
   sessions: Session[];
   editions: Editions;
   /** Progress per language, as Main would compute it; the tests and stories decide what it says. */
-  summaries: Record<string, SeriesSummary>;
+  summaries: Record<string, ProgressSummary | (() => ProgressSummary)>;
   preferences: Map<string, EditionPreference>;
   relations: Relations | null;
   /** What was written, in order, so a test can tell that nothing was written silently. */
@@ -97,8 +99,8 @@ export function memoryTracking(main: MemoryMain): TrackingApi {
     },
     async editions() { return { ok: true, data: main.editions }; },
     async series(_resource, language) {
-      const summary = (language && main.summaries[language]) || Object.values(main.summaries)[0];
-      return summary ? { ok: true, data: summary } : { ok: false, failure: 'missing' };
+      const found = (language && main.summaries[language]) || Object.values(main.summaries)[0];
+      return found ? { ok: true, data: typeof found === 'function' ? found() : found } : { ok: false, failure: 'missing' };
     },
     async relations() { return main.relations ? { ok: true, data: main.relations } : { ok: false, failure: 'missing' }; },
     async definition() { return { ok: true, data: { definition: equivalentDefinition } }; },
@@ -111,4 +113,31 @@ export function memoryTracking(main: MemoryMain): TrackingApi {
       return { ok: true, data: saved };
     },
   };
+}
+
+/** What Main projects onto the shelf from a Work's latest attempt (`session/state.ts`). */
+const shelfOf = (state: Session['state']): ReadingStatus | null =>
+  state === 'planned' ? 'want-to-read' : state === 'finished' ? 'read' : state === 'dnf' ? null : 'reading';
+
+/**
+ * Reader actions over the in-memory Main, with the same wrapper the store uses: after a write that took,
+ * the Work's shelf is read again (here from its latest attempt), so the status button follows.
+ */
+export function memoryReader(main: MemoryMain, initial: Record<string, ReadingStatus | null> = {}):
+  ReaderActions & { kind: 'ready' } {
+  const statuses = new Map(Object.entries(initial));
+  const listeners = new Set<() => void>();
+  let version = 0;
+  const notify = () => { version += 1; for (const listener of listeners) listener(); };
+  const refresh = (work: string) => {
+    const latest = main.sessions.find(item => item.target.work === work);
+    if (latest) statuses.set(work, shelfOf(latest.state));
+    notify();
+  };
+  return { kind: 'ready', ratingMax: 5, rate: null,
+    stateOf: work => ({ status: statuses.get(work) ?? null, rating: null }),
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    snapshot: () => version,
+    async setStatus(work, status) { statuses.set(work, status); notify(); return true; },
+    tracking: shelfFollowing(memoryTracking(main), refresh) };
 }

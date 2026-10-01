@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { TrackingMessages } from '../messages.ts';
 
 export default {
@@ -49,13 +49,14 @@ export default {
   conflictStarted: '開始', conflictFinished: '結束日期', conflictPosition: '進度',
   conflictEdition: insert('加入{{edition}}', { edition: String }),
 
+  workProgress: '你的進度', notStarted: '尚未開始',
   seriesProgress: '系列進度', seriesUnavailable: '無法載入系列進度。',
   stateCaughtUp: '已追上現有內容', stateFinishedParts: '已讀完已出版的各部',
   stateConcluded: '系列已完結', stateCorrespondence: '對應關係尚未確定',
   yes: '是', no: '否', unknown: '不明',
   partialNote: '這個系列的部數超過一頁所能容納，因此此處無法得知你是否已追上或讀完。',
-  countsLine: insert('必讀的 {{required}} 部中已讀完 {{completedRequired}} 部', { completedRequired: String, required: String }),
-  partsFinished: insert('共已讀完 {{completed}} 部', { completed: String }),
+  countsLine: plural({ other: insert('必讀的 {{count}} 部中已讀完 {{completedRequired}} 部') }, { count: asValue(number()), completedRequired: String }),
+  partsFinished: plural({ other: insert('共已讀完 {{count}} 部') }, { count: asValue(number()) }),
   nextPart: '下一部', noNext: '沒有待讀的部分了。',
   reasonNextAvailable: '可用這個語言閱讀的下一個必讀部分。',
   reasonAwaiting: '下一個必讀部分，但尚無這個語言的文本。',

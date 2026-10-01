@@ -1,6 +1,6 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
-import { mainTrackingApi } from '../tracking/api.ts';
+import { mainTrackingApi, type TrackingApi } from '../tracking/api.ts';
 import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-actions.tsx';
 
 // Main's reader library (`services/main/src/routes/library.ts`): status
@@ -51,6 +51,22 @@ export async function readReaderSeed(main: MainClient, actingSubject: string, wo
     } catch { /* The controls read these Works again in the browser when they are drawn. */ }
   }));
   return denied ? null : seed;
+}
+
+/**
+ * Main projects an attempt onto the Work's shelf (finished reads as Read, planned as Want to read, did
+ * not finish takes it off). After a write that took, the shelf state is read again, so the status
+ * button and anything keyed on it follow without a reload.
+ */
+export function shelfFollowing(tracking: TrackingApi, changed: (work: string) => void): TrackingApi {
+  const after = <T extends { ok: boolean }>(written: T & { data?: { target: { work: string | null } } }): T => {
+    const work = written.ok ? written.data?.target.work : null;
+    if (work) changed(work);
+    return written;
+  };
+  return { ...tracking,
+    start: async (work, input) => after(await tracking.start(work, input)),
+    change: async (session, version, changes) => after(await tracking.change(session, version, changes)) };
 }
 
 /**
@@ -116,7 +132,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
     },
     snapshot: () => version,
     available: () => !denied,
-    tracking: mainTrackingApi(actingSubject, main),
+    tracking: shelfFollowing(mainTrackingApi(actingSubject, main), work => void refresh(work)),
     async setStatus(work: string, status: ReadingStatus | null) {
       const api = main().v1.works({ id: work.slice(-36) })['reader-status'];
       const put = (entry: ReaderEntry) => api.put({ actingSubject, expectedVersion: entry.version, status },

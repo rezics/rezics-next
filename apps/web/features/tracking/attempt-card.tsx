@@ -37,10 +37,12 @@ export function AttemptCard({ session, title, work, editions, api, locale, t, on
     setBusy(false);
     if (written.ok) { setConflict(null); setKeepFailed(false); onChange(written.data); return true; }
     if (written.failure === 'stale') {
-      // The attempt as it now stands replaces the card's; the refused change waits for the reader's choice.
-      setConflict({ current: written.current, submitted: written.submitted });
-      setKeepFailed(false);
       onChange(written.current);
+      setKeepFailed(false);
+      // Main already holds what was asked for: nothing to choose between. Otherwise the refused change
+      // waits for the reader's choice, beside the attempt as it now stands.
+      if (!conflictRows(written.current, written.submitted).length) { setConflict(null); return true; }
+      setConflict({ current: written.current, submitted: written.submitted });
     } else if (version === session.version) setFailed(true);
     else setKeepFailed(true);
     return false;
@@ -65,7 +67,7 @@ export function AttemptCard({ session, title, work, editions, api, locale, t, on
     {ended ? <p className="text-muted-foreground text-sm">{session.state === 'dnf' ? t.dnfNote : t.endedNote}</p>
       : <div className="flex flex-wrap gap-2" role="group" aria-label={t.status}>
         {movesFrom(session.state).map(state => <Button key={state} size="sm" variant={state === 'finished' ? 'default' : 'outline'}
-          disabled={busy} onClick={() => void apply({ state })}>{moveLabel(state, t)}</Button>)}
+          disabled={busy} onClick={() => void apply({ state })}>{moveLabel(state, session.state, t)}</Button>)}
       </div>}
 
     <div className="grid gap-3 sm:grid-cols-2">

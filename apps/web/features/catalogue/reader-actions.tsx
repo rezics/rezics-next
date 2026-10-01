@@ -7,12 +7,11 @@ import { Rating, RatingLabel } from '@rezics/ui/rating';
 import { cn } from '@rezics/ui/utils';
 import { BookmarkCheckIcon, BookmarkPlusIcon, CheckIcon, ChevronDownIcon, StarIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { createContext, type ReactNode, useContext, useState, useSyncExternalStore } from 'react';
+import { createContext, lazy, type ReactNode, Suspense, useContext, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import type { TrackingApi } from '../tracking/api.ts';
 import { copyOf as trackingCopy } from '../tracking/messages.ts';
-import { TrackingSheet } from '../tracking/tracking-sheet.tsx';
 import { messages } from './messages.ts';
 import { createReaderStore, type RatingTarget, type ReaderSeed } from './reader-store.ts';
 
@@ -49,6 +48,9 @@ export type ReaderActions =
     /** Attempts, series progress and edition preferences; null where they are not wired, and "Details" is then not drawn. */
     tracking?: TrackingApi | null;
   };
+
+// The details sheet is loaded when a reader first asks for it, not with every card that carries a shelf button.
+const TrackingSheet = lazy(() => import('../tracking/tracking-sheet.tsx').then(module => ({ default: module.TrackingSheet })));
 
 const ReaderActionsContext = createContext<ReaderActions>({ kind: 'unavailable' });
 
@@ -163,6 +165,7 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
   const t = materializeData(messages[locale], { locale });
   const { actions, status, state, choose } = useStatus(work);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsAsked, setDetailsAsked] = useState(false);
   if (actions.kind === 'unavailable') return null;
   if (actions.kind === 'signed-out') {
     return <Link href={actions.signInHref} className={cn(buttonVariants({ size, variant, pill: true }), className)}>
@@ -170,9 +173,10 @@ export function ShelfButton({ work, title, locale, size = 'lg', variant = 'defau
   }
   const tracking = actions.tracking ?? null;
   const details = tracking ? trackingCopy(locale).details : undefined;
-  const onSelect = selectStatus(next => void choose(next), tracking ? () => setDetailsOpen(true) : undefined);
-  const sheet = tracking ? <TrackingSheet work={work} title={title} api={tracking} locale={locale} open={detailsOpen}
-    onOpenChange={setDetailsOpen} /> : null;
+  const onSelect = selectStatus(next => void choose(next), tracking ? () => { setDetailsAsked(true); setDetailsOpen(true); } : undefined);
+  const sheet = tracking && detailsAsked ? <Suspense fallback={null}>
+    <TrackingSheet work={work} title={title} api={tracking} locale={locale} open={detailsOpen} onOpenChange={setDetailsOpen} />
+  </Suspense> : null;
   const failure = state === 'failed'
     ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null;
   if (status) {

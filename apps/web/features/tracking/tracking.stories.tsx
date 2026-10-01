@@ -1,11 +1,11 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
-import { memoryReaderActions } from '../catalogue/fixtures.ts';
-import { type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
+import { ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import * as fixture from './fixtures.ts';
-import { createMemoryMain, type MemoryMain, memoryTracking } from './memory.ts';
+import { createMemoryMain, type MemoryMain, memoryReader, memoryTracking } from './memory.ts';
 import { SeriesProgressPanel } from './series-progress-panel.tsx';
 import { TrackingControl } from './tracking-control.tsx';
 
@@ -15,7 +15,7 @@ const signInHref = '/auth/start';
 
 /** One device: the shelf button and, below it, whatever the story embeds, acting on a shared in-memory Main. */
 function Device({ locale, main, work, title, status = 'reading', panel = false }: Args & { panel?: boolean }) {
-  const actions: ReaderActions = { ...memoryReaderActions({ [work]: { status } }), tracking: memoryTracking(main) };
+  const [actions] = useState(() => memoryReader(main, { [work]: status }));
   return <ReaderActionsProvider signedIn signInHref={signInHref} actions={actions}>
     <PageContainer className="grid max-w-md gap-6">
       <ShelfButton work={work} title={title} locale={locale} />
@@ -206,31 +206,96 @@ export const EditionPreference: Story = {
   },
 };
 
+/** Web Spider with a standalone summary that Main would compute from the attempts at the time of the read. */
+const spiderMain = (summary: (main: MemoryMain) => ReturnType<typeof fixture.standaloneSummary>) => {
+  const main = createMemoryMain({ editions: fixture.editions, relations: fixture.spiderRelations() });
+  main.summaries = { en: () => summary(main) };
+  return main;
+};
+const spiderTitle = 'So I’m a Spider, So What? (web)';
+const offer = 'Also mark “So I’m a Spider, So What? (book)” as read';
+
 /** Finishing web Spider leaves book Spider unstarted until the reader accepts the offered action. */
 export const AlsoMarkCorrespondence: Story = {
-  args: { main: createMemoryMain({ summaries: {}, editions: fixture.editions, relations: fixture.spiderRelations() }),
-    work: fixture.spider.web, title: 'So I’m a Spider, So What? (web)', status: 'read' },
+  args: { main: spiderMain(() => fixture.standaloneSummary('finished')), work: fixture.spider.web, title: spiderTitle, status: 'read' },
   render: args => <Device {...args} panel />,
   async play({ canvasElement, args }) {
-    const panel = within(await within(canvasElement).findByRole('region', { name: 'Series progress' }));
+    const panel = within(await within(canvasElement).findByRole('region', { name: 'Your progress' }));
     await expect(args.main.calls.started).toEqual([]);
+    await expect(panel.getByText('Finished')).toBeVisible();
     await expect(panel.getByText(/Nothing is marked until you choose/)).toBeVisible();
-    await userEvent.click(panel.getByRole('button', { name: 'Also mark “So I’m a Spider, So What? (book)” as read' }));
+    await userEvent.click(panel.getByRole('button', { name: offer }));
     await waitFor(() => expect(args.main.calls.started).toEqual([fixture.spider.book]));
     await expect(args.main.sessions[0]).toMatchObject({ state: 'finished', target: { work: fixture.spider.book } });
     await expect(await panel.findByText('“So I’m a Spider, So What? (book)” is marked as read.')).toBeVisible();
+    await waitFor(() => expect(panel.queryByRole('button', { name: offer })).toBeNull());
   },
 };
 
-/** Not offered while the reader has not finished this Work: nothing completes by itself. */
+/** Not offered while this Work is not finished: nothing completes by itself, and no series panel is drawn for a standalone Work. */
 export const NoOfferUntilFinished: Story = {
-  args: { main: createMemoryMain({ summaries: {}, editions: fixture.editions, relations: fixture.spiderRelations() }),
-    work: fixture.spider.web, title: 'So I’m a Spider, So What? (web)', status: 'reading' },
+  args: { main: spiderMain(() => fixture.standaloneSummary('reading')), work: fixture.spider.web, title: spiderTitle, status: 'reading' },
   render: args => <Device {...args} panel />,
   async play({ canvasElement, args }) {
     await within(canvasElement).findByRole('button', { name: 'Details' });
     await waitFor(() => expect(canvasElement.querySelector('[data-series-progress]')).toBeNull());
     await expect(args.main.calls.started).toEqual([]);
+  },
+};
+
+/** A Work with no composition answers for itself: no series lines, no "0 of 1 required parts", no language form. */
+export const StandaloneWorkDrawsNoSeries: Story = {
+  args: { main: createMemoryMain({ summaries: { en: fixture.standaloneSummary('not-started') }, editions: fixture.editions }),
+    work: fixture.spider.web, title: spiderTitle, status: null },
+  render: args => <Device {...args} panel />,
+  async play({ canvasElement }) {
+    await within(canvasElement).findByRole('button', { name: 'Details' });
+    await new Promise(done => setTimeout(done, 300));
+    await expect(canvasElement.querySelector('[data-series-progress]')).toBeNull();
+    await expect(canvasElement.textContent).not.toMatch(/required part/);
+  },
+};
+
+/** Finishing in Details moves the shelf without a reload: the status button reads Read, and the offer appears. */
+export const FinishingMovesTheShelf: Story = {
+  args: { main: spiderMain(main => fixture.standaloneSummary(main.sessions.some(item => item.state === 'finished') ? 'finished' : 'reading')),
+    work: fixture.spider.web, title: spiderTitle, status: null },
+  render: args => <Device {...args} panel />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('button', { name: offer })).toBeNull();
+    const sheet = await openDetails(canvasElement);
+    await userEvent.click(within(await sheet.findByRole('region', { name: 'Start an attempt' })).getByRole('button', { name: 'Start reading' }));
+    await userEvent.click(await sheet.findByRole('button', { name: 'Mark finished' }));
+    await waitFor(() => expect(sheet.getByText('Finished', { selector: '[data-slot=badge]' })).toBeVisible());
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(canvas.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible());
+    await expect(await canvas.findByRole('button', { name: offer })).toBeVisible();
+  },
+};
+
+/** While an attempt is open there is no second Start; once it ends the form reads "Start a reread". */
+export const StartOnlyWithoutAnOpenAttempt: Story = {
+  args: { main: createMemoryMain({ editions: fixture.editions, sessions: [fixture.session()] }) },
+  async play({ canvasElement }) {
+    const sheet = await openDetails(canvasElement);
+    const card = await sheet.findByRole('article', { name: 'First read' });
+    await expect(sheet.queryByRole('region', { name: 'Start an attempt' })).toBeNull();
+    await userEvent.click(within(card).getByRole('button', { name: 'Mark finished' }));
+    await expect(await sheet.findByRole('region', { name: 'Start a reread' })).toBeVisible();
+  },
+};
+
+/** Another device already made the same change: nothing to choose between, so no conflict is shown. */
+export const ConflictAlreadyResolved: Story = {
+  args: { main: createMemoryMain({ editions: fixture.editions, sessions: [fixture.session()] }) },
+  async play({ canvasElement, args }) {
+    const sheet = await openDetails(canvasElement);
+    const card = await sheet.findByRole('article', { name: 'First read' });
+    await memoryTracking(args.main).change(fixture.session().id, 1, { state: 'finished' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Mark finished' }));
+    await waitFor(() => expect(within(card).getByText('Finished', { selector: '[data-slot=badge]' })).toBeVisible());
+    await expect(sheet.queryByRole('alert')).toBeNull();
   },
 };
 

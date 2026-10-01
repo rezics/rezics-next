@@ -80,13 +80,15 @@ function SheetAttempts({ work, api, locale, t, open }: {
       {t.loadFailed}<Button size="sm" variant="outline" onClick={() => void load()}>{t.retry}</Button></AlertDescription></Alert>;
   }
   const rows = numbered(attempts.items);
-  const open_ = attempts.items.filter(isOpen).length;
+  const openCount = attempts.items.filter(isOpen).length;
   const ended = attempts.items.some(hasEnded);
   return <div className="grid gap-4">
-    {open_ > 1 ? <Alert variant="warning" role="status" data-two-open><AlertDescription>{t.twoOpen}</AlertDescription></Alert> : null}
+    {openCount > 1 ? <Alert variant="warning" role="status" data-two-open><AlertDescription>{t.twoOpen}</AlertDescription></Alert> : null}
     {editionsFailed ? <p className="text-muted-foreground text-xs">{t.editionsFailed}</p> : null}
     {editions?.more ? <p className="text-muted-foreground text-xs">{t.moreEditions}</p> : null}
-    <StartAttempt work={work} editions={editions} api={api} locale={locale} t={t} reread={ended} onStarted={put} />
+    {/* One attempt at a time: a second would be two open attempts. The form returns once the open one ends. */}
+    {attempts.items.some(item => !hasEnded(item)) ? null
+      : <StartAttempt work={work} editions={editions} api={api} locale={locale} t={t} reread={ended} onStarted={put} />}
     {rows.length === 0 ? <p className="text-muted-foreground text-sm">{t.noAttempts}</p> : null}
     <ol className="grid gap-4" aria-label={t.attempts}>
       {rows.map(({ session, number }) => <li key={session.id}>

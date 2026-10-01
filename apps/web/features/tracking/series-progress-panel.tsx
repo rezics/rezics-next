@@ -4,7 +4,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { useReaderActions } from '../catalogue/reader-actions.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -13,7 +13,7 @@ import { languageName, locatorParts } from './display.ts';
 import { copyOf, type Copy } from './messages.ts';
 import { SeriesStates } from './series-states.tsx';
 import type { ReadFailure } from '../feed/types.ts';
-import type { EditionChoice, EditionPreference, Editions, Relations, SeriesPart, SeriesSummary } from './types.ts';
+import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Relations, SeriesPart, SeriesSummary } from './types.ts';
 
 const uuid = (iri: string) => iri.slice(-36);
 
@@ -66,7 +66,9 @@ function PreferenceForm({ work, preference, language, editions, api, locale, t, 
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<'saved' | 'failed' | null>(null);
   const [stale, setStale] = useState<{ current: EditionPreference | null; mine: EditionChoice } | null>(null);
-  const languages = [...new Set<string>([...uiLocales, language])];
+  // The interface languages, the current choice and every language the Work's own editions are in.
+  const languages = [...new Map([...uiLocales, language, ...(editions?.realizations ?? []).map(item => item.language),
+    ...(editions?.releases ?? []).flatMap(item => item.contentLanguages)].map(tag => [tag.toLowerCase(), tag])).values()];
   const same = (tag: string | null) => tag?.toLowerCase() === language.toLowerCase();
   const offered = [
     ...(editions?.realizations ?? []).filter(item => same(item.language)).map(item => ({ kind: 'realization' as const,
@@ -145,7 +147,7 @@ function Correspondences({ offers, marked, counterparts, failed, onMark, t }: {
 
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
 interface Setup { preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
-type Progress = { language: string; value: SeriesSummary } | { language: string; failure: ReadFailure };
+type Progress = { language: string; value: ProgressSummary } | { language: string; failure: ReadFailure };
 
 /**
  * Where the reader stands in a series, as Main reports it: the four states as separate lines, the
@@ -177,8 +179,13 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
   }, [api, work]);
 
   const preference = setup?.preference ?? null;
+  const headingId = useId();
+  // Shelving or finishing this Work elsewhere on the page changes what Main reports: read it again.
+  const ownStatus = actions.kind === 'ready' ? actions.stateOf(work).status : null;
   const [marked, setMarked] = useState<ReadonlySet<string>>(new Set());
   const [markFailed, setMarkFailed] = useState<string | null>(null);
+  // Kept on screen while the write is out: the shelf it changes would otherwise withdraw the offer first.
+  const [marking, setMarking] = useState(false);
   useEffect(() => {
     if (!api || !setup) return;
     let current = true;
@@ -186,47 +193,56 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
       if (current) setProgress(result.ok ? { language, value: result.data } : { language, failure: result.failure });
     });
     return () => { current = false; };
-  }, [api, work, language, setup]);
+  }, [api, work, language, setup, ownStatus]);
 
   if (!api || !setup || !progress) return null;
   const ready = actions.kind === 'ready' ? actions : null;
   const value = 'value' in progress && progress.language === language ? progress.value : null;
   const failure = 'failure' in progress ? progress.failure : null;
   const counterparts = setup.counterparts;
-  const hasParts = Boolean(value && (value.counts.required || value.counts.completed || value.next));
-  // Offered once this Work is read and the counterpart, by Main's own status, is not.
-  const finished = ready?.stateOf(work).status === 'read';
+  // A Work with no composition answers for itself; only a composition has parts, a next part and a series to report.
+  const series = value?.scope === 'disclosed-composition' ? value : null;
+  const standalone = value?.scope === 'work' ? value : null;
+  const hasParts = Boolean(series && (series.counts.required || series.counts.completed || series.next));
+  // Offered once this Work is finished and the counterpart, by Main's own status, is not.
+  const finished = standalone ? standalone.status === 'finished' : ownStatus === 'read';
   const offers = finished ? counterparts.filter(item => !marked.has(item.work) && ready?.stateOf(item.work).status !== 'read') : [];
-  // A Work with no composition has no series to report; a failed read says so unless Main simply has nothing (404) or no sign-in.
+  // A failed read says so unless Main simply has nothing (404) or the reader is signed out.
   const silent = failure === 'missing' || failure === 'sign-in';
-  if (!hasParts && !offers.length && !marked.size && (!failure || silent)) return null;
+  if (!hasParts && !offers.length && !marked.size && !marking && (!failure || silent)) return null;
   async function mark(counterpart: Counterpart) {
     setMarkFailed(null);
+    setMarking(true);
     const written = await api!.start(counterpart.work, { state: 'finished' });
+    setMarking(false);
     if (written.ok) setMarked(current => new Set([...current, counterpart.work]));
     else setMarkFailed(counterpart.work);
   }
 
-  return <section aria-labelledby="series-progress" data-series-progress className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
-    <h2 id="series-progress" className="font-semibold text-xl tracking-tight">{t.seriesProgress}</h2>
+  return <section aria-labelledby={headingId} data-series-progress={series ? 'series' : 'work'}
+    className={className ?? 'grid gap-4 rounded-2xl border border-border/60 p-4 sm:p-5'}>
+    <h2 id={headingId} className="font-semibold text-xl tracking-tight">{series ? t.seriesProgress : t.workProgress}</h2>
     {failure && !value ? <Alert variant="destructive" role="alert"><AlertDescription>{t.seriesUnavailable}</AlertDescription></Alert> : null}
-    {value ? <>
-      <SeriesStates states={value.states} t={t} />
-      {value.partial ? <p className="text-muted-foreground text-xs" data-partial>{t.partialNote}</p> : null}
-      <p className="text-sm">{t.countsLine({ completedRequired: String(value.counts.completedRequired), required: String(value.counts.required) })}
-        <span className="text-muted-foreground"> · {t.partsFinished({ completed: String(value.counts.completed) })}</span></p>
+    {standalone ? <p className="text-sm" data-work-status={standalone.status ?? 'unknown'}>
+      {standalone.status === 'finished' ? t.stateFinished : standalone.status === 'reading' ? t.stateActive
+        : standalone.status === 'not-started' ? t.notStarted : t.unknown}</p> : null}
+    {series ? <>
+      <SeriesStates states={series.states} t={t} />
+      {series.partial ? <p className="text-muted-foreground text-xs" data-partial>{t.partialNote}</p> : null}
+      <p className="text-sm">{t.countsLine({ count: series.counts.required, completedRequired: String(series.counts.completedRequired) })}
+        <span className="text-muted-foreground"> · {t.partsFinished(series.counts.completed)}</span></p>
       <div className="grid gap-1" data-next>
         <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{t.nextPart}</h3>
-        {value.next ? <>
-          <p><PartLine part={value.next.part} t={t} /></p>
-          <p className="text-muted-foreground text-sm">{reasonText(value.next.reason, t)}</p>
-        </> : <p className="text-muted-foreground text-sm">{value.partial ? t.unknown : t.noNext}</p>}
+        {series.next ? <>
+          <p><PartLine part={series.next.part} t={t} /></p>
+          <p className="text-muted-foreground text-sm">{reasonText(series.next.reason, t)}</p>
+        </> : <p className="text-muted-foreground text-sm">{series.partial ? t.unknown : t.noNext}</p>}
       </div>
-      {value.furthestCompleted ? <div className="grid gap-1" data-furthest>
+      {series.furthestCompleted ? <div className="grid gap-1" data-furthest>
         <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">{t.furthestFinished}</h3>
-        <p><PartLine part={value.furthestCompleted.part} t={t} />
-          {value.furthestCompleted.locator
-            ? <span className="text-muted-foreground text-sm"> · {locatorParts(value.furthestCompleted.locator, t).furthest}</span> : null}</p>
+        <p><PartLine part={series.furthestCompleted.part} t={t} />
+          {series.furthestCompleted.locator
+            ? <span className="text-muted-foreground text-sm"> · {locatorParts(series.furthestCompleted.locator, t).furthest}</span> : null}</p>
       </div> : null}
     </> : null}
     {hasParts ? <div className="grid gap-2 border-border/60 border-t pt-3">

@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { TrackingMessages } from '../messages.ts';
 
 export default {
@@ -49,13 +49,14 @@ export default {
   conflictStarted: '시작', conflictFinished: '종료일', conflictPosition: '위치',
   conflictEdition: insert('{{edition}} 추가', { edition: String }),
 
+  workProgress: '내 진행 상황', notStarted: '읽기 전',
   seriesProgress: '시리즈 진행 상황', seriesUnavailable: '시리즈 진행 상황을 불러오지 못했습니다.',
   stateCaughtUp: '나와 있는 분량을 따라잡음', stateFinishedParts: '출간된 권을 모두 완독',
   stateConcluded: '시리즈 완결', stateCorrespondence: '대응 관계 미확정',
   yes: '예', no: '아니요', unknown: '알 수 없음',
   partialNote: '이 시리즈는 한 페이지에 담기지 않는 권수라서, 따라잡았는지 완독했는지 여기서는 알 수 없습니다.',
-  countsLine: insert('필수 {{required}}권 중 {{completedRequired}}권 완독', { completedRequired: String, required: String }),
-  partsFinished: insert('전체 {{completed}}권 완독', { completed: String }),
+  countsLine: plural({ other: insert('필수 {{count}}권 중 {{completedRequired}}권 완독') }, { count: asValue(number()), completedRequired: String }),
+  partsFinished: plural({ other: insert('전체 {{count}}권 완독') }, { count: asValue(number()) }),
   nextPart: '다음 권', noNext: '읽을 권이 남아 있지 않습니다.',
   reasonNextAvailable: '이 언어로 읽을 수 있는 다음 필수 권입니다.',
   reasonAwaiting: '다음 필수 권이지만, 이 언어의 본문이 아직 없습니다.',

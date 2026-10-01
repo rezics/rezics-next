@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { TrackingMessages } from '../messages.ts';
 
 export default {
@@ -49,13 +49,14 @@ export default {
   conflictStarted: '開始', conflictFinished: '終了日', conflictPosition: '位置',
   conflictEdition: insert('{{edition}}を追加', { edition: String }),
 
+  workProgress: '作品の進み具合', notStarted: '未読',
   seriesProgress: 'シリーズの進み具合', seriesUnavailable: 'シリーズの進み具合を読み込めませんでした。',
   stateCaughtUp: '公開済みの分に追いついている', stateFinishedParts: '刊行済みの巻をすべて読了',
   stateConcluded: 'シリーズは完結', stateCorrespondence: '対応関係が未確定',
   yes: 'はい', no: 'いいえ', unknown: '不明',
   partialNote: 'このシリーズは1ページに収まらない数の巻があるため、追いついているか読了したかはここでは分かりません。',
-  countsLine: insert('必須の巻 {{required}} 冊のうち {{completedRequired}} 冊を読了', { completedRequired: String, required: String }),
-  partsFinished: insert('合計 {{completed}} 冊を読了', { completed: String }),
+  countsLine: plural({ other: insert('必須の巻 {{count}} 冊のうち {{completedRequired}} 冊を読了') }, { count: asValue(number()), completedRequired: String }),
+  partsFinished: plural({ other: insert('合計 {{count}} 冊を読了') }, { count: asValue(number()) }),
   nextPart: '次の巻', noNext: '読む巻は残っていません。',
   reasonNextAvailable: 'この言語で読める、次の必須の巻です。',
   reasonAwaiting: '次の必須の巻ですが、この言語の本文はまだありません。',

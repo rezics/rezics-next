@@ -1,4 +1,4 @@
-import { insert } from 'native-i18n';
+import { asValue, insert, number, plural } from 'native-i18n';
 import type { TrackingMessages } from '../messages.ts';
 
 export default {
@@ -49,13 +49,17 @@ export default {
   conflictStarted: 'Inicio', conflictFinished: 'Fin el', conflictPosition: 'Posición',
   conflictEdition: insert('Añadir {{edition}}', { edition: String }),
 
+  workProgress: 'Tu progreso', notStarted: 'Sin empezar',
   seriesProgress: 'Progreso en la serie', seriesUnavailable: 'No se pudo cargar el progreso en la serie.',
   stateCaughtUp: 'Al día con lo disponible', stateFinishedParts: 'Terminadas las partes publicadas',
   stateConcluded: 'Serie concluida', stateCorrespondence: 'Correspondencia sin resolver',
   yes: 'Sí', no: 'No', unknown: 'Desconocido',
   partialNote: 'Esta serie tiene más partes de las que caben en una página, así que aquí no se sabe si estás al día o la has terminado.',
-  countsLine: insert('{{completedRequired}} de {{required}} partes obligatorias terminadas', { completedRequired: String, required: String }),
-  partsFinished: insert('{{completed}} partes terminadas en total', { completed: String }),
+  countsLine: plural({
+    one: insert('{{completedRequired}} de {{count}} parte obligatoria terminada'),
+    other: insert('{{completedRequired}} de {{count}} partes obligatorias terminadas'),
+  }, { count: asValue(number()), completedRequired: String }),
+  partsFinished: plural({ one: insert('{{count}} parte terminada en total'), other: insert('{{count}} partes terminadas en total') }, { count: asValue(number()) }),
   nextPart: 'Siguiente parte', noNext: 'No queda nada por leer.',
   reasonNextAvailable: 'La siguiente parte obligatoria que puedes leer en este idioma.',
   reasonAwaiting: 'La siguiente parte obligatoria, que aún no tiene texto en este idioma.',
