@@ -140,6 +140,8 @@ export default {
   noWorkYet: "Aucune œuvre sur REZICS pour le moment",
   authorsUnavailable: "Impossible de charger les auteurs que vous suivez",
 
+                                                                                                                                                                                                
+
   importHelp: "Choisissez l’outil dont provient votre bibliothèque et envoyez son export. REZICS associe chaque ligne sur le serveur et vous montre le résultat avant tout ajout. Les lignes sans correspondance restent privées ; aucune n’est perdue.",
   importFile: "Fichier de la bibliothèque",
   importDrop: "Déposez votre export ici ou choisissez un fichier",
@@ -206,8 +208,7 @@ export default {
   importKindSession: "Tentative de lecture",
   importKindShelf: "Étagère",
   importKindRetained: "Enregistrement source conservé",
-  importUnmatchedCount: plural({ one: insert("1 ligne attend encore un choix."), other: insert("{{count}} lignes attendent encore un choix.") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "Toutes les garder privées",
+  importKeepAllPrivate: "Garder toutes les lignes sans correspondance privées",
   importNotFoundPrivate: plural({ one: insert("1 ligne est introuvable et sera gardée privée."), other: insert("{{count}} lignes sont introuvables et seront gardées privées.") }, { count: asValue(number()) }),
   importNeedChoices: plural({ one: insert("Avant d’ajouter, choisissez une correspondance pour 1 ligne de plus ou gardez-la privée."), other: insert("Avant d’ajouter, choisissez une correspondance pour {{count}} lignes de plus ou gardez-les privées.") }, { count: asValue(number()) }),
   importApply: "Ajouter à ma bibliothèque",

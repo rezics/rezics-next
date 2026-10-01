@@ -120,6 +120,8 @@ export default {
   authorsYouFollow: '팔로우 중인 작가', newestWork: '최신 작품', noWorkYet: 'REZICS에 아직 작품이 없어요',
   authorsUnavailable: '팔로우 중인 작가를 불러오지 못했어요',
 
+                                                                                                                                                                                                
+
   importHelp: "지금 쓰는 서비스를 고르고 내보낸 파일을 올려 주세요. REZICS가 서버에서 모든 행을 맞춰 보고, 추가하기 전에 결과를 보여 줘요. 일치하지 않은 행은 비공개로 남고 버려지지 않아요.",
   importFile: "서재 파일",
   importDrop: "내보낸 파일을 여기에 놓거나 파일 선택",
@@ -186,8 +188,7 @@ export default {
   importKindSession: "읽기 기록",
   importKindShelf: "책장",
   importKindRetained: "저장된 원본 기록",
-  importUnmatchedCount: plural({ other: insert("아직 선택이 필요한 행이 {{count}}개 있어요.") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "모두 비공개로 두기",
+  importKeepAllPrivate: "일치하지 않은 행을 모두 비공개로 두기",
   importNotFoundPrivate: plural({ other: insert("찾지 못한 행 {{count}}개는 비공개로 보관돼요.") }, { count: asValue(number()) }),
   importNeedChoices: plural({ other: insert("추가하기 전에 행 {{count}}개의 일치 항목을 고르거나 비공개로 두세요.") }, { count: asValue(number()) }),
   importApply: "내 서재에 추가",

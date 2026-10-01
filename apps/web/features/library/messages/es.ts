@@ -140,6 +140,8 @@ export default {
   noWorkYet: "Aún no hay obras en REZICS",
   authorsUnavailable: "No se pudieron cargar los autores a los que sigues",
 
+                                                                                                                                                                                                
+
   importHelp: "Elige la herramienta de la que viene tu biblioteca y sube su exportación. REZICS comprueba cada fila en el servidor y te muestra el resultado antes de añadir nada. Las filas sin coincidencia quedan privadas; ninguna se descarta.",
   importFile: "Archivo de la biblioteca",
   importDrop: "Suelta aquí tu exportación o elige un archivo",
@@ -206,8 +208,7 @@ export default {
   importKindSession: "Intento de lectura",
   importKindShelf: "Estantería",
   importKindRetained: "Registro de origen guardado",
-  importUnmatchedCount: plural({ one: insert("1 fila aún necesita una elección."), other: insert("{{count}} filas aún necesitan una elección.") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "Mantenerlas todas privadas",
+  importKeepAllPrivate: "Mantener privadas todas las filas sin coincidencia",
   importNotFoundPrivate: plural({ one: insert("1 fila no se encontró y se mantendrá privada."), other: insert("{{count}} filas no se encontraron y se mantendrán privadas.") }, { count: asValue(number()) }),
   importNeedChoices: plural({ one: insert("Antes de añadir, elige una coincidencia para 1 fila más o mantenla privada."), other: insert("Antes de añadir, elige una coincidencia para {{count}} filas más o mantenlas privadas.") }, { count: asValue(number()) }),
   importApply: "Añadir a mi biblioteca",

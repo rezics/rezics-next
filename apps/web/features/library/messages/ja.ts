@@ -122,6 +122,8 @@ export default {
   authorsYouFollow: 'フォロー中の著者', newestWork: '最新の作品', noWorkYet: 'REZICS の作品はまだありません',
   authorsUnavailable: 'フォロー中の著者を読み込めませんでした',
 
+                                                                                                                                                                                                
+
   importHelp: "今お使いのツールを選び、その書き出しファイルをアップロードしてください。REZICS がサーバー上ですべての行を照合し、追加する前に結果を表示します。一致しなかった行は非公開のまま残り、破棄されません。",
   importFile: "ライブラリのファイル",
   importDrop: "書き出したファイルをここにドロップするか、ファイルを選択",
@@ -188,8 +190,7 @@ export default {
   importKindSession: "読書の記録",
   importKindShelf: "本棚",
   importKindRetained: "保存された元データ",
-  importUnmatchedCount: plural({ other: insert("選択が必要な行が {{count}} 件あります。") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "すべて非公開にする",
+  importKeepAllPrivate: "一致していない行をすべて非公開にする",
   importNotFoundPrivate: plural({ other: insert("見つからなかった {{count}} 件の行は非公開のまま保存されます。") }, { count: asValue(number()) }),
   importNeedChoices: plural({ other: insert("追加する前に、あと {{count}} 件の行で一致を選ぶか、非公開にしてください。") }, { count: asValue(number()) }),
   importApply: "ライブラリに追加",

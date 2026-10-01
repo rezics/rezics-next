@@ -1,27 +1,18 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { expect, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { messages } from '../features/library/messages.ts';
 import ko from '../features/library/messages/ko.ts';
-import { axeViolations, formatViolations } from './a11y-axe.ts';
-import { signInAtAccounts } from './account-sign-in.ts';
+import { clean, credentials, signIn } from './g-855-library.ts';
 
 // G-855 in a real browser on a fresh QA stack: a Goodreads file imported from the Library page (matched,
-// ambiguous and not-found rows, a choice, a row kept private, a reload in the middle of applying), then a
-// 1,200-record library downloaded with a reload in the middle, resumed, and imported back. Main parses and
-// matches; the browser only shows what it reports. The QA harness has one web member, so the library is
-// imported back into the same account: the second-account comparison is covered by G-854's integration test.
+// ambiguous and not-found rows, a choice, a row kept private, the connection dropping in the middle of
+// applying and a reload), at a phone and a desktop width in English and Korean. Main parses and matches;
+// the browser only shows what it reports. The download and the round trip are in the other G-855 files.
 
 interface Seed { matched: string[]; ambiguous: string }
 let seed: Seed;
 test.use({ actionTimeout: 20_000 });
-
-function credentials() {
-  const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
-  if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
-  return JSON.parse(readFileSync(path, 'utf8')) as { actingSubject: string; member: { email: string; password: string } };
-}
 
 test.beforeAll(async () => {
   test.setTimeout(240_000);
@@ -54,14 +45,6 @@ function goodreads(offset: number): Buffer {
   return Buffer.from([header, ...rows].join('\n'));
 }
 
-const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-async function clean(page: Page, info: TestInfo, name: string) {
-  expect(await overflows(page), `${name} overflows`).toBe(false);
-  const violations = await axeViolations(page);
-  expect(violations, formatViolations(violations)).toEqual([]);
-  await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
-}
-
 /** Open the section once the page has hydrated; a press before hydration opens nothing. */
 async function openSection(page: Page, title: string) {
   const summary = page.getByRole('heading', { name: title }).first();
@@ -77,7 +60,9 @@ for (const { locale, viewport } of combos) {
     const t = words(locale);
     const account = credentials();
     await page.setViewportSize(viewport);
-    await signInAtAccounts(page, `/${locale}/library`, account.member);
+    // Accounts shows its sign-in in the language of the page it returns to; sign in in English, then change language.
+    await signIn(page, '/en/library', account.member);
+    await page.goto(`/${locale}/library`);
     if (await page.getByRole('heading', { name: t.deniedTitle }).isVisible()) return;
     await openSection(page, t.importTitle);
     await expect(page.getByText(t.importAnilist)).toBeVisible();
@@ -101,10 +86,15 @@ for (const { locale, viewport } of combos) {
     await expect(tab(t.importGroupPrivate, 1)).toBeVisible();
     await expect(page.getByRole('button', { name: t.importApply })).toBeEnabled();
 
-    // Apply, and reload once Main has answered its first group with more still pending.
-    const firstGroup = page.waitForResponse(response => /\/library-imports\/[^/]+\/apply$/.test(response.url()) && response.status() === 202);
+    // Apply. Main answers its first group (eight rows) with more pending; the connection then drops, as a
+    // closed laptop would, and the reader reloads. Nothing is lost: the import is listed to continue.
+    const applies = /\/library-imports\/[^/]+\/apply$/;
+    let calls = 0;
+    await page.route(applies, route => ++calls === 1 ? route.continue() : route.abort());
     await page.getByRole('button', { name: t.importApply }).click();
-    await firstGroup;
+    await expect(page.getByText(t.importApplyStopped)).toBeVisible({ timeout: 120_000 });
+    expect(calls).toBe(2);
+    await page.unroute(applies);
     await page.reload();
     await openSection(page, t.importTitle);
     await expect(page.getByRole('heading', { name: t.importUnfinishedTitle })).toBeVisible();
@@ -120,76 +110,3 @@ for (const { locale, viewport } of combos) {
     await expect(page.getByRole('heading', { name: t.importUnfinishedTitle })).toHaveCount(0);
   });
 }
-
-test('a 1,200-record library downloads across a reload, resumes, and imports back to the same contents', async ({ page }, info) => {
-  test.setTimeout(900_000);
-  const t = words('en');
-  const account = credentials();
-  await signInAtAccounts(page, '/en/library', account.member);
-  if (await page.getByRole('heading', { name: t.deniedTitle }).isVisible()) return;
-  const api = async <T>(method: 'get' | 'post', path: string, data?: object): Promise<T> => {
-    const response = await page.request[method](`/api/main${path}`, { headers: { 'idempotency-key': `g855-${crypto.randomUUID()}` }, ...data ? { data } : {} });
-    expect(response.status(), await response.text()).toBeLessThan(300);
-    return await response.json() as T;
-  };
-  // A library of 1,200 retained source records, beyond every page bound, written through the import API.
-  const retained = Array.from({ length: 1_200 }, (_, index) => ({ kind: 'retained', sourceId: `unmatched-${index}`, title: `Private title ${index}`,
-    creators: [], work: null, target: null, identifiers: [], status: null, startedOn: null, finishedOn: null, score: null, review: null,
-    shelves: [], readCount: null, progress: null, session: null, raw: { progress: `c${index}`, extra: `private-${index}` } }));
-  const created = await api<{ id: string; total: number }>('post', '/v1/me/library-imports',
-    { actingSubject: account.actingSubject, format: 'rezics', file: JSON.stringify({ profile: 'rezics-library-export-v1', rows: retained }) });
-  for (let cursor: number | null = -1; cursor !== null;) {
-    cursor = (await api<{ nextCursor: number | null }>('get', `/v1/me/library-imports/${created.id}/rows?actingSubject=${encodeURIComponent(account.actingSubject)}${cursor >= 0 ? `&cursor=${cursor}` : ''}`)).nextCursor;
-  }
-  for (let progress = { pending: true }; progress.pending;) {
-    progress = await api('post', `/v1/me/library-imports/${created.id}/apply`, { actingSubject: account.actingSubject, context: null, language: 'und' });
-  }
-
-  // Slow each page a little, so the reload lands in the middle of the download.
-  await page.route('**/v1/me/library-export?**', async route => { await new Promise(done => setTimeout(done, 120)); await route.continue(); });
-  await page.reload();
-  await openSection(page, t.backupTitle);
-  await expect(page.getByText(t.backupContains)).toBeVisible();
-  await expect(page.getByText(t.backupNever)).toBeVisible();
-  await clean(page, info, 'export-idle');
-  await page.getByRole('button', { name: t.backupStart }).click();
-  await expect(page.getByText(/Collected [4-9]\d records/)).toBeVisible({ timeout: 120_000 });
-  await page.reload();
-  await openSection(page, t.backupTitle);
-  const paused = page.getByText(/The download stopped after (\d+) records/);
-  await expect(paused).toBeVisible();
-  const stoppedAt = Number((await paused.textContent())!.match(/after (\d+) records/)![1]);
-  expect(stoppedAt).toBeGreaterThanOrEqual(40);
-  await clean(page, info, 'export-paused');
-  await page.getByRole('button', { name: t.backupResume }).click();
-  const ready = page.getByText(/Your file is ready: ([\d,]+) records/);
-  await expect(ready).toBeVisible({ timeout: 300_000 });
-  const records = Number((await ready.textContent())!.match(/ready: ([\d,]+) records/)![1].replaceAll(',', ''));
-  expect(records).toBeGreaterThanOrEqual(1_200);
-  const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: t.backupSave }).click();
-  const file = await (await download).path();
-  const bundle = JSON.parse(readFileSync(file!, 'utf8')) as { profile: string; rows: Array<Record<string, unknown>> };
-  expect(bundle.profile).toBe('rezics-library-export-v1');
-  expect(bundle.rows).toHaveLength(records);
-  await clean(page, info, 'export-ready');
-
-  // Back in through the Library page: every row is matched, applies without a problem, and a new export has the same contents.
-  await page.unroute('**/v1/me/library-export?**');
-  await page.getByRole('heading', { name: t.importTitle }).click();
-  await page.getByRole('radio', { name: 'REZICS' }).check();
-  await page.locator('#library-import-file').setInputFiles({ name: 'rezics-library.json', mimeType: 'application/json', buffer: readFileSync(file!) });
-  await expect(page.getByRole('button', { name: t.importApply })).toBeEnabled({ timeout: 300_000 });
-  await page.getByRole('button', { name: t.importApply }).click();
-  await expect(page.getByText(/Finished: \d+ of \d+ rows/)).toBeVisible({ timeout: 600_000 });
-  const again = [];
-  for (let cursor: string | null = null, snapshot: string | undefined; ;) {
-    const query: string = `actingSubject=${encodeURIComponent(account.actingSubject)}${cursor ? `&cursor=${encodeURIComponent(cursor)}&snapshot=${encodeURIComponent(snapshot!)}` : ''}`;
-    const next = await api<{ rows: Array<Record<string, unknown>>; snapshot: string; nextCursor: string | null }>('get', `/v1/me/library-export?${query}`);
-    snapshot ??= next.snapshot; again.push(...next.rows);
-    if (!next.nextCursor) break;
-    cursor = next.nextCursor;
-  }
-  const digest = (rows: Array<Record<string, unknown>>) => rows.filter(row => row.kind === 'retained').map(row => JSON.stringify(row.raw)).sort();
-  expect(digest(again)).toEqual(digest(bundle.rows));
-});

@@ -201,6 +201,8 @@ export default {
   previousPage: '上一页',
   nextPage: '下一页',
 
+                                                                                                                                                                                                
+
   importHelp: "选择你当前使用的工具并上传它的导出文件。REZICS 会在服务器上匹配每一行，并在添加前展示结果。没有匹配的行会保持私密，不会被丢弃。",
   importFile: "书架文件",
   importDrop: "将导出文件拖到这里，或点击选择文件",
@@ -267,8 +269,7 @@ export default {
   importKindSession: "阅读记录",
   importKindShelf: "书架分组",
   importKindRetained: "已保存的来源记录",
-  importUnmatchedCount: plural({ other: insert("还有 {{count}} 行需要选择。") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "全部保持私密",
+  importKeepAllPrivate: "将所有未匹配的行保持私密",
   importNotFoundPrivate: plural({ other: insert("{{count}} 行未找到，将保持私密。") }, { count: asValue(number()) }),
   importNeedChoices: plural({ other: insert("添加前，请为另外 {{count}} 行选择匹配，或将其保持私密。") }, { count: asValue(number()) }),
   importApply: "添加到我的书架",

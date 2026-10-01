@@ -524,7 +524,8 @@ export const Attempts: Story = {
     const [details] = await canvas.findAllByRole('button', { name: 'Details' });
     await userEvent.click(details!);
     const sheet = await page().findByRole('dialog');
-    await expect(await within(sheet).findByText('Paused')).toBeVisible();
-    await expect(within(sheet).getByText('Finished')).toBeVisible();
+    // The sheet fades in; wait for each attempt's state to be on screen.
+    await waitFor(async () => expect(await within(sheet).findByText('Paused')).toBeVisible());
+    await waitFor(() => expect(within(sheet).getByText('Finished')).toBeVisible());
   },
 };

@@ -120,6 +120,8 @@ export default {
   authorsYouFollow: '你追蹤的作者', newestWork: '最新作品', noWorkYet: 'REZICS 上尚無作品',
   authorsUnavailable: '無法載入你追蹤的作者',
 
+                                                                                                                                                                                                
+
   importHelp: "選擇你目前使用的工具並上傳它的匯出檔。REZICS 會在伺服器上比對每一列，並在加入前顯示結果。沒有比對到的列會保持私密，不會被丟棄。",
   importFile: "書籍清單檔案",
   importDrop: "將匯出檔拖曳至此，或選擇檔案",
@@ -186,8 +188,7 @@ export default {
   importKindSession: "閱讀紀錄",
   importKindShelf: "書架",
   importKindRetained: "已儲存的來源紀錄",
-  importUnmatchedCount: plural({ other: insert("還有 {{count}} 列需要選擇。") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "全部保持私密",
+  importKeepAllPrivate: "將所有未比對的列保持私密",
   importNotFoundPrivate: plural({ other: insert("{{count}} 列未找到，將保持私密。") }, { count: asValue(number()) }),
   importNeedChoices: plural({ other: insert("加入前，請為另外 {{count}} 列選擇比對，或將其保持私密。") }, { count: asValue(number()) }),
   importApply: "加入我的藏書庫",

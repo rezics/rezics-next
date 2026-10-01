@@ -135,13 +135,14 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     const generation = run.current;
     const live = () => generation === run.current;
     const intent = entry.intent ?? { context, language: reviewLanguage };
-    const sealed = { ...entry, intent };
-    shelf.save(agent, sealed);
+    const withIntent = { ...entry, intent };
+    shelf.save(agent, withIntent);
     setError(null);
-    patch({ entry: sealed, stopped: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
+    patch({ entry: withIntent, stopped: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
     try {
       // Main will not seal while a row has neither a match nor a choice: what was not found stays private.
-      if (!applyStarted(current)) await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'));
+      // A sealed import has none left in that group, so a resumed apply asks for nothing here.
+      await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'));
       let last = -1, stalled = 0;
       for (;;) {
         const progress = await client.apply(entry.id, intent);
@@ -266,7 +267,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
             <div role="group" aria-label={t.importGroups} className="flex flex-wrap gap-2">
               {tabs.map(tab => <Button key={tab.key} size="sm" variant={group === tab.key ? 'default' : 'outline'}
                 aria-pressed={group === tab.key} onClick={() => { setGroup(tab.key); setPage(0); }}>
-                {tab.label} <span className="tabular-nums opacity-80">{number(tab.count)}</span></Button>)}
+                {tab.label} <span className={cn('tabular-nums', group !== tab.key && 'opacity-80')}>{number(tab.count)}</span></Button>)}
             </div>
             {shown.length ? <ol className="grid divide-y divide-border/70">
               {visible.map(row => <ImportRowItem key={row.index} row={row} sealed={sealed} locale={locale} messages={messages}
@@ -279,11 +280,10 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
               <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>{t.nextPage}</Button>
             </nav> : null}
             {active.loaded && !active.finished ? <div className="grid gap-3 rounded-xl bg-muted/50 p-3">
-              {!sealed && unresolved.length ? <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span>{t.importUnmatchedCount(unresolved.length)}</span>
+              {!sealed && counts['not-found'] ? <p className="text-muted-foreground text-xs">{t.importNotFoundPrivate(counts['not-found'])}</p> : null}
+              {!sealed && unresolved.length ? <div>
                 <Button size="sm" variant="outline" disabled={resolving}
                   onClick={() => void keepAllPrivate()}>{t.importKeepAllPrivate}</Button></div> : null}
-              {!sealed && counts['not-found'] ? <p className="text-muted-foreground text-xs">{t.importNotFoundPrivate(counts['not-found'])}</p> : null}
               <div className="flex flex-wrap items-center gap-3">
                 {active.progress?.pending || active.stopped ? null : <Button disabled={busy || resolving || !!choose}
                   onClick={() => void apply(active.entry, rows)}>{t.importApply}</Button>}

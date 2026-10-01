@@ -84,8 +84,7 @@ async play({ canvasElement }) {
 export const InterruptedApply: Story = { args: { make: faked({ step: 2, failApplyAt: 2 }) },
   async play({ canvasElement }) {
     const canvas = await openAndUpload(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: /^Choose a match 2$/ }));
-    await userEvent.click(canvas.getByRole('button', { name: 'Keep all of them private' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Keep every unmatched row private' }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Add to my library' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Add to my library' }));
     await expect(await canvas.findByText(/Adding stopped before it finished/)).toBeVisible();

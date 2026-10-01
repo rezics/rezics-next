@@ -140,6 +140,8 @@ export default {
   noWorkYet: "Auf REZICS gibt es noch keine Werke",
   authorsUnavailable: "Die Autor:innen, denen du folgst, konnten nicht geladen werden",
 
+                                                                                                                                                                                                
+
   importHelp: "Wähle das Programm, aus dem deine Bibliothek stammt, und lade dessen Export hoch. REZICS ordnet jede Zeile auf dem Server zu und zeigt dir das Ergebnis, bevor etwas hinzugefügt wird. Zeilen ohne Treffer bleiben privat; keine geht verloren.",
   importFile: "Bibliotheksdatei",
   importDrop: "Zieh deinen Export hierher oder wähle eine Datei aus",
@@ -206,8 +208,7 @@ export default {
   importKindSession: "Leseversuch",
   importKindShelf: "Regal",
   importKindRetained: "Gespeicherter Quelldatensatz",
-  importUnmatchedCount: plural({ one: insert("Für 1 Zeile fehlt noch eine Auswahl."), other: insert("Für {{count}} Zeilen fehlt noch eine Auswahl.") }, { count: asValue(number()) }),
-  importKeepAllPrivate: "Alle privat behalten",
+  importKeepAllPrivate: "Alle nicht zugeordneten Zeilen privat behalten",
   importNotFoundPrivate: plural({ one: insert("1 Zeile wurde nicht gefunden und bleibt privat."), other: insert("{{count}} Zeilen wurden nicht gefunden und bleiben privat.") }, { count: asValue(number()) }),
   importNeedChoices: plural({ one: insert("Wähle vor dem Hinzufügen für 1 weitere Zeile eine Zuordnung oder behalte sie privat."), other: insert("Wähle vor dem Hinzufügen für {{count}} weitere Zeilen eine Zuordnung oder behalte sie privat.") }, { count: asValue(number()) }),
   importApply: "Zu meiner Bibliothek hinzufügen",
