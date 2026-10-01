@@ -170,12 +170,15 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     expect(response.status).toBe(status);
     return result as T;
   };
-  const catalogueBody = async <T extends { title: string; language?: string }>(body: T) => {
+  const candidateReceipts = new Map<string, string>();
+  const catalogueBody = async <T extends { title: string; language?: string }>(body: T, key?: string) => {
     const language = body.language ?? 'und';
-    const { candidateReceipt } = await json<{ candidateReceipt: string }>(await call('POST', '/v1/catalogue/candidates', {
+    let candidateReceipt = key ? candidateReceipts.get(key) : undefined;
+    if (!candidateReceipt) ({ candidateReceipt } = await json<{ candidateReceipt: string }>(await call('POST', '/v1/catalogue/candidates', {
       profile: 'catalogue-candidates-v1', originalTitle: { value: body.title, language },
       aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
-    }), 200);
+    }), 200));
+    if (key) candidateReceipts.set(key, candidateReceipt);
     return { ...body, language, grain: 'new-creative-scope' as const, candidateReceipt };
   };
   const propose = async (workId: string, authors: unknown, title = 'Author credit Work',

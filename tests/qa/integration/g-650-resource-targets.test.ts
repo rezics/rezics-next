@@ -29,7 +29,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     prefix: 'semantic/structure/' });
   await structureObjects.initialize();
   const replies = new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env);
-  const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
+  const app = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
     access: f.access, content, contentAuthoring: content, realmReplies: replies, structureObjects,
     realmReplyThreads: new RealmReplyThreadStore(f.pool, f.accessPool), reviews: new ReaderReviews(f.accessPool),
     agentProvisioning: new AgentProvisioning(f.accessPool, f.env), personPreferences: new PersonPreferencesStore(f.accessPool),
@@ -44,8 +44,8 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     if (response.status !== status) throw new Error(`${response.status}: ${text}`);
     return JSON.parse(text) as T;
   };
-  const work = (title: string) => call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en',
-    title, semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }).then(response => json<Work>(response, 201));
+  const work = async (title: string) => call('POST', '/v1/works', await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en',
+    title, semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })).then(response => json<Work>(response, 201));
   const publish = async (w: Work) => {
     await f.grant(`contribution:create:${w.work}`, 'contribution.create');
     const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST', '/v1/contributions', {

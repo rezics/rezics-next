@@ -35,13 +35,14 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
   } });
   const environment = { ...f.env, fuseki: graph };
   const mediaAccess = new MediaAccessBatchReader(f.accessPool, graph);
+  await f.grant('catalogue:verify:root', 'catalogue.verify');
   const content = new ContentCore(f.pool);
   const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
     prefix: 'semantic/structure/' });
   await structureObjects.initialize();
-  const deps: MainWorkDependencies = { environment, access: f.access, account: f.account.verifier,
+  const deps: MainWorkDependencies = { environment, catalogueIntake: f.catalogueIntake, access: f.access, account: f.account.verifier,
     content, contentAuthoring: content, mediaAccess, structureObjects };
   const app = createMainApp(graph, deps);
   const call = (method: string, path: string, body?: object, authenticated = true) => app.handle(new Request(
@@ -55,8 +56,8 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
   };
   const get = (resource: string, authenticated = false) => call('GET', `/v1/resources/${shortId(resource)}`
     + (authenticated ? `?actingSubject=${encodeURIComponent(f.actor)}` : ''), undefined, authenticated);
-  const createWork = (title: string) => call('POST', '/v1/works', { profile: 'metadata-only-v1',
-    language: 'en', title, semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }).then(response => json<Work>(response, 201));
+  const createWork = async (title: string) => call('POST', '/v1/works', await f.catalogueBody({ profile: 'metadata-only-v1',
+    language: 'en', title, semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })).then(response => json<Work>(response, 201));
   const publish = async (work: Work): Promise<Publication> => {
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST', '/v1/contributions', {

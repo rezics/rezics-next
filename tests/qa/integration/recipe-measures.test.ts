@@ -17,10 +17,10 @@ test('RECIPE05: receipt-backed nutrition and yield retain coverage, basis and ex
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', { language: 'en',
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({ language: 'en',
       profile: 'metadata-only-v1', title: 'Recipe measure acceptance',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
-    }), 201);
+    })), 201);
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
     const created = await f.json<{ structure: string; revision: string }>(await f.call('POST',

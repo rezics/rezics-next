@@ -22,6 +22,9 @@ import { disclosureViewer } from '../../../services/main/src/modules/disclosure/
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationDispatcher, type NotificationSubjectReader, type ProviderSend } from '../../../services/main/src/modules/notification/dispatcher.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
+import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { png } from './media-support.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 
 import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
@@ -49,16 +52,16 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
   const heads = ownerTargetHeads({ graph: f.env, content: f.pool });
   const captures = ownerEvidenceCapture({ graph: { env: f.env, canReadWork: async () => true },
     content: { core: content, canRead: async (_principal, _actor, ids) => new Set(ids) } });
-  // An immutable media evidence anchor exercises Access's media fence; media's
-  // mutable asset-state delivery is owned and independently tested by G-571.
-  const mediaRef = nativeId(), mediaRevision = shortId(nativeId());
-  const mediaEvidence: CapturedEvidence = { owner: 'media', resource: mediaRef, component: 'cover',
-    revision: mediaRevision, locator: null, state: 'available', representation: 'image/png',
-    revisionDigest: digest('G-542 media fixture'), provenance: { fixture: 'g-542-immutable-media-anchor' } };
+  const mediaStore = new MediaStore(f.pool, content);
+  const objects = (prefix: string) => new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+    bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+    accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix });
+  await objects('media/').initialize();
+  let mediaEvidence: CapturedEvidence;
   const governance = new GovernanceStore(f.accessPool, { capture: async (principal, actor, target) =>
     target.owner === 'media' ? mediaEvidence : captures.capture(principal, actor, target) },
   { current: target => target.owner === 'media' ? Promise.resolve(null) : heads.current(target) }, rules,
-  ownerModerationEffects(new ContentModeration(f.pool), f.env));
+  ownerModerationEffects(new ContentModeration(f.pool), f.env, { pool: f.pool, core: content }));
   const suitability = new SuitabilityStore(f.accessPool, f.access);
   const notifications = new NotificationStore(f.accessPool);
   const subjects: NotificationSubjectReader = { resolve: async input => ({ status: 'available',
@@ -69,7 +72,7 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
     send: async request => { sent.push(request); return { status: 'accepted', messageId: randomUUID() }; },
     lookup: async () => ({ status: 'not_found' }) }, subjects);
   const deps: MainWorkDependencies = { environment: f.env, account: f.account.verifier, access: f.access,
-    suitability, governance: { store: governance, rules }, content,
+    media: { store: mediaStore, content, objects }, suitability, governance: { store: governance, rules }, content,
     notifications: { store: notifications, dispatcher } };
   const app = createMainApp(f.env.fuseki, deps);
   const call = (method: string, path: string, body?: object, authenticated = false) => app.handle(new Request(`http://main.local${path}`, {
@@ -120,6 +123,20 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         serializedJson: JSON.stringify({ body: `G-542 ${grain} secret words` }) });
       saved.push({ owner: 'content' as const, resource, component: 'body' as const, revision: value.revisionId! });
     }
+    await f.grant(`media:owner:${f.actor}`, 'media.upload');
+    const bytes = png(64, 64);
+    const reserved = await json<{ upload: string; asset: string }>(await call('POST', '/v1/media/uploads', {
+      profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png', byteLength: bytes.length,
+      sha256: createHash('sha256').update(bytes).digest('hex'), disclosure: 'public', actingSubject: f.actor,
+    }, true), 201);
+    const activated = await json<{ representation: string }>(await app.handle(new Request(
+      `http://main.local/v1/media/uploads/${reserved.upload}/bytes`, { method: 'PUT',
+        headers: { authorization: `Bearer ${f.account.tokenA}`, 'content-type': 'application/octet-stream' },
+        body: new Blob([bytes]) })), 201);
+    const mediaRef = `https://rezics.com/id/${reserved.asset}`, mediaRevision = activated.representation;
+    mediaEvidence = { owner: 'media', resource: mediaRef, component: 'cover', revision: mediaRevision, locator: null,
+      state: 'available', representation: 'image/png', revisionDigest: createHash('sha256').update(bytes).digest('hex'),
+      provenance: { fixture: 'g-542-owner-original' } };
     // The matrix proves the shared policy over exact owner grains. Endpoint
     // assertions below cover summaries/previews/sitemap, Content and notifications;
     // placed threads/feed/search/export and media-use bytes need their owner fixtures.
@@ -168,6 +185,7 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         reasons: fixtureReasons, reversesDecisionId: null, answersStepId: null, rationale: 'G-542 fixture restriction', disclosure: 'parties', idempotencyKey: randomUUID() };
       await claimFixture(f.accessPool, report.caseId, f.principalId, f.actor);
       const restricted = await governance.decide(principal, decision);
+      expect(restricted.operation.status, JSON.stringify(restricted.operation)).toBe('completed');
       for (const channel of DISCLOSURE_CHANNELS) expect((await disclose(f.env, [target], ANONYMOUS_VIEWER, channel))[0]).not.toBe('visible');
       expect((await notifications.readStream(principal, null)).items.find(item => item.id === notice.itemId)?.display).toBeNull();
       expect((await notifications.unreadCount(principal)).count).toBe(0);

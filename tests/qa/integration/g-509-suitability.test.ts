@@ -110,7 +110,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
   const store = new SuitabilityStore(countedPool, f.access);
   const content = new ContentCore(f.pool);
   const deps: MainWorkDependencies = {
-    environment: f.env,
+    environment: f.env, catalogueIntake: f.catalogueIntake,
     account: f.account.verifier,
     access: f.access,
     suitability: store,
@@ -186,13 +186,13 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
   try {
     expect(Date.now() - preparation).toBeLessThan(600_000);
     const work = await json<{ work: string; mainVersion: string }>(
-      await call('POST', '/v1/works', {
+      await call('POST', '/v1/works', await f.catalogueBody({
         profile: 'metadata-only-v1',
         language: 'en',
         title: 'Suitability across admitted resources',
         semanticTypes: ['https://schema.org/Book'],
         actingSubject: f.actor,
-      }),
+      })),
       201,
     );
     const editGrant = await f.grant(`work:edit:${work.work}`, 'work.edit');

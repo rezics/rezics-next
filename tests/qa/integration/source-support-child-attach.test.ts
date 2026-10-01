@@ -24,9 +24,9 @@ test('LIVE04/RECIPE06: a child occurrence has exact source support that withdraw
   await objects.initialize();
   (h.env as typeof h.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await h.json<{ work: string; mainVersion: string }>(await h.call('POST', '/v1/works', { language: 'en',
+    const work = await h.json<{ work: string; mainVersion: string }>(await h.call('POST', '/v1/works', await h.catalogueBody({ language: 'en',
       profile: 'metadata-only-v1', title: 'Source child support Work',
-      semanticTypes: ['https://schema.org/Recipe'], actingSubject: h.actor }), 201);
+      semanticTypes: ['https://schema.org/Recipe'], actingSubject: h.actor })), 201);
     await h.grant(`work:edit:${work.work}`, 'recipe.edit');
     await h.grant(`work:edit:${work.work}`, 'work.edit');
     await h.grant(`work:read:${work.work}`, 'work.read');

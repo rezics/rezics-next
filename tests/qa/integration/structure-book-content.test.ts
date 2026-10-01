@@ -18,7 +18,7 @@ test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed rel
     prefix: 'semantic/structure/' });
   await objects.initialize();
   const content = new ContentCore(f.pool);
-  const app = createMainApp(f.env.fuseki, { environment: f.env, structureObjects: objects,
+  const app = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, structureObjects: objects,
     account: f.account.verifier, access: f.access, content, contentAuthoring: content });
   const call = (method: string, path: string, body?: object, key = randomUUID(),
     token = f.account.tokenA) => app.handle(new Request(`http://main.local${path}`,
@@ -31,11 +31,11 @@ test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed rel
   };
   try {
     const book = await json<{ work: string; mainVersion: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: 'Native Book publication journey',
-        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
+      await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Native Book publication journey',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })), 201);
     const post = await json<{ work: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: 'Native Post chapter',
-        semanticTypes: ['https://schema.org/DigitalDocument'], actingSubject: f.actor }), 201);
+      await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Native Post chapter',
+        semanticTypes: ['https://schema.org/DigitalDocument'], actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${book.work}`, 'work.edit');
     await f.grant(`work:read:${book.work}`, 'work.read');
     await f.grant(`work:read:${post.work}`, 'work.read');
@@ -71,8 +71,8 @@ test('BOOK01/BOOK03/BOOK08: native Book follows published Post while a fixed rel
         mainVersion: book.mainVersion, actingSubject: f.actor }), 201);
     const path = `/v1/compositions/${shortId(created.structure)}`;
     const privatePost = await json<{ work: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: 'Undisclosed Post',
-        semanticTypes: ['https://schema.org/DigitalDocument'], actingSubject: f.actor }), 201);
+      await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Undisclosed Post',
+        semanticTypes: ['https://schema.org/DigitalDocument'], actingSubject: f.actor })), 201);
     const insert = (expectedHead: string, target: string, selection?: object) => ({
       profile: 'book-composition', expectedHead, actingSubject: f.actor,
       operations: [{ op: 'insert', parent: created.structure, position: 'last',

@@ -53,7 +53,7 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       actingSubject: f.actor,
     }), 201);
     await f.grant(`work:read:${created.work}`, 'work.read');
-    const studio = new Elysia().use(studioRoutes({ environment: f.env,
+    const studio = new Elysia().use(studioRoutes({ environment: f.env, catalogueIntake: f.catalogueIntake,
       account: f.account.verifier, access: f.access, studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
     const studioPath = `/v1/me/agents/${shortId(f.actor)}/works`;
     const studioCall = (token = f.account.tokenA) => studio.handle(new Request(`http://main.local${studioPath}`,
@@ -116,9 +116,9 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
 
     const content = new ContentCore(f.pool);
     const contentApp = new Elysia().use(contentRoutes(f.env.fuseki, {
-      environment: f.env, account: f.account.verifier, access: f.access,
+      environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier, access: f.access,
       content: content, contentAuthoring: content,
-    })).use(studioRoutes({ environment: f.env, account: f.account.verifier,
+    })).use(studioRoutes({ environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
       access: f.access, contentAuthoring: content, studioAccess: new StudioAccess(f.accessPool, f.env.fuseki) }));
     const contentCall = (method: string, path: string, body?: object) => contentApp.handle(new Request(
       `http://main.local${path}`, { method, headers: { authorization: `Bearer ${f.account.tokenA}`,
@@ -233,9 +233,9 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const source = await f.propose(`OL${Math.floor(Math.random() * 900000 + 100000)}W`,
       undefined, 'Imported studio classic');
     const imported = await f.adoptWork(source);
-    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', {
+    const curated = await f.json<{ work: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({
       profile: 'metadata-only-v1', title: 'Curated studio Work', language: 'en', actingSubject: f.actor,
-    }), 201);
+    })), 201);
     const authored = await f.json<{ items: Array<{ id: string }> }>(await studioCall(), 200);
     expect(authored.items.map(item => item.id)).not.toContain(imported.work);
     expect(authored.items.map(item => item.id)).not.toContain(curated.work);

@@ -64,8 +64,8 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const definitions = new Map(seed.map(item => [item.key, item]));
     const readGrants = new Map<string, string>();
     const work = async (title: string) => {
-      const result = await f.json<Work>(await f.call('POST', '/v1/works', { profile: 'metadata-only-v1',
-        language: 'ja', title, actingSubject: f.actor }), 201);
+      const result = await f.json<Work>(await f.call('POST', '/v1/works', await f.catalogueBody({ profile: 'metadata-only-v1',
+        language: 'ja', title, actingSubject: f.actor })), 201);
       readGrants.set(result.work, await f.grant(`work:read:${result.work}`, 'work.read'));
       return result;
     };
@@ -153,7 +153,7 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
     finally { await accountPool.end(); }
-    const readerApp = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
+    const readerApp = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
       access: f.access, agentProvisioning: new AgentProvisioning(f.accessPool, f.env),
       profiles: new ProfilesAccess(f.accessPool), libraryStatus: statuses,
       libraryRatings: new ReaderLibraryRatings(f.accessPool) });

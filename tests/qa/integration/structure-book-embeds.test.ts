@@ -21,7 +21,7 @@ test('BOOK06: publication rejects a private transitive Content embed before acti
     const value = Reflect.get(target, property, target);
     return typeof value === 'function' ? value.bind(target) : value;
   } });
-  const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
+  const app = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
     access: f.access, content, contentAuthoring: tracked });
   const call = (path: string, body: object) => app.handle(new Request(`http://main.local${path}`, {
     method: 'POST', headers: { authorization: `Bearer ${f.account.tokenA}`,
@@ -34,9 +34,9 @@ test('BOOK06: publication rejects a private transitive Content embed before acti
   };
   try {
     const makeWork = async (title: string) => {
-      const work = await json<{ work: string }>(await call('/v1/works', { language: 'en',
+      const work = await json<{ work: string }>(await call('/v1/works', await f.catalogueBody({ language: 'en',
         profile: 'metadata-only-v1', title, semanticTypes: ['https://schema.org/DigitalDocument'],
-        actingSubject: f.actor }), 201);
+        actingSubject: f.actor })), 201);
       await f.grant(`content:draft:${work.work}`, 'content.draft');
       const variant = `urn:rezics:variant:${randomUUID()}`;
       await f.grant(`content:publish:${work.work}`, 'content.publish');

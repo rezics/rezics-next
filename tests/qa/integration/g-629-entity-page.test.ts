@@ -42,13 +42,13 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
   try {
     const createWork = async (title: string, type = 'https://schema.org/Book') => {
       const created = await f.json<Work>(
-        await f.call('POST', '/v1/works', {
+        await f.call('POST', '/v1/works', await f.catalogueBody({
           profile: 'metadata-only-v1',
           language: 'en',
           title,
           semanticTypes: [type],
           actingSubject: f.actor,
-        }),
+        })),
         201,
       );
       await f.grant(`work:read:${created.work}`, 'work.read');

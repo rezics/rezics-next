@@ -9,13 +9,14 @@ test('G318: native creation admits package, mod, Hub, recipe and media Works wit
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const fixture = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `work-kind-${randomUUID()}`));
-  const app = createMainApp(fixture.env.fuseki, { environment: fixture.env,
+  await fixture.grant('catalogue:verify:root', 'catalogue.verify');
+  const app = createMainApp(fixture.env.fuseki, { environment: fixture.env, catalogueIntake: fixture.catalogueIntake,
     account: fixture.account.verifier, access: fixture.access });
-  const call = (types: string[], key = randomUUID()) => app.handle(new Request('http://main.local/v1/works', {
+  const call = async (types: string[], key = randomUUID()) => app.handle(new Request('http://main.local/v1/works', {
     method: 'POST', headers: { authorization: `Bearer ${fixture.account.tokenA}`,
       'content-type': 'application/json', 'idempotency-key': key },
-    body: JSON.stringify({ profile: 'metadata-only-v1', language: 'en', title: `Native ${[...types].sort().join(' + ')}`,
-      semanticTypes: types, actingSubject: fixture.actor }),
+    body: JSON.stringify(await fixture.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: `Native ${[...types].sort().join(' + ')}`,
+      semanticTypes: types, actingSubject: fixture.actor }, key)),
   }));
   const types = [
     ['https://schema.org/SoftwareSourceCode'],

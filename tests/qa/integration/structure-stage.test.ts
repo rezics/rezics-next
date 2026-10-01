@@ -17,7 +17,7 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
     accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
     prefix: 'semantic/structure/' });
   await objects.initialize();
-  const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
+  const app = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
     access: f.access, structureObjects: objects,
     structureStages: new StructureStageStore(f.pool, objects) });
   const call = (method: string, path: string, body?: object, key = randomUUID()) => app.handle(
@@ -30,8 +30,8 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
   };
   try {
     const book = await json<{ work: string; mainVersion: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: 'Stage Book',
-        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
+      await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Stage Book',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })), 201);
     const editGrant = await f.grant(`work:edit:${book.work}`, 'work.edit');
     await f.grant(`work:read:${book.work}`, 'work.read');
     const created = await json<{ structure: string; revision: string }>(await call('POST',
@@ -141,7 +141,7 @@ test('COMP03/COMP04: staged pages checkpoint under a lease and activation rechec
     expect((await read()).revision).toBe(activeHead);
 
     const target = await json<{ work: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: 'Staged chapter target', actingSubject: f.actor }), 201);
+      await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Staged chapter target', actingSubject: f.actor })), 201);
     const grant = await f.grant(`work:read:${target.work}`, 'work.read');
     const staleAuthority = await createStage();
     const chapter = { ...group(staleAuthority, 'a'), role: 'chapter', target: target.work,

@@ -47,7 +47,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
   const accountPool = new Pool({ connectionString: databases.urls.account });
   try {
     const core = new ContentCore(f.pool);
-    const deps: MainWorkDependencies = { environment: f.env, access: f.access, account: f.account.verifier,
+    const deps: MainWorkDependencies = { environment: f.env, catalogueIntake: f.catalogueIntake, access: f.access, account: f.account.verifier,
       content: core, contentAuthoring: core, agentProvisioning: new AgentProvisioning(f.accessPool, f.env) };
     deps.publicReports = new PublicReports(f.accessPool, publicReportOwners(deps, f.pool, core));
     deps.erasures = new ErasureService(relayPool, f.pool, f.accessPool);
@@ -66,9 +66,9 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
       if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
       return response.json() as Promise<T>;
     };
-    const work = await json<{ work: string; workRevision: string; mainVersion: string; mainRevision: string }>(await call('POST', '/v1/works', {
+    const work = await json<{ work: string; workRevision: string; mainVersion: string; mainRevision: string }>(await call('POST', '/v1/works', await f.catalogueBody({
       profile: 'metadata-only-v1', language: 'en', title: `Reported resource ${randomUUID()}`,
-      semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }, { token: f.account.tokenA }), 201);
+      semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), { token: f.account.tokenA }), 201);
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST', '/v1/contributions', {
       profile: 'text-contribution-v1', work: work.work, language: 'en', body: 'Published reported text',

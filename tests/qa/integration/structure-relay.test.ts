@@ -32,14 +32,14 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
     (f.env as typeof f.env & { structureObjects: typeof objects }).structureObjects = objects;
     const progress = new StructureProgressStore(f.pool);
     const progressApp = new Elysia().use(progressRoutes(f.env.fuseki, {
-      environment: f.env, account: f.account.verifier, access: f.access,
+      environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier, access: f.access,
       structureObjects: objects, progress }));
     const consumer = `structure-relay:${randomUUID()}`;
     await initializeRelayCheckpoint(relay, consumer, f.env.lineage.dataEpoch);
 
     const book = await f.json<{ work: string; mainVersion: string }>(await f.call('POST',
-      '/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'Relay chapter book',
-        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
+      '/v1/works', await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Relay chapter book',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${book.work}`, 'work.edit');
     await f.grant(`work:read:${book.work}`, 'work.read');
     const created = await f.json<{ structure: string; revision: string; sourcePosition: {

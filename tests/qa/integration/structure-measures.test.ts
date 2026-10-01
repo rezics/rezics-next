@@ -19,10 +19,10 @@ test('RECIPE05: expected-head measure edits retain exact revisions and receipt r
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', { language: 'en',
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({ language: 'en',
       profile: 'metadata-only-v1', title: 'Measure revision',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
-    }), 201);
+    })), 201);
     await f.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)',
       [`work:edit:${work.work}`]);
     await f.grant(`work:edit:${work.work}`, 'recipe.edit');
