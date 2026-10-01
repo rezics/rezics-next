@@ -26,10 +26,10 @@ export function memberReplyRoutes(work: MainWorkDependencies) {
         direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
         expectedHead: t.Nullable(uuid), body: t.Nullable(t.String({ minLength: 1, maxLength: 8192 })),
         actingSubject: native }, { additionalProperties: false }),
-      response: { 200: t.Object({ reply: native, variantId: t.String(), revisionId: uuid,
+      response: { 200: t.Object({ reply: native, variantId: t.String(), revisionId: uuid, revisionDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
         predecessor: t.Nullable(uuid), deleted: t.Boolean(), sourcePosition: contentDraftWriteResult.properties.sourcePosition,
         replayed: t.Boolean() }),
-      201: t.Object({ reply: native, variantId: t.String(), revisionId: uuid,
+      201: t.Object({ reply: native, variantId: t.String(), revisionId: uuid, revisionDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
         predecessor: t.Nullable(uuid), deleted: t.Boolean(), sourcePosition: contentDraftWriteResult.properties.sourcePosition,
         replayed: t.Boolean() }), ...writeProblems, ...workReadProblems, 413: problemResult(413) },
     }, async ({ request, body }) => {

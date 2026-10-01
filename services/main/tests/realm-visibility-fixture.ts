@@ -10,9 +10,10 @@ import type { RealmVisibility, RealmReviewMode } from '../src/modules/space/poli
 export async function realmVisibilityFixture() {
   const h = await memberFixture();
   expect((await h.post('/v1/publication-selections', h.selection)).status).toBe(201);
-  const created = await h.post('/v1/spaces', { profile: 'space-realm-v1', name: 'Visibility Realm',
+  const created = await h.post('/v1/spaces', { profile: 'space-realm-v2', name: 'Visibility Realm',
+    handle: `visibility-${randomUUID().slice(0, 16)}`, topics: [],
     capabilities: ['realm'], actingSubject: h.actor });
-  expect(created.status).toBe(201);
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
   const realm = created.body.realm as string;
   const principal = await h.principal();
   const principalId = await h.access.activePrincipalId(principal);
@@ -66,10 +67,8 @@ export async function realmVisibilityFixture() {
       rootTarget: input.rootTarget, rootRevision: input.rootRevision,
       parentReply: null, parentRevision: null, contextRevision: null }, actor);
     expect(identity.status, JSON.stringify(identity.body)).toBe(201);
-    const bytes = (await h.contentPool.query('SELECT byte_digest FROM content.revision WHERE id=$1',
-      [draft.body.revisionId])).rows[0].byte_digest;
     const placement = { profile: 'realm-reply-placement-v1', realm, reply: input.reply,
-      revisionId: draft.body.revisionId, revisionDigest: bytes, reviewDecisionId: null,
+      revisionId: draft.body.revisionId, revisionDigest: draft.body.revisionDigest, reviewDecisionId: null,
       expectedHead: null, actingSubject: actor };
     return { input, draft, placement, path: `/v1/member-replies/${input.reply.slice(-36)}` };
   };

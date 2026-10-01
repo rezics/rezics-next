@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ContentConflict, contentDraftIntentDigest, type ContentCore,
   type SaveDraftCommand } from '../../../../content/src/core.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
@@ -29,7 +30,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
     & Partial<Pick<AccessAdmissionRegistry, 'withRealmPolicy' | 'canReadWork' | 'canReadSemanticResource'>>,
   request: Request, input: MemberReplyDraft, key: string, admittedOrigin = false): Promise<{
-    reply: string; variantId: string; revisionId: string; predecessor: string | null; deleted: boolean;
+    reply: string; variantId: string; revisionId: string; revisionDigest: string; predecessor: string | null; deleted: boolean;
     sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
   if (![input.reply, input.rootTarget, input.rootRevision, input.actingSubject].every(value => native.test(value))
@@ -106,6 +107,7 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   if (saved.outcome === 'stale_head') throw new ContentDraftStale('reply head changed');
   if (saved.outcome !== 'succeeded') throw new AdmissionDenied('reply draft was cancelled');
   return { reply: input.reply, variantId: input.variantId, revisionId: saved.revisionId!,
+    revisionDigest: createHash('sha256').update(command.serializedJson).digest('hex'),
     predecessor: saved.predecessor, deleted: input.body === null,
     sourcePosition: saved.position, replayed: admission.replayed || saved.replayed };
 }

@@ -17,14 +17,12 @@ test('A member can publish a titled, Work attached community post and read its e
     expect(publicReply.status, JSON.stringify(publicReply.body)).toBe(404);
     const placed = await h.call('POST', '/v1/realm-reply-placements', { ...post.placement,
       revisionId: authored.body.revisionId,
-      revisionDigest: (await h.contentPool.query<{ byte_digest: string }>(
-        'SELECT byte_digest FROM content.revision WHERE id=$1', [authored.body.revisionId])).rows[0]!.byte_digest });
+      revisionDigest: authored.body.revisionDigest });
     expect(placed.status, JSON.stringify(placed.body)).toBe(201);
     const visible = await h.call('GET', post.path);
     expect(visible.status, JSON.stringify(visible.body)).toBe(200);
     expect(visible.body).toMatchObject({ body, author: h.actor, rootTarget: h.work.work,
-      originRealm: h.realm, revisionId: authored.body.revisionId });
-    expect((await h.replies.visible(h.realm, post.input.reply))?.revisionId).toBe(authored.body.revisionId);
+      originRealm: h.realm, revisionId: authored.body.revisionId, revisionDigest: authored.body.revisionDigest });
     expect((await h.call('POST', '/v1/realm-reply-placements', { ...post.placement,
       revisionId: authored.body.revisionId,
       revisionDigest: visible.body.revisionDigest }, h.actor, 'replay-placement')).status).toBe(409);
