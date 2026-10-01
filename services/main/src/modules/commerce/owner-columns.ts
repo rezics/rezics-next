@@ -4,7 +4,7 @@
 // the installed catalog. Owner adapters type selected rows as
 // `OwnerRow<typeof catalog.table>`, following the default node-postgres parsers.
 
-type PgColumn = 'uuid' | 'text' | 'int8' | 'int4' | 'bool' | 'timestamptz' | 'jsonb' | 'interval';
+type PgColumn = 'uuid' | 'text' | 'int8' | 'int2' | 'int4' | 'bool' | 'timestamptz' | 'jsonb' | 'interval';
 export type OwnerColumns = Record<string, Record<string, PgColumn | `${PgColumn}?`>>;
 
 /** node-postgres parses interval values into this shape. */
@@ -17,6 +17,7 @@ interface PgValues {
   uuid: string;
   text: string;
   int8: string;
+  int2: number;
   int4: number;
   bool: boolean;
   timestamptz: Date;

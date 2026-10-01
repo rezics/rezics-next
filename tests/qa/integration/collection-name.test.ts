@@ -26,7 +26,7 @@ test('Collection names publish a replayable localized revision over a legacy lab
     await f.json(await f.call('POST', '/v1/collections', { collection,
       name: 'Classics to start with · 从这里开始读经典', disclosure: 'public', actingSubject: f.actor }), 201);
     expect(await f.json(await f.call('GET', path), 200)).toMatchObject({ revision: null,
-      name: { original: 'en', labels: { en: 'Classics to start with · 从这里开始读经典' } } });
+      name: { original: 'und', labels: { und: 'Classics to start with · 从这里开始读经典' } } });
     const body = { profile: 'collection-public-name-v1', expectedHead: null, actingSubject: f.actor,
       name: { original: 'en', labels: { en: 'Classics to start with', 'zh-Hans': '从这里开始读经典' } } };
     const key = `collection-name-${randomUUID()}`;

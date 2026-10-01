@@ -471,7 +471,7 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
     key: (row) => field(row, 'id'),
     fetch: (seek, size) =>
       session.query(
-        `SELECT ?id ?revision WHERE {
+        `SELECT ?id ?revision ?name ?kind ?structure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?id a rv:Collection ; rv:curator ${iri(agent)} ;
       rv:collectionState rv:Active ; rv:disclosure rv:Public ; rv:collectionHead ?revision ;
       schema:name ?name ; rv:collectionKind ?kind ; rv:structure ?structure .
@@ -495,21 +495,11 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
       return rows.filter((_, index) => decisions[index] === 'visible');
     },
   });
-  const rows = selected.page.length
-    ? await session.query(
-        `SELECT ?id ?revision ?name ?kind ?structure WHERE {
-    VALUES (?id ?revision) { ${selected.page.map((row) => `(${iri(field(row, 'id'))} ${iri(field(row, 'revision'))})`).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?id rv:collectionHead ?revision ; schema:name ?name ;
-      rv:collectionKind ?kind ; rv:structure ?structure }
-  } LIMIT ${limit + 1}`,
-        limit + 1,
-      )
-    : [];
-  if (rows.length !== selected.page.length) throw new WorkReadMoved('Agent Collection changed');
+  // Hydration uses the same graph-position-bound rows that disclosure admitted.
+  const rows = selected.page;
   if (new Set(rows.map((row) => field(row, 'id'))).size !== rows.length)
     throw new WorkReadUnavailable('Ambiguous collection');
-  const items = selected.page.map((selectedRow) => {
-    const row = rows.find((row) => field(row, 'id') === field(selectedRow, 'id'))!;
+  const items = rows.map((row) => {
     const kind = field(row, 'kind');
     if (![`${RV}StaticCollection`, `${RV}CapturedCollection`].includes(kind))
       throw new WorkReadUnavailable('Invalid collection kind');

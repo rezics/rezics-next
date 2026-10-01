@@ -273,7 +273,7 @@ test('IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact 
     const other = await issue('0', otherRealm);
     expect((await post(changes, orgToken, joinBody(other, '0', otherRealm))).status).toBe(200);
     expect(await accessStateCoverage(accessPool)).not.toEqual(coverage);
-    expect((await post('/v1/works', orgToken, { profile: 'metadata-only-v1', language: 'en', title: 'No implicit authority',
+    expect((await post('/v1/works', orgToken, { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: 'No implicit authority',
       actingSubject: org })).status).toBe(403);
     expect((await post(changes, orgToken, changeBody('suspend', '1', '2'))).status).toBe(403);
     expect((await post(changes, realmToken, changeBody('leave', '1', '2'))).status).toBe(403);
@@ -301,7 +301,7 @@ test('IAM23/IAM24/IAM06: independent Org/Realm participation requires two exact 
     expect((await post(changes, orgToken, joinBody(rejoin, '4', realm, '4', 'terms-2'))).status).toBe(200);
     expect(await unrelatedSnapshot()).toEqual(before);
     expect(await (await read(realmToken, realm, 'realm')).json()).toMatchObject({ state: 'joined', generation: '5' });
-    expect((await post('/v1/works', orgToken, { profile: 'metadata-only-v1', language: 'en', title: 'No revived authority',
+    expect((await post('/v1/works', orgToken, { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: 'No revived authority',
       actingSubject: org })).status).toBe(403);
     expect((await accessPool.query(`SELECT h.reason_reference FROM access.org_realm_history h
       JOIN access.org_realm_participation p ON p.id = h.participation_id

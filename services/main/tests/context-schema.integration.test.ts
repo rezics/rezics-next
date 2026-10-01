@@ -134,10 +134,16 @@ test('CTX03: schema foundation Access private Context selections install empty, 
     await pool.query(`INSERT INTO access.acting_context_preference (principal_id, task, acting_subject, revision)
       VALUES ($1, 'work.create', NULL, $2)`, [principal, Bun.randomUUIDv7()]);
     const before = (await pool.query('SELECT to_jsonb(p)::text AS row FROM access.principal p ORDER BY id')).rows;
-    await apply(pool, [OWN, ...later]);
-    // Later migrations may add service principals; every pre-existing identity must survive unchanged.
+    await apply(pool, [OWN]);
+    // The Context migration alone preserves the entire prior identity schema.
     expect((await pool.query(`SELECT to_jsonb(p)::text AS row FROM access.principal p
       WHERE id = ANY($1::uuid[]) ORDER BY id`, [[principal, other]])).rows).toEqual(before);
+    await apply(pool, later);
+    // Later migrations may add service principals; every pre-existing identity must survive unchanged.
+    expect((await pool.query(`SELECT (to_jsonb(p) - 'first_seen_at')::text AS row FROM access.principal p
+      WHERE id = ANY($1::uuid[]) ORDER BY id`, [[principal, other]])).rows).toEqual(before);
+    expect((await pool.query(`SELECT count(*)::int AS n FROM access.principal
+      WHERE id = ANY($1::uuid[]) AND first_seen_at IS NOT NULL`, [[principal, other]])).rows[0].n).toBe(2);
     expect((await pool.query('SELECT count(*)::int AS n FROM access.acting_context_preference')).rows[0].n).toBe(1);
 
     const object = native();

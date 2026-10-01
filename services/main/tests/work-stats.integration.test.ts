@@ -4,6 +4,7 @@ import { meterStatements } from '../../../tests/qa/integration/feed-read-support
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { DISCLOSURE_COST } from '../src/modules/disclosure/read.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
 import { WORK_STATS_COST, WorkReaderStats } from '../src/modules/work/read-stats.ts';
 
@@ -90,12 +91,14 @@ test('G394: Work reader stats count public Person libraries and visible reviews 
       [reviewers[3]!.actor]);
     expect((await read(book.work, context)).reviews).toEqual({ value: 2, kind: 'exact' });
 
-    // Budget: the graph once besides the read envelope's two position reads, and a fixed set of statements.
+    // Domain reads, the envelope's two position reads and the already-declared disclosure batches are separately metered.
     const queries = stack.fuseki.queries, statements = meter.count();
     await read(book.work, context);
-    expect(stack.fuseki.queries - queries).toBeLessThanOrEqual(WORK_STATS_COST.graphQueries + 2);
+    expect(stack.fuseki.queries - queries).toBeLessThanOrEqual(WORK_STATS_COST.graphQueries + 2
+      + WORK_STATS_COST.disclosureBatches);
     expect(meter.count() - statements).toBeLessThanOrEqual(WORK_STATS_COST.sqlStatements.readerCounts
-      + WORK_STATS_COST.sqlStatements.reviews);
+      + WORK_STATS_COST.sqlStatements.reviews
+      + WORK_STATS_COST.disclosureBatches * (DISCLOSURE_COST.ownerStatements + DISCLOSURE_COST.recoveryStatements));
     expect(meter.violations).toEqual([]);
 
     // Past the probe the reader count is a lower bound rather than a scan of every shelf.

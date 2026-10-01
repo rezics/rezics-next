@@ -71,10 +71,10 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
     const title = `Content publication ${publicTitleTerm}`;
     const workAdmissionId = randomUUID();
     const actor = `https://rezics.com/id/${randomUUID()}`;
-    const created = await activateMetadataWork(env, { title, admission: {
+    const created = await activateMetadataWork(env, { title, language: 'en', admission: {
       id: workAdmissionId, scope: 'work:create:root', action: 'work.create',
       idempotencyKey: `content-work-${workAdmissionId}`,
-      requestDigest: metadataWorkRequestDigest(title), authorityEpoch: '0',
+      requestDigest: metadataWorkRequestDigest(title, [], 'en'), authorityEpoch: '0',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     } });
     const publicTitle = await fuseki.query(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>

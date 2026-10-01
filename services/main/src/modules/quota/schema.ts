@@ -1,9 +1,14 @@
 import type { OwnerColumns } from '../commerce/owner-columns.ts';
 
-/** Access database `quota` schema from migration 091. */
+/** Access database `quota` schema, including catalogue intake from migration 973. */
 export const quotaSchema = 'quota';
 
 export const quotaColumns = {
+  catalogue_search: { id: 'uuid', principal_id: 'uuid', data_epoch: 'text', sequence: 'int8',
+    input: 'jsonb', candidates: 'jsonb', expires_at: 'timestamptz' },
+  catalogue_creation: { admission_id: 'uuid', principal_id: 'uuid', search_id: 'uuid',
+    quota_exempt: 'bool', data_epoch: 'text' },
+  catalogue_pending: { principal_id: 'uuid', slot: 'int2', admission_id: 'uuid' },
   policy: { id: 'uuid', scope: 'text', unit: 'text', head_revision: 'int8' },
   policy_revision: { policy_id: 'uuid', revision: 'int8', period: 'text', base_allowance: 'int8',
     max_reservation: 'int8', reservation_ttl: 'interval', failure_policy: 'text',

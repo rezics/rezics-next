@@ -10,6 +10,8 @@ import { createAccountApp } from '../../../services/account/src/app.ts';
 import { ContentCore, contentDraftIntentDigest } from '../../../services/content/src/core.ts';
 import { ContentComments } from '../../../services/content/src/comments.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
@@ -164,8 +166,11 @@ async function startStack() {
       return main.handle(new Request(url.toString(), {
         headers: { authorization: `Bearer ${token}` } }));
     };
+    const authorIntent = { kind: 'person' as const, displayName: 'Fixture author' };
+    await createAgentGraph(environment, { id: randomUUID(), agent: actor,
+      ...authorIntent, digest: agentProvisionDigest(authorIntent) });
     await grant('work:create:root', 'work.create');
-    const created = await send('/v1/works', { profile: 'metadata-only-v1', language: 'en',
+    const created = await send('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en',
       title: `BOOK ${name} ${randomUUID()}`, actingSubject: actor });
     expect(created.status).toBe(201);
     const work = (await created.json() as { work: string }).work;

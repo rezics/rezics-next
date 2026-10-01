@@ -11,6 +11,8 @@ import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentComments } from '../../../services/content/src/comments.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, FusekiReadBudgetExceeded, fusekiReadBudget }
   from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -172,9 +174,12 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       }
       return await response.json() as T;
     };
+    const authorIntent = { kind: 'person' as const, displayName: 'Fixture author' };
+    await createAgentGraph(environment, { id: randomUUID(), agent: actor,
+      ...authorIntent, digest: agentProvisionDigest(authorIntent) });
     const marker = `s2journey${randomUUID().replaceAll('-', '')}`;
     const work = await post<{ work: string; mainVersion: string; workRevision: string;
-      mainRevision: string }>('/v1/works', { profile: 'metadata-only-v1', language: 'en',
+      mainRevision: string }>('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en',
         title: `S2 ${marker}`, actingSubject: actor });
     expect(work.work).not.toBe(work.mainVersion);
     expect(work.workRevision).not.toBe(work.mainRevision);
@@ -184,7 +189,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       return result.results?.bindings[0]?.sequence?.value;
     };
     const beforeOutages = await graphSequence();
-    const unavailableIntent = { profile: 'metadata-only-v1', language: 'en',
+    const unavailableIntent = { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en',
       title: `Unavailable owner ${randomUUID()}`, actingSubject: actor };
     const unavailableRequest = () => new Request('http://main.local/v1/works', {
       method: 'POST', headers: { authorization: `Bearer ${token}`,
@@ -216,7 +221,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     } finally { await deadAccessPool.end(); }
     expect(await graphSequence()).toBe(beforeOutages);
     const typeKey = `multi-type-${randomUUID()}`;
-    const typeIntent = { profile: 'metadata-only-v1', language: 'en', title: `Multi-type ${randomUUID()}`,
+    const typeIntent = { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Multi-type ${randomUUID()}`,
       actingSubject: actor, semanticTypes: [
         'https://schema.org/DigitalDocument', 'https://schema.org/Book' ] };
     const typedResponse = await send('/v1/works', typeIntent, true, typeKey);
@@ -320,7 +325,7 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
     expect((await readRelease(`https://rezics.com/id/${randomUUID()}`)).status).toBe(404);
     expect((await readRelease(actor, 'Bearer invalid')).status).toBe(401);
     for (let n = 0; n < 8; n++) {
-      await post('/v1/works', { profile: 'metadata-only-v1', language: 'en',
+      await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en',
         title: `Unrelated release cost ${n} ${randomUUID()}`, actingSubject: actor });
     }
     const grownCost = await observedGraphWork(`s2-release-grown-${randomUUID()}`);
