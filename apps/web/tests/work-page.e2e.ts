@@ -137,7 +137,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(versions.getByRole('listitem')).toHaveCount(2);
   await versions.getByRole('combobox', { name: 'Language' }).fill('JA');
   await versions.getByRole('button', { name: 'Apply' }).click();
-  await expect(page).toHaveURL(`/en/w/${id}/versions?kind=&language=JA`);
+  await expect(page).toHaveURL(`/en/w/${id}/versions?language=JA`);
   await expect(versions.getByRole('listitem')).toHaveCount(1);
   await expect(versions.getByRole('listitem')).toContainText('Japanese');
   await page.goto(`/en/w/${id}/versions?kind=release`);
