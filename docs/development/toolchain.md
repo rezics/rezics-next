@@ -353,6 +353,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task release:images` | Build local pinned OCI runtime images and record their release manifest; never push. |
 | `task ops:migrate` | Apply the release's locked, idempotent owner migrations. |
 | `task ops:env-check` | Validate a production environment file and refuse payment provider rows. |
+| `task ops:bootstrap` | Provision launch Realms, Zones and vocabulary, then admit bounded catalogue records through public APIs. |
 | `task release:install` | Verify a release artifact and provision a project from it. |
 | `task search:rebuild` | Rebuild the public search index on a stopped-writer stack. |
 | `task access:pending-search` | List unresolved private search deliveries (needs ACCESS_DATABASE_URL). |

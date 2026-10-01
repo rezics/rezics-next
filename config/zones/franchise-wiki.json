@@ -1,0 +1,20 @@
+{
+  "id": "franchise-wiki",
+  "name": "Franchise Wiki",
+  "language": "en",
+  "routeSegment": "franchise-wiki",
+  "preset": "editorial",
+  "navigation": [
+    { "label": "Home", "href": "/" },
+    { "label": "Characters", "href": "/characters" },
+    { "label": "Places", "href": "/places" },
+    { "label": "Events", "href": "/events" },
+    { "label": "Chapters", "href": "/chapters" }
+  ],
+  "mounts": [
+    { "id": "characters", "name": "Characters", "routeSegment": "characters" },
+    { "id": "places", "name": "Places", "routeSegment": "places" },
+    { "id": "events", "name": "Events", "routeSegment": "events" },
+    { "id": "chapters", "name": "Chapters", "routeSegment": "chapters" }
+  ]
+}

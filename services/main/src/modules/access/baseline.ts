@@ -9,6 +9,7 @@ import { maintainerControllerProof, maintainerGeneration } from '../work/maintai
 import { publicReplyRoot } from '../realm-reply/root.ts';
 import { authorSubmissionProof, authorWithdrawalProof, authorWorkGeneration } from './author-baseline.ts';
 import { workKinds } from '../work/work-kinds.ts';
+import { definitionCreatorAllowed } from './definition-creator.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -43,11 +44,16 @@ export interface BaselineProof {
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
   | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
-  | 'avatar' | 'submission-withdraw'; id: string };
+  | 'avatar' | 'submission-withdraw' | 'definition'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
 export function baselineTarget(action: string, scope: string): BaselineTarget | null {
+  if (['semantic.change', 'lexicon.presentation.change'].includes(action)
+    && scope.startsWith('semantic:edit:')) {
+    const id = scope.slice('semantic:edit:'.length);
+    return native.test(id) ? { kind: 'definition', id } : null;
+  }
   // The tag proposal adapter records a personal Statement under the author's
   // Work fence. This grants neither definition administration nor acceptance.
   if (['statement.record', 'relation.change', 'work.derive'].includes(action) && scope.startsWith('work:edit:')) {
@@ -141,6 +147,9 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   sourceRevision: string | null = null, contribution: string | null = null): Promise<boolean> {
   if (target.kind === 'root') return true;
   if (target.kind === 'personal') return target.id === actingSubject;
+  if (target.kind === 'definition') {
+    return definitionCreatorAllowed(client, graph, principalId, actingSubject, target.id);
+  }
   if (!graph) return false;
   if (target.kind === 'avatar') return !!await avatarControllerProof(client, graph, principalId, target.id)
     || await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;

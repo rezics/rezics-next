@@ -378,6 +378,11 @@ tasks:
     cmds:
       - bun scripts/ops/production-env.ts {{.CLI_ARGS}}
 
+  ops:bootstrap:
+    desc: Provision launch Realms, Zones and vocabulary, then admit bounded catalogue records through public APIs.
+    cmds:
+      - bun scripts/ops/bootstrap/index.ts {{.CLI_ARGS}}
+
   release:install:
     desc: Verify a release artifact and provision a project from it.
     cmds:

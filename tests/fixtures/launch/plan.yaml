@@ -1,0 +1,74 @@
+profile: launch-bootstrap-v1
+namespace: launch-v1
+operators:
+  - accountSubject: TBD
+    actingSubject: https://rezics.com/id/00000000-0000-4000-a000-000000000001
+zones:
+  - config/zones/light-novels.json
+  - config/zones/visual-novels.json
+  - config/zones/franchise-wiki.json
+vocabulary: relation-lexicon-v3
+sources:
+  - id: vndb
+    enabled: true
+    dumpUrl: https://dl.vndb.org/dump/vndb-db-2026-09-30.tar.zst
+    version: '2026-09-30'
+    dumpSha256: bd211aaa917fab1b7aa5b2c702fa339803c5f15cccaf682350b106a5e5426f2e
+    slice: tests/fixtures/vndb/slice.json
+    sliceSha256: e472c327c7040df744b759a71e65d64ff4c6f2b92a3516ea2bae015f5600c00b
+    licence: https://opendatacommons.org/licenses/odbl/1-0/
+    rightsEvidence: https://vndb.org/d17
+    rightsEvidenceDate: '2026-09-30'
+    attribution: VNDB contributors; ODbL 1.0 and DbCL 1.0. An adapted database retains ODbL sharing obligations.
+    steward: TBD
+    backup: TBD
+    zones: [light-novels, visual-novels]
+    bounds: { bytes: 250000, works: 1 }
+    records:
+      - id: v18334
+        grain: new-creative-scope
+        title: { value: ニューダンガンロンパV3 みんなのコロシアイ新学期, language: ja }
+        sourceTitlePointer: /tables/vn_titles/35/title
+        sourceLanguagePointer: /tables/vn_titles/35/lang
+        sourceIdPointer: /tables/vn_titles/35/id
+        semanticTypes: [https://schema.org/VideoGame]
+        aliases:
+          - { value: 'Danganronpa V3: Killing Harmony', language: en }
+        romanizations:
+          - { value: New Dangan Ronpa V3 Minna no Koroshiai Shingakki, language: ja }
+        creators: []
+        dates: []
+        identifiers:
+          - { provider: https://vndb.org/, identifier: v18334 }
+  - id: wikidata
+    enabled: false
+    dumpUrl: https://dumps.wikimedia.org/wikidatawiki/entities/
+    version: pending-pin
+    dumpSha256: null
+    slice: null
+    sliceSha256: null
+    licence: https://creativecommons.org/publicdomain/zero/1.0/
+    rightsEvidence: https://www.wikidata.org/wiki/Wikidata:Copyright
+    rightsEvidenceDate: '2026-09-30'
+    attribution: Wikidata; CC0.
+    steward: TBD
+    backup: TBD
+    zones: [light-novels]
+    bounds: { bytes: 100000, works: 1 }
+    records: []
+  - id: open-library
+    enabled: false
+    dumpUrl: https://openlibrary.org/developers/dumps
+    version: pending-pin
+    dumpSha256: null
+    slice: null
+    sliceSha256: null
+    licence: https://openlibrary.org/developers/licensing
+    rightsEvidence: https://openlibrary.org/developers/licensing
+    rightsEvidenceDate: '2026-09-30'
+    attribution: Open Library contributors; per the recorded source terms.
+    steward: TBD
+    backup: TBD
+    zones: [light-novels]
+    bounds: { bytes: 100000, works: 1 }
+    records: []
