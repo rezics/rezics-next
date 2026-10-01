@@ -86796,8 +86796,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "profile": {
@@ -86872,8 +86871,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "profile": {
@@ -86948,8 +86946,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "profile": {
@@ -339338,6 +339335,11 @@
                               ],
                               "type": "string"
                             },
+                            "language": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "population": {
                               "const": "account-principal",
                               "type": "string"
@@ -339350,6 +339352,7 @@
                           },
                           "required": [
                             "question",
+                            "language",
                             "grain",
                             "population",
                             "countedTarget"
@@ -340273,8 +340276,13 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "language": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "profile": {
-                        "const": "realm-target-rating-context-v1",
+                        "const": "realm-target-rating-context-v2",
                         "type": "string"
                       },
                       "question": {
@@ -340300,6 +340308,7 @@
                       "profile",
                       "realm",
                       "question",
+                      "language",
                       "targetGrain",
                       "actingSubject"
                     ],
@@ -340414,8 +340423,13 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "language": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "profile": {
-                        "const": "realm-target-rating-context-v1",
+                        "const": "realm-target-rating-context-v2",
                         "type": "string"
                       },
                       "question": {
@@ -340441,6 +340455,7 @@
                       "profile",
                       "realm",
                       "question",
+                      "language",
                       "targetGrain",
                       "actingSubject"
                     ],
@@ -340555,8 +340570,13 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "language": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
                       "profile": {
-                        "const": "realm-target-rating-context-v1",
+                        "const": "realm-target-rating-context-v2",
                         "type": "string"
                       },
                       "question": {
@@ -340582,6 +340602,7 @@
                       "profile",
                       "realm",
                       "question",
+                      "language",
                       "targetGrain",
                       "actingSubject"
                     ],
@@ -341021,12 +341042,17 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "language": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "population": {
                           "const": "account-principal",
                           "type": "string"
                         },
                         "profile": {
-                          "const": "realm-target-rating-context-v1",
+                          "const": "realm-target-rating-context-v2",
                           "type": "string"
                         },
                         "question": {
@@ -341098,6 +341124,7 @@
                         "context",
                         "realm",
                         "question",
+                        "language",
                         "contextRevision",
                         "targetGrain",
                         "scale",
@@ -341543,12 +341570,17 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "language": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "population": {
                           "const": "account-principal",
                           "type": "string"
                         },
                         "profile": {
-                          "const": "realm-target-rating-context-v1",
+                          "const": "realm-target-rating-context-v2",
                           "type": "string"
                         },
                         "question": {
@@ -341620,6 +341652,7 @@
                         "context",
                         "realm",
                         "question",
+                        "language",
                         "contextRevision",
                         "targetGrain",
                         "scale",
@@ -342309,12 +342342,20 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "language": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "population": {
                           "const": "account-principal",
                           "type": "string"
                         },
                         "profile": {
-                          "const": "realm-target-rating-context-v1",
+                          "enum": [
+                            "realm-target-rating-context-v2",
+                            "realm-target-rating-context-v1"
+                          ],
                           "type": "string"
                         },
                         "question": {
@@ -342362,6 +342403,7 @@
                         "context",
                         "realm",
                         "question",
+                        "language",
                         "contextRevision",
                         "targetGrain",
                         "scale",
@@ -405244,7 +405286,7 @@
                             "type": "string"
                           },
                           "language": {
-                            "const": "en",
+                            "minLength": 1,
                             "type": "string"
                           },
                           "question": {
@@ -405936,6 +405978,11 @@
                               ],
                               "type": "string"
                             },
+                            "language": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "population": {
                               "const": "account-principal",
                               "type": "string"
@@ -405948,6 +405995,7 @@
                           },
                           "required": [
                             "question",
+                            "language",
                             "grain",
                             "population",
                             "countedTarget"
@@ -453757,8 +453805,7 @@
                                     },
                                     "titleLanguage": {
                                       "maxLength": 35,
-                                      "minLength": 2,
-                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                      "minLength": 1,
                                       "type": "string"
                                     },
                                     "verifiedHead": {
@@ -455333,8 +455380,7 @@
                                         },
                                         "titleLanguage": {
                                           "maxLength": 35,
-                                          "minLength": 2,
-                                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                          "minLength": 1,
                                           "type": "string"
                                         },
                                         "verifiedHead": {
@@ -456550,8 +456596,7 @@
                                         },
                                         "titleLanguage": {
                                           "maxLength": 35,
-                                          "minLength": 2,
-                                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                          "minLength": 1,
                                           "type": "string"
                                         },
                                         "verifiedHead": {
@@ -457503,8 +457548,7 @@
                       },
                       "language": {
                         "maxLength": 35,
-                        "minLength": 2,
-                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "name": {
@@ -457550,8 +457594,7 @@
                       },
                       "language": {
                         "maxLength": 35,
-                        "minLength": 2,
-                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "name": {
@@ -457608,8 +457651,7 @@
                       },
                       "language": {
                         "maxLength": 35,
-                        "minLength": 2,
-                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "name": {
@@ -457655,8 +457697,7 @@
                       },
                       "language": {
                         "maxLength": 35,
-                        "minLength": 2,
-                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "name": {
@@ -457713,8 +457754,7 @@
                       },
                       "language": {
                         "maxLength": 35,
-                        "minLength": 2,
-                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "name": {
@@ -457760,8 +457800,7 @@
                       },
                       "language": {
                         "maxLength": 35,
-                        "minLength": 2,
-                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                        "minLength": 1,
                         "type": "string"
                       },
                       "name": {
@@ -485245,8 +485284,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "predecessor": {
@@ -485337,8 +485375,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "predecessor": {
@@ -485429,8 +485466,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "predecessor": {
@@ -519823,8 +519859,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "profile": {
@@ -519894,8 +519929,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "profile": {
@@ -519965,8 +519999,7 @@
                   },
                   "language": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   },
                   "profile": {
@@ -534034,8 +534067,7 @@
                                       },
                                       "titleLanguage": {
                                         "maxLength": 35,
-                                        "minLength": 2,
-                                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                        "minLength": 1,
                                         "type": "string"
                                       },
                                       "verifiedHead": {
@@ -534473,8 +534505,7 @@
                   },
                   "titleLanguage": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   }
                 },
@@ -534516,8 +534547,7 @@
                   },
                   "titleLanguage": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   }
                 },
@@ -534559,8 +534589,7 @@
                   },
                   "titleLanguage": {
                     "maxLength": 35,
-                    "minLength": 2,
-                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                    "minLength": 1,
                     "type": "string"
                   }
                 },
@@ -534719,8 +534748,7 @@
                         },
                         "titleLanguage": {
                           "maxLength": 35,
-                          "minLength": 2,
-                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                          "minLength": 1,
                           "type": "string"
                         },
                         "verifiedHead": {
@@ -534907,8 +534935,7 @@
                         },
                         "titleLanguage": {
                           "maxLength": 35,
-                          "minLength": 2,
-                          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                          "minLength": 1,
                           "type": "string"
                         },
                         "verifiedHead": {
@@ -535681,8 +535708,7 @@
                                 },
                                 "titleLanguage": {
                                   "maxLength": 35,
-                                  "minLength": 2,
-                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                  "minLength": 1,
                                   "type": "string"
                                 },
                                 "verifiedHead": {
