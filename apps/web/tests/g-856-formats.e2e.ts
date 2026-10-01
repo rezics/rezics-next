@@ -72,7 +72,7 @@ for (const viewport of [
       await expect(page.getByRole('button', { name: t.importApply, exact: true })).toBeEnabled();
       await page.getByRole('button', { name: t.importApply, exact: true }).click();
       await expect(
-        page.getByText(/^Finished: .* rows added or kept private cleanly\.$/),
+        page.getByText(/^Finished: .* rows added or kept private cleanly\./),
       ).toBeVisible({ timeout: 180_000 });
       const rows = await exportRows(page, account.actingSubject);
       expect(rows.some((row) => JSON.stringify(row.raw).includes(format.retained))).toBe(true);

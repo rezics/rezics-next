@@ -48,6 +48,8 @@ for (const viewport of [
     await expect(box).toContainText(seed.facts[0]!.text);
     await expect(box).toContainText(seed.facts[1]!.text);
     await clean(page, info, `q7-contradictions-${viewport.width}`);
+    await page.goto(`${path}?position=all`);
+    await expect(box).toContainText(seed.facts[2]!.text);
     // The API exposes applicability for each assertion. The corresponding
     // displayed claim must let the reader see which continuity it belongs to.
     for (const fact of seed.facts) {
@@ -56,9 +58,12 @@ for (const viewport of [
       );
       expect(response.status(), await response.text()).toBe(200);
       expect(((await response.json()) as { applicability: string[] }).applicability).toEqual([
-        seed.work,
+        fact.continuity,
       ]);
     }
+    await expect(
+      box.getByRole('link', { name: 'Synthetic alternate continuity', exact: true }),
+    ).toHaveCount(1);
     await expect(box.getByRole('link', { name: 'Pride and Prejudice', exact: true })).toHaveCount(
       2,
     );

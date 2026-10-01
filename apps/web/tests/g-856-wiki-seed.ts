@@ -16,7 +16,10 @@ import {
   selectMainDefault,
 } from '../../../services/main/src/modules/work/select-main.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
-import { publishCatalogueFact } from '../../../tests/fixtures/catalogue/acceptance.ts';
+import {
+  cataloguePositions,
+  publishCatalogueFact,
+} from '../../../tests/fixtures/catalogue/acceptance.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { seedWiki } from './g-849-records.ts';
 
@@ -138,6 +141,27 @@ try {
     });
     facts.push({ statement, text, continuity: seed.work, position: occurrences.at(-1)! });
   }
+  const alternate = await f.publicWork(seed.holderActor, ['en'], 'Synthetic alternate continuity');
+  for (const p of [holder, reviewer])
+    for (const action of ['work.read', 'work.edit', 'work.review']) {
+      await p.grant(`work:${action.slice(5)}:${alternate.work}`, action);
+    }
+  const alternateChapters = await cataloguePositions(holder, alternate.work, alternate.mainVersion);
+  const alternateText = 'Synthetic alternate claim: she never lives in Longbourn';
+  const alternateStatement = await publishCatalogueFact(holder, reviewer, {
+    work: alternate.work,
+    zone: seed.zone,
+    subject: seed.entities.elizabeth!,
+    predicate,
+    text: alternateText,
+    occurrences: alternateChapters.occurrences,
+  });
+  facts.push({
+    statement: alternateStatement,
+    text: alternateText,
+    continuity: alternate.work,
+    position: alternateChapters.occurrences.at(-1)!,
+  });
   // The browser hard case reuses the exact composition owner and 16-entry
   // command bound of G-847. No imported chapter is discarded at a UI window.
   const current = await holder.request(
@@ -214,7 +238,7 @@ try {
     holderActor: _actor,
     ...manifest
   } = seed;
-  console.log(JSON.stringify({ ...manifest, facts, thai, arabic }));
+  console.log(JSON.stringify({ ...manifest, facts, alternate, thai, arabic }));
 } finally {
   await f.stop();
 }
