@@ -4,6 +4,7 @@ import type { MergeDependencies } from '../identity-merge/runtime.ts';
 import { personMergeEffect } from '../identity-merge/person-effect.ts';
 import { MERGE_COST, mergeDigest, MergeConflict, InvalidMerge, type MergeHandler, type MergeItem, type MergeTask, type RecordedItem, type ItemOutcome } from '../identity-merge/contract.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { RATING_STANDING_CADENCE } from './context.ts';
 
 type Row = Record<string,Json>;
 interface Slot { head: Row | null; selection: Row | null }
@@ -24,7 +25,7 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
     return rows[0].main.value;
   };
   const standing = async (context: string) => (await graph.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(context)} rv:contextState rv:Active ; rv:targetGrain rv:MainVersion ; rv:ratingCadence rv:Standing
+    ${iri(context)} rv:contextState rv:Active ; rv:targetGrain rv:MainVersion ; rv:ratingCadence ${iri(RATING_STANDING_CADENCE)}
   } }`,4096)).boolean === true;
   const read = async (client: PoolClient,principal: string,context: string,work: string): Promise<Slot> => {
     const currentMain = await main(work);

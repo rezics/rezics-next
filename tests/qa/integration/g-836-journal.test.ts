@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { canonicalCandidate, type Json } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { runMergeTask, type MergeTaskRuntime } from '../../../services/main/src/modules/identity-merge/engine.ts';
 import { AccessMergeJournal } from '../../../services/main/src/modules/identity-merge/journal.ts';
@@ -10,7 +9,6 @@ import { discoverOwnerIdentityReferences }
   from '../../../services/main/src/modules/identity-merge/reference-discovery.ts';
 import { itemCommandKey, MergeConflict, MergePending, type ItemOutcome, type MergeHandler, type MergeTask,
   type TaskCompletion } from '../../../services/main/src/modules/identity-merge/contract.ts';
-import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 /** This is real PostgreSQL journal/recovery evidence with a transactional probe
  * owner. It is deliberately not the public SAO merge acceptance journey; native
