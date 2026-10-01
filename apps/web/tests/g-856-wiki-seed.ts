@@ -88,19 +88,29 @@ try {
     actingSubject: actor,
     grant: (scope: string, action: string) => grant(principalId, actor, scope, action),
     request: async (method: string, path: string, body?: unknown, key = randomUUID()) => {
-      const response = await app.handle(
-        new Request(`http://main.local${path}`, {
-          method,
-          headers: {
-            authorization: `Bearer ${token}`,
-            'idempotency-key': key,
-            ...(body ? { 'content-type': 'application/json' } : {}),
-          },
-          ...(body ? { body: JSON.stringify(body) } : {}),
-        }),
-      );
-      const text = await response.text();
-      return { status: response.status, body: text ? (JSON.parse(text) as unknown) : null };
+      // Main's live relay may move the graph during preflight. Resolve the
+      // same intent, bounded, rather than allocate another proposal.
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const response = await app.handle(
+          new Request(`http://main.local${path}`, {
+            method,
+            headers: {
+              authorization: `Bearer ${token}`,
+              'idempotency-key': key,
+              ...(body ? { 'content-type': 'application/json' } : {}),
+            },
+            ...(body ? { body: JSON.stringify(body) } : {}),
+          }),
+        );
+        const text = await response.text();
+        const result = {
+          status: response.status,
+          body: text ? (JSON.parse(text) as unknown) : null,
+        };
+        if (![202, 503].includes(response.status) || attempt === 39) return result;
+        await new Promise((done) => setTimeout(done, 300));
+      }
+      throw new Error('Fixture command did not resolve');
     },
   });
   const holder = port(seed.holderToken, seed.holderActor, holderId),

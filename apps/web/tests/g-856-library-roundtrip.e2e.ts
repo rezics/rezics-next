@@ -41,13 +41,14 @@ for (const viewport of [
       await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
     }).toPass({ timeout: 30_000 });
     await page.getByRole('radio', { name: 'REZICS' }).check();
-    await page
-      .locator('#library-import-file')
-      .setInputFiles({
-        name: 'rezics-library.json',
-        mimeType: 'application/json',
-        buffer: Buffer.from(JSON.stringify({ profile: 'rezics-library-export-v1', rows: before })),
-      });
+    await page.locator('#library-import-file').setInputFiles({
+      name: 'rezics-library.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(
+        JSON.stringify({ profile: 'rezics-library-export-v1', rows: before }) +
+          '\n'.repeat(viewport.width === 390 ? 1 : 2),
+      ),
+    });
     await expect(page.getByRole('button', { name: t.importApply })).toBeEnabled({
       timeout: 150_000,
     });

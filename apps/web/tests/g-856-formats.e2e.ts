@@ -43,7 +43,12 @@ for (const viewport of [
         await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
       }).toPass({ timeout: 30_000 });
       await page.getByRole('radio', { name: format.radio, exact: true }).check();
-      const buffer = readFileSync(`tests/fixtures/library-exports/${format.file}`);
+      // Byte-distinct whitespace avoids replaying the phone's already-applied
+      // file on desktop while preserving the exported source records.
+      const buffer = Buffer.concat([
+        readFileSync(`tests/fixtures/library-exports/${format.file}`),
+        Buffer.from('\n'.repeat(viewport.width === 390 ? 1 : 2)),
+      ]);
       await page
         .locator('#library-import-file')
         .setInputFiles({ name: format.file, mimeType: format.mime, buffer });
