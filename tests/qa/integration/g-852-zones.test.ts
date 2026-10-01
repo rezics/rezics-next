@@ -2,8 +2,11 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Pool } from 'pg';
+import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { ADMITTED as LOADED_COLUMNS, DBCL, ODBL, SHOWCASE, VNDB_ATTRIBUTION, loadVndbSlice,
+import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
+import { ADMITTED as LOADED_COLUMNS, DBCL, ODBL, SHOWCASE, VNDB_ATTRIBUTION, VNDB_LOCKED_SEED, loadVndbSlice,
   seededReleasePlan } from '../../fixtures/vndb/load.ts';
 import { applyLnVnZones } from '../../../scripts/dev/seed/ln-vn-zones-step.ts';
 import { applyVnCatalogue, vndbReleaseIri, type SeedPort } from '../../../scripts/dev/seed/vn-catalogue-step.ts';
@@ -26,7 +29,7 @@ const root = join(import.meta.dir, '../../..');
 
 test('G852: the committed VNDB slice stays inside the admitted columns', () => {
   expect(LOADED_COLUMNS).toEqual(ADMITTED);
-  const raw = JSON.parse(readFileSync(join(root, 'tests/fixtures/vndb/slice.json'), 'utf8')) as {
+  const raw = JSON.parse(readFileSync(join(root, VNDB_LOCKED_SEED), 'utf8')) as {
     provenance?: unknown; tables?: Record<string, unknown> };
   expect(Object.keys(raw).sort()).toEqual(['provenance', 'tables']);
   const tables = raw.tables ?? {};
@@ -76,6 +79,7 @@ test('G852: the committed VNDB slice stays inside the admitted columns', () => {
 
 test('G852: two Zones share one catalogue Work and one usable visual-novel release', async () => {
   const stack = await startMediaStack('g-852-zones', { agents: true, rights: true, library: true });
+  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
   try {
     const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
       bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
@@ -197,14 +201,25 @@ test('G852: two Zones share one catalogue Work and one usable visual-novel relea
     expect(reader.status.status).toBe('reading');
 
     const novels = zones.zones.find(zone => zone.id === 'light-novels')!;
+    // The production browse API consumes its owner projection. The media
+    // harness deliberately omits it; backfill the real owner after fixture writes.
+    const zoneBrowse = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
+    await zoneBrowse.backfill();
+    const queryApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      media: stack.media, mediaAccess: stack.mediaAccess, zoneBrowse,
+      account: { verify: async () => member.principal } });
+    const browseStack = { ...stack, call: async (method: string, path: string, options: { body?: unknown } = {}) =>
+      queryApp.handle(new Request(`http://main.local${path}`, { method,
+        headers: { 'content-type': 'application/json' },
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }) })) };
     for (const status of ['completed', 'ongoing', 'hiatus']) {
-      const page = await query(stack, { context: { realm: novels.realm }, scope: { kind: 'realm', realm: novels.realm },
+      const page = await query(browseStack, { context: { realm: novels.realm }, scope: { kind: 'realm', realm: novels.realm },
         sort: 'newest', page: { size: 20 }, filter: { all: [{ facet: 'status', any: [status] }] } });
       expect(page.template).toBe('zone-browse-v1');
       const sample = zones.samples.find(item => item.id === status)!;
       expect((page.result as { items: { id: string }[] }).items.map(item => item.id)).toContain(sample.iri);
     }
-    const lengths = await query(stack, { context: { realm: novels.realm }, scope: { kind: 'realm', realm: novels.realm },
+    const lengths = await query(browseStack, { context: { realm: novels.realm }, scope: { kind: 'realm', realm: novels.realm },
       sort: 'newest', page: { size: 20 }, filter: { all: [{ facet: 'length', range: { min: '0', max: '99999' } }] } });
     expect(lengths.template).toBe('zone-browse-v1');
     const phrase = await query(stack, { context: 'global', scope: { kind: 'all' }, text: { phrase: 'Light novel shelf' },
@@ -215,7 +230,7 @@ test('G852: two Zones share one catalogue Work and one usable visual-novel relea
     const hits = (phrase.result as { results: { work: string }[] }).results.map(item => item.work);
     expect(hits).toContain(english.iri);
     for (const work of japanese) expect(hits).not.toContain(work);
-  } finally { await stack.stop(); }
+  } finally { await relay.end(); await stack.stop(); }
 }, 420_000);
 
 async function json<T>(response: Response, status = 201): Promise<T> {

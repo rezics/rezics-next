@@ -13,6 +13,7 @@ import { seedReply } from './replies.ts';
 import { modsConcepts } from './realms-step.ts';
 import { gamesCatalogue } from './games-catalogue.ts';
 import { softwareCatalogue } from './software-catalogue.ts';
+import { requiresSeedAdministrator } from './work-authority.ts';
 import { afterCatchUp, refreshSeedTokens, type AgentReceipt, type ContributionReceipt, type PublicationReceipt,
   type SeedState, type Session, type WorkReceipt } from './state.ts';
 
@@ -85,6 +86,10 @@ class Official {
 /** Main requires a new Work's language. Stacks seeded before that recorded these intents without one, which Main
  * digests as English, so a conflicting replay repeats that. A clean `task dev:reset` gives every Work its own. */
 async function createWork(o: Official, body: { language: string } & Record<string, unknown>, token: string, key: string) {
+  if (requiresSeedAdministrator(body.semanticTypes as string[])) {
+    if (!o.state.operatorSession) throw new Error('Restricted Work seed creation requires the local fixture administrator');
+    token = o.state.operatorSession.token;
+  }
   return o.api.post<WorkReceipt>('/v1/works', body, token, key).catch((error: unknown) => {
     if (!(error instanceof SeedApiError) || error.status !== 409 || body.language === 'en') throw error;
     return o.api.post<WorkReceipt>('/v1/works', { ...body, language: 'en' }, token, key);
@@ -314,7 +319,7 @@ async function lighterTexts(o: Official) {
     await refreshSeedTokens(o.state);
     await o.state.optional(`Zone work ${extra.id}`, async () => {
       const as = o.person(extra.owner);
-      if (extra.type === 'mod' || extra.type === 'software') {
+      if (requiresSeedAdministrator([kinds[extra.type]])) {
         await grantImportedWorkSeedAuthority(o.input(as, as.actingSubject));
       }
       const target = await createWork(o, { profile: 'metadata-only-v1', title: extra.title,

@@ -4,6 +4,7 @@ import { firstSeedTypes, seedKey, semanticTypes, works, type DemoWork } from './
 import { demoClassics } from '../../../tests/fixtures/sources/open-library.ts';
 import { afterCatchUp, type SeedState, type WorkReceipt } from './state.ts';
 import { refreshMetadataBasis } from './metadata.ts';
+import { requiresSeedAdministrator } from './work-authority.ts';
 
 export async function seedWorks(state: SeedState) {
   const { api, created } = state;
@@ -17,25 +18,28 @@ export async function seedWorks(state: SeedState) {
     const author = work.author === 'moonlight' ? state.penAgents.get('moonlight')
       : work.author ? session.actingSubject : undefined;
     if (work.author && !author) throw new Error(`Work author ${work.author} is unavailable`);
-    // Mod creation is administrator-only under G-508. Give the fixture author
-    // explicit creation authority rather than relying on a member baseline.
-    if (work.type === 'mod') {
-      if (!state.operatorInput) throw new Error('Mod seed creation requires the local fixture operator');
-      await grantImportedWorkSeedAuthority({ ...state.operatorInput,
+    // Use the fixture administrator for restricted kinds. Its exact mandate
+    // still attributes the Work to the plan's author, not to the operator.
+    let creationApi = api, creationToken = session.token;
+    if (requiresSeedAdministrator(semanticTypes(work.type))) {
+      if (!state.operatorSession) throw new Error('Restricted Work seed creation requires the local fixture administrator');
+      if (state.operatorInput) await grantImportedWorkSeedAuthority({ ...state.operatorInput,
         ownerAccountSubject: session.accountId, actingSubject: author ?? owner.actingSubject });
+      creationApi = state.operatorSession.api;
+      creationToken = state.operatorSession.token;
     }
     const body = {
       profile: 'metadata-only-v1', title: work.seedTitle ?? work.title, semanticTypes: semanticTypes(work.type),
       language: work.language, actingSubject: author ?? owner.actingSubject,
       ...(author ? { authoring: 'own-work' } : {}) };
-    const receipt: WorkReceipt = await api.post<WorkReceipt>('/v1/works', body, session.token, seedKey('work', work.id))
+    const receipt: WorkReceipt = await creationApi.post<WorkReceipt>('/v1/works', body, creationToken, seedKey('work', work.id))
       .catch((error: unknown) => {
         // Stacks seeded before Works named their language and kind recorded these intents without them. Main
         // now requires the language and digests a missing one as English, so the replay states that.
         // A clean `task dev:reset` gives every Work both.
         if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
-        return api.post<WorkReceipt>('/v1/works', { ...body, language: 'en', semanticTypes: firstSeedTypes(work.type) },
-          session.token, seedKey('work', work.id));
+        return creationApi.post<WorkReceipt>('/v1/works', { ...body, language: 'en', semanticTypes: firstSeedTypes(work.type) },
+          creationToken, seedKey('work', work.id));
       });
     if (work.seedTitle && state.operatorInput) {
       const actor = author ?? owner.actingSubject;

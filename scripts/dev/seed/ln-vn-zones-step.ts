@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { join } from 'node:path';
 import { Pool } from 'pg';
 import { cataloguePlan } from '../../../tests/fixtures/catalogue/load.ts';
+import { catalogueWorkBody, CatalogueIntakeUnavailable } from '../../../tests/fixtures/catalogue/intake.ts';
 import { SHOWCASE } from '../../../tests/fixtures/vndb/load.ts';
 import { ZONE_PRESETS, type ZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
@@ -183,17 +184,19 @@ function catalogueKey(suffix: string): string {
   return value;
 }
 
-/** Replay catalogue Works when intake is available. A stack without it cannot replay those receipts. */
+/** Replay the franchise loader's exact intents, including its retained search evidence. */
 async function replayCatalogue(port: SeedPort): Promise<string[]> {
   const found: string[] = [];
   for (const item of cataloguePlan().works) {
-    const result = await port.request('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: item.title, language: 'ja', semanticTypes: [item.semanticType],
-      actingSubject: port.actingSubject,
-    }, catalogueKey(`work:${item.id}`));
-    // 400 is the Work-contract rejection when this stack has no catalogue intake.
-    // 422 and 503 are the same absence reported by the handler.
-    if ((result.status === 400 || result.status === 422 || result.status === 503) && found.length === 0) return [];
+    const key = catalogueKey(`work:${item.id}`);
+    let body: Awaited<ReturnType<typeof catalogueWorkBody>>;
+    try {
+      body = await catalogueWorkBody(port, { title: item.title, language: 'ja', semanticTypes: [item.semanticType] }, key);
+    } catch (error) {
+      if (error instanceof CatalogueIntakeUnavailable && found.length === 0) return [];
+      throw error;
+    }
+    const result = await port.request('POST', '/v1/works', body, key);
     if (result.status >= 400) fail(result, `catalogue work ${item.id}`);
     const work = (result.body as { work?: string }).work;
     if (!work) throw new Error(`Catalogue work ${item.id} has no IRI`);
@@ -251,7 +254,7 @@ async function insertMembers(port: SeedPort, zoneId: string, collection: string,
   return page.revision;
 }
 
-async function collectionPage(port: SeedPort, collection: string) {
+export async function collectionPage(port: SeedPort, collection: string) {
   const targets = new Set<string>();
   let after: string | null = null;
   let structure = '';
@@ -259,7 +262,7 @@ async function collectionPage(port: SeedPort, collection: string) {
   do {
     const page: { structure: string; revision: string; next: string | null;
       occurrences: { state?: string; role?: string; target?: string }[] } = await read(port,
-      `/v1/collections/${short(collection)}?limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`);
+      `/v1/collections/${short(collection)}?limit=20${after ? `&after=${encodeURIComponent(after)}` : ''}`);
     structure = page.structure;
     revision = page.revision;
     for (const item of page.occurrences) {

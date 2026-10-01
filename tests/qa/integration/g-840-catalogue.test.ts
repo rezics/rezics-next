@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
@@ -47,6 +48,7 @@ test('G-840: catalogue fixture queries through the public API', async () => {
       seriesSessions: new SeriesSessionReader(stack.contentPool), structureObjects: objects,
       media: stack.media, mediaAccess: stack.mediaAccess,
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      catalogueIntake: new CatalogueIntakeStore(stack.accessPool, stack.env),
       profiles: new ProfilesAccess(stack.accessPool),
       personPreferences: new PersonPreferencesStore(stack.accessPool),
       account: { verify: async request => {

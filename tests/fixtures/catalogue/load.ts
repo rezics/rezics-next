@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseCatalogueYaml, type CatalogueYaml } from './parse.ts';
+import { catalogueWorkBody } from './intake.ts';
+import { assertSeedRequest } from '../../../scripts/dev/seed/request-schema.ts';
 
 /** Derivation and relation evidence is one https URL. The SAO rewrite stores the
  * Asahi article; the Kadokawa PDF is the bunko realization's evidence. */
@@ -222,13 +224,16 @@ export async function loadCatalogue(port: CataloguePort): Promise<CatalogueManif
   const manifest: CatalogueManifest = { works: {}, collections: {}, compositions: {}, relations: plan.relations,
     realizations: {}, releases: {}, credits: [], agents: {}, pendingCredits: [], pendingStatements: plan.statements,
     createdWrites: 0 };
-  const send = async (method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, idempotency?: string) => {
+  const send = async (method: string, path: string, body?: unknown, idempotency?: string) => {
+    if (method !== 'GET') assertSeedRequest(method, path, body);
     let response = await port.request(method, path, body, idempotency);
     for (let attempt = 0; attempt < 8 && (response.status === 202 || response.status === 503); attempt++) {
       await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
       response = await port.request(method, path, body, idempotency);
     }
-    if (method !== 'GET' && response.status < 300 && !replayed(response.body)) manifest.createdWrites += 1;
+    if (method !== 'GET' && path !== '/v1/catalogue/candidates' && response.status < 300 && !replayed(response.body)) {
+      manifest.createdWrites += 1;
+    }
     return response;
   };
   const written = async <T>(method: 'POST' | 'PUT', path: string, body: unknown, idempotency: string): Promise<T> => {
@@ -243,6 +248,9 @@ export async function loadCatalogue(port: CataloguePort): Promise<CatalogueManif
   };
 
   await port.grant('work:create:root', 'work.create');
+  // A fixture editor loads more than the contributor's three pending records.
+  // This grant exempts throughput; it does not verify the fixture's facts.
+  await port.grant('catalogue:verify:root', 'catalogue.verify');
   const definitions = new Map<string, string>();
   const missingCredit = new Set<string>();
   for (const key of [...REQUIRED_LEXICON, ...Object.values(CREDIT_LEXICON)]) {
@@ -267,9 +275,10 @@ export async function loadCatalogue(port: CataloguePort): Promise<CatalogueManif
   }
 
   for (const item of plan.works) {
-    const receipt = await written<{ work: string; mainVersion: string; mainRevision: string }>('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: item.title, language: 'ja', semanticTypes: [item.semanticType],
-      actingSubject: port.actingSubject }, idempotency(`work:${item.id}`));
+    const key = idempotency(`work:${item.id}`);
+    const body = await catalogueWorkBody({ ...port, request: send }, {
+      title: item.title, language: 'ja', semanticTypes: [item.semanticType] }, key);
+    const receipt = await written<{ work: string; mainVersion: string; mainRevision: string }>('POST', '/v1/works', body, key);
     manifest.works[item.id] = { ...receipt, title: item.title };
     await port.grant(`work:read:${receipt.work}`, 'work.read');
     await port.grant(`work:edit:${receipt.work}`, 'work.edit');

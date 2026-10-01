@@ -115,9 +115,7 @@ export const VNDB_LOCKED_SEED =
   'tests/fixtures/seeds/vndb/e472c327c7040df744b759a71e65d64ff4c6f2b92a3516ea2bae015f5600c00b.json';
 
 export function loadVndbSlice(root = join(import.meta.dir, '../../..')): VndbSlice {
-  const bytes = readFileSync(join(import.meta.dir, 'slice.json'), 'utf8');
-  const locked = readFileSync(join(root, VNDB_LOCKED_SEED), 'utf8');
-  if (bytes !== locked) throw new Error('VNDB slice.json and the locked seed differ');
+  const bytes = readFileSync(join(root, VNDB_LOCKED_SEED), 'utf8');
   const parsed: unknown = JSON.parse(bytes);
   assertSlice(parsed);
   return parsed;

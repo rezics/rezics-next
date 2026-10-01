@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { assertSeedRequest } from './request-schema.ts';
 
 export interface SeedEndpoints {
   enrollmentToken?: string;
@@ -146,6 +147,7 @@ export class SeedApi {
 
   private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
     token: string, key: string): Promise<T> {
+    assertSeedRequest(method, path, body);
     let attemptKey = key;
     for (let attempt = 0; attempt < 8; attempt++) {
       const response = await fetch(`${this.endpoints.main}${path}`, { method,

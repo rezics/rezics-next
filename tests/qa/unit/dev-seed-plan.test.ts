@@ -6,6 +6,7 @@ import { bookConcepts, freeConcepts, genreConcepts, seededBookIds }
   from '../../../scripts/dev/seed/genres-plan.ts';
 import { firstSeedTypes, people, realms, seedKey, semanticTypes, works } from '../../../scripts/dev/seed/plan.ts';
 import { type SeedApi, SeedApiError } from '../../../scripts/dev/seed/api.ts';
+import { assertSeedRequest } from '../../../scripts/dev/seed/request-schema.ts';
 import { devResetPlan, devResetTarget } from '../../../scripts/dev/reset.ts';
 import { seedWorks } from '../../../scripts/dev/seed/works-step.ts';
 import { seedContributions } from '../../../scripts/dev/seed/contributions-step.ts';
@@ -145,8 +146,15 @@ describe('dev seed plan', () => {
   test('creates every original Work under its author', async () => {
     const calls: Array<{ body: Record<string, unknown>; key: string }> = [];
     const api = { post: async (_path: string, body: Record<string, unknown>, token: string, key: string) => {
+      // Fake sessions below use names rather than native IDs; validate the real
+      // body shape with a native attribution before recording it.
+      assertSeedRequest('POST', _path, { ...body,
+        actingSubject: 'https://rezics.com/id/00000000-0000-4000-a000-000000000001' });
       calls.push({ body, key });
       if (key === seedKey('work', 'bun')) expect(token).toBe('daniel');
+      if (['camp-lanterns', 'trail-markers'].some(id => key === seedKey('work', id))) {
+        expect(token).toBe('administrator');
+      }
       return { work: `https://rezics.com/id/${'1'.repeat(36)}`, mainVersion: 'v',
         workRevision: 'r', mainRevision: 'm', replayed: false } satisfies WorkReceipt;
     } } as unknown as SeedApi;
@@ -154,6 +162,7 @@ describe('dev seed plan', () => {
       token: person.id, actingSubject: `https://rezics.com/id/${person.id}` })),
     penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
     created: new Map(), optional: async () => null } as unknown as SeedState;
+    state.operatorSession = { api, token: 'administrator' } as NonNullable<SeedState['operatorSession']>;
     await seedWorks(state);
     expect(calls.find(call => call.key === seedKey('work', 'pride'))).toBeUndefined();
     expect(calls.find(call => call.key === seedKey('work', 'moonlight-story'))?.body)
@@ -189,6 +198,7 @@ describe('dev seed plan', () => {
       token: person.id, actingSubject: `https://rezics.com/id/${person.id}` })),
     penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
     created: new Map(), optional: async () => null } as unknown as SeedState;
+    state.operatorSession = { api, token: 'administrator' } as NonNullable<SeedState['operatorSession']>;
     await seedWorks(state);
     const retried = calls.filter((_body, index) => index % 2 === 1);
     expect(retried.find(body => body.title === 'Bilingual book club discussion prompt'))
