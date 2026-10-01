@@ -6,6 +6,7 @@ export const typeCovers = ["portrait","landscape","square","document"] as const;
 export const typeInterests = ["books","software","ai","recipes","media"] as const;
 export const typePrimaryActions = ["read","install","copy","watch","visit"] as const;
 export const typeCreationPolicies = ["administrator","contributor"] as const;
+export const typeWikiSegments = ["characters","places","events"] as const;
 /** Owner profile order, retained by Main admission enums and catalogue consumers. */
 export const workSemanticTypeOrder = ["https://schema.org/Book","https://schema.org/BookSeries","https://schema.org/DigitalDocument","https://schema.org/Recipe","https://schema.org/SoftwareApplication","https://schema.org/SoftwareSourceCode","https://schema.org/VideoGame","https://rezics.com/vocab/ModPackage","https://rezics.com/vocab/SkillPackage","https://rezics.com/vocab/PromptTemplate","https://schema.org/Movie","https://schema.org/TVSeries","https://schema.org/VideoObject","https://schema.org/AudioObject","https://schema.org/MusicRecording","https://schema.org/MusicAlbum"] as const;
 export const creatableWorkTypeOrder = ["https://schema.org/Book","https://schema.org/DigitalDocument","https://schema.org/Recipe","https://schema.org/SoftwareApplication","https://schema.org/SoftwareSourceCode","https://schema.org/VideoGame","https://rezics.com/vocab/ModPackage","https://rezics.com/vocab/SkillPackage","https://rezics.com/vocab/PromptTemplate"] as const;
@@ -68,6 +69,7 @@ export const typeRegistry = {
     "presentation": "default",
     "cover": "document",
     "priority": 100,
+    "wikiSegment": "characters",
     "labels": {
       "en": {
         "one": "Character",
@@ -344,6 +346,7 @@ export const typeRegistry = {
     "presentation": "default",
     "cover": "document",
     "priority": 100,
+    "wikiSegment": "characters",
     "labels": {
       "en": {
         "one": "Role",
@@ -701,6 +704,53 @@ export const typeRegistry = {
       }
     }
   },
+  "https://schema.org/Event": {
+    "type": "https://schema.org/Event",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "wikiSegment": "events",
+    "labels": {
+      "en": {
+        "one": "Event",
+        "other": "Events"
+      },
+      "zh-Hant": {
+        "one": "事件",
+        "other": "事件"
+      },
+      "zh-Hans": {
+        "one": "事件",
+        "other": "事件"
+      },
+      "ja": {
+        "one": "出来事",
+        "other": "出来事"
+      },
+      "ko": {
+        "one": "사건",
+        "other": "사건"
+      },
+      "de": {
+        "one": "Ereignis",
+        "other": "Ereignisse"
+      },
+      "fr": {
+        "one": "Événement",
+        "other": "Événements"
+      },
+      "es": {
+        "one": "Suceso",
+        "other": "Sucesos"
+      }
+    }
+  },
   "https://schema.org/ListItem": {
     "type": "https://schema.org/ListItem",
     "base": "record",
@@ -882,6 +932,53 @@ export const typeRegistry = {
       "es": {
         "one": "Música",
         "other": "Música"
+      }
+    }
+  },
+  "https://schema.org/Place": {
+    "type": "https://schema.org/Place",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "wikiSegment": "places",
+    "labels": {
+      "en": {
+        "one": "Place",
+        "other": "Places"
+      },
+      "zh-Hant": {
+        "one": "地點",
+        "other": "地點"
+      },
+      "zh-Hans": {
+        "one": "地点",
+        "other": "地点"
+      },
+      "ja": {
+        "one": "場所",
+        "other": "場所"
+      },
+      "ko": {
+        "one": "장소",
+        "other": "장소"
+      },
+      "de": {
+        "one": "Ort",
+        "other": "Orte"
+      },
+      "fr": {
+        "one": "Lieu",
+        "other": "Lieux"
+      },
+      "es": {
+        "one": "Lugar",
+        "other": "Lugares"
       }
     }
   },
@@ -1163,4 +1260,4 @@ export const typeRegistry = {
   }
 } as const;
 export type AdmittedType = keyof typeof typeRegistry;
-export const typeRegistryDigest = "0967fbe0c5c0be16e985163fc02abaf687b0647bcf5404545f0e4827f21a48d8";
+export const typeRegistryDigest = "e6841decac6b823229658e87aaaeebb5584574518e7ba168e532e331148a0f96";

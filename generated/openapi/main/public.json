@@ -400350,6 +400350,31 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "position",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                },
+                {
+                  "const": "all",
+                  "type": "string"
+                },
+                {
+                  "const": "mine",
+                  "type": "string"
+                },
+                {
+                  "const": "start",
+                  "type": "string"
+                }
+              ]
+            }
           }
         ],
         "responses": {
@@ -403288,6 +403313,14 @@
                         "type": {
                           "maxLength": 2048,
                           "minLength": 1,
+                          "type": "string"
+                        },
+                        "wikiSegment": {
+                          "enum": [
+                            "characters",
+                            "places",
+                            "events"
+                          ],
                           "type": "string"
                         }
                       },
@@ -406480,6 +406513,58 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "citations": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "locator": {},
+                                "method": {},
+                                "modality": {
+                                  "type": "string"
+                                },
+                                "quote": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "quoteWithheld": {
+                                  "type": "boolean"
+                                },
+                                "representationSha256": {
+                                  "type": "string"
+                                },
+                                "rightsBasis": {
+                                  "type": "string"
+                                },
+                                "sourceWork": {
+                                  "type": "string"
+                                },
+                                "submitter": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "sourceWork",
+                                "representationSha256",
+                                "locator",
+                                "quote",
+                                "quoteWithheld",
+                                "method",
+                                "modality",
+                                "submitter",
+                                "rightsBasis"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
                           "counterparts": {
                             "items": {
                               "anyOf": [
@@ -408313,7 +408398,9 @@
                                   "additionalProperties": false,
                                   "properties": {
                                     "acceptance": {
+                                      "~elyTyp": 7,
                                       "additionalProperties": false,
+                                      "nullable": true,
                                       "properties": {
                                         "context": {
                                           "type": "string"
@@ -408336,7 +408423,63 @@
                                         "decision",
                                         "source"
                                       ],
-                                      "type": "object"
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    },
+                                    "evidence": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "type": "string"
+                                          },
+                                          "locator": {},
+                                          "method": {},
+                                          "modality": {
+                                            "type": "string"
+                                          },
+                                          "quote": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "quoteWithheld": {
+                                            "type": "boolean"
+                                          },
+                                          "representationSha256": {
+                                            "type": "string"
+                                          },
+                                          "rightsBasis": {
+                                            "type": "string"
+                                          },
+                                          "sourceWork": {
+                                            "type": "string"
+                                          },
+                                          "submitter": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "id",
+                                          "sourceWork",
+                                          "representationSha256",
+                                          "locator",
+                                          "quote",
+                                          "quoteWithheld",
+                                          "method",
+                                          "modality",
+                                          "submitter",
+                                          "rightsBasis"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 16,
+                                      "type": "array"
                                     },
                                     "kind": {
                                       "const": "statement",
@@ -408347,6 +408490,27 @@
                                     },
                                     "predicate": {
                                       "type": "string"
+                                    },
+                                    "publication": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "wiki-bundle",
+                                          "type": "string"
+                                        },
+                                        "works": {
+                                          "items": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "works"
+                                      ],
+                                      "type": "object"
                                     },
                                     "qualifiers": {
                                       "additionalProperties": false,
@@ -409410,6 +409574,26 @@
                     "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
+                  "position": {
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "const": "all",
+                        "type": "string"
+                      },
+                      {
+                        "const": "mine",
+                        "type": "string"
+                      },
+                      {
+                        "const": "start",
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "profile": {
                     "const": "resource-summary-batch-v1",
                     "type": "string"
@@ -409456,6 +409640,26 @@
                     "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
                   },
+                  "position": {
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "const": "all",
+                        "type": "string"
+                      },
+                      {
+                        "const": "mine",
+                        "type": "string"
+                      },
+                      {
+                        "const": "start",
+                        "type": "string"
+                      }
+                    ]
+                  },
                   "profile": {
                     "const": "resource-summary-batch-v1",
                     "type": "string"
@@ -409501,6 +409705,26 @@
                     "maxLength": 35,
                     "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
                     "type": "string"
+                  },
+                  "position": {
+                    "anyOf": [
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      {
+                        "const": "all",
+                        "type": "string"
+                      },
+                      {
+                        "const": "mine",
+                        "type": "string"
+                      },
+                      {
+                        "const": "start",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "profile": {
                     "const": "resource-summary-batch-v1",
@@ -475676,6 +475900,14 @@
                             "maxLength": 2048,
                             "minLength": 1,
                             "type": "string"
+                          },
+                          "wikiSegment": {
+                            "enum": [
+                              "characters",
+                              "places",
+                              "events"
+                            ],
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -476068,6 +476300,14 @@
                     "minLength": 1,
                     "pattern": "^(https?://|urn:)[^\\s<>\"{}|\\\\^`]+$",
                     "type": "string"
+                  },
+                  "wikiSegment": {
+                    "enum": [
+                      "characters",
+                      "places",
+                      "events"
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -476350,6 +476590,14 @@
                     "minLength": 1,
                     "pattern": "^(https?://|urn:)[^\\s<>\"{}|\\\\^`]+$",
                     "type": "string"
+                  },
+                  "wikiSegment": {
+                    "enum": [
+                      "characters",
+                      "places",
+                      "events"
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -476631,6 +476879,14 @@
                     "maxLength": 2048,
                     "minLength": 1,
                     "pattern": "^(https?://|urn:)[^\\s<>\"{}|\\\\^`]+$",
+                    "type": "string"
+                  },
+                  "wikiSegment": {
+                    "enum": [
+                      "characters",
+                      "places",
+                      "events"
+                    ],
                     "type": "string"
                   }
                 },
@@ -476916,6 +477172,14 @@
                         "type": {
                           "maxLength": 2048,
                           "minLength": 1,
+                          "type": "string"
+                        },
+                        "wikiSegment": {
+                          "enum": [
+                            "characters",
+                            "places",
+                            "events"
+                          ],
                           "type": "string"
                         }
                       },
@@ -477605,6 +477869,14 @@
                         "type": {
                           "maxLength": 2048,
                           "minLength": 1,
+                          "type": "string"
+                        },
+                        "wikiSegment": {
+                          "enum": [
+                            "characters",
+                            "places",
+                            "events"
+                          ],
                           "type": "string"
                         }
                       },
@@ -480723,6 +480995,9 @@
                     "rightsBasis": {
                       "type": "string"
                     },
+                    "sourceWork": {
+                      "type": "string"
+                    },
                     "submitter": {
                       "type": "string"
                     }
@@ -480731,6 +481006,7 @@
                     "profile",
                     "id",
                     "representationSha256",
+                    "sourceWork",
                     "locator",
                     "quote",
                     "method",
@@ -531638,6 +531914,14 @@
                               "const": 24,
                               "type": "number"
                             },
+                            "summaryBatch": {
+                              "const": 50,
+                              "type": "number"
+                            },
+                            "typeQueriesPerPage": {
+                              "const": 1,
+                              "type": "number"
+                            },
                             "typeRowsPerResource": {
                               "const": 8,
                               "type": "number"
@@ -531650,6 +531934,8 @@
                             "membershipQueries",
                             "mountRows",
                             "typeRowsPerResource",
+                            "typeQueriesPerPage",
+                            "summaryBatch",
                             "maxGraphReads",
                             "maxGraphBytes",
                             "deadlineMs"
@@ -531770,6 +532056,14 @@
                               "const": 24,
                               "type": "number"
                             },
+                            "summaryBatch": {
+                              "const": 50,
+                              "type": "number"
+                            },
+                            "typeQueriesPerPage": {
+                              "const": 1,
+                              "type": "number"
+                            },
                             "typeRowsPerResource": {
                               "const": 8,
                               "type": "number"
@@ -531782,6 +532076,8 @@
                             "membershipQueries",
                             "mountRows",
                             "typeRowsPerResource",
+                            "typeQueriesPerPage",
+                            "summaryBatch",
                             "maxGraphReads",
                             "maxGraphBytes",
                             "deadlineMs"
@@ -531854,6 +532150,38 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
+                            "name": {
+                              "properties": {
+                                "basis": {
+                                  "enum": [
+                                    "requested",
+                                    "same-script",
+                                    "other-script",
+                                    "fallback"
+                                  ]
+                                },
+                                "direction": {
+                                  "enum": [
+                                    "ltr",
+                                    "rtl"
+                                  ],
+                                  "type": "string"
+                                },
+                                "language": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language",
+                                "direction",
+                                "basis"
+                              ],
+                              "type": "object"
+                            },
                             "types": {
                               "items": {
                                 "type": "string"
@@ -531864,7 +532192,8 @@
                           },
                           "required": [
                             "id",
-                            "types"
+                            "types",
+                            "name"
                           ],
                           "type": "object"
                         },
@@ -531949,6 +532278,14 @@
                               "const": 24,
                               "type": "number"
                             },
+                            "summaryBatch": {
+                              "const": 50,
+                              "type": "number"
+                            },
+                            "typeQueriesPerPage": {
+                              "const": 1,
+                              "type": "number"
+                            },
                             "typeRowsPerResource": {
                               "const": 8,
                               "type": "number"
@@ -531961,6 +532298,8 @@
                             "membershipQueries",
                             "mountRows",
                             "typeRowsPerResource",
+                            "typeQueriesPerPage",
+                            "summaryBatch",
                             "maxGraphReads",
                             "maxGraphBytes",
                             "deadlineMs"
@@ -532228,6 +532567,38 @@
                                   "inZone": {
                                     "type": "boolean"
                                   },
+                                  "name": {
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "same-script",
+                                          "other-script",
+                                          "fallback"
+                                        ]
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "types": {
                                     "items": {
                                       "type": "string"
@@ -532239,6 +532610,7 @@
                                 "required": [
                                   "id",
                                   "types",
+                                  "name",
                                   "inZone"
                                 ],
                                 "type": "object"
@@ -532397,6 +532769,14 @@
                               "const": 24,
                               "type": "number"
                             },
+                            "summaryBatch": {
+                              "const": 50,
+                              "type": "number"
+                            },
+                            "typeQueriesPerPage": {
+                              "const": 1,
+                              "type": "number"
+                            },
                             "typeRowsPerResource": {
                               "const": 8,
                               "type": "number"
@@ -532409,6 +532789,8 @@
                             "membershipQueries",
                             "mountRows",
                             "typeRowsPerResource",
+                            "typeQueriesPerPage",
+                            "summaryBatch",
                             "maxGraphReads",
                             "maxGraphBytes",
                             "deadlineMs"
@@ -532486,6 +532868,38 @@
                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                               "type": "string"
                             },
+                            "name": {
+                              "properties": {
+                                "basis": {
+                                  "enum": [
+                                    "requested",
+                                    "same-script",
+                                    "other-script",
+                                    "fallback"
+                                  ]
+                                },
+                                "direction": {
+                                  "enum": [
+                                    "ltr",
+                                    "rtl"
+                                  ],
+                                  "type": "string"
+                                },
+                                "language": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "value",
+                                "language",
+                                "direction",
+                                "basis"
+                              ],
+                              "type": "object"
+                            },
                             "types": {
                               "items": {
                                 "type": "string"
@@ -532496,7 +532910,8 @@
                           },
                           "required": [
                             "id",
-                            "types"
+                            "types",
+                            "name"
                           ],
                           "type": "object"
                         },
