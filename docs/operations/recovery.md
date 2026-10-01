@@ -156,7 +156,7 @@ Each backup and each complete restore has a 600-second command deadline. Restore
 includes decryption, copying, startup, WAL replay, full owner comparison, lineage
 cutover, Lucene rebuild, samples and serving verification. Phase durations and
 elapsed time are recorded in `backup-evidence.json` and `recovery-evidence.json`.
-This is the acceptance ceiling, not a demonstrated launch-scale RTO. The
+This is the acceptance ceiling. The measured command runs appear below. The
 [small command drill](../../tests/qa/fault-recovery/g-727-recovery-set.test.ts)
 checks encryption with a public-only capture keyring, retry after a failed
 encryption phase, two-owner deletion, revocation, exact available/denied Content
@@ -200,8 +200,24 @@ The drill verifies successful `fixture:restore` evidence, checks the actual Work
 count, captures the source and times restoration. It records the source fixture,
 count and per-phase evidence in `g-727-launch-restore.json`. It removes its
 generated target and, when it prepared the source itself, that source copy.
-A routine small result cannot qualify the medium fixture. No launch-scale
-RPO/RTO is qualified until the manager records the exclusive run.
+The medium run `20261001t080856-bf552b` passed on 2026-10-01 against commit
+`46a781ef`. It restored retained fixture `fx-medium-a4967fbb7f18` as
+`fixture-g916-src5`, verified the actual count of 100,000 Works, then completed
+both timed commands:
+
+| Command | Elapsed | Deadline |
+| --- | ---: | ---: |
+| Backup | 476,766 ms | 600,000 ms |
+| Verified restore | 345,104 ms | 600,000 ms |
+
+Source preparation took 247,452 ms before these command timers. The complete
+QA harness, including source probes and target teardown, took 962.9 seconds.
+Backup coverage took 214.0 seconds and physical copy took 161.1 seconds.
+Restore included 103.6 seconds for WAL and owner coverage, 24.0 seconds for
+Lucene rebuild and 95.9 seconds for owner reconciliation before serving release.
+The run retained `g-727-launch-restore.json` with both commands' complete phase
+and budget evidence. These are medium-fixture command measurements on the shared
+QA host; the manager's integrated exclusive run owns launch RPO/RTO qualification.
 
 ## Offline Lucene rebuild
 
