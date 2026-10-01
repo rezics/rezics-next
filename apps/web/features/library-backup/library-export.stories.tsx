@@ -55,6 +55,16 @@ export const ResumeAfterReload: Story = { args: { seed: async store => {
   await expect(await canvas.findByText(/Your file is ready: 45 records/)).toBeVisible();
 } };
 
+/** A finished download from an earlier visit is not offered as ready: it held private reviews and is cleared. */
+export const FinishedEarlierIsNotKept: Story = { args: { seed: async store => {
+  await store.append(agent, { snapshot: 'snapshot-1', cursor: null, pages: 1, rows: 20, done: true },
+    Array.from({ length: 20 }, (_, index) => exportRow(index)));
+} }, async play({ canvasElement }) {
+  const canvas = await open(canvasElement);
+  await expect(canvas.getByRole('button', { name: 'Download library' })).toBeVisible();
+  await expect(canvas.queryByText(/Your file is ready/)).toBeNull();
+} };
+
 /** The library changed while the download was stopped: Main refuses to mix states, so the reader starts over. */
 export const LibraryChanged: Story = { args: { moved: true, seed: async store => {
   await store.append(agent, { snapshot: 'snapshot-1', cursor: 'cursor-20', pages: 1, rows: 20, done: false },

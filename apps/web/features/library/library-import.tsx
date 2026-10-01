@@ -12,7 +12,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { writingLanguage } from '../content-language/writing-language.ts';
-import { type ApplyProgress, type CsvInspection, type CsvMapping, type ImportApi, ImportError, type ImportFormat,
+import { type ApplyProgress, UPLOAD_LIMIT_BYTES, type CsvInspection, type CsvMapping, type ImportApi, ImportError, type ImportFormat,
   type ImportRow, mainImportApi, type RowResolution } from './import-api.ts';
 import { browserImportShelf, type ImportShelf, type PendingImport } from './import-store.ts';
 import { applyFinished, applyStarted, countGroups, groupOf, loadAllRows, needsChoice, replaceRow, reloadRow,
@@ -58,6 +58,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const [group, setGroup] = useState<RowGroup | 'issues' | 'all'>('ambiguous');
   const [page, setPage] = useState(0);
   const [resolving, setResolving] = useState(false);
+  const [useImported, setUseImported] = useState(false);
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
 
   useEffect(() => { setPending(shelf.list(agent)); }, [agent, shelf]);
@@ -91,6 +92,8 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   }
 
   async function upload(file: File, chosen: CsvMapping | null = null, text?: string) {
+    // The mapped CSV was checked when it was first read; only a file chosen now is measured.
+    if (text === undefined && file.size > UPLOAD_LIMIT_BYTES) { setError(t.importTooLarge); return; }
     setError(null); setUploading(true);
     try {
       const content = text ?? await file.text();
@@ -107,10 +110,26 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     finally { setUploading(false); }
   }
 
-  async function resolveRow(id: string, row: ImportRow, choice: RowResolution) {
-    await client.resolve(id, row, choice);
-    const fresh = await reloadRow(client, id, row.index);
+  async function showRow(id: string, index: number) {
+    const fresh = await reloadRow(client, id, index);
     if (fresh) setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, fresh) } : current);
+  }
+  async function resolveRow(id: string, row: ImportRow, choice: RowResolution) {
+    try { await client.resolve(id, row, choice); } catch (failure) {
+      // The row changed elsewhere: show Main's version, so the next choice is made on it, then say so.
+      if (failure instanceof ImportError && failure.failure === 'conflict') await showRow(id, row.index).catch(() => undefined);
+      throw failure;
+    }
+    await showRow(id, row.index);
+  }
+  /** Rows the reader asked to overwrite what the Library already has: Main applies `replace` for them alone. */
+  async function useImportedValues(id: string, targets: readonly ImportRow[]) {
+    for (const row of targets) {
+      const work = row.resolution?.work ?? row.match?.work;
+      if (row.source.kind !== 'source' || !work || groupOf(row) !== 'matched') continue;
+      const target = row.resolution?.target ?? row.match?.target;
+      await client.resolve(id, row, { choice: 'apply', work, ...target ? { target } : {}, conflictChoice: 'replace' });
+    }
   }
   async function adoptRow(id: string, row: ImportRow, workId: string) {
     const work = await client.adopt(id, row.index, workId, locale);
@@ -136,13 +155,16 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     const live = () => generation === run.current;
     const intent = entry.intent ?? { context, language: reviewLanguage };
     const withIntent = { ...entry, intent };
-    shelf.save(agent, withIntent);
     setError(null);
-    patch({ entry: withIntent, stopped: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
+    patch({ stopped: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
     try {
       // Main will not seal while a row has neither a match nor a choice: what was not found stays private.
       // A sealed import has none left in that group, so a resumed apply asks for nothing here.
       await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'));
+      if (!entry.intent && useImported) await useImportedValues(entry.id, current);
+      // From here the intent is fixed: remember it, so a reload resumes this apply.
+      shelf.save(agent, withIntent);
+      patch({ entry: withIntent });
       let last = -1, stalled = 0;
       for (;;) {
         const progress = await client.apply(entry.id, intent);
@@ -152,6 +174,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
         stalled = progress.completed === last ? stalled + 1 : 0;
         last = progress.completed;
         if (stalled >= 5) throw new ImportError('unavailable');
+        if (stalled) await new Promise(resolve => setTimeout(resolve, 300 * stalled));
       }
       const rows = await loadAllRows(client, entry.id, entry.total, () => {}, live);
       if (!live()) return;
@@ -203,7 +226,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
           <h3 id="library-import-unfinished" className="font-medium text-sm">{t.importUnfinishedTitle}</h3>
           <ul className="grid gap-2">
             {others.map(entry => <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="min-w-0 break-words">{t.importUnfinishedItem({ name: entry.name, count: number(entry.total) })}</span>
+              <span className="min-w-0 break-words">{t.importUnfinishedItem({ name: entry.name, count: entry.total })}</span>
               <span className="flex gap-2">
                 <Button size="sm" disabled={busy} onClick={() => void openImport(entry)}>{t.importContinue}
                   <span className="sr-only"> — {entry.name}</span></Button>
@@ -252,7 +275,9 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
             <p className="text-muted-foreground text-sm">{t.importFileSelected({ name: active.entry.name })}</p>
             {!active.finished ? <Button size="sm" variant="outline" disabled={resolving || !!active.progress?.pending}
               onClick={() => void discard(active.entry)}>{t.importDiscard}</Button>
-              : <Button size="sm" variant="outline" onClick={() => { run.current += 1; setActive(null); }}>{t.importClose}</Button>}
+              : <span className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => void discard(active.entry)}>{t.importDelete}</Button>
+                <Button size="sm" variant="outline" onClick={() => { run.current += 1; setActive(null); }}>{t.importClose}</Button></span>}
           </div>
           {!active.loaded && !active.stopped ? <div className="grid gap-1" role="status">
             <Progress value={Math.round((rows.length / Math.max(1, active.entry.total)) * 100)} aria-label={t.importMatching({
@@ -261,6 +286,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
           </div> : null}
           {active.stopped && !active.loaded ? <div><Button size="sm" onClick={() => void openImport(active.entry)}>{t.importContinue}</Button></div> : null}
           {active.loaded || rows.length ? <>
+            {active.finished ? <p className="text-muted-foreground text-xs">{t.importDeleteNote}</p> : null}
             {active.finished ? <p role="status" className="text-sm">{t.importApplyDone({ done: number(rows.length - issues),
               total: number(rows.length) })}{issues ? ` ${t.importIssues(issues)}` : ''} <Link href="/library"
                 className="text-primary underline">{t.importViewLibrary}</Link></p> : null}
@@ -280,6 +306,12 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
               <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>{t.nextPage}</Button>
             </nav> : null}
             {active.loaded && !active.finished ? <div className="grid gap-3 rounded-xl bg-muted/50 p-3">
+              {!sealed && counts.matched ? <fieldset className="grid gap-1 text-sm">
+                <legend className="mb-1 font-medium">{t.importConflictLabel}</legend>
+                {([false, true] as const).map(value => <label key={String(value)} className="flex cursor-pointer items-center gap-2">
+                  <input type="radio" name="library-import-conflict" className="accent-primary" checked={useImported === value}
+                    onChange={() => setUseImported(value)} />{value ? t.importUseImported : t.importKeepMine}</label>)}
+              </fieldset> : null}
               {!sealed && counts['not-found'] ? <p className="text-muted-foreground text-xs">{t.importNotFoundPrivate(counts['not-found'])}</p> : null}
               {!sealed && unresolved.length ? <div>
                 <Button size="sm" variant="outline" disabled={resolving}

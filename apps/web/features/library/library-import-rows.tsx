@@ -87,7 +87,7 @@ export function ImportRowItem({ row, sealed, locale, messages, onResolve, onAdop
         {source.shelves.length ? <span>{source.shelves.join(', ')}</span> : null}
       </p>
       {source.review ? <p className="line-clamp-2 text-muted-foreground text-xs">{source.review.text}</p> : null}
-      {row.outcome ? <p role={issues.length ? 'alert' : undefined}
+      {row.outcome ? <p
         className={cn('text-xs', issues.length ? 'text-destructive' : 'text-muted-foreground')}>
         {issues.length ? issues.map(issue => issueText(issue, t)).join(' ')
           : row.outcome.applied.some(step => step !== 'private-source') ? t.importRowAdded : t.importRowKeptPrivate}</p> : null}

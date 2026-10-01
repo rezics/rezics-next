@@ -20,7 +20,8 @@ function Harness({ make, entries = [], ...props }: Omit<React.ComponentProps<typ
 const pending = (over: Partial<PendingImport> = {}): PendingImport => ({ id: 'file-1', format: 'goodreads',
   name: 'goodreads_library_export.csv', total: 9, createdAt: Date.now(), intent: null, ...over });
 const file = (name = 'goodreads_library_export.csv') => new File(['Title,Author\nPride and Prejudice,Jane Austen\n'], name, { type: 'text/csv' });
-const faked = (options: FakeOptions = {}) => () => fakeImportApi(goodreadsRows(), options);
+let last: ReturnType<typeof fakeImportApi> | undefined;
+const faked = (options: FakeOptions = {}) => () => (last = fakeImportApi(goodreadsRows(), options));
 
 const meta = { title: 'Library/Import', component: Harness,
   args: { agent: agentId, context: agentId, locale: 'en', messages, make: faked() },
@@ -68,6 +69,49 @@ export const NotFoundOpenLibrary: Story = { async play({ canvasElement }) {
   await expect(canvas.getByRole('button', { name: /^Matched 7$/ })).toBeVisible();
 } };
 
+/** The reader asks for the imported values to win over what the Library has: Main is told, row by row, to replace. */
+export const UseImportedValues: Story = { async play({ canvasElement }) {
+  const canvas = await openAndUpload(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: 'Keep every unmatched row private' }));
+  await expect(canvas.getByRole('radio', { name: 'Keep mine (default)' })).toBeChecked();
+  await userEvent.click(canvas.getByRole('radio', { name: 'Use the imported value' }));
+  await waitFor(() => expect(canvas.getByRole('button', { name: 'Add to my library' })).toBeEnabled());
+  await userEvent.click(canvas.getByRole('button', { name: 'Add to my library' }));
+  await expect(await canvas.findByText(/Finished: 9 of 9 rows/, undefined, { timeout: 5000 })).toBeVisible();
+  await expect(last!.held.filter(row => row.resolution?.conflictChoice === 'replace')).toHaveLength(6);
+} };
+
+/** Another device changed the row first: it is reloaded from Main, so the second choice is made on its current version. */
+export const ChangedElsewhere: Story = { args: { make: faked({ changedElsewhere: [6] }) }, async play({ canvasElement }) {
+  const canvas = await openAndUpload(canvasElement);
+  const row = () => canvas.getAllByText('Ambiguous Tale')[0]!.closest('li')!;
+  await userEvent.click(within(row()).getAllByRole('button', { name: /Ambiguous Tale/ })[0]!);
+  await expect(await within(row()).findByText(/changed elsewhere/)).toBeVisible();
+  await userEvent.click(within(row()).getAllByRole('button', { name: /Ambiguous Tale/ })[0]!);
+  await waitFor(() => expect(canvas.getByRole('button', { name: /^Choose a match 1$/ })).toBeVisible());
+} };
+
+/** A file over what one import takes is refused with its limit named, before anything is read. */
+export const FileTooLarge: Story = { async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.upload(canvas.getByLabelText('Library file'), new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'big.csv', { type: 'text/csv' }));
+  await expect(await canvas.findByText(/larger than 2 MB/)).toBeVisible();
+} };
+
+/** A finished import can be deleted: the uploaded file and the private rows kept with it go. */
+export const DeleteFinishedUpload: Story = { args: { make: () => fakeImportApi(halfApplied()),
+  entries: [pending({ intent: { context: agentId, language: 'und' } })] },
+async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByRole('button', { name: /Continue/ }));
+  await expect(await canvas.findByText(/Finished: 9 of 9 rows/, undefined, { timeout: 5000 })).toBeVisible();
+  await expect(canvas.getByText(/private rows kept with it/)).toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: 'Delete uploaded file' }));
+  await expect(await canvas.findByText('Your current tool')).toBeVisible();
+} };
+
 /** The import was left half applied: it is listed on the page, and continuing finishes the rows that remain. */
 export const PartialImport: Story = { args: { make: () => fakeImportApi(halfApplied()),
   entries: [pending({ intent: { context: agentId, language: 'und' } })] },
@@ -102,7 +146,7 @@ async play({ canvasElement }) {
   await userEvent.click(canvas.getByText('Import your books'));
   await userEvent.click(canvas.getByRole('button', { name: /Continue/ }));
   await expect(await canvas.findByText(/Finished: 7 of 9 rows/)).toBeVisible();
-  await expect(canvas.getByText('Its reading shelf changed. Review it before retrying.')).toBeVisible();
+  await expect(canvas.getByText('Your Library already had a different reading status for this Work, so it was left unchanged.')).toBeVisible();
   await expect(canvas.getByText('No Work was chosen, so it was kept private.')).toBeVisible();
 } };
 

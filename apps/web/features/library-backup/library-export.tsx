@@ -43,6 +43,9 @@ export function LibraryExport({ agent, locale, messages, api, store, save = down
 
   async function finish(progress: ExportProgress) {
     const files = assembleFiles(await collectedRows(kept, agent, progress), new Date().toISOString().slice(0, 10));
+    // The file now exists in this page alone. Its pages hold private reviews, so they are not kept in the browser:
+    // a reload offers a new download, never an old snapshot as ready.
+    await kept.clear(agent);
     setStage({ kind: 'ready', rows: progress.rows, files });
   }
   async function start(restart = false) {
@@ -67,7 +70,7 @@ export function LibraryExport({ agent, locale, messages, api, store, save = down
     let current = true;
     void kept.progress(agent).then(progress => {
       if (!current || !progress) return;
-      if (progress.done) void finish(progress).catch(() => setStage({ kind: 'paused', rows: progress.rows, failure: 'failed' }));
+      if (progress.done) void kept.clear(agent);
       else setStage({ kind: 'paused', rows: progress.rows, failure: 'failed' });
     }).catch(() => undefined);
     return () => { current = false; };
@@ -90,7 +93,7 @@ export function LibraryExport({ agent, locale, messages, api, store, save = down
         </div> : null}
         {stage.kind === 'paused' ? <div className="grid gap-3">
           <p role="alert" className="text-sm">{stage.failure === 'moved' ? t.backupChanged
-            : t.backupPaused({ count: number(stage.rows) })}</p>
+            : t.backupPaused(stage.rows)}</p>
           <div className="flex flex-wrap gap-2">
             {stage.failure === 'moved' ? <Button onClick={() => void start(true)}>{t.backupRestart}</Button>
               : <><Button onClick={() => void start()}>{t.backupResume}</Button>
@@ -98,7 +101,7 @@ export function LibraryExport({ agent, locale, messages, api, store, save = down
           </div>
         </div> : null}
         {stage.kind === 'ready' ? <div className="grid gap-3">
-          <p role="status" className="text-sm">{stage.rows ? t.backupReady({ count: number(stage.rows) }) : t.backupEmpty}</p>
+          <p role="status" className="text-sm">{stage.rows ? t.backupReady(stage.rows) : t.backupEmpty}</p>
           {stage.files.length > 1 ? <p className="text-muted-foreground text-sm">{t.backupSplit({ count: number(stage.files.length) })}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => save(stage.files)}><DownloadIcon aria-hidden="true" />{t.backupSave}</Button>

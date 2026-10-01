@@ -38,6 +38,9 @@ export interface ImportApi {
   adopt: (id: string, row: number, workId: string, locale: string) => Promise<string>;
 }
 
+/** What one import takes (`FILE_IMPORT_COST.bytes`); a larger file is refused before it is read. */
+export const UPLOAD_LIMIT_BYTES = 2 * 1024 * 1024;
+
 const key = () => `library-import:${crypto.randomUUID()}`;
 
 /** Retry-After accepts seconds or an HTTP date; an absent value waits one second. */

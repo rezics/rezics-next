@@ -47,11 +47,14 @@ export interface FakeOptions {
   /** The file's headers and distinct values for a CSV that needs mapping. */
   csv?: { headers: string[]; distinctValues: Record<string, string[]> };
   delayMs?: number;
+  /** Row indexes another device changes just before this reader's first choice on them (a 409). */
+  changedElsewhere?: number[];
 }
 
 export function fakeImportApi(rows: ImportRow[] = goodreadsRows(), options: FakeOptions = {}): ImportApi & { held: ImportRow[]; calls: string[] } {
   const { step = 3, issues = {}, delayMs = 0 } = options;
   let applies = 0, sealed: ApplyIntent | null = null;
+  const changed = new Set(options.changedElsewhere ?? []);
   const calls: string[] = [];
   const wait = () => delayMs ? new Promise(resolve => setTimeout(resolve, delayMs)) : Promise.resolve();
   const progress = (): ApplyProgress => ({ total: rows.length, completed: rows.filter(row => row.outcome).length,
@@ -70,6 +73,7 @@ export function fakeImportApi(rows: ImportRow[] = goodreadsRows(), options: Fake
       calls.push(`resolve:${row.index}:${choice.choice}`); await wait();
       if (sealed) throw new ImportError('conflict');
       const held = rows.find(item => item.index === row.index)!;
+      if (changed.delete(row.index)) held.version += 1;
       if (held.version !== row.version) throw new ImportError('conflict');
       held.resolution = choice; held.version += 1;
     },
