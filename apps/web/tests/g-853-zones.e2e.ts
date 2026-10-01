@@ -57,6 +57,16 @@ test.beforeAll(async () => {
     }
     if (state !== 'package') throw new Error(`The ${segment} Zone never reported its package approved`);
   }
+  // The Realms' public headers come from a projection that can trail the Zones.
+  for (const realm of [seed.zones.visual, seed.zones.light]) {
+    let found = false;
+    for (const deadline = Date.now() + 120_000; Date.now() < deadline && !found;) {
+      const header = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/realms/${uuid(realm)}`).catch(() => null);
+      found = Boolean(header?.ok);
+      if (!found) await new Promise(done => setTimeout(done, 1000));
+    }
+    if (!found) throw new Error(`The Realm ${realm} never became readable`);
+  }
 });
 
 const uuid = (iri: string) => iri.slice(-36);
