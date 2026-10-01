@@ -61,8 +61,8 @@ async function check(page: Page, info: TestInfo, name: string) {
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
 }
 
-/** A press before hydration does nothing; the Zone's package and its controls are ready when the page says so. */
-const ready = (page: Page) => page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
+/** The page and its scripts have loaded; the Zone's own markup is server-rendered, so assertions wait on it directly. */
+const ready = (page: Page) => page.waitForLoadState('load');
 
 for (const viewport of viewports) {
   for (const locale of locales) {
