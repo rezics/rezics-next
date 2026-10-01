@@ -143,7 +143,7 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
     await json(await request(administrator.token, 'POST', '/v1/access/role-bindings',
       binding(administrator.subject, editor.subject, await epoch(), editorBinding)), 200);
     const create = (person: typeof administrator, types: string[], key = randomUUID()) =>
-      request(person.token, 'POST', '/v1/works', { profile: 'metadata-only-v1', title: 'Role matrix Book',
+      request(person.token, 'POST', '/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', title: 'Role matrix Book',
         language: 'en', semanticTypes: types, actingSubject: person.subject }, key);
     type CreatedWork = { work: string; workRevision: string; mainVersion: string };
     const target = await json<CreatedWork>(await create(author, ['https://schema.org/Book']), 201);
