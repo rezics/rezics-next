@@ -24,6 +24,7 @@ import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
 import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage, CreditPage, Loaded, RatingRead,
   WorkHeader, WorkStats } from './types.ts';
 import type { ReadStart } from './read.ts';
+import { hubSections } from './hub.ts';
 import { OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 
@@ -61,7 +62,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       : null}
     readAction={readAction === undefined ? undefined
       : <ReadButton workRef={fixture.workRef} start={readAction} messages={t} />}>
-    <OverviewLayout messages={t} about={<WorkAbout work={work} messages={t} />} scopeBar={scopeBar}
+    <OverviewLayout messages={t} plan={hubSections} about={<WorkAbout work={work} messages={t} />} scopeBar={scopeBar}
       ratings={view ? <RatingSummaryRegion ratings={ratings} view={view} scopeBar={scopeBar} locale={locale}
         messages={t} /> : null}
       classification={view ? <ClassificationRegion classifications={classifications} view={view}

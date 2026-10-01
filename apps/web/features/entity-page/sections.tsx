@@ -28,10 +28,14 @@ export async function RelationsSection({ section, cursor, ...rest }: SectionProp
 }
 
 
-export async function DiscussionSection({ section, cursor, resource, registry, signedIn, ...rest }: SectionProps & {
+export async function DiscussionSection({ section, cursor, resource, registry, signedIn, preview, ...rest }: SectionProps & {
   cursor: string | undefined; resource: string; registry: EntityProjection['registry']; signedIn: boolean;
+  /** Show only the first few replies and no paging, for a host that links to the full list (the Work hub). */
+  preview?: number;
 }) {
-  const page = await readDiscussion(section, cursor);
+  const read = await readDiscussion(section, cursor);
+  const page = preview !== undefined && read.ok
+    ? { ok: true as const, data: { ...read.data, items: read.data.items.slice(0, preview), nextCursor: null } } : read;
   const ids = page.ok ? [...new Set(page.data.items.flatMap(item => idOf(item.realm) ?? []))] : [];
   const realms = new Map(await Promise.all(ids.map(async realm => {
     const header = await readRealm(realm, rest.locale);

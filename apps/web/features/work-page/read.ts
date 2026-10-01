@@ -11,6 +11,7 @@ import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, chapterPlaceHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, textHref,
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
+import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
   ContentsPage, CreditPage, DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead,
   ReadFailure, RealmHeader, Reviewer, ReviewPage, ReviewQuery, RecipeWorkPage, HubWorkPage,
@@ -333,6 +334,24 @@ export const readStart = cache(async (id: string, work: string, locale: UiLocale
     parent = occurrence;
   }
   return { kind: 'contents' };
+});
+
+/**
+ * Where Main says the reader stands in a Work: its composition's next part, or a standalone Work's own status
+ * (G-835). Nothing is derived here. Signed out, or without an acting Agent, there is nothing to read.
+ */
+export const readProgressSummary = cache(async (id: string, language?: string): Promise<Loaded<ProgressSummary>> => {
+  const { main, actingSubject } = await reader();
+  if (!actingSubject) return { ok: false, failure: 'sign-in' };
+  return settle(() => main.v1.me['progress-summaries']({ resource: id }).get({
+    query: { actingSubject, ...(language ? { language } : {}) } }));
+});
+
+/** The reader's private edition choice for a Work: a language and optionally one realization or release. */
+export const readEditionPreference = cache(async (id: string): Promise<Loaded<EditionPreference | null>> => {
+  const { main, actingSubject } = await reader();
+  if (!actingSubject) return { ok: false, failure: 'sign-in' };
+  return settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }));
 });
 
 export type ReadStart =

@@ -195,8 +195,17 @@ export function RatingSummaryRegion({ ratings, view, scopeBar, locale, messages 
         {item.question}</Link>;
     })}
   </nav> : null;
+  // What the numbers mean, always: the question asked, who answered, the scale and how many.
+  const basis = summary.status === 'available' && summary.scale && context ? <p data-rating-basis
+    className="flex flex-wrap gap-x-2 text-muted-foreground text-sm">
+    <span lang={context.language}>{context.question}</span><span aria-hidden="true">·</span>
+    <span>{t.ratingPopulation({ who: name })}</span><span aria-hidden="true">·</span>
+    <span>{t.ratingScaleRange({ min: formatNumber(summary.scale.min, locale), max: formatNumber(summary.scale.max, locale) })}</span>
+    <span aria-hidden="true">·</span><span>{t.ratingCount(summary.count)}</span>
+  </p> : null;
   return <Region id={RATINGS_REGION} title={t.ratings} aside={scopeBar}>
     {body}
+    {basis}
     {questions}
   </Region>;
 }

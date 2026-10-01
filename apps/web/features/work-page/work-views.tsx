@@ -24,11 +24,9 @@ import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { readContentsGroup } from './contents-actions.ts';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
-import { editionMessages, EditionsSection } from './editions.tsx';
 import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
-  readReleases,
   readContents, readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm,
-  readReviewer, readReviews, readStart, readVersions, readWorkStats, readRecipeWorkPage,
+  readReviewer, readReviews, readVersions, readWorkStats, readRecipeWorkPage,
   readHubWorkPage, readText } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
@@ -41,6 +39,9 @@ import { VersionsRegion } from './versions.tsx';
 import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
+import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, Status } from './hub-sections.tsx';
+import { type HubSection, hubPlan } from './hub.ts';
+import { WikiSection, WikiShortcut } from './wiki.tsx';
 import { readEntityProjection } from '../entity-page/read.ts';
 import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { WorkKindActions } from './types/actions.tsx';
@@ -111,12 +112,11 @@ export const readExperience = async (id: string, types: readonly string[]): Prom
   return workExperience(page.ok ? page.data : null, types);
 };
 
-/** A type's primary action, or the next readable chapter for books. */
+/** A type's own action (cook, copy, install), or for cover-led Works the one primary action the hub leads with. */
 async function ReadSlot({ workRef, id, work, experience, locale, messages }: Common & { workRef: WorkAt; id: string;
   work: Header; experience: WorkExperience }) {
   if (experience.kind === 'book') {
-    return <ReadButton workRef={workRef} start={await readStart(id, work.id, locale, work.selectedLanguage)}
-      messages={messages} />;
+    return <PrimaryAction workRef={workRef} id={id} work={work} locale={locale} messages={messages} />;
   }
   const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
     : null;
@@ -124,12 +124,24 @@ async function ReadSlot({ workRef, id, work, experience, locale, messages }: Com
     messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null} />;
 }
 
+/** The hub sections the Work's projection binds, in the documented order. */
+export const readHubPlan = async (id: string): Promise<readonly HubSection[]> => {
+  const page = await readEntityProjection(id);
+  return hubPlan(page.ok ? page.data : null);
+};
+
+/** The overview's section names, for "On this page". */
+export const hubLabels = (t: WorkPageMessages, plan: readonly HubSection[]) => plan.map(section => ({ id: section,
+  label: { about: t.sectionAbout, availability: t.sectionAvailability, parts: t.sectionParts, wiki: t.sectionWiki,
+    ratings: t.sectionRatings, discussion: t.sectionDiscussion, lists: t.sectionLists }[section] }));
+
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
 export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
 }) {
-  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience] = await Promise.all([readingAgent(),
-    browseReader(), readReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types)]);
+  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience, plan] = await Promise.all([readingAgent(),
+    browseReader(), readReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types),
+    readHubPlan(id)]);
   // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
   const context = ratings.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
@@ -142,10 +154,15 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
+    sections={hubLabels(messages, plan)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
       <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />
-    </Suspense>}>
+    </Suspense>}
+    status={experience.kind === 'book' ? <Suspense fallback={null}>
+      <Status id={id} locale={locale} messages={messages} /></Suspense> : undefined}
+    shortcuts={plan.includes('wiki') ? <Suspense fallback={null}>
+      <WikiShortcut id={id} locale={locale} messages={messages} /></Suspense> : undefined}>
     {children}</WorkFrame>;
 }
 
@@ -247,12 +264,6 @@ async function Classification(props: ScopedProps) {
 }
 
 /** Works to read next, beside the ones this Work's readers also enjoyed. */
-async function Editions({ id, locale, messages }: Common & { id: string }) {
-  const releases = await readReleases(id);
-  if (!releases.ok) return <EditionsSection items={null} failure={releases.failure} locale={locale} messages={messages} />;
-  return <EditionsSection items={releases.data.items} failure={null} locale={locale} messages={messages} />;
-}
-
 async function AlsoEnjoyed({ id, work, locale, messages }: Common & { id: string; work: Header }) {
   const [alsoEnjoyed, realms, { avatarQuery }] = await Promise.all([readAlsoEnjoyed(id, locale),
     scopeRealms(id, null, locale), browseReader()]);
@@ -289,24 +300,33 @@ async function TypeExperience({ id, work, experience, locale, messages }: Common
     locale={locale} messages={messages} />;
 }
 
-/** Overview: each region reads in parallel under its own Suspense boundary. */
+/**
+ * Overview: the hub's sections below the identity, in the documented order. Each region reads in parallel under
+ * its own Suspense boundary; `OverviewLayout` draws only the sections the Work's projection binds.
+ */
 export async function WorkOverview({ workRef, id, work, scope, context, locale, messages }: Common & {
   workRef: WorkAt; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
 }) {
-  const experience = await readExperience(id, work.types);
+  const [experience, plan] = await Promise.all([readExperience(id, work.types), readHubPlan(id)]);
   const t = messages;
   const loading = t.loadingRegion;
-  // Specialist reading or cooking leads; shared type sections follow the description.
-  return <OverviewLayout messages={messages} about={<div className="grid gap-8">
-    {experience.kind === 'book' || experience.kind === 'plain' ? null : <Suspense fallback={<RegionSkeleton
+  const common = { id, locale, messages };
+  return <OverviewLayout messages={messages} plan={plan}
+    // Specialist reading or cooking leads; the description and tags follow.
+    type={experience.kind === 'book' || experience.kind === 'plain' ? null : <Suspense fallback={<RegionSkeleton
       id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
       <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense>}
-    <WorkAbout work={work} messages={messages} />
-    <Suspense fallback={<RegionSkeleton id="work-editions-loading" title={editionMessages[locale].editions}
-      label={loading} lines={4} />}>
-      <Editions id={id} locale={locale} messages={messages} /></Suspense>
-    <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
-  </div>}
+    about={<WorkAbout work={work} messages={messages} />}
+    facts={<Suspense fallback={null}><AboutFacts {...common} /></Suspense>}
+    availability={<>
+      <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}
+        lines={4} />}>
+        <Availability workRef={workRef} {...common} /></Suspense>
+      <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
+    </>}
+    parts={<Parts workRef={workRef} {...common} />}
+    wiki={<Suspense fallback={<RegionSkeleton id="work-wiki-loading" title={t.sectionWiki} label={loading} lines={2} />}>
+      <WikiSection {...common} /></Suspense>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>
       <ScopeBarSlot workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />
     </Suspense>}
@@ -323,6 +343,9 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
       <Reviews workRef={workRef} id={id} work={work} scope={scope} context={context} locale={locale}
         messages={messages} />
     </Suspense> : null}
+    discussion={<Suspense fallback={<RegionSkeleton id="work-discussion-loading" title={t.sectionDiscussion}
+      label={loading} lines={3} />}>
+      <DiscussionHub workRef={workRef} {...common} /></Suspense>}
     adoption={scope ? <Suspense fallback={<RegionSkeleton id="work-adoption-loading" title={t.adoption}
       label={loading} lines={2} />}>
       <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />

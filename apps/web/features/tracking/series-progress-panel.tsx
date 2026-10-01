@@ -58,7 +58,7 @@ function reasonText(reason: NonNullable<SeriesSummary['next']>['reason'], t: Cop
 }
 
 /** The series' language and edition, saved against the version read; another device's change is shown, not overwritten. */
-function PreferenceForm({ work, preference, language, editions, api, locale, t, onSaved, onLanguage }: {
+export function PreferenceForm({ work, preference, language, editions, api, locale, t, onSaved, onLanguage }: {
   work: string; preference: EditionPreference | null; language: string; editions: Editions | null; api: TrackingApi;
   locale: UiLocale; t: Copy; onSaved: (preference: EditionPreference | null) => void; onLanguage: (language: string) => void;
 }) {
@@ -145,6 +145,12 @@ function Correspondences({ offers, marked, counterparts, failed, onMark, t }: {
   </div>;
 }
 
+/**
+ * Fired on `window` when a preference is saved outside the panel (the Work page's edition choice), so the panel
+ * reads progress again in the language the reader chose. `detail` is `{ work, preference }`.
+ */
+export const EDITION_SAVED = 'rezics:edition-preference-saved';
+
 /** What the panel reads once, before it asks for progress: the choice that names the language, editions, correspondences. */
 interface Setup { preference: EditionPreference | null; editions: Editions | null; counterparts: Counterpart[] }
 type Progress = { language: string; value: ProgressSummary } | { language: string; failure: ReadFailure };
@@ -155,7 +161,11 @@ type Progress = { language: string; value: ProgressSummary } | { language: strin
  * correspondence is recorded it offers to mark the counterpart read, only when the reader asks.
  * Nothing is computed here; a Work with no parts and no correspondence shows nothing.
  */
-export function SeriesProgressPanel({ work, locale, className }: { work: string; locale: UiLocale; className?: string }) {
+export function SeriesProgressPanel({ work, locale, className, preferenceForm = true }: {
+  work: string; locale: UiLocale; className?: string;
+  /** False where the page offers the same choice elsewhere (the Work page's edition section). */
+  preferenceForm?: boolean;
+}) {
   const actions = useReaderActions();
   const api = actions.kind === 'ready' ? actions.tracking ?? null : null;
   const t = copyOf(locale);
@@ -177,6 +187,17 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
       });
     return () => { current = false; };
   }, [api, work]);
+
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const detail = (event as CustomEvent<{ work: string; preference: EditionPreference | null }>).detail;
+      if (detail.work !== work) return;
+      setSetup(current => current ? { ...current, preference: detail.preference } : current);
+      if (detail.preference) setLanguage(detail.preference.language);
+    };
+    window.addEventListener(EDITION_SAVED, saved);
+    return () => window.removeEventListener(EDITION_SAVED, saved);
+  }, [work]);
 
   const preference = setup?.preference ?? null;
   const headingId = useId();
@@ -245,7 +266,7 @@ export function SeriesProgressPanel({ work, locale, className }: { work: string;
             ? <span className="text-muted-foreground text-sm"> · {locatorParts(series.furthestCompleted.locator, t).furthest}</span> : null}</p>
       </div> : null}
     </> : null}
-    {hasParts ? <div className="grid gap-2 border-border/60 border-t pt-3">
+    {hasParts && preferenceForm ? <div className="grid gap-2 border-border/60 border-t pt-3">
       <h3 className="font-medium text-sm">{t.preference}</h3>
       <p className="text-muted-foreground text-xs">{t.preferenceNote}</p>
       <PreferenceForm work={work} preference={preference} language={language}

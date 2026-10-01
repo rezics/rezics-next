@@ -14,7 +14,7 @@ export function WorkTabs({ workRef, labels, label }: {
 }) {
   const current = tabOf(usePathname(), workRef);
   const scope = scopeAt(workRef, Object.fromEntries(useSearchParams()));
-  return <nav aria-label={label} className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+  return <nav aria-label={label} className="hidden overflow-x-auto sm:block">
     <ul className="flex w-max min-w-full gap-1 border-border/70 border-b">
       {workTabs.map(tab => <li key={tab}>
         <Link href={workHref(workRef, tab, scope)}

@@ -74,7 +74,7 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
     {work.disclosure === 'restricted'
       ? <Badge variant="warning" title={t.restrictedHelp}><LockIcon aria-hidden="true" />{t.restricted}</Badge> : null}
     <h1 lang={work.title.language} dir={work.title.direction} className="text-balance font-semibold font-work-title
-      text-3xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-[2.75rem]/[1.12]">{work.title.value}</h1>
+      text-2xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-4xl/[1.12] lg:text-[2.75rem]/[1.12]">{work.title.value}</h1>
     {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
       className="max-w-2xl text-pretty font-medium text-foreground/80 text-lg">{work.tagline.value}</p> : null}
     {titleNeedsLanguageNote(work.title, locale) ? <p className="text-muted-foreground text-xs">
