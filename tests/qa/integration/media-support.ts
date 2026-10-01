@@ -36,8 +36,6 @@ import { mainSelectionDigest, selectMainDefault } from '../../../services/main/s
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
-import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
-import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
