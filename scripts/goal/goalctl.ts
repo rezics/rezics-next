@@ -1146,6 +1146,25 @@ async function status(): Promise<void> {
   if (closed) console.log(`${closed} closed task(s) omitted`);
 }
 
+/** QA stacks are named `rezics-qa-<UTC yyyymmddThhmmss>-<id>-<n>`. A run killed with SIGKILL never tears
+ * its stack down, and leaked stacks filled the Docker VM (four left running for nine hours). No QA run
+ * lasts three hours, so a stack started earlier is removed before the next run takes a slot. */
+export function reapStaleQaStacks(now = Date.now(), maxAgeMs = 3 * 3_600_000): string[] {
+  const listed = spawnSync('docker', ['ps', '-a', '--format', '{{.Label "com.docker.compose.project"}}'],
+    { encoding: 'utf8', timeout: 30_000 });
+  if (listed.status !== 0) return [];
+  const stale = [...new Set(listed.stdout.split('\n'))].filter(project => {
+    const match = /^rezics-qa-(\d{4})(\d{2})(\d{2})t(\d{2})(\d{2})(\d{2})-/.exec(project);
+    if (!match) return false;
+    const [, y, mo, d, h, mi, se] = match;
+    return now - Date.UTC(+y!, +mo! - 1, +d!, +h!, +mi!, +se!) > maxAgeMs;
+  });
+  for (const project of stale) {
+    spawnSync('docker', ['compose', '-p', project, 'down', '-v'], { encoding: 'utf8', timeout: 180_000 });
+  }
+  return stale;
+}
+
 async function withSlot(command: string[]): Promise<number> {
   const slots = Number(process.env.GOAL_QA_SLOTS ?? 4);
   const dir = join(stateDir, 'qa-slots');
@@ -1164,6 +1183,7 @@ async function withSlot(command: string[]): Promise<number> {
   }
   const slot = held;
   const release = () => rmSync(slot, { recursive: true, force: true });
+  reapStaleQaStacks();
   try {
     const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit' });
     const forward = (signal: NodeJS.Signals) => child.kill(signal);
