@@ -56,6 +56,10 @@ conventions below come from the first backend Goal:
   image stamp in `infra/dev/compose.yaml`. Run `task gen` locally when your tests
   need them, then restore those paths with `git checkout --` before handoff. The
   manager regenerates them once per integration wave.
+- When your change alters a served contract (a route's request or response
+  schema), run `task gen` and then `task web:typecheck`; fix web fixtures and
+  stories that no longer match the contract in the same change. Web code that
+  reads the changed field is the web owner's; list it under OWNER CHANGES.
 - Add a model profile as a new `model/definitions/<name>-v1.ts`; the compiler
   discovers it. Do not edit other profiles unless the brief claims them. A new
   profile is that file plus `model/accepted/profiles/<profile-id>.json`.
