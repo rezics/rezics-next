@@ -334,6 +334,28 @@ test('QA08: backend WORK01 needs the API owner result and cannot borrow browser 
   expect(acceptanceStatuses(workCase, [native], true, coverage).WORK01.status).toBe('passed');
 });
 
+test('QA08: CLP01 needs the API journey and the browser journey, and backend completion cannot borrow the browser', () => {
+  const loopCase = [{ id: 'CLP01', page: 'docs/goals/tasks/G-704.md' }];
+  const native = { tier: 'integration' as const,
+    file: 'tests/qa/integration/g-704-contribution-loop.test.ts',
+    name: 'CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted',
+    failed: false, skipped: false };
+  const browser = { tier: 'e2e' as const, file: 'apps/web/tests/g-704-contribution-loop.e2e.ts',
+    name: 'CLP01/CLP04: a contributor proposes, is asked for changes, revises past a stale approval, and sees the decision and its revert',
+    failed: false, skipped: false };
+  const required = declaredCaseCoverage(cases);
+  expect(required.get('CLP01')).toEqual([
+    `integration:${native.file}:${native.name}`,
+    `e2e:${browser.file}:${browser.name}`,
+  ]);
+  expect(acceptanceStatuses(loopCase, [native], true, required).CLP01.status).toBe('partial-pass');
+  expect(acceptanceStatuses(loopCase, [native, browser], true, required).CLP01.status).toBe('passed');
+  const backend = declaredCaseCoverage(loopCase, 'backend');
+  expect(backend.get('CLP01')).toEqual([`integration:${native.file}:${native.name}`]);
+  expect(acceptanceStatuses(loopCase, [browser], true, backend).CLP01.status).toBe('partial-pass');
+  expect(acceptanceStatuses(loopCase, [native], true, backend).CLP01.status).toBe('passed');
+});
+
 test('QA08: qualification page is generated only from a clean complete case run', () => {
   const report = { runId: 'run-one', source: { head: 'abc', fingerprint: '123', clean: true },
     sourceStable: true, certifiesFull: true,

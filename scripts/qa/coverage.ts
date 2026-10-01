@@ -38,7 +38,9 @@ export function declaredCaseCoverage(cases: readonly Case[], scope: 'all' | 'bac
       if (scope === 'all') throw new Error(`Invalid complete-case declaration: ${id}`);
       continue;
     }
-    const tests = scope === 'backend' && id === 'WORK01'
+    // Full coverage keeps browser evidence. Backend completion counts the API tests only,
+    // as WORK01 and the contribution loop (CLP) each declare both.
+    const tests = scope === 'backend' && (id === 'WORK01' || id.startsWith('CLP'))
       ? declared.filter(test => test.tier !== 'e2e') : declared;
     if (tests.length === 0) throw new Error(`Invalid complete-case declaration: ${id}`);
     const identities = tests.map(test => {

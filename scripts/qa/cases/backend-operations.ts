@@ -1715,6 +1715,87 @@ export const backendOperationMappings: readonly OperationMapping[] = [
     ],
     context: 'Configured primary absence and automatic backup alert delivery are pending G-917.',
   },
+  {
+    ids: ['CLP01'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals' },
+      { status: 'existing', method: 'GET', path: '/v1/editorial/proposals/{proposal}' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/reviews' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/revisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/decisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/withdrawal' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/reversal' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/recovery' },
+      { status: 'existing', method: 'GET', path: '/v1/me/notifications' },
+      { status: 'existing', method: 'PUT', path: '/v1/me/notifications/{item}/triage' },
+      { status: 'existing', method: 'GET', path: '/v1/works/{id}/metadata' },
+    ],
+    context: 'A catalogue correction is proposed, reviewed, revised, decided, notified, withdrawn, reverted and recovered.',
+  },
+  {
+    ids: ['CLP02'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals' },
+      { status: 'existing', method: 'GET', path: '/v1/editorial/proposals/{proposal}' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/reviews' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/revisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/decisions' },
+      { status: 'existing', method: 'GET', path: '/v1/wiki/{work}/history' },
+      { status: 'existing', method: 'GET', path: '/v1/me/notifications' },
+    ],
+    context: 'An assistant wiki bundle stays unpublished until a reviewer decides it, and the people concerned are notified.',
+  },
+  {
+    ids: ['CLP03'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals' },
+      { status: 'existing', method: 'GET', path: '/v1/editorial/proposals/{proposal}' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/reviews' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/revisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/decisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/reversal' },
+      { status: 'existing', method: 'GET', path: '/v1/wiki/{work}/history' },
+    ],
+    context: 'A chapter delta retracts one claim, resumes after interruption, refuses a competing delta and restores the ended claim.',
+  },
+  {
+    ids: ['CLP04'],
+    targets: [
+      { status: 'existing', method: 'GET', path: '/v1/editorial/proposals/{proposal}' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/revisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/decisions' },
+    ],
+    context: 'An approval of an earlier revision stays visible as stale and never counts, for a correction, a bundle and a delta.',
+  },
+  {
+    ids: ['CLP05'],
+    targets: [
+      { status: 'existing', method: 'GET', path: '/v1/wiki/{work}/history' },
+      { status: 'existing', method: 'POST', path: '/v1/semantic/changes' },
+      { status: 'existing', method: 'POST', path: '/v1/exports' },
+      { status: 'existing', method: 'GET', path: '/v1/exports/{export}' },
+      { status: 'existing', method: 'POST', path: '/v1/rights/use-assessments' },
+    ],
+    context: 'A pinned revision set renders unchanged after rename or merge; a rights restriction withholds the quote and stops the earlier export.',
+  },
+  {
+    ids: ['CLP06'],
+    targets: [
+      { status: 'existing', method: 'GET', path: '/v1/editorial/proposals/{proposal}' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/revisions' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/reviews' },
+      { status: 'existing', method: 'POST', path: '/v1/editorial/proposals/{proposal}/decisions' },
+      { status: 'existing', method: 'GET', path: '/v1/wiki/{work}/history' },
+    ],
+    context: 'Proposals, receipts and claims stay readable after a credential is replaced or revoked; the old bearer is refused.',
+  },
+  {
+    ids: ['CLP07'],
+    targets: [
+      { status: 'existing', method: 'GET', path: '/v1/works' },
+    ],
+    context: 'Absence check over the public OpenAPI document: no path, operation or tag may name distribution, worldbuilding, recognition, BlockNote, Agent mode, prose wikis or developer extras. GET /v1/works is an existing public route inside that document, not a closed capability.',
+  },
 ];
 
 export function operationMap(cases: readonly Case[]): ReadonlyMap<string, OperationMapping> {
