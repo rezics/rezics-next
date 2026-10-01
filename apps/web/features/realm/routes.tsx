@@ -11,6 +11,7 @@ import { PageContainer } from '../shell/page.tsx';
 import { ZoneBrowse } from '../zones/browse.tsx';
 import { type BrowseFacet, browseFacets, mainBrowseQuery, parseBrowseState } from '../zones/browse-state.ts';
 import { browseEntry, browseModel, type FacetCounts } from '../zones/browse-view.ts';
+import { ZoneSiteHome } from '../zones/site-home.tsx';
 import { cardRenderer, ZoneHome } from '../zones/zone-home.tsx';
 import { ReleaseBrowse, ReleaseBrowseHeader } from '../release-filter/browse.tsx';
 import { readReleaseBrowse } from '../release-filter/read.ts';
@@ -92,7 +93,9 @@ function facetCounts(page: ZoneBrowsePage): FacetCounts {
 }
 
 export function RealmHomeRoute(props: RealmRouteProps) {
-  return realmRoute(props, 'home', async view => {
+  return realmRoute(props, 'home', async (view, _locale, search) => {
+    // A package that sets out the Zone's home itself (a wiki's lists at the reader's position) replaces the modules.
+    if (view.pkg?.slots.home) return <ZoneSiteHome view={view} search={search} />;
     const { locale, realm } = view.context;
     // The home leads with search and the values a browse page filters by; its counts come from one browse read.
     const [modules, window] = await Promise.all([loadModules(view.presentation, view.context, view.bannerMedia),

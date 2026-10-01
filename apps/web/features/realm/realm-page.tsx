@@ -19,6 +19,9 @@ import { defaultModuleTitle, type ZoneMessages } from '../zones/messages.ts';
 import { defaultPresentation, type ZonePresentation } from '../zones/presentation.ts';
 import { zoneTheme } from '../zones/theme.ts';
 import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
+import { PositionBar } from '../wiki/position-bar.tsx';
+import { parsePosition } from '../wiki/position.ts';
+import { positionOf } from '../wiki/state.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmMembership } from './membership.tsx';
@@ -149,6 +152,8 @@ export async function RealmFrame({ view, tab, locale, search, address, crumbs, c
     enabled: lookEnabled });
   const members = membersText(realm.header.membership.count, locale, messages);
   const here = localizedPath(address ?? realmHref(locale, realm.ref, tab ?? 'home'), locale);
+  // A Zone whose package reads at the reader's position in a story offers the choice on every page.
+  const positions = realm.zone ? await positionOf(pkg, realm.zone.id, parsePosition(search)) : null;
   // Join or Follow first, as every community page offers; the page style stays beside it.
   const actions = <>
     <RealmMembership realm={realm.header.id} realmName={zone.name.value} initial={view.membership}
@@ -169,6 +174,7 @@ export async function RealmFrame({ view, tab, locale, search, address, crumbs, c
         discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
     site={view.mounts.length ? { label: messages.siteNavigation, links: mountLinks(view) } : undefined}
+    position={positions ? <PositionBar state={positions} here={here} locale={locale} /> : undefined}
     crumbs={crumbs ? { label: messages.breadcrumbs, items: crumbs } : undefined}
     notice={<ExecutionNotice execution={execution} showDesignHref={showDesign} messages={zoneMessages} />}>
     {/* Shelf controls on every tile; signing in from one returns to this tab. */}

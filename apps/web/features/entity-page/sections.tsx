@@ -13,8 +13,9 @@ import { DiscussionView, RelationsView, type SectionProps, StatementsView } from
 // The sections' server halves: each reads from the link the projection gave it, names what it lists, and hands
 // the answer to the view of the same name (views.tsx), which stories and tests draw without Main.
 
-export async function StatementsSection({ section, cursor, ...rest }: SectionProps & { cursor: string | undefined }) {
-  const page = await readStatements(section, cursor);
+export async function StatementsSection({ section, cursor, position, ...rest }: SectionProps
+  & { cursor: string | undefined; position?: string }) {
+  const page = await readStatements(section, cursor, position);
   const names = page.ok ? await namesOf(page.data.groups.flatMap(group => group.items.flatMap(item =>
     item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : []))) : new Map();
   return <StatementsView page={page} names={names} cursor={cursor} hrefFor={rest.hrefFor} t={rest.t}
@@ -22,8 +23,9 @@ export async function StatementsSection({ section, cursor, ...rest }: SectionPro
 }
 
 
-export async function RelationsSection({ section, cursor, ...rest }: SectionProps & { cursor: string | undefined }) {
-  return <RelationsView page={await readRelations(section, cursor)} cursor={cursor} hrefFor={rest.hrefFor}
+export async function RelationsSection({ section, cursor, position, ...rest }: SectionProps
+  & { cursor: string | undefined; position?: string }) {
+  return <RelationsView page={await readRelations(section, cursor, position)} cursor={cursor} hrefFor={rest.hrefFor}
     locale={rest.locale} t={rest.t} messages={rest.messages} />;
 }
 

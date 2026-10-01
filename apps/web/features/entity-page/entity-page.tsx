@@ -44,7 +44,8 @@ export function EntityNotFound({ t }: { t: Copy }) {
  * and `hrefFor` maps every link to the host's own addresses. A missing and a
  * hidden resource both end in `notFound()`.
  */
-export async function EntityPage({ resource, locale, hrefFor, frame = true, cursors = {}, sections: only }: {
+export async function EntityPage({ resource, locale, hrefFor, frame = true, cursors = {}, sections: only, position,
+  header = true }: {
   /** The resource's UUID or IRI. */
   resource: string; locale: UiLocale;
   /** Defaults to the standalone addresses: Works at `/w`, everything else at `/e`. */
@@ -53,10 +54,14 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   cursors?: EntityCursors;
   /** Draw only these sections, for a host that places the others itself. */
   sections?: readonly SectionId[];
+  /** The reading position (`all` or an occurrence IRI) Main withholds later records for; omitted, Main chooses. */
+  position?: string;
+  /** Draw the page's heading; a host that sets the name out itself leaves it off. */
+  header?: boolean;
 }) {
   const id = parseEntityRef(resource);
   if (!id) notFound();
-  const [t, messages, projection] = [copyOf(locale), await getMessages('workPage', locale), await readEntityProjection(id)];
+  const [t, messages, projection] = [copyOf(locale), await getMessages('workPage', locale), await readEntityProjection(id, position)];
   if (!projection.ok) {
     if (projection.failure === 'missing') notFound();
     return <Unavailable t={t} messages={messages} frame={frame} />;
@@ -71,13 +76,14 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   const loading = (section: EntitySection, title: string) =>
     <RegionSkeleton id={`${section.id}-loading`} title={title} label={messages.loadingRegion} lines={3} />;
   const body: ReactNode = <div className="grid min-w-0 gap-10">
-    <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale} t={t} />
+    {header ? <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale}
+      t={t} /> : null}
     {draw.map(section => {
       switch (section.id) {
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>
-          <StatementsSection section={section} cursor={cursors.statements} {...common} /></Suspense>;
+          <StatementsSection section={section} cursor={cursors.statements} position={position} {...common} /></Suspense>;
         case 'relations': return <Suspense key={section.id} fallback={loading(section, t.relations)}>
-          <RelationsSection section={section} cursor={cursors.relations} {...common} /></Suspense>;
+          <RelationsSection section={section} cursor={cursors.relations} position={position} {...common} /></Suspense>;
         case 'ratings': return <Suspense key={section.id} fallback={loading(section, messages.ratings)}>
           <RatingsSection section={section} registry={page.registry} {...common} /></Suspense>;
         case 'reviews': return <Suspense key={section.id} fallback={loading(section, messages.reviews)}>

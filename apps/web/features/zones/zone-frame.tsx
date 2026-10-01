@@ -64,8 +64,8 @@ export function ExecutionNotice({ execution, showDesignHref, messages }: {
  * Platform navigation (`tabs`) always stays, with the Zone's own pages (`site`) under it and, on one of them,
  * the way back (`crumbs`).
  */
-export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions, members, tabs, site, crumbs, notice,
-  children }: {
+export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions, members, tabs, site, position, crumbs,
+  notice, children }: {
   zone: ZoneContext;
   /** The value package CSS scopes to: the official slug, or the Realm's id. */
   dataZone: string;
@@ -73,6 +73,8 @@ export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions
   masthead: ReactNode; actions: ReactNode; members: string | null;
   tabs: ReactNode; notice?: ReactNode; children: ReactNode;
   site?: { label: string; links: readonly SiteLink[] };
+  /** The reader's place in the story, for a Zone whose package reads at one: its control, under the site navigation. */
+  position?: ReactNode;
   crumbs?: { label: string; items: readonly SiteCrumb[] };
 }) {
   const Header = pkg?.slots.header;
@@ -86,6 +88,7 @@ export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions
     </SlotBoundary> : masthead}
     {tabs}
     {site ? <ZoneSiteNavigation links={site.links} label={site.label} /> : null}
+    {position}
     {notice}
     {crumbs ? <ZoneBreadcrumbs crumbs={crumbs.items} label={crumbs.label} /> : null}
     {children}

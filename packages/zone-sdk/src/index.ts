@@ -340,15 +340,140 @@ export interface BrowseHeaderSlotProps extends ZoneSlotProps {
 export const zoneHubSections = ['about', 'availability', 'parts', 'wiki', 'ratings', 'discussion', 'lists'] as const;
 export type ZoneHubSection = (typeof zoneHubSections)[number];
 
+/**
+ * A page of a mounted resource that is not a Work: a character, place, event or chapter of a wiki. Main named
+ * it (`name`) and the platform gave it an address inside the Zone (`href`); `kind` is the type registry's word
+ * for what it is, in the reader's language.
+ */
+export interface ZoneMember { id: string; href: string; name: ZoneText; kind: string | null }
+
 /** A mounted Collection's index page: the Works on this page, set out by the platform as `fallback`. */
 export interface IndexSlotProps extends ZoneSlotProps, ZoneWorkRenderers {
   works: ZoneWork[];
+}
+
+/** A mounted Collection's index page for its members that are not Works: the page's members, in Main's order. */
+export interface MemberIndexSlotProps extends ZoneSlotProps {
+  members: ZoneMember[];
+  /** The mounted page the reader is on: its route segment (`characters`) and its name in the Zone. */
+  mount: { segment: string; name: ZoneText };
+  /** Where the reader reads up to, for a Zone whose records appear by position. */
+  position: ZonePositionState;
+  /** More members follow this page. */
+  more: boolean;
+}
+
+/**
+ * Where a position-aware Zone's reader is reading up to. Main decides what every read returns for it and
+ * withholds the rest before delivery; the package only words what the reader is looking at.
+ */
+export interface ZonePositionState {
+  /** `default` is Main's choice for this reader (their own progress, or the start), `chosen` one they picked. */
+  mode: 'default' | 'chosen' | 'all';
+  /** The position's name when there is one; null at the start, without progress and for `all`. */
+  label: ZoneText | null;
+  /** The address that shows everything; null when the page already does. */
+  showAllHref: string | null;
+}
+
+/** One line of a page's infobox: a property Main recorded and its values. */
+export interface ZoneFact { label: string; values: { text: ZoneText; href: string | null }[] }
+
+/** A relationship as a structured row: what it is, and the other participants. */
+export interface ZoneRelationship { label: string; others: { name: ZoneText; href: string | null }[] }
+
+/**
+ * A passage that supports a claim, with its source. `text` is null when Main withheld the quotation under a rights
+ * restriction; the source stays, so a reader can find the passage in their own copy.
+ */
+export interface ZoneEvidence {
+  id: string;
+  text: ZoneText | null;
+  withheld: boolean;
+  /** The claim it supports, in words (`Family: Bennet family`). */
+  supports: string;
+  /** How the claim is told: `narrated`, `said`, `rumoured` or `hypothetical`. */
+  modality: string;
+  /** The rights basis Main recorded for quoting it (`public_domain`, `license`, ...). */
+  rights: string;
+  /** The media type of the edition the passage was read from, and the agent that extracted it. */
+  mediaType: string | null;
+  agent: string | null;
+}
+
+/** A wiki page's data, as the platform read it for the reader's position. */
+export interface ZoneEntity {
+  id: string;
+  /** What it is (`Character`), from the type registry in the reader's language. */
+  kind: string | null;
+  name: ZoneText;
+  /** Other names by language, in the order Main returned them. */
+  aliases: ZoneText[];
+  facts: ZoneFact[];
+  relationships: ZoneRelationship[];
+  evidence: ZoneEvidence[];
+  /** The first position at which the record appears, when the platform could find it. */
+  firstSeen: { name: ZoneText; href: string | null } | null;
+  /** The record holds more than this lists (more facts, relationships or passages); the full page continues it. */
+  more: boolean;
+  /** The platform's own page for the record, at the same position. */
+  fullPage: string;
+  /** Set when the record is a position in the story (a chapter); null for any other record. */
+  chapter: ZoneChapter | null;
+}
+
+/** A chapter's place in the story, and what it adds to the wiki. */
+export interface ZoneChapter {
+  /** The reader's position is at or past this chapter. Before it, nothing is listed: Main has not revealed it. */
+  reached: boolean;
+  /**
+   * The members of each mounted list that appear at this chapter and not at the one before. `complete` is false
+   * when the comparison stopped at its bound, so a list may be shorter than the truth.
+   */
+  reveals: { segment: string; name: ZoneText; members: ZoneMember[]; complete: boolean }[];
+  previous: ZoneNeighbour | null;
+  next: ZoneNeighbour | null;
+}
+
+/** The position before or after a chapter, when the Zone has a page for it. */
+export interface ZoneNeighbour { name: ZoneText; href: string }
+
+/** A mounted resource's page inside the Zone: a character, a place, an event or a chapter. */
+export interface EntitySlotProps extends ZoneSlotProps {
+  entity: ZoneEntity;
+  position: ZonePositionState;
+  /** The mounted page it belongs to, for the way back. */
+  mount: { segment: string; name: ZoneText; href: string } | null;
+  /** The platform's own rendering of everything else the page holds (discussion, ratings), placed after the slot. */
+  rest: ReactNode;
+}
+
+/** One mounted list of a wiki's home, with the first of its members. */
+export interface ZoneHomeSection {
+  segment: string;
+  name: ZoneText;
+  href: string;
+  works: ZoneWork[];
+  members: ZoneMember[];
+  more: boolean;
+}
+
+/** The Zone's home: what each mounted page holds at the reader's position. */
+export interface HomeSlotProps extends ZoneSlotProps, ZoneWorkRenderers {
+  sections: ZoneHomeSection[];
+  position: ZonePositionState;
 }
 
 /** The slots a package may fill; an empty slot keeps the platform rendering. */
 export interface ZoneSlots {
   /** The index page of a mounted Collection (`/r/light-novels/catalogue`). */
   index?: ComponentType<IndexSlotProps>;
+  /** The index page of a mounted Collection's members that are not Works (`/r/franchise-wiki/characters`). */
+  memberIndex?: ComponentType<MemberIndexSlotProps>;
+  /** The page of a mounted resource that is not a Work (`/r/franchise-wiki/characters/{id}`). */
+  entity?: ComponentType<EntitySlotProps>;
+  /** The Zone's home, in place of its modules, for a Zone whose pages are its mounted lists. */
+  home?: ComponentType<HomeSlotProps>;
   /** Above the Zone's browse results: the release filter and the words around it. */
   browseHeader?: ComponentType<BrowseHeaderSlotProps>;
   header?: ComponentType<HeaderSlotProps>;
@@ -379,6 +504,13 @@ export interface ZonePackage {
    * hides (a visual novel leads with `availability`, a series with `parts`).
    */
   hubOrder?: readonly ZoneHubSection[];
+  /**
+   * Asks the platform to read this Zone at each reader's position in a story (a wiki that reveals records as
+   * chapters are read). `mount` is the route segment of the mounted list whose first Work the positions are in
+   * (`franchise`). The platform adds a position control to the Zone's frame and sends the position with every
+   * read; Main withholds what is revealed later, so a package never filters.
+   */
+  positions?: { mount: string };
 }
 
 export function defineZonePackage<const Package extends ZonePackage>(pkg: Package): Package {

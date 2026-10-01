@@ -8,10 +8,13 @@ import type { EntityProjection, EntitySection, RelationsPage, StatementPage } fr
 // one section's failure never takes down another, and every section read
 // follows the link the projection gave it.
 
-/** `entity-page-v1` for a resource, once per request; a hidden and a missing resource answer alike (`missing`). */
-export const readEntityProjection = cache(async (id: string): Promise<Loaded<EntityProjection>> => {
+/**
+ * `entity-page-v1` for a resource, once per request; a hidden and a missing resource answer alike (`missing`).
+ * `position` is the reading position Main withholds later records for (G-847); omitted, Main chooses for the reader.
+ */
+export const readEntityProjection = cache(async (id: string, position?: string): Promise<Loaded<EntityProjection>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.resources({ resource: id }).page.get({ query: { actingSubject } }));
+  return settle(() => main.v1.resources({ resource: id }).page.get({ query: { actingSubject, position } }));
 });
 
 export function sectionOf(page: EntityProjection, id: EntitySection['id']): EntitySection | undefined {
@@ -19,18 +22,20 @@ export function sectionOf(page: EntityProjection, id: EntitySection['id']): Enti
 }
 
 /** A page of accepted statements about the resource, in the reader's Context. */
-export async function readStatements(section: EntitySection, cursor: string | undefined): Promise<Loaded<StatementPage>> {
+export async function readStatements(section: EntitySection, cursor: string | undefined, position?: string):
+  Promise<Loaded<StatementPage>> {
   const { main, actingSubject } = await reader();
-  return settle(followHref<StatementPage>(main, section.href, { actingSubject, cursor }), cursor);
+  return settle(followHref<StatementPage>(main, section.href, { actingSubject, cursor, position }), cursor);
 }
 
 /**
  * A page of relation occurrences where the resource takes any role. Relations are public data: an anonymous
  * reader, or one signed in without an acting Agent, reads them as anyone does.
  */
-export async function readRelations(section: EntitySection, cursor: string | undefined): Promise<Loaded<RelationsPage>> {
+export async function readRelations(section: EntitySection, cursor: string | undefined, position?: string):
+  Promise<Loaded<RelationsPage>> {
   const { main, actingSubject } = await reader();
-  return settle(followHref<RelationsPage>(main, section.href, { actingSubject, after: cursor, limit: 20 }), cursor);
+  return settle(followHref<RelationsPage>(main, section.href, { actingSubject, after: cursor, limit: 20, position }), cursor);
 }
 
 /** Reviewed replies placed in public Realms about the resource, newest first. */
