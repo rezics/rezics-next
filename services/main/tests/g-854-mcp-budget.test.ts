@@ -9,6 +9,10 @@ test('G-854 review: only the actual library upload tool receives the larger MCP 
     method: 'tools/call',params: { name,arguments: { file: 'x'.repeat(MCP_COST.maxRequestBytes) } } }) });
   const uploaded = await mcpBody(request('library_import_create','library_import_create'));
   expect(uploaded).toBeInstanceOf(Uint8Array);
+  const escaped = new Request('http://main.local/mcp',{ method: 'POST',headers: { 'mcp-method': 'tools/call',
+    'mcp-name': 'library_import_create' },body: JSON.stringify({ method: 'tools/call',params: {
+      name: 'library_import_create',arguments: { file: '\u0000'.repeat(800_000) } } }) });
+  expect(await mcpBody(escaped)).toBeInstanceOf(Uint8Array);
   expect((await mcpBody(request('library_export'))) as Response).toHaveProperty('status',413);
   expect((await mcpBody(request('library_export','library_import_create'))) as Response).toHaveProperty('status',413);
   expect((await mcpBody(new Request('http://main.local/mcp',{ method: 'POST',headers: {

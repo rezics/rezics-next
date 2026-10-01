@@ -71,6 +71,8 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
     await resolve(legacyUpload.id,[reread],other,home.author.token);await checked(await apply(legacyUpload.id,other,home.author.token));
     expect((await sessions(other)).map(state => [state.startedOn,state.finishedOn])).toEqual([
       ['2020-01-01','2020-02-01'],['2026-01-01','2026-02-01'] ]);
+    await checked(await call('POST','/v1/collections',{ actingSubject: agent,collection: `https://rezics.com/id/${randomUUID()}`,
+      name: 'Replay shelf',disclosure: 'private' }),201);
     const first = await checked<Page>(await exported());
     expect(first.nextCursor).not.toBeNull();
     await stack.publicWork(other,['en'],'Unrelated catalogue write');
@@ -86,11 +88,20 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
     const twins = [attempt,{ ...attempt,sourceId: `https://rezics.com/id/${randomUUID()}` }];
     const twinUpload = await upload(twins);await resolve(twinUpload.id,twins);await checked(await apply(twinUpload.id));
     expect((await sessions()).length).toBe(3);
+    let workCursor: string | null = null;
+    const workHistory: string[] = [];
+    do {
+      const page = await checked<{ items: Array<{ id: string }>; nextCursor: string | null }>(await call('GET',
+        `/v1/me/sessions?${new URLSearchParams({ actingSubject: agent,work: book.work,limit: '1',...(workCursor ? { cursor: workCursor } : {}) })}`));
+      workHistory.push(...page.items.map(item => item.id));workCursor=page.nextCursor;
+    } while (workCursor);
+    expect(new Set(workHistory).size).toBe(3);
+    expect((await call('GET',`/v1/me/sessions?actingSubject=${encodeURIComponent(agent)}&work=${encodeURIComponent(book.work)}&target=${encodeURIComponent(book.work)}`)).status).toBe(400);
     const twinReplay = await upload(twins,randomUUID(),' ');await resolve(twinReplay.id,twins);await checked(await apply(twinReplay.id));
     expect((await sessions()).length).toBe(3);
     // A target belonging to another Work permanently refuses the first row.
     const alien = await stack.publicWork(other,['en'],'Alien target');
-    const bad = { ...attempt,sourceId: 'bad-target',session: { ...attempt.session,target: alien.work } };
+    const bad = { ...attempt,sourceId: attempt.sourceId,session: { ...attempt.session,target: alien.work } };
     const good = { ...attempt,sourceId: 'later-good',session: { ...attempt.session,state: 'paused' as const,startedOn: '2023',finishedOn: null } };
     const failed = await upload([bad,good]);await resolve(failed.id,[bad,good]);
     expect(await checked(await apply(failed.id))).toMatchObject({ completed: 2,issues: 1,pending: false });

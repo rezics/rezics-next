@@ -32,7 +32,7 @@ export const capabilities = {
     scopes: ['work:read'], description: 'Delete your uploaded source rows and import plans. Applied Library records remain. Uploads otherwise expire seven days after creation.' } } },
   '/v1/me/library-imports': { post: { disposition: 'supported', mcp: { tool: 'library_import_create', title: 'Import a library file',
     scopes: ['work:read'],
-    description: 'Upload your own library export or mapped CSV. Source rows stay private; catalogue matches are reviewed before applying. A CSV without mapping returns headers without storing the file.' } } },
+    description: 'Upload your own library export or mapped CSV. Uploads expire after seven days; save an export to retain source fields. Catalogue matches are reviewed before applying. A CSV without mapping returns headers without storing the file.' } } },
   '/v1/me/library-imports/{id}/rows': { get: { disposition: 'supported', mcp: { tool: 'library_import_rows', title: 'Review library import rows',
     scopes: ['work:read'],
     description: 'Page through every source row and its catalogue or Open Library candidates, retaining unsupported source fields.' } } },

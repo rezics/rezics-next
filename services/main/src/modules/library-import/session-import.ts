@@ -23,9 +23,9 @@ export async function findImportSession(store: ReaderLibraryImportStore, request
   const identity = importDigest([format,source.kind,source.sourceId,source.work ?? desired.target]);
   const bound = (await store.pool.query<{ session_id: string; desired_digest: string }>(`SELECT session_id,desired_digest FROM reader.library_import_session_effect
     WHERE agent=$1 AND source_identity=$2`,[agent,identity])).rows[0];
-  let cursor: string | null = null;
+  let cursor: string | null = null, fallback: SessionState | null = null;
   do {
-    const query = new URLSearchParams({ actingSubject: agent,target: source.work ?? desired.target,limit: '20',...(cursor ? { cursor } : {}) });
+    const query = new URLSearchParams({ actingSubject: agent,...(source.work ? { work: source.work } : { target: desired.target }),limit: '20',...(cursor ? { cursor } : {}) });
     const response = await mainCall(store,request,'GET',`/v1/me/sessions?${query}`);
     if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
     if (!response.ok) throw new ImportSessionFailed('Session owner read was refused');
@@ -39,11 +39,12 @@ export async function findImportSession(store: ReaderLibraryImportStore, request
       // previously restored attempt is already reserved for its source ID.
       const claimed = source.kind === 'session' && (await store.pool.query(`SELECT 1 FROM reader.library_import_session_effect
         WHERE agent=$1 AND session_id=$2 AND source_identity<>$3 LIMIT 1`,[agent,candidate.id,identity])).rowCount;
-      if (!claimed) return { identity,session: candidate,replay: false };
+      if (!claimed && !fallback) fallback=candidate;
+      if (fallback && !bound && source.kind!=='session') return { identity,session: fallback,replay: false };
     }
     cursor = page.nextCursor;
   } while (cursor);
-  return { identity,session: null,replay: false };
+  return { identity,session: fallback,replay: false };
 }
 
 export async function bindImportSession(store: ReaderLibraryImportStore, agent: string, identity: string, session: SessionState, desired: Desired) {

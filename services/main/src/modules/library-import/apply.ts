@@ -93,7 +93,7 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
     // Preserve a pre-existing completion before starting the first imported reread.
     if (inferred && state.status.status === 'read' && (row.status !== 'read'
       || row.startedOn !== state.status.startedOn || row.finishedOn !== state.status.finishedOn)) {
-      const history = await readSessionImportState<{ items: SessionState[] }>(store,request,`/v1/me/sessions?actingSubject=${encodeURIComponent(agent)}&target=${encodeURIComponent(work)}&limit=1`);
+      const history = await readSessionImportState<{ items: SessionState[] }>(store,request,`/v1/me/sessions?actingSubject=${encodeURIComponent(agent)}&work=${encodeURIComponent(work)}&limit=1`);
       if (!history) return null;
       if (!history.items.length && !await sessionStep(store,request,agent,fileKey,item.index,'legacy-completion','POST',
         '/v1/me/sessions',{ actingSubject: agent,target: work,expectedVersion: 0,state: 'finished',
@@ -111,7 +111,8 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
       const key = commandKey(agent,sourceKey,0,'session');
       const held = await store.planStep(agent,fileKey,item.index,'session',{ method,path,key,body: {
         actingSubject: agent,...(!saved ? { target: session.target } : {}),expectedVersion: saved?.version ?? 0,
-        state: session.state,startedOn: session.startedOn,finishedOn: session.finishedOn,addSelections: session.selections } });
+        state: session.state,startedOn: session.startedOn,finishedOn: session.finishedOn,addSelections: [{ target: session.target,...session.selections.find(selection => selection.target===session.target) },
+          ...session.selections.filter(selection => selection.target!==session.target)] } });
       const plan = held.plan as { method: string; path: string; key: string; body: object };
       const response = await mainCall(store,request,plan.method,plan.path,plan.body,plan.key);
       if (response.status >= 500 || response.status === 202 || response.status === 429) return null;

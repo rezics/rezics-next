@@ -50,7 +50,7 @@ export function sessionsRoutes(work: MainWorkDependencies) {
   };
   return new Elysia()
     .get('/v1/me/sessions', { query: t.Object({ actingSubject: readId,
-      target: t.Optional(readId), limit: t.Optional(t.Integer({ minimum: 1, maximum: SESSION_COST.page })),
+      target: t.Optional(readId), work: t.Optional(readId), limit: t.Optional(t.Integer({ minimum: 1, maximum: SESSION_COST.page })),
       cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(sessionState, { maxItems: SESSION_COST.page }),
         nextCursor: t.Nullable(t.String()) }), ...errors },

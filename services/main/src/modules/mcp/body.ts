@@ -1,7 +1,8 @@
 import { MCP_COST } from './capabilities.ts';
 import { FILE_IMPORT_COST } from '../library-import/formats/contract.ts';
 
-export const LIBRARY_IMPORT_MCP_BYTES = 2 * FILE_IMPORT_COST.bytes + 64 * 1024;
+// JSON escapes a source control byte as up to six ASCII bytes.
+export const LIBRARY_IMPORT_MCP_BYTES = 6 * FILE_IMPORT_COST.bytes + 64 * 1024;
 
 /** Apply both byte and time bounds before handing protocol parsing to the SDK. */
 export async function mcpBody(request: Request, deadlineMs: number = MCP_COST.deadlineMs): Promise<Uint8Array | Response | null> {

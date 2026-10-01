@@ -38,7 +38,7 @@ export class LibraryBundleExporter {
           schema:name ?name ; rv:disclosure ?disclosure ; rv:structure ?structure .
         ?structure rv:selectedGeneration ?generation .
         OPTIONAL { ?id rv:protectionHead ?protection }
-        BIND(SHA256(CONCAT(STR(?id),"|",STR(?name),"|",STR(?disclosure),"|",STR(?generation),"|",COALESCE(STR(?protection),""))) AS ?part)
+        BIND(SHA256(CONCAT(STR(?id),"|",ENCODE_FOR_URI(STR(?name)),"|",STR(?disclosure),"|",STR(?generation),"|",COALESCE(STR(?protection),""))) AS ?part)
       } } ORDER BY ?part }
     } LIMIT 1`,1);
     return { value: importDigest([position.data_epoch,position.version,position.expires_at?.toISOString(),

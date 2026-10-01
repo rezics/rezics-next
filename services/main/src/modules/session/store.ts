@@ -37,21 +37,28 @@ function checked(row: Row): SessionState {
 export class ConsumptionSessionStore {
   constructor(private readonly pool: Pool, private readonly library: ReaderLibraryStatusStore) {}
 
-  async page(input: SessionOwner, options: { target?: string; limit?: number; cursor?: string }) {
+  async page(input: SessionOwner, options: { target?: string; work?: string; limit?: number; cursor?: string }) {
     const identity = owner(input);
     const limit = options.limit ?? 20;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > SESSION_COST.page
-      || options.target !== undefined && !Value.Check(readId, options.target)) throw new InvalidSession('Invalid session page');
+      || options.target !== undefined && !Value.Check(readId, options.target)
+      || options.work !== undefined && (!Value.Check(readId, options.work) || options.target !== undefined)) throw new InvalidSession('Invalid session page');
     const control = await this.pool.query<{ data_epoch: string }>(
       'SELECT data_epoch FROM content.owner_control WHERE singleton');
     if (!control.rows[0]) throw new Error('Content owner position unavailable');
     const position = { dataEpoch: control.rows[0].data_epoch, sequence: '0' };
-    const binding = ['consumption-sessions-v1', ...identity, options.target ?? null];
+    const binding = options.work ? ['consumption-sessions-work-v1',...identity,options.work]
+      : ['consumption-sessions-v1', ...identity, options.target ?? null];
     const cursor = decodeReadCursor(options.cursor, binding, position);
     if (cursor && !/^[1-9][0-9]*$/.test(cursor.after)) throw new InvalidSession('Invalid session cursor');
     // Creation order is immutable: edits cannot move an attempt between pages.
     // Separate query shapes keep both seek paths on their leading index keys.
-    const rows = await this.pool.query<Row>(options.target
+    const rows = await this.pool.query<Row>(options.work
+      ? `SELECT s.state,s.attempt_order::text FROM reader.consumption_session s
+         WHERE principal_issuer=$1 AND principal_subject=$2 AND agent=$3 AND work=$4
+           ${cursor ? 'AND attempt_order<$6::bigint' : ''}
+         ORDER BY attempt_order DESC LIMIT $5`
+      : options.target
       ? `SELECT s.state, s.attempt_order::text FROM reader.consumption_session_target t
          JOIN reader.consumption_session s ON s.id = t.session
          WHERE t.principal_issuer = $1 AND t.principal_subject = $2 AND t.agent = $3
@@ -62,7 +69,8 @@ export class ConsumptionSessionStore {
          WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3
            ${cursor ? 'AND s.attempt_order < $5::bigint' : ''}
          ORDER BY s.attempt_order DESC LIMIT $4`,
-    options.target ? [...identity, options.target, limit + 1, ...(cursor ? [cursor.after] : [])]
+    options.work ? [...identity,options.work,limit+1,...(cursor ? [cursor.after] : [])]
+      : options.target ? [...identity, options.target, limit + 1, ...(cursor ? [cursor.after] : [])]
       : [...identity, limit + 1, ...(cursor ? [cursor.after] : [])]);
     const page = rows.rows.slice(0, limit);
     return { items: page.map(checked), nextCursor: rows.rows.length > limit
