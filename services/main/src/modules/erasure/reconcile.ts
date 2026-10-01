@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
 import type { GraphLineage } from '../work/activate.ts';
@@ -488,6 +489,7 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       const active = await restored.access.query(`SELECT 1 FROM access.principal
         WHERE id = ANY($1::uuid[]) AND active = true LIMIT 1`, [principals]);
       if (active.rowCount) throw new ErasureRestoreHold('restored Access principal is active');
+      await eraseLibraryImportsForPrincipals(restored.content,restored.access,principals);
     }
     if (entries.length < 1000) break;
     after = entries[entries.length - 1]!.epoch;

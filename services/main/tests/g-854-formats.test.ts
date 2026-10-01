@@ -8,6 +8,17 @@ import { chooseCandidates } from '../src/modules/library-import/match.ts';
 import { importDigest } from '../src/modules/library-import/file-store.ts';
 
 const fixture = (name: string) => readFileSync(new URL(`../../../tests/fixtures/library-exports/${name}`,import.meta.url),'utf8');
+test('G-854 review: a realistic 2,000-entry MAL export is bounded by bytes and entries, not XML nodes', () => {
+  const fields = ['manga_volumes','manga_chapters','my_read_volumes','my_read_chapters','my_score','my_times_read',
+    'my_rereading','my_rereading_chap','my_priority','my_discuss','my_retail_volumes','my_start_date','my_finish_date',
+    'my_scanalation_group','my_comments','my_tags','update_on_import'];
+  const file = `<myanimelist>\n${Array.from({ length: 2000 },(_,i) => `<manga>\n<manga_mangadb_id>${i+1}</manga_mangadb_id>\n<manga_title>Book ${i}</manga_title>\n<my_status>Completed</my_status>\n${fields.map(field => `<${field}>0</${field}>`).join('\n')}\n</manga>`).join('\n')}\n</myanimelist>`;
+  expect(Buffer.byteLength(file)).toBeLessThan(2*1024*1024);
+  const rows = parseLibraryFile('mal',file);
+  expect(rows.filter(row => row.kind==='source')).toHaveLength(2000);
+  expect(rows[1999]).toMatchObject({ sourceId: 'manga:2000',status: 'read' });
+  expect(() => parseLibraryFile('mal',file.replace('</myanimelist>',`${' '.repeat(2*1024*1024)}</myanimelist>`))).toThrow(FileImportInvalid);
+});
 test('G-854: generic mapping retains every unmapped field, status value and chapter label', () => {
   const file = fixture('novelupdates.csv');
   const preview = inspectGenericCsv(file);

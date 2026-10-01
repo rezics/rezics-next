@@ -17,7 +17,7 @@ export interface ImportPlacement { structure: string; expectedHead: string; atte
 /** The source record is site-wide. A session lock serializes this route's
  * read-before-acquire path for one Open Library identity across readers. */
 export class ReaderLibraryImportStore {
-  constructor(private readonly pool: Pool, private readonly budgets = {
+  constructor(readonly pool: Pool, private readonly budgets = {
     sourceSearchesPerDay: READER_IMPORT_COST.sourceSearchesPerDay as number,
     acquisitionsPerDay: READER_IMPORT_COST.acquisitionsPerDay as number,
   }) {

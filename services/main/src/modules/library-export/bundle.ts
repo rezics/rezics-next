@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
 import { emptyRow, FILE_IMPORT_COST, type CanonicalRow } from '../library-import/formats/contract.ts';
-import type { RowMatch } from '../library-import/file-store.ts';
+import { importDigest, type RowMatch } from '../library-import/file-store.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { SessionState } from '../session/contract.ts';
 
-export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 12, graphPerPage: 24,
+export const LIBRARY_EXPORT_COST = { page: 20, sqlPerPage: 16, graphPerPage: 26,
   phases: 7, responseBytes: FILE_IMPORT_COST.bytes } as const;
 type ExportOptions = { limit?: number; cursor?: string; snapshot?: string };
 const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: Record<string, unknown> = {}) =>
@@ -14,24 +14,45 @@ const row = (kind: CanonicalRow['kind'], id: string, work: string | null, raw: R
 
 /** Heterogeneous owner records prevent request-sized attempt/shelf arrays from
  * becoming library limits. Each phase seeks immutable identity keys. A Content
- * owner fence plus graph position detects changes before and after every page. */
+ * owner fence and reader collection/rating heads detect changes before and after every page.
+ * The retained cursor lasts 30 minutes and tolerates unrelated graph writes. */
 export class LibraryBundleExporter {
   constructor(private readonly content: Pool, private readonly access: Pool) {}
-  async fence(agent: string) {
-    const result = await this.content.query<{ data_epoch: string; version: string }>(`SELECT c.data_epoch,
-      coalesce(f.version,0)::text AS version FROM content.owner_control c
-      LEFT JOIN reader.library_bundle_fence f ON f.agent=$1 WHERE c.singleton`,[agent]);
-    if (!result.rows[0]) throw new WorkReadUnavailable('Library export position is unavailable');
-    return `${result.rows[0].data_epoch}:${result.rows[0].version}`;
+  async fence(session: WorkReadSession, agent: string) {
+    const result = await this.content.query<{ data_epoch: string; version: string; expires_at: Date | null }>(`SELECT c.data_epoch,
+      coalesce(f.version,0)::text AS version,
+      (SELECT min(expires_at) FROM reader.library_import_file WHERE agent=$1 AND expires_at>clock_timestamp()) AS expires_at
+      FROM content.owner_control c LEFT JOIN reader.library_bundle_fence f ON f.agent=$1 WHERE c.singleton`,[agent]);
+    const position = result.rows[0];
+    if (!position) throw new WorkReadUnavailable('Library export position is unavailable');
+    const principalId = await session.deps.access.activePrincipalId(session.principal!);
+    if (!principalId) throw new WorkReadUnavailable('Library export principal is unavailable');
+    const ratings = await this.access.query<{ digest: string }>(`SELECT md5(coalesce(string_agg(
+      context||':'||work||':'||revision,'|' ORDER BY context,work),'')) AS digest
+      FROM access.rating_aggregate_head WHERE principal_id=$1 AND target_release IS NULL`,[principalId]);
+    // Aggregate only this reader's collection heads. Jena preserves the ordered
+    // subquery input to GROUP_CONCAT; neither bodies nor memberships are returned.
+    const collections = await session.query(`SELECT (SHA256(GROUP_CONCAT(?part; separator="|")) AS ?digest) WHERE {
+      { SELECT ?part WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ?id a rv:Collection ; rv:curator ${iri(agent)} ; rv:collectionState rv:Active ;
+          schema:name ?name ; rv:disclosure ?disclosure ; rv:structure ?structure .
+        ?structure rv:selectedGeneration ?generation .
+        OPTIONAL { ?id rv:protectionHead ?protection }
+        BIND(SHA256(CONCAT(STR(?id),"|",STR(?name),"|",STR(?disclosure),"|",STR(?generation),"|",COALESCE(STR(?protection),""))) AS ?part)
+      } } ORDER BY ?part }
+    } LIMIT 1`,1);
+    return { value: importDigest([position.data_epoch,position.version,position.expires_at?.toISOString(),
+      ratings.rows[0]?.digest,collections[0]?.digest?.value]),expiresAt: position.expires_at?.getTime() };
   }
   async page(session: WorkReadSession, agent: string, options: ExportOptions) {
     if (!session.principal) throw new WorkReadInvalid('Authentication is required');
     const limit = options.limit ?? LIBRARY_EXPORT_COST.page;
-    const fence = await this.fence(agent), binding = ['rezics-library-export-v1',session.principal.issuer,session.principal.subject,agent];
-    const basis = decodeReadCursor(options.snapshot,binding,session.position);
+    const owner = await this.fence(session,agent), fence = owner.value, binding = ['rezics-library-export-v1',session.principal.issuer,session.principal.subject,agent];
+    const basis = decodeReadCursor(options.snapshot,binding,session.position,true);
     if (basis && basis.order !== fence) throw new WorkReadMoved('Library changed; start a new export');
-    const cursor = decodeReadCursor(options.cursor,binding,session.position);
+    const cursor = decodeReadCursor(options.cursor,binding,session.position,true);
     if (cursor && (!basis || cursor.order !== fence)) throw new WorkReadMoved('Library changed or snapshot is missing; start a new export');
+    const expiresAt = basis?.expiresAt ?? Math.min(Date.now()+30*60*1000,owner.expiresAt ?? Infinity);
     let phase = 0, after = '';
     if (cursor) {
       let key: unknown;
@@ -59,12 +80,12 @@ export class LibraryBundleExporter {
       }
       phase++; after = '';
     }
-    if (await this.fence(agent) !== fence || !await session.deps.access.canReadAsBaselineMember?.(session.principal,agent)) {
+    if ((await this.fence(session,agent)).value !== fence || !await session.deps.access.canReadAsBaselineMember?.(session.principal,agent)) {
       throw new WorkReadMoved('Library changed during export; start a new export');
     }
     const value = { profile: 'rezics-library-export-v1' as const, rows,
-      snapshot: options.snapshot ?? encodeReadCursor(binding,session.position,'snapshot',fence),
-      nextCursor: phase<LIBRARY_EXPORT_COST.phases ? encodeReadCursor(binding,session.position,JSON.stringify([phase,after]),fence) : null };
+      snapshot: options.snapshot ?? encodeReadCursor(binding,session.position,'snapshot',fence,expiresAt),
+      nextCursor: phase<LIBRARY_EXPORT_COST.phases ? encodeReadCursor(binding,session.position,JSON.stringify([phase,after]),fence,expiresAt) : null };
     if (new TextEncoder().encode(JSON.stringify(value)).length > LIBRARY_EXPORT_COST.responseBytes) {
       throw new WorkReadInvalid('Export page is too large; request a smaller limit');
     }
@@ -95,11 +116,15 @@ export class LibraryBundleExporter {
         review: { text: r.body,language: r.language,spoiler: r.spoiler } } }));
     }
     if (phase === 3) {
-      const key = `file_id::text || ':' || lpad(row_number::text,4,'0')`;
       const result = await this.content.query<{ key: string; source: CanonicalRow; private_extras: Record<string,unknown>; match: RowMatch | null; resolution: unknown; outcome: unknown }>(`
-        SELECT ${key} AS key,source,private_extras,match,resolution,outcome FROM reader.library_import_source_row
-        WHERE agent=$1 AND (source->>'kind' IN ('source','retained') OR private_extras <> '{}'::jsonb)
-          AND ${key}>$2 ORDER BY ${key} LIMIT $3`,[agent,after,limit]);
+        SELECT s.digest AS key,s.source,s.private_extras,r.match,r.resolution,r.outcome
+        FROM reader.library_import_source s
+        JOIN LATERAL (SELECT r.match,r.resolution,r.outcome FROM reader.library_import_source_row r
+          JOIN reader.library_import_file f ON f.agent=r.agent AND f.id=r.file_id
+          WHERE r.agent=s.agent AND r.source_digest=s.digest AND f.expires_at>clock_timestamp()
+          ORDER BY r.file_id,r.row_number LIMIT 1) r ON true
+        WHERE s.agent=$1 AND (s.source->>'kind' IN ('source','retained') OR s.private_extras <> '{}'::jsonb)
+          AND s.digest>$2 ORDER BY s.digest LIMIT $3`,[agent,after,limit]);
       return result.rows.map(s => ({ key: s.key,row: s.source.kind === 'retained' ? s.source
         : s.source.kind !== 'source' ? { ...row('retained',`extras:${s.key}`,s.source.work),title: s.source.title,
           raw: { sourceId: s.source.sourceId,fields: s.private_extras } }

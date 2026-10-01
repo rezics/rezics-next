@@ -63,8 +63,9 @@ imports and the installed package are checked for the offline boundary; no
 network, inference or REZICS service implementation enters the package.
 
 Main pins the same @xmldom/xmldom version for readers' uploaded MyAnimeList and
-VNDB exports. Both adapters reject entity declarations and enforce XML depth
-and node budgets before retaining source fields; they perform no live tool pulls.
+VNDB exports. Both adapters reject entity declarations and enforce file-byte,
+list-entry and XML-depth budgets before retaining source fields; they perform
+no live tool pulls.
 
 ## Local image screening
 

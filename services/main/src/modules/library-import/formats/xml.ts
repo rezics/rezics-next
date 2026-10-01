@@ -1,5 +1,5 @@
 import { DOMParser, type Element } from '@xmldom/xmldom';
-import { FileImportInvalid } from './contract.ts';
+import { FileImportInvalid, FILE_IMPORT_COST } from './contract.ts';
 
 export const xmlChildren = (element: Element, name?: string) => Array.from(element.childNodes)
   .filter((node): node is Element => node.nodeType === 1 && (!name || (node as Element).tagName === name));
@@ -19,6 +19,7 @@ export function retainedXml(element: Element): unknown {
 /** Inert uploaded XML only: no DTDs, entities or network resolution. The pinned
  * maintained DOM parser handles XML syntax; bounded traversal protects all adapters. */
 export function parseUploadedXml(file: string): Element {
+  if (new TextEncoder().encode(file).length > FILE_IMPORT_COST.bytes) throw new FileImportInvalid('File exceeds 2 MiB');
   if (/<!DOCTYPE|<!ENTITY/i.test(file)) throw new FileImportInvalid('XML entity declarations are unsupported');
   let malformed = false;
   let root: Element | null;
@@ -26,12 +27,12 @@ export function parseUploadedXml(file: string): Element {
   catch { throw new FileImportInvalid('Malformed export XML'); }
   if (malformed || !root) throw new FileImportInvalid('Malformed export XML');
   const pending: Array<[Element,number]> = [[root,0]];
-  let nodes = 0;
   while (pending.length) {
     const [element,depth] = pending.pop()!;
-    nodes += element.childNodes.length + 1;
-    if (nodes > 50_000 || depth > 64) throw new FileImportInvalid('XML nesting or node count exceeds the import budget');
-    pending.push(...xmlChildren(element).map(child => [child,depth+1] as [Element,number]));
+    // Real MAL rows carry dozens of fields and whitespace nodes. Bytes and
+    // list-entry counts bound total work; only nesting needs a separate guard.
+    if (depth > 64) throw new FileImportInvalid('XML nesting exceeds the import budget');
+    for (const child of xmlChildren(element)) pending.push([child,depth+1]);
   }
   return root;
 }

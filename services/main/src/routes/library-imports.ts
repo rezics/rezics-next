@@ -4,7 +4,7 @@ import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts
 import { canonicalRow, csvMapping, FILE_IMPORT_COST, FileImportInvalid, FileImportUnsupported } from '../modules/library-import/formats/contract.ts';
 import { parseLibraryFile } from '../modules/library-import/formats/index.ts';
 import { inspectGenericCsv } from '../modules/library-import/formats/generic-csv.ts';
-import { importDigest } from '../modules/library-import/file-store.ts';
+import { importDigest, LibraryFileMissing } from '../modules/library-import/file-store.ts';
 import { mainCall, matchLibraryRow } from '../modules/library-import/match.ts';
 import { applyLibraryFile } from '../modules/library-import/apply.ts';
 import { ReaderImportConflict, ReaderImportInvalid, ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
@@ -21,12 +21,15 @@ const errors = Object.fromEntries([400,401,403,404,409,422,503].map(status => [s
 const base = '/v1/me/library-imports';
 export const openApiOperations = {
   '/v1/me/library-imports': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/me/library-imports/{id}': { delete: { bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/rows': { get: { bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/rows/{row}': { put: { bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/apply': { post: { bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 export const capabilities = {
+  '/v1/me/library-imports/{id}': { delete: { disposition: 'supported', mcp: { tool: 'library_import_delete', title: 'Delete an uploaded library file',
+    scopes: ['work:read'], description: 'Delete your uploaded source rows and import plans. Applied Library records remain. Uploads otherwise expire seven days after creation.' } } },
   '/v1/me/library-imports': { post: { disposition: 'supported', mcp: { tool: 'library_import_create', title: 'Import a library file',
     scopes: ['work:read'],
     description: 'Upload your own library export or mapped CSV. Source rows stay private; catalogue matches are reviewed before applying. A CSV without mapping returns headers without storing the file.' } } },
@@ -41,7 +44,7 @@ export const capabilities = {
     description: 'Apply a bounded group of reviewed rows through ordinary library commands. Repeat until pending is false; retries resume one effect.' } } },
   '/v1/me/library-imports/{id}/rows/{row}/adoptions': { post: { disposition: 'supported', mcp: { tool: 'library_import_adopt', title: 'Adopt an Open Library candidate',
     scopes: ['work:read','work:create'],
-    description: 'Explicitly adopt a reviewed Open Library candidate using ordinary catalogue authority, then resolve the source row to the returned Work.' } } },
+    description: 'Explicitly adopt a reviewed Open Library candidate using ordinary catalogue authority. Resolve the source row separately to the returned Work before applying.' } } },
 } as const satisfies CapabilityDeclarations;
 const match = t.Object({ kind: t.Union([t.Literal('matched'),t.Literal('ambiguous'),t.Literal('not-found')]),
   work: t.Nullable(readId), target: t.Nullable(readId), truncated: t.Boolean(),
@@ -53,6 +56,7 @@ const resolution = t.Object({ choice: t.Union([t.Literal('apply'),t.Literal('pri
 const rowView = t.Object({ index: t.Integer(), source: canonicalRow, match: t.Nullable(match), resolution: t.Nullable(resolution),
   outcome: t.Nullable(t.Object({ applied: t.Array(t.String()),issues: t.Array(t.String()) })),version: t.Integer() });
 function failure(error: unknown): Response {
+  if (error instanceof LibraryFileMissing) return problem(404,'library_import_missing',error.message);
   if (error instanceof FileImportInvalid || error instanceof ReaderImportInvalid || error instanceof TargetNotBound) return problem(400,'invalid_library_file',error.message);
   if (error instanceof FileImportUnsupported) return problem(422,'library_format_unavailable',error.message);
   if (error instanceof ReaderImportConflict) return problem(409,'library_import_conflict',error.message);
@@ -69,6 +73,15 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     return key;
   }
   return new Elysia()
+    .delete(`${base}/:id`, { params: t.Object({ id: readUuid }),
+      query: t.Object({ actingSubject: readId },closed),response: { 200: t.Object({ deleted: t.Literal(true) }),...errors },
+    },async ({ request,params,query }) => {
+      try {
+        const key = await own(request,query.actingSubject); if (key instanceof Response) return key;
+        await deps.libraryFiles!.delete(query.actingSubject,params.id,key);
+        return Response.json({ deleted: true },{ headers });
+      } catch (error) { return failure(error); }
+    })
     .post(base, { body: t.Object({ actingSubject: readId,
       format: t.Union([t.Literal('goodreads'),t.Literal('storygraph'),t.Literal('generic-csv'),t.Literal('vndb'),t.Literal('mal'),t.Literal('rezics')]),
       file: t.String({ maxLength: FILE_IMPORT_COST.bytes }),mapping: t.Optional(csvMapping) },closed),

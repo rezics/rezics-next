@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import { recordAccountPreservation } from '../public-report/preservation.ts';
 import { ensureRetentionDomain, markErasureSuppressed, recordErasureInventory,
   relayTransaction } from './journal.ts';
@@ -30,7 +31,7 @@ export async function accountCredentialsPresent(account: Pool,
  * relay command after Account deletion intents are mirrored.
  */
 export async function settleAccountErasures(relay: Pool, access: Pool, account: Pool,
-  limit = 100): Promise<number> {
+  limit = 100, content?: Pool): Promise<number> {
   const pending = (await relay.query<{ id: string; account_issuer: string; account_subject: string }>(
     `SELECT id, account_issuer, account_subject FROM relay.erasure
      WHERE kind = 'account' AND stage = 'requested' ORDER BY erasure_epoch LIMIT $1`,
@@ -43,6 +44,7 @@ export async function settleAccountErasures(relay: Pool, access: Pool, account: 
       `SELECT id, active FROM access.principal WHERE account_issuer = $1 AND account_subject = $2`,
       [entry.account_issuer, entry.account_subject])).rows[0];
     if (principal?.active) continue;
+    if (principal && content) await eraseLibraryImportsForPrincipals(content,access,[principal.id]);
     const linked = await relayTransaction(relay, async client => {
       if (principal) {
         const intent = await client.query(
@@ -59,8 +61,13 @@ export async function settleAccountErasures(relay: Pool, access: Pool, account: 
       store: 'postgresql', custody: 'live' });
     await ensureRetentionDomain(relay, { label: ACCOUNT_WAL_DOMAIN, owner: 'account',
       store: 'postgresql_wal', custody: 'live' });
+    if (content) {
+      await ensureRetentionDomain(relay, { label: 'content:postgresql:live', owner: 'content',store: 'postgresql',custody: 'live' });
+      await ensureRetentionDomain(relay, { label: 'content:postgresql-wal:live', owner: 'content',store: 'postgresql_wal',custody: 'live' });
+    }
     await recordErasureInventory(relay, entry.id,
-      { owners: ['account'], liveRetentionReason: ACCOUNT_LIVE_RETENTION });
+      { owners: content ? ['account','content'] : ['account'], liveRetentionReason: ACCOUNT_LIVE_RETENTION,
+        liveRetentionReasons: { content: 'Content PostgreSQL keeps prior private upload row versions and WAL until a qualified rewrite' } });
     settled++;
   }
   return settled;

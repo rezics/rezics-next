@@ -26,7 +26,7 @@ export function libraryExportRoutes(deps: MainWorkDependencies) {
     try {
       const principal = await deps.account.verify(request,['work:read']);
       if (!await deps.access.canReadAsBaselineMember?.(principal,query.actingSubject)) return problem(403,'library_export_denied','Your library export is private to your own Person');
-      const result = await workRead(deps,request,{ actingSubject: query.actingSubject },
+      const result = await workRead(deps,request,{ actingSubject: query.actingSubject,movingGraph: true,retainedBasis: true },
         session => deps.libraryBundle!.page(session,query.actingSubject,query));
       return Response.json(result,{ headers: { 'cache-control': 'private, no-store' } });
     } catch (error) { return workReadError(error); }

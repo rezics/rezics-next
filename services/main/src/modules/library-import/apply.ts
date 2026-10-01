@@ -1,9 +1,10 @@
 import { ImportCommands, importReviewedBatch, portableShelfId, type ReviewedImportBatch } from './batch.ts';
 import { LibraryFileStore, importDigest, type ApplyIntent, type StoredSourceRow } from './file-store.ts';
-import { ReaderImportUnavailable, type ReaderLibraryImportStore } from './reader-import.ts';
+import type { ReaderLibraryImportStore } from './reader-import.ts';
 import { mainCall } from './match.ts';
-import type { CanonicalRow } from './formats/contract.ts';
+import type { CanonicalRow, LibraryFileFormat } from './formats/contract.ts';
 import type { SessionState } from '../session/contract.ts';
+import { bindImportSession, findImportSession, importSessionMatches, ImportSessionFailed, readSessionImportState } from './session-import.ts';
 
 /** Only identical scales (including quantization) enter the standing rating
  * Context. StoryGraph quarter stars and VNDB tenths remain source evidence. */
@@ -22,14 +23,14 @@ async function sessionStep(store: ReaderLibraryImportStore, request: Request, ag
   const held = await store.planStep(agent,file,row,step,{ method,path,body,key });
   const plan = held.plan as { method: string; path: string; body: object; key: string };
   const response = await mainCall(store,request,plan.method,plan.path,plan.body,plan.key);
-  if (!response.ok) { if (response.status >= 500 || response.status === 202) return null;
-    throw new ReaderImportUnavailable(`Session import command was refused (${response.status}); source row is retained`); }
+  if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
+  if (!response.ok) throw new ImportSessionFailed('Session import command was refused');
   await store.completeStep(agent,file,row,step);
   return response.json() as Promise<SessionState>;
 }
 
 async function applyRow(store: ReaderLibraryImportStore, request: Request, agent: string,
-  fileKey: string, item: StoredSourceRow, intent: ApplyIntent): Promise<NonNullable<StoredSourceRow['outcome']> | null> {
+  fileKey: string, item: StoredSourceRow, intent: ApplyIntent, format: LibraryFileFormat): Promise<NonNullable<StoredSourceRow['outcome']> | null> {
   const row = item.source, choice = item.resolution;
   if (choice?.choice === 'private' || row.kind === 'retained') return { applied: ['private-source'], issues: [] };
   const work = choice?.work ?? item.match?.work ?? row.work;
@@ -74,8 +75,8 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
     && choice?.conflictChoice !== 'keep';
   // Ordinary reviewed rows already do one state read. Only session orchestration
   // needs this earlier read, before creating an attempt or preserving a legacy read.
-  const state = inferred || legacyRead || row.session ? await commands.read<{ status: { status: string | null; startedOn: string | null;
-    finishedOn: string | null; version: number } }>(`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}`)
+  const state = inferred || legacyRead || row.session ? await readSessionImportState<{ status: { status: string | null; startedOn: string | null;
+    finishedOn: string | null; version: number } }>(store,request,`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}`)
     : { status: { status: null,startedOn: null,finishedOn: null,version: 0 } };
   if (!state) return null;
   const desired = batch.rows[0]!.status;
@@ -90,25 +91,48 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
   const applied: string[] = [];
   if (session) {
     // Preserve a pre-existing completion before starting the first imported reread.
-    if (inferred && row.status !== 'read' && state.status.status === 'read') {
-      const history = await commands.read<{ items: SessionState[] }>(`/v1/me/sessions?actingSubject=${encodeURIComponent(agent)}&target=${encodeURIComponent(work)}&limit=1`);
+    if (inferred && state.status.status === 'read' && (row.status !== 'read'
+      || row.startedOn !== state.status.startedOn || row.finishedOn !== state.status.finishedOn)) {
+      const history = await readSessionImportState<{ items: SessionState[] }>(store,request,`/v1/me/sessions?actingSubject=${encodeURIComponent(agent)}&target=${encodeURIComponent(work)}&limit=1`);
       if (!history) return null;
       if (!history.items.length && !await sessionStep(store,request,agent,fileKey,item.index,'legacy-completion','POST',
         '/v1/me/sessions',{ actingSubject: agent,target: work,expectedVersion: 0,state: 'finished',
           startedOn: state.status.startedOn,finishedOn: state.status.finishedOn })) return null;
     }
-    let saved = await sessionStep(store,request,agent,fileKey,item.index,'session','POST','/v1/me/sessions', {
-      actingSubject: agent, target: session.target, expectedVersion: 0, state: session.state,
-      startedOn: session.startedOn, finishedOn: session.finishedOn, addSelections: session.selections });
+    const existing = await findImportSession(store,request,agent,{ ...row,work },format,session);
+    if (!existing) return null;
+    let saved = existing.session;
+    const sourceKey = `source-session:${existing.identity}:${importDigest(session).slice(0,32)}`;
+    // Plans are still upload-local, but the API key is bound to source and
+    // desired state, independently of the upload's fresh Idempotency-Key.
+    if (!saved || !existing.replay && !importSessionMatches(saved,session)) {
+      const method = saved ? 'PATCH' : 'POST';
+      const path = saved ? `/v1/me/sessions/${uuid(saved.id)}` : '/v1/me/sessions';
+      const key = commandKey(agent,sourceKey,0,'session');
+      const held = await store.planStep(agent,fileKey,item.index,'session',{ method,path,key,body: {
+        actingSubject: agent,...(!saved ? { target: session.target } : {}),expectedVersion: saved?.version ?? 0,
+        state: session.state,startedOn: session.startedOn,finishedOn: session.finishedOn,addSelections: session.selections } });
+      const plan = held.plan as { method: string; path: string; key: string; body: object };
+      const response = await mainCall(store,request,plan.method,plan.path,plan.body,plan.key);
+      if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
+      if (!response.ok) throw new ImportSessionFailed('Session import command was refused');
+      saved = await response.json() as SessionState;
+      await store.completeStep(agent,fileKey,item.index,'session');
+    }
     if (!saved) return null;
-    for (const [index,locator] of session.locators.entries()) {
-      for (const [part,value] of [['furthest',locator.furthest],['current',locator.current]] as const) {
-        saved = await sessionStep(store,request,agent,fileKey,item.index,`locator-${index}-${part}`,'PATCH',
-          `/v1/me/sessions/${uuid(saved.id)}`,{ actingSubject: agent,expectedVersion: saved.version,
-            position: { target: locator.target,unit: locator.unit,value } });
-        if (!saved) return null;
+    if (!existing.replay) {
+      for (const [index,locator] of session.locators.entries()) {
+        const prior = saved.locators.find(position => position.target===locator.target && position.unit===locator.unit);
+        if (prior?.current===locator.current && prior.furthest===locator.furthest) continue;
+        for (const [part,value] of [['furthest',locator.furthest],['current',locator.current]] as const) {
+          saved = await sessionStep(store,request,agent,fileKey,item.index,`locator-${index}-${part}`,'PATCH',
+            `/v1/me/sessions/${uuid(saved.id)}`,{ actingSubject: agent,expectedVersion: saved.version,
+              position: { target: locator.target,unit: locator.unit,value } });
+          if (!saved) return null;
+        }
       }
     }
+    await bindImportSession(store,agent,existing.identity,saved,session);
     applied.push('session');
     // Session commands own the status projection; the explicit export Library
     // row restores any later manual statement independently.
@@ -120,9 +144,8 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
     && row.score?.max === 10) {
     const header = await commands.read<{ mainVersion: string }>(`/v1/works/${uuid(work)}?actingSubject=${encodeURIComponent(agent)}`);
     if (!header) return null;
-    const isGlobal = row.score?.max !== 10 && row.raw.ratingScaleMax !== 10;
-    const step = await commands.step(item.index,'portable-rating','POST',isGlobal ? '/v1/global-rating-observations' : '/v1/rating-observations', {
-      profile: isGlobal ? 'global-rating-standing-observation-v1' : 'realm-standing-rating-observation-v1',
+    const step = await commands.step(item.index,'portable-rating','POST','/v1/rating-observations', {
+      profile: 'realm-standing-rating-observation-v1',
       context: row.raw.ratingContext,work,mainVersion: header.mainVersion,expectedRevisionHead: null,
       value: row.score?.value ?? null,actingSubject: agent });
     if (step === 'retry') return null;
@@ -139,11 +162,19 @@ export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLib
   request: Request, agent: string, id: string, intent: ApplyIntent) {
   await files.seal(agent,id,intent);
   const file = await files.file(agent,id);
-  await store.withBatch(agent,file.import_key,async () => {
+  await store.withBatch(agent,'library-file-agent-apply',async () => {
     for (const item of await files.pending(agent,id)) {
-      const outcome = await applyRow(store,request,agent,file.import_key,item,intent);
-      if (!outcome) break;
-      await files.complete(agent,id,item.index,outcome);
+      const reviewedKey = commandKey(agent,file.import_key,item.index,'reviewed');
+      await files.pool.query(`INSERT INTO reader.library_import_file_batch(agent,file_id,import_key)
+        VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,[agent,id,reviewedKey]);
+      try {
+        const outcome = await applyRow(store,request,agent,file.import_key,item,intent,file.format);
+        if (!outcome) break;
+        await files.complete(agent,id,item.index,outcome);
+      } catch (error) {
+        if (!(error instanceof ImportSessionFailed)) throw error;
+        await files.complete(agent,id,item.index,{ applied: ['private-source'],issues: ['session-failed'] });
+      }
     }
   });
   return files.progress(agent,id);

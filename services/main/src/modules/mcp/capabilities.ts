@@ -34,10 +34,7 @@ export function attachCapabilities(document: CapabilityDocument, declarations: C
 }
 
 export const MCP_COST = Object.freeze({ maxTools: 128, maxInventoryBytes: 1_048_576,
-  // Library uploads allow 2 MiB of source. JSON string escaping can expand
-  // each source byte sixfold; reserve 64 KiB for the bounded RPC envelope.
-  // The operation's own schema and byte budget still validate the decoded file.
-  maxRequestBytes: 6 * 2 * 1024 * 1024 + 64 * 1024, deadlineMs: 30_000 });
+  maxRequestBytes: 1_048_576, deadlineMs: 30_000 });
 
 export interface OperationTool {
   name: string;

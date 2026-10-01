@@ -97,7 +97,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     expect(await checked(await apply(file.id))).toMatchObject({ pending: false,completed: 2,issues: 0 });
     expect(await checked(await apply(file.id))).toMatchObject({ pending: false,completed: 2 });
     expect((await resolve(file.id,0,2,{ choice: 'private' })).status).toBe(409);
-    const source = (await stack.contentPool.query(`SELECT source FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 ORDER BY row_number`,[agent,file.id])).rows;
+    const source = (await stack.contentPool.query(`SELECT s.source FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest WHERE r.agent=$1 AND r.file_id=$2 ORDER BY r.row_number`,[agent,file.id])).rows;
     expect(source[0].source.raw).toMatchObject({ Progress: 'c123',Translator: 'Private fan group' });
     let sessions = (await stack.contentPool.query(`SELECT state FROM reader.consumption_session WHERE agent=$1 ORDER BY attempt_order`,[agent])).rows.map(r => r.state);
     expect(sessions).toHaveLength(3);
@@ -184,7 +184,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     const storygraph = await checked<{ id: string }>(await create('storygraph',fixture('storygraph.csv')),201);
     await checked(await resolve(storygraph.id,0,1,{ choice: 'apply',work: first.work,conflictChoice: 'replace' }));
     expect(await checked(await apply(storygraph.id))).toMatchObject({ issues: 0 });
-    const quarterStars = (await stack.contentPool.query('SELECT source FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2',[agent,storygraph.id])).rows[0].source;
+    const quarterStars = (await stack.contentPool.query('SELECT s.source FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest WHERE r.agent=$1 AND r.file_id=$2',[agent,storygraph.id])).rows[0].source;
     expect(quarterStars.score).toEqual({ value: 3.5,min: 0.25,max: 5,step: 0.25 });
     expect((await stack.accessPool.query('SELECT count(*)::integer AS n FROM access.rating_aggregate_head')).rows[0].n).toBe(1);
     const vndb = await checked<{ id: string }>(await create('vndb',fixture('vndb.xml')),201);
@@ -198,7 +198,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     expect(await checked(await apply(vndb.id))).toMatchObject({ issues: 0,pending: false });
     expect((await home.deps.libraryStatus.privateReviews(agent,[first.work]))[0]).toMatchObject({ text: 'Private imported review',spoiler: true });
     sessions = (await stack.contentPool.query('SELECT state FROM reader.consumption_session WHERE agent=$1 ORDER BY attempt_order',[agent])).rows.map(r => r.state);
-    expect(sessions.filter(s => s.state === 'finished')).toHaveLength(3);
+    expect(sessions.filter(s => s.state === 'finished')).toHaveLength(2);
     expect(sessions.at(-2)).toMatchObject({ state: 'paused',startedOn: '2026-09-01' });
     const extension = { ...emptyRow('native-private-extra','',{ privateJournal: { chapter: 'c123',note: 'Retain this' } }),
       kind: 'session' as const,work: first.work,session: { target: first.work,state: 'planned' as const,

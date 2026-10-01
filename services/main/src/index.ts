@@ -16,6 +16,7 @@ import type { MainWorkDependencies } from './routes/dependencies.ts';
 import { mainRateLimit } from './modules/rate-limit/config.ts';
 import { openLibraryFixtureFetch } from '../../../scripts/dev/seed/open-library-fixtures.ts';
 import { ContentProjectionWorker } from './content-projection-worker.ts';
+import { LibraryImportRetentionWorker } from './modules/library-import/retention-worker.ts';
 import { AuthorReaders } from './modules/author-page/readers.ts';
 import { WorkReaderStats } from './modules/work/read-stats.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
@@ -534,6 +535,8 @@ const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, acc
 feedWorker?.start();
 realmPolicyRecovery.start();
 worker.start();
+const libraryImportRetentionWorker = new LibraryImportRetentionWorker(contentPool,pool);
+libraryImportRetentionWorker.start();
 const mediaScreenWorker = new MediaScreenWorker(new MediaScreenStore(contentPool), new LocalImageClassifier(),
   mediaObjects, governanceServices(pool, contentPool, content, sourceIntake, access, environment).store);
 mediaScreenWorker.start();
@@ -550,6 +553,7 @@ notificationDeliveryWorker?.start();
 let stopping = false;
 async function stop(): Promise<void> {
   await realmPolicyRecovery.stop();
+  await libraryImportRetentionWorker.stop();
   await mediaScreenWorker.stop();
   await serialStats?.stop();
   await zoneBrowse?.stop();

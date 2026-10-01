@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { FILE_IMPORT_COST, type CanonicalRow, type LibraryFileFormat } from './formats/contract.ts';
-import { ReaderImportConflict, ReaderImportUnavailable } from './reader-import.ts';
+import { ReaderImportConflict } from './reader-import.ts';
+import { deleteLibraryUploads } from './privacy.ts';
+
+export class LibraryFileMissing extends Error {}
+export const LIBRARY_UPLOAD_RETENTION_DAYS = 7;
 
 export interface ImportCandidate { work: string; target: string | null; title: string; creators: string[] }
 export interface RowMatch { kind: 'matched' | 'ambiguous' | 'not-found'; candidates: ImportCandidate[];
@@ -33,32 +37,50 @@ export class LibraryFileStore {
     const id = fileIdentity(agent, key), client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[JSON.stringify(['library-upload',agent])]);
+      const receipt = (await client.query<{ request_digest: string; file_id: string | null }>(`
+        SELECT request_digest,file_id FROM reader.library_import_upload_command WHERE agent=$1 AND idempotency_key=$2`,[agent,key])).rows[0];
+      if (receipt && receipt.request_digest !== digest) throw new ReaderImportConflict('Import key belongs to another file or mapping');
+      if (receipt && !receipt.file_id) throw new LibraryFileMissing('Upload was deleted or expired; use a new Idempotency-Key');
+      const previous = (await client.query<{ id: string; expires_at: Date }>(`
+        SELECT id,expires_at FROM reader.library_import_file WHERE agent=$1 AND file_digest=$2`,[agent,digest])).rows[0];
+      if (previous && previous.expires_at.getTime() <= Date.now()) throw new LibraryFileMissing('Upload expired; its private fields are being deleted');
+      if (previous) {
+        await client.query(`INSERT INTO reader.library_import_upload_command(agent,idempotency_key,request_digest,file_id)
+          VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,[agent,key,digest,previous.id]);
+        await client.query('COMMIT');return { id: previous.id,total: rows.length };
+      }
       await client.query(`INSERT INTO reader.library_import_batch(agent,import_key,request_digest,row_count)
         VALUES ($1,$2,$3,$4) ON CONFLICT (agent,import_key) DO NOTHING`, [agent,key,digest,rows.length]);
       const prior = await client.query<{ request_digest: string }>(`SELECT request_digest FROM reader.library_import_batch
         WHERE agent=$1 AND import_key=$2 FOR UPDATE`, [agent,key]);
       if (prior.rows[0]?.request_digest !== digest) throw new ReaderImportConflict('Import key belongs to another file or mapping');
-      await client.query(`INSERT INTO reader.library_import_file(agent,id,import_key,format)
-        VALUES ($1,$2,$3,$4)
-        ON CONFLICT DO NOTHING`, [agent,id,key,format]);
-      await client.query(`INSERT INTO reader.library_import_source_row(agent,file_id,row_number,source)
-        SELECT $1,$2,(ordinal-1)::integer,value FROM jsonb_array_elements($3::jsonb) WITH ORDINALITY AS r(value,ordinal)
-        ON CONFLICT DO NOTHING`, [agent,id,JSON.stringify(rows)]);
+      await client.query(`INSERT INTO reader.library_import_file(agent,id,import_key,format,file_digest)
+        VALUES ($1,$2,$3,$4,$5)`, [agent,id,key,format,digest]);
+      const sources = rows.map(source => ({ digest: importDigest(source),source }));
+      await client.query(`INSERT INTO reader.library_import_source(agent,digest,source)
+        SELECT $1,value->>'digest',value->'source' FROM jsonb_array_elements($2::jsonb)
+        ON CONFLICT DO NOTHING`,[agent,JSON.stringify(sources)]);
+      await client.query(`INSERT INTO reader.library_import_source_row(agent,file_id,row_number,source_digest)
+        SELECT $1,$2,(ordinal-1)::integer,value->>'digest' FROM jsonb_array_elements($3::jsonb) WITH ORDINALITY AS r(value,ordinal)`,
+      [agent,id,JSON.stringify(sources.map(({ digest }) => ({ digest })))]);
+      await client.query(`INSERT INTO reader.library_import_upload_command(agent,idempotency_key,request_digest,file_id)
+        VALUES ($1,$2,$3,$4)`,[agent,key,digest,id]);
       await client.query('COMMIT');
       return { id, total: rows.length };
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }
   async file(agent: string, id: string) {
     const result = await this.pool.query<{ import_key: string; format: LibraryFileFormat; apply_intent: ApplyIntent | null }>(`
-      SELECT import_key,format,apply_intent FROM reader.library_import_file WHERE agent=$1 AND id=$2`, [agent,id]);
-    if (!result.rows[0]) throw new ReaderImportUnavailable('Import file is unavailable');
+      SELECT import_key,format,apply_intent FROM reader.library_import_file WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp()`, [agent,id]);
+    if (!result.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
     return result.rows[0];
   }
   async page(agent: string, id: string, after: number, limit = FILE_IMPORT_COST.page as number) {
     await this.file(agent,id);
-    const result = await this.pool.query<SourceRecord>(`SELECT row_number,source,match,resolution,outcome,version::text
-      FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number>$3
-      ORDER BY row_number LIMIT $4`, [agent,id,after,limit+1]);
+    const result = await this.pool.query<SourceRecord>(`SELECT r.row_number,s.source,r.match,r.resolution,r.outcome,r.version::text
+      FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
+      WHERE r.agent=$1 AND r.file_id=$2 AND r.row_number>$3 ORDER BY r.row_number LIMIT $4`, [agent,id,after,limit+1]);
     return { rows: result.rows.slice(0,limit).map(unpack), more: result.rows.length>limit };
   }
   async saveMatch(agent: string, id: string, index: number, match: RowMatch) {
@@ -78,12 +100,13 @@ export class LibraryFileStore {
         await client.query('COMMIT'); return;
       }
       const file = await client.query<{ apply_intent: unknown }>(`SELECT apply_intent FROM reader.library_import_file
-        WHERE agent=$1 AND id=$2 FOR UPDATE`, [agent,id]);
-      if (!file.rows[0]) throw new ReaderImportUnavailable('Import file is unavailable');
+        WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp() FOR UPDATE`, [agent,id]);
+      if (!file.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
       if (file.rows[0].apply_intent) throw new ReaderImportConflict('Application has started; row choices are sealed');
-      const row = await client.query<SourceRecord>(`SELECT row_number,source,match,resolution,outcome,version::text
-        FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number=$3 FOR UPDATE`, [agent,id,index]);
-      if (!row.rows[0]) throw new ReaderImportUnavailable('Import row is unavailable');
+      const row = await client.query<SourceRecord>(`SELECT r.row_number,s.source,r.match,r.resolution,r.outcome,r.version::text
+        FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
+        WHERE r.agent=$1 AND r.file_id=$2 AND r.row_number=$3 FOR UPDATE OF r`, [agent,id,index]);
+      if (!row.rows[0]) throw new LibraryFileMissing('Import row is unavailable');
       const current = unpack(row.rows[0]);
       // Same intent is replayable even when the caller lost the first response.
       if (importDigest(current.resolution) !== importDigest(resolution)) {
@@ -100,8 +123,8 @@ export class LibraryFileStore {
     try {
       await client.query('BEGIN');
       const held = await client.query<{ apply_intent: ApplyIntent | null }>(`SELECT apply_intent FROM reader.library_import_file
-        WHERE agent=$1 AND id=$2 FOR UPDATE`, [agent,id]);
-      if (!held.rows[0]) throw new ReaderImportUnavailable('Import file is unavailable');
+        WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp() FOR UPDATE`, [agent,id]);
+      if (!held.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
       if (held.rows[0].apply_intent && importDigest(held.rows[0].apply_intent) !== importDigest(intent)) {
         throw new ReaderImportConflict('Apply context or language changed');
       }
@@ -114,9 +137,9 @@ export class LibraryFileStore {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   }
   async pending(agent: string, id: string) {
-    const rows = await this.pool.query<SourceRecord>(`SELECT row_number,source,match,resolution,outcome,version::text
-      FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND outcome IS NULL
-      ORDER BY row_number LIMIT ${FILE_IMPORT_COST.page}`, [agent,id]);
+    const rows = await this.pool.query<SourceRecord>(`SELECT r.row_number,s.source,r.match,r.resolution,r.outcome,r.version::text
+      FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
+      WHERE r.agent=$1 AND r.file_id=$2 AND r.outcome IS NULL ORDER BY r.row_number LIMIT ${FILE_IMPORT_COST.page}`, [agent,id]);
     return rows.rows.map(unpack);
   }
   async complete(agent: string, id: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>) {
@@ -129,5 +152,22 @@ export class LibraryFileStore {
       count(*) FILTER (WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues
       FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2`, [agent,id]);
     return { ...result.rows[0]!, pending: result.rows[0]!.completed < result.rows[0]!.total };
+  }
+  async delete(agent: string, id: string, key: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[JSON.stringify(['library-upload',agent])]);
+      const digest = importDigest(['delete-upload',id]);
+      const receipt = (await client.query<{ request_digest: string }>(`SELECT request_digest FROM reader.library_import_review_command
+        WHERE agent=$1 AND idempotency_key=$2`,[agent,key])).rows[0];
+      if (receipt && receipt.request_digest !== digest) throw new ReaderImportConflict('Delete key belongs to another operation');
+      if (!receipt) {
+        await deleteLibraryUploads(client,agent,[id]);
+        await client.query(`INSERT INTO reader.library_import_review_command(agent,idempotency_key,request_digest)
+          VALUES ($1,$2,$3)`,[agent,key,digest]);
+      }
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK');throw error; } finally { client.release(); }
   }
 }

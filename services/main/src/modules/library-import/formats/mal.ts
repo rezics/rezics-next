@@ -1,4 +1,4 @@
-import { emptyRow, FileImportInvalid, type CanonicalRow } from './contract.ts';
+import { emptyRow, FileImportInvalid, FILE_IMPORT_COST, type CanonicalRow } from './contract.ts';
 import { sourceDate, sourceShelves } from './csv.ts';
 import { parseUploadedXml, xmlChildren, xmlText, xmlAttributes, xmlContent, retainedXml } from './xml.ts';
 
@@ -16,6 +16,7 @@ export function parseMal(file: string): CanonicalRow[] {
   if (root.tagName !== 'myanimelist') throw new FileImportInvalid('Choose a MyAnimeList anime or manga export');
   const rows: CanonicalRow[] = [];
   for (const element of xmlChildren(root)) {
+    if (rows.length >= FILE_IMPORT_COST.rows) throw new FileImportInvalid('Choose a file with at most 5,000 source rows');
     if (element.tagName !== 'anime' && element.tagName !== 'manga') {
       const row = emptyRow(`mal-metadata:${rows.length}`,'',{ xml: retainedXml(element) });
       row.kind = 'retained'; rows.push(row); continue;
