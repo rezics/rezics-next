@@ -1,4 +1,9 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import type { Pool } from 'pg';
+import {
+  NotificationProducer,
+  NotificationProducerWorker,
+} from '../src/modules/notification-producers/producer.ts';
 import { safetyResponders, SAFETY_ALERT_COST } from '../src/modules/safety-alerts/store.ts';
 import { safetyAlertMessage } from '../../account/src/notification-safety.ts';
 import type { AccountLocale } from '../../account/src/email.ts';
@@ -46,5 +51,59 @@ test('G917: every Account locale has actionable evidence-free deadline and absen
       expect(message).not.toContain('credential');
       expect(message).not.toContain('evidence');
     }
+  }
+});
+
+test('G917: missing responders and safety timeouts leave Access, editorial and relay notifications running', async () => {
+  const logged = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (const message of [
+      'Safety responder Account subjects must already exist in Access',
+      'statement timeout',
+    ]) {
+      const calls: string[] = [];
+      const failure = new Error(message);
+      const access = {
+        connect: async () => {
+          calls.push('access');
+          return { query: async () => ({ rows: [] }), release: () => {} };
+        },
+      } as unknown as Pool;
+      class Producer extends NotificationProducer {
+        override async runEditorialOnce() {
+          calls.push('editorial');
+          return 7;
+        }
+        override async runRelayOnce() {
+          calls.push('relay');
+          return 1;
+        }
+      }
+      const producer = new Producer(
+        access,
+        null,
+        {} as Pool,
+        {} as never,
+        {} as never,
+        null,
+        null,
+        {
+          runOnce: async () => {
+            calls.push('safety');
+            throw failure;
+          },
+        },
+      );
+      expect(await producer.runAccessOnce()).toBe(7);
+      expect(calls).toEqual(['access', 'editorial', 'safety']);
+      calls.length = 0;
+      const worker = new NotificationProducerWorker(producer);
+      worker.start();
+      await worker.stop();
+      expect(calls).toEqual(['access', 'editorial', 'safety', 'relay']);
+      expect(logged).toHaveBeenLastCalledWith('Safety alerts:', failure);
+    }
+  } finally {
+    logged.mockRestore();
   }
 });

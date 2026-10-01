@@ -195,9 +195,15 @@ export class NotificationProducer {
   }
 
   async runAccessOnce(): Promise<number> {
-    const alerts = await this.safetyAlerts?.runOnce() ?? 0;
-    const count = await this.runOtherAccessOnce();
-    return alerts + count + (await this.runEditorialOnce());
+    const count = (await this.runOtherAccessOnce()) + (await this.runEditorialOnce());
+    try {
+      return count + (await this.safetyAlerts?.runOnce() ?? 0);
+    } catch (error) {
+      // A missing responder or failed safety intake must not stall the other
+      // Access producers or prevent the worker's following relay tick.
+      console.error('Safety alerts:', error);
+      return count;
+    }
   }
 
   private async runOtherAccessOnce(): Promise<number> {

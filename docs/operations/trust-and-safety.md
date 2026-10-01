@@ -155,9 +155,15 @@ safety readiness is unclaimed. The maintainer has not named the launch backup;
 the [installation procedure](production-install.md#safety-responders) keeps that
 appointment explicit.
 
-The notification producer checks up to 32 primary and 32 backup deadline
-candidates per tick and drains up to 32 durable alert intakes. It alerts the
-primary two hours before an unanswered platform NCII or DMCA process deadline.
+The notification producer starts from open platform cases and reads each case's
+due steps through its case index, excluding answered steps. Closed case history
+does not enter the deadline scan. Each tick creates up to 32 primary and 32
+backup alert records and drains up to 32 durable alert intakes; those are output
+bounds, while scan work scales with open cases and their due steps. Each source
+statement has a five-second timeout. The safety job runs after the other Access
+notification producers and logs failures separately so relay notifications
+continue. It alerts the primary two hours before an unanswered platform NCII or
+DMCA process deadline.
 A current primary case claim acknowledges engagement for its existing
 30-minute lease; renew it while working. Thirty minutes after primary alert
 intake, no current claim raises a backup alert. An inactive primary raises the

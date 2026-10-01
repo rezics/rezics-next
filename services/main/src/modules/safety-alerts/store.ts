@@ -3,7 +3,10 @@ import type { NotificationSubjectReader } from '../notification/dispatcher.ts';
 import { requireAccessOpen, sha256, type NotificationStore } from '../notification/store.ts';
 
 export const SAFETY_ALERT_BASIS = 'safety-deadline-v1';
-/** Two indexed deadline selections and one pending page; no inventory-sized writes.
+/** Two active-case deadline selections and one pending page; no inventory-sized writes.
+ * Source selections read open platform cases and at most 32 eligible steps per
+ * case, then create at most 32 alerts per responder. This is an output bound,
+ * not a 32-row scan bound; reads scale with active cases and their due steps.
  * Each tick takes at most 32 source intakes, with one recipient and <=8 endpoints each.
  * PostgreSQL 18 SKIP LOCKED is for queue consumers, not an authoritative case read:
  * https://www.postgresql.org/docs/18/sql-select.html#SQL-FOR-UPDATE-SHARE */
@@ -20,6 +23,35 @@ export interface SafetyResponders {
   primary: string;
   backup: string;
 }
+
+// MATERIALIZED prevents flattening back into a scan from the oldest global
+// deadline. The bounded LATERAL read uses safety_case_due for each open case:
+// https://www.postgresql.org/docs/18/queries-with.html#QUERIES-WITH-CTE-MATERIALIZATION
+export const SAFETY_ALERT_SOURCE_SQL = `WITH open_cases AS MATERIALIZED (
+  SELECT id,generation,review_pending FROM access.governance_case
+  WHERE authority_kind = 'platform' AND authority_scope_id = 'governance:platform' AND state = 'open'
+)
+INSERT INTO access.safety_alert
+  (step_id,case_id,case_generation,principal_id,responder,reason,due_at,created_at)
+SELECT s.id,c.id,c.generation,$1,$2,
+  CASE WHEN s.due_at <= $3 THEN 'overdue' WHEN $2 = 'primary' THEN 'approaching' ELSE 'unacknowledged' END,
+  s.due_at,$3
+FROM open_cases c CROSS JOIN LATERAL (
+  SELECT s.id,s.due_at FROM access.governance_process_step s
+  WHERE s.case_id = c.id AND s.process IN ('ncii','dmca_512')
+    AND s.due_at <= $3::timestamptz + ($4::bigint * interval '1 millisecond')
+    AND (c.review_pending OR s.step IN ('restoration_not_before','restoration_not_after'))
+    AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = s.id)
+    AND NOT EXISTS (SELECT 1 FROM access.safety_alert a WHERE a.step_id = s.id
+      AND a.case_generation = c.generation AND a.responder = $2 AND a.principal_id = $1)
+    AND ($2 = 'primary' OR s.due_at <= $3 OR NOT $7::boolean OR EXISTS (
+      SELECT 1 FROM access.safety_alert a WHERE a.step_id = s.id AND a.case_generation = c.generation
+        AND a.responder = 'primary' AND a.principal_id = $5 AND a.state = 'queued'
+        AND a.queued_at <= $3::timestamptz - ($6::bigint * interval '1 millisecond')
+        AND NOT EXISTS (SELECT 1 FROM access.safety_case_claim claim WHERE claim.case_id = c.id
+          AND claim.case_generation = c.generation AND claim.principal_id = $5 AND claim.expires_at > $3)))
+  ORDER BY s.due_at,s.id LIMIT $8
+) s ORDER BY s.due_at,s.id LIMIT $8 ON CONFLICT DO NOTHING`;
 type Recipient = { id: string; account_subject: string; active: boolean };
 type Alert = {
   id: string;
@@ -168,38 +200,16 @@ export class SafetyAlerts implements NotificationSubjectReader {
         ['backup', backup],
       ] as const) {
         if (!recipient.active) continue;
-        await client.query(
-          `INSERT INTO access.safety_alert
-          (step_id,case_id,case_generation,principal_id,responder,reason,due_at,created_at)
-          SELECT s.id,c.id,c.generation,$1,$2,
-            CASE WHEN s.due_at <= $3 THEN 'overdue' WHEN $2 = 'primary' THEN 'approaching' ELSE 'unacknowledged' END,
-            s.due_at,$3 FROM access.governance_process_step s
-          JOIN access.governance_case c ON c.id = s.case_id
-          WHERE c.authority_kind = 'platform' AND c.authority_scope_id = 'governance:platform'
-            AND c.state = 'open' AND s.process IN ('ncii','dmca_512')
-            AND s.due_at <= $3::timestamptz + ($4::bigint * interval '1 millisecond')
-            AND (c.review_pending OR s.step IN ('restoration_not_before','restoration_not_after'))
-            AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = s.id)
-            AND NOT EXISTS (SELECT 1 FROM access.safety_alert a WHERE a.step_id = s.id
-              AND a.case_generation = c.generation AND a.responder = $2 AND a.principal_id = $1)
-            AND ($2 = 'primary' OR s.due_at <= $3 OR NOT $7::boolean OR EXISTS (
-              SELECT 1 FROM access.safety_alert a WHERE a.step_id = s.id AND a.case_generation = c.generation
-                AND a.responder = 'primary' AND a.principal_id = $5 AND a.state = 'queued'
-                AND a.queued_at <= $3::timestamptz - ($6::bigint * interval '1 millisecond')
-                AND NOT EXISTS (SELECT 1 FROM access.safety_case_claim claim WHERE claim.case_id = c.id
-                  AND claim.case_generation = c.generation AND claim.principal_id = $5 AND claim.expires_at > $3)))
-          ORDER BY s.due_at,s.id LIMIT $8 ON CONFLICT DO NOTHING`,
-          [
-            recipient.id,
-            responder,
-            now,
-            SAFETY_ALERT_COST.leadMs,
-            primary.id,
-            SAFETY_ALERT_COST.acknowledgementMs,
-            primary.active,
-            SAFETY_ALERT_COST.batch,
-          ],
-        );
+        await client.query(SAFETY_ALERT_SOURCE_SQL, [
+          recipient.id,
+          responder,
+          now,
+          SAFETY_ALERT_COST.leadMs,
+          primary.id,
+          SAFETY_ALERT_COST.acknowledgementMs,
+          primary.active,
+          SAFETY_ALERT_COST.batch,
+        ]);
       }
       await client.query('COMMIT');
       await client.query('BEGIN');

@@ -7,6 +7,7 @@ import {
   SafetyAlerts,
   SAFETY_ALERT_BASIS,
   SAFETY_ALERT_COST,
+  SAFETY_ALERT_SOURCE_SQL,
 } from '../../../services/main/src/modules/safety-alerts/store.ts';
 import { SafetyAlertProvider } from '../../../services/main/src/modules/safety-alerts/provider.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
@@ -187,11 +188,53 @@ test('SAFETY03/SAFETY08: G917 restart replays partial intake once and recovery h
   }
 }, 180_000);
 
-test('SAFETY03/SAFETY08: G917 bounded pages drain every deadline and primary revocation still alerts the backup', async () => {
+test('SAFETY03/SAFETY08: G917 open-case scan excludes closed and answered history, drains pages and survives primary revocation', async () => {
   const f = await alertFixture('g917-bounds');
   try {
     const receipt = await f.report(await f.author.upload(png(73, 73)), 'ncii', nciiDeclaration);
     const deadline = deadlineFor(receipt.receivedAt);
+    const answeredImage = await f.author.upload(png(76, 76));
+    const answered = await f.report(answeredImage, 'ncii', nciiDeclaration);
+    const answeredStep = (
+      await f.stack.accessPool.query(
+        `SELECT id FROM access.governance_process_step WHERE case_id = $1 AND step = 'removal_deadline'`,
+        [answered.caseId],
+      )
+    ).rows[0].id;
+    await f.complete(await f.input(answered, answeredImage, 'restrict', null, answeredStep));
+    // Keep this answered case in the active set to exercise the answer anti-join.
+    await f.stack.accessPool.query(
+      'UPDATE access.governance_case SET review_pending = true WHERE id = $1',
+      [answered.caseId],
+    );
+    expect(
+      (
+        await f.stack.accessPool.query('SELECT state FROM access.governance_case WHERE id = $1', [
+          answered.caseId,
+        ])
+      ).rows[0].state,
+    ).toBe('open');
+    const historyPrefix = `g917-closed-${randomUUID()}:`;
+    await f.stack.accessPool.query(
+      `WITH history AS (
+        INSERT INTO access.governance_case
+          (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure,opened_at)
+        SELECT gen_random_uuid(),kind,authority_kind,authority_scope_id,context,target_owner,
+          $2 || n::text,target_component,disclosure,opened_at - interval '1 year'
+        FROM access.governance_case,generate_series(1,2000) n WHERE id = $1 RETURNING id
+      ) INSERT INTO access.governance_process_step
+        (id,case_id,report_id,process,step,idempotency_key,request_digest,occurred_at,due_at,content_language)
+      SELECT gen_random_uuid(),history.id,s.report_id,s.process,s.step,gen_random_uuid()::text,s.request_digest,
+        s.occurred_at - interval '1 year',s.due_at - interval '1 year',s.content_language
+      FROM history CROSS JOIN access.governance_process_step s
+      WHERE s.case_id = $1 AND s.step = 'removal_deadline'`,
+      [receipt.caseId, historyPrefix],
+    );
+    await f.stack.accessPool.query(
+      `UPDATE access.governance_case SET state = 'closed',closed_at = $2
+        WHERE starts_with(target_resource,$1)`,
+      [historyPrefix, deadline],
+    );
     // One owner-created case; isolated copies of its deadline exercise >1 work page.
     await f.stack.accessPool.query(
       `INSERT INTO access.governance_process_step
@@ -201,6 +244,60 @@ test('SAFETY03/SAFETY08: G917 bounded pages drain every deadline and primary rev
         generate_series(1,$2::int) WHERE case_id = $1 AND step = 'removal_deadline'`,
       [receipt.caseId, SAFETY_ALERT_COST.batch + 1],
     );
+    await f.stack.accessPool.query(
+      'ANALYZE access.governance_case,access.governance_process_step,access.moderation_decision',
+    );
+    const client = await f.stack.accessPool.connect();
+    try {
+      await client.query('BEGIN');
+      // Exercise the exact production INSERT and undo its output before the job.
+      const plan = await client.query<{ 'QUERY PLAN': [{ Plan: Record<string, unknown> }] }>(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${SAFETY_ALERT_SOURCE_SQL}`,
+        [
+          f.staff.principalId,
+          'primary',
+          deadline,
+          SAFETY_ALERT_COST.leadMs,
+          f.staff.principalId,
+          SAFETY_ALERT_COST.acknowledgementMs,
+          true,
+          SAFETY_ALERT_COST.batch,
+        ],
+      );
+      const nodes: Record<string, unknown>[] = [];
+      const visit = (node: Record<string, unknown>) => {
+        nodes.push(node);
+        for (const child of (node.Plans as Record<string, unknown>[] | undefined) ?? [])
+          visit(child);
+      };
+      visit(plan.rows[0]!['QUERY PLAN'][0].Plan);
+      const caseScan = nodes.find((node) => node['Relation Name'] === 'governance_case');
+      expect(caseScan).toBeDefined();
+      expect(caseScan?.['Node Type']).not.toBe('Seq Scan');
+      expect(
+        Number(caseScan?.['Actual Rows']) + Number(caseScan?.['Rows Removed by Filter'] ?? 0),
+      ).toBeLessThanOrEqual(2);
+      const stepScans = nodes.filter((node) => node['Relation Name'] === 'governance_process_step');
+      expect(stepScans.length).toBeGreaterThan(0);
+      for (const scan of stepScans) {
+        expect(scan['Node Type']).not.toBe('Seq Scan');
+        expect(String(scan['Index Cond'])).toContain('case_id');
+      }
+      const stepsRead = stepScans.reduce(
+        (sum, scan) =>
+          sum +
+          Number(scan['Actual Loops']) *
+            (Number(scan['Actual Rows']) + Number(scan['Rows Removed by Filter'] ?? 0)),
+        0,
+      );
+      expect(stepsRead).toBeLessThanOrEqual(SAFETY_ALERT_COST.batch + 4);
+      expect((await client.query('SELECT DISTINCT case_id FROM access.safety_alert')).rows).toEqual(
+        [{ case_id: receipt.caseId }],
+      );
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
     f.setClock(deadline);
     expect(await f.safetyAlerts.runOnce()).toBe(SAFETY_ALERT_COST.batch);
     await f.produce();
