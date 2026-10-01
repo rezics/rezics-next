@@ -137,6 +137,7 @@ import { governanceServices } from './modules/governance/composition.ts';
 import { PublicReports } from './modules/public-report/store.ts';
 import { publicReportOwners } from './modules/public-report/owners.ts';
 import { AccessRealmManagement } from './modules/access/realm-management.ts';
+import { RealmPolicyRecoveryWorker } from './modules/access/realm-management-recovery.ts';
 import { ManagementReadStore } from './modules/management-reads/read-store.ts';
 import { ManagementDecisionBasis } from './modules/management-reads/decision-basis.ts';
 import { ownerTargetHeads } from './modules/governance/evidence.ts';
@@ -506,6 +507,7 @@ const app = createMainApp(fuseki, {
   ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
 });
 libraryImport.setDispatch(request => app.handle(request));
+const realmPolicyRecovery = new RealmPolicyRecoveryWorker(pool, environment);
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
   config.CONTENT_PROJECTION_INTERVAL_MS);
@@ -525,6 +527,7 @@ const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, acc
   reviews: new ReaderReviews(pool),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) }, new FeedStore(pool), relayPool) : undefined;
 feedWorker?.start();
+realmPolicyRecovery.start();
 worker.start();
 const mediaScreenWorker = new MediaScreenWorker(new MediaScreenStore(contentPool), new LocalImageClassifier(),
   mediaObjects, governanceServices(pool, contentPool, content, sourceIntake, access, environment).store);
@@ -541,6 +544,7 @@ notificationDeliveryWorker?.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
+  await realmPolicyRecovery.stop();
   await mediaScreenWorker.stop();
   await serialStats?.stop();
   await zoneBrowse?.stop();

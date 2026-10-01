@@ -1,6 +1,6 @@
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V1 } from './create.ts';
+import { SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V1, SPACE_REALM_PROFILE_V2 } from './create.ts';
 
 export type RealmVisibility = 'public' | 'restricted' | 'private';
 export type RealmReviewMode = 'mandatory' | 'trusted-members' | 'open';
@@ -55,11 +55,13 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
   const space = spaces[0].space.value;
   const spaceProfile = spaces[0].spaceProfile?.value;
   const realmProfile = spaces[0].realmProfile?.value;
-  const profile = spaceProfile === SPACE_REALM_PROFILE && realmProfile === SPACE_REALM_PROFILE
-    ? SPACE_REALM_PROFILE : spaceProfile === undefined && realmProfile === undefined
+  const profile = spaceProfile === realmProfile
+    && [SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V2, SPACE_REALM_PROFILE_V1].includes(spaceProfile ?? '')
+    ? spaceProfile : spaceProfile === undefined && realmProfile === undefined
     ? SPACE_REALM_PROFILE_V1 : null;
   if (!profile) throw new Error('Realm Space profile is inconsistent');
-  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v3' : 'space-realm-v1';
+  const profileId = profile === SPACE_REALM_PROFILE ? 'space-realm-v3'
+    : profile === SPACE_REALM_PROFILE_V2 ? 'space-realm-v2' : 'space-realm-v1';
   const validations = await profileValidations(env.fuseki, profileId, [
     { shape: `${profile}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${profile}/realm-shape`, focus: [op.realm], graphs: [GRAPHS.current] },
