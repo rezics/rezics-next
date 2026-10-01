@@ -31,12 +31,13 @@ async function current(client: PoolClient, row: PermitRow, graph: Pick<FusekiCli
   await editorialController(client, row.principal, row.actor);
   const proposal: Proposal = { id: row.proposal, kind: row.kind, target: row.target,
     proposer: row.proposer_agent, proposerKey: row.proposer_key, latestRevision: row.revision, decision: null };
-  await requireReview(client, proposal, row.principal, row.actor,graph);
+  const publicWorks = await requireReview(client, proposal, row.principal, row.actor,graph);
   const basis = await reviewBasis(client, proposal, row.required,graph,row.approve ? { principal: row.principal,
     review: { id: row.id, proposal: row.proposal, revision: row.revision, reviewer: row.actor,
       reviewerKey: independenceKey(row.proposal,row.principal), outcome: 'approve', message: row.message, sequence: '0' } } : undefined);
   const state = reviewState(proposal,basis.reviews,basis.authority,row.required,await viewerFor(client,proposal,row.principal,row.actor,graph));
   if (!state.allowedActions.includes('apply')) throw new EditorialBlocked(state.blockers[0] ?? { code: 'review_authority_required' });
+  return [...new Set([...publicWorks,...basis.publicWorks])];
 }
 export async function registerEditorialAdmission(pool: Pool, request: AdmissionRequest,
   graph: Pick<FusekiClient,'query'> | undefined,
@@ -139,7 +140,7 @@ export async function withCommandOwnerAuthority<T>(pool: Pool, request: Admissio
  * This does not create another review policy or an ordinary edit delegation. */
 export async function checkEditorialApplication(client: PoolClient, application: string,
   binding: { kind: string; operationKey: string; candidateDigest: string },
-  graph: Pick<FusekiClient, 'query'> | undefined): Promise<void> {
+  graph: Pick<FusekiClient, 'query'> | undefined): Promise<string[]> {
   const row = await permit(client, application);
   const revision = (await client.query<{ candidate_digest: string }>(
     'SELECT candidate_digest FROM access.editorial_revision WHERE proposal=$1 AND n=$2',
@@ -149,5 +150,5 @@ export async function checkEditorialApplication(client: PoolClient, application:
     || binding.kind === 'merge' && row.required !== 2) {
     throw new AdmissionConflict('Native owner command differs from its reviewed application');
   }
-  await current(client, row, graph);
+  return current(client, row, graph);
 }

@@ -8,6 +8,8 @@ import { previewMerge, MergeConflictWithHeads } from '../identity-merge/prefligh
 import { AccessMergeJournal } from '../identity-merge/journal.ts';
 import { mergeEditorialCommands } from '../identity-merge/editorial-commands.ts';
 import { mergeDependencies, mergePreflightOwner, mergeTaskRuntime } from '../identity-merge/runtime.ts';
+import { mergeTargets, requireMergeDisclosure } from '../identity-merge/pair-authority.ts';
+import { ownerAuthorityBlockers } from './owner-authority.ts';
 
 export function reviewedMergeAdapter(owners: Pick<EditorialAdapter,'validate'|'commands'|'complete'|'compensate'>): EditorialAdapter {
   const adapter: EditorialAdapter = { ...owners,kind: 'merge',requiredApprovals: 2,
@@ -25,6 +27,10 @@ export const adapterModule = { kind: 'merge',
         if (target.resource !== plan.source.resource || target.work !== target.resource) throw new EditorialInvalid('Merge targets its original Work');
         const heads = checkedHeads([{ component: plan.source.resource,head: plan.source.revision },{ component: plan.survivor.resource,head: plan.survivor.revision }]);
         if (!headsEqual(heads,expected)) throw new EditorialBlocked({ code: 'stale_base',expectedHeads: expected,actualHeads: heads });
+        await requireMergeDisclosure(plan,dependencies.graph);
+        const blockers = await ownerAuthorityBlockers(runtime,runtime.actingSubject,
+          mergeTargets(target,plan).map(pair => ({ action: 'work.edit',scope: `work:edit:${pair.resource}` })));
+        if (blockers.length) throw new EditorialBlocked(blockers[0]!);
         try {
           if (plan.operation === 'unmerge') await journal.locked(plan.original,async scope => {
             const original = await scope.task(), completed = await scope.completion();
@@ -72,6 +78,7 @@ export const adapterModule = { kind: 'merge',
           baseHeads: [{ component: plan.source.resource,head: plan.source.revision },{ component: plan.survivor.resource,head: plan.survivor.revision }] };
       },
     });
-    return adapter;
+    return { ...adapter,applyBlockers: (target,revision,agent) => ownerAuthorityBlockers(runtime,agent,
+      mergeTargets(target,revision.candidate).map(pair => ({ action: 'work.edit',scope: `work:edit:${pair.resource}` }))) };
   },
 } satisfies EditorialAdapterModule<EditorialRuntime & { actingSubject: string }>;

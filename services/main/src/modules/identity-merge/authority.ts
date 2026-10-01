@@ -4,6 +4,7 @@ import { checkEditorialApplication } from '../editorial-review/admission.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { itemCommandKey, mergeDigest, MergeUnavailable, type MergeTask } from './contract.ts';
 import { checkedTask } from './journal.ts';
+import { lockMergeEditGates } from './pair-authority.ts';
 
 /** Called inside the native effect's Access authority transaction. A valid
  * proposal alone cannot deliver an unretained task, another epoch or different
@@ -41,7 +42,8 @@ export async function checkMergeAuthority(client: PoolClient, task: MergeTask, g
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
   }`, 4096)).boolean;
   if (open !== true) throw new MergeUnavailable('Native owner task epoch is unavailable');
-  await checkEditorialApplication(client, task.application, { kind: 'merge',
+  await lockMergeEditGates(client,task.plan);
+  return checkEditorialApplication(client, task.application, { kind: 'merge',
     operationKey: task.key, candidateDigest: task.candidateDigest }, graph);
 }
 

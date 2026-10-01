@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { checkMergeAuthority } from '../identity-merge/authority.ts';
+import { mergeDisclosureGuard, mergePublicAuthorityGuard, requireMergeDisclosure } from '../identity-merge/pair-authority.ts';
 import { itemCommandKey, mergeDigest, MergeConflict, MergeUnavailable, type MergeTask } from '../identity-merge/contract.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 
@@ -23,7 +24,7 @@ export async function commandWorkMerge(env: WorkActivationEnvironment, pool: Poo
   const existing = await readMergeIdentityReceipt(env,task);
   if (existing) return existing;
   return controlTransaction(pool,async client => {
-    await checkMergeAuthority(client,task,env.fuseki,'identity-merge');
+    const publicWorks = await checkMergeAuthority(client,task,env.fuseki,'identity-merge');
     const { source,survivor,operation } = task.plan, receipt = mergeIdentityReceiptIri(task), digest = mergeDigest(task);
     const batch = `urn:rezics:outbox:${hash(receipt)}`,event = `urn:rezics:event:${hash(receipt)}`;
     const validations = await profileValidations(env.fuseki,'work-metadata-v1',[
@@ -53,11 +54,18 @@ export async function commandWorkMerge(env: WorkActivationEnvironment, pool: Poo
             FILTER NOT EXISTS { ${iri(survivor.resource)} rv:mergedInto+ ${iri(source.resource)} }`
             : edge}
         }
+        ${mergeDisclosureGuard(task.plan)}
+        ${mergePublicAuthorityGuard(publicWorks)}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         BIND(?n + 1 AS ?next) }`;
     const result = await env.fuseki.commandWithReceipt({ receipt,digest,update,validations,deadlineMs: 10_000 });
     const committed = await readMergeIdentityReceipt(env,task);
     if (!committed) {
+      // Return the same shared policy refusal if disclosure changed between
+      // its authority read and the atomic graph guard.
+      if (result.status === 'guard-unmatched' || result.status === 'conflict') {
+        await requireMergeDisclosure(task.plan,env.fuseki);
+      }
       if (result.status === 'guard-unmatched' || result.status === 'conflict') throw new MergeConflict('Identity heads or resolution changed');
       throw new MergeUnavailable(`Identity command ${result.status}`);
     }

@@ -9,7 +9,7 @@ import { resolveTargets } from '../target/resolve.ts';
 import { discoverEditorialAdapters } from './adapters.ts';
 import { EditorialCommandJournal } from './command-journal.ts';
 import { applyOrderedCommands } from './ordered.ts';
-import { editorialController, editorialPrincipal, independenceKey, requireReview, reviewBasis, viewerFor } from './authority.ts';
+import { editorialController, editorialPrincipal, independenceKey, requireProposalAuthority, requireReview, reviewBasis, viewerFor } from './authority.ts';
 import { applyReviewedRevision, assertOpenRevision, assertOwnerReceipt, reviewState, type Viewer } from './lifecycle.ts';
 import { canonicalCandidate, EDITORIAL_COST, EditorialBlocked, EditorialInvalid, makeProposalRevision, revisionOperationKey,
   type ApplyInput, type BaseHead, type Blocker, type EditorialAdapter, type EditorialTarget, type EvidenceRef, type Json,
@@ -264,6 +264,7 @@ export class EditorialReviewStore {
       if (target.revision !== input.target.revision) throw new EditorialBlocked({ code: 'stale_base',
         expectedHeads: [{ component: target.resource,head: input.target.revision }],actualHeads: [{ component: target.resource,head: target.revision }] });
       const validated = await adapter.validate(target,input.candidate,input.baseHeads);
+      await requireProposalAuthority(client,input.kind,target,validated.candidate,principal,call.actingSubject,call.work.environment.fuseki);
       const controllers = (await client.query<{ principal_id: string }>(`SELECT DISTINCT principal_id
         FROM access.representation WHERE subject_id = $1 AND action = 'agent.control' AND active
           AND valid_until > clock_timestamp() ORDER BY principal_id LIMIT 17`,[call.actingSubject])).rows.map(row => row.principal_id);
@@ -295,6 +296,7 @@ export class EditorialReviewStore {
       assertOpenRevision(proposal,old); this.pending(await this.application(client,id,row.latest));
       const adapter = await this.adapter(row.kind,call);
       const validated = await adapter.validate(row.target,input.candidate,input.baseHeads);
+      await requireProposalAuthority(client,row.kind,row.target,validated.candidate,principal,call.actingSubject,call.work.environment.fuseki);
       await this.insertRevision(client,makeProposalRevision(id,row.latest + 1,validated,input.evidence),call.actingSubject);
       await this.event(client,id,row.latest + 1,'revised',call.actingSubject);
       const result = { proposal: id,revision: row.latest + 1,outcome: 'revised',replayed: false };
@@ -318,6 +320,11 @@ export class EditorialReviewStore {
       const proposal = rowToProposal(row);
       assertOpenRevision(proposal,await this.revision(client,id,input.revision)); this.pending(await this.application(client,id,row.latest));
       await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
+      if (row.kind === 'merge' && input.outcome === 'approve') {
+        const blockers = await this.ownerBlockers(await this.adapter(row.kind,call),row.target,
+          await this.revision(client,id,input.revision),call.actingSubject);
+        if (blockers.length) throw new EditorialBlocked(blockers[0]!);
+      }
       await this.insertReview(client,id,input.revision,principal,call.actingSubject,input.outcome,input.message);
       await this.event(client,id,input.revision,'reviewed',call.actingSubject);
       const result = { proposal: id,revision: input.revision,outcome: input.outcome,replayed: false };
