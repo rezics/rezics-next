@@ -40,6 +40,12 @@ export const NOTIFICATION_LIMITS = {
   deliveryTtlMs: 86_400_000,
 } as const;
 
+/** Indexed per-item delivery discovery, within the requested inbox page. */
+export const NOTIFICATION_DELIVERY_DISCOVERY_COST = {
+  statements: NOTIFICATION_LIMITS.streamPage,
+  selectedRows: NOTIFICATION_LIMITS.streamPage * NOTIFICATION_LIMITS.endpointsPerRecipient,
+} as const;
+
 /** Post-commit realtime hints. Durable notification items remain in the stream. */
 export const NOTIFICATION_REALTIME_CHANNEL = 'rezics_notification_stream_v1';
 
@@ -117,6 +123,7 @@ export interface StreamItem {
   triageRevision: string | null;
   reason: ProposalSubscriptionReason | null;
   proposal: { id: string; revision: number } | null;
+  deliveries: { id: string; channel: string }[];
   /** Present only for active items; withdrawn or erased items keep their sequence as a tombstone. */
   subject: { owner: string; ref: string; revision: string | null } | null;
   display: (Omit<NotificationDisplayContext, 'actorAgent'> & { actor: NotificationAgentSummary | null;
@@ -592,10 +599,19 @@ export class NotificationStore {
         FROM access.notification_read_watermark WHERE principal_id = $1 AND stream = 'inbox' AND generation = $2`,
       [principalId, stream.generation])).rows[0];
       const page = rows.slice(0, limit);
+      const deliveries = new Map<string, StreamItem['deliveries']>();
+      for (const item of page) {
+        // (item_id, endpoint_id) is a unique index; no recipient history scan.
+        deliveries.set(item.id, (await client.query<{ id: string; channel: string }>(`
+          SELECT id, channel FROM access.notification_delivery
+          WHERE item_id = $1 AND principal_id = $2 ORDER BY endpoint_id LIMIT $3`,
+        [item.id, principalId, NOTIFICATION_LIMITS.endpointsPerRecipient])).rows);
+      }
       return { principalId, page: {
         generation: stream.generation, head: stream.head_sequence, reset,
         readThrough: watermark?.read_through ?? '0',
         items: page.map(row => ({ id: row.id, sequence: row.sequence, purpose: row.purpose, topic: row.topic,
+          deliveries: deliveries.get(row.id)!,
           state: row.state, read: row.individually_read
             || BigInt(row.sequence) <= BigInt(watermark?.read_through ?? '0'),
           createdAt: row.created_at.toISOString(),

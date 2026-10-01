@@ -18,7 +18,7 @@ export const unsupportedPublicSearchSelectors = {
 
 export const workResult = t.Object({
   work: t.String(), mainVersion: t.String(), workRevision: t.String(),
-  mainRevision: t.String(), sourcePosition, replayed: t.Boolean(),
+  mainRevision: t.String(), admissionId: t.String(), sourcePosition, replayed: t.Boolean(),
 });
 
 /** Wire values are lexical and tagged; omission is the absent state. Null is invalid. */

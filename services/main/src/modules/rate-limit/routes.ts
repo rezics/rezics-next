@@ -61,6 +61,8 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/health/search-ready', 'read'],
   ['GET', '/v1/access/eligible-org-member-set-grants/{grantId}', 'read'],
   ['GET', '/v1/access/grants', 'read'],
+  ['GET', '/v1/access/authority-state', 'read'],
+  ['GET', '/v1/access/revocation-sources/{sourceId}', 'read'],
   ['GET', '/v1/access/grants/{grantId}', 'read'],
   ['GET', '/v1/access/grants/{grantId}/lineage', 'read'],
   ['GET', '/v1/access/group-impact-proposals/{proposalId}', 'read'],

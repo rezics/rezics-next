@@ -107,7 +107,7 @@ const position = { datasetId: 'product', dataEpoch: 'epoch', sequence: '42' };
 describe('Main typed route contracts', () => {
   test('successful, pending and public query envelopes validate', () => {
     expect(Value.Check(workResult, { work: id, mainVersion: id, workRevision: id,
-      mainRevision: id, sourcePosition: position, replayed: false })).toBe(true);
+      mainRevision: id, admissionId: id, sourcePosition: position, replayed: false })).toBe(true);
     expect(Value.Check(pendingOperation, { operationId: id, status: 'reconciling',
       phase: 'graph-outcome', result: null,
       retry: { allowed: true, afterMs: 1000 } })).toBe(true);

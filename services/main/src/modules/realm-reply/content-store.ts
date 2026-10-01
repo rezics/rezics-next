@@ -39,7 +39,7 @@ export interface ReviewDecision {
 export interface PlacementPreparation {
   directPolicyRevision?: string;
   operationId: string; realm: string; reply: string; revisionId: string;
-  revisionDigest: string; reviewDecisionId: string; reviewDigest: string; author: string;
+  revisionDigest: string; reviewDecisionId: string; reviewGeneration: string; reviewDigest: string; author: string;
   ownerDataEpoch: string; ownerSequence: string;
   rootTarget: string; rootRevision: string; parentReply: string | null;
   parentRevision: string | null; contextRevision: string | null;
@@ -421,7 +421,7 @@ export class RealmReplyContentStore {
             proof, policyAdmission.id, directPolicy]);
         }
       }
-      const approval = await client.query<{ request_digest: string; method: string; policy_revision: string }>(`SELECT c.request_digest, d.method, d.policy_revision
+      const approval = await client.query<{ request_digest: string; method: string; policy_revision: string; review_generation: string }>(`SELECT c.request_digest, d.method, d.policy_revision, d.review_generation
         FROM content.realm_review_decision d
         JOIN content.receipt c ON c.operation_id = d.operation_id
         WHERE d.id = $1 AND d.realm = $2 AND d.revision_id = $3 AND d.variant_id = $4
@@ -449,7 +449,7 @@ export class RealmReplyContentStore {
       return { ...(policyRevision ? { directPolicyRevision: policyRevision } : {}),
         operationId: admission.id, realm: input.realm, reply: input.reply,
         revisionId: input.revisionId, revisionDigest: input.revisionDigest,
-        reviewDecisionId, reviewDigest: approval.rows[0].request_digest,
+        reviewDecisionId, reviewGeneration: approval.rows[0].review_generation, reviewDigest: approval.rows[0].request_digest,
         ownerDataEpoch: position.rows[0]!.data_epoch, ownerSequence: position.rows[0]!.sequence,
         author: row.author,
         rootTarget: row.root_target, rootRevision: row.root_revision,
@@ -460,10 +460,10 @@ export class RealmReplyContentStore {
 
   private async placement(client: PoolClient, operationId: string): Promise<Omit<PlacementPreparation, 'replayed'> | null> {
     const result = await client.query<{ direct_policy_revision: string | null; realm: string; revision_id: string; review_decision_id: string;
-      request_digest: string; data_epoch: string; sequence: string;
+      request_digest: string; review_generation: string; data_epoch: string; sequence: string;
       byte_digest: string; id: string; author: string; root_target: string; root_revision: string;
       parent_reply: string | null; parent_revision: string | null; context_revision: string | null }>(`
-      SELECT p.direct_policy_revision, p.realm, p.revision_id::text, p.review_decision_id::text, c.request_digest, r.byte_digest,
+      SELECT p.direct_policy_revision, p.realm, p.revision_id::text, p.review_decision_id::text, d.review_generation, c.request_digest, r.byte_digest,
         prep.data_epoch::text, prep.sequence::text,
         i.id, i.author, i.root_target, i.root_revision, i.parent_reply,
         i.parent_revision::text, i.context_revision
@@ -478,7 +478,7 @@ export class RealmReplyContentStore {
     if (!row) return null;
     return { ...(row.direct_policy_revision ? { directPolicyRevision: row.direct_policy_revision } : {}),
       operationId, realm: row.realm, reply: row.id, revisionId: row.revision_id,
-      revisionDigest: row.byte_digest, reviewDecisionId: row.review_decision_id,
+      revisionDigest: row.byte_digest, reviewDecisionId: row.review_decision_id, reviewGeneration: row.review_generation,
       reviewDigest: row.request_digest,
       ownerDataEpoch: row.data_epoch, ownerSequence: row.sequence,
       author: row.author, rootTarget: row.root_target, rootRevision: row.root_revision,

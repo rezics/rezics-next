@@ -121,7 +121,7 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               aliases: body.aliases, romanizations: body.romanizations,
               ...(body.parentComposition ? { parentComposition: body.parentComposition } : {}) } }, work.catalogueIntake);
         return Response.json({ work: receipt.work, mainVersion: receipt.mainVersion,
-          workRevision: receipt.workRevision, mainRevision: receipt.mainRevision,
+          workRevision: receipt.workRevision, mainRevision: receipt.mainRevision, admissionId: receipt.admissionId,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
           replayed: receipt.replayed }, {
           status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },

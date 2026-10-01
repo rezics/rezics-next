@@ -4,7 +4,7 @@ import { groupNotifications, type StreamItem } from '../src/modules/notification
 test('G-286: repeat groups are page-local, disclosure-aware and capped at ten items', () => {
   const item = (index: number, visible = true): StreamItem => ({
     id: String(index), sequence: String(index), purpose: 'social', topic: 'reply',
-    state: 'active', read: false, subject: null, createdAt: '2026-09-28T00:00:00.000Z',
+    state: 'active', read: false, deliveries: [], subject: null, createdAt: '2026-09-28T00:00:00.000Z',
     saved: false,
     done: false,
     triageRevision: null,

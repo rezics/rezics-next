@@ -11,6 +11,7 @@ import { onboardingRoutes } from './routes/onboarding.ts';
 import { accessMembershipRoutes } from './routes/access-memberships.ts';
 import { managedRealmRoutes } from './routes/managed-realms.ts';
 import { accessPolicyRoutes } from './routes/access-policy.ts';
+import { accessReadRoutes } from './routes/access-read.ts';
 import { accessRoleRoutes } from './routes/access-roles.ts';
 import { accessTopologyRoutes } from './routes/access-topology.ts';
 import { actingContextRoutes } from './routes/acting-contexts.ts';
@@ -165,6 +166,7 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(collectionGrainRoutes(work))
+    .use(accessReadRoutes(work))
     .use(catalogueCandidateRoutes(work))
     .use(wikiRoutes(fuseki, work))
     .use(wikiEvidenceRoutes(work))

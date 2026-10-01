@@ -219,7 +219,7 @@ export class RealmReplyStore {
     });
     await this.seal(admission);
     return { placement: terminal.placement, reply: input.reply, realm: input.realm,
-      revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId,
+      revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId, reviewGeneration: prepared.reviewGeneration,
       replayed: admission.replayed || prepared.replayed };
   }
 

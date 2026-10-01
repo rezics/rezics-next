@@ -3,6 +3,9 @@
 // an Access pool that counts owner SQL calls, selected rows and written rows.
 import { randomUUID } from 'node:crypto';
 import { expect } from 'bun:test';
+import { authorityState, revocationSourceState, workAuthorityEpoch } from './g-903-api-values.ts';
+import { AccessAuthorityRead } from '../../../services/main/src/modules/access/authority-read.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -55,7 +58,8 @@ export async function policyHarness() {
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
   const app = createMainApp(fuseki, { environment: { fuseki, objectDirectory: '.temp/access-policy-objects',
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } },
-  account: account.verifier, access: registry, accessPolicy: owner });
+  account: account.verifier, access: registry, accessPolicy: owner,
+  authorityRead: new AccessAuthorityRead(pool), actingContexts: new AccessActingContexts(pool) });
   const call = async (method: string, path: string, token: string, body?: object, key = randomUUID()) => {
     const response = await app.handle(new Request(`http://main.local${path}`, { method,
       headers: { authorization: `Bearer ${token}`,
@@ -71,6 +75,9 @@ export async function policyHarness() {
     return response.body as T;
   };
   const q = (sql: string, values?: unknown[]) => pool.query(sql, values);
+  const authorityReaders: { subject: string; action: string }[] = [];
+  const issuedSources: { id: string; issuer: string; scope: string }[] = [];
+  const observedEpochs = new Map<string, string>();
   const fixture = {
     agent: async (kind: 'agent' | 'institution' = 'agent') => {
       const id = iri();
@@ -86,11 +93,15 @@ export async function policyHarness() {
       const id = randomUUID();
       await q(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
         VALUES ($1, $2, $3, $4, now() + interval '1 hour')`, [id, principal, subject, action]);
+      if (principal === manager && ['access.policy.manage', 'access.revoke'].includes(action)) {
+        authorityReaders.push({ subject, action });
+      }
       return id;
     },
     grant: async (issuer: string, recipient: string, scope: string, action: string,
       membership?: { id: string; generation: number }, lifetime = '1 hour') => {
       const id = randomUUID();
+      issuedSources.push({ id, issuer, scope });
       await q(`INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id,
           action, valid_until, membership_id, membership_generation)
         VALUES ($1, $2, $3, $4, $5, now() + $6::interval, $7, $8)`, [id, issuer, recipient, scope, action,
@@ -120,8 +131,30 @@ export async function policyHarness() {
         VALUES ($1, $2, $3, $4, 'joined', 1, 1, 'terms-1', $5)`, [id, kind, ownerSubject, principal, consent]);
       return id;
     },
-    epoch: async (scope: string) => (await q('SELECT authority_epoch FROM access.scope_gate WHERE id = $1',
-      [scope])).rows[0]!.authority_epoch as string,
+    epoch: async (scope: string) => {
+      let failure: unknown;
+      if (scope === 'work:create:root') {
+        try {
+          const epoch = await workAuthorityEpoch(app, account.tokenA);
+          observedEpochs.set(scope, epoch);
+          return epoch;
+        } catch (error) { failure = error; }
+      }
+      for (const reader of authorityReaders) {
+        try {
+          const source = issuedSources.find(source => source.scope === scope && source.issuer === reader.subject);
+          if (reader.action === 'access.revoke' && !source) continue;
+          const epoch = (reader.action === 'access.revoke'
+            ? await revocationSourceState(app, account.tokenA, source!.id, reader.subject)
+            : await authorityState(app, account.tokenA, scope, reader.subject, reader.action)).authorityEpoch;
+          observedEpochs.set(scope, epoch);
+          return epoch;
+        } catch (error) { failure = error; }
+      }
+      const observed = observedEpochs.get(scope);
+      if (observed !== undefined) return observed;
+      throw failure ?? new Error(`No authorized authority reader for ${scope}`);
+    },
   };
   return { pool, costs, account, manager, reader, registry, app, call, ok, q, fixture,
     managerToken: account.tokenA, readerToken: account.tokenB,

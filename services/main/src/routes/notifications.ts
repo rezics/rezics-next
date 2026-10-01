@@ -56,6 +56,7 @@ const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.S
     ]),
   ),
   proposal: t.Nullable(t.Object({ id: t.String(), revision: t.Integer({ minimum: 1 }) })),
+  deliveries: t.Array(t.Object({ id: t.String(), channel: t.String() }), { maxItems: 8 }),
   state: t.Union([t.Literal('active'), t.Literal('withdrawn'), t.Literal('erased')]),
   subject: t.Nullable(t.Object({ owner: t.String(), ref: t.String(), revision: t.Nullable(t.String()) })),
   display: t.Nullable(t.Object({ kind: t.Union([
