@@ -114,7 +114,7 @@ export function expectClean(found: Findings): void {
 }
 
 /** Whether the focused element draws a focus indicator (an outline or a ring) and is not covered by something else. */
-export interface FocusStop { name: string; ring: boolean; covered: boolean; offscreen: boolean }
+export interface FocusStop { name: string; ring: boolean; covered: boolean; offscreen: boolean; coveredBy?: string }
 
 export const focusStop = (page: Page): Promise<FocusStop> => page.evaluate(() => {
   const element = document.activeElement as HTMLElement | null;
@@ -138,7 +138,8 @@ export const focusStop = (page: Page): Promise<FocusStop> => page.evaluate(() =>
   const covered = !offscreen && !!top && top !== element && !element.contains(top) && !top.contains(element)
     && !element.closest('label')?.contains(top);
   return { name: `${element.tagName.toLowerCase()} ${element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40) ?? ''}`.trim(),
-    ring, covered, offscreen };
+    ring, covered, offscreen,
+    ...covered && top ? { coveredBy: `${top.tagName.toLowerCase()}${top.className ? `.${String(top.className).trim().split(/\s+/).slice(0, 4).join('.')}` : ''} at ${Math.round(x)},${Math.round(y)} (the control is ${Math.round(box.left)},${Math.round(box.top)} ${Math.round(box.width)}x${Math.round(box.height)})` } : {} };
 });
 
 /** Tab (then Shift+Tab, in case it lies behind) until `there` holds, noting every stop that shows no focus indicator or is hidden. */
@@ -151,7 +152,7 @@ async function walkTo(page: Page, there: () => Promise<boolean>, found: Findings
       const focus = await focusStop(page);
       const id = `${focus.name}`;
       if (!focus.ring && focus.name !== 'body' && !seen.has(`ring ${id}`)) { seen.add(`ring ${id}`); found.push(`${label}: no focus indicator on ${id}`); }
-      if (focus.covered && !seen.has(`cover ${id}`)) { seen.add(`cover ${id}`); found.push(`${label}: focus is hidden behind another element on ${id}`); }
+      if (focus.covered && !seen.has(`cover ${id}`)) { seen.add(`cover ${id}`); found.push(`${label}: focus is hidden behind ${focus.coveredBy ?? 'another element'} on ${id}`); }
       if (await there()) return;
     }
   }
