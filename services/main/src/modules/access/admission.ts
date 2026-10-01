@@ -795,12 +795,12 @@ export class AccessAdmissionRegistry {
     return withPreservationFence(this.pool, resource, operationId, write);
   }
 
-  async register(request: AdmissionRequest): Promise<RegisteredAdmission> {
+  async register(request: AdmissionRequest, transaction?: PoolClient): Promise<RegisteredAdmission> {
     if (request.editorialPermit) {
       const principalId = await this.activePrincipalId(request.principal);
       if (!principalId) throw new AdmissionDenied('principal is not admitted');
       await requirePlatformParticipation(this.pool, principalId);
-      return registerEditorialAdmission(this.pool, request, this.baselineGraph, ordinary => this.register(ordinary));
+      return registerEditorialAdmission(this.pool, request, this.baselineGraph, (client,ordinary) => this.register(ordinary,client));
     }
     if (request.action === 'publication.reject.organization') {
       throw new AdmissionDenied('organization moderation requires its atomic episode admission');
@@ -814,9 +814,9 @@ export class AccessAdmissionRegistry {
         && (request.action !== 'work.create' || request.scope !== 'work:create:root'))) {
       throw new AdmissionDenied('invalid admission request');
     }
-    const client = await this.pool.connect();
+    const client = transaction ?? await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      if (!transaction) await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       await requireRecoveryOpen(client);
@@ -873,7 +873,7 @@ export class AccessAdmissionRegistry {
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await baselineProofCurrent(client, this.baselineGraph, savedBaseline, existing);
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return { id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, authorityPath: existing.authority_path,
           scope: existing.scope_id, action: existing.action, idempotencyKey: existing.idempotency_key,
@@ -898,7 +898,7 @@ export class AccessAdmissionRegistry {
           && existing.authority_epoch === gate.authority_epoch
           && await selectedRepresentedWorkProof(client, existing,
             principal.enforcement_epoch, gate.group_generation, this.baselineGraph);
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return {
           id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, scope: existing.scope_id,
@@ -919,7 +919,7 @@ export class AccessAdmissionRegistry {
         const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await selectedDirectWorkProof(client, existing, principal.enforcement_epoch);
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return { id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, scope: existing.scope_id,
           authorityPath: existing.authority_path, action: existing.action,
@@ -1059,7 +1059,7 @@ export class AccessAdmissionRegistry {
           || existing.scope_id !== request.scope) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        await client.query('COMMIT');
+        if (!transaction) await client.query('COMMIT');
         return {
           id: existing.id, principalId: existing.principal_id,
           actingSubject: existing.acting_subject, scope: existing.scope_id,
@@ -1126,7 +1126,7 @@ export class AccessAdmissionRegistry {
         `INSERT INTO access.outbox (id, kind, admission_id, scope_id, authority_epoch)
          VALUES ($1, 'admission.registered', $2, $3, $4)`,
         [Bun.randomUUIDv7(), id, request.scope, gate.authority_epoch]);
-      await client.query('COMMIT');
+      if (!transaction) await client.query('COMMIT');
       return {
         id, principalId, actingSubject: request.actingSubject, authorityPath,
         scope: request.scope, action: request.action, idempotencyKey: request.idempotencyKey,
@@ -1137,11 +1137,11 @@ export class AccessAdmissionRegistry {
         dispatchEligible: true, replayed: false,
       };
     } catch (error) {
-      await rollback(client);
+      if (!transaction) await rollback(client);
       if (error instanceof GroupUnavailable) throw new AdmissionUnavailable(error.message);
       throw error;
     } finally {
-      client.release();
+      if (!transaction) client.release();
     }
   }
 

@@ -40,7 +40,7 @@ async function current(client: PoolClient, row: PermitRow, graph: Pick<FusekiCli
 }
 export async function registerEditorialAdmission(pool: Pool, request: AdmissionRequest,
   graph: Pick<FusekiClient,'query'> | undefined,
-  registerOrdinary: (request: AdmissionRequest) => Promise<RegisteredAdmission>): Promise<RegisteredAdmission> {
+  registerOrdinary: (client: PoolClient, request: AdmissionRequest) => Promise<RegisteredAdmission>): Promise<RegisteredAdmission> {
   return controlTransaction(pool, async client => {
     const principal = await editorialPrincipal(client, request.principal);
     // Serialize retries of this one permit without locking the proposal row
@@ -71,10 +71,10 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
         WHERE application = $1`,[row.id])).rows[0];
     await current(client, row,graph);
     // The permit narrows an ordinary owner admission; it never supplies its
-    // authority. A crash between registration and attachment replays the same
-    // ordinary idempotency key before delivery can begin.
+    // authority. Ordinary proof, admission and permit attachment share this
+    // transaction; registration needs no extra pooled connection or crash gap.
     return withCommandOwnerAuthority(pool, request, graph, async () => {
-      const admission = await registerOrdinary({ ...request, editorialPermit: undefined });
+      const admission = await registerOrdinary(client,{ ...request, editorialPermit: undefined });
       if (old && old.id !== admission.id) throw new AdmissionConflict('Editorial owner admission changed');
       if (!old) {
         if (command) await client.query(`INSERT INTO access.editorial_command_admission (application,position,admission)
@@ -82,7 +82,7 @@ export async function registerEditorialAdmission(pool: Pool, request: AdmissionR
         else await client.query(`INSERT INTO access.editorial_owner_admission (application,admission) VALUES ($1,$2)`, [row.id,admission.id]);
       }
       return admission;
-    });
+    }, row.kind === 'wiki-bundle' ? row.target.work : undefined);
   });
 }
 export async function checkEditorialAdmission(client: PoolClient, admission: string,
@@ -91,8 +91,9 @@ export async function checkEditorialAdmission(client: PoolClient, admission: str
     `SELECT application FROM access.editorial_owner_admission WHERE admission = $1
       UNION ALL SELECT application FROM access.editorial_command_admission WHERE admission = $1`, [admission])).rows[0];
   if (!binding) return false;
-  await current(client, await permit(client, binding.application),graph);
-  await withCommandOwnerAuthority(pool, request, graph, async () => {});
+  const row = await permit(client,binding.application);
+  await current(client,row,graph);
+  await withCommandOwnerAuthority(pool, request, graph, async () => {},row.kind === 'wiki-bundle' ? row.target.work : undefined);
   // Generic explicit owner grants have no pinned Work/baseline proof. Recheck
   // their live mandate at claim, as well as the independent review authority.
   const ordinary = await client.query(`SELECT 1 FROM access.admission a
@@ -110,17 +111,24 @@ export async function checkEditorialAdmission(client: PoolClient, admission: str
 /** An entity edit also belongs to each Work that owns its semantic record,
  * independently of the proposal's Work and its reviewing steward. */
 async function withCommandOwnerAuthority<T>(pool: Pool, request: AdmissionRequest,
-  graph: Pick<FusekiClient,'query'> | undefined, operation: () => Promise<T>): Promise<T> {
-  if (!request.scope.startsWith('semantic:edit:')) return operation();
-  if (!graph) throw new AdmissionDenied('Owner authority is unavailable');
-  const target = request.scope.slice('semantic:edit:'.length);
-  const rows = (await graph.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?work WHERE {
-    GRAPH ${iri(GRAPHS.current)} {
-      { ${iri(target)} rv:semanticWork ?work }
-      UNION { ${iri(target)} a <https://schema.org/CreativeWork> . BIND(${iri(target)} AS ?work) }
-    } } LIMIT 17`,8192)).results?.bindings ?? [];
-  if (rows.length > 16) throw new AdmissionDenied('Owner authority exceeds its bound');
-  const check = (at: number): Promise<T> => at === rows.length ? operation()
-    : withWorkEditAuthority(pool,request.principal,request.actingSubject,rows[at]!.work!.value,() => check(at + 1),graph);
-  return check(0);
+  graph: Pick<FusekiClient,'query'> | undefined, operation: () => Promise<T>, publicationWork?: string | null): Promise<T> {
+  const works = new Set(publicationWork ? [publicationWork] : []);
+  if (request.scope.startsWith('semantic:edit:')) {
+    if (!graph) throw new AdmissionDenied('Owner authority is unavailable');
+    const target = request.scope.slice('semantic:edit:'.length);
+    const rows = (await graph.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?work WHERE {
+      GRAPH ${iri(GRAPHS.current)} {
+        { ${iri(target)} rv:semanticWork ?work }
+        UNION { ${iri(target)} a <https://schema.org/CreativeWork> . BIND(${iri(target)} AS ?work) }
+      } } LIMIT 17`,8192)).results?.bindings ?? [];
+    if (rows.length > 16) throw new AdmissionDenied('Owner authority exceeds its bound');
+    for (const row of rows) works.add(row.work!.value);
+  }
+  // Check sequentially: an entity shared by several Works must not consume one
+  // pooled connection per Work. Every check runs again at dispatch claim.
+  for (const work of works) {
+    if (request.scope === `work:edit:${work}`) continue; // Ordinary admission owns this fence.
+    await withWorkEditAuthority(pool,request.principal,request.actingSubject,work,async () => {},graph);
+  }
+  return operation();
 }

@@ -40,6 +40,17 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     if (args[1] === pausePublication) { pausePublication = null; throw new Error('Evidence owner interrupted before commit'); }
     return nativePublish(...args);
   };
+  const nativeClaim = f.access.claim.bind(f.access);
+  let revokeAtClaim: string | null = null;
+  f.access.claim = async (...args) => {
+    const admission = (await f.accessPool.query<{ scope_id: string }>('SELECT scope_id FROM access.admission WHERE id = $1',[args[0]])).rows[0];
+    if (revokeAtClaim && admission?.scope_id === 'semantic:create:root') {
+      await f.accessPool.query(`UPDATE access.permission_grant SET active = false
+        WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.edit'`,[steward.actor,`work:edit:${revokeAtClaim}`]);
+      revokeAtClaim = null;
+    }
+    return nativeClaim(...args);
+  };
   let loseEntity = 0, rejectEntity = 0, hideReceipts = false, semanticWrites = 0;
   const nativeGraph = f.env.fuseki;
   const graph = new Proxy(nativeGraph,{ get(target,property) {
@@ -292,6 +303,15 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     expect(outcomes.get('claim:0')).toBe('dependency_rejected');
     expect(outcomes.get('claim:1')).toBe('dependency_rejected');
     expect(outcomes.get('members:characters:0')).toBe('applied');
+    // Claim rechecks the Work mandate for creation as well as target edits;
+    // losing it after registration cannot publish a Work link or any record.
+    const revoked = await setup(true), revokedProposal = await proposalFor(revoked.bundle), beforeRevocation = semanticWrites;
+    revokeAtClaim = revoked.work.work;
+    const revokedReceipt = await apply(revokedProposal.proposal,1);
+    expect(revokedReceipt.commands!.find(command => command.key.endsWith(':entity:elizabeth'))?.outcome).toBe('rejected');
+    expect(revokedReceipt.commands!.filter(command => command.outcome === 'applied')).toHaveLength(1);
+    expect(semanticWrites).toBe(beforeRevocation);
+    expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { ?entity <${RV}semanticWork> <${revoked.work.work}> } }`)).boolean).toBe(false);
     // Distinct incoming passages cannot race past the Work-wide allowance.
     const currentPoints = Number((await f.contentPool.query('SELECT sum(code_points)::text AS total FROM wiki.quotation WHERE work = $1',
       [hidden.work.work])).rows[0].total);

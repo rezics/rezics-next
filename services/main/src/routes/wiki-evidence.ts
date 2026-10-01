@@ -14,7 +14,7 @@ import { problem } from './problems.ts';
 
 export const openApiOperations = { '/v1/wiki/evidence/{id}': { get: { bearer: false } } } as const;
 export const capabilities = {
-  '/v1/wiki/evidence/{id}': { get: { disposition: 'supported',mcp: { tool: 'wiki_evidence',
+  '/v1/wiki/evidence/{id}': { get: { disposition: 'supported',mcp: { tool: 'wiki_evidence',scopes: ['work:read'],
     title: 'Read wiki evidence',description: 'Read a claim’s source locator and permitted quotation at a reading position.' } } },
 } as const;
 export const WIKI_EVIDENCE_READ_COST = { evidenceRows: 1, rightsRows: 1, references: 64, referenceBatch: 50 } as const;
