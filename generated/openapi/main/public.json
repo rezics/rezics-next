@@ -108887,6 +108887,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -109158,6 +109170,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -109479,6 +109503,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -110137,6 +110173,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -110244,6 +110292,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -110492,6 +110579,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -110599,6 +110698,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -110925,6 +111063,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -111196,6 +111346,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -111517,6 +111679,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -111855,6 +112029,18 @@
                           {
                             "properties": {
                               "code": {
+                                "const": "budget_exhausted",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "code": {
                                 "const": "apply_pending",
                                 "type": "string"
                               },
@@ -111994,6 +112180,45 @@
                                 "candidate": {},
                                 "candidateDigest": {
                                   "type": "string"
+                                },
+                                "commands": {
+                                  "items": {
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "applied",
+                                          "rejected",
+                                          "dependency_rejected"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "~elyTyp": 7,
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "result": {}
+                                    },
+                                    "required": [
+                                      "key",
+                                      "outcome",
+                                      "receipt",
+                                      "result"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 2048,
+                                  "type": "array"
                                 },
                                 "operationKey": {
                                   "maxLength": 512,
@@ -112611,6 +112836,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -112882,6 +113119,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -113203,6 +113452,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -113623,6 +113884,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -113730,6 +114003,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -113978,6 +114290,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -114085,6 +114409,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -114411,6 +114774,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -114682,6 +115057,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -115003,6 +115390,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -115367,6 +115766,18 @@
                           {
                             "properties": {
                               "code": {
+                                "const": "budget_exhausted",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "code": {
                                 "const": "apply_pending",
                                 "type": "string"
                               },
@@ -115506,6 +115917,45 @@
                                 "candidate": {},
                                 "candidateDigest": {
                                   "type": "string"
+                                },
+                                "commands": {
+                                  "items": {
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "applied",
+                                          "rejected",
+                                          "dependency_rejected"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "~elyTyp": 7,
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "result": {}
+                                    },
+                                    "required": [
+                                      "key",
+                                      "outcome",
+                                      "receipt",
+                                      "result"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 2048,
+                                  "type": "array"
                                 },
                                 "operationKey": {
                                   "maxLength": 512,
@@ -116070,6 +116520,18 @@
                           {
                             "properties": {
                               "code": {
+                                "const": "budget_exhausted",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "code": {
                                 "const": "apply_pending",
                                 "type": "string"
                               },
@@ -116209,6 +116671,45 @@
                                 "candidate": {},
                                 "candidateDigest": {
                                   "type": "string"
+                                },
+                                "commands": {
+                                  "items": {
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "outcome": {
+                                        "enum": [
+                                          "applied",
+                                          "rejected",
+                                          "dependency_rejected"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "receipt": {
+                                        "~elyTyp": 7,
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "result": {}
+                                    },
+                                    "required": [
+                                      "key",
+                                      "outcome",
+                                      "receipt",
+                                      "result"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 2048,
+                                  "type": "array"
                                 },
                                 "operationKey": {
                                   "maxLength": 512,
@@ -116826,6 +117327,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -117097,6 +117610,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -117418,6 +117943,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -117877,6 +118414,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -117984,6 +118533,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -118232,6 +118820,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -118339,6 +118939,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -118665,6 +119304,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -118936,6 +119587,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -119257,6 +119920,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -119667,6 +120342,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -119774,6 +120461,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -120100,6 +120826,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -120371,6 +121109,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -120692,6 +121442,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -121264,6 +122026,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -121371,6 +122145,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -121697,6 +122510,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -121968,6 +122793,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -122289,6 +123126,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -122657,6 +123506,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -122764,6 +123625,45 @@
                         "candidate": {},
                         "candidateDigest": {
                           "type": "string"
+                        },
+                        "commands": {
+                          "items": {
+                            "properties": {
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "enum": [
+                                  "applied",
+                                  "rejected",
+                                  "dependency_rejected"
+                                ],
+                                "type": "string"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "result": {}
+                            },
+                            "required": [
+                              "key",
+                              "outcome",
+                              "receipt",
+                              "result"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 2048,
+                          "type": "array"
                         },
                         "operationKey": {
                           "maxLength": 512,
@@ -123090,6 +123990,18 @@
                         {
                           "properties": {
                             "code": {
+                              "const": "budget_exhausted",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
                               "const": "apply_pending",
                               "type": "string"
                             },
@@ -123361,6 +124273,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -123682,6 +124606,18 @@
                           "properties": {
                             "code": {
                               "const": "revision_required",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "budget_exhausted",
                               "type": "string"
                             }
                           },
@@ -410680,7 +411616,8 @@
                           "source_record",
                           "content_variant",
                           "media_asset",
-                          "work"
+                          "work",
+                          "wiki_evidence"
                         ],
                         "type": "string"
                       },
@@ -410688,6 +411625,15 @@
                         "~elyTyp": 7,
                         "nullable": true,
                         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "wikiEvidenceId": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": [
                           "string",
                           "null"
@@ -410963,7 +411909,8 @@
                           "source_record",
                           "content_variant",
                           "media_asset",
-                          "work"
+                          "work",
+                          "wiki_evidence"
                         ],
                         "type": "string"
                       },
@@ -410971,6 +411918,15 @@
                         "~elyTyp": 7,
                         "nullable": true,
                         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "wikiEvidenceId": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": [
                           "string",
                           "null"
@@ -411246,7 +412202,8 @@
                           "source_record",
                           "content_variant",
                           "media_asset",
-                          "work"
+                          "work",
+                          "wiki_evidence"
                         ],
                         "type": "string"
                       },
@@ -411254,6 +412211,15 @@
                         "~elyTyp": 7,
                         "nullable": true,
                         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "wikiEvidenceId": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": [
                           "string",
                           "null"
@@ -411989,7 +412955,8 @@
                           "source_record",
                           "content_variant",
                           "media_asset",
-                          "work"
+                          "work",
+                          "wiki_evidence"
                         ],
                         "type": "string"
                       },
@@ -411997,6 +412964,15 @@
                         "~elyTyp": 7,
                         "nullable": true,
                         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "wikiEvidenceId": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": [
                           "string",
                           "null"
@@ -412124,7 +413100,8 @@
                           "source_record",
                           "content_variant",
                           "media_asset",
-                          "work"
+                          "work",
+                          "wiki_evidence"
                         ],
                         "type": "string"
                       },
@@ -412132,6 +413109,15 @@
                         "~elyTyp": 7,
                         "nullable": true,
                         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "wikiEvidenceId": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": [
                           "string",
                           "null"
@@ -412259,7 +413245,8 @@
                           "source_record",
                           "content_variant",
                           "media_asset",
-                          "work"
+                          "work",
+                          "wiki_evidence"
                         ],
                         "type": "string"
                       },
@@ -412267,6 +413254,15 @@
                         "~elyTyp": 7,
                         "nullable": true,
                         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "wikiEvidenceId": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": [
                           "string",
                           "null"
@@ -472314,6 +473310,410 @@
             ],
             "title": "Match extracted wiki names",
             "tool": "wiki_candidates"
+          }
+        }
+      }
+    },
+    "/v1/wiki/evidence/{id}": {
+      "get": {
+        "operationId": "getV1WikiEvidenceById",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "position",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                },
+                {
+                  "const": "all",
+                  "type": "string"
+                },
+                {
+                  "const": "mine",
+                  "type": "string"
+                },
+                {
+                  "const": "start",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "claim": {
+                      "type": "string"
+                    },
+                    "claimKind": {
+                      "enum": [
+                        "statement",
+                        "relation"
+                      ],
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "locator": {},
+                    "method": {},
+                    "modality": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "const": "wiki-evidence-v1",
+                      "type": "string"
+                    },
+                    "quote": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "quoteWithheld": {
+                      "type": "boolean"
+                    },
+                    "representationSha256": {
+                      "type": "string"
+                    },
+                    "rightsBasis": {
+                      "type": "string"
+                    },
+                    "submitter": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "id",
+                    "representationSha256",
+                    "locator",
+                    "quote",
+                    "method",
+                    "modality",
+                    "submitter",
+                    "rightsBasis",
+                    "claim",
+                    "claimKind",
+                    "quoteWithheld"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "x-rezics-capability": {
+          "disposition": "supported",
+          "mcp": {
+            "description": "Read a claim’s source locator and permitted quotation at a reading position.",
+            "scopes": [
+              "work:read"
+            ],
+            "title": "Read wiki evidence",
+            "tool": "wiki_evidence"
           }
         }
       }
