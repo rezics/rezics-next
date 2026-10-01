@@ -22,7 +22,12 @@ type WikiEntity = WikiExtraction['entities'][number];
 
 export const WIKI_APPLY_COST = { entities: 128, claims: 256, evidence: 4096, collectionBatch: 16,
   commands: 600, headsPerEntity: 1 } as const;
-export const wikiItemKey = (input: ApplyInput, item: string) => `wiki:${input.revision.proposal}:${input.revision.n}:${item}`;
+export function wikiItemKey(input: Pick<ApplyInput,'revision'>, item: string): string {
+  const prefix = `wiki:${input.revision.proposal}:${input.revision.n}:`;
+  // A full local entity id plus a retraction prefix can exceed the admission
+  // key bound. Keep ordinary keys readable and hash only that long suffix.
+  return prefix + (prefix.length + item.length <= 128 ? item : canonicalCandidate(item).digest);
+}
 const resultFor = (settled: readonly CommandOutcome[], key: string) => commandResult(settled.find(outcome => outcome.key === key));
 const resource = (settled: readonly CommandOutcome[], key: string) => {
   const value = resultFor(settled,key)?.component;

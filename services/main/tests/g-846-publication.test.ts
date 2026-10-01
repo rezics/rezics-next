@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { withholdPassage, evidenceId } from '../src/modules/wiki/evidence.ts';
-import { wikiEntityState } from '../src/modules/wiki/apply.ts';
+import { wikiEntityState, wikiItemKey } from '../src/modules/wiki/apply.ts';
 import type { WikiSnapshot } from '../src/modules/wiki/apply-snapshot.ts';
 
 test('G-846: a rights restriction redacts every nested source-text fallback', () => {
@@ -29,4 +29,15 @@ test('G-846: entity reuse retains unrelated facts and de-duplicates language-tag
   expect(wikiEntityState(entity,snapshot)).toEqual({ component: 'resource',types: [entity.type],lifecycle: 'active',properties: [name,fact,
     { predicate: 'https://schema.org/alternateName',value: { kind: 'language-string',lexical: 'Lizzy',language: 'en' } }] });
   expect(snapshot.entities.lizzy!.state).toMatchObject({ properties: [name,fact] });
+});
+
+test('G-846: maximum wire entity ids retain bounded, distinct compensation keys', () => {
+  const input = { revision: { proposal: '00000000-0000-0000-0000-000000000001',n: 2147483647,
+    candidate: null,candidateDigest: 'a'.repeat(64),before: null,baseHeads: [],evidence: [] } };
+  const item = `retract-entity:${'a'.repeat(64)}`;
+  const key = wikiItemKey(input,item);
+  expect(key.length).toBeLessThanOrEqual(128);
+  expect(wikiItemKey(input,item)).toBe(key);
+  expect(wikiItemKey(input,`retract-entity:${'b'.repeat(64)}`)).not.toBe(key);
+  expect(wikiItemKey(input,'entity:lizzy')).toBe(`wiki:${input.revision.proposal}:${input.revision.n}:entity:lizzy`);
 });

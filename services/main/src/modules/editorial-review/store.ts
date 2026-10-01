@@ -319,7 +319,19 @@ export class EditorialReviewStore {
         await client.query('ROLLBACK');
       } else resolution = adapter.commands ? await applyOrderedCommands(adapter,input) : await adapter.resolve!(input);
     }
-    catch { await client.query('ROLLBACK').catch(() => {}); return null; }
+    catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (error instanceof EditorialBlocked && error.blocker.code === 'budget_exhausted') {
+        const delivered = (await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
+          UNION ALL SELECT 1 FROM access.editorial_command_admission WHERE application = $1 LIMIT 1`,[application.id])).rowCount;
+        if (!delivered) {
+          await this.begin(client);
+          const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
+          await client.query('COMMIT'); return result;
+        }
+      }
+      return null;
+    }
     if (!resolution || resolution.outcome === 'pending') return null;
     await this.begin(client);
     const result = await this.finish(client,row,revision,application,resolution.outcome,

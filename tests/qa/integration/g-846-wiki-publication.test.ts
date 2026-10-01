@@ -28,6 +28,12 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
   const tokenPrincipals = new Map([[holder.token,holder.principal],[steward.token,steward.principal]]);
   const objects = f.objects('semantic/structure/'); await objects.initialize();
   const reading = new ReadingPositionStore(f.contentPool), evidence = new WikiEvidenceStore(f.contentPool);
+  const nativePublish = evidence.publish.bind(evidence);
+  let pausePublication: string | null = null;
+  evidence.publish = async (...args) => {
+    if (args[1] === pausePublication) { pausePublication = null; throw new Error('Evidence owner interrupted before commit'); }
+    return nativePublish(...args);
+  };
   let loseEntity = 0, rejectEntity = 0, hideReceipts = false, semanticWrites = 0;
   const nativeGraph = f.env.fuseki;
   const graph = new Proxy(nativeGraph,{ get(target,property) {
@@ -244,7 +250,7 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
         code_points,policy_version,applied_receipt) VALUES ($1,$2,$3,$3,$4,1,'fixture')`,
       [hidden.work.work,'c'.repeat(64),n.toString(16).padStart(64,'0'),points]);
     }
-    const passages = ['x','y'].map(letter => {
+    const passages = ['x','y','z'].map(letter => {
       const bundle = structuredClone(hidden.bundle);
       bundle.claims = [bundle.claims[0]!];
       bundle.claims[0]!.evidence[0]!.quote = letter.repeat(150);
@@ -254,6 +260,9 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     const candidates = [];
     for (const bundle of passages) candidates.push(await proposalFor(bundle));
     const raceKeys = candidates.map(() => randomUUID());
+    const suspended = candidates.pop()!, suspendedKey = raceKeys.pop()!;
+    pausePublication = suspended.proposal;
+    await json(await decide(suspended.proposal,1,suspendedKey),202);
     const raced = await Promise.all(candidates.map(async (proposal,index) => {
       const response = await decide(proposal.proposal,1,raceKeys[index]!);
       if (response.status === 409) {
@@ -267,6 +276,11 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     }));
     expect(raced.map(result => result.outcome).sort()).toEqual(['applied','cancelled']);
     expect(raced.find(result => result.outcome === 'cancelled')?.blocker?.code).toBe('budget_exhausted');
+    const retryBudget = await json<{ blocker: { code: string } }>(await decide(suspended.proposal,1,suspendedKey),409);
+    expect(retryBudget.blocker.code).toBe('budget_exhausted');
+    expect((await f.accessPool.query(`SELECT outcome FROM access.editorial_application_outcome o
+      JOIN access.editorial_application a ON a.id = o.application WHERE a.proposal = $1`,[suspended.proposal])).rows)
+      .toEqual([{ outcome: 'cancelled' }]);
     const cancelled = raced.find(result => result.outcome === 'cancelled')!;
     expect((await f.accessPool.query(`SELECT admission FROM access.editorial_command_admission c
       JOIN access.editorial_application a ON a.id = c.application WHERE a.proposal = $1`,[cancelled.proposal])).rowCount).toBe(0);
