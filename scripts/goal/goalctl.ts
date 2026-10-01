@@ -1166,7 +1166,7 @@ export function reapStaleQaStacks(now = Date.now(), maxAgeMs = 3 * 3_600_000): s
 }
 
 async function withSlot(command: string[]): Promise<number> {
-  const slots = Number(process.env.GOAL_QA_SLOTS ?? 4);
+  const slots = Number(process.env.GOAL_QA_SLOTS ?? 3);
   const dir = join(stateDir, 'qa-slots');
   mkdirSync(dir, { recursive: true });
   let held: string | undefined;

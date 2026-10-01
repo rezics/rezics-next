@@ -68,7 +68,7 @@ review; workers propose out-of-scope work instead of doing it.
 ## Integration and QA
 
 - Workers run only their own checks through `goalctl test`, which bounds
-  concurrent QA stacks (default 4 slots, `GOAL_QA_SLOTS`).
+  concurrent QA stacks (default 3 slots, `GOAL_QA_SLOTS`; four exhausted a 62 GB host beside a dozen workers).
 - The manager merges ready tasks in waves, one at a time, regenerates derived
   artifacts once (`task gen`), runs the static checks and one
   `goalctl test --affected <wave base>` run, then commits. Failures go back to
