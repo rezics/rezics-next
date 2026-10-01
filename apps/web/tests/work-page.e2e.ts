@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { type BrowserContext, expect, type Page, test, type TestInfo } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 
 interface Seed { work: string; realm: string; title: string; reply: string; chapters: string[]; targets: string[];
@@ -37,7 +37,7 @@ const uuid = (iri: string) => iri.slice(-36);
 const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 /** Screenshots at desktop and phone sizes in light and dark, with no horizontal overflow. */
-async function shoot(page: Page, context: BrowserContext, path: string, name: string, info: TestInfo) {
+async function shoot(page: Page, context: BrowserContext, path: string, name: string, info: TestInfo, framed = true) {
   for (const theme of ['light', 'dark'] as const) {
     await context.addCookies([{ name: 'rezics_theme', value: theme, url: page.url() }]);
     for (const viewport of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
@@ -45,6 +45,14 @@ async function shoot(page: Page, context: BrowserContext, path: string, name: st
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       expect(await overflows(page), `${name} ${theme} ${viewport.width}`).toBe(false);
+      // Tabs overflow on a phone, so "On this page" takes their place there and only there.
+      if (framed) {
+        const onThisPage = page.getByRole('button', { name: await page.locator('html').getAttribute('lang') === 'en'
+          ? 'On this page' : '本页内容' });
+        const tabs = page.getByRole('navigation', { name: /Work sections|作品栏目/ });
+        if (viewport.width < 600) { await expect(onThisPage).toBeVisible(); await expect(tabs).toBeHidden(); }
+        else { await expect(onThisPage).toBeHidden(); await expect(tabs).toBeVisible(); }
+      }
       await page.screenshot({ path: info.outputPath(`${name}-${theme}-${viewport.width}.png`), fullPage: true });
     }
   }
@@ -80,6 +88,20 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(page.getByRole('region', { name: 'Genres' }).getByRole('link', { name: 'Adventure' }))
     .toHaveAttribute('href', /^\/en\/discover\?term=[0-9a-f-]{36}$/);
   await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Reads the English version');
+  // The overview follows the documented order, each section under a stable anchor, and omits what the Work's
+  // projection does not bind (docs/plan/frontend.md#work-page).
+  const hubOrder = ['about', 'availability', 'parts', 'wiki', 'ratings', 'discussion', 'lists'];
+  const drawn = await page.locator('[data-hub-section]').evaluateAll(nodes => nodes.map(node => node.id));
+  expect(drawn).toEqual(hubOrder.filter(section => drawn.includes(section)));
+  expect(drawn).toEqual(expect.arrayContaining(['about', 'ratings', 'discussion', 'lists']));
+  // Ratings and reviews come before the lists and discovery that follow them, and details come last.
+  const below = async (first: Locator, second: Locator) => (await first.boundingBox())!.y < (await second.boundingBox())!.y;
+  expect(await below(page.locator('#ratings'), page.locator('#discussion'))).toBe(true);
+  expect(await below(page.locator('#discussion'), page.locator('#lists'))).toBe(true);
+  expect(await below(page.locator('#lists'), page.getByText('Details', { exact: true }))).toBe(true);
+  // The ratings say what the numbers mean: the question, who answered, the scale and the count.
+  await expect(page.locator('[data-rating-basis]')).toContainText('How good is this Work overall?');
+  await expect(page.locator('[data-rating-basis]')).toContainText('Rated by: Everyone');
   // Details speak plainly; identifiers wait one step further in, under Cite.
   await expect(page.getByText(seed.work, { exact: true })).toBeHidden();
   await page.getByText('Details', { exact: true }).click();
@@ -244,11 +266,11 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await shoot(page, context, `/zh-Hans/w/${id}/versions`, 'versions-zh-Hans', info);
   await shoot(page, context, `/zh-Hans/w/${id}/contents`, 'contents-zh-Hans', info);
   await shoot(page, context, `/zh-Hans/w/${id}/discussion`, 'discussion-zh-Hans', info);
-  await shoot(page, context, `/zh-Hans/w/${id}/read/${second}`, 'reader-zh-Hans', info);
+  await shoot(page, context, `/zh-Hans/w/${id}/read/${second}`, 'reader-zh-Hans', info, false);
   await page.request.post('/locale/select', { form: { locale: 'en' } });
-  await shoot(page, context, `/en/w/${id}/read/${first}`, 'reader-en', info);
+  await shoot(page, context, `/en/w/${id}/read/${first}`, 'reader-en', info, false);
   await shoot(page, context, `/en/w/${id}/history`, 'history-en', info);
-  await shoot(page, context, `/en/w/${single}/read`, 'text-reader-en', info);
+  await shoot(page, context, `/en/w/${single}/read`, 'text-reader-en', info, false);
   expect(errors).toEqual([]);
 });
 

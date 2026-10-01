@@ -282,4 +282,5 @@ export default {
   ratingPopulation: insert('評分者：{{who}}', { who: String }),
   ratingScaleRange: insert('評分範圍 {{min}}–{{max}}', { min: String, max: String }),
   reviewsOf: insert('{{target}} 的書評', { target: String }),
+  signInForParts: '登入後即可查看這部作品的組成部分與關聯。',
 } satisfies WorkPageMessages;

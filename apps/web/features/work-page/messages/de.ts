@@ -334,4 +334,5 @@ export default {
   ratingPopulation: insert('Bewertet von: {{who}}', { who: String }),
   ratingScaleRange: insert('Skala {{min}}–{{max}}', { min: String, max: String }),
   reviewsOf: insert('Rezensionen zu {{target}}', { target: String }),
+  signInForParts: 'Melde dich an, um die Teile und Verbindungen dieses Werks zu sehen.',
 } satisfies WorkPageMessages;

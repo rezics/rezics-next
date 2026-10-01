@@ -288,4 +288,5 @@ export default {
   ratingPopulation: insert('评分者：{{who}}', { who: String }),
   ratingScaleRange: insert('评分范围 {{min}}–{{max}}', { min: String, max: String }),
   reviewsOf: insert('{{target}} 的书评', { target: String }),
+  signInForParts: '登录后即可查看这部作品的组成部分与关联。',
 } satisfies Partial<WorkPageMessages>;

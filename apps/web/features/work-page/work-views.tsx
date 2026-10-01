@@ -320,7 +320,8 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
         <Availability workRef={workRef} {...common} /></Suspense>
       <Suspense fallback={null}><WorkTypeSections work={id} types={work.types} locale={locale} /></Suspense>
     </>}
-    parts={<Parts workRef={workRef} {...common} />}
+    parts={<Suspense fallback={<RegionSkeleton id="work-parts-loading" title={t.sectionParts} label={loading} lines={3} />}>
+      <Parts workRef={workRef} {...common} /></Suspense>}
     wiki={<Suspense fallback={<RegionSkeleton id="work-wiki-loading" title={t.sectionWiki} label={loading} lines={2} />}>
       <WikiSection {...common} /></Suspense>}
     scopeBar={<Suspense fallback={<ScopeBarSkeleton label={loading} />}>

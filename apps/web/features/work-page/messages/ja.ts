@@ -286,4 +286,5 @@ export default {
   ratingPopulation: insert('評価した人：{{who}}', { who: String }),
   ratingScaleRange: insert('尺度 {{min}}–{{max}}', { min: String, max: String }),
   reviewsOf: insert('{{target}} のレビュー', { target: String }),
+  signInForParts: 'ログインすると、この作品の構成と関連作品を表示できます。',
 } satisfies WorkPageMessages;

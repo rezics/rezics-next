@@ -280,6 +280,7 @@ const en = {
   discussionOpen: 'Open the discussion',
   discussionIntro: 'Threads about the Work, its parts and its releases. Reading needs no membership.',
   ratingPopulation: insert('Rated by: {{who}}', { who: String }),
+  signInForParts: 'Sign in to see this Work’s parts and connections.',
   reviewsOf: insert('Reviews of {{target}}', { target: String }),
   ratingScaleRange: insert('Scale {{min}}–{{max}}', { min: String, max: String }),
 };
