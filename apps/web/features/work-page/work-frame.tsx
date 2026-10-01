@@ -81,7 +81,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   if (!showsBookControls(experience)) {
     return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
       actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
-      <PageContainer className="grid gap-7 [text-autospace:normal]">
+      <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
         <div className="grid min-w-0 gap-5 border-border/60 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="grid min-w-0 content-start gap-3">
             <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale}
@@ -104,7 +104,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
     seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
     {/* CJK text spaces itself from inserted Latin names and digits ("来自 Tidewater Readers"). */}
-    <PageContainer className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-5 [text-autospace:normal]
+    <PageContainer className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-5 max-lg:pb-24 [text-autospace:normal]
       sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-x-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr]
       lg:gap-x-12 lg:gap-y-6 xl:grid-cols-[17rem_minmax(0,1fr)] xl:gap-x-16">
       {/* On a phone this column dissolves into the grid so the thumbnail sits beside the title and the actions span the width. */}

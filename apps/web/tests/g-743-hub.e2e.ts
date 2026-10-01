@@ -31,6 +31,7 @@ test('work-hub: a reader chooses an edition with the keyboard alone, under reduc
   await checkScreen(page, 'hub-series', found, info);
   await pressByKeyboard(page, action, found, 'primary action');
   await expect(page).toHaveURL(new RegExp(`/${locales.latin}/w/`));
+  await page.waitForLoadState('networkidle');
 
   // Volume 1: pick the other of its two editions and save it, every control reached by Tab and operated by key.
   await page.goto(at(one!, locales.latin, '#availability'));
