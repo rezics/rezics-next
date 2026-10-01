@@ -3,6 +3,9 @@ import { insert } from 'native-i18n';
 export default {
   title: insert('{{app}} 请求访问您的 REZICS 账号', { app: String }),
   unknownApp: '某个应用',
+  unverifiedApp: '未经验证的应用',
+  unverifiedIdentity: 'REZICS 尚未验证此应用的身份。',
+  redirectHost: '作答后将返回：',
   signedInAs: '当前登录账号',
   switchAccount: '不是您？切换账号',
   allowIntro: insert('这将允许 {{app}}：', { app: String }),

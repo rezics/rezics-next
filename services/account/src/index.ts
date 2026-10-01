@@ -47,6 +47,7 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
     await retainAccountSubjectDeletion(relayPool!, issuer, subject);
   } : undefined,
 }), pool, { operatorUserIds, displayPreferenceClientIds: new Set([config.WEB_OAUTH_CLIENT_ID].filter(Boolean)),
+  trustedProxyPeers: new Set(config.ACCOUNT_TRUSTED_PROXY_PEERS.split(',').map(value => value.trim()).filter(Boolean)),
   notificationDigest: { accountSecret: secret, mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } })
   .cleanup(() => { clearInterval(deliveryTimer); })
   .listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });

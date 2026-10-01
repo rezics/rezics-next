@@ -44,7 +44,7 @@ import { commandError, problem } from './problems.ts';
 
 /** Adapter discovery consumes the same public operation and its runtime schema. */
 export const capabilities = { '/v1/search/catalogue': { get: { disposition: 'supported',
-  mcp: { tool: 'search_catalogue', title: 'Search the catalogue',
+  mcp: { tool: 'search_catalogue', scopes: ['work:read'], title: 'Search the catalogue',
     description: 'Find public Works by a phrase in selected text. Results are ranked and continue with a cursor; counts state their precision. An optional Realm restricts results to its adoptions.' } } } } as const;
 
 const groupedNative = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });

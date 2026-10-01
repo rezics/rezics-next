@@ -19,8 +19,10 @@ export const openApiOperations = {
 } as const;
 export const capabilities = {
   '/v1/wiki/candidates': { post: { disposition: 'supported', mcp: { tool: 'wiki_candidates',
+    scopes: ['wiki:propose'],
     title: 'Match extracted wiki names', description: 'Find exact name and alias candidates in a Work’s wiki collections.' } } },
   '/v1/wiki/validations': { post: { disposition: 'supported', mcp: { tool: 'wiki_validate',
+    scopes: ['wiki:propose'],
     title: 'Validate a wiki extraction', description: 'Preview entities, facts, alignment and quotation use before submitting an extraction.' } } },
 } as const;
 const closed = { additionalProperties: false };

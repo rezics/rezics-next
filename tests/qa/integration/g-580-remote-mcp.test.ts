@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -46,7 +47,8 @@ test('G-580: official remote MCP client registers, consents with PKCE, reads/sea
     main.listen({ hostname: '127.0.0.1', port });
     const headers = { authorization: `Bearer ${tokens.access_token}` };
     const metadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
-    expect(await metadata.json()).toMatchObject({ authorization_servers: [verifierConfig.issuer], resource: origin });
+    expect(await metadata.json()).toMatchObject({ authorization_servers: [verifierConfig.issuer], resource: origin,
+      scopes_supported: ['context:read', 'wiki:propose', 'work:read'] });
     const issuerMetadata = await fetch(`${account.baseURL}/api/auth/.well-known/openid-configuration`);
     expect(await issuerMetadata.json()).toMatchObject({ registration_endpoint: `${account.baseURL}/api/auth/oauth2/register` });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), { requestInit: { headers } }));
@@ -99,4 +101,55 @@ test('G-580: official remote MCP client registers, consents with PKCE, reads/sea
     await stack.stop();
     await account.close();
   }
+}, 120_000);
+
+test('G-580: native loopback registration completes signed consent and PKCE at its exact callback port', async () => {
+  let returned: URL | undefined;
+  const callback = Bun.serve({ hostname: '127.0.0.1', port: 0,
+    fetch(request) { returned = new URL(request.url); return new Response('Authorization received'); } });
+  const redirect = `http://127.0.0.1:${callback.port}/callback`;
+  const account = await accountFixture();
+  try {
+    const oauth = await oauthFixture(account);
+    const person = await account.signup('g580-native@example.test');
+    const registration = await account.request('/api/auth/oauth2/register', {
+      client_name: 'REZICS', application_type: 'native', token_endpoint_auth_method: 'none',
+      redirect_uris: [redirect], grant_types: ['authorization_code', 'refresh_token'],
+      scope: 'openid work:read wiki:propose offline_access',
+    });
+    expect(registration.status, await registration.clone().text()).toBe(201);
+    const registered = await registration.json() as { client_id: string; redirect_uris: string[]; application_type: string };
+    expect(registered.redirect_uris).toEqual([redirect]);
+    expect(registered.application_type).toBe('native');
+    const verifier = randomBytes(32).toString('base64url'), state = randomUUID();
+    const authorize = new URLSearchParams({ client_id: registered.client_id, response_type: 'code',
+      redirect_uri: redirect, scope: 'openid work:read wiki:propose offline_access', state,
+      resource: account.config.resource, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+      code_challenge_method: 'S256' });
+    const authorized = await account.request(`/api/auth/oauth2/authorize?${authorize}`, undefined, person.cookie);
+    const pending = new URL(authorized.headers.get('location')!, account.baseURL);
+    expect(pending.pathname).toBe('/consent');
+    const signed = pending.searchParams.toString();
+    const preview = await account.request(`/api/account/consent?${new URLSearchParams({ oauth_query: signed })}`, undefined, person.cookie);
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({ client: { name: 'REZICS', unverified: true,
+      redirectHost: `127.0.0.1:${callback.port}` } });
+    const tampered = new URLSearchParams(signed); tampered.set('redirect_uri', 'https://attacker.test/callback');
+    expect((await account.request(`/api/account/consent?${new URLSearchParams({ oauth_query: tampered.toString() })}`,
+      undefined, person.cookie)).status).toBe(409);
+    const consent = await account.request('/api/account/consent', { oauth_query: signed, accept: true }, person.cookie);
+    expect(consent.status).toBe(200);
+    const destination = (await consent.json() as { url: string }).url;
+    expect((await fetch(destination)).status).toBe(200);
+    expect(returned!.searchParams.get('state')).toBe(state);
+    const exchange = { client_id: registered.client_id, grant_type: 'authorization_code',
+      code: returned!.searchParams.get('code')!, code_verifier: verifier, redirect_uri: redirect, resource: account.config.resource };
+    const wrongPort = await oauth.token({ ...exchange, redirect_uri: `http://127.0.0.1:${await freePort()}/callback` });
+    expect(wrongPort.status).toBe(400);
+    const token = await oauth.token(exchange);
+    expect(token.status, await token.clone().text()).toBe(200);
+    const tokens = await token.json() as { access_token: string; scope: string };
+    expect(tokens.scope.split(' ')).toContain('wiki:propose');
+    expect(await oauth.introspect(tokens.access_token)).toMatchObject({ active: true });
+  } finally { await account.close(); await callback.stop(true); }
 }, 120_000);

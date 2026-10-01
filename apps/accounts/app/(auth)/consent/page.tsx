@@ -17,8 +17,11 @@ export default async function ConsentPage({ searchParams }: { searchParams: Page
   }
   if (session.status !== 'ok') return <AuthFrame><ConsentProblem kind="unavailable" /></AuthFrame>;
   const [client, consent, locale] = await Promise.all([readPublicClient(pending.clientId), readConsent(oauthQuery), requestLocale()]);
-  const descriptions = consent.status === 'ok' ? Object.fromEntries(consent.data.scopes.map(scope =>
-    [scope.scope, scope.description[locale] ?? scope.description.en])) : undefined;
-  return <AuthFrame><ConsentCard app={client.status === 'ok' ? client.data : null}
+  if (consent.status !== 'ok') return <AuthFrame><ConsentProblem kind="unavailable" /></AuthFrame>;
+  const descriptions = Object.fromEntries(consent.data.scopes.map(scope =>
+    [scope.scope, scope.description[locale] ?? scope.description.en]));
+  return <AuthFrame><ConsentCard app={{ ...(client.status === 'ok' ? client.data
+    : { name: null, logo: null, uri: null, policy: null, terms: null }),
+    unverified: consent.data.unverified, redirectHost: consent.data.redirectHost }}
     user={session.data.user} scopes={pending.scopes} oauthQuery={oauthQuery} descriptions={descriptions} /></AuthFrame>;
 }

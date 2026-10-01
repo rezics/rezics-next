@@ -3,6 +3,9 @@ import { insert } from 'native-i18n';
 export default {
   title: insert('{{app}}에서 내 REZICS Account에 액세스하려고 합니다', { app: String }),
   unknownApp: '앱',
+  unverifiedApp: '인증되지 않은 앱',
+  unverifiedIdentity: 'REZICS에서 이 앱의 신원을 확인하지 않았습니다.',
+  redirectHost: '응답 후 돌아갈 곳:',
   signedInAs: '로그인한 계정',
   switchAccount: '본인이 아닌가요? 계정 전환',
   allowIntro: insert('허용하면 {{app}}에서 다음 작업을 할 수 있습니다:', { app: String }),

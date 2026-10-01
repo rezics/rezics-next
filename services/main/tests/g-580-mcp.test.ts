@@ -35,7 +35,12 @@ test('G-580: declaration guard rejects missing operations, duplicate names and u
     .toThrow('invalid capability');
   expect(() => operationTools({ paths: { '/a': fixture.paths!['/v1/works'], '/b': fixture.paths!['/v1/works'] } }))
     .toThrow('duplicate MCP tool');
-  expect(MCP_COST.httpDispatchesPerCall).toBe(1);
+  for (const scopes of [undefined, [''], ['work:read', 'work:read'], ['work:read other'], ['quote"']]) {
+    const invalid = structuredClone(fixture);
+    const declaration = invalid.paths!['/v1/works']!.post!['x-rezics-capability']!.mcp!;
+    Object.assign(declaration, { scopes });
+    expect(() => operationTools(invalid)).toThrow('requires explicit OAuth scopes');
+  }
 });
 
 test('G-580: every installed tool preserves each OpenAPI parameter and JSON body schema', () => {
@@ -46,6 +51,8 @@ test('G-580: every installed tool preserves each OpenAPI parameter and JSON body
   }
   for (const tool of tools) {
     expect(tool.operation['x-rezics-capability']?.mcp?.tool).toBe(tool.name);
+    expect(tool.operation['x-rezics-capability']!.mcp!.scopes.length).toBeGreaterThan(0);
+    if (tool.name.startsWith('wiki_')) expect(tool.operation['x-rezics-capability']!.mcp!.scopes).toEqual(['wiki:propose']);
     for (const parameter of tool.operation.parameters ?? []) {
       const group = parameter.in === 'header' ? 'headers' : parameter.in;
       const schema = tool.inputSchema.properties[group] as { properties: Record<string, unknown>; required: string[] };
@@ -109,6 +116,7 @@ test('G-580: stateless SDK transport dispatches once through G-543, preserves re
   const expired = await app.handle(rpc('tools/call', { name: 'fixture_write', arguments: args }));
   expect(expired.status).toBe(401);
   expect(expired.headers.get('www-authenticate')).toContain('resource_metadata=');
+  expect(expired.headers.get('www-authenticate')).toContain('scope="work:create"');
   expect(effects).toBe(1);
 });
 
@@ -118,7 +126,7 @@ test('G-580: protected-resource discovery, Origin and request byte limits apply 
     resource: 'https://main.test' } }, async () => { throw new Error('unexpected dispatch'); }, () => fixture));
   const metadata = await app.handle(new Request('http://localhost/.well-known/oauth-protected-resource/mcp'));
   expect(await metadata.json()).toEqual({ resource: 'https://main.test', authorization_servers: ['https://account.test/api/auth'],
-    scopes_supported: ['work:read'], bearer_methods_supported: ['header'] });
+    scopes_supported: ['work:create'], bearer_methods_supported: ['header'] });
   const hostile = rpc('tools/list'); hostile.headers.set('origin', 'https://hostile.test');
   expect((await app.handle(hostile)).status).toBe(403);
   const huge = new Request('http://localhost/mcp', { method: 'POST', body: 'x'.repeat(MCP_COST.maxRequestBytes + 1) });

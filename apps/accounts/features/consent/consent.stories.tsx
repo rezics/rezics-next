@@ -11,7 +11,7 @@ const meta = {
   args: { oauthQuery: query, scopes: ['openid', 'profile', 'email', 'work:read', 'offline_access', 'realm:adopt'],
     user: { name: 'Ada Lovelace', email: 'ada@example.test', image: null },
     app: { name: 'Reader', logo: null, uri: 'https://reader.example', policy: 'https://reader.example/privacy',
-      terms: 'https://reader.example/terms' } },
+      terms: 'https://reader.example/terms', unverified: false, redirectHost: 'reader.example' } },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
 } satisfies Meta<typeof ConsentCard>;
 export default meta;
@@ -70,6 +70,29 @@ export const UnknownApp: Story = {
   async play({ canvasElement }) {
     await expect(await within(canvasElement).findByRole('heading', { level: 1,
       name: 'An app wants to access your REZICS Account' })).toBeVisible();
+  },
+};
+
+export const Unverified: Story = {
+  args: { app: { ...meta.args.app, name: 'REZICS', unverified: true,
+    logo: 'https://unverified.example/logo.png', redirectHost: '127.0.0.1:49152' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Unverified app')).toBeVisible();
+    await expect(canvas.getByText('REZICS has not verified this app’s identity.')).toBeVisible();
+    await expect(canvas.getByText('127.0.0.1:49152')).toBeVisible();
+    await expect(canvas.queryByRole('img')).toBeNull();
+    await expect(canvas.queryByRole('link', { name: 'Privacy policy' })).toBeNull();
+    await expect(canvas.queryByRole('link', { name: 'Terms of service' })).toBeNull();
+  },
+};
+
+export const UnverifiedPhone: Story = { ...Unverified, globals: phone };
+export const UnverifiedJapanesePhone: Story = { ...Unverified, globals: { locale: 'ja', ...phone },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('未確認のアプリ')).toBeVisible();
+    await expect(canvas.getByText('127.0.0.1:49152')).toBeVisible();
   },
 };
 

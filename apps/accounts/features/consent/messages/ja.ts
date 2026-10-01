@@ -3,6 +3,9 @@ import { insert } from 'native-i18n';
 export default {
   title: insert('{{app}} が REZICS アカウントへのアクセスを求めています', { app: String }),
   unknownApp: 'アプリ',
+  unverifiedApp: '未確認のアプリ',
+  unverifiedIdentity: 'REZICS はこのアプリの身元を確認していません。',
+  redirectHost: '回答後の戻り先：',
   signedInAs: 'ログイン中のアカウント',
   switchAccount: '自分ではありませんか？アカウントを切り替える',
   allowIntro: insert('許可すると、{{app}} は次の操作を行えるようになります。', { app: String }),

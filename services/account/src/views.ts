@@ -9,7 +9,7 @@ export const descriptionView = t.Object({ scope: t.String(), description: t.Obje
   en: t.String(), 'zh-Hant': t.String(), 'zh-Hans': t.String(), ja: t.String(),
   ko: t.String(), de: t.String(), fr: t.String(), es: t.String() }) });
 export const consentView = t.Object({ client: t.Object({ id: t.String(), name: t.String(),
-  uri: t.Nullable(t.String()), icon: t.Nullable(t.String()) }), scopes: t.Array(descriptionView),
+  uri: t.Nullable(t.String()), icon: t.Nullable(t.String()), unverified: t.Boolean(), redirectHost: t.String() }), scopes: t.Array(descriptionView),
 resources: t.Array(t.String()), expiresAt: t.String() });
 export const consentDecisionView = t.Object({ redirect: t.Boolean(), url: t.String() });
 export const methodsView = t.Object({ password: t.Boolean(), passwordChangedAt: t.Nullable(t.String()),

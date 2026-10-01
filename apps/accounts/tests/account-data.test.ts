@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { list, parseActivity, parseConnectedApps, parseMethods, parsePublicClient, parseSession,
+import { list, parseActivity, parseConnectedApps, parseConsentPreview, parseMethods, parsePublicClient, parseSession,
   parseSessions } from '../features/api/account-data.ts';
 import { classifyFailure } from '../features/api/errors.ts';
 import { pendingAuthorization, safeReturnPath, signedOAuthQuery } from '../features/api/oauth-query.ts';
@@ -64,6 +64,14 @@ describe('Account responses', () => {
       client_uri: 'https://app.example', policy_uri: 'not a url', tos_uri: 'http://app.example/tos' }))
       .toEqual({ clientId: 'app', name: 'App', logo: null, uri: 'https://app.example', policy: null,
         terms: 'http://app.example/tos' });
+  });
+
+  test('consent identity comes from Account and older responses remain unverified', () => {
+    expect(parseConsentPreview({ scopes: [], client: { unverified: true, redirectHost: '127.0.0.1:49152' } }))
+      .toEqual({ scopes: [], unverified: true, redirectHost: '127.0.0.1:49152' });
+    expect(parseConsentPreview({ scopes: [], client: { unverified: false, redirectHost: 'rezics.com' } }))
+      .toEqual({ scopes: [], unverified: false, redirectHost: 'rezics.com' });
+    expect(parseConsentPreview({ scopes: [] })).toEqual({ scopes: [], unverified: true, redirectHost: null });
   });
 });
 

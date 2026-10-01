@@ -2,7 +2,7 @@
 export interface Capability {
   disposition: 'supported' | 'internal' | 'deferred';
   reason?: string;
-  mcp?: { tool: string; title: string; description: string; scopes?: readonly string[] };
+  mcp?: { tool: string; title: string; description: string; scopes: readonly string[] };
 }
 
 export interface HttpOperation {
@@ -34,7 +34,7 @@ export function attachCapabilities(document: CapabilityDocument, declarations: C
 }
 
 export const MCP_COST = Object.freeze({ maxTools: 128, maxInventoryBytes: 1_048_576,
-  maxRequestBytes: 1_048_576, deadlineMs: 30_000, httpDispatchesPerCall: 1 });
+  maxRequestBytes: 1_048_576, deadlineMs: 30_000 });
 
 export interface OperationTool {
   name: string;
@@ -54,6 +54,11 @@ export function operationTools(document: CapabilityDocument): OperationTool[] {
     for (const [method, operation] of Object.entries(methods)) {
       const declaration = operation['x-rezics-capability']?.mcp;
       if (!declaration) continue;
+      if (!Array.isArray(declaration.scopes) || declaration.scopes.some(scope =>
+        typeof scope !== 'string' || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope))
+        || new Set(declaration.scopes).size !== declaration.scopes.length) {
+        throw new Error(`MCP tool requires explicit OAuth scopes: ${method} ${path}`);
+      }
       if (operation['x-rezics-capability']?.disposition !== 'supported'
         || !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(declaration.tool)
         || !declaration.title || !declaration.description || names.has(declaration.tool)) {

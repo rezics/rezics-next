@@ -1,6 +1,7 @@
 'use client';
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
+import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
 import { AppWindowIcon, BookOpenIcon, InfinityIcon, KeyRoundIcon, UserRoundIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -11,7 +12,7 @@ import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
 import { useTranslation } from '../../i18n/client.ts';
 
 export interface ConsentApp { name: string | null; logo: string | null; uri: string | null;
-  policy: string | null; terms: string | null }
+  policy: string | null; terms: string | null; unverified?: boolean; redirectHost?: string | null }
 
 const groupIcons: Record<ScopeGroup, typeof UserRoundIcon> = { identity: UserRoundIcon,
   works: BookOpenIcon, other: KeyRoundIcon, offline: InfinityIcon };
@@ -26,6 +27,7 @@ export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { a
   const [busy, setBusy] = useState<'allow' | 'deny' | 'switch'>();
   const [failure, setFailure] = useState<FailureKind>();
   const name = app?.name?.trim() || t.unknownApp;
+  const unverified = app?.unverified !== false;
 
   async function answer(accept: boolean) {
     setBusy(accept ? 'allow' : 'deny');
@@ -46,9 +48,15 @@ export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { a
   return <div className="flex flex-col gap-6">
     <header className="flex flex-col gap-4">
       <span className="grid size-14 place-items-center overflow-hidden rounded-2xl border border-border/60 bg-accent text-accent-foreground">
-        {app?.logo ? <img src={app.logo} alt="" className="size-full object-cover" />
+        {!unverified && app?.logo ? <img src={app.logo} alt="" className="size-full object-cover" />
           : <AppWindowIcon className="size-7" aria-hidden="true" />}</span>
       <h1 className="text-[26px] leading-tight font-semibold tracking-tight">{t.title({ app: name })}</h1>
+      {unverified ? <div className="flex flex-col items-start gap-2">
+        <Badge variant="warning">{t.unverifiedApp}</Badge>
+        <p className="text-sm text-muted-foreground">{t.unverifiedIdentity}</p>
+      </div> : null}
+      {app?.redirectHost ? <p className="text-sm text-muted-foreground">{t.redirectHost} {' '}
+        <bdi className="break-all font-medium text-foreground">{app.redirectHost}</bdi></p> : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-border/80 py-1 ps-1 pe-3 text-sm">
           <UserAvatar user={user} size="sm" />
@@ -77,7 +85,7 @@ export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { a
       </ul>
     </section>
     <p className="text-sm text-muted-foreground">{t.trust({ app: name })}
-      {app?.policy || app?.terms ? <span className="mt-1 flex gap-4">
+      {!unverified && (app?.policy || app?.terms) ? <span className="mt-1 flex gap-4">
         {app.policy ? <a className="text-primary underline-offset-4 hover:underline" href={app.policy}
           target="_blank" rel="noreferrer">{t.appPolicy}</a> : null}
         {app.terms ? <a className="text-primary underline-offset-4 hover:underline" href={app.terms}

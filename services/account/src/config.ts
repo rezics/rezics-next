@@ -20,6 +20,8 @@ export const accountSpec = {
   ACCOUNT_TURNSTILE_SECRET_KEY: str({ default: '',
     desc: 'Cloudflare Turnstile secret, required only in cloudflare mode.' }),
   ACCOUNT_PORT: port({ default: 3002, desc: 'Port Account listens on at 127.0.0.1.' }),
+  ACCOUNT_TRUSTED_PROXY_PEERS: str({ default: '',
+    desc: 'Comma-separated socket peer IPs whose ingress replaces X-Forwarded-For with one client address.' }),
   ACCOUNT_ACCESS_DATABASE_URL: url({ default: undefined,
     desc: 'Access owner URL; enables the account deletion fence. Requires ACCOUNT_RELAY_DATABASE_URL.',
     example: 'postgres://access:password@127.0.0.1:5432/access' }),

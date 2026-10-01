@@ -17,12 +17,14 @@ export const capabilities = {
     scopes: ['work:read', 'context:read'],
     title: 'Read resource summaries', description: 'Read a bounded batch of resource summaries. Each item reports available or unavailable with current disclosure and its generation.' } } },
   '/v1/resources/{resource}/relations': { get: { disposition: 'supported', mcp: { tool: 'resource_relations',
+    scopes: ['work:read'],
     title: 'Read resource relations', description: 'Read visible resource relations, exact revisions and evidence. Continue with the returned cursor and preserve the reading position.' } } },
   '/v1/works/{id}/releases': { get: { disposition: 'supported', mcp: { tool: 'work_editions',
+    scopes: ['work:read'],
     title: 'Read editions of a Work', description: 'Read releases and editions of a Work, their identifiers, languages and coverage. Continue with the returned cursor.' } } },
 } as const satisfies CapabilityDeclarations;
 
-export interface McpConfig { issuer: string; resource: string; allowedOrigins?: readonly string[] }
+export interface McpConfig { issuer: string; resource: string }
 
 const installedContract = () => JSON.parse(readFileSync(new URL('../../../../generated/openapi/main/public.json',
   import.meta.url), 'utf8')) as CapabilityDocument;
@@ -32,11 +34,12 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp'>, d
   const config = work.mcp;
   if (!config) return new Elysia();
   const metadataURL = new URL('/.well-known/oauth-protected-resource/mcp', config.resource).href;
-  const challenge = `Bearer resource_metadata="${metadataURL}", scope="work:read"`;
-  const metadata = () => Response.json({ resource: config.resource, authorization_servers: [config.issuer],
-    scopes_supported: ['work:read'], bearer_methods_supported: ['header'] }, { headers: { 'cache-control': 'no-store' } });
   let inventory: ReturnType<typeof operationTools> | undefined;
   const tools = () => inventory ??= operationTools(contract());
+  const scopes = () => [...new Set(tools().flatMap(tool => tool.operation['x-rezics-capability']!.mcp!.scopes))].sort();
+  const challenge = () => `Bearer resource_metadata="${metadataURL}", scope="${scopes().join(' ')}"`;
+  const metadata = () => Response.json({ resource: config.resource, authorization_servers: [config.issuer],
+    scopes_supported: scopes(), bearer_methods_supported: ['header'] }, { headers: { 'cache-control': 'no-store' } });
   const handler = createMcpHandler(({ requestInfo }) => {
     const server = new Server({ name: 'rezics', version: '1.0.0' }, { capabilities: { tools: {} } });
     server.setRequestHandler('tools/list', ({ params }) => {
@@ -60,7 +63,7 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp'>, d
         || path === '/.well-known/oauth-protected-resource') return metadata();
       if (path !== '/mcp') return;
       const origin = request.headers.get('origin');
-      if (origin && ![new URL(config.resource).origin, ...(config.allowedOrigins ?? [])].includes(origin)) {
+      if (origin && origin !== new URL(config.resource).origin) {
         return new Response(null, { status: 403 });
       }
       try { await work.account.verify(request, []); }
@@ -69,7 +72,7 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp'>, d
         return Response.json({ type: 'about:blank', status, code: status === 401
           ? 'invalid_account_assertion' : 'account_unavailable', title: 'Account authorization unavailable' },
         { status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store',
-          ...(status === 401 ? { 'www-authenticate': challenge } : { 'retry-after': '5' }) } });
+          ...(status === 401 ? { 'www-authenticate': challenge() } : { 'retry-after': '5' }) } });
       }
       const body = await mcpBody(request);
       if (body instanceof Response) return body;

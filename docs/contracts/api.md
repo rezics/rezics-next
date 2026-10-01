@@ -65,11 +65,17 @@ OAuth protected-resource metadata at
 resource identifier. Account's `/api/auth/oauth2/register` admits public
 authorization-code clients with PKCE and exact redirects, optionally with
 refresh tokens. Registration is limited to Main and the declared agent scope
-ceiling (`mcp.scopes`, default `work:read`, plus `openid` and `offline_access`
+ceiling (required `mcp.scopes`, plus `openid` and `offline_access`
 for authorization). It grants no Resource rights. The existing installation,
 explicit consent and live introspection fences remain authoritative; revocation
-ends the next MCP request. Protected-resource discovery advertises only
-`work:read`, not refresh-token scopes. This registration profile uses
+ends the next MCP request. Protected-resource discovery and its authorization
+challenge advertise the union of declared tool scopes. Anonymous registration
+allows ten requests per client IP per five minutes, using Account's persistent
+budget; only configured proxy peers may supply the client address. Registration
+rejects app logos, websites, privacy policies and terms links. Consent marks
+apps outside the first-party registry as unverified and shows the redirect host
+from the signed request. Native clients may register an HTTP loopback callback.
+This registration profile uses
 [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html), the compatibility option
 in the [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization);
 client metadata documents require a separately qualified discovery profile.

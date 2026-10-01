@@ -4,6 +4,10 @@ import type { RateLimitFamily } from './budgets.ts';
 // family fails both composed-route and OpenAPI coverage tests. Parameter names
 // are immaterial; whole path segments match, never prefix lookalikes.
 const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])[] = [
+  // MCP messages have no domain budget; each tool call is budgeted by its dispatched operation.
+  ['*', '/mcp', 'read'],
+  ['GET', '/.well-known/oauth-protected-resource', 'read'],
+  ['GET', '/.well-known/oauth-protected-resource/mcp', 'read'],
   ['GET', '/v1/me/agents', 'read'],
   ['PUT', '/v1/suitability/{target}', 'write'],
   ['POST', '/v1/suitability/reads', 'read'],
@@ -746,6 +750,6 @@ export function rateLimitFamily(method: string, path: string): RateLimitFamily |
   // HEAD inherits the explicitly registered GET operation's read policy.
   const verb = method === 'HEAD' ? 'GET' : method;
   const normalized = path.replace(/:[^/]+/g, '_').replace(/\{[^}]+\}/g, '_');
-  const operation = compiled.find(entry => entry.method === verb && entry.path.test(normalized));
+  const operation = compiled.find(entry => (entry.method === verb || entry.method === '*') && entry.path.test(normalized));
   return operation?.family === 'read' ? null : operation?.family;
 }

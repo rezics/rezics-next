@@ -168,9 +168,13 @@ function parseConnectedApp(value: unknown): ConnectedApp | null {
 
 export const parseConnectedApps = (value: unknown) => page(value, parseConnectedApp);
 
-export function parseConsentPreview(value: unknown): { scopes: ScopeDescription[] } | null {
-  const scopes = list(record(value)?.scopes, parseScope);
-  return scopes ? { scopes } : null;
+export function parseConsentPreview(value: unknown): { scopes: ScopeDescription[]; unverified: boolean;
+  redirectHost: string | null } | null {
+  const item = record(value);
+  const scopes = list(item?.scopes, parseScope);
+  const client = record(item?.client);
+  // An older service cannot establish an app's identity.
+  return scopes ? { scopes, unverified: client?.unverified !== false, redirectHost: text(client?.redirectHost) } : null;
 }
 
 export function parsePublicClient(value: unknown): PublicClient | null {

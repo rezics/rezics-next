@@ -20,6 +20,9 @@ import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerat
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
 import { operatorAuthHooks } from './operator-auth-hooks.ts';
 import { beforeSessionDelete } from './first-party-session.ts';
+import { consumeAccountLimit } from './rate-limit.ts';
+
+export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
 
 export interface AccountConfig {
   baseURL: string;
@@ -45,11 +48,14 @@ type EmailUser = { id: string; email: string; locale?: unknown };
 export function agentRegistrationScopes(): string[] {
   const document = JSON.parse(readFileSync(new URL('../../../generated/openapi/main/public.json',
     import.meta.url), 'utf8')) as { paths: Record<string, Record<string, {
-      'x-rezics-capability'?: { mcp?: { scopes?: string[] } } }>> };
+      'x-rezics-capability'?: { mcp?: { scopes: string[] } } }>> };
   const scopes = new Set<string>(['openid', 'offline_access']);
   for (const methods of Object.values(document.paths)) for (const operation of Object.values(methods)) {
     const mcp = operation['x-rezics-capability']?.mcp;
-    if (mcp) for (const scope of mcp.scopes ?? ['work:read']) scopes.add(scope);
+    if (mcp) {
+      if (!Array.isArray(mcp.scopes)) throw new Error('Declared agent OAuth scopes are required');
+      for (const scope of mcp.scopes) scopes.add(scope);
+    }
   }
   if ([...scopes].some(scope => !providerScopes.includes(scope))) throw new Error('Unknown declared agent OAuth scope');
   return [...scopes].sort();
@@ -79,10 +85,20 @@ export function accountAuthOptions(config: AccountConfig) {
         if (body.token_endpoint_auth_method !== 'none' || body.subject_type === 'pairwise'
           || !Array.isArray(grants) || !grants.includes('authorization_code')
           || grants.some(grant => grant !== 'authorization_code' && grant !== 'refresh_token')
-          || body.client_credentials_scopes !== undefined || body.jwks !== undefined || body.jwks_uri !== undefined) {
+          || body.client_credentials_scopes !== undefined || body.jwks !== undefined || body.jwks_uri !== undefined
+          || ['logo_uri', 'client_uri', 'policy_uri', 'tos_uri'].some(field => body[field] !== undefined)) {
           throw new APIError('BAD_REQUEST', { error: 'invalid_client_metadata',
             error_description: 'Agent registration requires a public authorization-code client with PKCE' });
         }
+        // The HTTP boundary replaces this header using the socket peer or a configured proxy.
+        // Embedded calls without an address share a fail-closed budget.
+        const address = ctx.headers?.get('x-rezics-client-ip') ?? 'unknown';
+        let admitted: boolean;
+        try { admitted = await consumeAccountLimit(config.pool, config.secret, `oauth-register:${address}`,
+          AGENT_REGISTRATION_BUDGET.maximum, AGENT_REGISTRATION_BUDGET.seconds); }
+        catch { throw new APIError('SERVICE_UNAVAILABLE', { error: 'temporarily_unavailable' }, { 'Retry-After': '5' }); }
+        if (!admitted) throw new APIError('TOO_MANY_REQUESTS', { error: 'rate_limited' },
+          { 'Retry-After': String(AGENT_REGISTRATION_BUDGET.seconds) });
       }
       await operatorHooks.before(ctx);
     }) },

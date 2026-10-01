@@ -40,8 +40,9 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
     const installation = await currentInstallationIn(pool, clientId, scopes);
     if (!installation?.covers) throw new AccountProblem('stale_request', 409);
     const registration = await pool.query<{ name: string; uri: string | null; icon: string | null;
-      disabled: boolean | null; redirectUris: string[] }>(
-      'SELECT name, uri, icon, disabled, "redirectUris" FROM "oauthClient" WHERE "clientId" = $1', [clientId]);
+      disabled: boolean | null; redirectUris: string[]; firstParty: boolean }>(
+      `SELECT name, uri, icon, disabled, "redirectUris", EXISTS (SELECT 1 FROM rezics_oauth_first_party_client
+        WHERE client_id = $1) AS "firstParty" FROM "oauthClient" WHERE "clientId" = $1`, [clientId]);
     const client = registration.rows[0];
     if (!client || client.disabled || !client.redirectUris.includes(query.get('redirect_uri')!)) {
       throw new AccountProblem('stale_request', 409);
@@ -55,8 +56,10 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
       WHERE id = $1 AND session_id = $2 AND installation_id = $3
         AND expires_at > now() AND decided_at IS NULL`, [id, session.session.id, installation.id]);
     if (!current.rowCount) throw new AccountProblem('stale_request', 409);
+    const redirect = new URL(query.get('redirect_uri')!);
     return { id, session, installation, view: { client: { id: clientId, name: client.name || clientId,
-      uri: client.uri, icon: client.icon }, scopes: scopes.map(describeScope),
+      uri: client.uri, icon: client.icon, unverified: !client.firstParty,
+      redirectHost: redirect.host || redirect.protocol }, scopes: scopes.map(describeScope),
     resources: query.getAll('resource'), expiresAt: expiry.toISOString() } };
   };
   const decide = async (request: Request, parsed?: unknown): Promise<Response> => {

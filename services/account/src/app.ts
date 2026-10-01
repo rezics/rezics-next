@@ -1,4 +1,5 @@
 import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
+import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
 import { Pool } from 'pg';
 import type { createAccountAuth } from './auth.ts';
@@ -27,6 +28,8 @@ import { AccountRecoveryConflict, AccountRecoveryDenied, AccountRecoveryStale,
   readAccountRecoveryClaim, requestAccountRecovery } from './recovery-claim.ts';
 
 export interface AccountAppOptions {
+  /** Socket peers whose ingress replaces X-Forwarded-For with one client address. */
+  trustedProxyPeers?: ReadonlySet<string>;
   /** Verified private user IDs allowed to change App installations. */
   operatorUserIds?: ReadonlySet<string>;
   /** Connections the authorization-code guard may hold across exchanges. */
@@ -206,6 +209,15 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     } finally { client.release(); }
   };
   const app = new Elysia({ introspect: true })
+    .request(({ request, server }) => {
+      if (new URL(request.url).pathname !== '/api/auth/oauth2/register') return;
+      const peer = server?.requestIP(request)?.address;
+      const forwarded = request.headers.get('x-forwarded-for')?.trim();
+      const address = peer && options.trustedProxyPeers?.has(peer) && forwarded && isIP(forwarded)
+        ? forwarded : peer;
+      request.headers.delete('x-rezics-client-ip');
+      if (address) request.headers.set('x-rezics-client-ip', address);
+    })
     .error(({ error }) => {
       if (error instanceof ValidationError || error instanceof ParseError) return Response.json({ error: 'invalid_request' }, { status: 400 });
       if (error instanceof NotFound) return Response.json({ error: 'not_found' }, { status: 404 });

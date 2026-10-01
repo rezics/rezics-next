@@ -3,6 +3,9 @@ import { insert } from 'native-i18n';
 export default {
   title: insert('{{app}} wants to access your REZICS Account', { app: String }),
   unknownApp: 'An app',
+  unverifiedApp: 'Unverified app',
+  unverifiedIdentity: 'REZICS has not verified this app’s identity.',
+  redirectHost: 'After you answer, you will return to:',
   signedInAs: 'Signed in as',
   switchAccount: 'Not you? Switch account',
   allowIntro: insert('This will let {{app}}:', { app: String }),

@@ -3,6 +3,9 @@ import { insert } from 'native-i18n';
 export default {
   title: insert('{{app}} 想要存取你的 REZICS 帳戶', { app: String }),
   unknownApp: '某個應用程式',
+  unverifiedApp: '未經驗證的應用程式',
+  unverifiedIdentity: 'REZICS 尚未驗證此應用程式的身分。',
+  redirectHost: '回覆後將返回：',
   signedInAs: '目前登入的帳戶',
   switchAccount: '不是你本人？切換帳戶',
   allowIntro: insert('這會允許 {{app}}：', { app: String }),
