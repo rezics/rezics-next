@@ -51,7 +51,8 @@ type Step =
 /** The notice a step shows after something went wrong or needs saying; `tone` picks the alert. */
 type Notice = { tone: 'error' | 'info'; title?: string; body: string } | null;
 
-const retryDelays = [0, 600, 1500];
+/** Main applies a creation to the graph a moment after it answers, so the header's provenance is read until it shows. */
+const retryDelays = [0, 500, 1000, 2000, 3000, 5000, 8000];
 
 /** Wait text for Retry-After, in the reader's language. */
 function waitText(seconds: number, locale: UiLocale): string {
@@ -119,10 +120,10 @@ function AliasForm({ candidate, t, locale, actingSubject, save, onClose }: {
   const message = { saved: t.aliasSaved, denied: t.aliasDenied, taken: t.aliasTaken, invalid: t.aliasInvalid,
     failed: t.aliasFailed } as const;
   return <form aria-label={t.aliasHeading({ title })} className="grid gap-4 rounded-2xl border border-border/70 bg-card p-4"
-    onSubmit={async event => {
+    onSubmit={event => {
       event.preventDefault();
       setState('saving');
-      setState(await save({ actingSubject, work: candidate.work, alias, language }));
+      void save({ actingSubject, work: candidate.work, alias, language }).then(setState);
     }}>
     <h2 className="font-semibold text-lg">{t.aliasHeading({ title })}</h2>
     <Field><FieldLabel>{t.aliasLabel}</FieldLabel>
@@ -231,7 +232,7 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
         setStep({ name: 'created', work: answer.work, parent: series, provenance: null, verification: 'unverified' });
         for (const delay of retryDelays) {
           await new Promise(done => setTimeout(done, delay));
-          const read = await intake.provenance(answer.work);
+          const read = await intake.provenance(answer.work, actingSubject);
           if (read?.provenance || read?.verification) {
             setStep(current => current.name === 'created'
               ? { ...current, provenance: read.provenance, verification: read.verification } : current);

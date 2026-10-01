@@ -68,8 +68,8 @@ export interface IntakePort {
   /** Asks Main where a grain other than a new creative scope goes. */
   ownerApi(grain: Grain, input: SearchInput, receipt: string, actingSubject: string): Promise<OwnerAnswer>;
   create(input: SearchInput, receipt: string, actingSubject: string, semanticType: string | null): Promise<CreateAnswer>;
-  /** The unverified state and field provenance of a created Work, or null while Main cannot read it yet. */
-  provenance(work: string): Promise<HeaderMark | null>;
+  /** The unverified state and field provenance of a created Work, read as the contributor, or null while Main cannot read it yet. */
+  provenance(work: string, actingSubject: string): Promise<HeaderMark | null>;
 }
 
 export type OwnerAnswer =
@@ -137,9 +137,9 @@ export function mainIntake(given?: Pick<Main, 'v1'>): IntakePort {
         return { outcome: status === 401 || status === 403 ? 'denied' : 'unavailable' };
       } catch { return { outcome: 'unavailable' }; }
     },
-    async provenance(work) {
+    async provenance(work, actingSubject) {
       try {
-        const answer = await client().v1.works({ id: work.slice(-36) }).get();
+        const answer = await client().v1.works({ id: work.slice(-36) }).get({ query: { actingSubject } });
         if (!answer.data) return null;
         return { verification: answer.data.verification ?? null, provenance: answer.data.fieldProvenance ?? null };
       } catch { return null; }
