@@ -56,7 +56,7 @@ test('G922-H1: wiki history with position=all withholds an r18 Work from an unkn
 }, 180_000);
 
 // Owner: identity-merge / Work (G-836), editorial authority (G-865).
-test.todo('G922-H2: two source reviewers cannot merge a public Work into a private survivor they can only read', async () => {
+test('G922-H2: two source reviewers cannot merge a public Work into a private survivor they can only read', async () => {
   const f = await startMediaStack('g-922-merge', { profileCredits: true });
   try {
     const proposer = await f.member('proposer'),
@@ -122,8 +122,9 @@ test.todo('G922-H2: two source reviewers cannot merge a public Work into a priva
         { resource: source.work, revision: revision(source.work), locator: 'title-and-grain' },
       ],
     };
-    const proposal = await checked<{ proposal: string }>(
-      await call(
+    // G-930 may refuse the merge as early as its proposal; any refusal before a
+    // redirect is the defended outcome, which the final assertion checks.
+    const created = await call(
         '/v1/editorial/proposals',
         {
           profile: 'editorial-proposal-create-v1',
@@ -139,10 +140,9 @@ test.todo('G922-H2: two source reviewers cannot merge a public Work into a priva
           actingSubject: proposer.actor,
         },
         proposer.token,
-      ),
-      201,
-    );
-    await checked(
+      );
+    const proposal = created.status === 201 ? await checked<{ proposal: string }>(created, 201) : null;
+    if (proposal) await checked(
       await call(
         `/v1/editorial/proposals/${proposal.proposal}/reviews`,
         {
@@ -156,7 +156,7 @@ test.todo('G922-H2: two source reviewers cannot merge a public Work into a priva
       ),
     );
     const key = randomUUID();
-    for (let attempt = 0; attempt < 16; attempt++) {
+    for (let attempt = 0; proposal && attempt < 16; attempt++) {
       const response = await call(
         `/v1/editorial/proposals/${proposal.proposal}/decisions`,
         {
