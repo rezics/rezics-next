@@ -82,6 +82,14 @@ content does not establish an age or supply an adult opt-in. The shared
 [suitability policy](../contracts/classification-judgments.md#suitability-and-disclosure)
 also applies to derivatives and delivery channels.
 
+The first launch collects no age or country evidence and offers no adult
+opt-in, so assessed `r15`, `r18` and `r18g` targets are withheld from every
+reader, the same as absent. This narrows scope instead of operating age
+assurance: age-assurance law, vendor cost and the data it collects outweigh
+the value for light-novel and visual-novel catalogues at launch. Staff can
+still correct or clear any rating. Revisit when a market needs gated content
+and a free, privacy-preserving evidence source exists.
+
 ## Intake, response and recovery
 
 Before registration opens, name a primary and backup responder, test the public
