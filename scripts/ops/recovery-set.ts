@@ -183,8 +183,14 @@ export class RecoveryBudget {
       this.remaining();
       return result;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : 'unknown failure';
-      throw new Error(`Recovery phase ${name} failed: ${detail}; serving remains held`, { cause: error });
+      const failure = error instanceof Error ? error.message : 'unknown failure';
+      const detail =
+        Date.now() - this.started >= RECOVERY_BUDGET_MS
+          ? `exceeded its 600-second budget (${failure})`
+          : failure;
+      throw new Error(`Recovery phase ${name} failed: ${detail}; serving remains held`, {
+        cause: error,
+      });
     } finally {
       this.phases[name] = Math.round(performance.now() - at);
     }

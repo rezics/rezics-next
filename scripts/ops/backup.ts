@@ -290,6 +290,26 @@ export async function backupRecoverySet(
     });
     if (!generation) throw new Error('Source recovery fence generation is unavailable');
     const capturedGeneration = generation;
+    await budget.phase('postgres-read-settle', async () => {
+      // With data checksums, even read-only scans can WAL-log visibility hint
+      // bits. Read owner rows and flush that WAL before comparing the fenced cut,
+      // so a first read cannot trigger a full immutable-object capture retry.
+      // https://www.postgresql.org/docs/18/runtime-config-wal.html#GUC-WAL-LOG-HINTS
+      for (const pool of Object.values(pools)) {
+        budget.remaining();
+        await captureDatabaseRows(pool);
+      }
+      const checkpoint = new Pool({
+        connectionString: administratorUrl(context.saved, 'account'),
+        max: 1,
+        statement_timeout: budget.remaining(),
+      });
+      try {
+        await checkpoint.query('CHECKPOINT');
+      } finally {
+        await checkpoint.end();
+      }
+    });
     const coverage = await budget.phase('coverage', async () => {
       // PostgreSQL background WAL can advance once as sessions drain. Retry only
       // that diagnosed movement; owner/graph mismatches remain fatal.

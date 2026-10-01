@@ -285,6 +285,25 @@ test('G-916: recovery failures identify their phase and retain the original caus
   ).rejects.toThrow('gpg recovery step failed');
 });
 
+test('G-916: an object error after the command deadline reports budget exhaustion', async () => {
+  const budget = new RecoveryBudget();
+  const clock = spyOn(Date, 'now');
+  const cause = new Error('committed immutable object is unavailable');
+  try {
+    await budget.phase('coverage', () => {
+      clock.mockReturnValue(budget.started + 600_001);
+      throw cause;
+    });
+    throw new Error('expected failure');
+  } catch (error) {
+    expect((error as Error).message).toContain('600-second budget');
+    expect((error as Error).message).toContain('coverage');
+    expect((error as Error).cause).toBe(cause);
+  } finally {
+    clock.mockRestore();
+  }
+});
+
 test('G-916: S3 recovery reads carry the enclosing deadline through request signing', async () => {
   const controller = new AbortController();
   const bytes = new TextEncoder().encode('retained immutable bytes');
