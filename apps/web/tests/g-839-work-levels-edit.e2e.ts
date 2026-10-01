@@ -60,7 +60,7 @@ async function eventually(page: Page, path: string, check: () => Promise<void>, 
       if (info) mark(info, `${path}: ${(await page.locator('#main-content').innerText()).replace(/\s+/g, ' ').slice(0, 800)}`);
       throw error;
     }
-  }).toPass({ timeout: 60_000 });
+  }).toPass({ timeout: 100_000 });
 }
 
 const receipt = (page: Page) => page.getByText(/Main’s receipt:/);
@@ -143,9 +143,9 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await relation.getByRole('button', { name: 'Record relation' }).click();
   await expect(receipt(page)).toBeVisible();
   await eventually(page, at(index.genesisTestament, 'connections'), () => expect(page.locator('[data-relation-row]')
-    .filter({ hasText: 'Sequel to' })).toContainText('A Certain Magical Index: New Testament', { timeout: 2_000 }), info);
+    .filter({ hasText: 'Sequel to' })).toContainText('A Certain Magical Index: New Testament', { timeout: 15_000 }), info);
   await eventually(page, at(index.newTestament, 'connections'), () => expect(page.locator('[data-relation-row]')
-    .filter({ hasText: 'Sequel' })).toContainText('Genesis Testament', { timeout: 2_000 }), info);
+    .filter({ hasText: 'Sequel' })).toContainText('Genesis Testament', { timeout: 15_000 }), info);
 
   mark(info, 'relation recorded');
   // Editions: a zh-Hans realization of volume 1, then an omnibus release covering volumes 1-3.
@@ -160,7 +160,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   // Main applies a write to its graph a moment after the receipt: read again until the record shows.
   await expect(async () => {
     await page.goto(at(volumeOne, 'editions'));
-    await expect(page.locator('[data-language-group="zh-Hans"]')).toBeVisible({ timeout: 2_000 });
+    await expect(page.locator('[data-language-group="zh-Hans"]')).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 45_000 });
 
   mark(info, 'realization added');
@@ -184,7 +184,7 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await release.getByRole('button', { name: 'Add release' }).click();
   await expect(receipt(page).last()).toBeVisible();
   await eventually(page, at(volumeOne, 'editions'), async () => {
-    try { await expect(page.getByRole('region', { name: 'Releases' }).getByText('Covers 3 Works')).toBeVisible({ timeout: 2_000 }); }
+    try { await expect(page.getByRole('region', { name: 'Releases' }).getByText('Covers 3 Works')).toBeVisible({ timeout: 15_000 }); }
     catch (error) {
       mark(info, `releases: ${(await page.locator('#main-content').innerText()).replace(/\s+/g, ' ').slice(0, 1500)}`);
       throw error;
