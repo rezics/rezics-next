@@ -61,6 +61,25 @@ export class SeedApi {
     return fetch(url, init);
   }
 
+  /** Local demo identities are fixtures, including their policy acceptances.
+   * Read the current owner digests; never invent a version or apply this to a
+   * remote Account service. Accepted versions require no further write. */
+  private async acceptLocalSeedPolicies(cookie: string): Promise<void> {
+    const account = this.endpoints.account;
+    const response = await this.accountFetch(`${account}/api/account/policies`, { headers: { cookie } });
+    const policies = await payload<{ acceptanceRequired: boolean;
+      policies: { policyId: string; versionDigest: string }[] }>(response, 'Account seed policies');
+    if (!policies.acceptanceRequired) return;
+    if (policies.policies.length !== 2 || !['terms', 'privacy'].every(id =>
+      policies.policies.filter(policy => policy.policyId === id && /^[a-f0-9]{64}$/.test(policy.versionDigest)).length === 1)) {
+      throw new Error('Account seed policy catalogue is invalid');
+    }
+    const accepted = await this.accountFetch(`${account}/api/account/policies/acceptance`, { method: 'POST',
+      headers: { cookie, origin: account, 'content-type': 'application/json' },
+      body: JSON.stringify({ acceptedPolicies: policies.policies.map(({ policyId, versionDigest }) => ({ policyId, versionDigest })) }) });
+    await payload<unknown>(accepted, 'Account seed policy acceptance');
+  }
+
   private async verifyEmail(email: string): Promise<void> {
     const { account, mailpit } = this.endpoints;
     const requestedAt = Date.now();
@@ -134,7 +153,17 @@ export class SeedApi {
       redirect_uri: redirectUri, scope, state: randomUUID(), resource,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const authorized = await this.accountFetch(authorize, { headers: { cookie }, redirect: 'manual' });
+    const requestAuthorization = () => this.accountFetch(authorize, { headers: { cookie }, redirect: 'manual' });
+    let authorized = await requestAuthorization();
+    if (authorized.status === 403 && [account, this.endpoints.accountService ?? account].every(origin =>
+      ['127.0.0.1', 'localhost'].includes(new URL(origin).hostname))) {
+      const refused = await authorized.clone().json().catch(() => null) as { error?: string; code?: string } | null;
+      if (refused?.error === 'policy_acceptance_required' || refused?.code === 'policy_acceptance_required') {
+        await authorized.body?.cancel();
+        await this.acceptLocalSeedPolicies(cookie);
+        authorized = await requestAuthorization();
+      }
+    }
     const location = authorized.headers.get('location');
     if (authorized.status !== 302 || !location) {
       throw new SeedApiError('OAuth authorize', authorized.status, (await authorized.text()).slice(0, 500));

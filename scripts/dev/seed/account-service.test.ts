@@ -36,3 +36,53 @@ test('G-909: Account service authentication and PKCE exchange preserve the publi
     expect(calls).toEqual(['/api/auth/sign-in/email', '/api/auth/oauth2/authorize', '/api/auth/oauth2/token']);
   } finally { await server.stop(true); }
 });
+
+test('G-909: local fixture policy gates accept current owner digests once before OAuth', async () => {
+  const calls: string[] = [];
+  let accepted = false;
+  const policies = [{ policyId: 'terms', versionDigest: 'a'.repeat(64) },
+    { policyId: 'privacy', versionDigest: 'b'.repeat(64) }];
+  const publicOrigin = 'http://localhost:39999';
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', async fetch(request) {
+    const path = new URL(request.url).pathname;
+    calls.push(path);
+    if (!path.endsWith('/oauth2/token')) expect(request.headers.get('cookie')).toBe('session=seed');
+    if (path.endsWith('/oauth2/authorize')) return accepted
+      ? new Response(null, { status: 302, headers: { location: 'http://localhost:3000/callback?code=code' } })
+      : Response.json({ error: 'policy_acceptance_required' }, { status: 403 });
+    if (path === '/api/account/policies') return Response.json({ acceptanceRequired: !accepted, policies });
+    if (path === '/api/account/policies/acceptance') {
+      expect(request.headers.get('origin')).toBe(publicOrigin);
+      expect(await request.json()).toEqual({ acceptedPolicies: policies });
+      accepted = true;
+      return Response.json({ acceptanceRequired: false });
+    }
+    if (path.endsWith('/oauth2/token')) return Response.json({ access_token: 'token' });
+    return new Response(null, { status: 404 });
+  } });
+  try {
+    const api = new SeedApi({ account: publicOrigin, accountService: server.url.origin,
+      main: 'http://localhost:3001', mailpit: '', clientId: 'client', redirectUri: 'http://localhost:3000/callback',
+      resource: 'http://localhost:3001', scope: 'openid work:read' });
+    expect(await api.token('session=seed')).toBe('token');
+    expect(await api.token('session=seed')).toBe('token');
+    expect(calls.filter(path => path === '/api/account/policies/acceptance')).toHaveLength(1);
+    expect(calls.slice(0, 4)).toEqual(['/api/auth/oauth2/authorize', '/api/account/policies',
+      '/api/account/policies/acceptance', '/api/auth/oauth2/authorize']);
+  } finally { await server.stop(true); }
+});
+
+test('G-909: remote Account policy refusals never trigger automatic acceptance', async () => {
+  const calls: string[] = [];
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch(request) {
+    calls.push(new URL(request.url).pathname);
+    return Response.json({ error: 'policy_acceptance_required' }, { status: 403 });
+  } });
+  try {
+    const api = new SeedApi({ account: 'https://account.example.test', accountService: server.url.origin,
+      main: 'http://localhost:3001', mailpit: '', clientId: 'client', redirectUri: 'http://localhost:3000/callback',
+      resource: 'http://localhost:3001', scope: 'openid work:read' });
+    await expect(api.token('session=seed')).rejects.toThrow('policy_acceptance_required');
+    expect(calls).toEqual(['/api/auth/oauth2/authorize']);
+  } finally { await server.stop(true); }
+});
