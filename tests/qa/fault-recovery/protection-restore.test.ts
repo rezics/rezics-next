@@ -172,7 +172,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
     };
     await provisionFixtureAuthor(environment, actor);
     await grant(0, 'work:create:root', 'work.create');
-    const created = await read<{ work: string; workRevision: string }>(await call(app, 'POST', '/v1/works',
+    const created = await read<{ work: string; workRevision: string; sequence: string }>(await call(app, 'POST', '/v1/works',
       { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: 'Original protected title', actingSubject: actor }), 201);
     const work = created.work;
     await grant(0, `work:read:${work}`, 'work.read');
@@ -240,7 +240,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       GRAPH <urn:rezics:graph:receipts> { <${approved.receipt}> a rv:OperationReceipt } }`);
     expect(graphOldReceipt.boolean).toBe(false);
     const next = { dataEpoch: randomUUID(), routingEpoch: '2' };
-    await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: '1' }, next });
+    await cutoverRestoredGraphLineage(fuseki, { prior: { ...lineage, sequence: created.sequence }, next });
     const restored = { ...environment, lineage: next,
       titleAdmissionKey: apps.FUSEKI_TITLE_ADMISSION_KEY! };
     const restoredApp = createMainApp(fuseki, { environment: restored,
@@ -304,7 +304,7 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       [(await accessPool.query<{ request_digest: string }>(
         'SELECT request_digest FROM access.admission WHERE id = $1', [reviewAdmission])).rows[0]!.request_digest,
       reviewAdmission]);
-    for (let position = 2; position <= Number(approved.sourcePosition.sequence); position++) {
+    for (let position = Number(created.sequence) + 1; position <= Number(approved.sourcePosition.sequence); position++) {
       const reconciled = await reconcileRetainedWorkProtection(restored, restoredAccess,
         restoredRelay, coverage.relay, String(position));
       expect(reconciled.replayed).toBe(false);

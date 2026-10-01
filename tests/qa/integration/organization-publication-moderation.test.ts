@@ -19,6 +19,7 @@ import { organizationRejectionInput } from '../../../services/main/src/modules/w
 import { realmRejectionDigest, rejectRealmLocal, sealRealmRejectionAdmission }
   from '../../../services/main/src/modules/work/reject-realm.ts';
 import { selectAdmittedRealmLocal } from '../../../services/main/src/modules/work/select-realm-admitted.ts';
+import { selectAdmittedMainDefault } from '../../../services/main/src/modules/work/select-main-admitted.ts';
 import { editAdmittedMetadataWork } from '../../../services/main/src/modules/work/edit-admitted.ts';
 import { readExactContributionDraft } from '../../../services/main/src/modules/contribution/history.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
@@ -284,6 +285,14 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
     await must(await moderate(), 409);
     target = { ...target, publicationDecision: nextPublished.publicationDecision! };
     target = { ...target, selection: await renew() };
+    // Keep the independent Main publication current before probing a membership move.
+    await selectAdmittedMainDefault(env, account.verifier, access, s.orgRequest, {
+      context: { kind: 'main-version-default', id: target.mainVersion }, work: target.work,
+      contribution: target.contribution, publicationDecision: target.publicationDecision,
+      expectedSelectionHead: s.main.selection!, selectionBasis: 'main-maintainer',
+      actingSubject: s.f.org, idempotencyKey: randomUUID(),
+    });
+    expect((await search()).total).toBe(1);
     // A move after the atomic dispatch admission cannot retroactively rewrite or extend it.
     const destination = await createAdmittedRealmSpace(env, account.verifier, access, s.realmRequest,
       { name: 'Organization move destination', actingSubject: s.f.realmManager, idempotencyKey: randomUUID() });

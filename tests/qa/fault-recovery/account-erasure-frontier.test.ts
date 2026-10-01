@@ -224,7 +224,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const publicTitle = 'Unrelated public Work survives Account erasure';
     const publicWork = await createAdmittedMetadataWork(environment,
       verifierAccount, registry, request, {
-        title: publicTitle, actingSubject: publicActor,
+        title: publicTitle, language: 'en', actingSubject: publicActor,
         idempotencyKey: `erasure-public-work-${randomUUID()}` });
     expect(publicWork.sequence).toBe('1');
     const variantId = `urn:rezics:variant:${randomUUID()}`;
