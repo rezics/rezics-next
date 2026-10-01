@@ -113,6 +113,8 @@ export const isolatedIntegrationFileList = [
   // These probes finish or rank the complete graph population within fixed budgets.
   'tests/qa/integration/concept-page.test.ts',
   'tests/qa/integration/g-556-ranked-catalogue.test.ts',
+  // Home's relay reads its complete retained outbox from sequence zero.
+  'tests/qa/integration/g-542-endpoints.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

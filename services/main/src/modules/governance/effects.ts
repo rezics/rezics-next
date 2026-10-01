@@ -72,16 +72,23 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             id: string;
             byte_digest: string;
           }>(
-            `SELECT a.owner,a.state_head,p.id,p.byte_digest FROM media.asset a
+            target.owner === 'media' && target.component === 'media_use'
+              ? `SELECT a.owner,a.state_head,p.id,p.byte_digest FROM media.use u
+           JOIN media.asset a ON a.id = u.asset_id
+           JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original'
+           WHERE u.target = $1 AND u.asset_revision_id = $2::uuid AND u.id = $3::uuid LIMIT 1`
+              : `SELECT a.owner,a.state_head,p.id,p.byte_digest FROM media.asset a
            JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original'
            LEFT JOIN content.revision r ON r.id = $2::uuid
                       WHERE a.id = $1 AND (p.id = $2::uuid OR (r.variant_id = a.variant_id AND r.body @> jsonb_build_object(
              'representations',jsonb_build_array(jsonb_build_object('id',p.id::text))))) LIMIT 1`,
             [
-              target.resource.slice(-36),
+              target.owner === 'media' && target.component === 'media_use'
+                ? target.resource : target.resource.slice(-36),
               target.revision && /^[0-9a-f-]{36}$/.test(target.revision.slice(-36))
                 ? target.revision.slice(-36)
                 : null,
+              ...(target.owner === 'media' && target.component === 'media_use' ? [target.locator] : []),
             ],
           )
         ).rows[0];
