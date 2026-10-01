@@ -5,7 +5,7 @@ import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezi
 import { cn } from '@rezics/ui/utils';
 import type { ZoneText } from '@rezics/zone-sdk';
 import { BookMarkedIcon, CheckIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { WikiMessages } from './messages.ts';
 
@@ -41,11 +41,14 @@ function Text({ text }: { text: ZoneText }) {
  */
 export function PositionControl({ copy, at, options, progress, everything, more }: PositionControlProps) {
   const [open, setOpen] = useState(false);
+  // Tests and scripts wait for this before they press the trigger: the server-rendered button does nothing until then.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const close = () => setOpen(false);
   return <div data-position-bar="" role="region" aria-label={copy.region} className="border-border/70 border-b bg-card/50">
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 sm:px-6 lg:px-10">
       <Sheet open={open} onOpenChange={details => setOpen(details.open)}>
-        <SheetTrigger className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto max-w-full min-h-9 whitespace-normal py-1.5 text-start')}
+        <SheetTrigger data-hydrated={hydrated ? 'true' : undefined} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto max-w-full min-h-9 whitespace-normal py-1.5 text-start')}
 >
           <BookMarkedIcon aria-hidden="true" />
           <span data-position-current="" className="min-w-0">

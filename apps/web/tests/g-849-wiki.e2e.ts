@@ -119,7 +119,7 @@ for (const viewport of viewports) {
       // The list agrees with the home, and the later character's own address is the Zone's not-found page.
       await page.goto(site(locale, '/characters'));
       await ready(page);
-      await expect(page.locator('[data-zone-members] li')).toHaveCount(2);
+      await expect(page.locator('[data-wiki-index="characters"] li')).toHaveCount(2);
       const hidden = await page.goto(site(locale, `/characters/${uuid(seed.entities.darcy)}`));
       expect(hidden?.status()).toBe(404);
       await expect(page.getByRole('heading', { level: 1 }).filter({ hasText: w.darcy })).toHaveCount(0);
@@ -149,7 +149,7 @@ test('anonymous: Show everything reveals the rest, and the choice stays in the a
   // The list keeps the choice; the later character is a page now.
   await page.goto(site('en', '/characters?position=all'));
   await ready(page);
-  await expect(page.locator('[data-zone-members] li')).toHaveCount(3);
+  await expect(page.locator('[data-wiki-index="characters"] li')).toHaveCount(3);
   await page.getByRole('link', { name: /Fitzwilliam Darcy/ }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Fitzwilliam Darcy' })).toBeVisible();
   expect(page.url()).toContain('position=all');
@@ -162,6 +162,7 @@ test('the position control works by keyboard and leads to a chapter', async ({ p
   await page.goto(site('en'));
   await ready(page);
   const button = page.getByRole('button', { name: /^Up to:/ });
+  await expect(button).toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
   await button.focus();
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog');
@@ -189,7 +190,9 @@ for (const viewport of viewports) {
         test.setTimeout(300_000);
         await page.setViewportSize(viewport);
         const { actingSubject, member } = credentials();
-        await signInAtAccounts(page, site(locale), member);
+        // The Accounts sign-in page is read in English; the Zone is read in `locale` once signed in.
+        await signInAtAccounts(page, site('en'), member);
+        await page.goto(site(locale));
         await ready(page);
         // Before any chapter is finished the reader starts at the first.
         if (viewport.name === 'phone' && locale === 'en') {
