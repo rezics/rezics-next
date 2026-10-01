@@ -88,8 +88,7 @@ try {
     actingSubject: actor,
     grant: (scope: string, action: string) => grant(principalId, actor, scope, action),
     request: async (method: string, path: string, body?: unknown, key = randomUUID()) => {
-      // Main's live relay may move the graph during preflight. Resolve the
-      // same intent, bounded, rather than allocate another proposal.
+      // Resolve retryable HTTP outcomes with the same bounded command intent.
       for (let attempt = 0; attempt < 40; attempt++) {
         const response = await app.handle(
           new Request(`http://main.local${path}`, {
@@ -202,6 +201,28 @@ try {
     for (const action of ['work.read', 'work.edit', 'work.review']) {
       await p.grant(`work:${action.slice(5)}:${alternate.work}`, action);
     }
+  const franchiseRoute = await seed.read(
+    `/v1/zones/${seed.zone.slice(-36)}/routes?path=%2Ffranchise&position=all`,
+  );
+  const franchise = ((await franchiseRoute.json()) as { mount: { target: string } }).mount.target;
+  const members = await catalogueRequest<{ structure: string; revision: string }>(
+    holder,
+    'GET',
+    `/v1/collections/${franchise.slice(-36)}?actingSubject=${encodeURIComponent(seed.holderActor)}&position=all`,
+  );
+  await catalogueRequest(holder, 'POST', `/v1/collections/${franchise.slice(-36)}/changes`, {
+    expectedHead: members.revision,
+    actingSubject: seed.holderActor,
+    operations: [
+      {
+        op: 'insert',
+        parent: members.structure,
+        role: 'member',
+        position: 'last',
+        target: alternate.work,
+      },
+    ],
+  });
   const alternateChapters = await cataloguePositions(holder, alternate.work, alternate.mainVersion);
   const alternateText = 'Synthetic alternate claim: she never lives in Longbourn';
   const alternateStatement = await publishCatalogueFact(holder, reviewer, {
