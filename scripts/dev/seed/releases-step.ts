@@ -1,5 +1,7 @@
 import { grantImportedWorkSeedAuthority } from './operator.ts';
 import { seedKey, semanticTypes } from './plan.ts';
+import { SeedApiError, type SeedApi } from './api.ts';
+import { stableId } from './state.ts';
 import type { ContributionReceipt, PublicationReceipt, SeedState, WorkReceipt } from './state.ts';
 
 const id = (suffix: string) => `https://rezics.com/id/01944100-0000-7000-8000-${suffix}`;
@@ -42,6 +44,50 @@ const releaseBody = (edition: typeof releaseSeedPlan.editions[number], actor: st
   originalUrl: null, fixedRelease: null, coverage: null, evidence: null,
 });
 
+/** Earlier seeds created a separate classic Work. Preserve its edition IDs;
+ * an edition on the imported Work needs its own stable identity. A missing or
+ * hidden summary never proves another owner, so it cannot justify a new ID. */
+export async function seedReleaseIdentity(api: Pick<SeedApi, 'get'>, work: string, legacyId: string,
+  token: string, actor: string): Promise<string> {
+  let summary: { type: string; work: string | null };
+  try {
+    summary = await api.get(`/v1/resources/${legacyId.slice(-36)}?${new URLSearchParams({ actingSubject: actor })}`, token);
+  } catch (error) {
+    if (error instanceof SeedApiError && error.status === 404) return legacyId;
+    throw error;
+  }
+  if (summary.type !== 'release' || !summary.work) throw new Error(`Seed release identity is not an owned release: ${legacyId}`);
+  return summary.work === work ? legacyId : `https://rezics.com/id/${stableId(`release:${work}:${legacyId}`)}`;
+}
+
+/** The explicit own-work field was added after this serial was first seeded.
+ * Its stable web-release identity locates that exact Work through public reads;
+ * title search or a different creation key could duplicate the serial. */
+export async function seedSerialWork(api: Pick<SeedApi, 'post' | 'get'>, actor: string, token: string): Promise<WorkReceipt> {
+  const plan = releaseSeedPlan.serial;
+  try {
+    return await api.post<WorkReceipt>('/v1/works', {
+      profile: 'metadata-only-v1', title: plan.title, semanticTypes: semanticTypes('book'),
+      language: plan.language, actingSubject: actor, authoring: 'own-work',
+    }, token, seedKey('release-work', 'star-harbor'));
+  } catch (error) {
+    if (!(error instanceof SeedApiError) || error.status !== 409) throw error;
+    let code: unknown;
+    try { code = (JSON.parse(error.detail) as { code?: string }).code; }
+    catch { throw error; }
+    if (code !== 'idempotency_conflict') throw error;
+    const query = new URLSearchParams({ actingSubject: actor });
+    const summary = await api.get<{ type: string; work: string | null }>(`/v1/resources/${plan.release.slice(-36)}?${query}`, token);
+    if (summary.type !== 'release' || !summary.work) throw error;
+    const header = await api.get<{ id: string; mainVersion: string; revision: string; mainVersionRevision: string;
+      title: { value: string; language: string }; types: string[] }>(`/v1/works/${summary.work.slice(-36)}?${query}`, token);
+    if (header.id !== summary.work || header.title.value !== plan.title || header.title.language !== plan.language
+      || !semanticTypes('book').every(type => header.types.includes(type))) throw error;
+    return { work: header.id, mainVersion: header.mainVersion, workRevision: header.revision,
+      mainRevision: header.mainVersionRevision, replayed: true };
+  }
+}
+
 export async function seedReleases(state: SeedState) {
   const author = state.sessions[0];
   if (!author) throw new Error('Release seed needs an account');
@@ -52,13 +98,11 @@ export async function seedReleases(state: SeedState) {
   if (!classic || !state.operatorInput) throw new Error('Release seed requires the imported Red Chamber and fixture operator');
   await grantImportedWorkSeedAuthority(state.operatorInput, classic.work, classic.mainVersion);
   for (const edition of releaseSeedPlan.editions) {
-    await state.api.put(`/v1/works/${classic.work.slice(-36)}/releases/${edition.id.slice(-36)}`,
-      releaseBody(edition, actor), author.token, seedKey('release', edition.id));
+    const releaseId = await seedReleaseIdentity(state.api, classic.work, edition.id, author.token, actor);
+    await state.api.put(`/v1/works/${classic.work.slice(-36)}/releases/${releaseId.slice(-36)}`,
+      { ...releaseBody(edition, actor), id: releaseId }, author.token, seedKey('release', releaseId));
   }
-  const serial = await state.api.post<WorkReceipt>('/v1/works', {
-    profile: 'metadata-only-v1', title: releaseSeedPlan.serial.title, semanticTypes: semanticTypes('book'),
-    language: releaseSeedPlan.serial.language, actingSubject: actor, authoring: 'own-work',
-  }, author.token, seedKey('release-work', 'star-harbor'));
+  const serial = await seedSerialWork(state.api, actor, author.token);
   await grantImportedWorkSeedAuthority(state.operatorInput, serial.work, serial.mainVersion);
   const web = releaseSeedPlan.serial;
   await state.api.put(`/v1/works/${serial.work.slice(-36)}/releases/${web.release.slice(-36)}`, {

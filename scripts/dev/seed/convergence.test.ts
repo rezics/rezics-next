@@ -121,11 +121,25 @@ test('G-909: an old catalogue creation conflict remains actionable instead of mi
   });
 });
 
-test('G-909: denied or unavailable refreshes fail without sending a new PUT', async () => {
-  for (const status of [403, 503]) await serverFixture((_request, call) => call.method === 'GET'
+test('G-909: denied, missing or unavailable refreshes fail without sending a new PUT', async () => {
+  for (const status of [403, 404, 503]) await serverFixture((_request, call) => call.method === 'GET'
     ? Response.json({ code: 'release_unavailable' }, { status }) : conflict('release_basis_changed'), async (api, calls) => {
     await expect(api.put(path, release, 'token', 'seed-release')).rejects.toThrow(`HTTP ${status}`);
     expect(calls.map(call => call.method)).toEqual(['PUT', 'GET']);
+  });
+});
+
+test('G-909: an unreadable legacy release cannot be skipped or updated without its basis', async () => {
+  let puts = 0;
+  await serverFixture((_request, call) => call.method === 'GET'
+    ? Response.json({ code: 'work_unavailable' }, { status: 404 })
+    : conflict(++puts === 1 ? 'idempotency_conflict' : 'release_basis_changed'), async (api, calls) => {
+    await expect(api.put(path, release, 'token', 'seed-release')).rejects.toThrow('HTTP 404');
+    expect(calls.map(call => call.method)).toEqual(['PUT', 'GET', 'PUT', 'GET']);
+    const writes = calls.filter(call => call.method === 'PUT');
+    expect(writes[1]!.body).toEqual(release);
+    expect(writes[1]!.key).not.toBe(writes[0]!.key);
+    expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: 0 });
   });
 });
 
