@@ -36,16 +36,19 @@ export async function graphPlacementControl(fuseki: FusekiClient): Promise<Graph
 }
 
 /**
- * Compare all named graph facts except local control and cutover receipts. The
+ * Compare all named graph facts except local control, search journal and cutover receipts. The
  * transfer itself is an offline TDB2/object operation. This bounded scan rejects
  * blank nodes because their labels cannot prove equality across physical copies.
  * Cost is O(Q log Q + B), memory O(Q), with a 16 MiB query response cap.
  */
 export async function graphPlacementCoverage(fuseki: FusekiClient,
   objects: ObjectRecoveryStore): Promise<GraphPlacementCoverage> {
+  // Each native cutover appends a local search delta in its new lineage.
+  // Public search RDF and all product revisions remain part of the comparison.
   const result = await fuseki.query(`SELECT ?graph ?subject ?predicate ?object WHERE {
     GRAPH ?graph { ?subject ?predicate ?object }
     FILTER(?graph != ${iri(GRAPHS.control)})
+    FILTER(?graph != <urn:rezics:graph:search-delta>)
     FILTER(?graph != ${iri(GRAPHS.receipts)} ||
       !STRSTARTS(STR(?subject), "urn:rezics:receipt:restore-"))
   }`, 16_777_216);

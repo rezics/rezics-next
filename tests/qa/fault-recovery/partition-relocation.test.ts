@@ -13,7 +13,7 @@ import { graphPlacementControl, graphPlacementCoverage }
   from '../../../services/main/src/modules/owner/placement.ts';
 import { OwnerPartitionRoutes, StalePartitionLease }
   from '../../../services/main/src/modules/partition/route.ts';
-import { activateMetadataWork, DATASET, iri, metadataWorkRequestDigest }
+import { activateMetadataWork, DATASET, GRAPHS, iri, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
 import { readExactWorkRevision } from '../../../services/main/src/modules/work/history.ts';
 import { changeComposition, compositionChangeDigest, compositionCreateDigest,
@@ -175,6 +175,14 @@ test('MODEL07/MODEL12/SYS08/COMP07: verified move retains Work and Structure his
     expect(missingStructure.status).toBe(409);
     expect((await routes.current('graph', DATASET)).location).toBe(Bun.env.FUSEKI_URL);
     withholdPage = false;
+    const extraFact = `GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(created.workRevision)} <urn:rezics:relocation:unexpected> "tampered" }`;
+    await target.update(`INSERT DATA { ${extraFact} }`);
+    const differentProduct = await send({ profile: 'owner-relocation-v1', action: 'activate',
+      id: staged.id }, key);
+    expect(differentProduct.status).toBe(409);
+    expect((await routes.current('graph', DATASET)).location).toBe(Bun.env.FUSEKI_URL);
+    await target.update(`DELETE DATA { ${extraFact} }`);
     const movedResponse = await send({ profile: 'owner-relocation-v1', action: 'activate',
       id: staged.id }, key);
     const movedBody = await movedResponse.json();
