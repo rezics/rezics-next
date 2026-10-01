@@ -8,6 +8,7 @@ export interface SeedWriteCounts { written: number; replayed: number; reconciled
 export interface SeedEndpoints {
   enrollmentToken?: string;
   account: string;
+  accountService?: string;
   main: string;
   mailpit: string;
   clientId: string;
@@ -35,10 +36,22 @@ async function payload<T>(response: Response, operation: string): Promise<T> {
 export class SeedApi {
   constructor(readonly endpoints: SeedEndpoints) {}
 
+  /** Account's public origin defines its issuer and Origin checks; the native
+   * service serves the same API without requiring the Accounts UI proxy. */
+  private accountFetch(input: string | URL, init?: RequestInit): Promise<Response> {
+    const url = new URL(input);
+    if (this.endpoints.accountService && url.origin === this.endpoints.account) {
+      const service = new URL(this.endpoints.accountService);
+      url.protocol = service.protocol;
+      url.host = service.host;
+    }
+    return fetch(url, init);
+  }
+
   private async verifyEmail(email: string): Promise<void> {
     const { account, mailpit } = this.endpoints;
     const requestedAt = Date.now();
-    const sent = await fetch(`${account}/api/auth/send-verification-email`, { method: 'POST',
+    const sent = await this.accountFetch(`${account}/api/auth/send-verification-email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: account,
         ...(this.endpoints.enrollmentToken ? { 'x-captcha-response': this.endpoints.enrollmentToken } : {}) },
       body: JSON.stringify({ email }) });
@@ -57,7 +70,7 @@ export class SeedApi {
             && url.pathname === '/api/auth/verify-email'; } catch { return false; }
         });
         if (!match) throw new Error(`Local verification message for ${email} has no Account link`);
-        const verified = await fetch(match, { redirect: 'manual' });
+        const verified = await this.accountFetch(match, { redirect: 'manual' });
         if (verified.status !== 302 && !verified.ok) {
           throw new SeedApiError(`Account email verification ${email}`, verified.status,
             (await verified.text()).slice(0, 300));
@@ -73,12 +86,12 @@ export class SeedApi {
     const account = this.endpoints.account;
     const headers = { 'content-type': 'application/json', origin: account,
       ...(this.endpoints.enrollmentToken ? { 'x-captcha-response': this.endpoints.enrollmentToken } : {}) };
-    const signIn = () => fetch(`${account}/api/auth/sign-in/email`, { method: 'POST', headers,
+    const signIn = () => this.accountFetch(`${account}/api/auth/sign-in/email`, { method: 'POST', headers,
       body: JSON.stringify({ email: user.email, password: user.password }) });
     let response = await signIn();
     if ([400, 401, 404].includes(response.status) && user.name) {
       await response.body?.cancel();
-      const registration = await fetch(`${account}/api/auth/sign-up/email`, { method: 'POST', headers,
+      const registration = await this.accountFetch(`${account}/api/auth/sign-up/email`, { method: 'POST', headers,
         body: JSON.stringify({ ...signupPolicyFixture, name: user.name, email: user.email, password: user.password }) });
       await payload<unknown>(registration, `Account sign-up ${user.email}`);
       response = await signIn();
@@ -108,14 +121,14 @@ export class SeedApi {
       redirect_uri: redirectUri, scope, state: randomUUID(), resource,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
+    const authorized = await this.accountFetch(authorize, { headers: { cookie }, redirect: 'manual' });
     const location = authorized.headers.get('location');
     if (authorized.status !== 302 || !location) {
       throw new SeedApiError('OAuth authorize', authorized.status, (await authorized.text()).slice(0, 500));
     }
     const code = new URL(location, account).searchParams.get('code');
     if (!code) throw new Error(`OAuth authorize: no code in ${new URL(location, account).pathname}`);
-    const exchanged = await fetch(`${account}/api/auth/oauth2/token`, { method: 'POST',
+    const exchanged = await this.accountFetch(`${account}/api/auth/oauth2/token`, { method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId,
         code, redirect_uri: redirectUri, code_verifier: verifier, resource }) });
@@ -164,6 +177,16 @@ export class SeedApi {
       const response = await fetch(`${this.endpoints.main}${path}`, { method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
           'idempotency-key': attemptKey }, body: JSON.stringify(body) });
+      if (response.status === 503 && method === 'POST' && path === '/v1/catalogue/candidates' && attempt < 7) {
+        const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
+        if (detail?.code === 'search_index_unavailable' || detail?.code === 'catalogue_unavailable') {
+          // Just-updated metadata can outpace the public index. Search only;
+          // creation keys and bodies remain unchanged while it catches up.
+          await response.body?.cancel();
+          await new Promise(resolve => setTimeout(resolve, Math.min(4000, 500 * 2 ** attempt)));
+          continue;
+        }
+      }
       // A stale seed-owned PUT can converge through its public read contract.
       // Pending operations retain their exact body/key until they settle.
       if (response.status === 409 && attempt < 7) {

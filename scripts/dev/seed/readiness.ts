@@ -1,6 +1,6 @@
 import type { SeedEndpoints } from './api.ts';
 
-// Aspire's executable health can precede the Accounts HTTP listener. Probe
+// Aspire's executable health can precede the Account HTTP listener. Probe
 // only reads, before any fixture mutation, under one shared startup deadline.
 export async function waitForSeedApis(endpoints: SeedEndpoints,
   options: { fetch?: (url: string, init: RequestInit) => Promise<Response>;
@@ -8,7 +8,7 @@ export async function waitForSeedApis(endpoints: SeedEndpoints,
   const transport = options.fetch ?? fetch;
   const deadline = Date.now() + (options.timeoutMs ?? 60_000);
   await Promise.all([
-    `${endpoints.account}/api/auth/get-session`,
+    `${endpoints.accountService ?? endpoints.account}/api/auth/get-session`,
     `${endpoints.main}/health/ready`,
     `${endpoints.mailpit}/api/v1/messages?limit=1`,
   ].map(async url => {

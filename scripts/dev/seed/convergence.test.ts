@@ -128,3 +128,16 @@ test('G-909: denied or unavailable refreshes fail without sending a new PUT', as
     expect(calls.map(call => call.method)).toEqual(['PUT', 'GET']);
   });
 });
+
+test('G-909: catalogue lookup waits for projection readiness without changing its body or key', async () => {
+  const body = { profile: 'catalogue-candidates-v1', originalTitle: { value: 'Book', language: 'en' },
+    aliases: [], romanizations: [], creators: [], dates: [], identifiers: [] };
+  await serverFixture((_request, _call, calls) => calls.length <= 2
+    ? Response.json({ code: calls.length === 1 ? 'search_index_unavailable' : 'catalogue_unavailable' }, { status: 503 })
+    : Response.json({ candidateReceipt: uuid, candidates: [] }), async (api, calls) => {
+    expect(await api.post('/v1/catalogue/candidates', body, 'token', 'seed-search')).toMatchObject({ candidateReceipt: uuid });
+    expect(calls).toHaveLength(3);
+    expect(calls.every(call => call.key === 'seed-search' && JSON.stringify(call.body) === JSON.stringify(body))).toBe(true);
+    expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: 1 });
+  });
+});

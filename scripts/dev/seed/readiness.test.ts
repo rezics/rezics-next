@@ -28,3 +28,13 @@ test('G-543: seed startup fails within its shared deadline when an API stays una
   await expect(waitForSeedApis(endpoints, { fetch: transport, retryMs: 1, timeoutMs: 15 }))
     .rejects.toThrow('Seed API did not become ready within the startup deadline:');
 });
+
+test('G-909: readiness probes Account directly while its public issuer still points to the Accounts proxy', async () => {
+  const urls: string[] = [];
+  await waitForSeedApis({ ...endpoints, accountService: 'http://localhost:3002' }, {
+    fetch: async url => { urls.push(url); return new Response(null); }, timeoutMs: 1_000,
+  });
+  expect(urls).toContain('http://localhost:3002/api/auth/get-session');
+  expect(urls).not.toContain('http://localhost:3004/api/auth/get-session');
+  expect(endpoints.account).toBe('http://localhost:3004');
+});

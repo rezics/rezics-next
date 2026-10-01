@@ -89,11 +89,12 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
       operator?: { id: string; email: string; password: string } }
     : null;
   const account = env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL;
+  const accountService = env.ACCOUNT_SERVICE_ORIGIN ?? account;
   const main = Bun.env.REZICS_SEED_MAIN_ORIGIN ?? env.MAIN_ORIGIN;
   if (!account || !main || !publicConfig.redirectUris[0] || !publicConfig.scope) {
     throw new Error('Dev stack lacks its public OAuth client');
   }
-  for (const origin of [account, main]) {
+  for (const origin of [account, accountService!, main]) {
     if (!['127.0.0.1', 'localhost'].includes(new URL(origin).hostname)) {
       throw new Error('The demo seed accepts loopback Account and Main APIs only');
     }
@@ -102,7 +103,7 @@ function configuration(): { endpoints: SeedEndpoints; fixture: SeedState['fixtur
     && env.ACCESS_DATABASE_URL && env.ACCOUNT_SECRET ? privateConfig.operator : null,
     accountDatabaseUrl: env.ACCOUNT_DATABASE_URL ?? null,
     accessDatabaseUrl: env.ACCESS_DATABASE_URL ?? null, accountSecret: env.ACCOUNT_SECRET ?? null },
-  endpoints: { account, main, enrollmentToken: env.ACCOUNT_ENROLLMENT_TOKEN,
+  endpoints: { account, accountService, main, enrollmentToken: env.ACCOUNT_ENROLLMENT_TOKEN,
     mailpit: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`,
     clientId: publicConfig.clientId, redirectUri: publicConfig.redirectUris[0],
     resource: publicConfig.resource, scope: publicConfig.scope } };
