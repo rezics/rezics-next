@@ -178,4 +178,14 @@ export default {
   fieldRequired: '請填寫此欄。',
   confirmRequired: '請勾選此項聲明才能繼續。',
   appealHelp: '如果你不同意這項決定，請說明原因。會由未參與此決定的人審閱。',
+
+  sorHeading: '理由說明',
+  sorFacts: '事實',
+  sorScope: '範圍',
+  sorDuration: '期間',
+  sorAutomationYes: '此裁決使用了自動化。',
+  sorAutomationNo: '此裁決未使用自動化。',
+  sorRule: '規則：{ref}，版本 {revision}',
+  sorAppeal: '如不同意，可使用下方表單提出申訴。',
+  sorApplying: '裁決仍在執行中。請稍後再回來查看。',
 } satisfies SafetyMessages;

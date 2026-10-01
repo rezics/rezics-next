@@ -178,4 +178,14 @@ export default {
   fieldRequired: 'Rellena este campo.',
   confirmRequired: 'Marca esta declaración para continuar.',
   appealHelp: 'Si no estás de acuerdo con esta decisión, explica por qué. Lo lee una persona que no tomó la decisión.',
+
+  sorHeading: 'Exposición de motivos',
+  sorFacts: 'Hechos',
+  sorScope: 'Alcance',
+  sorDuration: 'Duración',
+  sorAutomationYes: 'En esta decisión intervino la automatización.',
+  sorAutomationNo: 'En esta decisión no intervino la automatización.',
+  sorRule: 'Regla: {ref}, revisión {revision}',
+  sorAppeal: 'Si no estás de acuerdo, puedes apelar con el formulario de abajo.',
+  sorApplying: 'La decisión aún se está aplicando. Vuelve a comprobarlo en un rato.',
 } satisfies SafetyMessages;

@@ -13,6 +13,7 @@ import { ManageFailure, Named, Thumb } from './parts.tsx';
 import { positionOf } from './permissions.ts';
 import { ActingAs } from './realm-frame.tsx';
 import { realmHref } from './routes.ts';
+import { SITE_SAFETY_PATH } from './safety-state.ts';
 import type { Loaded, ManagedRealm, RealmHeader } from './types.ts';
 
 /** A managed Realm as the list shows it: Main's permissions and counts, its public name, and its Manage address. */
@@ -59,14 +60,22 @@ function RealmCard({ summary, now, locale, messages }: { summary: ManagedSummary
  * `GET /v1/me/managed-realms`), each with what waits for it. The navigation
  * opens the only one directly; this list is for people with several.
  */
-export function ManageHome({ agent, realms, moreHref, now, locale, messages, signInHref, retryHref }: {
+export function ManageHome({ agent, realms, moreHref, now, locale, messages, signInHref, retryHref, platformSafety = false }: {
   agent: AgentOption; realms: Loaded<ManagedList>; moreHref: string | null; now: number; locale: UiLocale;
   messages: ManageMessages; signInHref?: string; retryHref?: string;
+  /** Whether Main lets the acting Agent read the platform safety queue; only then is its entry shown. */
+  platformSafety?: boolean;
 }) {
   const t = materializeData(messages, { locale });
   return <PageContainer className="grid gap-10">
     <PageHeader title={t.title} description={t.description}
       actions={<ActingAs agent={agent} locale={locale} messages={messages} />} />
+    {platformSafety ? <section aria-labelledby="manage-site" className="grid gap-3">
+      <h2 id="manage-site" className="font-semibold text-lg tracking-tight">{t.siteTitle}</h2>
+      <p className="max-w-2xl text-muted-foreground text-sm">{t.siteHelp}</p>
+      <LocalizedLink href={SITE_SAFETY_PATH} className={cn(buttonVariants({ size: 'sm' }), 'justify-self-start')}>
+        {t.siteOpen}</LocalizedLink>
+    </section> : null}
     <section aria-labelledby="manage-realms" className="grid gap-4">
       <div className="space-y-1">
         <h2 id="manage-realms" className="font-semibold text-lg tracking-tight">{t.yourRealms}</h2>

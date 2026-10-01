@@ -178,4 +178,14 @@ export default {
   fieldRequired: 'Bitte ausfüllen.',
   confirmRequired: 'Setze für diese Erklärung ein Häkchen, um fortzufahren.',
   appealHelp: 'Wenn du mit dieser Entscheidung nicht einverstanden bist, sag, warum. Eine Person, die nicht an der Entscheidung beteiligt war, liest es.',
+
+  sorHeading: 'Begründung',
+  sorFacts: 'Sachverhalt',
+  sorScope: 'Umfang',
+  sorDuration: 'Dauer',
+  sorAutomationYes: 'An dieser Entscheidung war Automatisierung beteiligt.',
+  sorAutomationNo: 'An dieser Entscheidung war keine Automatisierung beteiligt.',
+  sorRule: 'Regel: {ref}, Revision {revision}',
+  sorAppeal: 'Wenn du nicht einverstanden bist, kannst du mit dem Formular unten Einspruch einlegen.',
+  sorApplying: 'Die Entscheidung wird noch umgesetzt. Schau in Kürze noch einmal nach.',
 } satisfies SafetyMessages;

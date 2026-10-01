@@ -178,4 +178,14 @@ export default {
   fieldRequired: '请填写此项。',
   confirmRequired: '请勾选此项声明才能继续。',
   appealHelp: '如果你不同意这项决定，请说明原因。会由未参与此决定的人审阅。',
+
+  sorHeading: '理由说明',
+  sorFacts: '事实',
+  sorScope: '范围',
+  sorDuration: '时长',
+  sorAutomationYes: '此裁决使用了自动化。',
+  sorAutomationNo: '此裁决未使用自动化。',
+  sorRule: '规则：{ref}，版本 {revision}',
+  sorAppeal: '如不同意，可使用下面的表单提出申诉。',
+  sorApplying: '裁决仍在执行中。请稍后再来查看。',
 } satisfies SafetyMessages;

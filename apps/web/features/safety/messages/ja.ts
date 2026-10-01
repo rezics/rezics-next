@@ -178,4 +178,14 @@ export default {
   fieldRequired: 'この項目を入力してください。',
   confirmRequired: '続けるにはこの陳述にチェックを入れてください。',
   appealHelp: '判断に同意できない場合は、その理由を書いてください。判断に関わっていない人が確認します。',
+
+  sorHeading: '理由書',
+  sorFacts: '事実',
+  sorScope: '範囲',
+  sorDuration: '期間',
+  sorAutomationYes: 'この判断には自動化が関わりました。',
+  sorAutomationNo: 'この判断には自動化は関わっていません。',
+  sorRule: 'ルール: {ref}、リビジョン {revision}',
+  sorAppeal: '同意できない場合は、下のフォームから異議を申し立てられます。',
+  sorApplying: '判断はまだ適用中です。しばらくしてからもう一度確認してください。',
 } satisfies SafetyMessages;

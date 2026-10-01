@@ -178,4 +178,14 @@ export default {
   fieldRequired: 'Renseignez ce champ.',
   confirmRequired: 'Cochez cette déclaration pour continuer.',
   appealHelp: 'Si vous contestez cette décision, dites pourquoi. Une personne qui n’a pas pris la décision le lit.',
+
+  sorHeading: 'Exposé des motifs',
+  sorFacts: 'Faits',
+  sorScope: 'Portée',
+  sorDuration: 'Durée',
+  sorAutomationYes: 'Une automatisation est intervenue dans cette décision.',
+  sorAutomationNo: 'Aucune automatisation n’est intervenue dans cette décision.',
+  sorRule: 'Règle : {ref}, révision {revision}',
+  sorAppeal: 'Si vous n’êtes pas d’accord, vous pouvez faire appel avec le formulaire ci-dessous.',
+  sorApplying: 'La décision est encore en cours d’application. Revenez dans un moment.',
 } satisfies SafetyMessages;

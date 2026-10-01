@@ -77,6 +77,40 @@ export const NciiDeadline: Story = {
   },
 };
 
+const statement = { facts: 'The post names and threatens a private person.', scope: 'The post only.', duration: 'Until restored.',
+  automation: false, appealRoute: '/v1/public-reports/{caseId}/correspondence' as const, contentLanguage: 'en',
+  rule: { ref: 'urn:rezics:rule:harassment', revision: '3', digest: 'a'.repeat(64) } };
+const operation = (state: 'completed' | 'accepted') => ({ operationId: 'o1', status: state, continuation: null,
+  items: [{ ordinal: 1, target: 'content:post', state: state === 'completed' ? 'confirmed' as const : 'pending' as const,
+    receipt: state === 'completed' ? 'r1' : null, continuation: null, error: null }] });
+
+/** A staff decision's reasons are shown as the API returns them: facts, scope, duration, automation, rule and appeal. */
+export const StatementOfReasons: Story = {
+  args: { initial: { kind: 'loaded', status: status({ state: 'closed', outcome: 'restrict',
+    statementOfReasons: statement, operation: operation('completed') }) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const reasons = within(canvas.getByRole('region', { name: 'Statement of reasons' }));
+    await expect(reasons.getByText('The post names and threatens a private person.')).toBeVisible();
+    await expect(reasons.getByText('Until restored.')).toBeVisible();
+    await expect(reasons.getByText('No automation was involved in this decision.')).toBeVisible();
+    await expect(reasons.getByText('Rule: urn:rezics:rule:harassment, revision 3')).toBeVisible();
+    await expect(reasons.getByText(/you can appeal with the form below/)).toBeVisible();
+    await expect(reasons.queryByRole('status')).toBeNull();
+  },
+};
+
+/** Until every effect is confirmed the page says the decision is still being applied. */
+export const StatementWhileApplying: Story = {
+  args: { initial: { kind: 'loaded', status: status({ state: 'open', outcome: 'restrict',
+    statementOfReasons: { ...statement, automation: true }, operation: operation('accepted') }) } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Automation was involved in this decision.')).toBeVisible();
+    await expect(canvas.getByText(/still being applied/)).toBeVisible();
+  },
+};
+
 /** A copyright decision opens the counter-notice, which warns that the sender's details are disclosed. */
 export const CounterNotice: Story = {
   args: { initial: { kind: 'loaded', status: status({ category: 'copyright', process: 'dmca_512', state: 'closed',

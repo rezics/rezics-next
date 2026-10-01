@@ -196,6 +196,17 @@ const en = {
   fieldRequired: 'Fill this in.',
   confirmRequired: 'Tick this statement to continue.',
   appealHelp: 'If you disagree with this decision, say why. A person who did not make the decision reads it.',
+
+  // The statement of reasons on a decided case
+  sorHeading: 'Statement of reasons',
+  sorFacts: 'Facts',
+  sorScope: 'Scope',
+  sorDuration: 'Duration',
+  sorAutomationYes: 'Automation was involved in this decision.',
+  sorAutomationNo: 'No automation was involved in this decision.',
+  sorRule: 'Rule: {ref}, revision {revision}',
+  sorAppeal: 'If you disagree, you can appeal with the form below.',
+  sorApplying: 'The decision is still being applied. Check back in a little while.',
 };
 
 export type SafetyMessages = typeof en;

@@ -41,6 +41,27 @@ function Step({ step, t, locale }: { step: CaseStep; t: Text; locale: UiLocale }
   </li>;
 }
 
+/** The structured statement a decision wrote, as Main returns it; the writer's own words stay in their language. */
+function StatementOfReasons({ statement, applying, t }: { statement: NonNullable<CaseStatus['statementOfReasons']>;
+  applying: boolean; t: Text }) {
+  const lang = statement.contentLanguage === 'und' ? undefined : statement.contentLanguage;
+  return <section aria-labelledby="case-reasons" className="grid max-w-2xl gap-3 rounded-2xl border border-border/60 p-4 sm:p-5">
+    <h2 id="case-reasons" className="font-semibold">{t.sorHeading}</h2>
+    <dl lang={lang} className="grid gap-x-6 gap-y-3 sm:grid-cols-[max-content_1fr]">
+      <dt className="text-muted-foreground text-sm">{t.sorFacts}</dt>
+      <dd className="whitespace-pre-line text-pretty [overflow-wrap:anywhere]">{statement.facts}</dd>
+      <dt className="text-muted-foreground text-sm">{t.sorScope}</dt>
+      <dd className="whitespace-pre-line text-pretty [overflow-wrap:anywhere]">{statement.scope}</dd>
+      <dt className="text-muted-foreground text-sm">{t.sorDuration}</dt>
+      <dd className="whitespace-pre-line text-pretty [overflow-wrap:anywhere]">{statement.duration}</dd>
+    </dl>
+    <p className="text-sm">{statement.automation ? t.sorAutomationYes : t.sorAutomationNo}</p>
+    <p className="text-sm [overflow-wrap:anywhere]">{fill(t.sorRule, { ref: statement.rule.ref, revision: statement.rule.revision })}</p>
+    <p className="text-sm">{t.sorAppeal}</p>
+    {applying ? <p role="status" className="text-muted-foreground text-sm">{t.sorApplying}</p> : null}
+  </section>;
+}
+
 /** Why a send did not go through. A link Main does not know says so; only a counter-notice is about who may send it. */
 const sendProblem = (failure: Failure, t: Text, locale: UiLocale, refused: string, kind: string) =>
   failure.reason === 'limited' ? fill(t.retryIn, { time: waitText(failure.retryAfter, locale) })
@@ -242,6 +263,8 @@ export function CaseView({ locale, caseId, initial, credential: given, actingSub
       {status.reasons ? <><dt className="text-muted-foreground text-sm">{t.reasons}</dt>
         <dd className="whitespace-pre-line text-pretty [overflow-wrap:anywhere]">{status.reasons}</dd></> : null}
     </dl>
+    {status.statementOfReasons ? <StatementOfReasons statement={status.statementOfReasons} t={t}
+      applying={status.operation !== null && status.operation.status !== 'completed'} /> : null}
     {status.category === 'ncii' ? <p role="note" className="max-w-2xl rounded-2xl bg-muted/60 p-4 text-sm font-medium">
       {t.nciiNotice}</p> : null}
 

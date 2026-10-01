@@ -178,4 +178,14 @@ export default {
   fieldRequired: '이 항목을 입력하세요.',
   confirmRequired: '계속하려면 이 진술에 체크하세요.',
   appealHelp: '이 결정에 동의하지 않는다면 이유를 적어 주세요. 결정에 관여하지 않은 사람이 검토합니다.',
+
+  sorHeading: '사유서',
+  sorFacts: '사실관계',
+  sorScope: '범위',
+  sorDuration: '기간',
+  sorAutomationYes: '이 결정에 자동화가 관여했습니다.',
+  sorAutomationNo: '이 결정에 자동화는 관여하지 않았습니다.',
+  sorRule: '규칙: {ref}, 리비전 {revision}',
+  sorAppeal: '동의하지 않는다면 아래 양식으로 이의를 제기할 수 있습니다.',
+  sorApplying: '결정이 아직 적용되는 중입니다. 잠시 후 다시 확인하세요.',
 } satisfies SafetyMessages;
