@@ -152,6 +152,18 @@ export class EditorialReviewStore {
       || kind === 'merge' && adapter.requiredApprovals !== 2) throw new EditorialInvalid('Invalid adapter');
     return adapter;
   }
+  private async ownerBlockers(adapter: EditorialAdapter, target: EditorialTarget,
+    revision: ProposalRevision, agent: string): Promise<Blocker[]> {
+    if (!adapter.applyBlockers) return [];
+    try {
+      return await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
+        callsLeft: EDITORIAL_STORE_COST.graphCalls,bytesLeft: EDITORIAL_STORE_COST.graphBytes },
+      () => adapter.applyBlockers!(target,revision,agent));
+    } catch (error) {
+      if (error instanceof EditorialBlocked) return [error.blocker];
+      throw error;
+    }
+  }
   private async begin(client: PoolClient, snapshot = false) {
     await client.query(snapshot ? 'BEGIN ISOLATION LEVEL REPEATABLE READ' : 'BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
@@ -278,7 +290,7 @@ export class EditorialReviewStore {
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await client.query('COMMIT'); return replay; }
       await editorialController(client,principal,call.actingSubject);
-      if (principal !== row.proposer_principal) throw new AdmissionDenied('Only the proposer revises this proposal');
+      if (call.actingSubject !== row.proposer_agent) throw new AdmissionDenied('Only the proposer revises this proposal');
       const proposal = rowToProposal(row), old = await this.revision(client,id,input.revision);
       assertOpenRevision(proposal,old); this.pending(await this.application(client,id,row.latest));
       const adapter = await this.adapter(row.kind,call);
@@ -374,6 +386,11 @@ export class EditorialReviewStore {
     }
     catch (error) {
       await client.query('ROLLBACK').catch(() => {});
+      if (error instanceof EditorialBlocked && error.blocker.code === 'owner_command_refused') {
+        await this.begin(client);
+        const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
+        await client.query('COMMIT'); return result;
+      }
       if (error instanceof EditorialBlocked && error.blocker.code === 'budget_exhausted') {
         const delivered = (await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
           UNION ALL SELECT 1 FROM access.editorial_command_admission WHERE application = $1 LIMIT 1`,[application.id])).rowCount;
@@ -387,8 +404,10 @@ export class EditorialReviewStore {
     }
     if (!resolution || resolution.outcome === 'pending') return null;
     await this.begin(client);
-    const result = await this.finish(client,row,revision,application,resolution.outcome,
-      resolution.outcome === 'applied' ? resolution.receipt : undefined);
+    const result = await this.finish(client,row,revision,application,
+      resolution.outcome === 'refused' ? 'cancelled' : resolution.outcome,
+      resolution.outcome === 'applied' ? resolution.receipt : undefined,
+      resolution.outcome === 'refused' ? resolution.blocker : undefined);
     await client.query('COMMIT'); return result;
   }
   async decide(call: EditorialCall, id: string, input: DecisionInput, key: string): Promise<CommandResult> {
@@ -433,6 +452,8 @@ export class EditorialReviewStore {
       const basis = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki,prospective);
       const state = reviewState(proposal,basis.reviews,basis.authority,adapter.requiredApprovals,await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki));
       if (!state.allowedActions.includes('apply')) throw new EditorialBlocked(state.blockers[0] ?? { code: 'review_authority_required' });
+      const ownerBlockers = await this.ownerBlockers(adapter,row.target,revision,call.actingSubject);
+      if (ownerBlockers.length) throw new EditorialBlocked(ownerBlockers[0]!);
       await client.query(`INSERT INTO access.editorial_application
         (id,proposal,revision,principal,actor,operation_key,command_key,command_digest,approve,message,required)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[applicationId,id,revision.n,principal,call.actingSubject,
@@ -454,6 +475,11 @@ export class EditorialReviewStore {
         deliver);
       } catch (error) {
         await client.query('ROLLBACK');
+        if (error instanceof EditorialBlocked && error.blocker.code === 'owner_command_refused') {
+          await this.begin(client);
+          const result = await this.finish(client,row,revision,application,'cancelled',undefined,error.blocker);
+          await client.query('COMMIT'); return result;
+        }
         if (error instanceof EditorialBlocked && error.blocker.code === 'budget_exhausted') {
           const delivered = (await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
             UNION ALL SELECT 1 FROM access.editorial_command_admission WHERE application = $1 LIMIT 1`,[application.id])).rowCount;
@@ -488,7 +514,7 @@ export class EditorialReviewStore {
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await client.query('COMMIT'); return replay; }
       await editorialController(client,principal,call.actingSubject);
-      if (principal !== row.proposer_principal) throw new AdmissionDenied('Only the proposer withdraws this proposal');
+      if (call.actingSubject !== row.proposer_agent) throw new AdmissionDenied('Only the proposer withdraws this proposal');
       assertOpenRevision(rowToProposal(row),await this.revision(client,id,revision)); this.pending(await this.application(client,id,row.latest));
       await client.query(`INSERT INTO access.editorial_decision (proposal,revision,principal,actor,outcome)
         VALUES ($1,$2,$3,$4,'withdrawn')`,[id,revision,principal,call.actingSubject]);
@@ -546,10 +572,23 @@ export class EditorialReviewStore {
         const counted = basis.reviews.some(review => review.outcome === 'approve' && review.reviewerKey === viewer.principalKey);
         if (state.approvalIds.length + (counted ? 0 : 1) >= adapter.requiredApprovals) state.allowedActions.push('approve-and-apply');
       }
+      if (!row.decision && viewer.eligibleReviewer && viewer.principalKey !== row.proposer_key) {
+        const blockers = await this.ownerBlockers(adapter,row.target,revision,viewer.agent);
+        if (blockers.length) {
+          state.blockers.push(...blockers);
+          state.allowedActions = state.allowedActions.filter(action => !['apply','approve-and-apply'].includes(action));
+        }
+      }
       const pending = await this.application(client,id,row.latest);
       if (!row.decision && pending) {
         state.allowedActions = pending.outcome ? state.allowedActions.filter(action => !['apply','approve-and-apply'].includes(action)) : ['recover'];
         state.blockers.push(pending.outcome ? { code: 'revision_required' } : { code: 'apply_pending',operationKey: pending.operation_key });
+        if (pending.outcome) {
+          const retained = (await client.query<{ result: CommandResult }>(`SELECT result FROM access.editorial_command_receipt
+            WHERE principal = $1 AND idempotency_key = $2 AND request_digest = $3`,
+          [pending.principal,pending.command_key,pending.command_digest])).rows[0]?.result;
+          if (retained?.blocker?.code === 'owner_command_refused') state.blockers.push(retained.blocker);
+        }
       }
       const binding = { proposal: id,timeline: 'editorial-v1' }, after = cursorDecode(cursor,binding);
       if (after !== null && (typeof after !== 'string' || !/^(0|[1-9][0-9]*)$/.test(after))) throw new EditorialInvalid('Invalid timeline cursor');
@@ -593,13 +632,13 @@ export class EditorialReviewStore {
       await this.begin(client);
       const principal = call.principal ? await editorialPrincipal(client,call.principal) : null;
       if (options.filter !== 'target' && !principal) throw new AdmissionDenied('Sign in to select this queue');
-      if (options.filter === 'review-requested') await editorialController(client,principal!,call.actingSubject);
+      if (options.filter === 'review-requested' || options.filter === 'mine') await editorialController(client,principal!,call.actingSubject);
       rows = (await client.query<{ id: string; target: EditorialTarget; kind: string; created_at: string }>(`SELECT p.id,p.target,p.kind,p.created_at::text
-        FROM access.editorial_proposal p WHERE ($1 <> 'mine' OR p.proposer_principal = $2)
+        FROM access.editorial_proposal p WHERE ($1 <> 'mine' OR p.proposer_agent = $2)
           AND ($1 <> 'target' OR p.resource = $3)
           AND ($1 <> 'review-requested' OR NOT EXISTS (SELECT 1 FROM access.editorial_decision d WHERE d.proposal = p.id))
           AND ($4::timestamptz IS NULL OR (p.created_at,p.id) < ($4,$5::uuid))
-        ORDER BY p.created_at DESC,p.id DESC LIMIT $6`,[options.filter,principal,options.target ?? null,
+        ORDER BY p.created_at DESC,p.id DESC LIMIT $6`,[options.filter,call.actingSubject,options.target ?? null,
         after?.time ?? null,after?.id ?? null,limit + 1])).rows;
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }

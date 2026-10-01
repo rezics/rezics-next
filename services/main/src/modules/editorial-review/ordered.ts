@@ -1,5 +1,5 @@
 import { canonicalCandidate, EDITORIAL_COST, EditorialInvalid, EditorialReceiptInvalid,
-  type ApplyInput, type ApplyOutcome, type CommandOutcome, type EditorialAdapter, type OwnerCommand } from './contract.ts';
+  type ApplyInput, type ApplyOutcome, type Blocker, type CommandOutcome, type EditorialAdapter, type OwnerCommand } from './contract.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 
 export const ORDERED_COMMAND_COST = { graphCalls: 64, graphBytes: 4 * 1024 * 1024,
@@ -20,6 +20,15 @@ export function checkedCommandOutcome(outcome: CommandOutcome, key: string): Com
   return outcome;
 }
 
+export function commandRefusal(command: CommandOutcome): Extract<Blocker, { code: 'owner_command_refused' }> | null {
+  if (command.outcome === 'applied') return null;
+  const result = command.result;
+  const reason = result && typeof result === 'object' && !Array.isArray(result)
+    && typeof result.code === 'string' && /^[a-z][a-z0-9_]{0,127}$/.test(result.code)
+    ? result.code : command.outcome;
+  return { code: 'owner_command_refused',key: command.key,reason };
+}
+
 /** No later item can overtake an unknown acknowledgement. Receipt-only reads
  * resolve admitted items; authenticated retries dispatch the first undelivered
  * item and continue. Settled outcomes are immutable, including rejected items. */
@@ -33,7 +42,11 @@ export async function applyOrderedCommands(adapter: EditorialAdapter, input: App
   const outcomes: CommandOutcome[] = [];
   for (const [position,command] of commands.entries()) {
     let stored = await input.commands.read(input,position);
-    if (stored.outcome) { outcomes.push(checkedCommandOutcome(stored.outcome,command.key)); continue; }
+    if (stored.outcome) {
+      const checked = checkedCommandOutcome(stored.outcome,command.key), blocker = commandRefusal(checked);
+      if (blocker) return { outcome: 'refused',blocker };
+      outcomes.push(checked); continue;
+    }
     if (Date.now() - started >= ORDERED_COMMAND_COST.deliveryMs) return { outcome: 'pending' };
     const outcome = await fusekiReadBudget.run({ signal: AbortSignal.timeout(ORDERED_COMMAND_COST.commandMs),
       callsLeft: ORDERED_COMMAND_COST.graphCalls,bytesLeft: ORDERED_COMMAND_COST.graphBytes },async () => {
@@ -50,6 +63,8 @@ export async function applyOrderedCommands(adapter: EditorialAdapter, input: App
     if (!outcome) return { outcome: 'pending' };
     const checked = checkedCommandOutcome(outcome,command.key);
     await input.commands.settle(input,position,checked);
+    const blocker = commandRefusal(checked);
+    if (blocker) return { outcome: 'refused',blocker };
     outcomes.push(checked);
   }
   const receipt = await adapter.complete(input,outcomes);

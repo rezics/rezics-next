@@ -24,7 +24,7 @@ import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 import { publicSemantics } from './semantic-disclosure.ts';
-import { checkEditorialAdmission, registerEditorialAdmission } from '../editorial-review/admission.ts';
+import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAuthority } from '../editorial-review/admission.ts';
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
@@ -143,6 +143,7 @@ export class AdmissionDenied extends Error {}
 export class AdmissionUnavailable extends Error {}
 export class AdmissionConflict extends Error {}
 export class AdmissionExpired extends Error {}
+class AuthorityChecked extends Error {}
 
 interface GateRow { authority_epoch: string; open: boolean; dispatch_open: boolean }
 interface SearchReadRow {
@@ -811,6 +812,28 @@ export class AccessAdmissionRegistry {
   }
 
   async register(request: AdmissionRequest, transaction?: PoolClient): Promise<RegisteredAdmission> {
+    return this.registerRequest(request,transaction);
+  }
+
+  /** Probe the ordinary registration policy without retaining an admission,
+   * outbox event or lazily created gate. The same policy runs again at dispatch.
+   * Cost matches one registration's bounded authority reads, with no owner IO. */
+  async assertAuthority(request: Omit<AdmissionRequest, 'editorialPermit' | 'idempotencyKey' | 'requestDigest'>,
+    publicationWork?: string | null): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const probe = { ...request,idempotencyKey: `authority:${Bun.randomUUIDv7()}`,requestDigest: '0'.repeat(64) };
+      await withCommandOwnerAuthority(this.pool,probe,this.baselineGraph,
+        () => this.registerRequest(probe,client,true),publicationWork);
+    } catch (error) {
+      if (!(error instanceof AuthorityChecked)) throw error;
+    } finally {
+      await rollback(client); client.release();
+    }
+  }
+
+  private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false): Promise<RegisteredAdmission> {
     if (request.editorialPermit) {
       const principalId = await this.activePrincipalId(request.principal);
       if (!principalId) throw new AdmissionDenied('principal is not admitted');
@@ -1121,6 +1144,10 @@ export class AccessAdmissionRegistry {
         };
       }
       if (!gate.open) throw new AdmissionDenied('scope is closed');
+      if (authorityOnly) {
+        if (!gate.dispatch_open) throw new AdmissionDenied('scope dispatch is closed');
+        throw new AuthorityChecked();
+      }
 
       const id = Bun.randomUUIDv7();
       const inserted = await client.query<{ expires_at: Date; registered_at: Date }>(

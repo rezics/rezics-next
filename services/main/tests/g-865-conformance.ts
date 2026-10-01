@@ -129,3 +129,38 @@ export async function runEditorialOrderedConformance(module: AdapterFixtureModul
   expect((await apply(f,adapter,f.proposal,input)).receipt).toEqual(result.receipt);
   expect(owners.map(owner => owner.writes())).toEqual([1,1]);
 }
+
+/** A refused command is a failed application, including after an earlier owner
+ * effect. Retained refusal recovery must never call complete or redeliver. */
+export async function runEditorialRefusalConformance(module: AdapterFixtureModule): Promise<void> {
+  for (const refusal of ['rejected','dependency_rejected'] as const) {
+    const f = await module.create();
+    let deliveries = 0, completed = 0;
+    const command = (index: number): EditorialCommand => ({ key: `owner:${index}`,
+      prepare: async () => ({ action: 'test.owner',scope: 'test:owner',digest: f.input.revision.candidateDigest }),
+      resolve: async () => null,
+      execute: async (delivery): Promise<CommandOutcome> => {
+        deliveries++;
+        return { key: delivery.key,outcome: index === 0 ? 'applied' : refusal,
+          receipt: index === 0 ? 'urn:test:success' : null,
+          result: index === 0 ? {} : { code: 'owner_authority_required' } };
+      } });
+    const adapter = { ...f.adapter,commands: async () => [command(0),command(1),command(2)],
+      complete: async () => { completed++; throw new Error('Refused application cannot complete'); } };
+    const input = { ...f.input,commands: new MemoryCommandJournal() };
+    await blocked(apply(f,adapter,f.proposal,input),'owner_command_refused');
+    await blocked(apply(f,adapter,f.proposal,{ ...input,resumeDelivery: false }),'owner_command_refused');
+    await blocked(apply(f,adapter,f.proposal,input),'owner_command_refused');
+    expect(deliveries).toBe(2);
+    expect(completed).toBe(0);
+    expect(f.proposal.decision).toBeNull();
+  }
+
+  const f = await module.create(), success = await apply(f);
+  // Even an adapter bypassing ordered delivery cannot turn a rejected item
+  // inside an apparently successful owner receipt into an applied decision.
+  const bypass = { ...f.adapter,commands: undefined,apply: async () => ({ outcome: 'applied' as const,
+    receipt: { ...success.receipt!,commands: [{ key: 'refused',outcome: 'rejected' as const,
+      receipt: null,result: { code: 'owner_authority_required' } }] } }) };
+  await blocked(apply(f,bypass),'owner_command_refused');
+}

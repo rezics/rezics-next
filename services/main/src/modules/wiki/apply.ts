@@ -145,7 +145,9 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
         dispatch: admission => changeRelationOccurrence(env,{ admission,expectedHead: null,input: relation,beforeCommit: revealClaim }),
         cancel: admission => cancelSemanticAdmission(env,familyReceiptIri(admission.id,'relation-change'),admission) };
     },async result => reveal([position(result.component,predicate.kind === 'property' ? 'statement' : 'relation',
-      claim.revealedAt,result.receipt)],[{ evidence: ids,claim: result.component,kind: predicate.kind === 'property' ? 'statement' : 'relation' }])));
+      claim.revealedAt,result.receipt)],[{ evidence: ids,claim: result.component,kind: predicate.kind === 'property' ? 'statement' : 'relation' }]),
+    predicate.kind === 'property' ? { action: 'statement.record',scope: `statement:speak:${input.permit.decidingAgent}` }
+      : { action: 'relation.change',scope: 'relation:create:root' }));
   }
   const mounts = ['characters','places','events','chapters'] as const;
   for (const segment of mounts) {
@@ -174,7 +176,7 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
         read: id => readCompositionReceipt(env,id,'collection.edit'),
         dispatch: admission => changeComposition(env,{ admission,structure: header.structure,expectedHead: head,operations }),
         cancel: admission => sealStructureAdmissionCancellation(env,admission) };
-      }));
+      },undefined,{ action: 'collection.edit',scope: `collection:edit:${header.owner}` }));
     }
   }
   return commands;

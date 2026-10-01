@@ -46,6 +46,8 @@ export type Blocker =
   | { code: 'stale_base'; expectedHeads: BaseHead[]; actualHeads: BaseHead[] }
   | { code: 'self_review' }
   | { code: 'review_authority_required' }
+  | { code: 'owner_authority_required'; action: string; scope: string }
+  | { code: 'owner_command_refused'; key: string; reason: string }
   | { code: 'required_approvals'; required: number; received: number }
   | { code: 'terminal_decision'; outcome: TerminalDecision['outcome'] }
   | { code: 'owner_unavailable' }
@@ -116,6 +118,9 @@ export interface CommandDelivery {
  * binding before admission, tied to the approved candidate digest. */
 export interface EditorialCommand {
   key: string;
+  /** Current owner authority can be read before delivery, even when the exact
+   * digest depends on an earlier command's newly allocated resource. */
+  authority?(): Promise<Pick<OwnerCommand, 'action' | 'scope'> | null>;
   prepare(settled: readonly CommandOutcome[]): Promise<OwnerCommand>;
   execute(delivery: CommandDelivery, settled: readonly CommandOutcome[]): Promise<CommandOutcome | null>;
   resolve(delivery: CommandDelivery, settled: readonly CommandOutcome[]): Promise<CommandOutcome | null>;
@@ -129,6 +134,7 @@ export interface OrderedCommandJournal {
 }
 export type ApplyOutcome =
   | { outcome: 'applied'; receipt: OwnerReceipt }
+  | { outcome: 'refused'; blocker: Extract<Blocker, { code: 'owner_command_refused' }> }
   | { outcome: 'stale_base'; actualHeads: BaseHead[] }
   | { outcome: 'pending' };
 
@@ -143,6 +149,8 @@ export interface EditorialAdapter {
    * Other owner mechanisms must resolve their own fate, never infer cancellation
    * from a missing graph admission. This is an owner binding, not a kind state. */
   admission?: 'access';
+  /** Advisory current owner authority; dispatch independently rechecks it. */
+  applyBlockers?(target: EditorialTarget, revision: ProposalRevision, agent: ResourceRef): Promise<Blocker[]>;
   validate(target: EditorialTarget, candidate: unknown, expectedHeads: BaseHead[]): Promise<ValidatedCandidate>;
   preview(revision: ProposalRevision): Promise<PreviewChange[]>;
   apply(input: ApplyInput): Promise<ApplyOutcome>;

@@ -69,7 +69,7 @@ test('G865: request_changes replaces a stance; a comment does not discard an app
 
 test('G865: viewer actions and blockers contain no private operator keys', async () => {
   const f = await componentFixture();
-  const own = { agent: native(), principalKey: f.proposal.proposerKey, eligibleReviewer: true };
+  const own = { agent: f.proposal.proposer, principalKey: f.proposal.proposerKey, eligibleReviewer: true };
   const state = reviewState(f.proposal, f.reviews, f.authority, 1, own);
   expect(state.allowedActions).toEqual(['revise', 'withdraw']);
   expect(JSON.stringify(state)).not.toContain(f.proposal.proposerKey);

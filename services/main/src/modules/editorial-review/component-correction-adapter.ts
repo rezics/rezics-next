@@ -6,6 +6,7 @@ import { canonicalCandidate, checkedHeads, EditorialBlocked, EditorialInvalid, h
   revisionOperationKey, type EditorialTarget, type Json, type OwnerReceipt, type ValidatedCandidate } from './contract.ts';
 import { assertOwnerReceipt } from './lifecycle.ts';
 import { componentOwners, resolveComponent, type EditorialRuntime } from './runtime.ts';
+import { ownerAuthorityBlockers } from './owner-authority.ts';
 
 type Candidate = { command: 'work-metadata'; state: MetadataState }
   | { command: 'semantic-change'; state: ComponentInput };
@@ -125,6 +126,9 @@ export function componentCorrectionAdapter(owners: ComponentCorrectionOwners): E
 export const adapterModule = { kind: 'component-correction',
   create(dependencies: ComponentCorrectionOwners | EditorialRuntime): EditorialAdapter {
     if ('work' in dependencies) return { ...componentCorrectionAdapter(componentOwners(dependencies)),
-      admission: 'access',resolve: input => resolveComponent(dependencies,input) };
+      admission: 'access',resolve: input => resolveComponent(dependencies,input),
+      applyBlockers: (target,revision,agent) => revision.ownerCommand
+        ? ownerAuthorityBlockers(dependencies,agent,[revision.ownerCommand])
+        : Promise.resolve([{ code: 'owner_unavailable' }]) };
     return componentCorrectionAdapter(dependencies);
   } } satisfies EditorialAdapterModule<ComponentCorrectionOwners | EditorialRuntime>;

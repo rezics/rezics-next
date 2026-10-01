@@ -1,6 +1,8 @@
 import { canonicalCandidate, type ApplyInput, type BaseHead, type CommandOutcome,
   type EditorialAdapter, type EditorialAdapterModule, type EditorialCommand, type EditorialTarget,
   type OwnerReceipt, type ProposalRevision, type ValidatedCandidate } from './contract.ts';
+import { revisionOperationKey } from './contract.ts';
+import { ownerAuthorityBlockers } from './owner-authority.ts';
 import { applyOrderedCommands } from './ordered.ts';
 import type { EditorialRuntime } from './runtime.ts';
 import { extractionCandidate, wikiSnapshot } from '../wiki/apply-snapshot.ts';
@@ -12,6 +14,7 @@ import { isDeltaRevert, validateWikiDelta, validateDeltaRevert, wikiDeltaCommand
   wikiDeltaRevertCommands, wikiDeliveryFence } from '../wiki/delta-runtime.ts';
 
 export interface WikiAdapterOwners {
+  applyBlockers?: EditorialAdapter['applyBlockers'];
   validate(target: EditorialTarget, candidate: unknown, expected: BaseHead[]): Promise<ValidatedCandidate>;
   commands(input: ApplyInput): Promise<EditorialCommand[]>;
   complete(input: ApplyInput, outcomes: readonly CommandOutcome[]): Promise<OwnerReceipt>;
@@ -21,6 +24,7 @@ export interface WikiAdapterOwners {
 export function wikiBundleAdapter(owners: WikiAdapterOwners): EditorialAdapter {
   const adapter: EditorialAdapter = { kind: 'wiki-bundle',requiredApprovals: 1,
     validate: owners.validate,commands: owners.commands,complete: owners.complete,disclose: owners.disclose,
+    applyBlockers: owners.applyBlockers,
     apply: input => applyOrderedCommands(adapter,input),compensate: async receipt => owners.compensate
       ? owners.compensate(receipt) : compensateWikiReceipt(receipt),
     async preview(revision) {
@@ -41,15 +45,28 @@ export const adapterModule = { kind: 'wiki-bundle',
   create(dependencies: WikiAdapterOwners | EditorialRuntime & { actingSubject: string }): EditorialAdapter {
     if (!('work' in dependencies)) return wikiBundleAdapter(dependencies);
     const runtime = dependencies;
+    const plan = (input: ApplyInput) => isWikiDelta(input.revision.candidate)
+      ? wikiDeltaCommands(runtime,input) : isDeltaRevert(input.revision.candidate) ? wikiDeltaRevertCommands(runtime,input)
+        : isWikiRetraction(input.revision.candidate) ? wikiRetractionCommands(runtime,input) : wikiCommands(runtime,input);
     return wikiBundleAdapter({
+      async applyBlockers(target,revision,agent) {
+        const commands = await plan({ target,revision,expectedHeads: revision.baseHeads,
+          operationKey: revisionOperationKey(revision.proposal,revision.n),
+          permit: { proof: revision.proposal,proposal: revision.proposal,revision: revision.n,
+            candidateDigest: revision.candidateDigest,decidingAgent: agent } });
+        const requirements = [{ action: 'work.edit',scope: `work:edit:${target.resource}` }];
+        for (const command of commands) {
+          const authority = await command.authority?.();
+          if (authority) requirements.push(authority);
+        }
+        return ownerAuthorityBlockers(runtime,agent,requirements,target.work);
+      },
       validate: (target,candidate,expected) => isWikiDelta(candidate) ? validateWikiDelta(runtime,target,candidate,expected)
         : isDeltaRevert(candidate) ? validateDeltaRevert(runtime,target,candidate.proposal,expected)
           : isWikiRetraction(candidate) ? validateWikiRetraction(runtime,target,candidate,expected) : wikiSnapshot(runtime,target,candidate,expected),
       commands: async input => {
         await wikiDeliveryFence(runtime,input);
-        return isWikiDelta(input.revision.candidate)
-        ? wikiDeltaCommands(runtime,input) : isDeltaRevert(input.revision.candidate) ? wikiDeltaRevertCommands(runtime,input)
-          : isWikiRetraction(input.revision.candidate) ? wikiRetractionCommands(runtime,input) : wikiCommands(runtime,input);
+        return plan(input);
       },
       complete: completeWikiBundle,
       compensate: async receipt => isWikiDelta(receipt.candidate)

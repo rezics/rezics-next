@@ -97,11 +97,11 @@ export async function independent(client: PoolClient, proposal: Proposal, princi
 }
 export async function viewerFor(client: PoolClient, proposal: Proposal, principal: string,
   agent: string, graph: Pick<FusekiClient,'query'> | undefined): Promise<Viewer> {
-  const own = independenceKey(proposal.id, principal) === proposal.proposerKey;
+  const own = agent === proposal.proposer;
   const eligible = await humanReviewer(proposal, agent, graph)
     && await canReview(client, principal, agent, proposal.target,graph);
   const separate = await independent(client, proposal, principal, agent);
-  return { agent, principalKey: !own && !separate ? proposal.proposerKey : independenceKey(proposal.id, principal),
+  return { agent, principalKey: !separate ? proposal.proposerKey : independenceKey(proposal.id, principal),
     eligibleReviewer: eligible, ownsProposal: own };
 }
 export async function requireReview(client: PoolClient, proposal: Proposal, principal: string, agent: string,

@@ -268,11 +268,11 @@ test('G-865: durable API lifecycle binds current independent review to header an
     const semantic = await propose({ command: 'semantic-change',state: semanticState('Reviewed fact') },[{ component: work.work,head: work.workRevision }]);
     // The review role includes Work edits, but cannot substitute for the
     // semantic owner's ordinary target permission (shared kernel conformance).
-    const deniedSemantic = await json<{ blocker: { code: string } }>(await decide(semantic.proposal,1),409);
-    expect(deniedSemantic.blocker.code).toBe('revision_required'); expect(semanticWrites).toBe(0);
+    const deniedSemantic = await json<{ blocker: { code: string } }>(await decide(semantic.proposal,1),403);
+    expect(deniedSemantic.blocker.code).toBe('owner_authority_required'); expect(semanticWrites).toBe(0);
     expect((await f.accessPool.query(`SELECT o.outcome FROM access.editorial_application_outcome o
       JOIN access.editorial_application a ON a.id = o.application WHERE a.proposal = $1`,[semantic.proposal])).rows)
-      .toEqual([{ outcome: 'cancelled' }]);
+      .toEqual([]); // Preflight denies before retaining an application intent.
     await f.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING',[`semantic:edit:${work.work}`]);
     for (const [agent,principal] of [[actorB,f.otherPrincipal],[actorC,principalC]]) {
       await f.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)

@@ -23,7 +23,7 @@ export function dependencyRejected(key: string): CommandOutcome {
 export function wikiGraphCommand(runtime: EditorialRuntime, key: string,
   build: (settled: readonly CommandOutcome[]) => Promise<WikiGraphCommand | null>,
   finalize: (result: { component: string; revision: string; receipt: string }, settled: readonly CommandOutcome[]) => Promise<void>
-    = async () => {}): EditorialCommand {
+    = async () => {}, deferredAuthority?: Pick<OwnerCommand, 'action' | 'scope'>): EditorialCommand {
   const finish = async (delivery: CommandDelivery, settled: readonly CommandOutcome[], spec: WikiGraphCommand) => {
     if (!delivery.admissionId) return null;
     const terminal = await spec.read(delivery.admissionId);
@@ -41,6 +41,7 @@ export function wikiGraphCommand(runtime: EditorialRuntime, key: string,
     return { key,outcome: 'applied' as const,receipt: terminal.receipt,result };
   };
   return { key,
+    authority: async () => (await build([]))?.binding ?? deferredAuthority ?? null,
     prepare: async settled => (await build(settled))?.binding ?? { action: 'wiki.dependency-rejected',scope: 'wiki:dependency',
       digest: canonicalCandidate({ key,code: 'dependency_rejected' }).digest },
     resolve: async (delivery,settled) => {

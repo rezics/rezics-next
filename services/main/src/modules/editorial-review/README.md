@@ -20,6 +20,10 @@ Review authority covers publicly readable Works. A private Work additionally
 requires the reviewer's current Work-specific edit grant; a read grant plus a
 global review role or contextual review grant cannot authorize its correction.
 Private independence keys never enter API history, errors or hook events.
+Open proposals belong to their proposer Agent. A replacement credential with
+current control of that same Agent can revise, withdraw and find them in its
+own queue. Control of another Agent, even by the original principal, does not
+transfer ownership or make that operator independent for review.
 
 The current-candidate rule follows the
 [protected-review precedent](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-pull-request-reviews-before-merging)
@@ -50,6 +54,15 @@ lifecycle rather than treating a foreign owner effect as cancelled.
 Ordinary reads take no exclusive proposal lock. Pending recovery attempts that
 lock without waiting; an active owner delivery remains readable as pending.
 A SQL snapshot keeps each returned revision, decision and timeline coherent.
+Ordered delivery stops at the first rejected or dependency-rejected owner
+command. Its immutable outcome cancels the application attempt, never creates
+an applied decision, and remains visible as `owner_command_refused` alongside
+`revision_required`. Recovery and retry inspect that same outcome without
+redelivery or completion; any earlier effects remain in the owner journals.
+Current read actions and decision preflight also probe the ordinary Access
+owner policy without retaining an admission. Missing authority removes apply
+actions and identifies the action/scope in `owner_authority_required`; the
+real command still checks authority again at registration and claim.
 
 `component-correction` calls the existing Work header metadata and semantic
 commands in process. The header corrects existing title/description fields.
@@ -92,7 +105,8 @@ declared graph budget; owner validators retain their tighter limits.
 
 The conformance suite rejects stale approvals, dependent reviewers, malformed or
 absent receipts, an implicit second decision, altered targets/permits and deliberate
-regressions. The integration journey exercises actual Access/graph admissions,
+regressions, including refused command delivery and receipt-only recovery for
+every installed adapter. The integration journey exercises actual Access/graph admissions,
 header and semantic corrections, revision, rejection, withdrawal, compensation,
 concurrent decisions, lost-response/process recovery, authority revocation,
 immutable SQL guards, cursors and hook ordering. These prove the named bounded

@@ -1,5 +1,5 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import type { AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { setWorkMetadata, readMetadataReceipt } from '../work/metadata-command.ts';
 import { metadataComponent, checkedMetadataState, StaleWorkMetadata } from '../work/metadata-schema.ts';
@@ -63,6 +63,8 @@ export function componentOwners(runtime: EditorialRuntime): ComponentCorrectionO
       } catch (error) {
         if (error instanceof StaleWorkMetadata) return { outcome: 'stale_base',actualHeads: (await owners.readMetadata(input.target)).heads };
         if (error instanceof PendingAdmittedWork) return { outcome: 'pending' };
+        if (error instanceof AdmissionDenied) return { outcome: 'refused',
+          blocker: { code: 'owner_command_refused',key: input.operationKey,reason: 'owner_authority_required' } };
         throw error;
       }
     },
@@ -75,6 +77,8 @@ export function componentOwners(runtime: EditorialRuntime): ComponentCorrectionO
       } catch (error) {
         if (error instanceof StaleSemanticHead) return { outcome: 'stale_base',actualHeads: (await owners.readSemantic(input.target,state.component)).heads };
         if (error instanceof PendingAdmittedWork) return { outcome: 'pending' };
+        if (error instanceof AdmissionDenied) return { outcome: 'refused',
+          blocker: { code: 'owner_command_refused',key: input.operationKey,reason: 'owner_authority_required' } };
         throw error;
       }
     },

@@ -110,7 +110,7 @@ export async function checkEditorialAdmission(client: PoolClient, admission: str
 
 /** An entity edit also belongs to each Work that owns its semantic record,
  * independently of the proposal's Work and its reviewing steward. */
-async function withCommandOwnerAuthority<T>(pool: Pool, request: AdmissionRequest,
+export async function withCommandOwnerAuthority<T>(pool: Pool, request: AdmissionRequest,
   graph: Pick<FusekiClient,'query'> | undefined, operation: () => Promise<T>, publicationWork?: string | null): Promise<T> {
   const works = new Set(publicationWork ? [publicationWork] : []);
   if (request.scope.startsWith('semantic:edit:')) {

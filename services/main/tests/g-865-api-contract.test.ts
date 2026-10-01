@@ -22,6 +22,10 @@ test('G865: generated API exposes the common lifecycle, optional public reads an
   const actions = result.properties?.allowedActions?.items;
   expect(actions?.enum?.includes('recover') ?? actions?.anyOf?.some(action => action.const === 'recover')).toBe(true);
   expect(result.properties?.staleApprovalIdsComplete).toBeDefined();
+  const blockers = result.properties?.blockers?.items?.anyOf ?? [];
+  for (const code of ['owner_authority_required','owner_command_refused']) {
+    expect(blockers.some(schema => schema.properties?.code?.const === code)).toBe(true);
+  }
   const recovery = document.paths[`${root}/{proposal}/recovery`]!.post!;
   expect(recovery.security).toEqual([{}, { bearerAuth: [] }]);
   expect(recovery.parameters?.some(parameter => parameter.name === 'Idempotency-Key') ?? false).toBe(false);

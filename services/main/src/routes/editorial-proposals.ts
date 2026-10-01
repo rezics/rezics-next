@@ -43,6 +43,8 @@ export const editorialBlocker = t.Union([
   t.Object({ code: t.Literal('stale_revision'),latestRevision: n }),
   t.Object({ code: t.Literal('stale_base'),expectedHeads: heads,actualHeads: heads }),
   t.Object({ code: t.Literal('self_review') }),t.Object({ code: t.Literal('review_authority_required') }),
+  t.Object({ code: t.Literal('owner_authority_required'),action: ref,scope: ref }),
+  t.Object({ code: t.Literal('owner_command_refused'),key: ref,reason: ref }),
   t.Object({ code: t.Literal('required_approvals'),required: n,received: t.Integer({ minimum: 0 }) }),
   t.Object({ code: t.Literal('terminal_decision'),outcome: terminalOutcome }),
   t.Object({ code: t.Literal('owner_unavailable') }),t.Object({ code: t.Literal('revision_required') }),
@@ -79,7 +81,7 @@ const optionalSecurity: { security: Record<string,string[]>[] } = { security: [{
 
 export function editorialError(error: unknown): Response {
   if (error instanceof EditorialBlocked) {
-    const status = ['self_review','review_authority_required'].includes(error.blocker.code) ? 403
+    const status = ['self_review','review_authority_required','owner_authority_required'].includes(error.blocker.code) ? 403
       : error.blocker.code === 'owner_unavailable' ? 503 : 409;
     return Response.json({ type: `https://rezics.com/problems/editorial_${error.blocker.code}`,
       title: error.blocker.code,status,code: `editorial_${error.blocker.code}`,blocker: error.blocker },

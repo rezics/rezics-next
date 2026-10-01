@@ -177,6 +177,7 @@ export interface MainWorkDependencies {
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
     | 'canReadStandingRating' | 'canLinkTranslation' | 'canEditWork' | 'activePrincipalId'>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
+    & Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'hasNonBaselineWorkCreateAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'withRealmPolicy'>>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'

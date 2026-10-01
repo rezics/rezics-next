@@ -2,7 +2,7 @@ import { canonicalCandidate, EditorialBlocked, EditorialInvalid, EditorialReceip
   headsEqual, revisionOperationKey, type ApplyInput, type Blocker, type EditorialAdapter,
   type OwnerReceipt, type Proposal, type ProposalReview, type ProposalRevision,
   type ResourceRef, type TerminalDecision } from './contract.ts';
-import { applyOrderedCommands, checkedCommandOutcome } from './ordered.ts';
+import { applyOrderedCommands, checkedCommandOutcome, commandRefusal } from './ordered.ts';
 
 /** Authority results come from a fresh Access read under its decision fence.
  * Reusing the authority observed when a review was submitted is forbidden. */
@@ -69,7 +69,7 @@ export function reviewState(proposal: Proposal, reviews: readonly ProposalReview
   if (approvalIds.length < required) blockers.push({ code: 'required_approvals', required, received: approvalIds.length });
   const own = viewer.principalKey === proposal.proposerKey || viewer.agent === proposal.proposer;
   if (own) {
-    if (viewer.ownsProposal !== false) allowedActions.push('revise', 'withdraw');
+    if (viewer.ownsProposal ?? viewer.agent === proposal.proposer) allowedActions.push('revise', 'withdraw');
     blockers.push({ code: 'self_review' });
   } else if (viewer.eligibleReviewer) {
     allowedActions.push('review', 'reject');
@@ -101,7 +101,11 @@ export function assertOwnerReceipt(receipt: OwnerReceipt,
     if (!receipt.commands.length || new Set(receipt.commands.map(command => command.key)).size !== receipt.commands.length) {
       throw new EditorialReceiptInvalid('Ordered receipt lacks unique command outcomes');
     }
-    for (const command of receipt.commands) checkedCommandOutcome(command,command.key);
+    for (const command of receipt.commands) {
+      checkedCommandOutcome(command,command.key);
+      const blocker = commandRefusal(command);
+      if (blocker) throw new EditorialBlocked(blocker);
+    }
   }
 }
 
@@ -129,6 +133,7 @@ export async function applyReviewedRevision(adapter: EditorialAdapter, proposal:
     throw new EditorialBlocked(blocker ?? { code: 'review_authority_required' });
   }
   const result = adapter.commands ? await applyOrderedCommands(adapter,input) : await adapter.apply(input);
+  if (result.outcome === 'refused') throw new EditorialBlocked(result.blocker);
   if (result.outcome === 'stale_base') throw new EditorialBlocked({ code: 'stale_base',
     expectedHeads: input.expectedHeads, actualHeads: result.actualHeads });
   if (result.outcome === 'pending') throw new EditorialBlocked({ code: 'apply_pending', operationKey: input.operationKey });
