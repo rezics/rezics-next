@@ -27,6 +27,7 @@ import { ReasoningInputRejected, ReasoningProfileRejected } from '../modules/sem
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest,
   withdrawStatement, withdrawStatementRequest,
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
+import { resolveTargets } from '../modules/target/resolve.ts';
 import { StatementNotFound, readStatement, resolveStatementAcceptance } from '../modules/statement/read.ts';
 import { CUTOVER_FAMILY, MIGRATION_FAMILY, cutoverRequest, cutoverV1Decisions,
   migrateV1Decision, migrationRequest } from '../modules/statement/migrate-v1.ts';
@@ -748,6 +749,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const read = await readingPositionRead(work, request, principal, query.actingSubject, async boundary => {
           const statement = await readStatement(env, `https://rezics.com/id/${params.id}`,
             privateReader(principal, query.actingSubject ?? null));
+          await resolveTargets(boundary.session,[statement.subject,
+            ...(statement.value.kind === 'resource' ? [statement.value.iri] : [])],'collection-member');
           const records = [statement.statement, statement.subject, ...statement.applicability,
             ...(statement.value.kind === 'resource' ? [statement.value.iri] : [])];
           const visible = await boundary.visible(records);

@@ -101,6 +101,7 @@ export interface MainWorkDependencies {
   zoneBrowse?: import('../modules/zone-browse/store.ts').BrowseEntryReader;
   mcp?: import('./mcp.ts').McpConfig;
   wikiQuotations?: QuotationReader;
+  wikiEvidence?: import('../modules/wiki/evidence.ts').WikiEvidenceStore;
   editorialReview?: import('../modules/editorial-review/store.ts').EditorialReviewStore;
   types?: import('../modules/types/store.ts').AdmittedTypeStore;
   editionPreferences?: import('../modules/session/preference-store.ts').EditionPreferenceStore;

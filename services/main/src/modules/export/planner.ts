@@ -54,12 +54,13 @@ export interface ExportBasis {
 
 /** Exact Content rights-material key derived by an owner reader, never from a request. */
 export interface ExportRightsMaterialKey {
-  scopeKind: 'source_provider' | 'source_record' | 'content_variant' | 'media_asset';
+  scopeKind: 'source_provider' | 'source_record' | 'content_variant' | 'media_asset' | 'wiki_evidence';
   provider: string | null;
   namespace: string | null;
   sourceRecordId: string | null;
   contentVariantId: string | null;
   mediaAsset: string | null;
+  wikiEvidenceId?: string | null;
   component: string;
 }
 

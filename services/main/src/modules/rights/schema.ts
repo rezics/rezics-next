@@ -7,7 +7,7 @@ import { bigint, jsonb, pgSchema, primaryKey, smallint, text, timestamp, uuid } 
 const rights = pgSchema('rights');
 const at = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
-export const materialScopes = ['source_provider', 'source_record', 'content_variant', 'media_asset', 'work'] as const;
+export const materialScopes = ['source_provider', 'source_record', 'content_variant', 'media_asset', 'work', 'wiki_evidence'] as const;
 export const expressionKinds = ['fact', 'expression', 'compilation', 'media', 'service', 'unknown'] as const;
 export const assessmentFamilies = ['data_rights', 'service_terms'] as const;
 export const useKinds = ['acquisition', 'raw_retention', 'wiki_display', 'search', 'media_delivery',
@@ -29,6 +29,7 @@ export const material = rights.table('material', {
   contentVariantId: text('content_variant_id'),
   mediaAsset: text('media_asset'),
   workId: text('work_id'),
+  wikiEvidenceId: text('wiki_evidence_id'),
   component: text('component').notNull(),
   expressionKind: text('expression_kind', { enum: expressionKinds }).notNull(),
   createdAt: at('created_at').notNull(),

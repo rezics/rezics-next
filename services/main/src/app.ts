@@ -117,6 +117,7 @@ import { typeAdministrationRoutes } from './routes/types.ts';
 import { queryRoutes } from './routes/query.ts';
 import { savedFilterRoutes } from './routes/saved-filters.ts';
 import { wikiRoutes, wikiSchemaError } from './routes/wiki.ts';
+import { wikiEvidenceRoutes } from './routes/wiki-evidence.ts';
 import { rateLimitHook } from './modules/rate-limit/hook.ts';
 import { composeDisclosure } from './modules/disclosure/assembly.ts';
 
@@ -166,6 +167,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(collectionGrainRoutes(work))
     .use(catalogueCandidateRoutes(work))
     .use(wikiRoutes(fuseki, work))
+    .use(wikiEvidenceRoutes(work))
     .use(editorialProposalRoutes(work))
     .use(suitabilityRoutes(work))
     .use(sessionsRoutes(work))

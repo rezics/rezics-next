@@ -18,7 +18,7 @@ export const ASSESS_SCOPE = 'rights:assess';
 export interface MaterialScope {
   scopeKind: typeof materialScopes[number];
   provider: string | null; namespace: string | null; sourceRecordId: string | null;
-  contentVariantId: string | null; mediaAsset: string | null; workId?: string | null; component: string;
+  contentVariantId: string | null; mediaAsset: string | null; workId?: string | null; wikiEvidenceId?: string | null; component: string;
 }
 export interface UseKey { family: typeof assessmentFamilies[number]; useKind: typeof useKinds[number]; useScope: string }
 export interface AssessmentInput extends UseKey {
@@ -112,7 +112,8 @@ function normalize(error: unknown): Error {
 
 function validMaterial(material: MaterialScope): boolean {
   return (materialScopes as readonly string[]).includes(material.scopeKind) && componentPattern.test(material.component)
-    && (material.scopeKind !== 'work' || agentPattern.test(material.workId ?? ''));
+    && (material.scopeKind !== 'work' || agentPattern.test(material.workId ?? ''))
+    && (material.scopeKind !== 'wiki_evidence' || agentPattern.test(material.wikiEvidenceId ?? ''));
 }
 
 /**
@@ -251,9 +252,9 @@ export class RightsStore {
       FROM rights.material WHERE scope_kind = $1 AND provider IS NOT DISTINCT FROM $2
         AND namespace IS NOT DISTINCT FROM $3 AND source_record_id IS NOT DISTINCT FROM $4
         AND content_variant_id IS NOT DISTINCT FROM $5 AND media_asset IS NOT DISTINCT FROM $6
-        AND work_id IS NOT DISTINCT FROM $7 AND component = $8`,
+        AND work_id IS NOT DISTINCT FROM $7 AND component = $8 AND wiki_evidence_id IS NOT DISTINCT FROM $9`,
     [material.scopeKind, material.provider, material.namespace, material.sourceRecordId, material.contentVariantId,
-      material.mediaAsset, material.workId ?? null, material.component])).rows[0];
+      material.mediaAsset, material.workId ?? null, material.component, material.wikiEvidenceId ?? null])).rows[0];
   }
 
   async assess(principal: VerifiedPrincipal, input: AssessmentInput): Promise<Assessment & { replayed: boolean }> {
@@ -283,12 +284,12 @@ export class RightsStore {
         return { ...await this.read(client, prior.id), replayed: true };
       }
       await client.query(`INSERT INTO rights.material (id, scope_kind, provider, namespace, source_record_id,
-          content_variant_id, media_asset, work_id, component, expression_kind)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          content_variant_id, media_asset, work_id, component, expression_kind, wiki_evidence_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT DO NOTHING`,
       [randomUUID(), input.material.scopeKind, input.material.provider, input.material.namespace,
         input.material.sourceRecordId, input.material.contentVariantId, input.material.mediaAsset,
-        input.material.workId ?? null, input.material.component, input.expressionKind]);
+        input.material.workId ?? null, input.material.component, input.expressionKind, input.material.wikiEvidenceId ?? null]);
       const material = await this.findMaterial(client, input.material);
       if (!material) throw new RightsStale('material identity is unavailable');
       if (material.expression_kind !== input.expressionKind) {
@@ -386,8 +387,8 @@ export class RightsStore {
         extent: Record<string, unknown> | null; obligations: Array<{ kind: string; instrument: string;
           applies_to: string; notice: string | null }> }>(`WITH requested AS (
           SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::uuid[],
-            $6::text[], $7::text[], $8::text[]) AS r(ordinal, scope_kind, provider,
-              namespace, source_record_id, content_variant_id, media_asset, component)
+            $6::text[], $7::text[], $8::text[], $11::text[]) AS r(ordinal, scope_kind, provider,
+              namespace, source_record_id, content_variant_id, media_asset, component, wiki_evidence_id)
         )
         SELECT r.ordinal, m.id, m.expression_kind, a.id AS assessment_id, a.basis, a.outcome,
           a.license_instrument, a.exception_kind, a.rationale, a.extent,
@@ -398,6 +399,7 @@ export class RightsStore {
             AND m.source_record_id IS NOT DISTINCT FROM r.source_record_id
             AND m.content_variant_id IS NOT DISTINCT FROM r.content_variant_id
             AND m.media_asset IS NOT DISTINCT FROM r.media_asset AND m.component = r.component
+            AND m.wiki_evidence_id IS NOT DISTINCT FROM r.wiki_evidence_id
           LIMIT 1) m ON true
         LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'data_rights'
           AND h.use_kind = $9 AND h.use_scope = $10
@@ -410,7 +412,7 @@ export class RightsStore {
         valid.map(item => item.identity.material.provider), valid.map(item => item.identity.material.namespace),
         valid.map(item => item.identity.material.sourceRecordId), valid.map(item => item.identity.material.contentVariantId),
         valid.map(item => item.identity.material.mediaAsset), valid.map(item => item.identity.material.component),
-        useKind, scope,
+        useKind, scope, valid.map(item => item.identity.material.wikiEvidenceId ?? null),
       ]) : Promise.resolve({ rows: [] }),
       enforceable.length ? this.access.query<{ ordinal: number; decision_id: string | null }>(`WITH requested AS (
           SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::text[]) AS r(

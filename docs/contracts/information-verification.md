@@ -157,14 +157,12 @@ the wiki+ positioning. The rules it relies on:
   reviews, library status, discussion, relations and lists; the wiki Zone is its
   deep end, not a replacement.
 
-The shared capabilities this needs are missing today (R51): an evidence profile
-for externally held text with selectors, rights, continuity and revelation
-position; bounded batch reconciliation; a contribution-bundle lifecycle
-(validate, preview, submit, review, accept or reject, withdraw, receipt);
-dependency-safe publication across entities and statements; and MCP bindings
-for those operations. The first proof is one Work with two language editions,
-a wiki Zone and a chapter update, measured in editor minutes per accepted claim
-against manual work at equal quality.
+External-text evidence, reviewed bundle publication, dependency outcomes and
+revelation positions now share the existing proposal and owner-command lifecycle.
+What remains missing (R51) is bounded chapter-delta reconciliation and its MCP
+bindings. The first editorial benchmark still needs one Work with two language
+editions, a wiki Zone and a chapter update, measured in editor minutes per accepted
+claim against manual work at equal quality.
 
 Each Realm decides whether agents may draft and whether generated prose is
 permitted. Facts and structure are the default because fluent prose can hide

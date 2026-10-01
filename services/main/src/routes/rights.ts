@@ -35,9 +35,9 @@ const instrument = t.String({ pattern: '^https?://[^\\s]{1,500}$' });
 const noStore = { headers: { 'cache-control': 'no-store' } };
 
 const material = t.Object({
-  scopeKind: literals(['source_provider', 'source_record', 'content_variant', 'media_asset', 'work']),
+  scopeKind: literals(['source_provider', 'source_record', 'content_variant', 'media_asset', 'work', 'wiki_evidence']),
   provider: nullable(100), namespace: nullable(100), sourceRecordId: t.Nullable(uuid),
-  contentVariantId: nullable(300), mediaAsset: t.Nullable(agent), workId: t.Optional(t.Nullable(agent)),
+  contentVariantId: nullable(300), mediaAsset: t.Nullable(agent), workId: t.Optional(t.Nullable(agent)), wikiEvidenceId: t.Optional(t.Nullable(agent)),
   component: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }) }, { additionalProperties: false });
 const useKey = {
   family: literals(['data_rights', 'service_terms']),

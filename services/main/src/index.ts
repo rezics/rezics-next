@@ -4,6 +4,7 @@ import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { Pool } from 'pg';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
+import { WikiEvidenceStore } from './modules/wiki/evidence.ts';
 import { AdmittedTypeStore } from './modules/types/store.ts';
 import { ReadingPositionStore } from './modules/reading-position/store.ts';
 import { createHash } from 'node:crypto';
@@ -352,6 +353,7 @@ const libraryImport = new ReaderLibraryImportStore(contentPool, {
 const app = createMainApp(fuseki, {
   mcp: { issuer: config.ACCOUNT_ISSUER, resource: config.ACCOUNT_MAIN_RESOURCE },
   wikiQuotations: new WikiQuotationStore(contentPool),
+  wikiEvidence: new WikiEvidenceStore(contentPool),
   editorialReview: new EditorialReviewStore(pool),
   types,
   suitability: new SuitabilityStore(pool, access),

@@ -180,17 +180,20 @@ export interface WithdrawStatementInput {
   speaker: StatementSpeaker;
   expectedHead: string;
   actingSubject: string;
+  /** Server-bound reviewed compensation may retract a prior speaker's source.
+   * Ordinary transports never accept this field; admission still binds its scope. */
+  originalSpeaker?: string;
 }
 
 export function withdrawStatementRequest(input: WithdrawStatementInput) {
   if (!nativeId.test(input.statement) || !nativeId.test(input.expectedHead)
-    || !nativeId.test(input.actingSubject)
+    || !nativeId.test(input.actingSubject) || input.originalSpeaker !== undefined && !nativeId.test(input.originalSpeaker)
     || (input.speaker.kind === 'realm' && !nativeId.test(input.speaker.realm))) {
     throw new InvalidContextCommand('invalid Statement withdrawal');
   }
-  return { ...STATEMENT_AUTHORITY.speak(speakerIri(input)), action: 'statement.withdraw',
+  return { ...STATEMENT_AUTHORITY.speak(input.originalSpeaker ?? speakerIri(input)), action: 'statement.withdraw',
     digest: hash(JSON.stringify([STATEMENT_FAMILIES.withdraw, input.statement, input.speaker,
-      input.expectedHead, input.actingSubject])) };
+      input.expectedHead, input.actingSubject,...(input.originalSpeaker ? [input.originalSpeaker] : [])])) };
 }
 
 /** Withdraw the source without erasing its meaning or its retained active revision. */
@@ -200,7 +203,7 @@ export async function withdrawStatement(env: WorkActivationEnvironment, admissio
   const family = STATEMENT_FAMILIES.withdraw;
   const existing = await readCommandReceipt(env, admission.id, family);
   if (existing) return checkedCommandReceipt(existing, admission, request.digest);
-  const speaker = speakerIri(input);
+  const speaker = input.originalSpeaker ?? speakerIri(input);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     SELECT ?head ?state WHERE {
