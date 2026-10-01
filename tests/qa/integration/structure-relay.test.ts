@@ -38,7 +38,7 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
     await initializeRelayCheckpoint(relay, consumer, f.env.lineage.dataEpoch);
 
     const book = await f.json<{ work: string; mainVersion: string }>(await f.call('POST',
-      '/v1/works', await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title: 'Relay chapter book',
+      '/v1/works', await f.authoredBody({ profile: 'metadata-only-v1', language: 'en', title: 'Relay chapter book',
         semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${book.work}`, 'work.edit');
     await f.grant(`work:read:${book.work}`, 'work.read');

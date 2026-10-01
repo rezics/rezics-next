@@ -61,7 +61,7 @@ test('G398: Open Library adoption states Book; a guarded Work type revision upda
       .toBe(200);
 
     const generic = await h.json<{ work: string; mainVersion: string; workRevision: string }>(
-      await h.call('POST', '/v1/works', await h.catalogueBody({ profile: 'metadata-only-v1', title: 'Type revision', language: 'en',
+      await h.call('POST', '/v1/works', await h.authoredBody({ profile: 'metadata-only-v1', title: 'Type revision', language: 'en',
         actingSubject: h.actor })), 201);
     const path = `/v1/works/${shortId(generic.work)}/type`;
     const body = { profile: 'work-type-v1', expectedHead: generic.workRevision,

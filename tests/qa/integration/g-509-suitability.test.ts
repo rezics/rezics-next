@@ -186,7 +186,7 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
   try {
     expect(Date.now() - preparation).toBeLessThan(600_000);
     const work = await json<{ work: string; mainVersion: string }>(
-      await call('POST', '/v1/works', await f.catalogueBody({
+      await call('POST', '/v1/works', await f.authoredBody({
         profile: 'metadata-only-v1',
         language: 'en',
         title: 'Suitability across admitted resources',

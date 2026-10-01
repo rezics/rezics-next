@@ -32,7 +32,7 @@ test('BOOK07: exact source import and three-way refresh preserve local edits or 
   };
   try {
     const createBook = async (title: string) => json<{ work: string; mainVersion: string }>(
-      await call('POST', '/v1/works', await f.catalogueBody({ profile: 'metadata-only-v1', language: 'en', title,
+      await call('POST', '/v1/works', await f.authoredBody({ profile: 'metadata-only-v1', language: 'en', title,
         semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor })), 201);
     const source = await createBook('Imported source Book');
     const target = await createBook('Local edited Book');

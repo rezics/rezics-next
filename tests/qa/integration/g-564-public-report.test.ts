@@ -66,7 +66,7 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
       if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
       return response.json() as Promise<T>;
     };
-    const work = await json<{ work: string; workRevision: string; mainVersion: string; mainRevision: string }>(await call('POST', '/v1/works', await f.catalogueBody({
+    const work = await json<{ work: string; workRevision: string; mainVersion: string; mainRevision: string }>(await call('POST', '/v1/works', await f.authoredBody({
       profile: 'metadata-only-v1', language: 'en', title: `Reported resource ${randomUUID()}`,
       semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), { token: f.account.tokenA }), 201);
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');

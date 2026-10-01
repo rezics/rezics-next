@@ -36,10 +36,9 @@ test('G-830: Index compositions retain local numbering, publication order, repla
     secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/structure/' });
   await objects.initialize();
   (f.env as WorkActivationEnvironment & { structureObjects: S3ImmutableObjects }).structureObjects = objects;
-  await f.grant('catalogue:verify:root', 'catalogue.verify');
   const query = `?actingSubject=${encodeURIComponent(f.actor)}`;
   const createWork = async (title: string, semanticType = 'https://schema.org/Book') => {
-    const work = await f.json<Work>(await f.call('POST', '/v1/works', await f.catalogueBody({
+    const work = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
       profile: 'metadata-only-v1', title, language: 'en', semanticTypes: [semanticType], actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${work.work}`, 'work.edit');
     await f.grant(`work:read:${work.work}`, 'work.read');
@@ -253,7 +252,7 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
     await f.grant(`work:read:${volume.work}`, 'work.read');
     f.setAuthorName(authorKey, 'Catalogue author');
     await f.sourceAuthorNames.command(f.principalId, randomUUID(), authorKey, { action: 'refresh', expectedRevision: null });
-    const series = await f.json<Work>(await f.call('POST', '/v1/works', await f.catalogueBody({
+    const series = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
       profile: 'metadata-only-v1', title: 'Volume catalogue series', semanticTypes: ['https://schema.org/Book'],
       language: 'en', actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${series.work}`, 'work.edit');

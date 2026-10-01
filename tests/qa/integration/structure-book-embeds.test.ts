@@ -34,7 +34,7 @@ test('BOOK06: publication rejects a private transitive Content embed before acti
   };
   try {
     const makeWork = async (title: string) => {
-      const work = await json<{ work: string }>(await call('/v1/works', await f.catalogueBody({ language: 'en',
+      const work = await json<{ work: string }>(await call('/v1/works', await f.authoredBody({ language: 'en',
         profile: 'metadata-only-v1', title, semanticTypes: ['https://schema.org/DigitalDocument'],
         actingSubject: f.actor })), 201);
       await f.grant(`content:draft:${work.work}`, 'content.draft');

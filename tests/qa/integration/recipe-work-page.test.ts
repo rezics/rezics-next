@@ -16,7 +16,7 @@ test('G-415: a visible Recipe Work page scales the pinned ingredient revision an
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.authoredBody({
       language: 'en', profile: 'metadata-only-v1', title: 'Measured pancakes',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
     })), 201);

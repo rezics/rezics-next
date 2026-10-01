@@ -18,7 +18,7 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
   await objects.initialize();
   (h.env as typeof h.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
-    const work = await h.json<{ work: string; mainVersion: string }>(await h.call('POST', '/v1/works', await h.catalogueBody({ language: 'en',
+    const work = await h.json<{ work: string; mainVersion: string }>(await h.call('POST', '/v1/works', await h.authoredBody({ language: 'en',
       profile: 'metadata-only-v1', title: 'Recipe source withdrawal',
       semanticTypes: ['https://schema.org/Recipe'], actingSubject: h.actor,
     })), 201);

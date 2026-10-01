@@ -37,7 +37,7 @@ test('WIKI04/VIEW05: saved dynamic query and captured Collection retain separate
       state: 'claimed', dispatchEligible: true, replayed: false };
   };
   async function publishSearchableWork() {
-    const created = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.catalogueBody({ language: 'en',
+    const created = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.authoredBody({ language: 'en',
       profile: 'metadata-only-v1', title: `Wiki result ${randomUUID()}`, actingSubject: f.actor,
     })), 201);
     await f.grant(`work:read:${created.work}`, 'work.read');

@@ -27,6 +27,7 @@ import { ownerEvidenceCapture } from '../../../services/main/src/modules/governa
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { SourceNativeChildStore } from '../../../services/main/src/modules/source/child-native-support.ts';
 import { sourceChildOccurrence } from '../../../services/main/src/modules/source/child-correspondence.ts';
+import { provisionFixtureAuthor } from './authored-work.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -170,6 +171,13 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     expect(response.status).toBe(status);
     return result as T;
   };
+  let authorReady: Promise<void> | undefined;
+  const authoredBody = async <T extends { actingSubject: string }>(body: T) => {
+    if (body.actingSubject !== actor) throw new Error('Authored fixture body must use its represented Agent');
+    authorReady ??= provisionFixtureAuthor(env, actor);
+    await authorReady;
+    return { ...body, authoring: 'own-work' as const };
+  };
   const candidateReceipts = new Map<string, string>();
   const catalogueBody = async <T extends { title: string; language?: string }>(body: T, key?: string) => {
     const language = body.language ?? 'und';
@@ -213,7 +221,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     rightsStore, governance, ruleDigest,
     credits, nativeChildren, principalId, otherPrincipal, actor, sourceAuthorNames,
     setAuthorName: (key: string, name: string) => retainedAuthorNames.set(key, name),
-    call, json, catalogueBody, catalogueIntake, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
+    call, json, authoredBody, catalogueBody, catalogueIntake, grant, propose, adoptWork, input, nativeFuseki, creditCommands, fieldCommands,
     failCertificate: () => { loseCertificate = true; }, loseGraph: () => { loseGraphResponse = true; },
     loseRetirementGraph: () => { loseRetirementResponse = true; },
     loseFieldGraph: () => { loseFieldResponse = true; },
