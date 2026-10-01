@@ -8,10 +8,10 @@ import { prepareImageContext, runtimeRoles } from '../../scripts/ops/release-ima
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 
-test('G-722 image context excludes development data and credentials', () => {
+test('G-722 image context excludes development data and credentials', async () => {
   const directory = join(repositoryRoot, '.temp/g722-context-test');
   try {
-    prepareImageContext(directory);
+    await prepareImageContext(directory);
     for (const path of ['.temp', 'node_modules', 'services/main/.env.example', 'tests/fixtures']) {
       expect(Bun.file(join(directory, path)).size).toBe(0);
     }
