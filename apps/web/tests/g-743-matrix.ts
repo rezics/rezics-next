@@ -39,14 +39,27 @@ export async function setTheme(page: Page, theme: Theme): Promise<void> {
 
 const wide = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 
+/** The elements that reach furthest past the right edge, for the finding that reports the overflow. */
+const widest = (page: Page) => page.evaluate(() => [...document.querySelectorAll('body *')]
+  .map(element => ({ element, right: element.getBoundingClientRect().right }))
+  .filter(item => item.right > innerWidth + 1)
+  .sort((a, b) => b.right - a.right).slice(0, 3)
+  .map(({ element, right }) => `${element.tagName.toLowerCase()}${element.className ? `.${String(element.className).trim().split(/\s+/).slice(0, 4).join('.')}` : ''} ends at ${Math.round(right)}px: ${element.textContent?.trim().slice(0, 50)}`)
+  .join('; '));
+
 /**
  * The screen as it stands, in both themes at both widths, then at the two zoom reflow widths. Returns the findings
  * (and attaches them to the test as annotations) rather than throwing, so the journey carries on to its next screen;
  * `expectClean` makes them the test's result.
  */
 export async function checkScreen(page: Page, name: string, found: Findings, info?: TestInfo,
-  options: { exclude?: string[]; themes?: readonly Theme[] } = {}): Promise<void> {
+  options: { exclude?: string[]; themes?: readonly Theme[]; knownOverflow?: string } = {}): Promise<void> {
   const original = page.viewportSize() ?? sizes.desktop;
+  // An overflow another task already owns is an annotation on this test; its own test (named for the owner) fails until it is fixed.
+  const sideways = async (message: string) => {
+    if (options.knownOverflow && info) info.annotations.push({ type: 'finding', description: `${options.knownOverflow}: ${message}` });
+    else found.push(message);
+  };
   try {
     for (const theme of options.themes ?? themes) {
       for (const [label, size] of Object.entries(sizes)) {
@@ -56,14 +69,14 @@ export async function checkScreen(page: Page, name: string, found: Findings, inf
         const violations = await axeViolations(page, options.exclude ? { exclude: options.exclude } : {});
         if (violations.length) found.push(`${label2}\n${formatViolations(violations)}`);
         const over = await wide(page);
-        if (over > 1) found.push(`${label2} scrolls sideways by ${over}px`);
+        if (over > 1) await sideways(`${label2} scrolls sideways by ${over}px (${await widest(page)})`);
       }
     }
     for (const width of reflowWidths) {
       await page.setViewportSize({ width, height: 720 });
       await page.waitForTimeout(50);
       const over = await wide(page);
-      if (over > 1) found.push(`${name} at ${width} CSS px (zoom ${1280 / width * 100}%) scrolls sideways by ${over}px`);
+      if (over > 1) await sideways(`${name} at ${width} CSS px (zoom ${1280 / width * 100}%) scrolls sideways by ${over}px (${await widest(page)})`);
     }
   } finally {
     await page.setViewportSize(original);
@@ -71,6 +84,19 @@ export async function checkScreen(page: Page, name: string, found: Findings, inf
     await page.evaluate(() => document.getElementById('g743-settle')?.remove());
   }
   if (info) await page.screenshot({ path: info.outputPath(`${name.replaceAll(/[^\w-]+/g, '-')}.png`) });
+}
+
+/** Only the horizontal-overflow part of the matrix, at a phone width and at the two zoom reflow widths. */
+export async function checkReflow(page: Page, name: string, found: Findings): Promise<void> {
+  const original = page.viewportSize() ?? sizes.desktop;
+  try {
+    for (const width of [sizes.phone.width, ...reflowWidths]) {
+      await page.setViewportSize({ width, height: 720 });
+      await page.waitForTimeout(50);
+      const over = await wide(page);
+      if (over > 1) found.push(`${name} at ${width} CSS px scrolls sideways by ${over}px (${await widest(page)})`);
+    }
+  } finally { await page.setViewportSize(original); }
 }
 
 /** Make the findings the test's result; the message lists every one. */

@@ -9,7 +9,6 @@ import type { Hub } from './g-850-seed.ts';
 // motion, an English and a Japanese interface.
 let hub: Hub;
 test.use({ actionTimeout: 15_000 });
-test.describe.configure({ mode: 'serial' });
 test.beforeAll(async () => {
   test.setTimeout(420_000);
   hub = await hubRecords();

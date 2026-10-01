@@ -16,7 +16,6 @@ import type { Hub } from './g-850-seed.ts';
 let hub: Hub;
 let books: { matched: string[]; ambiguous: string };
 test.use({ actionTimeout: 20_000 });
-test.describe.configure({ mode: 'serial' });
 test.beforeAll(async () => {
   test.setTimeout(540_000);
   hub = await hubRecords();
