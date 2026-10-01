@@ -59,8 +59,7 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
           AND principal_id=$3 AND task_key=$4`,[context,task.plan.survivor.resource,principal,task.plan.operation === 'unmerge' ? task.plan.original : '']);
         outcome = matches ? 'moved' : 'ambiguous';
       } else {
-        if (mergeDigest(current) !== mergeDigest(saved)) throw new MergeConflict('Rating slots changed');
-        if (!saved.source.head) return { outcome: 'retained',afterHead: mergeDigest(current),after: current as unknown as Json };
+        if (mergeDigest(current) !== mergeDigest(saved) || !saved.source.head) return { outcome: 'retained',afterHead: mergeDigest(current),after: current as unknown as Json };
         if (!saved.survivor.head) {
           const rows = (await graph.query(`PREFIX rv: <${RV}> SELECT ?main WHERE { GRAPH ${iri(GRAPHS.current)} {
             ${iri(task.plan.survivor.resource)} rv:mainVersion ?main } } LIMIT 2`,4096)).results?.bindings ?? [];
@@ -74,7 +73,7 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
       const after = await pair(client,task,item.key);
       return { outcome,afterHead: mergeDigest(after),after: after as unknown as Json };
     },original);
-  return { owner,version: 'effective-person-vote-v2',references: ['table:access.rating_aggregate_head.work','table:access.rating_merge_selection.work'],
+  return { owner,version: 'effective-person-vote-v3',references: ['table:access.rating_aggregate_head.work','table:access.rating_merge_selection.work'],
     cost: { page: MERGE_COST.page,callsPerItem: 24,bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) { const rows = await inventory({ plan },null,33); return { owner,count: Math.min(rows.length,32),complete: rows.length <= 32 }; },
     async plan(task,after,limit) {

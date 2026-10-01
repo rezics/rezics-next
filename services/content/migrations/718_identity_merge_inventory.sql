@@ -15,8 +15,3 @@ CREATE TABLE reader.library_status_merge_receipt (
 );
 CREATE TRIGGER library_status_merge_receipt_immutable BEFORE UPDATE OR DELETE
   ON reader.library_status_merge_receipt FOR EACH ROW EXECUTE FUNCTION content.no_mutation();
-
--- Inventory identity is private bookkeeping; progress/selection/version stay exact.
-ALTER TABLE structure.progress ADD COLUMN merge_inventory_id bigint GENERATED ALWAYS AS IDENTITY;
-CREATE UNIQUE INDEX progress_merge_identity ON structure.progress(merge_inventory_id);
-CREATE INDEX progress_merge_inventory ON structure.progress(structure,merge_inventory_id);

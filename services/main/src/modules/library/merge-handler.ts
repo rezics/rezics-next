@@ -99,8 +99,8 @@ export function libraryMergeHandler({ contentPool, accessPool, graph }: LibraryM
             outcome = 'moved';
           }
         } else {
-          if (!current.source || mergeDigest(current) !== mergeDigest(saved)) throw new MergeConflict('Library slots changed');
-          if (saved.source.status === null) outcome = 'retained';
+          // A personal edit after page capture wins over the saved merge plan.
+          if (!current.source || mergeDigest(current) !== mergeDigest(saved) || saved.source.status === null) outcome = 'retained';
           else {
             if (!saved.survivor) await write(task.plan.survivor.resource, saved.source, 0, 'survivor');
             await write(task.plan.source.resource, null, saved.source.version, 'source');
@@ -117,7 +117,7 @@ export function libraryMergeHandler({ contentPool, accessPool, graph }: LibraryM
       });
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   };
-  return { owner, version: 'person-status-v1', references: ['table:reader.library_status.work'],
+  return { owner, version: 'person-status-v2', references: ['table:reader.library_status.work'],
     cost: { page: MERGE_COST.page, callsPerItem: 128, bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) {
       const rows = await inventory(plan, null, MERGE_COST.page + 1);

@@ -86,9 +86,6 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
           || mergeDigest(retained.result) !== mergeDigest(original.result)) throw new InvalidMerge('Follow compensation is not retained');
       }
       const inventoryPresent = (await client.query('SELECT 1 FROM access.follow_inventory WHERE principal_id=$1 FOR UPDATE', [item.key])).rowCount;
-      if (!inventoryPresent && !original) {
-        throw new MergeConflict('Follow principal inventory disappeared');
-      }
       const current = await read(client, item.key, task.plan.source.resource, task.plan.survivor.resource);
       let next: Snapshot | null = null;
       let outcome: ItemOutcome['outcome'];
@@ -104,10 +101,12 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
           outcome = 'moved';
         }
       } else {
-        if (!current.source || mergeDigest(current) !== mergeDigest(saved)) throw new MergeConflict('Follow slots changed');
-        next = { source: { ...saved.source, following: false, revision: randomUUID() },
-          survivor: saved.survivor ?? { ...saved.source, target: task.plan.survivor.resource, revision: randomUUID() } };
-        outcome = saved.survivor ? 'history' : 'moved';
+        if (!inventoryPresent || !current.source || mergeDigest(current) !== mergeDigest(saved)) outcome = 'retained';
+        else {
+          next = { source: { ...saved.source, following: false, revision: randomUUID() },
+            survivor: saved.survivor ?? { ...saved.source, target: task.plan.survivor.resource, revision: randomUUID() } };
+          outcome = saved.survivor ? 'history' : 'moved';
+        }
       }
       if (next) {
         await put(client, next.source); await put(client, next.survivor!);
@@ -123,7 +122,7 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
       return result;
     });
   };
-  return { owner, version: 'person-slot-v1', references: ['table:access.follow.target'],
+  return { owner, version: 'person-slot-v2', references: ['table:access.follow.target'],
     cost: { page: MERGE_COST.page, callsPerItem: 128, bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) {
       const rows = await inventory(plan, null, MERGE_COST.page + 1);

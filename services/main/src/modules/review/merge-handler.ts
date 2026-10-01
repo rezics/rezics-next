@@ -37,8 +37,7 @@ export function reviewMergeHandler({ accessPool,graph }: MergeDependencies): Mer
       const current = await read(client,task,item.key), visible = (await client.query(`SELECT 1 FROM access.reader_review r
         WHERE r.id=$1 AND ${reviewVisibleSql}`,[item.key])).rowCount;
       if (!current) {
-        if (!original) throw new MergeConflict('Review disappeared');
-        return { outcome: 'ambiguous',afterHead: null,after: { policy: 'withdrawn-person-state' } };
+        return { outcome: original ? 'ambiguous' : 'retained',afterHead: null,after: { policy: 'withdrawn-person-state' } };
       }
       let outcome: ItemOutcome['outcome'];
       if (original) {
@@ -49,8 +48,7 @@ export function reviewMergeHandler({ accessPool,graph }: MergeDependencies): Mer
           await saveRevision(client,item.key); outcome = 'moved';
         }
       } else {
-        if (mergeDigest(current) !== mergeDigest(saved)) throw new MergeConflict('Review slots changed');
-        if (!visible) outcome = 'retained';
+        if (mergeDigest(current) !== mergeDigest(saved) || !visible) outcome = 'retained';
         else {
           let main = saved.source.main_version;
           if (!saved.survivor) {
@@ -70,7 +68,7 @@ export function reviewMergeHandler({ accessPool,graph }: MergeDependencies): Mer
       const after = await read(client,task,item.key);
       return { outcome,afterHead: mergeDigest(after),after: after as unknown as Json };
     },original);
-  return { owner,version: 'person-review-v1',references: ['table:access.reader_review.work'],
+  return { owner,version: 'person-review-v2',references: ['table:access.reader_review.work'],
     cost: { page: MERGE_COST.page,callsPerItem: 24,bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) { const rows = await inventory(plan.source.resource,null,33); return { owner,count: Math.min(rows.length,32),complete: rows.length<=32 }; },
     async plan(task,after,limit) {

@@ -25,6 +25,7 @@ export const PERSON_STATE_MERGE_EXCLUSIONS: Readonly<Record<string,string>> = {
   'table:reader.library_status_command.work': 'Immutable command receipt retains its original intent.',
   'table:reader.private_import_review.work': 'Private imported annotation remains attached to its original import; it is not a public review slot.',
   'table:structure.progress_command.structure': 'Exact occurrence command receipt retains its original structure and selection.',
+  'table:structure.progress.structure': 'Reading progress pins an exact structure, occurrence and selection; independent attempts remain on the original Work, like sessions.',
   'table:reader.consumption_session.work': 'Independent reading sessions remain distinct; no session reconciliation at launch.',
   'table:reader.consumption_session_target.resource': 'An exact target within an independent session retains its original identity.',
   'table:access.reader_review_revision.work': 'Retained review revision is immutable history, not a live review slot.',

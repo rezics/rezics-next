@@ -16,6 +16,8 @@ import { StructureProgressStore } from '../../../services/main/src/modules/progr
 import { discoverMergeHandlers, assertMergeCoverage } from '../../../services/main/src/modules/identity-merge/handlers.ts';
 import { discoverOwnerIdentityReferences } from '../../../services/main/src/modules/identity-merge/reference-discovery.ts';
 import { PERSON_STATE_MERGE_EXCLUSIONS } from '../../../services/main/src/modules/identity-merge/person-state-coverage.ts';
+import { itemCommandKey } from '../../../services/main/src/modules/identity-merge/contract.ts';
+import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { readNextMainOutboxBatch, readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
@@ -30,9 +32,33 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
   const f = await authorCreditFixture(Bun.env as Record<string,string>,directory,scopes);
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   let loseLibraryAcknowledgement = false, libraryCommits = 0;
+  const interleavedEdits = new Map<string,() => Promise<void>>();
+  const interleavedPool = (pool: Pool) => new Proxy(pool,{ get(target,property) {
+    if (property === 'connect') return async () => {
+      const client = await target.connect();
+      return new Proxy(client,{ get(native,key) {
+        if (key === 'query') return async (query: string,parameters?: unknown[]) => {
+          const commandKey = parameters?.[0],edit = typeof commandKey === 'string' && query.includes('_merge_receipt')
+            ? interleavedEdits.get(commandKey) : undefined;
+          if (edit) {
+            interleavedEdits.delete(commandKey as string);
+            // The interleaved HTTP request has its own graph budget, as it
+            // would when another reader edits while merge delivery is paused.
+            await fusekiReadBudget.exit(edit);
+          }
+          return native.query(query,parameters);
+        };
+        const value: unknown = Reflect.get(native,key,native);
+        return typeof value === 'function' ? value.bind(native) : value;
+      } });
+    };
+    const value: unknown = Reflect.get(target,property,target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } }) as Pool;
+  const mergeAccessPool = interleavedPool(f.accessPool);
   // Lose acknowledgement after the native effect/receipt COMMIT, before the
   // Access item journal can record it. Restart must find the native receipt.
-  const faultPool = new Proxy(f.pool,{ get(target,property) {
+  const faultPool = new Proxy(interleavedPool(f.pool),{ get(target,property) {
     if (property === 'connect') return async () => {
       const client = await target.connect(); let effect = false;
       return new Proxy(client,{ get(native,key) {
@@ -64,9 +90,9 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
   });
   f.access.configureBaseline(f.env.fuseki);
   const deps = { environment: f.env,access: f.access,account: f.account.verifier,
-    identityMerge: { accessPool: f.accessPool,contentPool: faultPool },
+    identityMerge: { accessPool: mergeAccessPool,contentPool: faultPool },
     agentProvisioning: new AgentProvisioning(f.accessPool,f.env),
-    editorialReview: new EditorialReviewStore(f.accessPool,modules),libraryStatus: new ReaderLibraryStatusStore(f.pool),
+    editorialReview: new EditorialReviewStore(mergeAccessPool,modules),libraryStatus: new ReaderLibraryStatusStore(f.pool),
     follows: new FollowsStore(f.accessPool),reviews: new ReaderReviews(f.accessPool),progress: new StructureProgressStore(f.pool) };
   let app = createMainApp(f.env.fuseki,deps);
   const call = (method: string,path: string,body?: object,token: string | null = f.account.tokenA,key = randomUUID()) =>
@@ -187,7 +213,8 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     const proposed = await propose(candidate);
     const preview = await json<{ revision: { before: { owners: Array<{ owner: string; count: number }> } } }>(await call('GET',path(proposed.proposal),undefined,null));
     expect(Object.fromEntries(preview.revision.before.owners.map(owner => [owner.owner,owner.count])))
-      .toMatchObject({ library: 2,follows: 2,rating: 5,review: 2,progress: 1 });
+      .toMatchObject({ library: 2,follows: 2,rating: 5,review: 2 });
+    expect(preview.revision.before.owners.some(owner => owner.owner === 'progress')).toBe(false);
     const approve = (id: string,actor: string,token: string) => call('POST',path(id,'/reviews'),
       { profile: 'editorial-proposal-review-v1',revision: 1,outcome: 'approve',message: 'Checked volume and language evidence',actingSubject: actor },token);
     const decide = (id: string,actor: string,token: string,approveNow = false,key = randomUUID()) => call('POST',path(id,'/decisions'),
@@ -218,9 +245,9 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     const oldId = `/v1/resources/${shortId(source.work)}`;
     expect(await json(await call('GET',oldId,undefined,null))).toMatchObject({ status: 'merged',resolution: { survivor: survivor.work } });
     await json(await call('GET',path(proposed.proposal),undefined,null)); expect(libraryCommits).toBe(1);
-    app = createMainApp(f.env.fuseki,{ ...deps,editorialReview: new EditorialReviewStore(f.accessPool,modules) });
+    app = createMainApp(f.env.fuseki,{ ...deps,editorialReview: new EditorialReviewStore(mergeAccessPool,modules) });
     const merged = await finish(proposed.proposal,applyKey);
-    expect(merged.outcome).toBe('applied'); expect(merged.receipt?.commands).toHaveLength(6);
+    expect(merged.outcome).toBe('applied'); expect(merged.receipt?.commands).toHaveLength(5);
     const identityEvent = async (command: Command,operation: string) => {
       const rows = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?epoch ?sequence WHERE {
         GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:mergeTask ${lit(command.receipt!.operationKey)} ; rv:dataEpoch ?epoch ; rv:sequence ?sequence }
@@ -277,6 +304,49 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     expect((await reviews()).rows).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: shortId(reviewB.review),work: source.work,deleted: false }),
       expect.objectContaining({ id: shortId(reviewSurvivor.review),body: 'Later survivor edit' })]));
+    expect((await f.pool.query('SELECT to_jsonb(p) AS row FROM structure.progress p WHERE structure=$1',[structure])).rows).toEqual(progressBefore);
+    // Save another merge's owner pages, then perform ordinary public edits
+    // before each corresponding native effect reads its current person slots.
+    // Both a changed existing survivor and a newly populated survivor win.
+    const raced = await propose(candidate), taskKey = `editorial:${raced.proposal}:1`, changedOwners: string[] = [];
+    const afterCapture = (owner: string,item: string,edit: () => Promise<void>) => interleavedEdits.set(itemCommandKey(taskKey,owner,item),async () => {
+      expect((await f.accessPool.query('SELECT 1 FROM access.identity_merge_item WHERE task_key=$1 AND owner=$2 AND item_key=$3',
+        [taskKey,owner,item])).rows).toHaveLength(1);
+      await edit(); changedOwners.push(owner);
+    });
+    const libraryVersion = (await f.pool.query<{ version: string }>('SELECT version::text FROM reader.library_status WHERE agent=$1 AND work=$2',[actorA,survivor.work])).rows[0]!.version;
+    afterCapture('library',actorA,async () => { await status(survivor.work,actorA,'reading',f.account.tokenA,Number(libraryVersion)); });
+    const followRevision = (await f.accessPool.query<{ revision: string }>('SELECT revision::text FROM access.follow WHERE principal_id=$1 AND target=$2',[f.principalId,survivor.work])).rows[0]!.revision;
+    afterCapture('follows',f.principalId,async () => { await follow(survivor.work,actorA,true,f.account.tokenA,followRevision); });
+    const ratingRevision = (await f.accessPool.query<{ revision: string }>('SELECT revision FROM access.rating_aggregate_head WHERE context=$1 AND work=$2 AND principal_id=$3',
+      [context,survivor.work,f.principalId])).rows[0]!.revision;
+    afterCapture('rating',`${f.principalId}|${context}`,async () => {
+      await json(await call('POST','/v1/global-rating-observations',{ profile: 'global-rating-standing-observation-v1',context,
+        work: survivor.work,mainVersion: survivor.mainVersion,expectedRevisionHead: ratingRevision,value: 3,actingSubject: actorA }),201);
+    });
+    afterCapture('review',shortId(reviewB.review),async () => {
+      await rate(survivor,actorB,5,tokenB);
+      await json(await call('POST','/v1/reviews',reviewBody(survivor.work,actorB,'Interleaved survivor review'),tokenB),201);
+    });
+    await json(await approve(raced.proposal,actorB,tokenB));
+    const reconciled = await finish(raced.proposal);
+    expect(reconciled.outcome).toBe('applied'); expect(interleavedEdits.size).toBe(0);
+    expect(changedOwners.sort()).toEqual(['follows','library','rating','review']);
+    const retained = (await f.accessPool.query<{ owner: string; item_key: string }>(`SELECT owner,item_key FROM access.identity_merge_item_outcome
+      WHERE task_key=$1 AND outcome='retained'`,[taskKey])).rows;
+    expect(retained).toEqual(expect.arrayContaining([
+      { owner: 'library',item_key: actorA },{ owner: 'follows',item_key: f.principalId },
+      { owner: 'rating',item_key: `${f.principalId}|${context}` },{ owner: 'review',item_key: shortId(reviewB.review) }]));
+    expect((await state()).rows).toEqual(expect.arrayContaining([
+      { agent: actorA,work: source.work,status: 'read' },{ agent: actorA,work: survivor.work,status: 'reading' }]));
+    expect((await f.accessPool.query('SELECT target,following FROM access.follow WHERE principal_id=$1 AND target=ANY($2::text[])',
+      [f.principalId,[source.work,survivor.work]])).rows).toEqual(expect.arrayContaining([
+      { target: source.work,following: true },{ target: survivor.work,following: true }]));
+    expect(await aggregate(survivor)).toMatchObject({ count: 2,mean: 4 });
+    expect((await reviews()).rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: shortId(reviewB.review),work: source.work,body: 'Source-only reader review',deleted: false })]));
+    expect((await f.accessPool.query('SELECT body FROM access.reader_review WHERE principal_id=$1 AND work=$2',[f.otherPrincipal,survivor.work])).rows)
+      .toEqual([{ body: 'Interleaved survivor review' }]);
     expect((await f.pool.query('SELECT to_jsonb(p) AS row FROM structure.progress p WHERE structure=$1',[structure])).rows).toEqual(progressBefore);
     expect(Date.now()-started).toBeLessThan(600_000);
   } finally { await accountPool.end(); await f.close(); rmSync(directory,{ recursive: true,force: true }); }

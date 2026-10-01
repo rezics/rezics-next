@@ -31,7 +31,6 @@ authority; a new key cannot replace a still-pending application.
 | Follows | Survivor slot (including explicit unfollow) wins; source-only follow moves | Exact slot and inventory comparison; unrelated follows retained |
 | Rating | One current standing vote per Account principal and Context; native survivor wins; source-only vote selected with its original admission/observation receipt; exact attempts and historical Main Versions retained | Remove only this merge's selection; original observations never rewritten; later edits ambiguous |
 | Review | Survivor person/Context slot wins; source-only review moves with attribution, helpful votes and revision history | Exact post-effect pair comparison; later edits ambiguous |
-| Progress | Exact structure, occurrence and selection remain independent | Retained outcome never enters compensation |
 
 Unmerge uses the original task's immutable moved/history items rather than
 rediscovering survivor contents. A changed item receives an `ambiguous` outcome;
@@ -48,9 +47,13 @@ identity. Grants, private disclosure and creator rights never transfer.
 Handlers are discovered as `modules/<owner>/merge-handler.ts`. The SQL
 person-state coverage test detects even empty new owner tables and requires a
 handler or an exact, explained exclusion from `person-state-coverage.ts`.
-Sessions, owned copies, exact attempts, imported private annotations and
+Reading progress, sessions, owned copies, exact attempts, imported private annotations and
 immutable command receipts are exclusions. Graph predicate scanning is outside
 this guard.
+
+A personal slot changed after page capture receives a durable `retained`
+outcome. The current survivor wins; neither current slot is overwritten, and
+that item does not enter unmerge compensation.
 
 Old IDs return a typed merged resolution. Address GET 200 preserves its original
 `work-address-v1` shape and original Work/Main Version, adding optional
