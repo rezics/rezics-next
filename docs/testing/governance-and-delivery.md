@@ -16,5 +16,5 @@ editorial-correction tests for exact review, independent human control and
 approved-effect binding. The [pending protection subcases](../../scripts/qa/cases/editorial-protection.ts)
 state the additional owner-boundary results; voting and moderation examples alone
 do not qualify them. Poll counting tests do not substitute for storage concurrency,
-current Access admission or [governance workload](../storage/workloads/governance-delivery-capacity.md)
+current Access admission or [governance workload](../storage/workload-budgets.md#governance-voting-and-delivery)
 qualification.

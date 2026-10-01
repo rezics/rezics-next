@@ -88,3 +88,67 @@ The 180-second sustained profile, 20,000-unit search scale, full
 native Jena/SQL work, 500-million-entity placement and 3-billion scenario are
 not qualified. A later owner-specific threshold breach should trigger admission,
 query/profile restriction, index adjustment or a placement review. Sharding and fleet operations remain separate measured work.
+
+## Owner workloads
+
+Each owner's planning axes are declared as checked inputs in
+[`scripts/load/budget.ts`](../../scripts/load/budget.ts); derive the owner's
+facts and retained history separately from the global scenario above, and use
+[multi-scale work observations](../testing/complexity.md) before qualifying a
+threshold. Current small fixtures do not establish 500-million-entity capacity.
+The design rules each owner keeps:
+
+### Statements, grouping and context
+
+Anchor statement, inverse and vocabulary reads; stage cycle-sensitive changes;
+invalidate affected statements and context generations incrementally. Never
+materialize Resource × Realm or Resource × Context × individual products, and
+never scan Realm members to discover their interpretation: resolve indexed
+explicit, speaker, entry and Global selections over bounded pinned dependency
+chains, and reject ambiguity or unavailable bases. A final page limit does not
+bound aggregation work, so budget candidate statements, support fan-out,
+correlated occurrences, distinct-key memory, group overlap and hydration,
+including cold caches. Count facts, resources and occurrences separately; never
+infer distinct targets by summing overlapping groups. A new semantic Context
+revision justifies no corpus rewrite or automatic fan-out adoption; prove pinned
+statements stay unchanged and measure actual adoption separately.
+
+### Identity and Access
+
+Use selective subject/target/scope indexes, batched decisions, bounded impact
+planning and immediate scope fences before cleanup; the private directory is
+never a per-request join. Enforce budgets inside execution (a counter checked
+after an unbounded SQL scan is insufficient), and treat budget exhaustion as
+unavailable, never as allowance or proof of no authority. Materialize ancestry
+only where measured reads warrant it, budgeting storage by actual closure, and
+stage index generations because reparenting and revocation multiply updates.
+The [depth study](../research/access-depth-representation-and-voting.md)
+explains the unqualified tuning candidates (32-edge hierarchies, 8-edge
+representation chains, 64 evaluator levels, 2,048 decision states, 50 ms
+deadline, 100-target batches); they are not production limits. Report 99%
+legitimate-task coverage as a separate product target with representative task
+weights, not from a small chain probe.
+
+### Governance, voting and delivery
+
+Commit decisions and fences before bounded propagation; page recipients; bound
+intent, dead-letter bytes and external retries. Prepare electorate, weight and
+allocation snapshots before a poll opens, so ballot mutations work on named
+entitlements and expected revisions without recomputing the electorate. Use
+replayable tally projections rather than one global exact write counter; full
+liquid routing is a separately qualified bounded job.
+
+### Catalogue, sources, subscriptions and ratings
+
+- Catalogue editing pages source/target correspondence, coalesces root-local
+  search updates and stages large adoption bundles; a name edit never rebuilds
+  unrelated facts.
+- Source interoperability streams acquisition with bounded joins, keeps source
+  load apart from the product dataset and detects retention gaps; full
+  source-corpus indexing is a separately admitted workload.
+- Subscriptions index by beneficiary, target and period, reserve atomically
+  per owner, reconcile providers idempotently and never recompute all
+  beneficiaries synchronously.
+- Ratings reduce per rater before population aggregation, update affected
+  buckets incrementally, bound interval intersections and run exact analytics
+  asynchronously.

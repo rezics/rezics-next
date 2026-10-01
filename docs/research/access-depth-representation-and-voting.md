@@ -63,7 +63,7 @@ p99 latency. Its numbers do not rank the engines for REZICS capacity.
 
 Depth alone cannot bound work: breadth, alternate paths, policy states, reads,
 freshness and invalidation cost also matter. The
-[Access workload profile](../storage/workloads/identity-access-capacity.md)
+[Access workload profile](../storage/workload-budgets.md#identity-and-access)
 records starting experimental limits and the dimensions still requiring
 measurement. [Zanzibar](https://www.usenix.org/system/files/atc19-pang.pdf),
 [SpiceDB](https://authzed.com/docs/spicedb/modeling/recursion-and-max-depth)

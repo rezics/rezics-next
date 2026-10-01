@@ -17,21 +17,6 @@ Route schemas, `services/main/src/routes/problems.ts` and generated OpenAPI
 define installed envelopes and safe Problem Details codes. Reconcile an uncertain
 graph outcome with the same body and key. No general operation-status endpoint exists.
 
-## Pending operation families
-
-Shared Context/Statement, general editorial correction, source adoption, export
-and operation-status APIs still need owner schemas and tests. Context edit,
-Realm adoption and private selection have separate authority and expected heads;
-preview pins definitions, and changed dependencies reject the write. Statement
-reads retain speaker, semantic revision and acceptance scope. Editorial proposal
-creation changes no adoption; independent review binds exact candidate, evidence,
-rule and content/protection/control/decision bases. Bounded approval/application
-is one owner commit; history pages cap at 50. Distinguish stale, denied,
-unsupported, over-budget, unknown and unavailable with safe disclosure. The
-future operation resource separates pending/running/waiting/reconciling/terminal
-status from domain activation. See [Context](../contracts/context.md) and
-[editorial protection](../contracts/editorial-protection.md).
-
 ## Owner extension points
 
 - Export `oauthScopes` in `services/account/src/oauth-scopes/<owner>.ts`;

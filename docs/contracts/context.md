@@ -44,6 +44,6 @@ explicit, speaker object/relation, object and default selections, then Global.
   broader label cannot prove a narrower criterion.
 - Declare bounded hydration, invalidation and disclosure behavior for every new
   consumer. Incomplete semantic resolution cannot authorize a write or exact
-  count; capacity qualification remains the [statement workload](../storage/workloads/statement-capacity.md).
+  count; capacity qualification remains the [statement workload](../storage/workload-budgets.md#statements-grouping-and-context).
 
 These target obligations exceed the installed profile's qualified subset.
