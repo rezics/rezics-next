@@ -446,9 +446,17 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     writeFileSync(join(restoredData, 'recovery.signal'), '');
     const restoredPort = await freePort();
     restoredStartAttempted = true;
-    execFileSync('pg_ctl', ['-D', restoredData, '-l', join(state, 'restored-postgres.log'),
-      '-o', `-h 127.0.0.1 -p ${restoredPort} -k ${socketDirectory}`, '-t', '20', '-w', 'start'],
-    { cwd: state, timeout: 25_000 });
+    const restoredLog = join(state, 'restored-postgres.log');
+    // Cold backup recovery syncs the copied directory before accepting connections.
+    try {
+      execFileSync('pg_ctl', ['-D', restoredData, '-l', restoredLog,
+        '-o', `-h 127.0.0.1 -p ${restoredPort} -k ${socketDirectory}`, '-t', '60', '-w', 'start'],
+      { cwd: state, timeout: 65_000 });
+    } catch (error) {
+      // Cleanup removes the data directory; retain the startup diagnosis in QA output.
+      throw new Error(`Restored PostgreSQL startup failed:\n${readFileSync(restoredLog, 'utf8').slice(-8_000)}`,
+        { cause: error });
+    }
     const restoredPool = (database: string, user: string, password: string) => new Pool({
       host: '127.0.0.1', port: restoredPort, database, user, password,
     });
