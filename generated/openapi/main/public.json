@@ -197173,6 +197173,10 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "revisionDigest": {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
                     "revisionId": {
                       "pattern": "^[0-9a-f-]{36}$",
                       "type": "string"
@@ -197205,6 +197209,7 @@
                     "reply",
                     "variantId",
                     "revisionId",
+                    "revisionDigest",
                     "predecessor",
                     "deleted",
                     "sourcePosition",
@@ -197240,6 +197245,10 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "revisionDigest": {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
                     "revisionId": {
                       "pattern": "^[0-9a-f-]{36}$",
                       "type": "string"
@@ -197272,6 +197281,7 @@
                     "reply",
                     "variantId",
                     "revisionId",
+                    "revisionDigest",
                     "predecessor",
                     "deleted",
                     "sourcePosition",
