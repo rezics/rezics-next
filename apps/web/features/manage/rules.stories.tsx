@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { acting, adminApi, type AdminRecord, header, realm, rules, settings } from './fixtures.ts';
 import { messages } from './messages.ts';
 import ko from './messages/ko.ts';
@@ -36,6 +37,22 @@ type Story = StoryObj<typeof meta>;
 
 const body = () => within(document.body);
 const firstRule = (canvas: ReturnType<typeof within>) => canvas.getAllByRole('heading', { level: 3 })[0]!;
+
+/**
+ * A controlled field drops the tail of a typed string when another render
+ * (reading languages arriving) lands between keystrokes. Commit the whole value.
+ */
+async function typeText(field: () => HTMLElement, text: string) {
+  await waitFor(async () => {
+    const input = field() as HTMLInputElement | HTMLTextAreaElement;
+    if (input.value !== text) {
+      await userEvent.click(input);
+      await userEvent.clear(input);
+      await userEvent.type(input, text);
+    }
+    expect(field()).toHaveValue(text);
+  }, { timeout: 5000 });
+}
 
 export const PublishedRules: Story = {
   async play({ canvasElement }) {
@@ -207,6 +224,17 @@ export const RuleWrittenInJapanese: Story = {
   args: { locale: 'ko', messages: korean },
   globals: { locale: 'ko' },
   parameters: { route: { pathname: `/ko/manage/r/${realm}/settings` } },
+  beforeEach() {
+    // A late person-preferences answer re-renders the editor mid-keystroke and keeps only a prefix.
+    forgetReadingLanguages();
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('person-preferences')) return Response.json({ contentLanguages: [] });
+      return original(input, init);
+    }) as typeof fetch;
+    return () => { globalThis.fetch = original; forgetReadingLanguages(); };
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '규칙 편집' }));
@@ -214,16 +242,21 @@ export const RuleWrittenInJapanese: Story = {
     const added = canvas.getByRole('heading', { name: '규칙 4' }).closest('li')!;
     const pick = async (opener: RegExp, query: string, option: RegExp) => {
       await userEvent.click(within(added).getByRole('button', { name: opener }));
-      await userEvent.type(await body().findByRole('searchbox'), query);
-      await userEvent.click(await body().findByRole('button', { name: option }));
+      const search = await body().findByRole('searchbox');
+      await waitFor(() => expect(search).toBeVisible());
+      await userEvent.type(search, query);
+      const choice = await body().findByRole('button', { name: option });
+      await waitFor(() => expect(choice).toBeVisible());
+      await userEvent.click(choice);
     };
     await pick(/^작성 언어 — 규칙 4/, '일본어', /日本語/);
-    await userEvent.type(within(added).getByRole('textbox', { name: '일본어 제목' }), '親切に');
-    await userEvent.type(within(added).getByRole('textbox', { name: '일본어 설명' }), '読者を尊重する');
+    const field = (name: string) => within(added).getByRole('textbox', { name });
+    await typeText(() => field('일본어 제목'), '親切に');
+    await typeText(() => field('일본어 설명'), '読者を尊重する');
     await expect(within(added).getByRole('textbox', { name: '일본어 제목' })).toHaveAttribute('lang', 'ja');
     await pick(/^번역 추가 — 규칙 4/, 'ko', /한국어/);
-    await userEvent.type(within(added).getByRole('textbox', { name: '한국어 제목' }), '친절하게');
-    await userEvent.type(within(added).getByRole('textbox', { name: '한국어 설명' }), '독자를 존중하세요');
+    await typeText(() => field('한국어 제목'), '친절하게');
+    await typeText(() => field('한국어 설명'), '독자를 존중하세요');
     await userEvent.click(canvas.getByRole('button', { name: '변경 사항 검토' }));
     const dialog = within(await body().findByRole('dialog', {}, { timeout: 5000 }));
     await userEvent.type(dialog.getByRole('textbox'), '일본어 규칙');

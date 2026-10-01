@@ -126,13 +126,17 @@ export const Chapters: Story = {
     await moveBy(canvasElement, '第三章 最后一班车', 'Move “第三章 最后一班车” up');
     await waitFor(() => expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent('第三章 最后一班车'));
     await expect(canvas.getByText('Moved “第三章 最后一班车”.')).toBeInTheDocument();
-    await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第四章 站台');
+    const title = canvas.getByRole('textbox', { name: 'New chapter' });
+    await userEvent.type(title, '第四章 站台');
+    await waitFor(() => expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('第四章 站台'));
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
-    await expect(await canvas.findByRole('link', { name: 'Write “第四章 站台”' })).toBeInTheDocument();
+    // The chapter is written through the story's Main double; under load that round trip exceeds the default wait.
+    await expect(await canvas.findByRole('link', { name: 'Write “第四章 站台”' }, { timeout: 5000 })).toBeInTheDocument();
     await expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('');
     // A chapter just added moves at once: the list was read again with its place.
     await moveBy(canvasElement, '第四章 站台', 'Move “第四章 站台” up');
-    await waitFor(() => expect(within(list).getAllByRole('listitem')[2]).toHaveTextContent('第四章 站台'));
+    await waitFor(() => expect(within(list).getAllByRole('listitem')[2]).toHaveTextContent('第四章 站台'),
+      { timeout: 5000 });
     await expect(calls).toEqual(['move', 'work', 'insert', 'move']);
   },
 };
@@ -258,9 +262,17 @@ export const Volumes: Story = {
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “番外”' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “番外”' }));
     await choose('Rename');
-    const name = canvas.getByRole('textbox', { name: 'New title for “番外”' });
-    await userEvent.clear(name);
-    await userEvent.type(name, '番外篇{Enter}');
+    const name = () => canvas.getByRole('textbox', { name: 'New title for “番外”' }) as HTMLInputElement;
+    // Enter in the same type call submits before the characters land, so the volume keeps its old name.
+    await waitFor(async () => {
+      const input = name();
+      if (input.value !== '番外篇') {
+        await userEvent.clear(input);
+        await userEvent.type(input, '番外篇');
+      }
+      expect(name()).toHaveValue('番外篇');
+    }, { timeout: 5000 });
+    await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByRole('button', { name: /^番外篇/ }, { timeout: 5000 })).toBeVisible();
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' }));

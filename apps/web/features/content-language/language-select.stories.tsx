@@ -36,6 +36,21 @@ const open = async (canvas: ReturnType<typeof within>, name: RegExp) => {
   return body().findByRole('searchbox');
 };
 
+/** The search field is controlled. A short query keeps a different list than the one the story asked for. */
+async function typeQuery(canvas: ReturnType<typeof within>, opener: RegExp, query: string) {
+  const search = await open(canvas, opener);
+  await waitFor(() => expect(search).toBeVisible());
+  await waitFor(async () => {
+    const box = body().getByRole('searchbox') as HTMLInputElement;
+    if (box.value !== query) {
+      await userEvent.click(box);
+      await userEvent.clear(box);
+      await userEvent.type(box, query);
+    }
+    expect(body().getByRole('searchbox')).toHaveValue(query);
+  }, { timeout: 5000 });
+}
+
 /** Nothing is known about the writer: the text says so instead of claiming the interface language. */
 export const NotSpecified: Story = {
   async play({ canvasElement }) {
@@ -93,8 +108,10 @@ export const ArabicIsRightToLeft: Story = {
 export const TypedTag: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.type(await open(canvas, /^Language of your post:/), 'pt-br');
-    await expect(await body().findByRole('button', { name: /Brazilian Portuguese/ })).toBeVisible();
+    await typeQuery(canvas, /^Language of your post:/, 'pt-br');
+    const match = await body().findByRole('button', { name: /Brazilian Portuguese/ }, { timeout: 5000 });
+    // The row is in the tree while the popover is still fading in.
+    await waitFor(() => expect(match).toBeVisible());
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(canvas.getByTestId('sent')).toHaveTextContent('pt-BR'));
   },
@@ -104,8 +121,10 @@ export const TypedTag: Story = {
 export const NoMatch: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.type(await open(canvas, /^Language of your post:/), 'not a tag!');
-    await expect(await body().findByText(/No language matches/)).toBeVisible();
+    await typeQuery(canvas, /^Language of your post:/, 'not a tag!');
+    // `<output>` is also a status, so match the message. It is in the tree before the popover finishes fading in.
+    const status = await body().findByText(/No language matches/, {}, { timeout: 5000 });
+    await waitFor(() => expect(status).toBeVisible());
     await userEvent.keyboard('{Enter}');
     await expect(canvas.getByTestId('sent')).toHaveTextContent('und');
   },

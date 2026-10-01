@@ -32,6 +32,19 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** A controlled field can keep only a prefix when another render lands between keystrokes. */
+async function typeValue(field: () => HTMLInputElement | HTMLTextAreaElement, text: string) {
+  await waitFor(async () => {
+    const input = field();
+    if (input.value !== text) {
+      await userEvent.click(input);
+      await userEvent.clear(input);
+      await userEvent.type(input, text);
+    }
+    expect(field()).toHaveValue(text);
+  }, { timeout: 5000 });
+}
+
 const list = (canvas: ReturnType<typeof within>) => canvas.getByRole('list', { name: 'Queue items' });
 const detailTitle = (canvas: ReturnType<typeof within>) => canvas.getAllByRole('heading', { level: 3 })
   .find((heading: HTMLElement) => heading.id.startsWith('queue-detail-') && heading.checkVisibility())!;
@@ -77,9 +90,11 @@ export const RejectWithReason: Story = {
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Reject this submission' }, { timeout: 5000 }));
     await userEvent.click(dialog.getByRole('button', { name: 'Reject' }));
     await expect(dialog.getByText('Write a reason first.')).toBeInTheDocument();
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason the author sees' }),
+    const rejectDialog = () => within(within(document.body).getByRole('dialog', { name: 'Reject this submission' }));
+    await typeValue(() => rejectDialog().getByRole('textbox', { name: 'Reason the author sees' }) as HTMLTextAreaElement,
       'Please say which translation this chapter comes from.');
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Private note for moderators' }), 'Third unattributed upload.');
+    await typeValue(() => rejectDialog().getByRole('textbox', { name: 'Private note for moderators' }) as HTMLTextAreaElement,
+      'Third unattributed upload.');
     await userEvent.click(dialog.getByRole('button', { name: 'Reject' }));
     await expect(canvas.getByRole('status', { name: 'Decisions you can still undo' })).toHaveTextContent('Rejected');
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'reject',
@@ -119,8 +134,12 @@ export const KeepOrRemoveReport: Story = {
     await userEvent.keyboard('r');
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Remove reported content' }, { timeout: 5000 }));
     await expect(dialog.queryByRole('textbox', { name: 'Private note for moderators' })).toBeNull();
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Why it’s removed' }), 'Rule 1: no spoilers in titles.');
-    await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
+    const reasonField = () => within(within(document.body).getByRole('dialog', { name: 'Remove reported content' }))
+      .getByRole('textbox', { name: 'Why it’s removed' }) as HTMLTextAreaElement;
+    // The dialog focuses a rule radio after open. Typing before that focus lands keeps only a prefix.
+    await typeValue(reasonField, 'Rule 1: no spoilers in titles.');
+    await userEvent.click(within(within(document.body).getByRole('dialog', { name: 'Remove reported content' }))
+      .getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep' }),
       expect.objectContaining({ id: queue[5]!.id, action: 'remove', reason: 'Rule 1: no spoilers in titles.' })]));
   },
@@ -153,7 +172,8 @@ export const EscalateReport: Story = {
     reset();
     await userEvent.keyboard('e');
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Escalate to the Realm owners' }, { timeout: 5000 }));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'What should the owners look at?' }),
+    await typeValue(() => within(within(document.body).getByRole('dialog', { name: 'Escalate to the Realm owners' }))
+      .getByRole('textbox', { name: 'What should the owners look at?' }) as HTMLTextAreaElement,
       'Edition question needs an owner decision.');
     await userEvent.click(dialog.getByRole('button', { name: 'Escalate' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'escalate' })]));

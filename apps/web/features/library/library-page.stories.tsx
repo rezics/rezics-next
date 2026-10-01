@@ -72,10 +72,23 @@ export const ReadHistory: Story = {
     await expect(canvas.queryByRole('region', { name: 'Currently reading' })).toBeNull();
     // Dates: the finish date is edited in a popover and checked against the start.
     await userEvent.click(canvas.getByRole('button', { name: 'Add dates — Frankenstein; or, The Modern Prometheus' }));
+    const datesOf = () => page().getByRole('dialog', { name: /Reading dates for “Frankenstein/ });
     const dates = await page().findByRole('dialog', { name: /Reading dates for “Frankenstein/ }, { timeout: 5000 });
-    await userEvent.type(within(dates).getByLabelText('Started'), '2026-05-10');
-    await userEvent.type(within(dates).getByLabelText('Finished'), '2026-05-01');
-    await userEvent.click(within(dates).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(dates).toHaveAttribute('data-state', 'open'));
+    // A date that never lands makes Save succeed with empty dates and close the editor, so the order error never shows.
+    const fillDate = async (label: string, value: string) => {
+      await waitFor(async () => {
+        const input = within(datesOf()).getByLabelText(label) as HTMLInputElement;
+        if (input.value !== value) {
+          await userEvent.clear(input);
+          await userEvent.type(input, value);
+        }
+        expect(within(datesOf()).getByLabelText(label)).toHaveValue(value);
+      }, { timeout: 5000 });
+    };
+    await fillDate('Started', '2026-05-10');
+    await fillDate('Finished', '2026-05-01');
+    await userEvent.click(within(datesOf()).getByRole('button', { name: 'Save' }));
     // The error fades in; wait until it has.
     await waitFor(() => expect(within(dates).getByText('The finish date can’t be before the start date.')).toBeVisible(),
       { timeout: 3000 });

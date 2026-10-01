@@ -51,6 +51,19 @@ function Placeholder() {
   </PageContainer>;
 }
 
+/**
+ * A sheet stays mounted until `animationend`. Closing during the entrance
+ * animation misses that event, so the dialog never leaves. Wait until nothing is running.
+ */
+async function whenSettled(name: string) {
+  await waitFor(async () => {
+    const dialog = within(document.body).getByRole('dialog', { name });
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const running = dialog.getAnimations({ subtree: true }).some(animation => animation.playState === 'running');
+    expect(running).toBe(false);
+  }, { timeout: 5000 });
+}
+
 const meta = {
   title: 'Shell/App shell', component: AppShell,
   args: { locale: 'en', messages, theme: 'light', navCollapsed: false,
@@ -276,6 +289,10 @@ export const CommunitiesChinese: Story = {
     await expect(drawer.getByText('小说')).toHaveAttribute('lang', 'zh-Hans');
     await expect(drawer.getByText('图书')).toHaveAttribute('dir', 'ltr');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    // The drawer and the bottom bar share one name. The modal hides the bar on the next frame,
+    // and the accessibility check runs as soon as play returns.
+    await waitFor(() => expect(within(document.body).getAllByRole('navigation', { name: '主导航' })).toHaveLength(1),
+      { timeout: 5000 });
   },
 };
 
@@ -293,8 +310,9 @@ export const PhoneCommunities: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
     const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }, { timeout: 5000 }));
     await waitFor(() => expect(drawer.getByRole('region', { name: 'Your Realms' })).toBeVisible());
+    await whenSettled('Menu');
     await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull(), { timeout: 5000 });
   },
 };
 
