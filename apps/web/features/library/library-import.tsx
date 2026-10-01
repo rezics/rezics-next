@@ -259,7 +259,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
             onDragOver={event => event.preventDefault()} onDragLeave={() => setDragging(false)}
             onDrop={event => { event.preventDefault(); setDragging(false);
               const file = event.dataTransfer.files[0]; if (file && !uploading) void upload(file); }}
-            className={cn('flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed',
+            className={cn('relative flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed',
               'px-4 py-5 text-center text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
               dragging ? 'border-primary bg-primary/10' : 'border-border bg-muted/30 hover:border-primary')}>
             <UploadCloudIcon aria-hidden="true" className="size-6 text-primary" />

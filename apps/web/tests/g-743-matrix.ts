@@ -43,7 +43,16 @@ const wide = (page: Page) => page.evaluate(() => document.documentElement.scroll
 const widest = (page: Page) => page.evaluate(() => [...document.querySelectorAll('body *')]
   .map(element => ({ element, right: element.getBoundingClientRect().right }))
   .filter(item => item.right > innerWidth + 1)
-  .sort((a, b) => b.right - a.right).slice(0, 3)
+  // What a scroller or a clipped box holds past its edge is not what widens the page.
+  .filter(({ element }) => {
+    for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+      if (['auto', 'scroll', 'hidden', 'clip'].includes(getComputedStyle(parent).overflowX)) return false;
+    }
+    return true;
+  })
+  // Only the innermost box at each edge: its ancestors reach as far because it does.
+  .filter(({ element, right }) => ![...element.children].some(child => child.getBoundingClientRect().right >= right - 0.5))
+  .sort((a, b) => b.right - a.right).slice(0, 5)
   .map(({ element, right }) => `${element.tagName.toLowerCase()}${element.className ? `.${String(element.className).trim().split(/\s+/).slice(0, 4).join('.')}` : ''} ends at ${Math.round(right)}px: ${element.textContent?.trim().slice(0, 50)}`)
   .join('; '));
 
