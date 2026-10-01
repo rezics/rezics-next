@@ -14,12 +14,10 @@ function Text({ text }: { text: ZoneText }) {
   return <bdi lang={text.lang || undefined} dir={text.dir}>{text.value}</bdi>;
 }
 
-/** Where the reader is reading up to, and the way to see everything. */
-function PositionNote({ position, t, Link }: { position: ZonePositionState; t: Strings; Link: Link }) {
+/** Where the reader is reading up to; the frame's position control is the way to change it. */
+function PositionNote({ position, t }: { position: ZonePositionState; t: Strings }) {
   return <p data-wiki-position="" className="fw-position">
-    {position.mode === 'all' ? t.atEverything
-      : position.label ? <>{t.atPosition(position.label.value)}</> : t.atAnyPosition}
-    {position.showAllHref ? <>{' '}<Link href={position.showAllHref}>{t.showEverything}</Link></> : null}
+    {position.mode === 'all' ? t.atEverything : position.label ? t.atPosition(position.label.value) : t.atAnyPosition}
   </p>;
 }
 
@@ -70,7 +68,7 @@ export function WikiHome({ zone, sections, position, card, Link }: HomeSlotProps
   const lists = sections.filter(section => !section.works.length);
   const hasPages = lists.some(section => section.members.length);
   return <div data-wiki-home="" className="fw-page">
-    <PositionNote position={position} t={t} Link={Link} />
+    <PositionNote position={position} t={t} />
     {sections.map(section => {
       const id = `fw-${section.segment}`;
       const empty = !section.works.length && !section.members.length;
@@ -108,7 +106,7 @@ export function WikiHome({ zone, sections, position, card, Link }: HomeSlotProps
 export function WikiMemberIndex({ zone, members, mount, position, more, Link }: MemberIndexSlotProps) {
   const t = strings(zone.locale);
   return <div data-wiki-index={mount.segment} className="fw-page">
-    <PositionNote position={position} t={t} Link={Link} />
+    <PositionNote position={position} t={t} />
     <Members segment={mount.segment} members={members} Link={Link} />
     {more ? <p className="fw-quiet">{t.more}</p> : null}
   </div>;
@@ -169,7 +167,7 @@ export function WikiEntity({ zone, entity, position, mount, rest, Link }: Entity
   return <article data-wiki-entity="" className="fw-page fw-entity">
     {mount ? <p className="fw-back"><Link href={mount.href}><ArrowLeftIcon aria-hidden="true" className="rtl:rotate-180" />
       {t.back(mount.name.value)}</Link></p> : null}
-    <PositionNote position={position} t={t} Link={Link} />
+    <PositionNote position={position} t={t} />
     <header className="fw-entity-head">
       <h1 lang={entity.name.lang || undefined} dir={entity.name.dir} className="fw-entity-name">{entity.name.value}</h1>
       {entity.aliases.length ? <p data-wiki-aliases="" className="fw-aliases"><span>{t.alsoKnownAs}:</span>{' '}

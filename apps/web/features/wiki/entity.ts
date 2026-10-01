@@ -155,7 +155,7 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
     asChapter ? chapterOf({ id, site, state, mount, locale, lists }) : null,
     state && !asChapter ? firstSeen(id, state) : null]);
   const firstSeenAt = seen && state ? await positionLink(site, state, seen, locale) : null;
-  return { id, kind: entryLabel(projection.registry, locale), name: own, aliases, facts, relationships, evidence,
+  return { id, kind: projection.registry.default ? null : entryLabel(projection.registry, locale), name: own, aliases, facts, relationships, evidence,
     firstSeen: firstSeenAt, more: more || claims.reduce((count, claim) => count + claim.ids.length, 0) > EVIDENCE_LIMIT,
     fullPage, chapter };
 }

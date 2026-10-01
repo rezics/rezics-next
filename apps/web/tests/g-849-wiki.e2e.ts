@@ -72,7 +72,7 @@ const words = {
     edition: 'text/plain edition', beyond: 'beyond your reading position' },
   ja: { upTo: 'ここまで:', start: '物語の始まり', progress: 'あなたの進行状況', characters: '主要人物', everything: 'すべて表示',
     elizabeth: 'エリザベス・ベネット', jane: 'ジェーン・ベネット', darcy: 'Fitzwilliam Darcy', revealed: 'この章で明かされること',
-    notFound: '', sister: '姉妹', acquaintance: '知人', passages: '引用と出典', alias: 'Lizzy', edition: 'text/plain 版',
+    notFound: 'このコミュニティは見つかりません', sister: '姉妹', acquaintance: '知人', passages: '引用と出典', alias: 'Lizzy', edition: 'text/plain 版',
     beyond: '現在の読み進めた位置より先' },
 } as const;
 
@@ -89,6 +89,8 @@ async function check(page: Page, info: TestInfo, name: string) {
   const violations = await axeViolations(page);
   expect(violations, formatViolations(violations)).toEqual([]);
   await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
+  // Passing tests keep no output; the screenshots are reviewed from here.
+  await page.screenshot({ path: `.temp/g849-shots/${name}.png`, fullPage: true });
 }
 
 /** The page and its scripts have loaded; the Zone's own markup is server-rendered, so assertions wait on it directly. */
@@ -120,9 +122,10 @@ for (const viewport of viewports) {
       await page.goto(site(locale, '/characters'));
       await ready(page);
       await expect(page.locator('[data-wiki-index="characters"] li')).toHaveCount(2);
-      const hidden = await page.goto(site(locale, `/characters/${uuid(seed.entities.darcy)}`));
-      expect(hidden?.status()).toBe(404);
-      await expect(page.getByRole('heading', { level: 1 }).filter({ hasText: w.darcy })).toHaveCount(0);
+      // The Zone answers as it does for any address it has no page for; the page is not a stub of the character.
+      await page.goto(site(locale, `/characters/${uuid(seed.entities.darcy)}`));
+      await expect(page.getByRole('heading', { level: 1, name: w.notFound })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(w.darcy)).toHaveCount(0);
       await check(page, info, `hidden-${locale}-${viewport.name}`);
 
       // A chapter beyond the visitor's position lists nothing it reveals.

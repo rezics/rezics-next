@@ -23,7 +23,11 @@ const renderers = { card, whyHere: () => null, nextVolumes: () => null };
 /** Every string an input carries, so words in the output can be traced to the read that supplied them. */
 function strings(value: unknown, found = new Set<string>()): Set<string> {
   if (typeof value === 'string') found.add(value);
-  else if (Array.isArray(value)) for (const item of value) strings(item, found);
+  else if (Array.isArray(value)) {
+    // A count is the length of a list the read returned, nothing else.
+    found.add(String(value.length));
+    for (const item of value) strings(item, found);
+  }
   else if (value && typeof value === 'object' && !('$$typeof' in value)) for (const item of Object.values(value)) strings(item, found);
   return found;
 }
@@ -43,7 +47,7 @@ function ownWords(locale: string): string[] {
 const entities: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#x27;': '\'', '&#39;': '\'' };
 /** Text in `html` that neither an input nor the package's own words account for. */
 function leftover(html: string, inputs: unknown[], locale: string): string[] {
-  const allowed = [...inputs.flatMap(input => [...strings(input)]), ...ownWords(locale), '·', ':', ',', '.', '—']
+  const allowed = [...inputs.flatMap(input => [...strings(input)]), ...ownWords(locale), '·', ':', ',', '.', '—', '+']
     .filter(word => word.length).sort((a, b) => b.length - a.length);
   const lines = html.replace(/<[^>]+>/g, '\n').replace(/&(amp|lt|gt|quot|#x27|#39);/g, match => entities[match]!).split('\n');
   const stray: string[] = [];
@@ -106,6 +110,8 @@ describe('G-849 wiki slots draw only what the host read', () => {
     const rogue = () => createElement('ul', null, ...data.characters.map(item => createElement('li', null, item.name.value)),
       createElement('li', null, 'George Wickham'));
     expect(leftover(renderToStaticMarkup(rogue()), [data.characters], 'en')).toEqual(['George Wickham']);
+    // A count is only the length of a list it was given.
+    expect(leftover('<span>99</span>', [data.characters], 'en')).toEqual(['99']);
   });
 
   test('a part the read did not return is not drawn: no placeholder rows, passages or lists', () => {

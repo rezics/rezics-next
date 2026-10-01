@@ -24,7 +24,7 @@ export async function readMembers(site: ZoneSite, segment: string, items: readon
     // A chapter's summary is named after its Work; the name the story gives it is the label its composition wrote.
     const chapter = state && page.data.target.base === 'occurrence' ? occurrenceName(state, item.id, locale) : null;
     return { id: item.id, href: memberHref(site, segment, item.id), name: chapter ?? zoneText(page.data.summary.name),
-      kind: entryLabel(page.data.registry, locale) } satisfies ZoneMember;
+      kind: page.data.registry.default ? null : entryLabel(page.data.registry, locale) } satisfies ZoneMember;
   }));
   return members.flatMap(member => member ?? []);
 }
