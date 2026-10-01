@@ -77,6 +77,26 @@ the background in an agent session; stop it with `astro dev stop` in `apps/about
 - **Cookies.** `rezics_locale` and `rezics_theme`, both first-party and set from the browser;
   no analytics or third-party requests.
 
+## Policies
+
+The nine policies in `docs/legal/` (Terms, Privacy, Acceptable Use, Content Ratings and Age, AI,
+Copyright and DMCA, NCII, Child Safety, API and Agent) are published at `/<locale>/legal/<slug>/`
+from those Markdown files through a content loader (`src/legal/loader.ts`); there are no copies.
+They stay in English in every locale (a localized notice says the English text governs), and the
+creator distribution outline is not published because it is an outline, not a policy. The AI
+policy is published because the Terms incorporate it.
+
+- **Facts.** The operator, mailboxes, DMCA agent and every other `[REZICS TO FILL]` answer come
+  from `src/legal/facts.ts`, supplied by the maintainer; an empty string means "not supplied" and
+  nothing there is invented. A new marker in a source needs a slot in that file, and
+  `tests/g-736-legal.test.ts` fails until it has one.
+- **Draft and release.** A development build shows every unfilled marker highlighted under a
+  "draft, not in force" banner and marks the pages `noindex`. `task about:build -- --release`
+  (or `ABOUT_RELEASE=1`) fails while a marker or an empty fact remains, and when the digest of a
+  source differs from `services/account/src/policy-versions.ts`. A release lists the policies in
+  the sitemap. Editing `terms-of-service.md` or `privacy-policy.md` therefore also means updating
+  that file, whose digests are what sign-up records and what re-acceptance compares.
+
 ## Tooling notes
 
 - `astro check` needs the TypeScript 6 compiler API, which the native TypeScript 7 the other
