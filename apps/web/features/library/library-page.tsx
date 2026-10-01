@@ -344,7 +344,7 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
     ratingContext={data.ratingContext} titles={titles} api={api} readerActions={readerActions} locale={locale}
     messages={messages}>
     {/* Titles mix Latin and CJK; space them apart. */}
-    <PageContainer className="grid gap-8 [text-autospace:normal]">
+    <PageContainer className="grid grid-cols-[minmax(0,1fr)] gap-8 [text-autospace:normal]">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">
           <h1 className="text-balance font-semibold text-3xl tracking-tight sm:text-4xl">{t.title}</h1>
@@ -361,7 +361,7 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
         {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
           messages={messages} /> : null}
       </>
-        : <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
+        : <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
           <ShelfNav state={state} overview={data} locale={locale} messages={messages} />
           <div className="grid min-w-0 content-start gap-10">
             {state.shelf.kind === 'all' && !state.cursor && reading.length
