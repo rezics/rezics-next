@@ -6,10 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "dist/client", "binding": "ASSETS", "not_found_handling": "none" },
   "vars": { "ACCOUNT_SERVICE_ORIGIN": "http://127.0.0.1:3002", "ACCOUNT_BASE_URL": "http://127.0.0.1:3004",
-    "WEB_ORIGIN": "http://127.0.0.1:3000" },
+    "WEB_ORIGIN": "http://127.0.0.1:3000", "ABOUT_SITE_URL": "http://127.0.0.1:4321" },
   "env": { "production": {
     "name": "rezics-accounts-production",
     "vars": { "ACCOUNT_SERVICE_ORIGIN": "<ACCOUNT_SERVICE_ORIGIN>", "ACCOUNT_BASE_URL": "<ACCOUNT_BASE_URL>",
-      "WEB_ORIGIN": "<WEB_ORIGIN>" }
+      "WEB_ORIGIN": "<WEB_ORIGIN>", "ABOUT_SITE_URL": "<ABOUT_SITE_URL>" }
   } }
 }

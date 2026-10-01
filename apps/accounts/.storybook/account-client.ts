@@ -21,7 +21,7 @@ export const totpEnrollment = { totpURI: 'otpauth://totp/REZICS:ada%40example.te
 
 export function fakeAccountClient(fake: FakeAccount = {}): AccountClient {
   const api: AccountApi = {
-    signIn: () => ok({}), verifyTwoFactor: () => ok({}), signInWithPasskey: ({ conditional, signal }) => conditional ? pendingAutofill(signal) : ok({}), signUp: () => ok({}),
+    signIn: () => ok({}), verifyTwoFactor: () => ok({}), signInWithPasskey: ({ conditional, signal }) => conditional ? pendingAutofill(signal) : ok({}), signUp: () => ok({}), acceptPolicies: () => ok(undefined), unsubscribe: () => ok(undefined),
     requestPasswordReset: () => ok(undefined), resetPassword: () => ok(undefined),
     sendVerificationEmail: () => ok(undefined), signOut: () => ok(undefined),
     consent: () => ok({ redirect: 'https://app.example/callback?code=c' }),

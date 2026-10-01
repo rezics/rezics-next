@@ -5,21 +5,27 @@ import { SignUpForm } from './sign-up-form.tsx';
 import { chinese, dark, phone } from '../../.storybook/variants.ts';
 import { AuthFrame } from '../shell/auth-frame.tsx';
 import { turnstileFixture } from './turnstile.fixture.ts';
+import { policyFixture } from './policies.fixture.ts';
 
 const meta = {
-  title: 'Accounts/Create account', component: SignUpForm, args: { turnstileSiteKey: TURNSTILE_TEST_SITE_KEY, next: '/' },
+  title: 'Accounts/Create account', component: SignUpForm, args: { turnstileSiteKey: TURNSTILE_TEST_SITE_KEY, next: '/', policies: policyFixture,
+    aboutOrigin: 'https://rezics.example', country: 'US' },
   decorators: [Story => <AuthFrame><Story /></AuthFrame>],
   beforeEach: () => turnstileFixture(),
 } satisfies Meta<typeof SignUpForm>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function fill(canvasElement: HTMLElement, password = 'long pass phrase', confirm = password, submit = true) {
+async function fill(canvasElement: HTMLElement, password = 'long pass phrase', confirm = password, submit = true,
+  birth = { month: '05', year: '1990' }, accept = true) {
   const canvas = within(canvasElement);
   await userEvent.type(await canvas.findByRole('textbox', { name: 'Name' }), 'Ada Lovelace');
   await userEvent.type(canvas.getByRole('textbox', { name: 'Email' }), 'ada@example.test');
   await userEvent.type(canvas.getByLabelText('Password'), password);
   await userEvent.type(canvas.getByLabelText('Confirm'), confirm);
+  await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Month' }), birth.month);
+  await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Year' }), birth.year);
+  if (accept) await userEvent.click(canvas.getByRole('checkbox', { name: /I have read and accept/ }));
   if (submit) await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
   return canvas;
 }
@@ -34,6 +40,8 @@ export const Form: Story = {
     await expect(canvas.getByText('Enter your name')).toBeVisible();
     await expect(canvas.getByText('Enter an email')).toBeVisible();
     await expect(canvas.getByText('Use 12 characters or more for your password')).toBeVisible();
+    await expect(canvas.getByText('Choose your birth month and year')).toBeVisible();
+    await expect(canvas.getByText('Accept the Terms and the Privacy Policy to create an account')).toBeVisible();
     await userEvent.clear(canvas.getByLabelText('Password'));
     await fill(canvasElement);
     await expect(created).toHaveBeenCalledWith('/');
@@ -124,5 +132,104 @@ export const Chinese: Story = {
     await expect(await canvas.findByRole('heading', { level: 1, name: '创建您的 REZICS 账号' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: '下一步' }));
     await expect(canvas.getByText('请输入您的姓名')).toBeVisible();
+  },
+};
+
+const refused = (kind: 'market-minimum-age' | 'market-unavailable' | 'invalid-birth-month' | 'policy-acceptance-required',
+  minimumAge?: number) => ({ account: { api: { signUp: async () => ({ ok: false as const, kind, status: 400, minimumAge }) } } });
+
+export const PoliciesAreTheExactVersions: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const terms = await canvas.findByRole('link', { name: 'Terms of Service' });
+    await expect(terms).toHaveAttribute('href', 'https://rezics.example/en/legal/terms/');
+    await expect(terms).toHaveAttribute('data-digest', 'a'.repeat(64));
+    await expect(canvas.getByRole('link', { name: 'Privacy Policy' }))
+      .toHaveAttribute('href', 'https://rezics.example/en/legal/privacy/');
+    await expect(canvas.getAllByText(/effective 2026-10-01/)).toHaveLength(2);
+    await expect(canvas.getByText('Region we detected: United States')).toBeVisible();
+  },
+};
+
+const sent = fn(async () => ({ ok: true as const, data: { verify: true } }));
+export const SendsTheDeclarationsAndAcceptedDigests: Story = {
+  parameters: { account: { api: { signUp: sent } } },
+  async play({ canvasElement }) {
+    await fill(canvasElement);
+    await expect(sent).toHaveBeenCalledWith(expect.objectContaining({ birthMonth: '1990-05',
+      acceptedPolicies: [{ policyId: 'terms', versionDigest: 'a'.repeat(64) },
+        { policyId: 'privacy', versionDigest: 'b'.repeat(64) }] }));
+  },
+};
+
+export const RefusedBelowTheMinimumAgeInKorea: Story = {
+  args: { country: 'KR' },
+  parameters: refused('market-minimum-age', 14),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(
+      'In South Korea, REZICS accounts are for people aged 14 or older. This is a rule about age, not a judgment of you');
+  },
+};
+
+export const RefusedBelowTheMinimumAgeInTheEea: Story = {
+  args: { country: 'DE' },
+  parameters: refused('market-minimum-age', 16),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('In Germany, REZICS accounts are for people aged 16 or older.');
+  },
+};
+
+export const RegionNotOpen: Story = {
+  args: { country: 'CN' },
+  parameters: refused('market-unavailable'),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('REZICS is not creating accounts in China yet. Nothing was saved.');
+  },
+};
+
+export const UnknownRegion: Story = {
+  args: { country: null },
+  parameters: refused('market-minimum-age', 16),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement);
+    await expect(canvas.getByText('We could not detect your region, so the strictest minimum age applies.')).toBeVisible();
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('In your region, REZICS accounts are for people aged 16');
+  },
+};
+
+export const PoliciesChangedWhileFilling: Story = {
+  parameters: refused('policy-acceptance-required'),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('The policies changed while you were here.');
+  },
+};
+
+export const PoliciesUnavailable: Story = {
+  args: { policies: undefined },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('sign-up is paused');
+    await expect(canvas.getByRole('button', { name: 'Next' })).toBeDisabled();
+  },
+};
+
+export const NeedsTheBirthMonthAndAcceptance: Story = {
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement, 'long pass phrase', 'long pass phrase', true, { month: '', year: '' }, false);
+    await expect(canvas.getByText('Choose your birth month and year')).toBeVisible();
+    await expect(canvas.getByText('Accept the Terms and the Privacy Policy to create an account')).toBeVisible();
+  },
+};
+export const PhoneWithRefusal: Story = {
+  args: { country: 'KR' },
+  globals: phone,
+  parameters: refused('market-minimum-age', 14),
+  async play({ canvasElement }) {
+    const canvas = await fill(canvasElement);
+    await expect(await canvas.findByRole('alert')).toBeVisible();
   },
 };

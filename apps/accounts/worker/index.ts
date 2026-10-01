@@ -11,6 +11,7 @@ export default {
       return proxyAccountRequest(request, {
         serviceOrigin: httpOrigin('ACCOUNT_SERVICE_ORIGIN', config.ACCOUNT_SERVICE_ORIGIN),
         publicOrigin: httpOrigin('ACCOUNT_BASE_URL', config.ACCOUNT_BASE_URL),
+        countryFromHeader: config.ACCOUNTS_COUNTRY_FROM_HEADER,
       });
     }
     const localized = applyLocaleParameter(request);

@@ -66,3 +66,10 @@ Stop the AppHost with `task dev:stop -- --profile qa --run-id web-demo` (add
 `--backend` in a worktree). To discard the project and its credentials, run
 `task stack:reset -- --profile qa --run-id web-demo`, then remove
 `.temp/stack/rezics-qa-web-demo/`.
+
+Account applies a sign-up's minimum age from `CF-IPCountry`, and only when the
+request comes from a peer in `ACCOUNT_TRUSTED_PROXY_PEERS`. Local stacks trust
+loopback and set `ACCOUNTS_COUNTRY_FROM_HEADER`, so the Accounts app passes the
+header a browser tool sends (the local worker's own edge always reports one
+fixed country); production reads only Cloudflare's country and refuses that
+setting. With no country the strictest minimum age applies.

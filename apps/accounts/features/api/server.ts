@@ -4,6 +4,7 @@ import { cache } from 'react';
 import { parseActivity, parseConnectedApps, parseConsentPreview, parseDisplayPreferences, parseMethods, parsePublicClient, parseSession,
   parseSessions, record } from './account-data.ts';
 import { accountsConfig, httpOrigin } from '../config/env.ts';
+import { parsePolicyStatus } from '../auth/policies.ts';
 
 export type { AccountSession } from './account-data.ts';
 
@@ -60,3 +61,17 @@ export const readPublicClient = cache((clientId: string) =>
 export const readRequestingClient = cache((clientId: string, oauthQuery: string) =>
   read('/api/auth/oauth2/public-client-prelogin', parsePublicClient,
     { anonymous: true, body: { client_id: clientId, oauth_query: oauthQuery } }));
+/** The current policy versions and whether this visitor must accept them; public, so sign-up can read it. */
+export const readPolicyStatus = cache(() =>
+  read('/api/account/policies', parsePolicyStatus, { anonymous: true }));
+/** Whether the signed link behind an unsubscribe email is still valid; reading it changes nothing. */
+export const readUnsubscribe = cache(async (token: string): Promise<'valid' | 'invalid' | 'unavailable'> => {
+  try {
+    const response = await fetch(new URL(`/api/account/mail/unsubscribe?${new URLSearchParams({ token })}`,
+      origins().service), { cache: 'no-store', signal: AbortSignal.timeout(8_000),
+      headers: { accept: 'application/json' } });
+    const body = await response.json().catch(() => null) as unknown;
+    if (response.status === 400) return 'invalid';
+    return response.ok && record(body)?.confirmationRequired === true ? 'valid' : 'unavailable';
+  } catch { return 'unavailable'; }
+});

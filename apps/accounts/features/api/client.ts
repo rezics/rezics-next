@@ -1,10 +1,13 @@
 // Browser calls to the Account service through this origin's proxy. Each one
 // maps to a Better Auth or oauth-provider endpoint of the pinned version, or to
 // an Account route under /api/account.
-import { classifyFailure, type FailureKind, type Result } from './errors.ts';
+import { classifyFailure, refusedMinimumAge, type FailureKind, type Result } from './errors.ts';
 import { parseDisplayPreferences, type AccountLocale, type DisplayPreferences } from './account-data.ts';
 import { creationOptions, credentialJson, isCancelled, passkeysSupported,
   requestOptions } from '../auth/webauthn.ts';
+
+/** The exact policy text a person accepted: its policy and the digest of the displayed version. */
+export interface PolicyAcceptance { policyId: 'terms' | 'privacy'; versionDigest: string }
 
 /** Where to go next: the provider's continuation of an OAuth request, if any. */
 interface Continuation { redirect?: string }
@@ -22,7 +25,12 @@ export interface AccountApi {
   Promise<Result<Continuation>>;
   /** `verify` means the account needs its email verified before signing in. */
   signUp(input: { name: string; email: string; password: string; locale: AccountLocale; oauthQuery?: string;
-    carry?: string; captchaToken?: string }): Promise<Result<Continuation & { verify?: boolean }>>;
+    carry?: string; captchaToken?: string; birthMonth: string; acceptedPolicies: PolicyAcceptance[] }):
+  Promise<Result<Continuation & { verify?: boolean }>>;
+  /** Accept the current policies after a material change (the signed-in person's own receipt). */
+  acceptPolicies(acceptedPolicies: PolicyAcceptance[]): Promise<Result<void>>;
+  /** The confirmed one-click unsubscribe from optional email (RFC 8058); no sign-in. */
+  unsubscribe(token: string): Promise<Result<void>>;
   requestPasswordReset(email: string, captchaToken?: string): Promise<Result<void>>;
   resetPassword(token: string, newPassword: string): Promise<Result<void>>;
   sendVerificationEmail(email: string, captchaToken?: string): Promise<Result<void>>;
@@ -68,7 +76,11 @@ async function call<T = unknown>(path: string, body?: Body, captchaToken?: strin
     return { ok: false, kind: 'unavailable', status: 0 };
   }
   const data = await response.json().catch(() => null) as unknown;
-  if (!response.ok) return { ok: false, kind: classifyFailure(response.status, data), status: response.status };
+  if (!response.ok) {
+    const minimumAge = refusedMinimumAge(data);
+    return { ok: false, kind: classifyFailure(response.status, data), status: response.status,
+      ...(minimumAge === undefined ? {} : { minimumAge }) };
+  }
   return { ok: true, data: data as T };
 }
 
@@ -144,9 +156,11 @@ export const browserAccountApi: AccountApi = {
       ...(oauthQuery ? { oauth_query: oauthQuery } : {}) });
     return result.ok ? { ok: true, data: continuation(result.data) } : result;
   },
-  async signUp({ name, email, password, locale, oauthQuery, carry, captchaToken }) {
-    // The verification link returns to where this sign-up started.
+  async signUp({ name, email, password, locale, oauthQuery, carry, captchaToken, birthMonth, acceptedPolicies }) {
+    // The verification link returns to where this sign-up started. Account keeps
+    // the birth month only for this admission decision, never on the account.
     const result = await auth<{ token?: string | null }>('/sign-up/email', { name, email, password, locale,
+      birthMonth, acceptedPolicies,
       callbackURL: carry ? `${callbackPaths.verifyEmail}?${carry}` : callbackPaths.verifyEmail,
       ...(oauthQuery ? { oauth_query: oauthQuery } : {}) }, captchaToken);
     if (!result.ok) return result;
@@ -154,6 +168,21 @@ export const browserAccountApi: AccountApi = {
     // Without a session token the account (or an existing one) waits for email
     // verification; the answer is the same either way.
     return { ok: true, data: next.redirect || result.data?.token ? next : { verify: true } };
+  },
+  async acceptPolicies(acceptedPolicies) {
+    return done(await account('/policies/acceptance', { acceptedPolicies }));
+  },
+  async unsubscribe(token) {
+    let response: Response;
+    try {
+      response = await fetch(`/api/account/mail/unsubscribe?${new URLSearchParams({ token })}`, {
+        method: 'POST', credentials: 'omit', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ 'List-Unsubscribe': 'One-Click' }) });
+    } catch { return { ok: false, kind: 'unavailable', status: 0 }; }
+    await response.body?.cancel();
+    return response.ok ? { ok: true, data: undefined }
+      : { ok: false, kind: response.status === 400 ? 'invalid-token' : response.status >= 500 ? 'unavailable' : 'failed',
+        status: response.status };
   },
   async requestPasswordReset(email, captchaToken) {
     return done(await auth('/request-password-reset', { email, redirectTo: callbackPaths.resetPassword }, captchaToken));

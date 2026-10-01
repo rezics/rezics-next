@@ -10,9 +10,12 @@ export type FailureKind = 'invalid-credentials' | 'email-not-verified' | 'rate-l
   | 'last-method'
   | 'invalid-code'
   // The browser's passkey prompt was dismissed, timed out or is unsupported.
-  | 'cancelled';
+  | 'cancelled'
+  // Sign-up declarations the market's rules refuse; `minimumAge` accompanies the age one.
+  | 'birth-month-required' | 'invalid-birth-month' | 'market-unavailable' | 'market-minimum-age'
+  | 'policy-acceptance-required';
 
-interface Failure { ok: false; kind: FailureKind; status: number }
+interface Failure { ok: false; kind: FailureKind; status: number; minimumAge?: number }
 export type Result<T> = { ok: true; data: T } | Failure;
 
 const byCode: Record<string, FailureKind> = {
@@ -53,6 +56,21 @@ const byError: Record<string, FailureKind> = {
   unauthenticated: 'unauthenticated',
 };
 
+// Account's sign-up admission answers `{ reason, minimumAge }` (market-policy.ts).
+const byReason: Record<string, FailureKind> = {
+  birth_month_required: 'birth-month-required',
+  invalid_birth_month: 'invalid-birth-month',
+  market_unavailable: 'market-unavailable',
+  market_minimum_age: 'market-minimum-age',
+  policy_acceptance_required: 'policy-acceptance-required',
+};
+
+/** The minimum age a market-minimum-age refusal reports, when it is a number. */
+export function refusedMinimumAge(body: unknown): number | undefined {
+  const age = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).minimumAge : undefined;
+  return typeof age === 'number' && Number.isInteger(age) ? age : undefined;
+}
+
 export function classifyFailure(status: number, body: unknown): FailureKind {
   const record = typeof body === 'object' && body !== null ? body as Record<string, unknown> : {};
   const code = typeof record.code === 'string' ? record.code : undefined;
@@ -60,6 +78,8 @@ export function classifyFailure(status: number, body: unknown): FailureKind {
   const message = typeof record.message === 'string' ? record.message : '';
   if (status === 429) return 'rate-limited';
   if (status >= 500) return 'unavailable';
+  const reason = typeof record.reason === 'string' ? record.reason : error;
+  if (reason && byReason[reason]) return byReason[reason];
   if (code && byCode[code]) return byCode[code];
   if (error && byError[error]) return byError[error];
   if (error === 'invalid_signature' || error === 'invalid_request' && status === 400) return 'expired-request';

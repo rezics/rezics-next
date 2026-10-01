@@ -92,6 +92,10 @@ async function fillSignUp(page: Page, person: Person) {
   await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
   await page.getByLabel('Password', { exact: true }).fill(person.password);
   await page.getByLabel('Confirm').fill(person.password);
+  // The sign-up declaration: a birth month well above any market's minimum age, and the policies shown.
+  await page.getByRole('combobox', { name: 'Month' }).selectOption('05');
+  await page.getByRole('combobox', { name: 'Year' }).selectOption('1990');
+  await page.getByText('I have read and accept:').click();
   await page.getByRole('button', { name: 'Next' }).click();
 }
 

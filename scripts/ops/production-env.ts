@@ -177,6 +177,8 @@ export function checkProductionEnv(
   ) {
     throw new Error('Production SMTP requires TLS');
   }
+  if (/^(?:true|1)$/i.test(env.ACCOUNTS_COUNTRY_FROM_HEADER ?? ''))
+    throw new Error('Production takes the sign-up country from the Cloudflare edge, never ACCOUNTS_COUNTRY_FROM_HEADER');
   for (const name of [
     'FUSEKI_MAINTENANCE_TOKEN',
     'FUSEKI_COMMAND_TOKEN',

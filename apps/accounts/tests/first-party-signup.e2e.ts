@@ -28,6 +28,10 @@ test('joining from home verifies email, resumes REZICS authorization and keeps t
   await page.getByRole('textbox', { name: 'Email' }).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByLabel('Confirm').fill(password);
+  // The sign-up declaration: a birth month well above any market's minimum age, and the policies shown.
+  await page.getByRole('combobox', { name: 'Month' }).selectOption('05');
+  await page.getByRole('combobox', { name: 'Year' }).selectOption('1990');
+  await page.getByText('I have read and accept:').click();
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
 

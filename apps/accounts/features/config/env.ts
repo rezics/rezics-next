@@ -1,7 +1,7 @@
 // Server-side configuration for the Accounts Worker. Defaults match the `vars`
 // in wrangler.jsonc and the shared `task dev` backend; `task env:example`
 // renders this spec into apps/accounts/.env.example.
-import { cleanEnv, str, url } from 'envalid';
+import { bool, cleanEnv, str, url } from 'envalid';
 
 export const accountsSpec = {
   ACCOUNT_TURNSTILE_MODE: str({ choices: ['local', 'cloudflare'], default: 'cloudflare', devDefault: 'local',
@@ -13,6 +13,10 @@ export const accountsSpec = {
   ACCOUNT_BASE_URL: url({ default: 'http://127.0.0.1:3004',
     desc: 'Public Account origin and OAuth issuer base, the same value the Account service uses.' }),
   WEB_ORIGIN: url({ default: 'http://127.0.0.1:3000', desc: 'REZICS web origin linked from the Accounts header.' }),
+  ACCOUNTS_COUNTRY_FROM_HEADER: bool({ default: false,
+    desc: 'Development only: sign-up takes its country from the request CF-IPCountry header, not the Cloudflare edge, so a browser tool can choose a region. Production refuses it.' }),
+  ABOUT_SITE_URL: url({ default: 'https://rezics.com',
+    desc: 'Public about site origin that publishes the policies sign-up and re-acceptance link to.' }),
 };
 
 export function accountsConfig(env: Record<string, string | undefined> = process.env) {

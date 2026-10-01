@@ -10,18 +10,52 @@ const requestHeaders = ['accept', 'accept-language', 'authorization', 'content-t
   'dpop', 'user-agent', 'x-account-reason', 'x-captcha-response'];
 const fetchMetadata = ['sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site'];
 const bodyless = new Set(['GET', 'HEAD']);
+// A browser that lands on one of these gets the page that presents the result
+// instead of the service's JSON: re-acceptance after a policy change, and the
+// confirmation behind an email's unsubscribe link.
+const authorizePaths = new Set(['/api/auth/oauth2/authorize', '/oauth2/authorize']);
+const unsubscribePath = '/api/account/mail/unsubscribe';
 
 export interface AccountProxyOptions {
   /** Where the Account service listens, e.g. http://127.0.0.1:3002. */
   serviceOrigin: string;
   /** The public Account origin the service trusts (its ACCOUNT_BASE_URL). */
   publicOrigin: string;
+  /** Development only (`ACCOUNTS_COUNTRY_FROM_HEADER`): take the country from `CF-IPCountry` even on a runtime
+   * that has an edge, because the local worker's edge always reports one fixed country. */
+  countryFromHeader?: boolean;
   fetch?: typeof fetch;
 }
 
 /** Paths this origin forwards to the Account service instead of rendering. */
 export function isAccountServicePath(pathname: string): boolean {
   return prefixes.some(prefix => pathname.startsWith(prefix));
+}
+
+/** A browser navigation, not a server caller or a script's fetch. */
+function isNavigation(request: Request): boolean {
+  return request.method === 'GET' && request.headers.get('sec-fetch-mode') === 'navigate';
+}
+
+/** The page that asks for the current policies; `continue` carries the root-relative request to resume. */
+export const policyAcceptancePath = '/accept-policies';
+
+function redirect(location: string): Response {
+  return new Response(null, { status: 302, headers: { location, 'cache-control': 'no-store',
+    'referrer-policy': 'no-referrer' } });
+}
+
+/**
+ * The visitor's country as Cloudflare's edge resolved it. On Cloudflare the
+ * edge's own `cf.country` is the only source: a client-sent `CF-IPCountry` is
+ * never copied. Without a `cf` object (tests) there is no edge, so the header
+ * is passed through, and so it is when `fromHeader` is set for local development;
+ * Account still uses it only from a proxy peer it is configured to trust.
+ */
+export function edgeCountry(request: Request, fromHeader = false): string | undefined {
+  const cf = (request as Request & { cf?: { country?: unknown } }).cf;
+  const value = cf && !fromHeader ? cf.country : request.headers.get('cf-ipcountry');
+  return typeof value === 'string' && /^[A-Z]{2}$/.test(value) ? value : undefined;
 }
 
 function sameOrigin(value: string | null, origin: string): boolean {
@@ -75,6 +109,9 @@ export async function proxyAccountRequest(request: Request,
       ? name === 'origin' ? options.publicOrigin : reorigin(value, own, options.publicOrigin)
       : value);
   }
+  // Sign-up applies the market's minimum age from the edge's country, never from the client.
+  const country = edgeCountry(request, options.countryFromHeader);
+  if (country) headers.set('cf-ipcountry', country);
   // Only the edge knows the client address; a client-sent value is never trusted.
   const client = request.headers.get('cf-connecting-ip');
   if (client) headers.set('x-forwarded-for', client);
@@ -87,6 +124,18 @@ export async function proxyAccountRequest(request: Request,
   } catch {
     return Response.json({ error: 'temporarily_unavailable' }, { status: 503,
       headers: { 'cache-control': 'no-store', 'retry-after': '5' } });
+  }
+  if (isNavigation(request) && upstream.status === 403 && authorizePaths.has(incoming.pathname)) {
+    const body = await upstream.clone().json().catch(() => null) as { code?: unknown } | null;
+    // The current policies need accepting; afterwards the same request continues.
+    if (body?.code === 'policy_acceptance_required') {
+      return redirect(`${own}${policyAcceptancePath}?${new URLSearchParams({
+        continue: `${incoming.pathname}${incoming.search}` })}`);
+    }
+  }
+  if (isNavigation(request) && incoming.pathname === unsubscribePath) {
+    await upstream.body?.cancel();
+    return redirect(`${own}/unsubscribe${incoming.search}`);
   }
   const outgoing = new Headers(upstream.headers);
   // fetch has already decoded the body; its original framing no longer applies.

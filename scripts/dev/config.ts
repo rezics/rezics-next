@@ -198,6 +198,10 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
         Object.fromEntries(['write', 'upload', 'report', 'correspondence', 'search', 'provider']
           .map(family => [family, { maximum: 1_000_000, seconds: 60 }]))]))),
     MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS: compose.MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS ?? '127.0.0.1,::1',
+    // Account applies a sign-up's market rule from the edge's CF-IPCountry only via a trusted
+    // peer; locally the Accounts app proxies from loopback, so a browser tool can choose a region.
+    ACCOUNTS_COUNTRY_FROM_HEADER: compose.ACCOUNTS_COUNTRY_FROM_HEADER ?? 'true',
+    ACCOUNT_TRUSTED_PROXY_PEERS: compose.ACCOUNT_TRUSTED_PROXY_PEERS ?? '127.0.0.1,::1',
     MAIN_READER_IMPORT_SEARCHES_PER_DAY: compose.MAIN_READER_IMPORT_SEARCHES_PER_DAY ?? '1000000',
     MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY: compose.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY ?? '1000000',
     ACCOUNT_TURNSTILE_MODE: compose.ACCOUNT_TURNSTILE_MODE ?? 'local',
