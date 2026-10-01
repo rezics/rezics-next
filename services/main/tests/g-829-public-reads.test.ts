@@ -70,6 +70,7 @@ export const publicGetRoutes = [
   '/v1/resources/:resource/page', '/v1/resources/:resource/statements',
   '/v1/compositions/:id/revisions/:revision', '/v1/compositions/:id/seals/:seal',
   '/v1/compositions/:id/occurrences/:occurrence', '/v1/collections/:id',
+  '/v1/collections/:id/works',
   '/v1/collections/:id/name', '/v1/collections/:id/revisions/:revision',
 ] as const;
 

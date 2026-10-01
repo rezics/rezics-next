@@ -15,7 +15,9 @@ import {
   requireMandate,
   requirePrincipal,
 } from '../access/topology-control.ts';
-import { resolvedTarget, type ResolvedTarget } from '../target/contract.ts';
+import { resolvedTarget, targetRef, type ResolvedTarget } from '../target/contract.ts';
+import { resolveCommandTarget, targetRead } from '../target/resolve.ts';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { command, type Assessed, type Command, type ReadAssessment } from './contract.ts';
 import { atLeastAsRestrictive, UNASSESSED, type Labels } from './policy.ts';
 
@@ -30,6 +32,7 @@ export const SUITABILITY_COST = {
   readStatements: 1,
   moderatorAuthorityStatements: 4,
   writeStatements: 6,
+  commandTargetQueries: 3,
   lockTimeoutMs: 2000,
   statementTimeoutMs: 5000,
 } as const;
@@ -125,19 +128,43 @@ export class SuitabilityStore {
     });
   }
 
-  async write(
+  write(
     principal: VerifiedPrincipal,
     target: ResolvedTarget,
     input: Command,
     key: string,
   ): Promise<{ assessment: Assessed; replayed: boolean }> {
+    return this.writeWithTarget(principal, target, input, key);
+  }
+
+  /** A suitability command needs structural identity, not permission to read
+   * rated content. Platform authority is locked before resolving that identity;
+   * author commands retain the owning Work's edit proof and platform floor. */
+  writeCommand(principal: VerifiedPrincipal, resource: string, input: Command, key: string,
+    environment: WorkActivationEnvironment): Promise<{ assessment: Assessed; replayed: boolean }> {
+    if (!Value.Check(targetRef, resource)) throw new ControlInvalid('Invalid suitability target');
+    return this.writeWithTarget(principal,
+      () => targetRead(environment, {}, session => resolveCommandTarget(session, resource)), input, key);
+  }
+
+  private async writeWithTarget(
+    principal: VerifiedPrincipal,
+    targetProof: ResolvedTarget | (() => Promise<ResolvedTarget>),
+    input: Command,
+    key: string,
+  ): Promise<{ assessment: Assessed; replayed: boolean }> {
     if (
-      !Value.Check(resolvedTarget, target) ||
+      (typeof targetProof !== 'function' && !Value.Check(resolvedTarget, targetProof)) ||
       !Value.Check(command, input) ||
       !/^[A-Za-z0-9:_./-]{1,128}$/.test(key)
     )
       throw new ControlInvalid('Invalid suitability command');
-    const digest = createHash('sha256')
+    const resolve = async () => {
+      const target = typeof targetProof === 'function' ? await targetProof() : targetProof;
+      if (!Value.Check(resolvedTarget, target)) throw new ControlInvalid('Invalid suitability target proof');
+      return target;
+    };
+    const digest = (target: ResolvedTarget) => createHash('sha256')
       .update(
         JSON.stringify([
           target.resource,
@@ -149,6 +176,7 @@ export class SuitabilityStore {
       )
       .digest('hex');
     if (input.basis === 'author') {
+      const target = await resolve();
       if (!target.work) throw new ControlDenied('Author assessment requires an owning Work');
       return this.authorAuthority.withWorkEditAuthority(
         principal,
@@ -162,7 +190,7 @@ export class SuitabilityStore {
               target.resource,
               input,
               key,
-              digest,
+              digest(target),
               proof,
               proof.validUntil,
             ),
@@ -182,6 +210,7 @@ export class SuitabilityStore {
         undefined,
         PLATFORM_SCOPE,
       );
+      const target = await resolve();
       // Access permits infinite mandates. Cap the lease in SQL so PostgreSQL
       // infinity never reaches JavaScript date arithmetic or the audit proof.
       const lease = (
@@ -200,7 +229,7 @@ export class SuitabilityStore {
         target.resource,
         input,
         key,
-        digest,
+        digest(target),
         {
           principalId: owner.id,
           principalEpoch: owner.epoch,

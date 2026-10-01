@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { discloseInventory, DisclosureUnavailable } from '../../../services/main/src/modules/disclosure/read.ts';
 import { SuitabilityStore } from '../../../services/main/src/modules/suitability/store.ts';
+import type { Assessed } from '../../../services/main/src/modules/suitability/contract.ts';
+import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
 import { WorkReaderStats } from '../../../services/main/src/modules/work/read-stats.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
@@ -128,9 +130,10 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
     expect(await (await requests(work.work, false)[2]!()).text()).toContain('G897 secret statement');
     expect((await search()).total).toBe(3);
     expect((await call('GET', `/v1/media/uses/${media.body.items[0]!.use}`)).status).toBe(200);
-    const assessment = await suitability.write(home.author.principal,
-      { resource: work.work, base: 'work', work: work.work, revision: head, types: [], disclosure: 'public' },
-      { actingSubject: home.author.actor, expectedRevision: null, labels: ['r18'], basis: 'platform' }, randomUUID());
+    const rate = (labels: Labels, expectedRevision: string | null, actor = home.author.actor) =>
+      call('PUT', `/v1/suitability/${work.work.slice(-36)}`, {
+        actingSubject: actor, expectedRevision, labels, basis: 'platform' }, true);
+    const assessment = await json<{ assessment: Assessed }>(await rate(['r18'], null));
     const absent = `https://rezics.com/id/${randomUUID()}`;
     for (const signed of [false, true]) {
       const deniedReads = requests(work.work, signed), absentReads = requests(absent, signed);
@@ -176,6 +179,23 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
       expect((await discloseInventory(home.stack.env, [{ owner: 'graph', resource: child, component: 'record' }],
         undefined, 'read'))[0]).not.toBe('visible');
     }
+    // Moderation is a command proof, independent of permission to read rated
+    // content. Withdraw this Agent's Work read grant before correcting it.
+    await home.stack.accessPool.query(`UPDATE access.permission_grant SET active = false
+      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.read'`, [home.author.actor, `work:read:${work.work}`]);
+    const corrected = await json<{ assessment: Assessed }>(await rate(['r18g'], assessment.assessment.revision));
+    expect(corrected.assessment.predecessor).toBe(assessment.assessment.revision);
+    expect(corrected.assessment.labels).toEqual(['r18g']);
+    for (const read of requests(work.work, false)) {
+      expect(await (await read()).text()).not.toContain(work.title);
+    }
+    expect((await rate([], assessment.assessment.revision)).status).toBe(409);
+    expect((await rate([], corrected.assessment.revision, seeded.author)).status).toBe(403);
+    await home.stack.accessPool.query(`UPDATE access.permission_grant SET active = false
+      WHERE recipient_subject = $1 AND scope_id = 'governance:platform' AND action = 'governance.moderate'`, [home.author.actor]);
+    expect((await rate([], corrected.assessment.revision)).status).toBe(403);
+    await home.author.grant('governance:platform', 'governance.moderate');
+    await home.author.grant(`work:read:${work.work}`, 'work.read');
     const readDisclosure = governance.disclosure.read.bind(governance.disclosure);
     governance.disclosure.read = async () => { throw new DisclosureUnavailable('Assessment store unavailable'); };
     try {
@@ -197,10 +217,9 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
     const exported = await json<{ plan: unknown }>(await call('POST', '/v1/exports', exportBody, true), 201);
     expect(JSON.stringify(exported)).toContain('disclosure_restricted');
     expect(JSON.stringify(exported)).not.toContain(work.title);
-    await suitability.write(home.author.principal,
-      { resource: work.work, base: 'work', work: work.work, revision: head, types: [], disclosure: 'public' },
-      { actingSubject: home.author.actor, expectedRevision: assessment.assessment.revision,
-        labels: [], basis: 'platform' }, randomUUID());
+    const cleared = await json<{ assessment: Assessed }>(await rate([], corrected.assessment.revision));
+    expect(cleared.assessment.predecessor).toBe(corrected.assessment.revision);
+    expect(cleared.assessment.labels).toEqual([]);
     for (const read of requests(work.work, false)) expect((await read()).status).toBe(200);
   } finally { await home.stop(); }
 }, 180_000);

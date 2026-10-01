@@ -122,6 +122,60 @@ const revisionPatterns = {
 const requiresWork = { work: true, realization: true, release: true, occurrence: true,
   resource: false } satisfies Record<Base, boolean>;
 
+/** Command identity proof: no names, bodies, media or audience admission. Call
+ * only from a command owner that establishes its own authority before exposing
+ * a result. Shares the reader's structural revision paths and position fences.
+ * One target, one bounded query with at most 64 structural/semantic types. */
+export async function resolveCommandTarget(session: TargetReadSession, resource: string): Promise<ResolvedTarget> {
+  session.checkDeadline();
+  if (!Value.Check(targetRef, resource)) throw new WorkReadInvalid('Command target is invalid');
+  const ownership = {
+    work: 'BIND(?r AS ?work)',
+    realization: `GRAPH ${iri(GRAPHS.current)} { ?r rv:work ?work }`,
+    release: `{ GRAPH ${iri(GRAPHS.current)} { ?r rv:work ?work } }
+      UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease ; rv:work ?work } }`,
+    occurrence: `GRAPH ${iri(GRAPHS.current)} { ?structure rv:structureOf ?component .
+      { ?component a rv:MainVersion ; rv:work ?work }
+      UNION { ?component a schema:CreativeWork . BIND(?component AS ?work) } }`,
+    // Structural grains keep their owner even when they also have semantic facts.
+    resource: `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r a ?structural .
+      VALUES ?structural { schema:CreativeWork rv:MainVersion rv:TextContribution
+        rv:Realization rv:Release schema:ListItem } } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } }`,
+  } satisfies Record<Base, string>;
+  const branches = capabilityBases.suitability.map(base => `{
+    { ${revisionPatterns[base]} } ${ownership[base]} BIND("${base}" AS ?base)
+  }`);
+  const rows = await session.query(`SELECT ?epoch ?sequence ?r ?base ?work ?revision ?type WHERE {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
+    OPTIONAL { VALUES ?r { ${iri(resource)} }
+      { ${branches.join(' UNION ')}
+        UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:MainVersion } BIND("main-version" AS ?base) } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
+      OPTIONAL { { GRAPH ${iri(GRAPHS.current)} { ?r a ?type } }
+        UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } BIND(rv:FixedRelease AS ?type) } }
+    }
+  } LIMIT ${TARGET_RESOLVE_COST.typesPerTarget + 1}`, TARGET_RESOLVE_COST.typesPerTarget);
+  if (!rows.length || rows.some(row => row.epoch?.value !== session.position.dataEpoch
+    || row.sequence?.value !== session.position.sequence)) throw new WorkReadMoved('Graph changed during command target resolution');
+  const exact = rows.filter(row => row.r?.value === resource && row.base);
+  if (!exact.length) throw new TargetUnavailable();
+  const bases = new Set(exact.map(row => row.base!.value));
+  if (bases.size !== 1) throw new WorkReadUnavailable('Command target grain is ambiguous');
+  const base = exact[0]!.base!.value as Base;
+  if (!capabilityBases.suitability.includes(base)) throw new TargetNotBound();
+  const revisions = new Set(exact.map(row => row.revision?.value));
+  const works = new Set(exact.map(row => row.work?.value ?? null));
+  const types = [...new Set(exact.flatMap(row => row.type ? [row.type.value] : []))].sort();
+  const target = { resource, base, revision: exact[0]!.revision?.value,
+    work: exact[0]!.work?.value ?? null, types, disclosure: 'restricted' as const };
+  if (revisions.size !== 1 || works.size !== 1 || !Value.Check(resolvedTarget, target)
+    || requiresWork[base] !== (target.work !== null) || base === 'work' && target.work !== resource) {
+    throw new WorkReadUnavailable('Command target identity is ambiguous');
+  }
+  return target;
+}
+
 export function targetSummaryReader(session: TargetReadSession): SummaryReader {
   const { deps, principal, options } = session;
   const actingSubject = options.actingSubject;

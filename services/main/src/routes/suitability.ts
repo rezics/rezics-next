@@ -52,19 +52,13 @@ export function suitabilityRoutes(work: MainWorkDependencies) {
           const principal = await work.account.verify(request, [
             body.basis === 'platform' ? MODERATION_SCOPE : 'work:edit',
           ]);
-          const targets = await workRead(
-            work,
-            request,
-            { actingSubject: body.actingSubject },
-            (session) =>
-              resolveTargets(session, [`https://rezics.com/id/${params.target}`], 'suitability'),
-          );
           return Response.json(
-            await work.suitability.write(
+            await work.suitability.writeCommand(
               principal,
-              targets[0]!,
+              `https://rezics.com/id/${params.target}`,
               body,
               request.headers.get('idempotency-key') ?? '',
+              work.environment,
             ),
             { headers },
           );

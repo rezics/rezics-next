@@ -259,10 +259,13 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
       residuals }, deps.rights);
   }
   if (selection.kind === 'semantic-revision') {
-    if ((await unverifiedWorks(deps.env, [selection.resource])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
     if (!deps.canReadSemantic || !await deps.canReadSemantic(principal, actingSubject, selection.resource, selection.reference)) {
       throw new ExportSourceNotFound('semantic resource is unavailable');
     }
+    // Establish exact-history authority before probing current catalogue state
+    // or hydrating bytes. Denied and absent sources share the same 404 even if
+    // a later disclosure/verification owner is unavailable.
+    if ((await unverifiedWorks(deps.env, [selection.resource])).size) throw new ExportSourceNotFound('Work awaits catalogue verification');
     const exact = await readSemanticRevision(deps.env, selection.resource, selection.reference,
       resource => deps.canReadSemantic!(principal, actingSubject, resource));
     if (!exact || exact.state.component !== 'resource') {
