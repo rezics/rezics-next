@@ -199748,6 +199748,47 @@
                       "null"
                     ]
                   },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
                   "reversesDecisionId": {
                     "~elyTyp": 7,
                     "nullable": true,
@@ -199818,6 +199859,15 @@
                           "~elyTyp": 7,
                           "maxLength": 512,
                           "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
                           "nullable": true,
                           "type": [
                             "string",
@@ -199967,6 +200017,47 @@
                       "null"
                     ]
                   },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
                   "reversesDecisionId": {
                     "~elyTyp": 7,
                     "nullable": true,
@@ -200037,6 +200128,15 @@
                           "~elyTyp": 7,
                           "maxLength": 512,
                           "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
                           "nullable": true,
                           "type": [
                             "string",
@@ -200186,6 +200286,47 @@
                       "null"
                     ]
                   },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
                   "reversesDecisionId": {
                     "~elyTyp": 7,
                     "nullable": true,
@@ -200256,6 +200397,15 @@
                           "~elyTyp": 7,
                           "maxLength": 512,
                           "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
                           "nullable": true,
                           "type": [
                             "string",
@@ -200400,6 +200550,92 @@
                       },
                       "type": "array"
                     },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
                     "outcome": {
                       "type": "string"
                     },
@@ -200417,6 +200653,7 @@
                     "caseGeneration",
                     "outcome",
                     "replayed",
+                    "operation",
                     "enforcement"
                   ],
                   "type": "object"
@@ -200425,7 +200662,7 @@
             },
             "description": "Response for status 200"
           },
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -200482,6 +200719,92 @@
                       },
                       "type": "array"
                     },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
                     "outcome": {
                       "type": "string"
                     },
@@ -200499,13 +200822,14 @@
                     "caseGeneration",
                     "outcome",
                     "replayed",
+                    "operation",
                     "enforcement"
                   ],
                   "type": "object"
                 }
               }
             },
-            "description": "Response for status 201"
+            "description": "Response for status 202"
           },
           "400": {
             "content": {
@@ -290101,6 +290425,97 @@
                         "null"
                       ]
                     },
+                    "operation": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "outcome": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -290134,6 +290549,71 @@
                     },
                     "state": {
                       "type": "string"
+                    },
+                    "statementOfReasons": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "appealRoute": {
+                          "const": "/v1/public-reports/{caseId}/correspondence",
+                          "type": "string"
+                        },
+                        "automation": {
+                          "type": "boolean"
+                        },
+                        "contentLanguage": {
+                          "maxLength": 255,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "duration": {
+                          "maxLength": 4000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "facts": {
+                          "maxLength": 4000,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "rule": {
+                          "properties": {
+                            "digest": {
+                              "type": "string"
+                            },
+                            "ref": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ref",
+                            "revision",
+                            "digest"
+                          ],
+                          "type": "object"
+                        },
+                        "scope": {
+                          "maxLength": 4000,
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "facts",
+                        "scope",
+                        "duration",
+                        "automation",
+                        "appealRoute",
+                        "contentLanguage",
+                        "rule"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     },
                     "steps": {
                       "items": {
@@ -290205,6 +290685,8 @@
                     "process",
                     "outcome",
                     "reasons",
+                    "statementOfReasons",
+                    "operation",
                     "steps",
                     "nextCursor"
                   ],
@@ -407437,6 +407919,47 @@
                       "null"
                     ]
                   },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
                   "reversesDecisionId": {
                     "~elyTyp": 7,
                     "nullable": true,
@@ -407507,6 +408030,15 @@
                           "~elyTyp": 7,
                           "maxLength": 512,
                           "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
                           "nullable": true,
                           "type": [
                             "string",
@@ -407655,6 +408187,47 @@
                       "null"
                     ]
                   },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
                   "reversesDecisionId": {
                     "~elyTyp": 7,
                     "nullable": true,
@@ -407725,6 +408298,15 @@
                           "~elyTyp": 7,
                           "maxLength": 512,
                           "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
                           "nullable": true,
                           "type": [
                             "string",
@@ -407873,6 +408455,47 @@
                       "null"
                     ]
                   },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
                   "reversesDecisionId": {
                     "~elyTyp": 7,
                     "nullable": true,
@@ -407943,6 +408566,15 @@
                           "~elyTyp": 7,
                           "maxLength": 512,
                           "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
                           "nullable": true,
                           "type": [
                             "string",
@@ -408087,6 +408719,92 @@
                       },
                       "type": "array"
                     },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
                     "outcome": {
                       "type": "string"
                     },
@@ -408104,6 +408822,7 @@
                     "caseGeneration",
                     "outcome",
                     "replayed",
+                    "operation",
                     "enforcement"
                   ],
                   "type": "object"
@@ -408112,7 +408831,7 @@
             },
             "description": "Response for status 200"
           },
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -408169,6 +408888,92 @@
                       },
                       "type": "array"
                     },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
                     "outcome": {
                       "type": "string"
                     },
@@ -408186,13 +408991,14 @@
                     "caseGeneration",
                     "outcome",
                     "replayed",
+                    "operation",
                     "enforcement"
                   ],
                   "type": "object"
                 }
               }
             },
-            "description": "Response for status 201"
+            "description": "Response for status 202"
           },
           "400": {
             "content": {
@@ -410547,6 +411353,4418 @@
               }
             },
             "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-cases": {
+      "get": {
+        "operationId": "getV1Safety-cases",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "urgent",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "enum": [
+                "child_exploitation",
+                "ncii",
+                "credible_threat",
+                "copyright",
+                "privacy",
+                "harassment",
+                "hateful_abuse",
+                "fraud_or_malware",
+                "explicit_imagery",
+                "impersonation",
+                "spam_or_manipulation",
+                "illegal_content",
+                "realm_rules"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "contentLanguage",
+            "required": false,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dueBefore",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 4000,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "caseId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "category": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "claimedBy": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "contentLanguage": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "decisionHead": {
+                            "~elyTyp": 7,
+                            "format": "uuid",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "dueAt": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "generation": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "openedAt": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "properties": {
+                              "component": {
+                                "type": "string"
+                              },
+                              "owner": {
+                                "type": "string"
+                              },
+                              "resource": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "owner",
+                              "resource",
+                              "component"
+                            ],
+                            "type": "object"
+                          },
+                          "urgent": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "caseId",
+                          "kind",
+                          "urgent",
+                          "generation",
+                          "decisionHead",
+                          "openedAt",
+                          "target",
+                          "category",
+                          "contentLanguage",
+                          "dueAt",
+                          "claimedBy"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-cases/{caseId}": {
+      "get": {
+        "operationId": "getV1Safety-casesByCaseId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reportCursor",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "caseId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "decision": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "properties": {
+                        "caseGeneration": {
+                          "type": "string"
+                        },
+                        "caseId": {
+                          "type": "string"
+                        },
+                        "decisionId": {
+                          "type": "string"
+                        },
+                        "enforcement": {
+                          "items": {
+                            "properties": {
+                              "component": {
+                                "type": "string"
+                              },
+                              "effect": {
+                                "type": "string"
+                              },
+                              "fenceEpoch": {
+                                "type": "string"
+                              },
+                              "owner": {
+                                "type": "string"
+                              },
+                              "resource": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "owner",
+                              "resource",
+                              "component",
+                              "revision",
+                              "effect",
+                              "state",
+                              "fenceEpoch"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operation": {
+                          "properties": {
+                            "continuation": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "items": {
+                              "items": {
+                                "properties": {
+                                  "continuation": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "error": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "ordinal": {
+                                    "type": "integer"
+                                  },
+                                  "receipt": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "confirmed",
+                                      "pending",
+                                      "uncertain",
+                                      "failed"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "target": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "ordinal",
+                                  "target",
+                                  "state",
+                                  "receipt",
+                                  "continuation",
+                                  "error"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "operationId": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "enum": [
+                                "accepted",
+                                "completed",
+                                "partial",
+                                "cancelled"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "operationId",
+                            "status",
+                            "items",
+                            "continuation"
+                          ],
+                          "type": "object"
+                        },
+                        "outcome": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "decisionId",
+                        "caseId",
+                        "caseGeneration",
+                        "outcome",
+                        "replayed",
+                        "operation",
+                        "enforcement"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "generation": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "reports": {
+                      "items": {
+                        "properties": {
+                          "category": {
+                            "type": "string"
+                          },
+                          "evidenceDigest": {
+                            "type": "string"
+                          },
+                          "reportId": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "reportId",
+                          "evidenceDigest",
+                          "category"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "reportsNextCursor": {
+                      "~elyTyp": 7,
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "targets": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "enum": [
+                              "name",
+                              "title",
+                              "body",
+                              "structure",
+                              "media_use",
+                              "synopsis",
+                              "cover",
+                              "publication",
+                              "record"
+                            ],
+                            "type": "string"
+                          },
+                          "effect": {
+                            "enum": [
+                              "disclosure",
+                              "publication",
+                              "participation",
+                              "capability",
+                              "search",
+                              "raw_delivery",
+                              "media_delivery",
+                              "export",
+                              "source_apply"
+                            ],
+                            "type": "string"
+                          },
+                          "expectedHead": {
+                            "~elyTyp": 7,
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "expiresAt": {
+                            "~elyTyp": 7,
+                            "format": "date-time",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "locator": {
+                            "~elyTyp": 7,
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "owner": {
+                            "enum": [
+                              "graph",
+                              "content",
+                              "source",
+                              "media",
+                              "review"
+                            ],
+                            "type": "string"
+                          },
+                          "resource": {
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "revision": {
+                            "~elyTyp": 7,
+                            "maxLength": 512,
+                            "minLength": 1,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "scopeKind": {
+                            "enum": [
+                              "exact_revision",
+                              "component"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "owner",
+                          "resource",
+                          "component",
+                          "locator",
+                          "scopeKind",
+                          "revision",
+                          "expectedHead",
+                          "effect"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 64,
+                      "type": "array"
+                    },
+                    "urgent": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "caseId",
+                    "kind",
+                    "urgent",
+                    "generation",
+                    "state",
+                    "reports",
+                    "reportsNextCursor",
+                    "decision",
+                    "targets"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-cases/{caseId}/claim": {
+      "post": {
+        "operationId": "postV1Safety-casesByCaseIdClaim",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "caseId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "claimedBy": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "caseId",
+                    "claimedBy"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-cases/{caseId}/decisions": {
+      "post": {
+        "operationId": "postV1Safety-casesByCaseIdDecisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "answersStepId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "caseId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "disclosure": {
+                    "enum": [
+                      "private",
+                      "parties",
+                      "public_summary"
+                    ],
+                    "type": "string"
+                  },
+                  "evidenceDigest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "expectedGeneration": {
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "restrict",
+                      "interim_restrict",
+                      "final_restrict",
+                      "dismiss",
+                      "restore",
+                      "reverse"
+                    ],
+                    "type": "string"
+                  },
+                  "rationale": {
+                    "~elyTyp": 7,
+                    "maxLength": 8000,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
+                  "reversesDecisionId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rule": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "digest": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "revision",
+                      "digest"
+                    ],
+                    "type": "object"
+                  },
+                  "targets": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "component": {
+                          "enum": [
+                            "name",
+                            "title",
+                            "body",
+                            "structure",
+                            "media_use",
+                            "synopsis",
+                            "cover",
+                            "publication",
+                            "record"
+                          ],
+                          "type": "string"
+                        },
+                        "effect": {
+                          "enum": [
+                            "disclosure",
+                            "publication",
+                            "participation",
+                            "capability",
+                            "search",
+                            "raw_delivery",
+                            "media_delivery",
+                            "export",
+                            "source_apply"
+                          ],
+                          "type": "string"
+                        },
+                        "expectedHead": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "locator": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "owner": {
+                          "enum": [
+                            "graph",
+                            "content",
+                            "source",
+                            "media",
+                            "review"
+                          ],
+                          "type": "string"
+                        },
+                        "resource": {
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "scopeKind": {
+                          "enum": [
+                            "exact_revision",
+                            "component"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "owner",
+                        "resource",
+                        "component",
+                        "locator",
+                        "scopeKind",
+                        "revision",
+                        "expectedHead",
+                        "effect"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "reasons",
+                  "caseId",
+                  "expectedGeneration",
+                  "actingSubject",
+                  "targets",
+                  "rule",
+                  "evidenceDigest",
+                  "reversesDecisionId",
+                  "answersStepId",
+                  "rationale",
+                  "disclosure",
+                  "idempotencyKey",
+                  "outcome"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "answersStepId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "caseId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "disclosure": {
+                    "enum": [
+                      "private",
+                      "parties",
+                      "public_summary"
+                    ],
+                    "type": "string"
+                  },
+                  "evidenceDigest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "expectedGeneration": {
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "restrict",
+                      "interim_restrict",
+                      "final_restrict",
+                      "dismiss",
+                      "restore",
+                      "reverse"
+                    ],
+                    "type": "string"
+                  },
+                  "rationale": {
+                    "~elyTyp": 7,
+                    "maxLength": 8000,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
+                  "reversesDecisionId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rule": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "digest": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "revision",
+                      "digest"
+                    ],
+                    "type": "object"
+                  },
+                  "targets": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "component": {
+                          "enum": [
+                            "name",
+                            "title",
+                            "body",
+                            "structure",
+                            "media_use",
+                            "synopsis",
+                            "cover",
+                            "publication",
+                            "record"
+                          ],
+                          "type": "string"
+                        },
+                        "effect": {
+                          "enum": [
+                            "disclosure",
+                            "publication",
+                            "participation",
+                            "capability",
+                            "search",
+                            "raw_delivery",
+                            "media_delivery",
+                            "export",
+                            "source_apply"
+                          ],
+                          "type": "string"
+                        },
+                        "expectedHead": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "locator": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "owner": {
+                          "enum": [
+                            "graph",
+                            "content",
+                            "source",
+                            "media",
+                            "review"
+                          ],
+                          "type": "string"
+                        },
+                        "resource": {
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "scopeKind": {
+                          "enum": [
+                            "exact_revision",
+                            "component"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "owner",
+                        "resource",
+                        "component",
+                        "locator",
+                        "scopeKind",
+                        "revision",
+                        "expectedHead",
+                        "effect"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "reasons",
+                  "caseId",
+                  "expectedGeneration",
+                  "actingSubject",
+                  "targets",
+                  "rule",
+                  "evidenceDigest",
+                  "reversesDecisionId",
+                  "answersStepId",
+                  "rationale",
+                  "disclosure",
+                  "idempotencyKey",
+                  "outcome"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "answersStepId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "caseId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "disclosure": {
+                    "enum": [
+                      "private",
+                      "parties",
+                      "public_summary"
+                    ],
+                    "type": "string"
+                  },
+                  "evidenceDigest": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "expectedGeneration": {
+                    "pattern": "^(0|[1-9][0-9]{0,18})$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "restrict",
+                      "interim_restrict",
+                      "final_restrict",
+                      "dismiss",
+                      "restore",
+                      "reverse"
+                    ],
+                    "type": "string"
+                  },
+                  "rationale": {
+                    "~elyTyp": 7,
+                    "maxLength": 8000,
+                    "minLength": 1,
+                    "nullable": true,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "reasons": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "appealRoute": {
+                        "const": "/v1/public-reports/{caseId}/correspondence",
+                        "type": "string"
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "contentLanguage": {
+                        "maxLength": 255,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "duration": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "facts": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "maxLength": 4000,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "facts",
+                      "scope",
+                      "duration",
+                      "automation",
+                      "appealRoute",
+                      "contentLanguage"
+                    ],
+                    "type": "object"
+                  },
+                  "reversesDecisionId": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rule": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "digest": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      "ref": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "revision": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "revision",
+                      "digest"
+                    ],
+                    "type": "object"
+                  },
+                  "targets": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "component": {
+                          "enum": [
+                            "name",
+                            "title",
+                            "body",
+                            "structure",
+                            "media_use",
+                            "synopsis",
+                            "cover",
+                            "publication",
+                            "record"
+                          ],
+                          "type": "string"
+                        },
+                        "effect": {
+                          "enum": [
+                            "disclosure",
+                            "publication",
+                            "participation",
+                            "capability",
+                            "search",
+                            "raw_delivery",
+                            "media_delivery",
+                            "export",
+                            "source_apply"
+                          ],
+                          "type": "string"
+                        },
+                        "expectedHead": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expiresAt": {
+                          "~elyTyp": 7,
+                          "format": "date-time",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "locator": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "owner": {
+                          "enum": [
+                            "graph",
+                            "content",
+                            "source",
+                            "media",
+                            "review"
+                          ],
+                          "type": "string"
+                        },
+                        "resource": {
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "revision": {
+                          "~elyTyp": 7,
+                          "maxLength": 512,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "scopeKind": {
+                          "enum": [
+                            "exact_revision",
+                            "component"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "owner",
+                        "resource",
+                        "component",
+                        "locator",
+                        "scopeKind",
+                        "revision",
+                        "expectedHead",
+                        "effect"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 64,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "reasons",
+                  "caseId",
+                  "expectedGeneration",
+                  "actingSubject",
+                  "targets",
+                  "rule",
+                  "evidenceDigest",
+                  "reversesDecisionId",
+                  "answersStepId",
+                  "rationale",
+                  "disclosure",
+                  "idempotencyKey",
+                  "outcome"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "caseGeneration": {
+                      "type": "string"
+                    },
+                    "caseId": {
+                      "type": "string"
+                    },
+                    "decisionId": {
+                      "type": "string"
+                    },
+                    "enforcement": {
+                      "items": {
+                        "properties": {
+                          "component": {
+                            "type": "string"
+                          },
+                          "effect": {
+                            "type": "string"
+                          },
+                          "fenceEpoch": {
+                            "type": "string"
+                          },
+                          "owner": {
+                            "type": "string"
+                          },
+                          "resource": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "state": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "owner",
+                          "resource",
+                          "component",
+                          "revision",
+                          "effect",
+                          "state",
+                          "fenceEpoch"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "decisionId",
+                    "caseId",
+                    "caseGeneration",
+                    "outcome",
+                    "replayed",
+                    "operation",
+                    "enforcement"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "caseGeneration": {
+                      "type": "string"
+                    },
+                    "caseId": {
+                      "type": "string"
+                    },
+                    "decisionId": {
+                      "type": "string"
+                    },
+                    "enforcement": {
+                      "items": {
+                        "properties": {
+                          "component": {
+                            "type": "string"
+                          },
+                          "effect": {
+                            "type": "string"
+                          },
+                          "fenceEpoch": {
+                            "type": "string"
+                          },
+                          "owner": {
+                            "type": "string"
+                          },
+                          "resource": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "state": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "owner",
+                          "resource",
+                          "component",
+                          "revision",
+                          "effect",
+                          "state",
+                          "fenceEpoch"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "decisionId",
+                    "caseId",
+                    "caseGeneration",
+                    "outcome",
+                    "replayed",
+                    "operation",
+                    "enforcement"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-cases/{caseId}/preservation-holds": {
+      "post": {
+        "operationId": "postV1Safety-casesByCaseIdPreservation-holds",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "caseId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "caseId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "holdId": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "caseId",
+                    "holdId"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-cases/due-steps": {
+      "get": {
+        "operationId": "getV1Safety-casesDue-steps",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": true,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "caseId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "dueAt": {
+                            "type": "string"
+                          },
+                          "step": {
+                            "type": "string"
+                          },
+                          "stepId": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "stepId",
+                          "caseId",
+                          "step",
+                          "dueAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-decisions/{decisionId}/cancellation": {
+      "post": {
+        "operationId": "postV1Safety-decisionsByDecisionIdCancellation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "decisionId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "idempotencyKey": {
+                    "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "actingSubject",
+                  "idempotencyKey"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "caseGeneration": {
+                      "type": "string"
+                    },
+                    "caseId": {
+                      "type": "string"
+                    },
+                    "decisionId": {
+                      "type": "string"
+                    },
+                    "enforcement": {
+                      "items": {
+                        "properties": {
+                          "component": {
+                            "type": "string"
+                          },
+                          "effect": {
+                            "type": "string"
+                          },
+                          "fenceEpoch": {
+                            "type": "string"
+                          },
+                          "owner": {
+                            "type": "string"
+                          },
+                          "resource": {
+                            "type": "string"
+                          },
+                          "revision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "state": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "owner",
+                          "resource",
+                          "component",
+                          "revision",
+                          "effect",
+                          "state",
+                          "fenceEpoch"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "operation": {
+                      "properties": {
+                        "continuation": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "continuation": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "receipt": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "state": {
+                                "enum": [
+                                  "confirmed",
+                                  "pending",
+                                  "uncertain",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              },
+                              "target": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "target",
+                              "state",
+                              "receipt",
+                              "continuation",
+                              "error"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "operationId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "accepted",
+                            "completed",
+                            "partial",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "operationId",
+                        "status",
+                        "items",
+                        "continuation"
+                      ],
+                      "type": "object"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "decisionId",
+                    "caseId",
+                    "caseGeneration",
+                    "outcome",
+                    "replayed",
+                    "operation",
+                    "enforcement"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/v1/safety-notices": {
+      "get": {
+        "operationId": "getV1Safety-notices",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "caseId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "credential": {
+                            "type": "string"
+                          },
+                          "decisionId": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "reasons": {
+                            "properties": {
+                              "appealRoute": {
+                                "const": "/v1/public-reports/{caseId}/correspondence",
+                                "type": "string"
+                              },
+                              "automation": {
+                                "type": "boolean"
+                              },
+                              "contentLanguage": {
+                                "maxLength": 255,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "duration": {
+                                "maxLength": 4000,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "facts": {
+                                "maxLength": 4000,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "rule": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "digest": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  },
+                                  "ref": {
+                                    "maxLength": 512,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "maxLength": 512,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "ref",
+                                  "revision",
+                                  "digest"
+                                ],
+                                "type": "object"
+                              },
+                              "scope": {
+                                "maxLength": 4000,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "facts",
+                              "scope",
+                              "duration",
+                              "automation",
+                              "appealRoute",
+                              "contentLanguage",
+                              "rule"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "caseId",
+                          "decisionId",
+                          "credential",
+                          "reasons"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "~elyTyp": 7,
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
           },
           "500": {
             "content": {
