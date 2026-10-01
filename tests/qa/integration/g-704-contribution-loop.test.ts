@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
 import type { WikiDelta } from '../../../services/main/src/modules/wiki/delta.ts';
 import type { WikiExtraction } from '../../../services/main/src/modules/wiki/protocol.ts';
-import { RV } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { type Command, type History, type Loop, loopStack, type Member, type ProposalRead, short, wikiWorld, type WikiWorld } from './g-704-support.ts';
 
 /** The language of a Swedish catalogue Work: none of the eight interface locales, so nothing may borrow the UI's. */
@@ -258,6 +258,132 @@ test('CLP03: a chapter delta retracts one claim without deleting what it omits, 
     expect((await history(L, world)).claims.map((claim) => claim.value.object))
       .toEqual([pinned.claims[1]!.value.object, pinned.claims[0]!.value.object]);
     expect(RV).toBeDefined();
+  } finally {
+    await L.close();
+  }
+}, 300_000);
+
+test('CLP05: historical wiki rendering and export survive renames, merges and rights changes', async () => {
+  const L = await loopStack('g-704-history');
+  const { steward, holder, call, json } = L;
+  try {
+    const world = await wikiWorld(L);
+    const { receipt } = await appliedBundle(L, world);
+    const elizabeth = outcome(receipt, 'entity:elizabeth');
+    const jane = outcome(receipt, 'entity:jane').component;
+    const pinned = await history(L, world);
+    const pinnedQuery = `&revisions=${encodeURIComponent(JSON.stringify(pinned.revisions))}`;
+    // The wiki moves on: a later chapter delta retracts one claim and ends it for new readers only.
+    const fourth = world.chapters.occurrences[3]!;
+    const bundle: WikiExtraction = { ...world.bundle, entities: [],
+      units: [{ ...world.bundle.units[0]!, id: 'ch4', ordinal: 3, label: 'Chapter 4', occurrence: fourth }],
+      claims: [{ ...world.bundle.claims[0]!, subject: elizabeth.component, revealedAt: 'ch4',
+        evidence: [world.evidenceFor('Chapter four corrects the family')] }] };
+    const delta = await submit(L, world, L.assistant, { profile: 'wiki-delta-v1', base: pinned.revisions, bundle,
+      changes: [{ claim: pinned.claims[0]!.claim, revision: pinned.claims[0]!.revision, operation: 'retract',
+        reason: 'Chapter four contradicts this assertion', evidenceClaim: 0 }] } satisfies WikiDelta,
+    receipt.afterHeads, receipt.afterHeads[0]!.head!);
+    await L.apply(delta.proposal, 1);
+    expect((await history(L, world)).claims).toHaveLength(1);
+    expect(await history(L, world, holder, pinnedQuery)).toEqual(pinned);
+
+    // A semantic rename and a merge of the dependency do not rewrite what the pin rendered.
+    await steward.grant(`semantic:edit:${elizabeth.component}`, 'semantic.change');
+    await json(await call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', target: elizabeth.component, expectedHead: elizabeth.revision, actingSubject: steward.actor,
+      state: { component: 'resource', types: [`${RV}Character`], lifecycle: 'active', properties: [
+        { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: 'Elizabeth Darcy', language: 'en' } },
+        { predicate: `${RV}semanticWork`, value: { kind: 'resource', ref: world.work.work } }] },
+    }, steward.token));
+    expect(await history(L, world, holder, pinnedQuery)).toEqual(pinned);
+    await L.f.fuseki.update(`INSERT DATA { GRAPH <${GRAPHS.current}> { <${jane}> <${RV}mergedInto> <${elizabeth.component}> } }`);
+    const { resolutions: _merged, ...mergedContent } = await history(L, world, holder, pinnedQuery);
+    const { resolutions: _original, ...pinnedContent } = pinned;
+    expect(mergedContent).toEqual(pinnedContent);
+
+    // Export the pin, then restrict the quoted passage: the old manifest stops serving and a new one withholds the quote.
+    await holder.grant(`export:${world.work.work}`, 'export.create');
+    const exportBody = { profile: 'export-create-v1', actingSubject: holder.actor, useScope: 'quotation',
+      selection: { kind: 'wiki-revision-set', reference: world.work.work, revisions: pinned.revisions, expectedPosition: pinned.sourcePosition } };
+    const exported = await json<{ manifestId: string; manifestDigest: string; plan: { completeness: string } }>(
+      await call('POST', '/v1/exports', exportBody), 201);
+    expect(exported.plan.completeness).toBe('complete');
+    expect(JSON.stringify(exported.plan)).toContain('The Bennet family');
+    const quotes = (receipt.owner as { evidence: string[] }).evidence;
+    await steward.grant('rights:assess', 'rights.assess');
+    const restrictionKey = randomUUID();
+    await json(await call('POST', '/v1/rights/use-assessments', {
+      profile: 'rights-use-assessment-v1', actingSubject: steward.actor,
+      material: { scopeKind: 'wiki_evidence', provider: null, namespace: null, sourceRecordId: null, contentVariantId: null,
+        wikiEvidenceId: quotes[0], mediaAsset: null, component: 'record' },
+      expressionKind: 'expression', family: 'data_rights', useKind: 'quotation', useScope: 'rezics:export:quotation',
+      basis: 'permission', outcome: 'not_supported', licenseInstrument: null, exceptionKind: null, rationale: null,
+      extent: {}, evidence: {}, obligations: [], expectedAssessment: null, idempotencyKey: restrictionKey,
+    }, steward.token, restrictionKey), 201);
+    for (const url of [historyPath(world), historyPath(world) + pinnedQuery, L.path(delta.proposal)]) {
+      const response = await call('GET', url);
+      const text = await response.text();
+      expect(response.status).toBe(200);
+      expect(text).not.toContain('The Bennet family');
+      expect(text).toContain('quoteWithheld');
+    }
+    expect((await call('GET', `/v1/exports/${exported.manifestId}`)).status).toBe(409);
+    const withheld = await json<{ manifestId: string; manifestDigest: string; plan: { completeness: string } }>(
+      await call('POST', '/v1/exports', exportBody), 201);
+    expect(withheld.manifestDigest).not.toBe(exported.manifestDigest);
+    expect(withheld.plan.completeness).toBe('complete');
+    expect(JSON.stringify(withheld.plan)).not.toContain('The Bennet family');
+    expect((await call('GET', `/v1/exports/${withheld.manifestId}`)).status).toBe(200);
+  } finally {
+    await L.close();
+  }
+}, 300_000);
+
+test('CLP06: a replaced or revoked assistant credential keeps the artifacts it was authorized to make', async () => {
+  const L = await loopStack('g-704-assistant');
+  const { steward, assistant, holder, call, json } = L;
+  try {
+    const world = await wikiWorld(L);
+    const { proposal, receipt } = await appliedBundle(L, world);
+    const pinned = await history(L, world);
+    // A second contribution is still open when the credential changes hands.
+    const fourth = world.chapters.occurrences[3]!;
+    const open = await submit(L, world, assistant, { profile: 'wiki-delta-v1', base: pinned.revisions,
+      bundle: { ...world.bundle, entities: [], claims: [], units: [{ ...world.bundle.units[0]!, id: 'ch4', ordinal: 3,
+        label: 'Chapter 4', occurrence: fourth }] }, changes: [] } satisfies WikiDelta,
+    receipt.afterHeads, receipt.afterHeads[0]!.head!);
+
+    // Replace: the new credential controls the same Agent; the old bearer no longer works anywhere.
+    const next = await L.replaceCredential(assistant);
+    for (const request of [() => call('GET', L.path(proposal.proposal), undefined, assistant.token),
+      () => L.revise(open.proposal, 1, { profile: 'wiki-delta-v1', base: pinned.revisions, bundle: world.bundle, changes: [] },
+        receipt.afterHeads, assistant)]) {
+      const refused = await request().then((response) => response.status, () => 'rejected' as const);
+      expect(refused === 'rejected' || refused >= 400).toBe(true);
+    }
+    // The artifacts it authored are untouched: the claims, the applied proposal with its receipt and attribution.
+    expect(await history(L, world)).toEqual(pinned);
+    const kept = await L.read(proposal.proposal, steward);
+    expect(kept.state).toBe('applied');
+    expect(kept.proposal.proposer).toBe(assistant.actor);
+    expect(kept.proposal.decision?.receipt).toEqual(receipt);
+    // The replacement controls the same Agent, so it is no more independent of that Agent's work than the old credential.
+    expect(await L.blocker(await L.review(open.proposal, 1, 'approve', next), 403)).toBe('self_review');
+    expect(await L.blocker(await L.decide(open.proposal, 1, next), 403)).toBe('self_review');
+
+    // Revoke outright: nobody holds a credential, yet the open contribution stays reviewable and decidable.
+    await L.revokeCredential(next);
+    expect((await L.read(open.proposal, steward)).allowedActions).toContain('approve-and-apply');
+    const ended = await L.apply(open.proposal, 1);
+    expect(ended.commands?.length).toBeGreaterThan(0);
+    const after = await history(L, world);
+    expect(after.claims).toEqual(pinned.claims);
+    expect(after.revisionSetDigest).not.toBe(pinned.revisionSetDigest);
+    expect((await L.read(open.proposal, steward)).proposal.proposer).toBe(assistant.actor);
+    expect((await L.read(proposal.proposal, steward)).timeline.some((event) => event.actor === assistant.actor)).toBe(true);
+    // Nothing the revoked credential made is deleted, and the Account behind it never appears in the record.
+    expect(JSON.stringify(await L.read(proposal.proposal, steward))).not.toContain(assistant.principalId);
+    expect(holder.actor).not.toBe(assistant.actor);
   } finally {
     await L.close();
   }
