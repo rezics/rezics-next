@@ -6,6 +6,7 @@ import { messages } from '../features/work-page/messages.ts';
 import { ACTION_ATTRIBUTE, type HubSection, hubAnchors, hubPlan, hubSections } from '../features/work-page/hub.ts';
 import { character, characterRelations, wikiRealm, wikiStatements } from '../features/work-page/hub-fixtures.ts';
 import { nextAction } from '../features/work-page/primary-action.tsx';
+import { mergedSurvivor } from '../features/work-page/read.ts';
 import { mainCharacters, wikiHref, wikiRealmOf } from '../features/work-page/wiki.ts';
 import { RegionFailure } from '../features/work-page/region.tsx';
 import { WikiSectionView } from '../features/work-page/wiki.tsx';
@@ -157,10 +158,10 @@ describe('Explore the wiki', () => {
     expect(html).toContain(t.wikiPosition);
   });
 
-  test('absent: one line says there is no wiki and how holders build one', () => {
+  test('absent: one line says there is no wiki, and nothing links to one', () => {
     const html = view(null);
     expect(html).toContain(t.wikiNone);
-    expect(html).toContain(t.wikiBuild);
+    expect(html).not.toContain('<a ');
     expect(html).not.toContain('data-wiki-characters');
   });
 
@@ -185,5 +186,17 @@ describe('Explore the wiki', () => {
     expect(region.props.id).toBe('work-wiki');
     expect(region.props.children.type).toBe(RegionFailure);
     expect(region.props.children.props.title).toBe(t.wikiUnavailable);
+  });
+});
+
+describe('a merged Work’s address', () => {
+  const survivor = '01944100-0000-7000-8000-0000000000f1';
+  test('follows the survivor the address reports, and reads as today when it reports none', () => {
+    expect(mergedSurvivor({ work: iri('1'), resolution: { state: 'merged', survivor: `https://rezics.com/id/${survivor}` } }))
+      .toBe(survivor);
+    expect(mergedSurvivor({ work: iri('1') })).toBeNull();
+    expect(mergedSurvivor({ resolution: { state: 'current' } })).toBeNull();
+    expect(mergedSurvivor({ resolution: { state: 'merged', survivor: 'https://example.com/x' } })).toBeNull();
+    expect(mergedSurvivor(null)).toBeNull();
   });
 });

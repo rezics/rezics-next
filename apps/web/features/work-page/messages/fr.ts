@@ -324,7 +324,6 @@ export default {
   wikiTimeline: 'Chronologie',
   wikiOpen: 'Ouvrir le wiki',
   wikiNone: 'Cette œuvre n’a pas encore de wiki.',
-  wikiBuild: 'Comment les détenteurs en construisent un',
   wikiPosition: 'Affiché jusqu’à votre position de lecture, sans rien révéler.',
   wikiWithheld: 'Rien n’est encore révélé à votre point de l’histoire. Les personnages apparaissent au fil de la lecture.',
   wikiUnavailable: 'Le wiki n’a pas pu être chargé.',

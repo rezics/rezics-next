@@ -325,7 +325,6 @@ export default {
   wikiTimeline: 'Zeitleiste',
   wikiOpen: 'Wiki öffnen',
   wikiNone: 'Für dieses Werk gibt es noch kein Wiki.',
-  wikiBuild: 'Wie Halter eines aufbauen',
   wikiPosition: 'Angezeigt bis zu deiner Leseposition, ohne etwas zu verraten.',
   wikiWithheld: 'An deiner Stelle in der Geschichte ist noch nichts enthüllt. Figuren erscheinen, während du liest.',
   wikiUnavailable: 'Das Wiki konnte nicht geladen werden.',

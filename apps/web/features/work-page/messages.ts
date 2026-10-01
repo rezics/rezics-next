@@ -273,7 +273,6 @@ const en = {
   wikiTimeline: 'Timeline',
   wikiOpen: 'Open the wiki',
   wikiNone: 'No wiki exists for this Work yet.',
-  wikiBuild: 'How holders build one',
   wikiPosition: 'Shown up to your reading position, so nothing is given away.',
   wikiWithheld: 'Nothing is revealed yet at your place in the story. Characters appear as you read.',
   wikiUnavailable: 'The wiki could not be loaded.',

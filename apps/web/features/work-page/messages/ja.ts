@@ -277,7 +277,6 @@ export default {
   wikiTimeline: '年表',
   wikiOpen: 'ウィキを開く',
   wikiNone: 'この作品のウィキはまだありません。',
-  wikiBuild: 'ホルダーがウィキを作る方法',
   wikiPosition: 'あなたの読書位置までを表示します。ネタバレはありません。',
   wikiWithheld: '今の進行位置では、まだ明かされた内容がありません。キャラクターは読み進めると現れます。',
   wikiUnavailable: 'ウィキを読み込めませんでした。',

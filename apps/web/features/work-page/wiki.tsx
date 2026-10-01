@@ -26,7 +26,6 @@ export interface WikiRead {
 }
 
 const MAIN_CHARACTERS = 8;
-const WIKI_GUIDE = (locale: UiLocale) => `/${locale}/wikis/`;
 
 const link = buttonVariants({ variant: 'outline', size: 'sm', pill: true });
 
@@ -42,8 +41,7 @@ export function WikiSectionView({ wiki, locale, messages }: {
   const realm = wiki.zone.data;
   if (!realm) {
     return <Region id="work-wiki" title={title}>
-      <p className="text-muted-foreground text-sm">{t.wikiNone}{' '}
-        <a href={WIKI_GUIDE(locale)} className="text-primary underline underline-offset-4 hover:no-underline">{t.wikiBuild}</a></p>
+      <p className="text-muted-foreground text-sm">{t.wikiNone}</p>
     </Region>;
   }
   const characters = wiki.characters?.ok ? mainCharacters(wiki.characters.data, MAIN_CHARACTERS) : [];

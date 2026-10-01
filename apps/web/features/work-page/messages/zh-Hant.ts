@@ -273,7 +273,6 @@ export default {
   wikiTimeline: '時間線',
   wikiOpen: '開啟百科',
   wikiNone: '這部作品還沒有百科。',
-  wikiBuild: '持有者如何建立百科',
   wikiPosition: '只顯示到你的閱讀進度為止，不會劇透。',
   wikiWithheld: '你目前的進度還沒有揭露任何內容，角色會隨著閱讀逐步出現。',
   wikiUnavailable: '無法載入百科。',

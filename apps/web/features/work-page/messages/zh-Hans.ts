@@ -279,7 +279,6 @@ export default {
   wikiTimeline: '时间线',
   wikiOpen: '打开百科',
   wikiNone: '这部作品还没有百科。',
-  wikiBuild: '持有者如何建立百科',
   wikiPosition: '只显示到你的阅读进度为止，不会剧透。',
   wikiWithheld: '你当前的进度还没有揭露任何内容，角色会随着阅读逐步出现。',
   wikiUnavailable: '无法加载百科。',

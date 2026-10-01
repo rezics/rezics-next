@@ -71,9 +71,18 @@ export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise
   } catch { return { ok: false, failure: 'unavailable' }; }
 }
 
+/**
+ * The survivor a merged Work's address reports in its optional `resolution`, as a Work UUID; null when the
+ * answer carries none (the Work was not merged, or Main predates reporting it), which reads as today.
+ */
+export function mergedSurvivor(answer: unknown): string | null {
+  const resolution = (answer as { resolution?: { state?: unknown; survivor?: unknown } } | null)?.resolution;
+  return resolution?.state === 'merged' && typeof resolution.survivor === 'string' ? idOf(resolution.survivor) : null;
+}
+
 export type ResolvedRef =
   | { kind: 'work'; id: string }
-  /** The slug was renamed or merged; the page moves to the current one. */
+  /** The slug was renamed, or its Work merged into another: the page moves to the current ref. */
   | { kind: 'moved'; slug: string }
   | { kind: 'missing' }
   | { kind: 'unavailable' };
@@ -85,7 +94,11 @@ export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> =
   try {
     // A renamed slug answers 308 with the current one; read it rather than follow it.
     const { data, error } = await main.v1.addresses.work({ slug: ref.slug }).get({ fetch: { redirect: 'manual' } });
-    if (data) return { kind: 'work', id: data.work.slice(-36) };
+    if (data) {
+      // A merged Work's page is its survivor's: the hub moves there rather than showing the duplicate.
+      const survivor = mergedSurvivor(data);
+      return survivor ? { kind: 'moved', slug: survivor } : { kind: 'work', id: data.work.slice(-36) };
+    }
     if (error?.status === 308) return { kind: 'moved', slug: error.value.canonical.slug };
     return error && failureOf(error.status) === 'missing' ? { kind: 'missing' } : { kind: 'unavailable' };
   } catch {

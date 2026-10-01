@@ -50,7 +50,6 @@ export const WikiAbsent: WikiStory = {
   async play({ canvasElement }) {
     const section = within(canvasElement).getByRole('region', { name: 'Explore the wiki' });
     await expect(section).toHaveTextContent('No wiki exists for this Work yet.');
-    await expect(within(section).getByRole('link', { name: 'How holders build one' })).toHaveAttribute('href', '/en/wikis/');
     await expect(within(section).queryByRole('list')).toBeNull();
   },
 };

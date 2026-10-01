@@ -2,7 +2,7 @@ import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/
 
 interface Member {
   actor: string;
-  grant(scope: string, action: string): Promise<void>;
+  grant(scope: string, action: string): Promise<unknown>;
   send(method: string, path: string, body?: unknown, key?: string): Promise<Response>;
   read(path: string): Promise<Response>;
 }

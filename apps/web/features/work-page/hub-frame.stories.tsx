@@ -55,6 +55,10 @@ export const PhoneFirstScreen: Story = {
     const action = canvas.getByRole('link', { name: /^Continue/ });
     await expect(action).toHaveAttribute('href', `/en/w/${fixture.workRef}-2`);
     await expect(canvas.getByText('Next: Volume 2')).toBeVisible();
+    // Reporting the Work is in the action column, after the shelf and the rating, and does not lead.
+    const report = canvas.getByRole('link', { name: 'Report this work' });
+    await expect(report).toHaveAttribute('href', expect.stringContaining('/report'));
+    await expect(report.getBoundingClientRect().top).toBeGreaterThan(action.getBoundingClientRect().bottom);
     const status = canvas.getByRole('list', { name: 'Your edition' });
     await expect(status).toHaveTextContent('Your edition: Sword Art Online 1: Aincrad');
     await expect(status).toHaveTextContent('2 of 4 required parts finished');

@@ -277,7 +277,6 @@ export default {
   wikiTimeline: '연표',
   wikiOpen: '위키 열기',
   wikiNone: '이 작품에는 아직 위키가 없습니다.',
-  wikiBuild: '홀더가 위키를 만드는 방법',
   wikiPosition: '읽은 위치까지만 보여 주므로 스포일러가 없습니다.',
   wikiWithheld: '지금 읽은 위치에서는 아직 공개된 내용이 없습니다. 읽어 나가면 등장인물이 나타납니다.',
   wikiUnavailable: '위키를 불러오지 못했습니다.',
