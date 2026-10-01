@@ -19,11 +19,14 @@ test('OPS01: every frozen backend case has one checked owner API operation targe
   };
   const selected = selectBackendCases(caseInventory(root)).cases;
   const mapped = operationMap(selected);
-  expect(mapped.size).toBe(276);
+  expect(mapped.size).toBe(284);
   expect(mapped.has('VIEW04')).toBe(false);
-  expect(backendOperationMappings).toHaveLength(130);
+  expect(backendOperationMappings).toHaveLength(138);
+  expect(backendOperationMappings.slice(130).flatMap(group => group.ids)).toEqual([
+    'SAFETY01', 'SAFETY02', 'SAFETY03', 'SAFETY04', 'SAFETY05', 'SAFETY06', 'SAFETY07', 'SAFETY08',
+  ]);
   const targetDigest = createHash('sha256')
-    .update(JSON.stringify(backendOperationMappings.map(({ ids, targets }) => ({ ids, targets }))))
+    .update(JSON.stringify(backendOperationMappings.slice(0, 130).map(({ ids, targets }) => ({ ids, targets }))))
     .digest('hex');
   // Snapshot of the 130 E/P route groups before retiring the Markdown matrix.
   expect(targetDigest).toBe('040e7653e970bb04f2adf503994568c544f1f9622c81692378d71c5ddfc5c2db');

@@ -14,26 +14,39 @@ mkdirSync(scratch, { recursive: true });
 
 test('QA04: every migrated acceptance scenario and required result retains its ID and owning page', () => {
   const cases = caseInventory(root);
-  expect(cases).toHaveLength(277);
+  expect(cases).toHaveLength(285);
   expect(new Set(cases.map(item => item.id)).size).toBe(cases.length);
   expect(cases.find(item => item.id === 'OPS01')?.page).toBe('docs/testing/operations.md');
   expect(cases.find(item => item.id === 'IAM01')?.page).toBe('docs/testing/identity-and-access.md');
   expect(cases.find(item => item.id === 'MODEL27')?.page).toBe('docs/testing/model-contracts.md');
   expect(caseInventory(join(root, '.temp', 'missing-docs'))).toEqual(cases);
   for (const item of declaredCases) {
-    expect(existsSync(join(root, item.page.replace('docs/testing/', 'scripts/qa/cases/').replace(/\.md$/, '.ts')))).toBe(true);
+    const caseModule = item.page === 'docs/operations/trust-and-safety.md'
+      ? 'scripts/qa/cases/launch-safety.ts'
+      : item.page.replace('docs/testing/', 'scripts/qa/cases/').replace(/\.md$/, '.ts');
+    expect(existsSync(join(root, caseModule))).toBe(true);
   }
-  const digest = createHash('sha256').update(declaredCases.map(item =>
+  const safetyCases = declaredCases.filter(item => item.id.startsWith('SAFETY'));
+  expect(safetyCases.map(item => item.id)).toEqual([
+    'SAFETY01', 'SAFETY02', 'SAFETY03', 'SAFETY04', 'SAFETY05', 'SAFETY06', 'SAFETY07', 'SAFETY08',
+  ]);
+  expect(safetyCases.every(item => item.page === 'docs/operations/trust-and-safety.md')).toBe(true);
+  const originalCases = declaredCases.filter(item => !item.id.startsWith('SAFETY'));
+  expect(originalCases).toHaveLength(277);
+  const digest = createHash('sha256').update(originalCases.map(item =>
     `${item.id}\t${item.page}\t${item.scenario}\t${item.requiredResult}`).join('\n')).digest('hex');
   // Snapshot of all 277 original table rows before switching the runtime inventory.
   expect(digest).toBe('e30dd965638383ea27f8ccff59afcc31761f0698b529a5cbd087a43e27de56fa');
+  const safetyDigest = createHash('sha256').update(safetyCases.map(item =>
+    `${item.id}\t${item.page}\t${item.scenario}\t${item.requiredResult}`).join('\n')).digest('hex');
+  expect(safetyDigest).toBe('4e682b1a041b8f53ee1b049f3fc5732cc0d2a520421abb2a717419f112a7c175');
 });
 
 test('QA04: backend scope freezes every owner row and excludes only rendered VIEW04', () => {
   const inventory = caseInventory(root);
   const selected = selectBackendCases(inventory);
   expect(selected.inventoryFingerprint).toBe(inventoryFingerprint);
-  expect(selected.cases).toHaveLength(276);
+  expect(selected.cases).toHaveLength(284);
   expect(selected.excluded.map(item => item.id)).toEqual(['VIEW04']);
   expect(selected.cases.some(item => item.id === 'VIEW06')).toBe(true);
   expect(selected.cases.some(item => item.id === 'VIEW08')).toBe(true);

@@ -1645,6 +1645,76 @@ export const backendOperationMappings: readonly OperationMapping[] = [
     context:
       'E `POST /v1/recommendations/queries`; E `POST /v1/recommendations/pages`; E `GET /v1/recommendations/generations/{generation}`.',
   },
+  {
+    ids: ['SAFETY01'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/public-reports' },
+      { status: 'existing', method: 'GET', path: '/v1/public-reports/{caseId}' },
+      { status: 'existing', method: 'POST', path: '/v1/public-reports/{caseId}/correspondence' },
+    ],
+    context: 'Public intake and credential-bound correspondence do not require posting authority.',
+  },
+  {
+    ids: ['SAFETY02'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/public-reports' },
+      { status: 'existing', method: 'POST', path: '/v1/safety-cases/{caseId}/decisions' },
+      { status: 'existing', method: 'POST', path: '/v1/media/uploads' },
+      { status: 'existing', method: 'GET', path: '/v1/media/uses/{use}' },
+    ],
+    context: 'Receipt fixes the removal deadline; decisions suppress the original and identical uploads and uses.',
+  },
+  {
+    ids: ['SAFETY03'],
+    targets: [
+      { status: 'existing', method: 'GET', path: '/v1/safety-cases/due-steps' },
+      { status: 'planned', method: 'GET', path: '/v1/me/notifications' },
+    ],
+    context: 'Due-step reads exist; automatic durable responder alerts independent of optional preferences are pending G-917.',
+  },
+  {
+    ids: ['SAFETY04'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/media/uploads' },
+      { status: 'existing', method: 'GET', path: '/v1/media/uploads/{upload}' },
+      { status: 'existing', method: 'GET', path: '/v1/safety-cases/{caseId}' },
+      { status: 'existing', method: 'GET', path: '/v1/media/uses/{use}' },
+    ],
+    context: 'Scanner failure holds delivery and retains an attributable screening review.',
+  },
+  {
+    ids: ['SAFETY05'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/public-reports/{caseId}/correspondence' },
+      { status: 'existing', method: 'POST', path: '/v1/safety-cases/{caseId}/decisions' },
+      { status: 'existing', method: 'GET', path: '/v1/public-reports/{caseId}' },
+    ],
+    context: 'Affected parties retain appeals and reasons; staff decisions replay their owner receipts.',
+  },
+  {
+    ids: ['SAFETY06'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/safety-cases/{caseId}/preservation-holds' },
+      { status: 'existing', method: 'POST', path: '/v1/media/assets/{asset}/state' },
+    ],
+    context: 'A preservation hold blocks deletion and retains its attributable postponement reason.',
+  },
+  {
+    ids: ['SAFETY07'],
+    targets: [
+      { status: 'existing', method: 'POST', path: '/v1/safety-cases/{caseId}/decisions' },
+      { status: 'planned', method: 'GET', path: '/v1/safety-notices' },
+    ],
+    context: 'Safety notices exist; mandatory email to affected parties independent of optional preferences is pending G-918.',
+  },
+  {
+    ids: ['SAFETY08'],
+    targets: [
+      { status: 'existing', method: 'GET', path: '/v1/safety-cases/due-steps' },
+      { status: 'planned', method: 'GET', path: '/v1/me/notifications' },
+    ],
+    context: 'Configured primary absence and automatic backup alert delivery are pending G-917.',
+  },
 ];
 
 export function operationMap(cases: readonly Case[]): ReadonlyMap<string, OperationMapping> {

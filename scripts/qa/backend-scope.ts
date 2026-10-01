@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { Case } from './acceptance.ts';
 
-// Frozen on 2026-09-26. Adding, removing, renaming or moving an acceptance row
+// Reviewed on 2026-10-01 to include SAFETY01–08 as backend obligations.
+// Adding, removing, renaming or moving an acceptance row
 // requires an explicit backend-scope review before the Goal denominator changes.
-export const inventoryFingerprint = '9d9278464c813a80861c58c49573fc6e2b33d5966da10326ea321e5b86618750';
+export const inventoryFingerprint = 'fc49248d4286ef69108dddd5f50247f8e835f7c3ab88c62db7ab41ed96f7635b';
 
 export const excludedFrontendCases = {
   VIEW04: 'Historical Block rendering and executable-markup isolation are rendered-client behavior; the backend still preserves unknown Block data under its model and export contracts.',
