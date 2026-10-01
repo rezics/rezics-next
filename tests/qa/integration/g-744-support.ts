@@ -18,6 +18,7 @@ import { PublicReports } from '../../../services/main/src/modules/public-report/
 import { publicReportOwners } from '../../../services/main/src/modules/public-report/owners.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
+import { SafetyAlerts, SAFETY_ALERT_BASIS } from '../../../services/main/src/modules/safety-alerts/store.ts';
 import { startMediaStack, png, sha, type MediaStack } from './media-support.ts';
 import { fixtureReasons } from './g-565-decision-support.ts';
 
@@ -44,8 +45,9 @@ export async function json<T>(response: Response, status = 200): Promise<T> {
 /** The established G-565 fixture: real Access, Content, graph and object owners.
  * Bearer mapping isolates staff authority; SAFETY01 separately uses real Account introspection.
  * No alert, mail or scanning result is manufactured by this fixture. */
-export async function safetyFixture(label: string, autoClearUploads = true) {
-  const stack = await startMediaStack(label, { autoClearUploads });
+export async function safetyFixture(label: string, autoClearUploads = true,
+  ownerUrls?: { access: string; content: string; relay: string }) {
+  const stack = await startMediaStack(label, { autoClearUploads, ownerUrls });
   try {
     const staff = await stack.member('primary-responder');
     const backup = await stack.member('backup-responder');
@@ -90,6 +92,11 @@ export async function safetyFixture(label: string, autoClearUploads = true) {
       [staff, backup, author].map((member) => [member.token, member.principal]),
     );
     const notifications = new NotificationStore(stack.accessPool);
+    const safetyAlerts = new SafetyAlerts(stack.accessPool, notifications, {
+      issuer: staff.principal.issuer, primary: staff.principal.subject, backup: backup.principal.subject,
+    }, () => clock);
+    await safetyAlerts.initialize();
+    notifications.registerReadSubjectReader(SAFETY_ALERT_BASIS, safetyAlerts);
     const producer = new NotificationProducer(
       stack.accessPool,
       null,
@@ -97,6 +104,8 @@ export async function safetyFixture(label: string, autoClearUploads = true) {
       stack.fuseki,
       notifications,
       null,
+      null,
+      safetyAlerts,
     );
     const deps: MainWorkDependencies = {
       environment: stack.env,
@@ -264,6 +273,7 @@ export async function safetyFixture(label: string, autoClearUploads = true) {
       governance,
       notifications,
       producer,
+      safetyAlerts,
       call,
       read,
       report,

@@ -65,7 +65,8 @@ export class NotificationDispatcher {
   private readonly scopedSubjects = new Map<string, NotificationSubjectReader>();
 
   constructor(private readonly pool: Pool, private readonly provider: DeliveryProvider,
-    private readonly subjects: NotificationSubjectReader, options: { retryMs?: number } = {}) {
+    private readonly subjects: NotificationSubjectReader, private readonly options: {
+      retryMs?: number; disclosureBasis?: string } = {}) {
     this.retryMs = options.retryMs ?? DISPATCH_LIMITS.retryMs;
   }
 
@@ -107,9 +108,11 @@ export class NotificationDispatcher {
   async recoverExpiredLeases(limit: number = DISPATCH_LIMITS.batch): Promise<number> {
     return this.transaction(async client => (await client.query(`UPDATE access.notification_delivery d
       SET state = 'uncertain', lease_token = NULL, lease_until = NULL, next_attempt_at = clock_timestamp()
-      FROM (SELECT id FROM access.notification_delivery WHERE state = 'sending' AND lease_until < clock_timestamp()
-        ORDER BY lease_until, id LIMIT $1 FOR UPDATE SKIP LOCKED) due
-      WHERE d.id = due.id`, [limit])).rowCount ?? 0);
+      FROM (SELECT d.id FROM access.notification_delivery d JOIN access.notification_item i ON i.id = d.item_id
+        WHERE d.state = 'sending' AND d.lease_until < clock_timestamp()
+          AND ($2::text IS NULL OR i.disclosure_basis = $2)
+        ORDER BY d.lease_until, d.id LIMIT $1 FOR UPDATE OF d SKIP LOCKED) due
+      WHERE d.id = due.id`, [limit, this.options.disclosureBasis ?? null])).rowCount ?? 0);
   }
 
   async runOnce(limit: number = DISPATCH_LIMITS.batch): Promise<DispatchSummary> {
@@ -120,10 +123,13 @@ export class NotificationDispatcher {
       cancelled: 0, reconciled: 0 };
     const claimed = await this.transaction(async client => {
       const due = (await client.query<Omit<Claimed, 'lease_token' | 'was_uncertain'> & { state: string }>(
-        `SELECT id, item_id, principal_id, endpoint_id, channel, endpoint_generation::text, attempt_count, state
-         FROM access.notification_delivery
-         WHERE state IN ('pending', 'uncertain') AND next_attempt_at <= clock_timestamp()
-         ORDER BY next_attempt_at, id LIMIT $1 FOR UPDATE SKIP LOCKED`, [limit])).rows;
+        `SELECT d.id, d.item_id, d.principal_id, d.endpoint_id, d.channel,
+           d.endpoint_generation::text, d.attempt_count, d.state
+         FROM access.notification_delivery d JOIN access.notification_item i ON i.id = d.item_id
+         WHERE d.state IN ('pending', 'uncertain') AND d.next_attempt_at <= clock_timestamp()
+           AND ($2::text IS NULL OR i.disclosure_basis = $2)
+         ORDER BY d.next_attempt_at, d.id LIMIT $1 FOR UPDATE OF d SKIP LOCKED`,
+        [limit, this.options.disclosureBasis ?? null])).rows;
       const leased: Claimed[] = [];
       for (const row of due) {
         const reason = await this.ineligible(client, row);

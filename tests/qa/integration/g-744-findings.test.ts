@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { safetyFixture, json, png, sha, nciiDeclaration } from './g-744-support.ts';
 
-// Fails until G-917 adds responder alerts; G-917 turns this back into test().
-test.todo('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the primary has not responded', async () => {
+test('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the primary has not responded', async () => {
   const f = await safetyFixture('g744-deadline');
   try {
     await f.notifications.registerEndpoint(f.backup.principal, {
@@ -29,8 +28,8 @@ test.todo('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the pr
       new Date(deadline).toISOString(),
     );
     await f.produce();
-    // Polling a due list proves deadline tracking, not alert delivery. Even the
-    // installed producer tick currently leaves the backup without a delivery.
+    // The installed producer creates a durable external delivery independently
+    // of staff polling the queue. Account/SMTP outcomes are exercised in G-917.
     const alerts = await f.stack.accessPool.query(
       `SELECT d.id FROM access.notification_delivery d
       JOIN access.notification_item i ON i.id = d.item_id WHERE i.principal_id = $1
@@ -39,7 +38,7 @@ test.todo('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the pr
     );
     expect(
       alerts.rowCount,
-      'G744-H1: no deadline/absence alert producer or responder roster; owner brief G744-FIX-ALERTS',
+      'G744-H1: overdue primary absence must queue the backup alert',
     ).toBeGreaterThan(0);
   } finally {
     await f.stop();

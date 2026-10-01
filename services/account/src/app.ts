@@ -21,6 +21,7 @@ import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
 import { emailChangeApi } from './email-change.ts';
 import { notificationDigestApi } from './notification-digest.ts';
+import { notificationSafetyApi } from './notification-safety.ts';
 import { mailSuppressionApi } from './mail-suppression.ts';
 import { policyAcceptanceApi } from './policy-acceptance.ts';
 import { accountSchemaReady } from './schema-ready.ts';
@@ -262,6 +263,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       return currentIntrospection(pool, token, await auth.handler(request));
     })
     .use(options.notificationDigest ? notificationDigestApi(pool,
+      options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
+    .use(options.notificationDigest ? notificationSafetyApi(pool,
       options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
     .use(policyAcceptanceApi(auth, pool, auth.options.policyVersions))
     .use(mailSuppressionApi(pool, String(auth.options.secret), options.mailEventsSecret))

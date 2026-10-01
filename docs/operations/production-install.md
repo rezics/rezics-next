@@ -76,6 +76,33 @@ Mounted Collections, navigation and presentation are data. The import proof
 places the same native catalogue Work in both LN/VN Collections; it creates no
 extra Work for a Zone or language.
 
+## Safety responders
+
+Before opening registration, uploads or posting, appoint a primary and a backup
+safety responder. **The maintainer has not named the launch backup yet.** Do
+not replace that missing appointment with a demo subject or the primary's own
+Account. Record both approved Account subjects and provision their platform
+moderation/evidence authority through the
+[trust and safety procedure](trust-and-safety.md#platform-suitability-moderation-setup).
+Verify both Account email addresses and record their preferred mail language.
+
+In the operator's `.temp/production.env`, set `SAFETY_PRIMARY_ACCOUNT` and
+`SAFETY_BACKUP_ACCOUNT` to those distinct subjects, alongside the existing
+`ACCOUNT_ISSUER`, Main confidential-client credentials and retained erasure
+relay. Restart Main. The checked-in Main environment example leaves both unset;
+an incomplete roster fails startup, and an unset roster leaves alerting disabled.
+No default backup is appointed by the software. Account uses its existing SMTP
+configuration and mandatory notice queue; optional notification preferences and
+optional-mail suppression do not disable safety alerts.
+
+Run the deadline and absent-responder drill with both responders, including a
+lost mail acknowledgement, before claiming readiness. Confirm the primary's
+approach alert, the backup's absence and overdue alerts, and the recorded SMTP
+result in `access.safety_alert_delivery`. A pending or uncertain delivery is not
+a successful drill. The [alert operating procedure](trust-and-safety.md#deadline-alerts-and-responder-absence)
+describes acknowledgement, recovery and audit inspection. Mandatory mail to
+affected uploaders remains the separate SAFETY07 launch gate.
+
 ## Bootstrap and verify
 
 Keep the environment file, customized plan and receipts under `.temp/` in the

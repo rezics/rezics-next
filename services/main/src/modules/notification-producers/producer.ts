@@ -50,7 +50,8 @@ export class NotificationProducer {
     private readonly content: Pool, private readonly graph: Pick<FusekiClient, 'query'>,
     private readonly notifications: Pick<NotificationStore, 'enqueue'>,
     private readonly relayConsumer: string | null,
-    private readonly relayCheckpoint: Pool | null = relay) {}
+    private readonly relayCheckpoint: Pool | null = relay,
+    private readonly safetyAlerts?: { runOnce(): Promise<number> }) {}
 
   /** Source and recipient identities are read after their owner commits. */
   private async accessNotification(event: AccessEvent): Promise<NotificationEvent | null> {
@@ -194,8 +195,9 @@ export class NotificationProducer {
   }
 
   async runAccessOnce(): Promise<number> {
+    const alerts = await this.safetyAlerts?.runOnce() ?? 0;
     const count = await this.runOtherAccessOnce();
-    return count + (await this.runEditorialOnce());
+    return alerts + count + (await this.runEditorialOnce());
   }
 
   private async runOtherAccessOnce(): Promise<number> {

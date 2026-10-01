@@ -138,9 +138,69 @@ owns that launch sequence.
 The executable [launch drill declarations](../../scripts/qa/cases/launch-safety.ts)
 and [recovery tests](../../tests/qa/fault-recovery/g-744-safety.test.ts) distinguish
 deadline tracking from alert delivery, and a private case inbox from safety
-email. G-744's source review found both delivery paths incomplete: due NCII
-steps require polling, no primary/backup roster or absence escalation is wired,
-and media enforcement's private party notice does not reach its uploader by
-email. Keep readiness unclaimed until SAFETY03, SAFETY07 and SAFETY08 run with
-real delivery and responder configuration. The [security review](security.md#launch-review-2026-10-01)
+email. G-917 adds responder alerts; media enforcement's private party notice
+still requires G-918's mandatory uploader email. Keep readiness unclaimed until
+SAFETY03, SAFETY07 and SAFETY08 run with production responder configuration and
+real delivery. The [security review](security.md#launch-review-2026-10-01)
 records the reviewed source and release-image limitation.
+
+## Deadline alerts and responder absence
+
+Set Main's `SAFETY_PRIMARY_ACCOUNT` and `SAFETY_BACKUP_ACCOUNT` to distinct,
+existing active Account subjects at `ACCOUNT_ISSUER`. Neither setting grants
+moderation or evidence access: provision the approved responders as above.
+Main refuses a partial roster, duplicate subjects, placeholders and missing or
+inactive principals. Both unset leaves the job disabled and logs that launch
+safety readiness is unclaimed. The maintainer has not named the launch backup;
+the [installation procedure](production-install.md#safety-responders) keeps that
+appointment explicit.
+
+The notification producer checks up to 32 primary and 32 backup deadline
+candidates per tick and drains up to 32 durable alert intakes. It alerts the
+primary two hours before an unanswered platform NCII or DMCA process deadline.
+A current primary case claim acknowledges engagement for its existing
+30-minute lease; renew it while working. Thirty minutes after primary alert
+intake, no current claim raises a backup alert. An inactive primary raises the
+backup alert immediately in the approach window. At the deadline the backup is
+alerted even if the primary's claim remains current. Claiming or reading a
+notification never answers a legal process step; the owner decision does that.
+Resolved, answered or superseded case generations do not deliver stale alerts.
+
+Alerts contain only an opaque alert ID, deadline and escalation reason. The
+notification inbox and Account's existing mandatory notice queue bypass optional
+notification choices and optional-mail unsubscribe. Account resolves the
+verified address and recorded language, encrypts queued mail, and sends through
+its configured SMTP transport. The Main HTTP notification provider is not
+required for safety email. Retained Account erasure replay is required. Alert
+intake is idempotent after restart; Account deduplicates the stable delivery ID
+before SMTP.
+
+Inspect the bounded audit view for a case or delivery; retain the receipt with
+the drill record:
+
+```sql
+SELECT alert_id, step_id, account_subject, responder, reason, due_at,
+       intake_state, delivery_id, channel, delivery_state, diagnostic
+FROM access.safety_alert_delivery
+WHERE case_id = '<case UUID>'
+ORDER BY created_at, alert_id;
+```
+
+`queued` intake proves durable notification work, not external delivery.
+Main records `delivered` only after Account reports SMTP acceptance (`sent`),
+not after Account queue intake. It does not prove the responder read the mail.
+A lost HTTP acknowledgement is looked up by the same delivery ID on restart.
+Account's ambiguous SMTP result remains `uncertain` and is never automatically
+resent; inspect Account mail status and contact the backup through the operator's
+existing procedure. Expired queued mail is a failed delivery. Missing verified
+addresses or language produce a failed intake, never a success. Inspect
+`notification_attempt` for transport attempts and the Account row named by
+`provider_message_id` for confirmed mail.
+
+The source records are durable while PostgreSQL row leases bound concurrent
+queue consumers ([PostgreSQL 18 SELECT](https://www.postgresql.org/docs/18/sql-select.html#SQL-FOR-UPDATE-SHARE)).
+SMTP acceptance transfers delivery responsibility to the receiving server,
+not proof of human acknowledgement ([RFC 5321 §4.2.5](https://www.rfc-editor.org/rfc/rfc5321.html#section-4.2.5)).
+G-917's [integration drills](../../tests/qa/integration/g-917-safety-alerts.test.ts)
+exercise deadline boundaries, claim expiry, concurrency, partial intake, restart,
+revocation, recovery holds, unsubscribe and unconfirmed SMTP delivery.

@@ -160,6 +160,8 @@ import { editorialNotificationSubjectReader } from './modules/notification-produ
 import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { NotificationDigestWorker } from './modules/notification/digest.ts';
+import { SafetyAlerts, SAFETY_ALERT_BASIS, safetyResponders } from './modules/safety-alerts/store.ts';
+import { SafetyAlertProvider } from './modules/safety-alerts/provider.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ThemeStore } from './modules/theme/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
@@ -294,6 +296,13 @@ const eventQueries = new EventTemporalQueries(pool, environment, createHash('sha
 const hub = new HubStore(contentPool, content, access, environment, packageArtifacts);
 const downloadLeases = new AccessDownloadLeases(pool);
 const notificationStore = new NotificationStore(pool);
+const safetyRoster = safetyResponders(config.ACCOUNT_ISSUER, config.SAFETY_PRIMARY_ACCOUNT, config.SAFETY_BACKUP_ACCOUNT);
+const safetyAlerts = safetyRoster ? new SafetyAlerts(pool, notificationStore, safetyRoster) : undefined;
+if (safetyAlerts) {
+  if (!relayPool) throw new Error('safety alert delivery requires the retained erasure relay');
+  await safetyAlerts.initialize();
+  notificationStore.registerReadSubjectReader(SAFETY_ALERT_BASIS, safetyAlerts);
+} else console.warn('Safety responders are not configured; launch safety readiness is unclaimed');
 notificationStore.setDefaultReadSubjectReader(currentContentSubjectReader(content, notificationStore, access));
 notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, environment.lineage, media.store));
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
@@ -321,9 +330,13 @@ if (notificationProviderConfigured && !relayPool) {
 }
 const notificationProvider = notificationProviderConfigured ? new HttpDeliveryProvider({ name: 'http',
   baseUrl: notificationProviderConfig.url!, bearerToken: notificationProviderConfig.token! }) : undefined;
-const notificationDispatcher = notificationProvider
-  ? new NotificationDispatcher(pool, notificationProvider,
-    currentContentSubjectReader(content, notificationStore, access)) : undefined;
+const deliveryProvider = safetyAlerts ? new SafetyAlertProvider(pool, config.ACCOUNT_ISSUER,
+  config.ACCOUNT_INTROSPECT_URL, config.ACCOUNT_MAIN_CLIENT_SECRET, notificationProvider) : notificationProvider;
+const notificationDispatcher = deliveryProvider
+  ? new NotificationDispatcher(pool, deliveryProvider,
+    currentContentSubjectReader(content, notificationStore, access),
+    { disclosureBasis: notificationProvider ? undefined : SAFETY_ALERT_BASIS }) : undefined;
+if (safetyAlerts) notificationDispatcher?.registerSubjectReader(SAFETY_ALERT_BASIS, safetyAlerts);
 notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 notificationDispatcher?.registerSubjectReader('editorial-proposal-v1', notificationEditorialReader);
@@ -332,7 +345,7 @@ for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-out
 for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationFeedReader);
 const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
   pool, relayPool ? erasureRelayPool! : null, contentPool, fuseki,
-  notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null));
+  notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null, safetyAlerts));
 const notificationDigestWorker = new NotificationDigestWorker(pool, notificationStore,
   config.ACCOUNT_ISSUER, new URL('/api/internal/notification-digest',
     config.ACCOUNT_INTROSPECT_URL).toString(), config.ACCOUNT_MAIN_CLIENT_SECRET);

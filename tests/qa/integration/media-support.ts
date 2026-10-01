@@ -75,7 +75,8 @@ export type MediaStack = Awaited<ReturnType<typeof startMediaStack>>;
 /** Real Access, Content PostgreSQL, Jena and RustFS behind one Main app; Account is a
  * bearer-to-principal table so several isolated members can act concurrently. */
 export async function startMediaStack(label: string, options: { contentProjection?: boolean; profileCredits?: boolean;
-  autoClearUploads?: boolean; agents?: boolean; rights?: boolean; library?: boolean } = {}) {
+  autoClearUploads?: boolean; agents?: boolean; rights?: boolean; library?: boolean;
+  ownerUrls?: { access: string; content: string; relay: string } } = {}) {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
     || !Bun.env.MAIN_ROUTING_EPOCH || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCOUNT_RELAY_DATABASE_URL || !Bun.env.MAIN_S3_ENDPOINT || !Bun.env.MAIN_OBJECT_DIRECTORY) {
@@ -88,9 +89,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
   // fixture too. The runner removes both owners when it resets the QA stack.
   const env: WorkActivationEnvironment = { fuseki, objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
-  const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
-  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
-  const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
+  const accessPool = new Pool({ connectionString: options.ownerUrls?.access ?? Bun.env.ACCESS_DATABASE_URL });
+  const contentPool = new Pool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL });
+  const relayPool = new Pool({ connectionString: options.ownerUrls?.relay ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const contentCursor = new ContentProjectionCursor(contentPool);
