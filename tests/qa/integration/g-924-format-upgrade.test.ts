@@ -23,19 +23,19 @@ test('G924: offline subject rewrite retains audit values, dependent views and gr
     await pool.query(
       `INSERT INTO access.governance_case
       (id,kind,authority_kind,authority_scope_id,context,target_owner,target_resource,target_component,disclosure)
-      VALUES ($1,'content_report','platform','governance:platform','urn:rezics:context:global','content',$1::text,'body','private')`,
+      VALUES ($1::uuid,'content_report','platform','governance:platform','urn:rezics:context:global','content',$1::text,'body','private')`,
       [caseId],
     );
     await pool.query(
       `INSERT INTO access.governance_report
       (id,case_id,idempotency_key,request_digest,reason_code,evidence_count,evidence_digest)
-      VALUES ($1,$2,$1::text,$3,'ncii',1,$3)`,
+      VALUES ($1::uuid,$2,$1::text,$3,'ncii',1,$3)`,
       [report, caseId, 'a'.repeat(64)],
     );
     await pool.query(
       `INSERT INTO access.governance_process_step
       (id,case_id,report_id,process,step,idempotency_key,request_digest,occurred_at,due_at)
-      VALUES ($1,$2,$3,'ncii','removal_deadline',$1::text,$4,now(),now()+interval '1 day')`,
+      VALUES ($1::uuid,$2,$3,'ncii','removal_deadline',$1::text,$4,now(),now()+interval '1 day')`,
       [step, caseId, report, 'b'.repeat(64)],
     );
     await pool.query(

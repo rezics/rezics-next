@@ -94,7 +94,7 @@ test('G924: indexed merged inventory stays bounded through masked votes, 100/101
     await pool.query(
       `INSERT INTO access.editorial_application
       (id,proposal,revision,principal,actor,operation_key,command_key,command_digest,approve,required,message)
-      VALUES ($1,$2,1,$3,$4,$5,$1::text,$6,false,2,'G924 inventory fixture')`,
+      VALUES ($1::uuid,$2,1,$3,$4,$5,$1::text,$6,false,2,'G924 inventory fixture')`,
       [application, proposal, people[0], actor, task, canonical.digest],
     );
     await pool.query(
