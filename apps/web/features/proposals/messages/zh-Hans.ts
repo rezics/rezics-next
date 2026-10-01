@@ -65,7 +65,6 @@ export default {
   wikiRelation: insert('关系：{{subject}} → {{object}}', { subject: String, object: String }),
   wikiProperty: insert('{{subject}}：', { subject: String }),
   wikiQuoteWithheld: '引文已被隐藏。',
-  wikiLocatorText: '正文片段',
   wikiLocatorBlock: insert('段落 {{block}}', { block: String }),
   wikiLocatorScript: insert('脚本 {{label}}，第 {{line}} 句', { label: String, line: String }),
   wikiLocatorEpub: '书中片段',

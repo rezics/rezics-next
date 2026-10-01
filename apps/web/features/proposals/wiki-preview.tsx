@@ -28,7 +28,6 @@ const card = 'grid min-w-0 gap-2 rounded-xl bg-muted/40 px-3 py-2.5 text-sm';
 
 function locatorText(locator: WikiLocator, t: T): string {
   switch (locator.kind) {
-    case 'text': return t.wikiLocatorText;
     case 'block': return t.wikiLocatorBlock({ block: locator.block });
     case 'script': return t.wikiLocatorScript({ label: locator.label, line: String(locator.line) });
     case 'epub': return t.wikiLocatorEpub;

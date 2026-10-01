@@ -65,7 +65,6 @@ export default {
   wikiRelation: insert('관계: {{subject}} → {{object}}', { subject: String, object: String }),
   wikiProperty: insert('{{subject}}:', { subject: String }),
   wikiQuoteWithheld: '인용문은 표시되지 않습니다.',
-  wikiLocatorText: '본문의 한 구절',
   wikiLocatorBlock: insert('블록 {{block}}', { block: String }),
   wikiLocatorScript: insert('스크립트 {{label}}, {{line}}번째 줄', { label: String, line: String }),
   wikiLocatorEpub: '책의 한 구절',

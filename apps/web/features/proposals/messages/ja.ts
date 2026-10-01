@@ -65,7 +65,6 @@ export default {
   wikiRelation: insert('関係: {{subject}} → {{object}}', { subject: String, object: String }),
   wikiProperty: insert('{{subject}}:', { subject: String }),
   wikiQuoteWithheld: '引用は非表示です。',
-  wikiLocatorText: '本文の一節',
   wikiLocatorBlock: insert('ブロック {{block}}', { block: String }),
   wikiLocatorScript: insert('スクリプト {{label}}、{{line}} 行目', { label: String, line: String }),
   wikiLocatorEpub: '書籍の一節',

@@ -69,7 +69,6 @@ export const messages = {
   wikiRelation: insert('Relation: {{subject}} → {{object}}', { subject: String, object: String }),
   wikiProperty: insert('{{subject}}:', { subject: String }),
   wikiQuoteWithheld: 'The quotation is withheld.',
-  wikiLocatorText: 'Passage of the text',
   wikiLocatorBlock: insert('Block {{block}}', { block: String }),
   wikiLocatorScript: insert('Script {{label}}, line {{line}}', { label: String, line: String }),
   wikiLocatorEpub: 'Passage of the book',

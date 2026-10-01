@@ -65,7 +65,6 @@ export default {
   wikiRelation: insert('Beziehung: {{subject}} → {{object}}', { subject: String, object: String }),
   wikiProperty: insert('{{subject}}:', { subject: String }),
   wikiQuoteWithheld: 'Das Zitat wird zurückgehalten.',
-  wikiLocatorText: 'Textstelle',
   wikiLocatorBlock: insert('Block {{block}}', { block: String }),
   wikiLocatorScript: insert('Skript {{label}}, Zeile {{line}}', { label: String, line: String }),
   wikiLocatorEpub: 'Stelle im Buch',

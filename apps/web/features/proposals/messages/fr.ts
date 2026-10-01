@@ -65,7 +65,6 @@ export default {
   wikiRelation: insert('Relation : {{subject}} → {{object}}', { subject: String, object: String }),
   wikiProperty: insert('{{subject}} :', { subject: String }),
   wikiQuoteWithheld: 'La citation est masquée.',
-  wikiLocatorText: 'Passage du texte',
   wikiLocatorBlock: insert('Bloc {{block}}', { block: String }),
   wikiLocatorScript: insert('Script {{label}}, ligne {{line}}', { label: String, line: String }),
   wikiLocatorEpub: 'Passage du livre',

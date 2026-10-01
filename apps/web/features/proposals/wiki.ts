@@ -13,10 +13,10 @@ const list = (value: Json): Json[] => Array.isArray(value) ? value : [];
 const text = (value: Json): string | null => typeof value === 'string' && value ? value : null;
 
 export type WikiLocator =
-  | { kind: 'text' } | { kind: 'block'; block: string } | { kind: 'script'; label: string; line: number }
+  | { kind: 'block'; block: string } | { kind: 'script'; label: string; line: number }
   | { kind: 'epub' } | { kind: 'bytes'; start: number; end: number };
 
-/** One citation: where it is (when the locator says) and the quoted passage, which rights may withhold. */
+/** One citation: where it is (when the locator names a place; a quoted passage is its own locator) and the quoted passage, which rights may withhold. */
 export interface WikiEvidence { locator: WikiLocator | null; quote: string | null; language: string | null }
 export interface WikiName { value: string; language: string; kind: 'primary' | 'alias' | 'title'; position: string | null }
 export interface WikiEntity { name: string; type: string | null; existing: boolean; names: WikiName[] }
@@ -40,7 +40,6 @@ export type WikiView =
 const locatorOf = (value: Json): WikiLocator | null => {
   const selector = record(record(value)?.selector);
   switch (selector?.type) {
-    case 'TextQuoteSelector': return { kind: 'text' };
     case 'BlockSelector': { const block = text(selector.blockId); return block ? { kind: 'block', block } : null; }
     case 'ScriptSelector': { const label = text(selector.label);
       return label && typeof selector.utterance === 'number' ? { kind: 'script', label, line: selector.utterance + 1 } : null; }

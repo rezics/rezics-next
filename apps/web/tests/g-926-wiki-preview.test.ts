@@ -19,7 +19,7 @@ describe('G-926 wiki bundle preview', () => {
       { value: 'Lizzy', language: 'en', kind: 'alias', position: 'Chapter 2' }]);
     expect(view.claims).toMatchObject([
       { subject: 'Elizabeth Bennet', object: { kind: 'literal', value: 'Bennet family' }, modality: 'narrated',
-        position: 'Chapter 1', evidence: [{ quote: 'The Bennet family', locator: { kind: 'text' }, language: 'en' }] },
+        position: 'Chapter 1', evidence: [{ quote: 'The Bennet family', locator: null, language: 'en' }] },
       { subject: 'Elizabeth Bennet', object: { kind: 'entity', name: 'Jane Bennet' }, modality: 'said',
         position: 'Chapter 3' }]);
     expect(view.corrections).toEqual([]);
