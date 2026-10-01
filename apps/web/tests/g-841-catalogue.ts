@@ -8,9 +8,12 @@ import { resolve } from 'node:path';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
+import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
@@ -74,7 +77,9 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   await structureObjects.initialize();
   Object.assign(stack.env, { structureObjects });
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-    libraryStatus: library, sessions: new ConsumptionSessionStore(stack.contentPool, library),
+    libraryStatus: library, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
+    reviews: new ReaderReviews(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
+    sessions: new ConsumptionSessionStore(stack.contentPool, library),
     editionPreferences: new EditionPreferenceStore(stack.contentPool),
     seriesSessions: new SeriesSessionReader(stack.contentPool), structureObjects,
     media: stack.media, mediaAccess: stack.mediaAccess,

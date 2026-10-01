@@ -229,10 +229,10 @@ export const ByGrain: Story = {
     const canvas = within(canvasElement);
     // The Work's own reviews first, counted per Main Version.
     await expect(canvas.getByText(/story \(Main Version\)/)).toBeVisible();
-    const edition = canvas.getByRole('button', { name: grainTargets[1]!.label });
-    await userEvent.click(edition);
+    await userEvent.click(canvas.getByRole('button', { name: grainTargets[1]!.label }));
     await waitFor(() => expect(canvas.getByText(/edition \(release\)/)).toBeVisible());
-    await expect(edition).toHaveAttribute('aria-pressed', 'true');
+    // The section is drawn again for the chosen target, so the choice is looked up again.
+    await expect(canvas.getByRole('button', { name: grainTargets[1]!.label })).toHaveAttribute('aria-pressed', 'true');
     await expect(canvas.getByText('Reviews of Sword Art Online 1: Aincrad · Yen Press · 2014')).toBeVisible();
     // A related Work with no rating question in this scope says so instead of borrowing another's reviews.
     await userEvent.click(canvas.getByRole('button', { name: 'Aincrad (manga)' }));
