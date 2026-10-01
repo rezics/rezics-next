@@ -7,6 +7,7 @@ import { ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects,
   type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { checkStructureSealManifest } from '../../../services/main/src/modules/structure/format.ts';
+import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { readCompositionSeal } from '../../../services/main/src/modules/structure/seal-read.ts';
 import { readExportPlan } from '../../../services/main/src/modules/export/readers.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
@@ -15,7 +16,7 @@ import { progressRoutes } from '../../../services/main/src/routes/progress.ts';
 type Created = { structure: string; revision: string; receipt: string; replayed: boolean };
 type Changed = Created & { occurrences: string[]; cost: { pagesRead: number;
   pagesWritten: number; placementsWritten: number; segmentsWritten: number; rebalanced: number } };
-type Page = { revision: string; predecessor: string | null; placementCount: number;
+type Page = { revision: string; predecessor: string | null;
   occurrences: Array<{ occurrence: string; state: string; parent: string; target?: string;
     orderKey: string; sourceKey?: string }>; next: string | null; cost: { pagesRead: number } };
 
@@ -64,7 +65,9 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
     const read = `${path}?actingSubject=${encodeURIComponent(f.actor)}`;
     expect((await f.call('GET', read, undefined, randomUUID(), f.account.tokenB)).status).toBe(404);
     const empty = await f.json<Page>(await f.call('GET', read), 200);
-    expect(empty).toMatchObject({ revision: created.revision, placementCount: 0, occurrences: [] });
+    expect(empty).toMatchObject({ revision: created.revision, occurrences: [] });
+    expect(empty).not.toHaveProperty('placementCount');
+    expect((await readCompositionHeader(f.env, created.structure))?.placementCount).toBe(0);
 
     const changeKey = `composition-${randomUUID()}`;
     const insert = { profile: 'book-composition', expectedHead: created.revision,
@@ -258,7 +261,7 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
       expect(dense.cost.placementsWritten).toBeLessThanOrEqual(64);
     }
     expect(rebalanced).toBeGreaterThan(0);
-    expect((await f.json<Page>(await f.call('GET', read), 200)).placementCount).toBe(515);
+    expect((await readCompositionHeader(f.env, created.structure))?.placementCount).toBe(515);
     const retained: string[] = [];
     let cursor: string | null = null;
     do {
@@ -289,9 +292,22 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
       occurrence: catalogChange.occurrences[0], target: catalogTarget,
     });
     expect(catalogPage.occurrences.at(-1)).not.toHaveProperty('selection');
-    expect((await f.json<Page>(await f.call('GET',
-      `${path}/revisions/${shortId(denseHead)}?actingSubject=${encodeURIComponent(f.actor)}&limit=100`),
-    200)).placementCount).toBe(515);
+    // The API reports disclosed occurrences, never a hidden total. Materialize
+    // both populated parents at the exact retained revision to prove all 515 placements.
+    const retainedPath = `${path}/revisions/${shortId(denseHead)}?actingSubject=${encodeURIComponent(f.actor)}&limit=100`;
+    let retainedRoots = 0, retainedCursor: string | null = null;
+    do {
+      const page = await f.json<Page>(await f.call('GET', `${retainedPath}${retainedCursor
+        ? `&after=${encodeURIComponent(retainedCursor)}` : ''}`), 200);
+      expect(page.revision).toBe(denseHead);
+      retainedRoots += page.occurrences.length;
+      retainedCursor = page.next;
+    } while (retainedCursor);
+    const retainedChildren = await f.json<Page>(await f.call('GET',
+      `${retainedPath}&parent=${encodeURIComponent(volume)}`), 200);
+    expect(retainedChildren.revision).toBe(denseHead);
+    expect(retainedChildren.next).toBeNull();
+    expect(retainedRoots + retainedChildren.occurrences.length).toBe(515);
     expect((await f.call('POST', `${path}/restorations`, {
       expectedHead: denseHead, restoredFrom: changed.revision, actingSubject: f.actor })).status).toBe(409);
   } finally { await f.close(); }

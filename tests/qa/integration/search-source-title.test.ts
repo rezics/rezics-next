@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { SourceAuthorNameStore } from '../../../services/main/src/modules/source/author-name.ts';
@@ -31,7 +32,8 @@ test('title, localized title, tagline and retained author facts match current pu
       return Response.json({ key: '/authors/OL1A', type: { key: '/type/author' }, revision, name: displayName });
     }) as typeof fetch);
     const discovery = new DiscoveryProjection(stack.accessPool);
-    const deps = { environment: stack.env, access: stack.access, sourceIntake: intake,
+    await actor.grant('work:create:root', 'work.create');
+    const deps = { actingContexts: new AccessActingContexts(stack.accessPool), environment: stack.env, access: stack.access, sourceIntake: intake,
       sourceAuthorNames: names, discovery, judgments: new AccessJudgments(stack.accessPool),
       account: { verify: async (request: Request, scopes: readonly string[]) => {
         if (request.headers.get('authorization') === 'Bearer owner'

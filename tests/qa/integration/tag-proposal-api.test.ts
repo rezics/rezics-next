@@ -82,7 +82,10 @@ test('G-354 tags: author-only proposals, CJK language lookup, independent Global
     // A definition's existence never asserts the Work's base classification.
     expect((await h.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
       ${iri(work.mainVersion)} <${RV}classifiedAs> ?concept } }`)).boolean).toBe(false);
-    await h.accessPool.query('UPDATE "access".representation SET active = false, generation = generation + 1 WHERE subject_id = $1', [h.actor]);
+    // Revoke this Work's proposal authority while retaining the Agent's last controller.
+    expect((await h.accessPool.query(`UPDATE access.scope_gate
+      SET open = false, dispatch_open = false, authority_epoch = authority_epoch + 1
+      WHERE id = $1`, [`work:edit:${work.work}`])).rowCount).toBe(1);
     expect((await h.call('POST', '/v1/tag-proposals', input)).status).toBe(403);
     // An overflow is unavailable, never a false-negative search result.
     await h.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {

@@ -170,7 +170,8 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     expect(linked.boolean).toBe(true);
     const unexpectedContent = await fuseki.query(`PREFIX rv: <${RV}> ASK {
       { GRAPH ${iri(GRAPHS.current)} { ?item rv:work ${iri(created.work)} .
-          FILTER(?item != ${iri(created.mainVersion)}) } }
+          FILTER(?item != ${iri(created.mainVersion)})
+          FILTER NOT EXISTS { ?item a rv:NativeAgentCredit ; rv:agent ${iri(result.actingSubject)} . } } }
       UNION { GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ${iri(created.work)} . } }
       UNION { GRAPH ${iri(GRAPHS.current)} { VALUES ?owner {
@@ -185,6 +186,10 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
           FILTER(?later != ${iri(created.mainRevision)}) } }
     }`);
     expect(unexpectedContent.boolean).toBe(false);
+    const credits = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?credit WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?credit a rv:NativeAgentCredit ; rv:work ${iri(created.work)} ;
+        rv:agent ${iri(result.actingSubject)} . } }`);
+    expect(credits.results?.bindings).toHaveLength(1);
     const selection = await main.handle(new Request(
       `http://localhost/v1/main-versions/${created.mainVersion.split('/').at(-1)}/selection`));
     expect(selection.status).toBe(404);

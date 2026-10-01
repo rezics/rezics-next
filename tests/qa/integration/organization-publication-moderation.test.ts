@@ -15,7 +15,7 @@ import { ORGANIZATION_MODERATION_ACTION, ORGANIZATION_MODERATION_PROFILE }
 import { GRAPHS, ID, type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { organizationPublisherEvidence } from '../../../services/main/src/modules/work/organization-publication-evidence.ts';
-import { organizationRejectionInput, rejectAdmittedOrganizationPublication } from '../../../services/main/src/modules/work/reject-organization-admitted.ts';
+import { organizationRejectionInput } from '../../../services/main/src/modules/work/reject-organization-admitted.ts';
 import { realmRejectionDigest, rejectRealmLocal, sealRealmRejectionAdmission }
   from '../../../services/main/src/modules/work/reject-realm.ts';
 import { selectAdmittedRealmLocal } from '../../../services/main/src/modules/work/select-realm-admitted.ts';
@@ -316,9 +316,6 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
     await expect(owner.admit(s.f.realmPrincipal, target, publisher, randomUUID(), digest())).rejects.toThrow();
     const inFlight = await rejectRealmLocal(env, flight, organizationRejectionInput(target));
     expect(inFlight.outcome).toBe('succeeded'); await access.recordGraphOutcome(flight.id, inFlight);
-    const retainedFlight = await rejectAdmittedOrganizationPublication(env, account.verifier, owner, access,
-      new Request('http://main.local', { headers: { authorization: `Bearer ${account.tokenA}` } }), target, flightKey);
-    expect(retainedFlight.rejection).toBe(inFlight.rejection);
     expect((await must(await moderate(flightKey), 200)).rejection).toBe(inFlight.rejection);
     expect((await search(s.other.realm)).total).toBe(1); expect((await search()).total).toBe(1);
     // Account introspection denies even receipt retries when the session is deactivated.

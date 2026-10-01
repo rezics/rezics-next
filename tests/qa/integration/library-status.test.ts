@@ -82,7 +82,10 @@ test.each(['initial context', 'retained context'])(
         if (scopes.includes('rating:read') && !ratingConsent) throw new AccountAssertionDenied('Missing rating consent');
         const principal = tokens.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
         if (!principal) throw new Error('unknown bearer');
-        return principal;
+        return { ...principal, currentAssertion: async () => {
+          if (scopes.includes('rating:read') && !ratingConsent) throw new AccountAssertionDenied('Missing rating consent');
+          return principal;
+        } };
       } }, libraryStatus: status, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
       profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
@@ -217,14 +220,6 @@ test.each(['initial context', 'retained context'])(
     await grant(`collection:edit:${collection}`, 'collection.edit');
     await grant(`collection:edit:${olderCollection}`, 'collection.edit');
     await grant(`work:read:${publicWork.work}`, 'work.read');
-    const nativeCommand = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
-    stack.fuseki.commandWithReceipt = async command => {
-      try {
-        const result = await nativeCommand(command);
-        if (result.status !== 'committed') console.error('Collection fixture graph result', result);
-        return result;
-      } catch (error) { console.error('Collection fixture graph error', error); throw error; }
-    };
     const olderResponse = await app.handle(new Request('http://main.local/v1/collections', { method: 'POST',
       headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
         'idempotency-key': randomUUID() },
