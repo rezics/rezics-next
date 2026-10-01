@@ -527369,6 +527369,22 @@
                                         "type": "string"
                                       },
                                       {
+                                        "const": "home",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "entity",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "index",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "memberIndex",
+                                        "type": "string"
+                                      },
+                                      {
                                         "maxLength": 72,
                                         "pattern": "^module:[a-z0-9]+(-[a-z0-9]+)*$",
                                         "type": "string"
