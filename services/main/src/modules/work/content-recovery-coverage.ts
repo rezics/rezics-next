@@ -95,10 +95,23 @@ function wellFormed(reference: GraphContentReference): boolean {
  * Enumerate every graph quad that may reference an owner row: each
  * `rv:contentRevision` with its pin, and any other IRI object of the owner-row
  * form. The owner catalog later decides which candidates name owner rows.
+ * Quiesced named graphs partition the full scan into independently bounded
+ * requests, including after an offline rebuild restarts Fuseki cold. O(Q + G)
+ * engine work and O(R log R) client work for Q quads, G graphs and R references.
  */
 export async function graphContentReferences(fuseki: FusekiClient): Promise<GraphContentReference[]> {
-  const result = await fuseki.query(`PREFIX rv: <${RV}>
+  const inventory = await fuseki.query('SELECT ?graph WHERE { GRAPH ?graph {} }');
+  if (!inventory.results?.bindings) throw new ContentRecoveryConflict('graph inventory query is incomplete');
+  const graphs = new Set(inventory.results.bindings.map(row => {
+    if (row.graph?.type !== 'uri' || !row.graph.value)
+      throw new ContentRecoveryConflict('graph inventory name is not an IRI');
+    return row.graph.value;
+  }));
+  const references: GraphContentReference[] = [];
+  for (const graph of graphs) {
+    const result = await fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?graph ?subject ?predicate ?object ?digest ?preparation ?epoch ?sequence WHERE {
+      BIND(IRI(${JSON.stringify(graph)}) AS ?graph)
       { GRAPH ?graph { ?subject rv:contentRevision ?object .
           OPTIONAL { ?subject rv:byteDigest ?digest }
           OPTIONAL { ?subject rv:contentPreparation ?preparation }
@@ -111,16 +124,18 @@ export async function graphContentReferences(fuseki: FusekiClient): Promise<Grap
           && STRSTARTS(STR(?object), "urn:rezics:")
           && REGEX(STR(?object), "^urn:rezics:[a-z][a-z0-9_]*:[a-z][a-z0-9-]*:.")) }
     }`);
-  const rows = result.results?.bindings;
-  if (!rows) throw new ContentRecoveryConflict('graph Content reference query is incomplete');
-  const references = rows.map(row => {
-    const value = (name: string) => row[name]?.value ?? null;
-    const reference: GraphContentReference = { graph: value('graph')!, subject: value('subject')!,
-      predicate: value('predicate')!, object: value('object')!, byteDigest: value('digest'),
-      preparationId: value('preparation'), ownerEpoch: value('epoch'), ownerSequence: value('sequence') };
-    if (!wellFormed(reference)) throw new ContentRecoveryConflict('graph Content reference is malformed');
-    return reference;
-  });
+    const rows = result.results?.bindings;
+    if (!rows) throw new ContentRecoveryConflict('graph Content reference query is incomplete');
+    for (const row of rows) {
+      if (row.graph?.value !== graph) throw new ContentRecoveryConflict('graph reference scan crossed its graph');
+      const value = (name: string) => row[name]?.value ?? null;
+      const reference: GraphContentReference = { graph: value('graph')!, subject: value('subject')!,
+        predicate: value('predicate')!, object: value('object')!, byteDigest: value('digest'),
+        preparationId: value('preparation'), ownerEpoch: value('epoch'), ownerSequence: value('sequence') };
+      if (!wellFormed(reference)) throw new ContentRecoveryConflict('graph Content reference is malformed');
+      references.push(reference);
+    }
+  }
   return sorted(references);
 }
 

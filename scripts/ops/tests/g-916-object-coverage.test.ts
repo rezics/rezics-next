@@ -14,11 +14,66 @@ import {
   graphObjectReferences,
 } from '../../../services/main/src/modules/owner/object-coverage.ts';
 import { GRAPHS } from '../../../services/main/src/modules/work/activate.ts';
+import { graphContentReferences } from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { RecoveryBudget } from '../recovery-set.ts';
 
 const uri = (value: string) => ({ type: 'uri', value });
 type Rows = NonNullable<SparqlResult['results']>['bindings'];
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
+test('G-916: Content reference scans bind every discovered graph and retain unknown owner namespaces', async () => {
+  const id = '0190a3a4-8e3b-7c1d-9f2e-3a4b5c6d7e8f';
+  const graphs = [GRAPHS.current, 'urn:rezics:graph:custom"graph', GRAPHS.control];
+  const queries: string[] = [];
+  const fuseki = {
+    query: async (query: string) => {
+      queries.push(query);
+      if (query === 'SELECT ?graph WHERE { GRAPH ?graph {} }')
+        return { results: { bindings: graphs.map((graph) => ({ graph: uri(graph) })) } };
+      const binding = query.match(/BIND\(IRI\((".*")\) AS \?graph\)/)?.[1];
+      if (!binding) throw new Error('scan has no bound graph');
+      const graph = JSON.parse(binding) as string;
+      const common = { graph: uri(graph), subject: uri('urn:rezics:subject:one') };
+      const rows =
+        graph === GRAPHS.current
+          ? [
+              {
+                ...common,
+                predicate: uri('https://rezics.com/vocab/contentRevision'),
+                object: uri(`urn:rezics:content:revision:${id}`),
+                digest: { type: 'literal', value: 'a'.repeat(64) },
+                epoch: { type: 'literal', value: id },
+                sequence: { type: 'literal', value: '0' },
+              },
+            ]
+          : graph === graphs[1]
+            ? [
+                {
+                  ...common,
+                  predicate: uri('https://rezics.com/vocab/cites'),
+                  object: uri(`urn:rezics:custom_ledger:evidence-item:${id}`),
+                },
+              ]
+            : [];
+      return { results: { bindings: rows } };
+    },
+  } as unknown as FusekiClient;
+  const references = await graphContentReferences(fuseki);
+  expect(references).toHaveLength(2);
+  expect(references.find((ref) => ref.graph === GRAPHS.current)).toMatchObject({
+    byteDigest: 'a'.repeat(64),
+    ownerEpoch: id,
+    ownerSequence: '0',
+    preparationId: null,
+  });
+  expect(references.find((ref) => ref.graph === graphs[1])).toMatchObject({
+    object: `urn:rezics:custom_ledger:evidence-item:${id}`,
+    byteDigest: null,
+    ownerEpoch: null,
+  });
+  expect(queries).toHaveLength(4);
+  expect(queries[2]).toContain(JSON.stringify(graphs[1]));
+});
 
 function scans(rows: {
   manifest: Rows;
@@ -223,21 +278,28 @@ test('G-916: recovery failures identify their phase and retain the original caus
     expect((error as Error).cause).toBe(cause);
   }
   expect(budget.phases.coverage).toBeGreaterThanOrEqual(0);
-  await expect(budget.phase('encrypt', () => {
-    throw new Error('gpg recovery step failed');
-  })).rejects.toThrow('gpg recovery step failed');
+  await expect(
+    budget.phase('encrypt', () => {
+      throw new Error('gpg recovery step failed');
+    }),
+  ).rejects.toThrow('gpg recovery step failed');
 });
 
 test('G-916: S3 recovery reads carry the enclosing deadline through request signing', async () => {
   const controller = new AbortController();
   const bytes = new TextEncoder().encode('retained immutable bytes');
   const observed: boolean[] = [];
-  const transport = spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-    if (!(input instanceof Request)) throw new Error('expected a signed request');
-    observed.push(input.signal.aborted);
-    if (input.signal.aborted) throw input.signal.reason;
-    return new Response(bytes);
-  });
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(
+      async (input: Parameters<typeof fetch>[0]) => {
+        if (!(input instanceof Request)) throw new Error('expected a signed request');
+        observed.push(input.signal.aborted);
+        if (input.signal.aborted) throw input.signal.reason;
+        return new Response(bytes);
+      },
+      { preconnect: fetch.preconnect },
+    ),
+  );
   try {
     const store = new S3ImmutableObjects({
       endpoint: 'https://objects.example.test',

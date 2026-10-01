@@ -35,8 +35,16 @@ function task(name: string, args: string[], timeout = 120_000): void {
     encoding: 'utf8',
     timeout,
   });
-  if (result.error || result.status !== 0)
-    throw new Error(`${name} failed; inspect fixture/stack evidence`);
+  if (result.error || result.status !== 0) {
+    writeFileSync(
+      join(Bun.env.REZICS_QA_ARTIFACT_DIR!, `g-727-${name.replace(':', '-')}.log`),
+      `${result.stdout ?? ''}${result.stderr ?? ''}`,
+      { mode: 0o600 },
+    );
+    throw new Error(`${name} failed; inspect fixture/stack evidence`, {
+      cause: result.error ?? new Error(`exit ${result.status}`),
+    });
+  }
 }
 
 // No corpus build and no skip: routine QA restores a retained small fixture;
@@ -70,6 +78,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
   let custody: ReturnType<typeof recoveryTestCustody> | undefined;
   const pools: Pool[] = [];
   let phase = 'preparation';
+  let failure: unknown;
   try {
     if (!preparedSource) {
       const profile = (requestedProfile ?? 'small') as FixtureProfile;
@@ -142,6 +151,11 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
         (<http://www.w3.org/2000/01/rdf-schema#label> "${workToken(sample.index)}" 10) } } ORDER BY ?s`,
       },
     );
+    writeFileSync(
+      join(Bun.env.REZICS_QA_ARTIFACT_DIR!, 'g-727-source-probes.json'),
+      JSON.stringify(probes, null, 2),
+      { mode: 0o600 },
+    );
     if (!retainedRecipient) custody = recoveryTestCustody(custodyDirectory, nonce);
     phase = 'backup';
     const backup = await backupRecoverySet({
@@ -191,22 +205,38 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       ),
     );
   } catch (error) {
-    throw new Error(`Launch recovery drill failed during ${phase}`, { cause: error });
+    failure = new Error(`Launch recovery drill failed during ${phase}`, { cause: error });
+    throw failure;
   } finally {
     await Promise.allSettled(pools.map((pool) => pool.end()));
-    try {
-      task('stack:reset', ['--profile', 'qa', '--run-id', targetId, '--persistent']);
-    } finally {
-      try {
+    const cleanupErrors: unknown[] = [];
+    // Large-volume deletion is outside both 600-second command timers. Keep
+    // the existing whole-test deadline and preserve a primary verification error.
+    for (const cleanup of [
+      () => task('stack:reset', ['--profile', 'qa', '--run-id', targetId, '--persistent'], 300_000),
+      () => {
         if (!preparedSource)
-          task('stack:reset', ['--profile', 'qa', '--run-id', sourceId, '--persistent']);
-      } finally {
+          task('stack:reset', ['--profile', 'qa', '--run-id', sourceId, '--persistent'], 300_000);
+      },
+      () => {
         if (custody) {
           closeRecoveryTestCustody(custody);
           rmSync(custodyDirectory, { recursive: true, force: true });
           rmSync(set, { recursive: true, force: true });
         }
+      },
+    ]) {
+      try {
+        cleanup();
+      } catch (error) {
+        cleanupErrors.push(error);
       }
     }
+    if (cleanupErrors.length)
+      throw new AggregateError(
+        failure ? [failure, ...cleanupErrors] : cleanupErrors,
+        'Launch recovery drill cleanup failed',
+        { cause: failure ?? cleanupErrors[0] },
+      );
   }
 }, 1_260_000);

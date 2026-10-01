@@ -263,7 +263,7 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
           'sh',
           helper,
           '-ec',
-          "printf '\narchive_mode = off\nrestore_command = '\"'\"'false'\"'\"'\n' >> /to/18/docker/postgresql.auto.conf; touch /to/18/docker/recovery.signal; chown -R postgres:postgres /to/18/docker",
+          "printf '\narchive_mode = off\nrestore_command = '\"'\"'false'\"'\"'\n' >> /to/18/docker/postgresql.auto.conf; touch /to/18/docker/recovery.signal; mkdir -p /to/archive; chown postgres:postgres /to/archive; chown -R postgres:postgres /to/18/docker",
         ],
         budget,
         environment,
@@ -403,7 +403,9 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       );
       const body = (await response.json()) as { state?: string; disposition?: string };
       if (!response.ok || body.state !== 'reconciled' || body.disposition !== 'matched')
-        throw new Error('Owner reconciliation did not verify the restore');
+        throw new Error(
+          `Owner reconciliation did not verify the restore (${response.status}, ${body.state ?? 'unknown'}, ${body.disposition ?? 'unknown'})`,
+        );
     });
     await budget.phase('release-access', async () => {
       await releaseAccessRecoveryFence(restoredPools.access, manifest.fenceGeneration);

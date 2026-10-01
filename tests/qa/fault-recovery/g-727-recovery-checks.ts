@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { exportAccountData } from '../../../services/account/src/data-export.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -242,7 +242,27 @@ export function recoveryChecks(
           body: JSON.stringify(body),
         });
       expect((await app.handle(request('Bearer denied'))).status).toBe(401);
-      return app.handle(request('Bearer qa-owner'));
+      const response = await app.handle(request('Bearer qa-owner'));
+      const responseBody = (await response.clone().json()) as {
+        state?: string;
+        disposition?: string;
+      };
+      const hold = await context.pools.relay.query<{ hold_reason: string | null }>(
+        'SELECT hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1',
+        [`owner:reconcile:${idempotencyKey}`],
+      );
+      const reason = hold.rows[0]?.hold_reason;
+      if (Bun.env.REZICS_QA_ARTIFACT_DIR)
+        writeFileSync(
+          join(
+            Bun.env.REZICS_QA_ARTIFACT_DIR,
+            `g-727-reconciliation-${context.apps.MAIN_DATA_EPOCH}.json`,
+          ),
+          JSON.stringify({ status: response.status, ...responseBody, holdReason: reason }, null, 2),
+          { mode: 0o600 },
+        );
+      if (reason) throw new Error(`Owner reconciliation remained held: ${reason}`);
+      return response;
     },
   };
 }
