@@ -22,7 +22,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 
 test('G630: mounted Zone routes enforce current typed bindings, complete paging and population disclosure', async () => {
-  const stack = await startMediaStack('g-630-routes');
+  const stack = await startMediaStack('g-630-routes', { profileCredits: true });
   try {
     const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
       bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,

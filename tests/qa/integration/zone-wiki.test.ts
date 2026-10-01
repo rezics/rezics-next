@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
@@ -8,6 +8,7 @@ import { readZoneConfiguration } from '../../../services/main/src/modules/zone/c
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS }
   from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 
 test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without owning or disclosing it', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -21,6 +22,8 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
   await objects.initialize();
   (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
   try {
+    await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor, kind: 'person',
+      displayName: 'Wiki editor', digest: createHash('sha256').update(f.actor).digest('hex') });
     await f.grant('space:create:root', 'space.create');
     const space = await f.json<{ space: string; realm: string }>(await f.call('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name: 'Shared wiki', capabilities: ['realm'], actingSubject: f.actor,
