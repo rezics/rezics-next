@@ -29,21 +29,27 @@ import { YourEdition } from './your-edition.tsx';
 
 interface Common { locale: UiLocale; messages: WorkPageMessages }
 
+/** Progress is counted in a language: the reader's chosen one, else the one the interface is in (as the series panel does). */
+const progressLanguage = (preference: Awaited<ReturnType<typeof readEditionPreference>>, locale: UiLocale) =>
+  preference.ok && preference.data ? preference.data.language : locale;
+
 /**
  * The page's one primary action and the reader's status under it. Main decides: hosted text first, then the
  * next part its progress summary names, then choosing an edition; this maps the answers to a button.
  */
 export async function PrimaryAction({ workRef, id, work, locale, messages }: Common & { workRef: WorkAt; id: string;
   work: Header }) {
-  const [start, progress, preference, releases] = await Promise.all([readStart(id, work.id, locale, work.selectedLanguage),
-    readProgressSummary(id), readEditionPreference(id), readReleases(id)]);
+  const [start, preference, releases] = await Promise.all([readStart(id, work.id, locale, work.selectedLanguage),
+    readEditionPreference(id), readReleases(id)]);
+  const progress = await readProgressSummary(id, progressLanguage(preference, locale));
   const action = nextAction({ start, progress, preference, releases: releases.ok ? releases.data.items.length : 0 });
   return action ? <NextActionView action={action} workRef={workRef} locale={locale} messages={messages} /> : null;
 }
 
 /** The edition the reader chose and their progress, named in Main's words, under the primary action. */
 export async function Status({ id, locale, messages }: Common & { id: string }) {
-  const [progress, preference] = await Promise.all([readProgressSummary(id), readEditionPreference(id)]);
+  const preference = await readEditionPreference(id);
+  const progress = await readProgressSummary(id, progressLanguage(preference, locale));
   const chosen = preference.ok ? preference.data?.edition : null;
   const names = chosen ? await readNames(chosen.resource) : null;
   const summary = chosen ? names?.get(chosen.resource) : undefined;
