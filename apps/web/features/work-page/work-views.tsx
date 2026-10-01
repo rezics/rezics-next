@@ -22,6 +22,7 @@ import { HistoryRegion } from './history.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { readContentsGroup } from './contents-actions.ts';
+import { ProvisionalNotice } from '../catalogue-intake/provisional-notice.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
 import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
@@ -158,8 +159,10 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     </Suspense>}
     status={experience.kind === 'book' ? <Suspense fallback={null}>
       <Status id={id} locale={locale} messages={messages} /></Suspense> : undefined}
-    shortcuts={plan.includes('wiki') ? <Suspense fallback={null}>
-      <WikiShortcut id={id} locale={locale} messages={messages} /></Suspense> : undefined}>
+    shortcuts={<>
+      <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
+      {plan.includes('wiki') ? <Suspense fallback={null}>
+        <WikiShortcut id={id} locale={locale} messages={messages} /></Suspense> : null}</>}>
     {children}</WorkFrame>;
 }
 
