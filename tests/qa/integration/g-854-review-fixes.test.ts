@@ -102,7 +102,7 @@ test('G-854 review: replay uses actual attempts, 4xx rows continue, upload delet
     expect((await call('DELETE',deletePath,undefined,deleteKey,home.author.token)).status).toBe(403);
     await checked(await call('DELETE',deletePath,undefined,deleteKey));await checked(await call('DELETE',deletePath,undefined,deleteKey));
     expect((await call('GET',`/v1/me/library-imports/${initial.id}/rows?actingSubject=${encodeURIComponent(agent)}`)).status).toBe(404);
-    expect((await upload([finished],randomUUID())).id).toBe(rewritten.id);
+    const afterDelete = await upload([finished]);await resolve(afterDelete.id,[finished]);await checked(await apply(afterDelete.id));
     expect((await sessions()).length).toBe(4);
     // Expiry excludes source rows before the retention poll physically removes them.
     const expires = { ...emptyRow('expires','',{ secret: 'Expiry secret' }),kind: 'retained' as const };
