@@ -22,18 +22,31 @@ export async function readWikiExport(
   revisions: WikiRevisionSet,
   position: { dataEpoch: string; sequence: string },
   useScope: ExportPlan['useScope'],
-  rights?: LicenseScopeHook,
+  rights: LicenseScopeHook,
   scope?: import('../wiki/history-read.ts').WikiHistoryScope,
 ) {
-  const { resolutions: _resolutions, ...history } = await readWikiHistory(
-    work,
-    principal,
-    actor,
-    resource,
-    revisions,
-    undefined,
-    scope,
-  );
+  const {
+    resolutions: _resolutions,
+    nextCursor,
+    ...history
+  } = await readWikiHistory(work, principal, actor, resource, revisions, undefined, scope);
+  let cursor = nextCursor;
+  while (cursor) {
+    const page = await readWikiHistory(
+      work,
+      principal,
+      actor,
+      resource,
+      history.revisions,
+      undefined,
+      scope,
+      { cursor },
+    );
+    history.claims.push(...page.claims);
+    history.entities.push(...page.entities);
+    history.units.push(...page.units);
+    cursor = page.nextCursor;
+  }
   if (
     position.dataEpoch !== history.sourcePosition.dataEpoch ||
     position.sequence !== history.sourcePosition.sequence
@@ -72,20 +85,5 @@ export async function readWikiExport(
       },
     ],
   );
-  return planExport(
-    { targetProfile: 'rezics-wiki-v1', useScope, members, residuals: [] },
-    rights ??
-      (async () => [
-        {
-          basisKind: 'unprotected_fact',
-          basisRef: null,
-          licenseExpression: null,
-          notice: null,
-          obligations: [],
-          useScope,
-          result: 'undetermined',
-          memberOrdinals: [1],
-        },
-      ]),
-  );
+  return planExport({ targetProfile: 'rezics-wiki-v1', useScope, members, residuals: [] }, rights);
 }

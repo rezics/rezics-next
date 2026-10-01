@@ -1,24 +1,15 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import {
-  EditorialBlocked,
-  EditorialInvalid,
-  canonicalCandidate,
-} from '../editorial-review/contract.ts';
-import { readMergedIdentity } from '../identity-merge/resolution.ts';
-import {
-  discloseWikiHistory,
-  wikiHistory,
-  wikiReceipts,
-  wikiRevisionSet,
-  WIKI_HISTORY_COST,
-} from './history.ts';
+import { EditorialBlocked, EditorialInvalid } from '../editorial-review/contract.ts';
+import { readMergedIdentity, type MergedIdentity } from '../identity-merge/resolution.ts';
+import { discloseWikiHistory, wikiHistory, wikiReceipts, WIKI_HISTORY_COST } from './history.ts';
 import { revisionSetDigest, type WikiRevisionSet } from './delta.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { readingPositionRead } from '../reading-position/read.ts';
 import { propertyRevelationRecord } from '../reading-position/store.ts';
 import { wikiSegment } from './apply-snapshot.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
+import { wikiHistoryPage } from './history-page.ts';
 
 export interface WikiHistoryScope {
   entity?: string;
@@ -35,16 +26,17 @@ async function readWikiHistoryUnchecked(
   selection?: WikiRevisionSet,
   request = new Request('http://main.local/?position=all'),
   scope: WikiHistoryScope = {},
+  page: { limit?: number; cursor?: string } = {},
 ) {
+  scope = {
+    ...(scope.entity ? { entity: scope.entity } : {}),
+    ...(scope.section ? { section: scope.section } : {}),
+  };
   if (!work.editorialReview || !work.wikiEvidence)
     throw new EditorialBlocked({ code: 'owner_unavailable' });
   if (!(await work.access.canReadWork(principal, actor, resource)))
     throw new EditorialInvalid('Wiki is unavailable');
-  const all = await wikiReceipts(work.editorialReview.pool, resource, selection?.length);
-  const selected = selection ? all.slice(0, selection.length) : all;
-  if (selection && revisionSetDigest(selection) !== revisionSetDigest(wikiRevisionSet(selected))) {
-    throw new EditorialInvalid('Revision set is not a complete applied wiki prefix');
-  }
+  const selected = await wikiReceipts(work.editorialReview, resource, selection);
   const pinnedHistory = wikiHistory(resource, selected);
   const visibleHistory = await readingPositionRead(
     work,
@@ -117,19 +109,21 @@ async function readWikiHistoryUnchecked(
     ...history.entities.map((entity) => entity.revision),
   ];
   let sequence = '0';
-  if (pins.length) {
+  const uniquePins = [...new Set(pins)];
+  for (let at = 0; at < uniquePins.length; at += 64) {
+    const batch = uniquePins.slice(at, at + 64);
     const rows =
       (
         await work.environment.fuseki.query(
           `PREFIX rv: <${RV}>
       SELECT ?revision ?epoch ?sequence WHERE { GRAPH ${iri(GRAPHS.revisions)} {
-        VALUES ?revision { ${[...new Set(pins)].map(iri).join(' ')} }
-        ?revision rv:dataEpoch ?epoch ; rv:sequence ?sequence . } } LIMIT 641`,
+        VALUES ?revision { ${batch.map(iri).join(' ')} }
+        ?revision rv:dataEpoch ?epoch ; rv:sequence ?sequence . } } LIMIT 65`,
           262144,
         )
       ).results?.bindings ?? [];
     if (
-      rows.length !== new Set(pins).size ||
+      rows.length !== batch.length ||
       rows.some(
         (row) =>
           row.epoch?.value !== work.environment.lineage.dataEpoch ||
@@ -139,19 +133,31 @@ async function readWikiHistoryUnchecked(
       throw new EditorialInvalid('Historical graph pins are unavailable');
     sequence = rows.reduce(
       (max, row) => (BigInt(row.sequence!.value) > BigInt(max) ? row.sequence!.value : max),
-      '0',
+      sequence,
     );
   }
+  const paged = wikiHistoryPage(
+    history,
+    {
+      resource,
+      actor,
+      principal: [principal.issuer, principal.subject],
+      revisions: pinnedHistory.revisions,
+      scope,
+      position: new URL(request.url).searchParams.get('position'),
+    },
+    page,
+  );
   const canRead = async (entity: string) =>
     !!(await work.access.canReadSemanticResource?.(principal, actor, entity));
   const identities = new Set([
-    ...history.entities.map((entity) => entity.entity),
-    ...history.claims.flatMap((claim) => [
+    ...paged.entities.map((entity) => entity.entity),
+    ...paged.claims.flatMap((claim) => [
       claim.value.subject,
       ...(claim.value.object.kind === 'entity' ? [claim.value.object.ref] : []),
     ]),
   ]);
-  const resolutions: Record<string, unknown> = {};
+  const resolutions: Record<string, MergedIdentity> = {};
   for (const entity of identities) {
     if (!(await canRead(entity))) throw new EditorialInvalid('Wiki dependency is unavailable');
     const resolution = await readMergedIdentity(work.environment, entity, canRead);
@@ -159,10 +165,11 @@ async function readWikiHistoryUnchecked(
   }
   // Resolutions describe today's links; they never replace a pinned IRI/name.
   return {
-    ...(await discloseWikiHistory(history, work.wikiEvidence, work.rights?.store)),
+    ...(await discloseWikiHistory(paged, work.wikiEvidence, work.rights?.store)),
+    nextCursor: paged.nextCursor,
     sourcePosition: { dataEpoch: work.environment.lineage.dataEpoch, sequence },
     scope,
-    revisionSetDigest: canonicalCandidate(history.revisions).digest,
+    revisionSetDigest: revisionSetDigest(history.revisions),
     resolutions,
   };
 }

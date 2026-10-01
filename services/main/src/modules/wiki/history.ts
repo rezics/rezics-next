@@ -1,7 +1,8 @@
-import type { Pool, PoolClient } from 'pg';
+import type { EditorialReviewStore } from '../editorial-review/store.ts';
 import {
   EditorialBlocked,
   EditorialInvalid,
+  canonicalCandidate,
   type OwnerReceipt,
 } from '../editorial-review/contract.ts';
 import { commandResult } from './apply-runtime.ts';
@@ -12,12 +13,11 @@ import { evidenceId, withholdPassage, type WikiEvidenceStore } from './evidence.
 import type { RightsStore } from '../rights/store.ts';
 import type { WikiExtraction } from './protocol.ts';
 
-/** SQL and reducer work is O(receipts + retained commands + evidence).
- * Oversized current sets fail explicitly; historical prefixes stay readable. */
+/** Inventory uses 64-receipt keyset queries, never a product-size cap.
+ * Replay is O(journal commands + evidence); graph disclosure has a per-read budget. */
 export const WIKI_HISTORY_COST = {
   receipts: 64,
-  claims: 512,
-  entities: 128,
+  pageItems: 64,
   statementMs: 1000,
   graphCalls: 2048,
   graphBytes: 8_388_608,
@@ -46,33 +46,52 @@ export interface WikiHistory {
   }[];
   units: WikiExtraction['units'];
 }
-/** Indexed Work inventory, with overflow detection rather than a sampled base. */
+/** Follow every keyset page within one pinned cut, including for delta bases. */
 export async function wikiReceipts(
-  pool: Pick<Pool | PoolClient, 'query'>,
+  store: Pick<EditorialReviewStore, 'appliedReceipts'>,
   work: string,
-  prefix?: number,
+  selection?: WikiRevisionSet,
 ): Promise<OwnerReceipt[]> {
-  const rows = (
-    await pool.query<{ receipt: OwnerReceipt }>(
-      `SELECT d.owner_receipt AS receipt
-    FROM access.editorial_proposal p JOIN access.editorial_decision d ON d.proposal = p.id
-    WHERE p.resource = $1 AND p.kind = 'wiki-bundle' AND d.outcome = 'applied'
-    ORDER BY d.created_at,d.proposal LIMIT $2`,
-      [work, prefix ?? WIKI_HISTORY_COST.receipts + 1],
-    )
-  ).rows;
-  if (rows.length > WIKI_HISTORY_COST.receipts)
-    throw new EditorialBlocked({ code: 'budget_exhausted' });
-  return rows.map((row) => row.receipt);
+  const receipts: OwnerReceipt[] = [];
+  let through = selection
+    ? Array.isArray(selection)
+      ? (selection.at(-1)?.proposal ?? null)
+      : selection.through
+    : undefined;
+  let cursor: string | undefined;
+  do {
+    const page = await store.appliedReceipts(work, 'wiki-bundle', WIKI_HISTORY_COST.receipts, {
+      through,
+      cursor,
+    });
+    through = page.through;
+    receipts.push(...page.receipts);
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  if (
+    selection &&
+    ((through !== receipts.at(-1)?.proposal && through !== null) ||
+      revisionSetDigest(selection) !== revisionSetDigest(wikiRevisionSet(receipts)))
+  )
+    throw new EditorialInvalid('Revision set is not a complete applied wiki prefix');
+  return receipts;
 }
-export const wikiRevisionSet = (receipts: readonly OwnerReceipt[]): WikiRevisionSet =>
-  receipts.map((receipt) => ({
-    proposal: receipt.proposal,
-    revision: receipt.revision,
-    digest: receipt.candidateDigest,
-  }));
+export const wikiRevisionSet = (receipts: readonly OwnerReceipt[]): WikiRevisionSet => ({
+  profile: 'wiki-revision-set-v1',
+  through: receipts.at(-1)?.proposal ?? null,
+  digest: revisionSetDigest(
+    receipts.map((receipt) => ({
+      proposal: receipt.proposal,
+      revision: receipt.revision,
+      digest: receipt.candidateDigest,
+    })),
+  ),
+});
 export function assertWikiBase(expected: WikiRevisionSet, receipts: readonly OwnerReceipt[]) {
-  if (revisionSetDigest(expected) !== revisionSetDigest(wikiRevisionSet(receipts))) {
+  if (
+    (!Array.isArray(expected) && expected.through !== (receipts.at(-1)?.proposal ?? null)) ||
+    revisionSetDigest(expected) !== revisionSetDigest(wikiRevisionSet(receipts))
+  ) {
     throw new EditorialBlocked({
       code: 'stale_base',
       expectedHeads: [
@@ -93,7 +112,24 @@ export function wikiHistory(work: string, receipts: readonly OwnerReceipt[]): Wi
   const claims = new Map<string, WikiHistoryClaim>(),
     entities = new Map<string, WikiHistory['entities'][number]>();
   const units = new Map<string, WikiExtraction['units'][number]>();
+  const previous: OwnerReceipt[] = [];
+  let previousDigest = revisionSetDigest([]);
+  const byProposal = new Map(receipts.map((receipt) => [receipt.proposal, receipt]));
   for (const receipt of receipts) {
+    const base = {
+      profile: 'wiki-revision-set-v1' as const,
+      through: previous.at(-1)?.proposal ?? null,
+      digest: previousDigest,
+    };
+    previousDigest = canonicalCandidate({
+      previous: previousDigest,
+      pin: {
+        proposal: receipt.proposal,
+        revision: receipt.revision,
+        digest: receipt.candidateDigest,
+      },
+    }).digest;
+    previous.push(receipt);
     if (
       receipt.candidate &&
       typeof receipt.candidate === 'object' &&
@@ -102,7 +138,7 @@ export function wikiHistory(work: string, receipts: readonly OwnerReceipt[]): Wi
     ) {
       // Resolve the exact retained source; a revert never reads the current name.
       const proposal = receipt.candidate.proposal;
-      const source = receipts.find((row) => row.proposal === proposal);
+      const source = byProposal.get(String(proposal));
       if (!source || !isWikiDelta(source.candidate))
         throw new EditorialInvalid('Delta revert source is missing');
       const added = [...claims.values()].filter((claim) => claim.proposal === source.proposal);
@@ -142,7 +178,12 @@ export function wikiHistory(work: string, receipts: readonly OwnerReceipt[]): Wi
     const delta = isWikiDelta(receipt.candidate) ? checkWikiDelta(receipt.candidate) : null;
     const bundle = delta?.bundle ?? extractionCandidate(receipt.candidate);
     if (bundle.target !== work) throw new EditorialInvalid('Revision set crosses wiki Works');
-    if (delta) assertWikiBase(delta.base, receipts.slice(0, receipts.indexOf(receipt)));
+    if (
+      delta &&
+      (revisionSetDigest(delta.base) !== base.digest ||
+        (!Array.isArray(delta.base) && delta.base.through !== base.through))
+    )
+      throw new EditorialInvalid('Applied delta has an inconsistent journal base');
     const result = (key: string) =>
       commandResult(
         receipt.commands?.find(
@@ -209,9 +250,6 @@ export function wikiHistory(work: string, receipts: readonly OwnerReceipt[]): Wi
         ),
       });
     }
-  }
-  if (claims.size > WIKI_HISTORY_COST.claims || entities.size > WIKI_HISTORY_COST.entities) {
-    throw new EditorialBlocked({ code: 'budget_exhausted' });
   }
   return {
     profile: 'wiki-history-v1',

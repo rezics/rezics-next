@@ -128,7 +128,7 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     if (!deps.wiki) throw new ExportSourceUnavailable('Wiki owner is unavailable');
     if (selection.expectedPosition.dataEpoch !== deps.env.lineage.dataEpoch) throw new ExportStale('Wiki epoch changed');
     return readWikiExport(deps.wiki, principal, actingSubject, selection.reference, selection.revisions,
-      selection.expectedPosition, useScope, deps.rights, selection.scope);
+      selection.expectedPosition, useScope, deps.rights ?? unknownRights, selection.scope);
   }
   if (selection.kind === 'vndb-concept-run') {
     const runId = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(selection.reference)?.[1];

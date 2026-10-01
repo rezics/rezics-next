@@ -5,7 +5,7 @@ import { WikiExtractionSchema, WikiNativeResourceSchema } from './protocol.ts';
 import { checkWikiExtraction } from './validate.ts';
 
 const closed = { additionalProperties: false };
-export const WikiRevisionSetSchema = Type.Array(
+const LegacyWikiRevisionSetSchema = Type.Array(
   Type.Object(
     {
       proposal: Type.String({ format: 'uuid' }),
@@ -16,6 +16,19 @@ export const WikiRevisionSetSchema = Type.Array(
   ),
   { maxItems: 64 },
 );
+/** Constant-size pin of a complete applied journal, including its digest. */
+export const WikiJournalPinSchema = Type.Object(
+  {
+    profile: Type.Literal('wiki-revision-set-v1'),
+    through: Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+    digest: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+  },
+  closed,
+);
+export const WikiRevisionSetSchema = Type.Union([
+  WikiJournalPinSchema,
+  LegacyWikiRevisionSetSchema,
+]);
 export const WikiDeltaSchema = Type.Object(
   {
     profile: Type.Literal('wiki-delta-v1'),
@@ -51,7 +64,8 @@ export function checkWikiDelta(value: unknown): WikiDelta {
     throw new EditorialInvalid('Invalid wiki delta');
   checkWikiExtraction(value.bundle);
   if (
-    new Set(value.base.map((pin) => pin.proposal)).size !== value.base.length ||
+    (Array.isArray(value.base) &&
+      new Set(value.base.map((pin) => pin.proposal)).size !== value.base.length) ||
     new Set(value.changes.map((change) => change.claim)).size !== value.changes.length ||
     value.changes.some(
       (change) => !change.reason.trim() || !value.bundle.claims[change.evidenceClaim],
@@ -62,5 +76,9 @@ export function checkWikiDelta(value: unknown): WikiDelta {
   return value;
 }
 export function revisionSetDigest(base: WikiRevisionSet): string {
-  return canonicalCandidate(base).digest;
+  if (!Array.isArray(base)) return base.digest;
+  return base.reduce(
+    (previous, pin) => canonicalCandidate({ previous, pin }).digest,
+    canonicalCandidate([]).digest,
+  );
 }

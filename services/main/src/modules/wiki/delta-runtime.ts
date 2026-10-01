@@ -11,7 +11,13 @@ import {
 } from '../editorial-review/contract.ts';
 import type { EditorialRuntime } from '../editorial-review/runtime.ts';
 import { checkWikiDelta, isWikiDelta } from './delta.ts';
-import { assertWikiBase, wikiHistory, wikiReceipts, type WikiHistoryClaim } from './history.ts';
+import {
+  assertWikiBase,
+  wikiHistory,
+  wikiReceipts,
+  wikiRevisionSet,
+  type WikiHistoryClaim,
+} from './history.ts';
 import { wikiSnapshot, type WikiSnapshot } from './apply-snapshot.ts';
 import { wikiCommands, wikiItemKey } from './apply.ts';
 import { wikiRetractionCommands } from './apply-compensation.ts';
@@ -38,7 +44,7 @@ export const isDeltaRevert = (
   value.profile === 'wiki-delta-revert-v1';
 async function receipts(runtime: EditorialRuntime, work: string) {
   if (!runtime.work.editorialReview) throw new EditorialBlocked({ code: 'owner_unavailable' });
-  return wikiReceipts(runtime.work.editorialReview.pool, work);
+  return wikiReceipts(runtime.work.editorialReview, work);
 }
 const normalized = (receipt: OwnerReceipt): OwnerReceipt =>
   isWikiDelta(receipt.candidate)
@@ -80,7 +86,8 @@ async function assertClaimHeads(runtime: EditorialRuntime, claims: WikiHistoryCl
       (
         await runtime.work.environment.fuseki.query(
           `PREFIX rv: <${RV}> SELECT ?head WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(claim.claim)} rv:head ?head } } LIMIT 2`,
+      GRAPH ${iri(GRAPHS.current)} { VALUES ?headPredicate { rv:head rv:occurrenceHead }
+        ${iri(claim.claim)} ?headPredicate ?head } } LIMIT 2`,
           4096,
         )
       ).results?.bindings ?? [];
@@ -104,61 +111,39 @@ export async function wikiDeliveryFence(
     isWikiDelta(input.revision.candidate) ||
     isDeltaRevert(input.revision.candidate) ||
     isWikiRetraction(input.revision.candidate);
-  const pool = runtime.work.editorialReview?.pool;
-  if (!pool) throw new EditorialBlocked({ code: 'owner_unavailable' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query("SET LOCAL statement_timeout = '1000ms'");
-    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
-      `wiki-delta:${work}`,
-    ]);
-    // A retained owner admission/outcome wins over a prospective rival.
-    // Never mark a partially delivered application stale during recovery.
-    const started = (
-      await client.query(
-        `SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
-            UNION ALL SELECT 1 FROM access.editorial_command_admission WHERE application = $1 LIMIT 1`,
-        [input.permit.proof],
+  const store = runtime.work.editorialReview;
+  if (!store) throw new EditorialBlocked({ code: 'owner_unavailable' });
+  await store.unresolvedApplications(
+    work,
+    'wiki-bundle',
+    input.permit.proof,
+    `wiki-delta:${work}`,
+    async ({ started, profiles }) => {
+      // Retained owner delivery wins during recovery, including partial delivery.
+      if (started) return;
+      if (
+        profiles.some(
+          (profile) =>
+            exclusive ||
+            ['wiki-delta-v1', 'wiki-delta-revert-v1', 'wiki-retraction-v1'].includes(profile),
+        )
       )
-    ).rowCount;
-    if (started) {
-      await client.query('COMMIT');
-      return;
-    }
-    const occupied = (
-      await client.query(
-        `SELECT 1 FROM access.editorial_proposal p
-            JOIN access.editorial_application a ON a.proposal = p.id
-            JOIN access.editorial_revision r ON r.proposal = a.proposal AND r.n = a.revision
-            WHERE p.resource = $1 AND p.kind = 'wiki-bundle' AND (a.proposal <> $2 OR a.revision <> $3)
-              AND ($4::boolean OR r.candidate::jsonb->>'profile' IN ('wiki-delta-v1','wiki-delta-revert-v1','wiki-retraction-v1'))
-              AND NOT EXISTS (SELECT 1 FROM access.editorial_application_outcome o WHERE o.application = a.id)
-            LIMIT 1`,
-        [work, input.revision.proposal, input.revision.n, exclusive],
-      )
-    ).rowCount;
-    if (occupied)
-      throw new EditorialBlocked({
-        code: 'stale_base',
-        expectedHeads: input.expectedHeads,
-        actualHeads: [{ component: work, head: null }],
-      });
-    if (isWikiDelta(input.revision.candidate))
-      assertWikiBase(input.revision.candidate.base, await wikiReceipts(client, work));
-    if (isDeltaRevert(input.revision.candidate))
-      assertWikiBase(
-        (input.revision.before as unknown as { base: import('./delta.ts').WikiRevisionSet }).base,
-        await wikiReceipts(client, work),
-      );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
+        throw new EditorialBlocked({
+          code: 'stale_base',
+          expectedHeads: input.expectedHeads,
+          actualHeads: [{ component: work, head: null }],
+        });
+      if (isWikiDelta(input.revision.candidate))
+        assertWikiBase(input.revision.candidate.base, await wikiReceipts(store, work));
+      if (isDeltaRevert(input.revision.candidate))
+        assertWikiBase(
+          (input.revision.before as unknown as { base: import('./delta.ts').WikiRevisionSet }).base,
+          await wikiReceipts(store, work),
+        );
+    },
+  );
 }
+
 async function endingCommands(
   runtime: EditorialRuntime,
   input: ApplyInput,
@@ -181,16 +166,9 @@ async function endingCommands(
         ),
       };
     }
-    const review = new Proxy(runtime.work.editorialReview!, {
-      get(target, property) {
-        if (property === 'appliedReceipt') return async () => owner;
-        const value: unknown = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
     const key = wikiItemKey(input, `delta-end:${index}`);
     const all = await wikiRetractionCommands(
-      { ...runtime, work: { ...runtime.work, editorialReview: review } },
+      runtime,
       {
         ...input,
         revision: {
@@ -200,6 +178,7 @@ async function endingCommands(
       },
       (originalIndex) =>
         originalIndex === claim.index ? key : wikiItemKey(input, `retract-claim:${originalIndex}`),
+      owner,
     );
     const command = all.find((item) => item.key === key);
     if (!command) throw new EditorialInvalid('Accepted claim lacks its owner ending command');
@@ -271,11 +250,7 @@ export async function validateDeltaRevert(
     ...validated,
     candidate: canonicalCandidate({ profile: 'wiki-delta-revert-v1', proposal }).candidate,
     before: canonicalCandidate({
-      base: current.map((row) => ({
-        proposal: row.proposal,
-        revision: row.revision,
-        digest: row.candidateDigest,
-      })),
+      base: wikiRevisionSet(current),
     }).candidate,
   };
 }

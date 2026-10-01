@@ -393,14 +393,12 @@ export async function wikiDeltaJourney() {
       continuity: work.work,
       zone,
       source,
-      units: chapters.occurrences
-        .slice(0, 3)
-        .map((occurrence, index) => ({
-          id: `ch${index + 1}`,
-          ordinal: index,
-          label: `Chapter ${index + 1}`,
-          occurrence,
-        })),
+      units: chapters.occurrences.slice(0, 3).map((occurrence, index) => ({
+        id: `ch${index + 1}`,
+        ordinal: index,
+        label: `Chapter ${index + 1}`,
+        occurrence,
+      })),
       entities: [
         {
           id: 'elizabeth',
@@ -451,6 +449,7 @@ export async function wikiDeltaJourney() {
       sourcePosition: { dataEpoch: string; sequence: string };
       revisionSetDigest: string;
       resolutions: Record<string, unknown>;
+      nextCursor: string | null;
     };
     const pinned = await json<History>(await call('GET', historyPath));
     expect(pinned.claims).toHaveLength(2);
@@ -571,6 +570,17 @@ export async function wikiDeltaJourney() {
     );
     const current = await json<History>(await call('GET', historyPath));
     expect(current.claims.map((claim) => claim.claim)).toEqual([pinned.claims[1]!.claim]);
+    const graphClaims =
+      (
+        await f.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statementState ?relationState WHERE {
+      GRAPH <${GRAPHS.current}> { <${statement}> rv:statementState ?statementState .
+        <${pinned.claims[1]!.claim}> rv:occurrenceHead ?head . }
+      GRAPH <${GRAPHS.revisions}> { ?head rv:lifecycle ?relationState . }
+    } LIMIT 2`)
+      ).results?.bindings ?? [];
+    expect(graphClaims).toHaveLength(1);
+    expect(graphClaims[0]!.statementState!.value).toBe(`${RV}Withdrawn`);
+    expect(graphClaims[0]!.relationState!.value).toBe(`${RV}Active`);
     expect(await json<History>(await call('GET', pinnedPath))).toEqual(pinned);
     expect(
       (
@@ -654,6 +664,51 @@ export async function wikiDeltaJourney() {
         (claim) => claim.value.object,
       ),
     ).toEqual([pinned.claims[1]!.value.object, pinned.claims[0]!.value.object]);
+    // Relation occurrences have their own head predicate; corrections use the
+    // same reviewed ending/revert path as personal Statements.
+    const beforeRelation = await json<History>(await call('GET', historyPath));
+    const relationClaim = beforeRelation.claims.find((row) => row.value.object.kind === 'entity')!;
+    await steward.grant(`relation:edit:${relationClaim.claim}`, 'relation.change');
+    const relationDelta = await submit({
+      profile: 'wiki-delta-v1',
+      base: beforeRelation.revisions,
+      bundle: deltaBundle,
+      changes: [
+        {
+          claim: relationClaim.claim,
+          revision: relationClaim.revision,
+          operation: 'retract',
+          reason: 'Chapter four corrects the relation',
+          evidenceClaim: 0,
+        },
+      ],
+    });
+    const relationEnded = await apply(relationDelta.proposal, 1);
+    expect(relationEnded.commands!.find((row) => row.key.endsWith(':delta-end:0'))?.outcome).toBe(
+      'applied',
+    );
+    expect(
+      (await json<History>(await call('GET', historyPath))).claims.some(
+        (row) => row.claim === relationClaim.claim,
+      ),
+    ).toBe(false);
+    const relationRevert = await json<Command>(
+      await call('POST', path(relationDelta.proposal, '/reversal'), {
+        profile: 'editorial-proposal-revert-v1',
+        evidence: [],
+        actingSubject: holder.actor,
+      }),
+      201,
+    );
+    const relationRestored = await apply(relationRevert.proposal, 1);
+    expect(
+      relationRestored.commands!.find((row) => row.key.endsWith(':delta-restore:0'))?.outcome,
+    ).toBe('applied');
+    expect(
+      (await json<History>(await call('GET', historyPath))).claims.some(
+        (row) => row.value.object.kind === 'entity',
+      ),
+    ).toBe(true);
     const entityPin = await json<History>(
       await call('GET', `${pinnedPath}&entity=${encodeURIComponent(elizabeth)}`),
     );
@@ -778,22 +833,82 @@ export async function wikiDeltaJourney() {
       ),
       201,
     );
-    for (const url of [
-      historyPath,
-      pinnedPath,
-      `/v1/exports/${exported.manifestId}`,
-      path(submitted.proposal),
-    ]) {
+    for (const url of [historyPath, pinnedPath, path(submitted.proposal)]) {
       const response = await call('GET', url),
         text = await response.text();
       expect(response.status).toBe(200);
       expect(text).not.toContain('The Bennet family');
       expect(text).toContain('quoteWithheld');
     }
-    const projected = await json<{ sealedManifestDigest: string }>(
-      await call('GET', `/v1/exports/${exported.manifestId}`),
+    expect((await call('GET', `/v1/exports/${exported.manifestId}`)).status).toBe(409);
+    const withheld = await json<{
+      manifestId: string;
+      manifestDigest: string;
+      plan: { completeness: string };
+    }>(await call('POST', '/v1/exports', exportBody), 201);
+    expect(withheld.manifestId).not.toBe(exported.manifestId);
+    expect(withheld.manifestDigest).not.toBe(exported.manifestDigest);
+    expect(withheld.plan.completeness).toBe('complete');
+    expect(JSON.stringify(withheld.plan)).not.toContain('The Bennet family');
+    expect(JSON.stringify(withheld.plan)).toContain('quoteWithheld');
+    expect((await call('GET', `/v1/exports/${withheld.manifestId}`)).status).toBe(200);
+    // The franchise inventory crosses the old 64-proposal window through real
+    // reviewed publications. The next delta must fence the entire journal.
+    const chapterOnly = { ...deltaBundle, claims: [] };
+    for (let index = 0; index < 65; index++) {
+      const chapter = await proposalFor(chapterOnly);
+      await apply(chapter.proposal, 1);
+    }
+    const journalPage = await deps.editorialReview!.appliedReceipts(
+      shown.work.work,
+      'wiki-bundle',
+      64,
     );
-    expect(projected.sealedManifestDigest).toBe(exported.manifestDigest);
+    expect(journalPage.receipts).toHaveLength(64);
+    expect(journalPage.nextCursor).not.toBeNull();
+    const bulk = await json<History>(await call('GET', historyPath));
+    expect(JSON.stringify(bulk.revisions).length).toBeLessThan(200);
+    const pagedClaims: string[] = [],
+      pagedEntities: string[] = [],
+      pagedUnits: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await json<History>(
+        await call(
+          'GET',
+          `${historyPath}&limit=1&revisions=${encodeURIComponent(JSON.stringify(bulk.revisions))}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        ),
+      );
+      expect(page.claims.length + page.entities.length + page.units.length).toBeLessThanOrEqual(1);
+      pagedClaims.push(...page.claims.map((row) => row.claim));
+      pagedEntities.push(...page.entities.map((row) => row.entity));
+      pagedUnits.push(...page.units.map((row) => row.id));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(pagedClaims.sort()).toEqual(bulk.claims.map((row) => row.claim).sort());
+    expect(pagedEntities.sort()).toEqual(bulk.entities.map((row) => row.entity).sort());
+    expect(pagedUnits.sort()).toEqual(bulk.units.map((row) => row.id).sort());
+    const later = await submit({
+      profile: 'wiki-delta-v1',
+      base: bulk.revisions,
+      bundle: chapterOnly,
+      changes: [],
+    });
+    await apply(later.proposal, 1);
+    await expect(
+      submit({ profile: 'wiki-delta-v1', base: bulk.revisions, bundle: chapterOnly, changes: [] }),
+    ).rejects.toThrow('409');
+    expect((await json<History>(await call('GET', historyPath))).revisionSetDigest).not.toBe(
+      bulk.revisionSetDigest,
+    );
+    const oldBulk = await json<History>(
+      await call(
+        'GET',
+        `${historyPath}&revisions=${encodeURIComponent(JSON.stringify(bulk.revisions))}`,
+      ),
+    );
+    expect(oldBulk).toEqual(bulk);
+    expect((await call('GET', `/v1/exports/${withheld.manifestId}`)).status).toBe(200);
   } finally {
     await f.stop();
   }

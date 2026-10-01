@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { Value } from 'typebox/value';
 import {
   canonicalCandidate,
   type OwnerReceipt,
@@ -11,7 +12,10 @@ import {
   wikiRevisionSet,
   discloseWikiHistory,
   assertWikiBase,
+  wikiReceipts,
 } from '../src/modules/wiki/history.ts';
+import { wikiHistoryPage } from '../src/modules/wiki/history-page.ts';
+import { WikiHistoryResponseSchema } from '../src/modules/wiki/history-schema.ts';
 import type { WikiExtraction } from '../src/modules/wiki/protocol.ts';
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const work = native(),
@@ -131,10 +135,85 @@ test('G-693: missing citation, duplicate target, blank reason and malformed acce
     { ...delta, changes: [{ ...delta.changes[0], evidenceClaim: 255 }] },
     { ...delta, changes: [delta.changes[0], delta.changes[0]] },
     { ...delta, changes: [{ ...delta.changes[0], reason: '  ' }] },
-    { ...delta, base: [delta.base[0], delta.base[0]] },
+    {
+      ...delta,
+      base: [
+        { proposal: first.proposal, revision: 1, digest: first.candidateDigest },
+        { proposal: first.proposal, revision: 1, digest: first.candidateDigest },
+      ],
+    },
   ]) {
     expect(() => checkWikiDelta(invalid)).toThrow();
   }
+});
+test('G-693: more than 64 applied proposals page completely, pin old cuts and supply a compact delta base', async () => {
+  const journal = Array.from({ length: 137 }, () =>
+    receipt(bundle, {
+      'claim:0': { component: native(), revision: native() },
+    }),
+  );
+  const calls: Array<{ limit: number; cursor?: string }> = [];
+  const store = {
+    appliedReceipts: async (
+      _work: string,
+      _kind: string,
+      limit: number,
+      options: { cursor?: string; through?: string | null } = {},
+    ) => {
+      calls.push({ limit, cursor: options.cursor });
+      const end =
+        options.through === null
+          ? 0
+          : options.through
+            ? journal.findIndex((row) => row.proposal === options.through) + 1
+            : journal.length;
+      const at = options.cursor
+        ? journal.findIndex((row) => row.proposal === options.cursor) + 1
+        : 0;
+      const page = journal.slice(at, Math.min(at + limit, end));
+      return {
+        receipts: page,
+        through: journal[end - 1]?.proposal ?? null,
+        nextCursor: at + limit < end ? page.at(-1)!.proposal : null,
+      };
+    },
+  };
+  const receipts = await wikiReceipts(store, work);
+  expect(receipts).toEqual(journal);
+  expect(calls.map((call) => call.limit)).toEqual([64, 64, 64]);
+  expect(calls.slice(1).every((call) => !!call.cursor)).toBe(true);
+  const history = wikiHistory(work, receipts),
+    pin = history.revisions;
+  expect(JSON.stringify(pin).length).toBeLessThan(200);
+  const claims: string[] = [],
+    entities: string[] = [],
+    units: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = wikiHistoryPage(history, pin, { limit: 23, cursor });
+    claims.push(...page.claims.map((row) => row.claim));
+    entities.push(...page.entities.map((row) => row.entity));
+    units.push(...page.units.map((row) => row.id));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(new Set(claims).size).toBe(137);
+  expect(claims.length).toBe(137);
+  expect(entities).toEqual([]);
+  expect(units).toEqual(history.units.map((unit) => unit.id));
+  const next = receipt(
+    { profile: 'wiki-delta-v1', base: pin, bundle, changes: [] },
+    {
+      'claim:0': { component: native(), revision: native() },
+    },
+  );
+  expect(checkWikiDelta(next.candidate).base).toEqual(pin);
+  assertWikiBase(pin, receipts);
+  journal.push(next);
+  expect(wikiHistory(work, await wikiReceipts(store, work)).claims).toHaveLength(138);
+  expect(await wikiReceipts(store, work, pin)).toEqual(receipts);
+  expect(() => assertWikiBase(pin, journal)).toThrow('stale_base');
+  const firstPage = wikiHistoryPage(history, pin, { limit: 1 });
+  expect(() => wikiHistoryPage(history, {}, { cursor: firstPage.nextCursor! })).toThrow();
 });
 test('G-693: retained history redacts every quote fallback on each read without changing immutable pins', async () => {
   const first = receipt(bundle, { 'claim:0': { component: native(), revision: native() } });
@@ -148,6 +227,16 @@ test('G-693: retained history redacts every quote fallback on each read without 
   expect(JSON.stringify(blocked)).not.toContain('before');
   expect(blocked.claims[0]!.value.evidence[0]).toMatchObject({ quote: null, quoteWithheld: true });
   expect(blocked.revisions).toEqual(pin.revisions);
+  const response = {
+    ...blocked,
+    sourcePosition: { dataEpoch: randomUUID(), sequence: '1' },
+    scope: {},
+    revisionSetDigest: 'b'.repeat(64),
+    resolutions: {},
+    nextCursor: null,
+  };
+  expect(Value.Check(WikiHistoryResponseSchema, response)).toBe(true);
+  expect(Value.Check(WikiHistoryResponseSchema, { ...response, sourcePosition: {} })).toBe(false);
   expect(pin.claims[0]!.value.evidence[0]!.quote).toBe('The family');
 });
 test('G-693: repeated local unit IDs never retarget earlier accepted citations', () => {

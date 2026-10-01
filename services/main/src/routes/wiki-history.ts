@@ -10,6 +10,7 @@ import { WikiRevisionSetSchema, type WikiRevisionSet } from '../modules/wiki/del
 import { readWikiHistory } from '../modules/wiki/history-read.ts';
 import { wikiError } from './wiki.ts';
 import { readingPositionQuery } from './reading-positions.ts';
+import { WikiHistoryResponseSchema } from '../modules/wiki/history-schema.ts';
 
 export const openApiOperations = { '/v1/wiki/{work}/history': { get: { bearer: true } } } as const;
 export const capabilities = {
@@ -21,7 +22,7 @@ export const capabilities = {
         scopes: ['work:read'],
         title: 'Read an accepted wiki revision set',
         description:
-          'Read reviewed wiki claims at a reading position, retaining historical names and current quotation restrictions.',
+          'Page reviewed wiki claims at a reading position. Reuse revisions on every page and as the base of a chapter delta; historical names and current quotation restrictions are retained.',
       },
     },
   },
@@ -34,6 +35,8 @@ export function wikiHistoryRoutes(work: MainWorkDependencies) {
       query: t.Object({
         actingSubject: groupAgent,
         revisions: t.Optional(t.String({ maxLength: 16000 })),
+        cursor: t.Optional(t.String({ maxLength: 2048 })),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: 64 })),
         position: readingPositionQuery,
         entity: t.Optional(groupAgent),
         section: t.Optional(
@@ -46,7 +49,7 @@ export function wikiHistoryRoutes(work: MainWorkDependencies) {
         ),
       }),
       response: {
-        200: t.Object({}, { additionalProperties: true }),
+        200: WikiHistoryResponseSchema,
         ...authorizedReadProblems,
         409: problemResult(409),
         422: problemResult(422),
@@ -74,6 +77,7 @@ export function wikiHistoryRoutes(work: MainWorkDependencies) {
             selection,
             request,
             { entity: query.entity, section: query.section },
+            { limit: query.limit, cursor: query.cursor },
           ),
           { headers: { 'cache-control': 'no-store' } },
         );

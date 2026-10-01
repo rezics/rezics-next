@@ -166,8 +166,21 @@ Every owner command requires the applying steward's ordinary Access authority
 for its target in addition to the candidate-bound review permit. Editing a
 matched entity also requires the authority of each Work that owns it. Personal
 Statements can be withdrawn only under their original speaker's ordinary path.
-What remains missing (R51) is bounded chapter-delta reconciliation and its MCP
-bindings. The first editorial benchmark still needs one Work with two language
+Chapter updates use `wiki-delta-v1` candidates in the same `wiki-bundle` lifecycle.
+The history API/MCP read returns a compact, digest-checked pin of the complete
+applied journal; keyset pages keep both history reads and delta-base inventory
+usable beyond 64 proposals. The next delta reuses that pin as `base`, publishes
+new records through the ordinary owners and names every amendment or retraction
+with its accepted claim/revision, cited evidence and reason. Omitted claims stay
+accepted. A stale base fails before delivery; interrupted owner delivery resumes
+its retained commands. A reviewed reversal appends compensating occurrences.
+Historical names and claims remain pinned, with current merge resolution reported
+separately. Rights withholding removes quotations on every read. If that changes
+a sealed export's manifest, its read becomes stale; a fresh seal of the same pins
+retains a complete manifest with explicit withheld markers.
+
+R51's chapter-delta reconciliation and MCP bindings are implemented. The first
+editorial benchmark still needs one Work with two language
 editions, a wiki Zone and a chapter update, measured in editor minutes per accepted
 claim against manual work at equal quality.
 

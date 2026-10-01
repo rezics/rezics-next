@@ -15,7 +15,6 @@ import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credi
 import { prideExample } from '../../../packages/wiki-toolkit/skill/examples/pride.ts';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
 import { startMediaStack } from './media-support.ts';
-import { wikiDeltaJourney } from './g-693-wiki-journey.ts';
 
 test('G-848: model-free skill units, alignment, candidates and validation produce an acceptable bundle on the local QA stack', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration QA tier');
@@ -726,4 +725,4 @@ test('G-848: submit a wiki-bundle, two independent reviewers approve it, and pub
   }
 }, 180_000);
 
-test('G-848: later-chapter deltas — G-693', wikiDeltaJourney, 180_000);
+// Later-chapter delta coverage is registered once in g-693-wiki-delta.test.ts.

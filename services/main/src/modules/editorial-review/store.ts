@@ -71,8 +71,60 @@ function cursorDecode(cursor: string | undefined, binding: unknown): unknown {
 }
 
 export class EditorialReviewStore {
-  /** Owner adapters append their bounded bookkeeping in the same Access store. */
-  constructor(readonly pool: Pool, private readonly modules = discoverEditorialAdapters()) {}
+  constructor(private readonly pool: Pool, private readonly modules = discoverEditorialAdapters()) {}
+  /** Keyset pages of immutable receipts. The upper proposal pins one journal cut;
+   * no adapter knows the kernel's tables or receives its database connection. */
+  async appliedReceipts(resource: string, kind: string, limit: number,
+    options: { cursor?: string; through?: string | null } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 64) throw new EditorialInvalid('Invalid receipt page');
+    const binding = { resource,kind,through: options.through ?? null };
+    const after = cursorDecode(options.cursor,binding) as { time?: unknown; id?: unknown } | null;
+    if (after && (typeof after.time !== 'string' || !Number.isFinite(Date.parse(after.time))
+      || typeof after.id !== 'string' || !/^[0-9a-f-]{36}$/.test(after.id))) throw new EditorialInvalid('Invalid receipt cursor');
+    if (options.through === null) return { receipts: [] as OwnerReceipt[],nextCursor: null,through: null };
+    return controlRead(this.pool,async client => {
+      await client.query("SET LOCAL statement_timeout = '1000ms'");
+      const cut = options.through ?? (await client.query<{ proposal: string }>(`SELECT d.proposal
+        FROM access.editorial_proposal p JOIN access.editorial_decision d ON d.proposal = p.id
+        WHERE p.resource = $1 AND p.kind = $2 AND d.outcome = 'applied'
+        ORDER BY d.created_at DESC,d.proposal DESC LIMIT 1`,[resource,kind])).rows[0]?.proposal ?? null;
+      if (!cut) return { receipts: [] as OwnerReceipt[],nextCursor: null,through: null };
+      const rows = (await client.query<{ receipt: OwnerReceipt; time: string; id: string }>(`SELECT
+        d.owner_receipt AS receipt,d.created_at::text AS time,d.proposal AS id
+        FROM access.editorial_proposal p JOIN access.editorial_decision d ON d.proposal = p.id
+        JOIN access.editorial_decision upper ON upper.proposal = $3 AND upper.outcome = 'applied'
+        WHERE p.resource = $1 AND p.kind = $2 AND d.outcome = 'applied'
+          AND (d.created_at,d.proposal) <= (upper.created_at,upper.proposal)
+          AND ($4::timestamptz IS NULL OR (d.created_at,d.proposal) > ($4,$5::uuid))
+        ORDER BY d.created_at,d.proposal LIMIT $6`,[resource,kind,cut,after?.time ?? null,after?.id ?? null,limit + 1])).rows;
+      const page = rows.slice(0,limit),last = page.at(-1);
+      return { receipts: page.map(row => row.receipt),through: cut,
+        nextCursor: rows.length > limit && last ? cursorEncode({ resource,kind,through: cut },{ time: last.time,id: last.id }) : null };
+    });
+  }
+  /** Inspect pending intents under an adapter-selected advisory fence. Only the
+   * profiles and whether this intent already delivered leave the kernel. */
+  async unresolvedApplications<T>(resource: string, kind: string, except: string, fence: string,
+    inspect: (state: { started: boolean; profiles: string[] }) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await this.begin(client);
+      await client.query("SET LOCAL statement_timeout = '1000ms'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[fence]);
+      const started = !!(await client.query(`SELECT 1 FROM access.editorial_command_outcome WHERE application = $1
+        UNION ALL SELECT 1 FROM access.editorial_command_admission WHERE application = $1 LIMIT 1`,[except])).rowCount;
+      const rows = (await client.query<{ profile: string }>(`SELECT DISTINCT COALESCE(r.candidate::jsonb->>'profile','') AS profile
+        FROM access.editorial_proposal p JOIN access.editorial_application a ON a.proposal = p.id
+        JOIN access.editorial_revision r ON r.proposal = a.proposal AND r.n = a.revision
+        WHERE p.resource = $1 AND p.kind = $2 AND a.id <> $3
+          AND NOT EXISTS (SELECT 1 FROM access.editorial_application_outcome o WHERE o.application = a.id)
+        LIMIT 65`,[resource,kind,except])).rows;
+      if (rows.length > 64) throw new EditorialBlocked({ code: 'budget_exhausted' });
+      const result = await inspect({ started,profiles: rows.map(row => row.profile) });
+      await client.query('COMMIT');
+      return result;
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  }
   /** Internal immutable receipt lookup for an owner's compensation validator. */
   async appliedReceipt(proposal: string): Promise<OwnerReceipt | null> {
     return (await this.pool.query<{ owner_receipt: OwnerReceipt }>(`SELECT owner_receipt FROM access.editorial_decision

@@ -58,9 +58,9 @@ export async function validateWikiRetraction(runtime: EditorialRuntime, target: 
   return { ...compensateWikiReceipt(original),baseHeads: expected };
 }
 export async function wikiRetractionCommands(runtime: EditorialRuntime, input: ApplyInput,
-  claimKey = (index: number) => wikiItemKey(input,`retract-claim:${index}`)): Promise<EditorialCommand[]> {
+  claimKey = (index: number) => wikiItemKey(input,`retract-claim:${index}`), retained?: OwnerReceipt): Promise<EditorialCommand[]> {
   if (!isWikiRetraction(input.revision.candidate)) throw new EditorialInvalid('Invalid wiki retraction');
-  const original = await originalWikiReceipt(runtime,input.revision.candidate.proposal), bundle = extractionCandidate(original.candidate);
+  const original = retained ?? await originalWikiReceipt(runtime,input.revision.candidate.proposal), bundle = extractionCandidate(original.candidate);
   const snapshot = original.before as unknown as WikiSnapshot, outcomes = original.commands ?? [], env = runtime.work.environment;
   const oldKey = (item: string) => `wiki:${original.proposal}:${original.revision}:${item}`;
   const oldResult = (item: string) => commandResult(outcomes.find(outcome => outcome.key === oldKey(item)));

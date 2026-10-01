@@ -94,7 +94,7 @@ export async function createAdmittedExport(deps: ExportDependencies, request: Re
 
 /** Revalidate disclosure and owner evidence before serving an immutable private export. */
 export async function readAuthorizedExport(deps: ExportDependencies, request: Request,
-  manifestId: string): Promise<SealedExport & { sealedManifestDigest?: string }> {
+  manifestId: string): Promise<SealedExport> {
   const principal = await deps.account.verify(request, ['export:read']);
   const principalId = await deps.access.activePrincipalId(principal);
   if (!principalId) throw new ExportDenied('export principal is inactive');
@@ -128,18 +128,15 @@ export async function readAuthorizedExport(deps: ExportDependencies, request: Re
     selection = { kind: 'semantic-revision', reference, resource: data.resource, expectedPosition };
   } else if (profile === 'rezics-vndb-concept-source-v1') {
     selection = { kind: 'vndb-concept-run', reference, expectedPosition };
-  } else if (profile === 'rezics-wiki-v1' && Array.isArray(data?.revisions)) {
+  } else if (profile === 'rezics-wiki-v1' && data?.revisions && typeof data.revisions === 'object') {
     selection = { kind: 'wiki-revision-set', reference, expectedPosition,
       revisions: data.revisions as import('../wiki/delta.ts').WikiRevisionSet,
       scope: data.scope as import('../wiki/history-read.ts').WikiHistoryScope };
   } else throw new ExportSourceUnavailable('export source locator is unavailable');
   const current = await readExportPlan(deps.readers, principal, actor, selection, saved.plan.useScope);
-  if (current.manifestDigest !== saved.manifestDigest && profile !== 'rezics-wiki-v1') throw new ExportStale('export disclosure changed');
+  if (current.manifestDigest !== saved.manifestDigest) throw new ExportStale('export disclosure changed');
   if (await deps.access.activePrincipalId(principal) !== principalId) {
     throw new ExportDenied('export principal is inactive');
   }
-  // Retained sealed bytes remain immutable. A wiki read serves today's rights
-  // projection and identifies the original seal separately when quotes change.
-  return profile === 'rezics-wiki-v1' && current.manifestDigest !== saved.manifestDigest
-    ? { ...saved, plan: current, manifestDigest: current.manifestDigest, sealedManifestDigest: saved.manifestDigest } : saved;
+  return saved;
 }

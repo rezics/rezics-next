@@ -100,10 +100,23 @@ If that capability is unavailable, retain the validated bundle locally and repor
 that submission is pending. Never invent a submit endpoint or present a validation
 preview as a published wiki.
 
-For later chapters, read accepted records and pending proposals first. Submit only
-new entities, aliases, claims and evidence as a delta, reusing confirmed resource IDs.
-Revalidate against current state. Corrections and contradictions need explicit
-review; a delta never silently deletes or rewrites earlier accepted claims. Persist
+For later chapters, discover `wiki_history` (`GET /v1/wiki/{work}/history`) and read accepted records and pending
+proposals first. Keep the returned `revisions` pin, then follow `nextCursor` while
+reusing that pin, reading position and scope on every page. The pin covers the
+complete applied journal, including franchises with more than 64 proposals.
+Submit a `wiki-bundle` candidate shaped as
+`{ profile: "wiki-delta-v1", base: revisions, bundle, changes }`: `bundle` is a
+validated `wiki-extraction-v1` for the new chapter, reusing confirmed resource IDs.
+`changes` is empty for additions. Each correction names the accepted `claim` and
+`revision`, `operation` (`amend` or `retract`), a nonblank `reason`, and the zero-based
+`evidenceClaim` index of its cited claim in the new bundle. For an amendment that
+claim is the replacement; for a retraction it supplies the reviewed citation and
+does not publish a replacement assertion. Omission never deletes accepted claims.
+A `stale_base` response requires rereading history and revising the proposal;
+partial application resumes through the same decision idempotency key. Corrections
+and reversals require the normal review authority. Pinned history preserves old
+names and facts, with current rights withholding; a changed export manifest needs
+a fresh seal of those pins. Persist
 proposal IDs and receipts only through the server or the holder's existing workflow;
 the toolkit creates no ledger or worker process.
 
