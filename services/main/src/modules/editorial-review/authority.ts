@@ -7,9 +7,22 @@ import { mandateFor, requirePrincipal } from '../access/topology-control.ts';
 import { currentMembershipDependency } from '../access/memberships.ts';
 import { EditorialBlocked, type EditorialTarget, type Proposal, type ProposalReview } from './contract.ts';
 import type { CurrentReviewer, Viewer } from './lifecycle.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 
 export const independenceKey = (proposal: string, principal: string) =>
   createHash('sha256').update(`${proposal}\0${principal}`).digest('hex');
+
+/** Merge reviews must be made by a Person Agent. An independently controlled
+ * service is still a bot; operator comparison alone cannot make it human. */
+async function humanReviewer(proposal: Proposal, agent: string, graph: Pick<FusekiClient, 'query'> | undefined) {
+  if (proposal.kind !== 'merge') return true;
+  if (!graph) return false;
+  return (await graph.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(agent)} a rv:Agent ; rv:agentKind rv:PersonAgent }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(agent)} rv:agentKind ?otherKind
+      FILTER(?otherKind != rv:PersonAgent) } }
+  }`, 4096)).boolean === true;
+}
 
 export async function editorialPrincipal(client: PoolClient, principal: VerifiedPrincipal): Promise<string> {
   const fresh = principal.currentAssertion ? await principal.currentAssertion() : principal;
@@ -85,7 +98,8 @@ export async function independent(client: PoolClient, proposal: Proposal, princi
 export async function viewerFor(client: PoolClient, proposal: Proposal, principal: string,
   agent: string, graph: Pick<FusekiClient,'query'> | undefined): Promise<Viewer> {
   const own = independenceKey(proposal.id, principal) === proposal.proposerKey;
-  const eligible = await canReview(client, principal, agent, proposal.target,graph);
+  const eligible = await humanReviewer(proposal, agent, graph)
+    && await canReview(client, principal, agent, proposal.target,graph);
   const separate = await independent(client, proposal, principal, agent);
   return { agent, principalKey: !own && !separate ? proposal.proposerKey : independenceKey(proposal.id, principal),
     eligibleReviewer: eligible, ownsProposal: own };
@@ -93,7 +107,7 @@ export async function viewerFor(client: PoolClient, proposal: Proposal, principa
 export async function requireReview(client: PoolClient, proposal: Proposal, principal: string, agent: string,
   graph: Pick<FusekiClient,'query'> | undefined) {
   if (!await independent(client, proposal, principal, agent)) throw new EditorialBlocked({ code: 'self_review' });
-  if (!await canReview(client, principal, agent, proposal.target,graph)) {
+  if (!await humanReviewer(proposal, agent, graph) || !await canReview(client, principal, agent, proposal.target,graph)) {
     throw new EditorialBlocked({ code: 'review_authority_required' });
   }
 }
@@ -135,24 +149,66 @@ export async function reviewBasis(client: PoolClient, proposal: Proposal, requir
         AND (edit.membership_id IS NULL OR EXISTS (SELECT 1 FROM access.membership dep
           WHERE dep.id = edit.membership_id AND dep.member_subject = edit.recipient_subject
             AND dep.state = 'joined' AND dep.generation = edit.membership_generation))))`;
-  const selection = async (outcome: 'approve' | 'request_changes', limit: number) => client.query<ProposalReview & { principal: string }>(`
+  const selection = async (outcome: 'approve' | 'request_changes', limit: number, separateFrom: string | null = null) => client.query<ProposalReview & { principal: string }>(`
     SELECT r.id,r.proposal,r.revision,r.reviewer,r.reviewer_key AS "reviewerKey",r.outcome,r.message,r.sequence::text,r.principal
     FROM access.editorial_review r JOIN access.editorial_proposal p ON p.id = r.proposal
     WHERE r.proposal = $1 AND r.revision = $2 AND r.outcome = $3
       AND ($4::uuid IS NULL OR r.principal <> $4) AND ${available}
+      AND ($7::text IS NULL OR (r.reviewer <> $7 AND NOT EXISTS (
+        SELECT 1 FROM access.representation own JOIN access.representation other
+          ON other.principal_id = own.principal_id
+        WHERE own.subject_id = r.reviewer AND other.subject_id = $7
+          AND own.action = 'agent.control' AND other.action = 'agent.control'
+          AND own.active AND other.active AND own.valid_until > clock_timestamp()
+          AND other.valid_until > clock_timestamp())))
       AND NOT EXISTS (SELECT 1 FROM access.editorial_review later WHERE later.proposal = r.proposal
         AND later.revision = r.revision AND later.principal = r.principal
         AND later.outcome <> 'comment' AND later.sequence > r.sequence)
-    ORDER BY r.sequence DESC LIMIT $5`, [proposal.id, proposal.latestRevision, outcome, prospective?.principal ?? null, limit,publicWork]);
-  const approvals = await selection('approve', required), changes = await selection('request_changes', 1);
+    ORDER BY r.sequence DESC LIMIT $5`, [proposal.id, proposal.latestRevision, outcome, prospective?.principal ?? null, limit,publicWork,separateFrom]);
+  // Seek the second independent stance rather than capping two overlapping
+  // operators first. A valid older human approval must not disappear merely
+  // because a shared controller added a newer stance.
+  const approvals = proposal.kind !== 'merge' ? await selection('approve', required)
+    : prospective?.review.outcome === 'approve'
+      ? await selection('approve', required - 1, prospective.review.reviewer)
+      : await selection('approve', 1);
+  if (proposal.kind === 'merge' && prospective?.review.outcome !== 'approve' && required > 1 && approvals.rows[0]) {
+    approvals.rows.push(...(await selection('approve', 1, approvals.rows[0].reviewer)).rows);
+  }
+  const changes = await selection('request_changes', 1);
   const reviews: ProposalReview[] = [], authority: CurrentReviewer[] = [];
   for (const row of [...approvals.rows, ...changes.rows]) {
-    if (!await canReview(client, row.principal, row.reviewer, proposal.target,graph)) continue;
+    if (!await humanReviewer(proposal, row.reviewer, graph)
+      || !await canReview(client, row.principal, row.reviewer, proposal.target,graph)) continue;
     reviews.push(row); authority.push({ reviewer: row.reviewer, reviewerKey: row.reviewerKey, eligible: true });
   }
   if (prospective) {
+    await requireReview(client, proposal, prospective.principal, prospective.review.reviewer, graph);
     reviews.push(prospective.review);
     authority.push({ reviewer: prospective.review.reviewer, reviewerKey: prospective.review.reviewerKey, eligible: true });
+  }
+  if (proposal.kind === 'merge') {
+    const approved = reviews.filter(review => review.outcome === 'approve');
+    // Two Accounts controlling either same Agent, or overlapping sets of Agents,
+    // do not supply two independent human decisions. Keep the first stance and
+    // require another review instead of manufacturing a second comparison key.
+    const independent: ProposalReview[] = [];
+    for (const right of approved) {
+      let separate = true;
+      for (const left of independent) {
+        const shared = left.reviewer === right.reviewer || (await client.query(`
+        SELECT a.id FROM access.representation a JOIN access.representation b
+          ON b.principal_id = a.principal_id
+        WHERE a.subject_id = $1 AND b.subject_id = $2
+          AND a.action = 'agent.control' AND b.action = 'agent.control'
+          AND a.active AND b.active AND a.valid_until > clock_timestamp()
+          AND b.valid_until > clock_timestamp()
+        LIMIT 1 FOR SHARE OF a,b`, [left.reviewer, right.reviewer])).rowCount;
+        if (shared) { separate = false; break; }
+      }
+      if (separate) independent.push(right);
+      else reviews.splice(reviews.indexOf(right), 1);
+    }
   }
   return { reviews, authority };
 }

@@ -1,4 +1,5 @@
 import { Value } from 'typebox/value';
+import { MAX_WORK_REDIRECT_HOPS } from '../address/contract.ts';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { MAX_SUMMARY_BATCH, readResourceSummaries, type SummaryBatch, type SummaryReader } from '../media/summary.ts';
@@ -13,7 +14,10 @@ import { disclosureGraphEnvironment } from '../disclosure/read.ts';
 /** One summary batch and one exact-head query, independent of target count.
  * Owner-specific summary probes remain in the summary's reported cost. */
 export const TARGET_RESOLVE_COST = { batch: MAX_SUMMARY_BATCH, revisionQueries: 1,
-  typesPerTarget: MAX_TARGET_TYPES, revisionRows: MAX_SUMMARY_BATCH * MAX_TARGET_TYPES, redirectHops: 8 } as const;
+  typesPerTarget: MAX_TARGET_TYPES, revisionRows: MAX_SUMMARY_BATCH * MAX_TARGET_TYPES,
+  redirectHops: MAX_WORK_REDIRECT_HOPS, redirectBatch: MAX_SUMMARY_BATCH,
+  /** Each visited identity is disclosed and hydrated in bounded batches. */
+  mergedBatches: MAX_WORK_REDIRECT_HOPS + 1 } as const;
 
 export class TargetNotBound extends Error {
   readonly status = 422;
@@ -237,6 +241,39 @@ async function redirected(resource: string, redirectOf: RedirectOf): Promise<str
 export async function resolveTargets<Session extends TargetReadSession>(session: Session, iris: readonly string[],
   capability: Capability, redirectOf?: RedirectOf, reportOwners?: ReportTargets<Session>): Promise<ResolvedTarget[]> {
   session.checkDeadline();
+  if (!iris.length || iris.length > TARGET_RESOLVE_COST.batch || iris.some(resource => !Value.Check(targetRef, resource))) {
+    throw new WorkReadInvalid('Target batch is invalid');
+  }
+  if (redirectOf) return resolveTargetHeads(session, iris, capability, redirectOf, reportOwners);
+  const current = new Map(iris.map(resource => [resource, resource]));
+  const seen = new Map(iris.map(resource => [resource, new Set<string>()]));
+  const resolved = new Map<string, ResolvedTarget>();
+  for (let hop = 0; hop <= TARGET_RESOLVE_COST.redirectHops; hop++) {
+    const active = [...current].filter(([source]) => !resolved.has(source));
+    const resources = [...new Set(active.map(([, resource]) => resource))];
+    const redirects = new Map<string, string>();
+    const targets = await resolveTargetHeads(session, resources, capability, () => null, reportOwners, redirects);
+    const byResource = new Map(targets.map(target => [target.resource, target]));
+    for (const [source, resource] of active) {
+      const path = seen.get(source)!;
+      if (path.has(resource)) throw new WorkReadUnavailable('Target redirect is cyclic');
+      path.add(resource);
+      const next = redirects.get(resource);
+      if (!next) resolved.set(source, byResource.get(resource)!);
+      else {
+        if (!Value.Check(targetRef, next) || path.has(next)) throw new WorkReadUnavailable('Target redirect is cyclic or invalid');
+        current.set(source, next);
+      }
+    }
+    if (resolved.size === current.size) return iris.map(resource => resolved.get(resource)!);
+  }
+  throw new WorkReadUnavailable('Target redirect exceeds its bound');
+}
+
+async function resolveTargetHeads<Session extends TargetReadSession>(session: Session, iris: readonly string[],
+  capability: Capability, redirectOf: RedirectOf, reportOwners?: ReportTargets<Session>,
+  redirects?: Map<string, string>): Promise<ResolvedTarget[]> {
+  session.checkDeadline();
   if (!iris.length || iris.length > TARGET_RESOLVE_COST.batch
     || iris.some(resource => !Value.Check(targetRef, resource))) {
     throw new WorkReadInvalid('Target batch is invalid');
@@ -253,7 +290,14 @@ export async function resolveTargets<Session extends TargetReadSession>(session:
       || !capabilityBases.report.includes(target.base))) throw new WorkReadUnavailable('Report owner returned an invalid target');
     if (owned.size) {
       const remaining = resources.filter(resource => !owned.has(resource));
-      const resolved = remaining.length ? await resolveTargets(session, remaining, capability) : [];
+      if (redirects) {
+        const rows = await session.query(`SELECT ?r ?mergedInto WHERE {
+          VALUES ?r { ${[...owned.keys()].map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} { ?r rv:mergedInto ?mergedInto }
+        } LIMIT ${owned.size + 1}`, owned.size + 1);
+        collectRedirects(rows, redirects);
+      }
+      const resolved = remaining.length ? await resolveTargetHeads(session, remaining, capability, () => null, undefined, redirects) : [];
       const all = new Map([...owned, ...resolved.map(target => [target.resource, target] as const)]);
       return iris.map(resource => all.get(canonical.get(resource)!)!);
     }
@@ -305,9 +349,10 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
     VALUES ?r { ${available.filter(summary => summary.base === base).map(summary => iri(summary.reference)).join(' ')} }
     ${revisionPatterns[base]}
   }`);
-  const rows = await session.query(`SELECT ?epoch ?sequence ?r ?revision ?type WHERE {
+  const rows = await session.query(`SELECT ?epoch ?sequence ?r ?revision ?type ?mergedInto WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
     OPTIONAL { ${branches.join(' UNION ')}
+      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?r rv:mergedInto ?mergedInto } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
       OPTIONAL { { GRAPH ${iri(GRAPHS.current)} { ?r a ?type } }
         UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease }
@@ -324,6 +369,7 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
     byResource.set(row.r.value, grouped);
   }
   const targets = new Map<string, ResolvedTarget>();
+  if (redirects) collectRedirects(rows, redirects);
   for (const summary of available) {
     const exact = byResource.get(summary.reference) ?? [];
     if (!exact.length) {
@@ -340,4 +386,15 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
       work: summary.work, revision: exact[0]!.revision!.value, types, disclosure: summary.disclosure });
   }
   return targets;
+}
+
+function collectRedirects(rows: Awaited<ReturnType<TargetReadSession['query']>>, redirects: Map<string, string>) {
+  for (const row of rows) {
+    if (!row.mergedInto) continue;
+    if (!row.r || row.mergedInto.type !== 'uri' || !Value.Check(targetRef, row.mergedInto.value)
+      || redirects.has(row.r.value) && redirects.get(row.r.value) !== row.mergedInto.value) {
+      throw new WorkReadUnavailable('Target merge destination is ambiguous');
+    }
+    redirects.set(row.r.value, row.mergedInto.value);
+  }
 }

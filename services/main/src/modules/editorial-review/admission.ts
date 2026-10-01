@@ -132,3 +132,22 @@ async function withCommandOwnerAuthority<T>(pool: Pool, request: AdmissionReques
   }
   return operation();
 }
+
+/** A resumable reviewed operation can deliver several native owner commands.
+ * Each effect transaction checks the SAME shared lifecycle application, holding
+ * its current reviewer/controller dependencies through that owner's commit.
+ * This does not create another review policy or an ordinary edit delegation. */
+export async function checkEditorialApplication(client: PoolClient, application: string,
+  binding: { kind: string; operationKey: string; candidateDigest: string },
+  graph: Pick<FusekiClient, 'query'> | undefined): Promise<void> {
+  const row = await permit(client, application);
+  const revision = (await client.query<{ candidate_digest: string }>(
+    'SELECT candidate_digest FROM access.editorial_revision WHERE proposal=$1 AND n=$2',
+    [row.proposal, row.revision])).rows[0];
+  if (row.kind !== binding.kind || row.operation_key !== binding.operationKey
+    || revision?.candidate_digest !== binding.candidateDigest
+    || binding.kind === 'merge' && row.required !== 2) {
+    throw new AdmissionConflict('Native owner command differs from its reviewed application');
+  }
+  await current(client, row, graph);
+}

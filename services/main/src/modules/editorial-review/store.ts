@@ -71,8 +71,7 @@ function cursorDecode(cursor: string | undefined, binding: unknown): unknown {
 }
 
 export class EditorialReviewStore {
-  private readonly modules = discoverEditorialAdapters();
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly modules = discoverEditorialAdapters()) {}
   /** Internal immutable receipt lookup for an owner's compensation validator. */
   async appliedReceipt(proposal: string): Promise<OwnerReceipt | null> {
     return (await this.pool.query<{ owner_receipt: OwnerReceipt }>(`SELECT owner_receipt FROM access.editorial_decision
@@ -96,7 +95,8 @@ export class EditorialReviewStore {
     const module = (await this.modules).get(kind);
     if (!module) throw new EditorialInvalid('Editorial kind is not installed');
     const adapter = module.create(call);
-    if (adapter.kind !== kind || ![1,2].includes(adapter.requiredApprovals)) throw new EditorialInvalid('Invalid adapter');
+    if (adapter.kind !== kind || ![1,2].includes(adapter.requiredApprovals)
+      || kind === 'merge' && adapter.requiredApprovals !== 2) throw new EditorialInvalid('Invalid adapter');
     return adapter;
   }
   private async begin(client: PoolClient, snapshot = false) {
@@ -172,9 +172,9 @@ export class EditorialReviewStore {
       JSON.stringify(revision.before),JSON.stringify(revision.baseHeads),JSON.stringify(revision.evidence),revision.ownerCommand ?? null,actor]);
   }
   async resolveTarget(call: Pick<EditorialCall,'work' | 'request' | 'actingSubject'>,
-    resource: string, context: EditorialTarget['context']): Promise<EditorialTarget> {
+    resource: string, context: EditorialTarget['context'], followMerged = true): Promise<EditorialTarget> {
     const target = await workRead(call.work,call.request,{ actingSubject: call.actingSubject || undefined },
-      async session => (await resolveTargets(session,[resource],'discussion'))[0]!);
+      async session => (await resolveTargets(session,[resource],'discussion', followMerged ? undefined : () => null))[0]!);
     if (context !== 'urn:rezics:context:global') {
       const principal = await call.work.account.verify(call.request,['work:read']);
       if (!await call.work.access.realmReadProof?.(principal,call.actingSubject,context)) throw new AdmissionDenied('Context is unavailable');
@@ -187,7 +187,7 @@ export class EditorialReviewStore {
   async create(call: EditorialCall, input: CreateProposal, key: string, reverts: string | null = null,
     intent: unknown = { operation: 'create',input,reverts,actor: call.actingSubject }): Promise<CommandResult> {
     keyCheck(key);
-    const target = await this.resolveTarget(call,input.target.resource,input.target.context);
+    const target = await this.resolveTarget(call,input.target.resource,input.target.context,input.kind !== 'merge');
     const adapter = await this.adapter(input.kind,call), id = randomUUID();
     const requestDigest = digest(intent);
     return this.locked(id,async client => {
@@ -221,7 +221,7 @@ export class EditorialReviewStore {
     keyCheck(key); const requestDigest = digest({ operation: 'revise',id,input,actor: call.actingSubject });
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
-      await this.resolveTarget(call,row.target.resource,row.target.context);
+      await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await client.query('COMMIT'); return replay; }
       await editorialController(client,principal,call.actingSubject);
@@ -247,7 +247,7 @@ export class EditorialReviewStore {
     const requestDigest = digest({ operation: 'review',id,input,actor: call.actingSubject });
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
-      await this.resolveTarget(call,row.target.resource,row.target.context);
+      await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await client.query('COMMIT'); return replay; }
       const proposal = rowToProposal(row);
@@ -338,13 +338,51 @@ export class EditorialReviewStore {
       resolution.outcome === 'applied' ? resolution.receipt : undefined);
     await client.query('COMMIT'); return result;
   }
+  private async resume(client: PoolClient, row: ProposalRow, adapter: EditorialAdapter, application: Application,
+    call: EditorialCall, principal: string, key: string, requestDigest: string): Promise<CommandResult> {
+    if (!adapter.resume || application.principal !== principal || application.actor !== call.actingSubject) {
+      throw new EditorialBlocked({ code: 'apply_pending', operationKey: application.operation_key });
+    }
+    await this.begin(client);
+    const proposal = rowToProposal(row), revision = await this.revision(client, row.id, application.revision);
+    const prospective = application.approve ? { principal, review: { id: application.id, proposal: row.id,
+      revision: revision.n, reviewer: application.actor, reviewerKey: independenceKey(row.id, principal),
+      outcome: 'approve' as const, message: application.message, sequence: '0' } } : undefined;
+    await requireReview(client, proposal, principal, call.actingSubject, call.work.environment.fuseki);
+    const fresh = await reviewBasis(client, proposal, application.required, call.work.environment.fuseki, prospective);
+    const viewer = await viewerFor(client, proposal, principal, call.actingSubject, call.work.environment.fuseki);
+    try {
+      const decision = await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
+        callsLeft: EDITORIAL_STORE_COST.graphCalls, bytesLeft: EDITORIAL_STORE_COST.graphBytes },
+      () => applyReviewedRevision({ ...adapter, apply: adapter.resume!.bind(adapter) }, proposal,
+        this.applyInput(proposal, revision, application), fresh.reviews, fresh.authority, viewer, row.reverts));
+      const result = await this.finish(client, row, revision, application, 'applied', decision.receipt!);
+      if (key !== application.command_key) await this.save(client, principal, key, requestDigest, result);
+      await client.query('COMMIT'); return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error instanceof EditorialBlocked && error.blocker.code === 'stale_base') {
+        await this.begin(client);
+        await this.finish(client, row, revision, application, 'stale_base', undefined, error.blocker);
+        await client.query('COMMIT'); throw error;
+      }
+      const recovered = await this.recover(client, row, adapter, application);
+      if (recovered) {
+        if (key !== application.command_key) {
+          await this.begin(client); await this.save(client, principal, key, requestDigest, recovered); await client.query('COMMIT');
+        }
+        return recovered;
+      }
+      return { proposal: row.id, revision: revision.n, outcome: 'apply_pending', replayed: false };
+    }
+  }
   async decide(call: EditorialCall, id: string, input: DecisionInput, key: string): Promise<CommandResult> {
     keyCheck(key); messageCheck(input.message);
     const requestDigest = digest({ operation: 'decide',id,input,actor: call.actingSubject });
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal);
       let row = await this.proposal(client,id);
-      await this.resolveTarget(call,row.target.resource,row.target.context);
+      await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await client.query('COMMIT'); return replay; }
       const adapter = await this.adapter(row.kind,call);
@@ -355,6 +393,14 @@ export class EditorialReviewStore {
           application.principal === principal && application.actor === call.actingSubject ? call : undefined);
         if (recovered && application.command_key === key && application.principal === principal
           && application.command_digest === requestDigest) return { ...recovered,replayed: true };
+        if (recovered && application.principal === principal && application.actor === call.actingSubject
+          && input.outcome === 'applied' && input.revision === application.revision) {
+          await this.begin(client); await this.save(client, principal, key, requestDigest, recovered); await client.query('COMMIT');
+          return { ...recovered, replayed: true };
+        }
+        if (!recovered && !adapter.commands && adapter.resume && input.outcome === 'applied' && input.revision === application.revision) {
+          return this.resume(client, row, adapter, application, call, principal, key, requestDigest);
+        }
         if (!recovered && application.command_key === key && application.principal === principal
           && application.actor === call.actingSubject && application.command_digest === requestDigest) {
           return { proposal: id,revision: application.revision,outcome: 'apply_pending',replayed: false };
@@ -431,7 +477,7 @@ export class EditorialReviewStore {
     keyCheck(key); const requestDigest = digest({ operation: 'withdraw',id,revision,actor: call.actingSubject });
     return this.locked(id,async client => {
       await this.begin(client); const principal = await editorialPrincipal(client,call.principal), row = await this.proposal(client,id);
-      await this.resolveTarget(call,row.target.resource,row.target.context);
+      await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const replay = await this.replay(client,principal,key,requestDigest);
       if (replay) { await client.query('COMMIT'); return replay; }
       await editorialController(client,principal,call.actingSubject);
@@ -449,7 +495,7 @@ export class EditorialReviewStore {
     let row: ProposalRow;
     try { row = await this.proposal(client,id); } finally { client.release(); }
     if (row.decision?.outcome !== 'applied' || !row.decision.receipt) throw new EditorialInvalid('Only an applied proposal can be reverted');
-    const target = await this.resolveTarget(call,row.target.resource,row.target.context), adapter = await this.adapter(row.kind,call);
+    const target = await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge'), adapter = await this.adapter(row.kind,call);
     const candidate = await adapter.compensate(row.decision.receipt);
     return this.create(call,{ kind: row.kind,target,candidate: candidate.candidate,baseHeads: candidate.baseHeads,evidence },key,id,
       { operation: 'revert',id,evidence,actor: call.actingSubject });
@@ -461,7 +507,7 @@ export class EditorialReviewStore {
     let recoveryLocked = false;
     try {
       let row = await this.proposal(client,id);
-      await this.resolveTarget(call,row.target.resource,row.target.context);
+      await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
       const adapter = await this.adapter(row.kind,call), application = await this.application(client,id,row.latest);
       if (application && !application.outcome) {
         // Never queue a read behind decide's lock during owner delivery. Only
@@ -553,7 +599,7 @@ export class EditorialReviewStore {
     const items: Array<{ id: string; kind: string; target: EditorialTarget }> = [];
     for (const row of rows.slice(0,limit)) {
       try {
-        await this.resolveTarget(call,row.target.resource,row.target.context);
+        await this.resolveTarget(call,row.target.resource,row.target.context,row.kind !== 'merge');
         if (options.filter === 'review-requested') {
           const check = await this.pool.connect();
           try {

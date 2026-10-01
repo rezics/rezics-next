@@ -134,7 +134,7 @@ export type ApplyOutcome =
 
 /** Kinds own candidate meaning and one guarded owner command, never lifecycle
  * states or review policy. Add <kind>-adapter.ts exporting adapterModule; discovery
- * requires no shared registry edit. Identity merge can request two approvals. */
+ * requires no shared registry edit. Identity merge requires two approvals. */
 export interface EditorialAdapter {
   kind: string;
   requiredApprovals: 1 | 2;
@@ -154,6 +154,10 @@ export interface EditorialAdapter {
   compensate(receipt: OwnerReceipt): Promise<ValidatedCandidate>;
   /** Receipt-only lookup; must not dispatch or require the old credential. */
   resolve?(input: ApplyInput): Promise<ApplyOutcome | { outcome: 'cancelled' } | null>;
+  /** Explicit decision retry, after fresh Access review/controller checks.
+   * Read/recovery paths call resolve only. Delivery keeps the original permit,
+   * candidate and operation key; an HTTP retry key cannot start another task. */
+  resume?(input: ApplyInput): Promise<ApplyOutcome>;
 }
 export interface EditorialAdapterModule<Dependencies = unknown> {
   kind: string;
