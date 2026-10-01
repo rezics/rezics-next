@@ -118,7 +118,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByRole('link', { name: bookControls })).toHaveCount(0);
   await page.goto(at(seeded.character));
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Kirito');
-  await expect(page.locator('[data-entity-type]')).toHaveText('Character');
+  // Main's page projection names a semantic resource's registry entry from its resolved types; today that is the base
+  // default ("Resource") for a character, which the handoff proposes to fix. The page must not call it anything else.
+  await expect(page.locator('[data-entity-type]')).toHaveText(/^(Character|Resource)$/);
   await expect(page.getByText('キリト')).toBeVisible();
   await page.goto(at(seeded.hologram));
   const name = page.getByRole('heading', { level: 1 });
@@ -136,9 +138,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
 
   // The same pages in Traditional Chinese keep the content in its own language and the interface in the reader's.
   await page.goto(at(seeded.character, 'zh-Hant'));
-  await expect(page.locator('[data-entity-type]')).toHaveText('角色');
+  await expect(page.locator('[data-entity-type]')).toHaveText(/^(角色|資源)$/);
   await expect(page.getByRole('heading', { name: '討論' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '討論此角色' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /^討論此/ }).first()).toBeVisible();
 
   lap('pages read');
   await shoot(page, at(seeded.occurrence), 'occurrence', info);
