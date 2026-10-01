@@ -40,5 +40,3 @@ export const works: WorkChoice[] = [
 ];
 export const loadWorks = async () => works;
 export const loadRealizations = async () => ({ title: 'New Testament 22 Reverse', items: realizations });
-
-export const editAction = 'work.edit';

@@ -2,7 +2,7 @@
 
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
-import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
+import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { NativeSelect } from '@rezics/ui/native-select';
 import { ArrowDownIcon, ArrowUpIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
@@ -13,7 +13,7 @@ import { mayEdit } from './allowed.ts';
 import { materializeData } from 'native-i18n';
 import type { Copy, WorkLevelsEditMessages } from './messages.ts';
 import { useWrite } from './use-write.ts';
-import { invalidField, WriteStatus } from './write-status.tsx';
+import { hintFor, WriteStatus } from './write-status.tsx';
 import type { Values, WriteState } from './write.ts';
 import { WorkPicker, type WorkLoader } from './work-picker.tsx';
 
@@ -51,14 +51,16 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
   load?: WorkLoader; links?: { first: string | null; next: string | null };
 }) {
   const t = materializeData(messages, { locale });
-  const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
+  const { state, run, pending, values, reload, reloading, formKey, root } = useWrite(action);
   if (!mayEdit(allowed)) return null;
-  const invalid = invalidField(state);
+  /** The hint for a field of the form whose last submit was refused, so one form's refusal never marks another's field. */
+  const refused = values.intent === 'update' ? `update:${values.occurrence}` : values.intent ?? '';
+  const hintIn = (form: string, field: string) => (refused === form ? hintFor(state, field, t) : null);
   /** What was typed into this row's own form when its last submit was refused, so a refusal never loses it. */
   const typed = (part: EditablePart) => values.intent === 'update' && values.occurrence === part.occurrence ? values : null;
   /** What was typed into the add form, when that is the form whose last submit was refused. */
   const added: Values = values.intent === 'add' ? values : {};
-  return <div className="grid gap-6">
+  return <div ref={root} className="grid gap-6">
     <div aria-live="polite" className="grid gap-3"><WriteStatus state={state} t={t} onReload={reload} reloading={reloading} /></div>
     {parts.length ? <ol aria-label={t.partsList} className="grid divide-y divide-border/60 border-border/60 border-y">
       {parts.map((part, index) => <li key={part.occurrence} className="grid gap-2 py-3">
@@ -83,10 +85,11 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
             className="rounded-xl border border-border/60 px-2 py-1 text-sm open:basis-full">
             <summary className="flex cursor-pointer items-center gap-1 py-1" aria-label={t.editPart({ label: part.label })}>
               <PencilIcon aria-hidden="true" className="size-4" />{t.edit}</summary>
-            <form action={run} className="grid gap-3 py-2"><Context work={work} structure={structure} head={head} intent="update">
+            <form action={run} data-form={`update:${part.occurrence}`} className="grid gap-3 py-2"><Context work={work} structure={structure} head={head} intent="update">
               <input type="hidden" name="occurrence" value={part.occurrence} />
-              <Field><FieldLabel>{t.partLabel}</FieldLabel>
-                <Input name="label" defaultValue={typed(part)?.label ?? part.label} maxLength={500} required autoComplete="off" /></Field>
+              <Field invalid={hintIn(`update:${part.occurrence}`, 'label') !== null}><FieldLabel>{t.partLabel}</FieldLabel>
+                <Input name="label" defaultValue={typed(part)?.label ?? part.label} maxLength={500} required autoComplete="off" />
+                <FieldError>{hintIn(`update:${part.occurrence}`, 'label')}</FieldError></Field>
               <Field><FieldLabel>{t.partInclusion}</FieldLabel>
                 <NativeSelect name="inclusion" defaultValue={typed(part)?.inclusion ?? part.inclusion}>
                   {inclusionOptions(t).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -108,24 +111,24 @@ export function PartsEditor({ work, structure, head, parts, allowed, locale, act
       {links.first ? <Link href={links.first} className="text-primary text-sm underline-offset-4 hover:underline">{t.firstParts}</Link> : <span />}
       {links.next ? <Link href={links.next} className="text-primary text-sm underline-offset-4 hover:underline">{t.moreParts}</Link> : null}
     </nav> : null}
-    <form key={formKey} action={run} className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4" aria-label={t.addPart}>
+    <form key={formKey} action={run} data-form="add" className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4" aria-label={t.addPart}>
       <h3 className="font-semibold text-base">{t.addPart}</h3>
       <Context work={work} structure={structure} head={head} intent="add" />
-      <Field invalid={invalid === 'target'}><FieldLabel>{t.partTarget}</FieldLabel>
-        <WorkPicker name="target" locale={locale} t={t} load={load} initial={added.target ?? ''} invalid={invalid === 'target'} />
-        <FieldHelper>{t.partTargetHelp}</FieldHelper></Field>
-      <Field invalid={invalid === 'label'}><FieldLabel>{t.partLabel}</FieldLabel>
+      <Field invalid={hintIn('add', 'target') !== null}><FieldLabel>{t.partTarget}</FieldLabel>
+        <WorkPicker name="target" locale={locale} t={t} load={load} initial={added.target ?? ''} invalid={hintIn('add', 'target') !== null} />
+        <FieldHelper>{t.partTargetHelp}</FieldHelper><FieldError>{hintIn('add', 'target')}</FieldError></Field>
+      <Field invalid={hintIn('add', 'label') !== null}><FieldLabel>{t.partLabel}</FieldLabel>
         <Input name="label" defaultValue={added.label ?? ''} maxLength={500} required autoComplete="off" />
-        <FieldHelper>{t.partLabelHelp}</FieldHelper></Field>
+        <FieldHelper>{t.partLabelHelp}</FieldHelper><FieldError>{hintIn('add', 'label')}</FieldError></Field>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field><FieldLabel>{t.partInclusion}</FieldLabel>
           <NativeSelect name="inclusion" defaultValue={added.inclusion ?? 'required'}>
             {inclusionOptions(t).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</NativeSelect></Field>
-        <Field><FieldLabel>{t.partPlace}</FieldLabel>
+        <Field invalid={hintIn('add', 'after') !== null}><FieldLabel>{t.partPlace}</FieldLabel>
           <NativeSelect name="after" defaultValue={added.after ?? 'last'}>
             <option value="last">{t.placeLast}</option><option value="first">{t.placeFirst}</option>
             {parts.map(part => <option key={part.occurrence} value={part.occurrence}>{t.placeAfter({ label: part.label })}</option>)}
-          </NativeSelect></Field>
+          </NativeSelect><FieldError>{hintIn('add', 'after')}</FieldError></Field>
       </div>
       <Button type="submit" isLoading={pending} disabled={pending} className="w-fit">
         <PlusIcon aria-hidden="true" />{pending ? t.submitting : t.addPartButton}</Button>

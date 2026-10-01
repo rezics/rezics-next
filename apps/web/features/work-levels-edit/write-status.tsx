@@ -9,17 +9,26 @@ const fieldHints = { work: 'badWork', intent: 'badIntent', structure: 'badStruct
   after: 'badAfter', kind: 'badKind', counterpart: 'badCounterpart', evidence: 'badEvidence', language: 'badLanguage',
   translators: 'badTranslators', publishers: 'badPublishers', title: 'badTitle', status: 'badStatus', isbn13: 'badIsbn13',
   year: 'badYear', territory: 'badTerritory', identifiers: 'badIdentifiers', coverage: 'badCoverage' } as const;
+/** The codes with no control of their own on the page: the form's wiring, which the alert reports. */
+const wiring = new Set(['work', 'intent', 'structure']);
 
-const headlines: Record<Problem, 'problemSignIn' | 'problemDenied' | 'problemStale' | 'problemInvalid' | 'problemUnavailable'> = {
-  'sign-in': 'problemSignIn', denied: 'problemDenied', stale: 'problemStale', invalid: 'problemInvalid',
-  unavailable: 'problemUnavailable' };
+const headlines: Record<Problem, 'problemSignIn' | 'problemDenied' | 'problemStale' | 'problemConflict' | 'problemInvalid'
+  | 'problemUnavailable'> = { 'sign-in': 'problemSignIn', denied: 'problemDenied', stale: 'problemStale',
+  conflict: 'problemConflict', invalid: 'problemInvalid', unavailable: 'problemUnavailable' };
 
 /** The field a refusal names, for the form to mark invalid. */
 export const invalidField = (state: WriteState) => state.status === 'error' ? state.field : null;
 
+/** What to fix in `field`, when the last refusal named it; the form shows it with the field (`FieldError`). */
+export function hintFor(state: WriteState, field: string, t: Copy): string | null {
+  const named = invalidField(state);
+  return named === field && field in fieldHints ? t[fieldHints[field as keyof typeof fieldHints]] : null;
+}
+
 /**
- * What the last submit came to: Main's receipt, a write still being applied, or Main's refusal with
- * its own reason. A head that moved offers "Reload latest"; the form keeps what was typed.
+ * What the last submit came to: a receipt, a write still being applied, or a refusal with its own
+ * reason. A head that moved offers "Reload latest"; the form keeps what was typed. A refusal that
+ * names an input is shown with that input instead, and focus moves there.
  */
 export function WriteStatus({ state, t, onReload, reloading = false }: {
   state: WriteState; t: Copy; onReload: () => void; reloading?: boolean;
@@ -35,8 +44,9 @@ export function WriteStatus({ state, t, onReload, reloading = false }: {
     return <Alert variant="info" role="status"><HourglassIcon aria-hidden="true" />
       <AlertTitle>{t.pendingTitle}</AlertTitle><AlertDescription>{t.pendingBody}</AlertDescription></Alert>;
   }
+  if (state.field && !wiring.has(state.field)) return null;
   const hint = state.field ? t[fieldHints[state.field as keyof typeof fieldHints] ?? 'problemInvalid'] : null;
-  return <Alert variant="destructive" role="alert"><TriangleAlertIcon aria-hidden="true" />
+  return <Alert variant="destructive" role="alert" tabIndex={-1} data-write-alert=""><TriangleAlertIcon aria-hidden="true" />
     <AlertTitle>{t[headlines[state.problem]]}</AlertTitle>
     <AlertDescription className="grid gap-2">
       {hint ? <span>{hint}</span> : null}

@@ -12,18 +12,26 @@ export type WriteState =
 export type Values = Readonly<Record<string, string>>;
 
 /** The kinds of refusal a person can act on differently. */
-export type Problem = 'sign-in' | 'denied' | 'stale' | 'invalid' | 'unavailable';
+export type Problem = 'sign-in' | 'denied' | 'stale' | 'conflict' | 'invalid' | 'unavailable';
 
 type ProblemAnswer = { status: number; value?: unknown };
 
-/** The refusal a Main status means: 409 is a head that moved, 400 and 422 a rejected input, 401 and 403 no authority. */
+/**
+ * A 409 means the head or basis the page showed has moved only when the problem's code says so
+ * (`stale_*`, `*_basis_changed`): reloading helps then. Any other 409 (an idempotency or stage
+ * conflict, a composition that already exists) is a refusal that reloading does not change.
+ */
+export const isStaleCode = (code: string | null) => code !== null && (/^stale_/.test(code) || /_basis_changed$/.test(code));
+
+/** The refusal an answer means: a moved head, a conflict, a rejected input (400, 413, 422) or no authority (401, 403, 404). */
 export function problemOf(error: ProblemAnswer): { problem: Problem; detail: string | null } {
   const value = typeof error.value === 'object' && error.value !== null ? error.value as Record<string, unknown> : {};
   const detail = typeof value.detail === 'string' && value.detail ? value.detail
     : typeof value.title === 'string' && value.title ? value.title : null;
+  const code = typeof value.code === 'string' ? value.code : null;
   const problem: Problem = error.status === 401 ? 'sign-in'
     : error.status === 403 || error.status === 404 ? 'denied'
-      : error.status === 409 ? 'stale'
+      : error.status === 409 ? (isStaleCode(code) ? 'stale' : 'conflict')
         : error.status === 400 || error.status === 413 || error.status === 422 ? 'invalid' : 'unavailable';
   return { problem, detail };
 }

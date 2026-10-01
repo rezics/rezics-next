@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@rezics/ui/button';
-import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
+import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { NativeSelect } from '@rezics/ui/native-select';
 import { LinkIcon } from 'lucide-react';
@@ -12,7 +12,7 @@ import { type KindOption, viaOf } from './kinds.ts';
 import { materializeData } from 'native-i18n';
 import type { WorkLevelsEditMessages } from './messages.ts';
 import { useWrite } from './use-write.ts';
-import { invalidField, WriteStatus } from './write-status.tsx';
+import { hintFor, WriteStatus } from './write-status.tsx';
 import type { WriteState } from './write.ts';
 import { WorkPicker, type WorkLoader } from './work-picker.tsx';
 
@@ -28,13 +28,13 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
   load?: WorkLoader;
 }) {
   const t = materializeData(messages, { locale });
-  const { state, run, pending, values, reload, reloading, formKey } = useWrite(action);
+  const { state, run, pending, values, reload, reloading, formKey, root } = useWrite(action);
   const [chosen, setChosen] = useState<string | null>(null);
   if (!mayEdit(allowed)) return null;
-  const invalid = invalidField(state);
+  const hint = (field: string) => hintFor(state, field, t);
   if (!kinds.length) return <p role="status" className="text-muted-foreground text-sm">{t.noKindsBody}</p>;
   const current = kinds.find(kind => kind.key === (chosen ?? values.kind)) ?? kinds[0]!;
-  return <form key={formKey} action={run} aria-label={t.recordRelation}
+  return <div ref={root}><form key={formKey} action={run} aria-label={t.recordRelation}
     className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4">
     <h3 className="font-semibold text-base">{t.recordRelation}</h3>
     <p className="text-muted-foreground text-sm">{t.relationsHelp}</p>
@@ -42,22 +42,22 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
     <input type="hidden" name="work" value={work} />
     <input type="hidden" name="mainVersion" value={mainVersion} /><input type="hidden" name="head" value={head} />
     <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-start">
-      <Field invalid={invalid === 'kind'}><FieldLabel>{t.relKind}</FieldLabel>
+      <Field invalid={hint('kind') !== null}><FieldLabel>{t.relKind}</FieldLabel>
         <NativeSelect name="kind" value={current.key} onChange={event => setChosen(event.currentTarget.value)}>
           {kinds.map(kind => <option key={kind.key} value={kind.key} lang={kind.language}>{kind.label}</option>)}
-        </NativeSelect><FieldHelper>{t.relKindHelp}</FieldHelper></Field>
-      <Field invalid={invalid === 'counterpart'}><FieldLabel>{t.relCounterpart}</FieldLabel>
+        </NativeSelect><FieldHelper>{t.relKindHelp}</FieldHelper><FieldError>{hint('kind')}</FieldError></Field>
+      <Field invalid={hint('counterpart') !== null}><FieldLabel>{t.relCounterpart}</FieldLabel>
         <WorkPicker name="counterpart" locale={locale} t={t} load={load} initial={values.counterpart ?? ''}
-          invalid={invalid === 'counterpart'} /><FieldHelper>{t.relCounterpartHelp}</FieldHelper></Field>
+          invalid={hint('counterpart') !== null} /><FieldHelper>{t.relCounterpartHelp}</FieldHelper><FieldError>{hint('counterpart')}</FieldError></Field>
     </div>
-    <Field invalid={invalid === 'evidence'}><FieldLabel>{t.relEvidence}</FieldLabel>
+    <Field invalid={hint('evidence') !== null}><FieldLabel>{t.relEvidence}</FieldLabel>
       <Input name="evidence" type="url" inputMode="url" defaultValue={values.evidence ?? ''} required maxLength={2048}
-        autoComplete="off" placeholder="https://" /><FieldHelper>{t.relEvidenceHelp}</FieldHelper></Field>
+        autoComplete="off" placeholder="https://" /><FieldHelper>{t.relEvidenceHelp}</FieldHelper><FieldError>{hint('evidence')}</FieldError></Field>
     {viaOf(current.key) === 'derivation' ? <label className="flex items-start gap-3 text-sm">
       <input type="checkbox" name="unresolved" defaultChecked={values.unresolved === 'on'} className="mt-1 size-4 accent-primary" />
       <span className="grid gap-0.5"><span>{t.relUnresolved}</span>
         <span className="text-muted-foreground text-xs">{t.relUnresolvedHelp}</span></span></label> : null}
     <Button type="submit" isLoading={pending} disabled={pending} className="w-fit">
       <LinkIcon aria-hidden="true" />{pending ? t.submitting : t.recordButton}</Button>
-  </form>;
+  </form></div>;
 }

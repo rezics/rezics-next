@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { EditCatalogue } from './g-839-catalogue.ts';
@@ -8,10 +8,7 @@ import type { EditCatalogue } from './g-839-catalogue.ts';
 // the browser signs in as the stack's web member, an editor of those Works, and maintains their
 // parts, relations, realizations and releases on desktop and on a phone.
 let catalogue: EditCatalogue;
-const started = Date.now();
-/** Elapsed seconds per step, kept beside the screenshots: the whole file shares one Playwright budget. */
-const mark = (info: TestInfo, step: string) => appendFileSync(info.outputPath('timing.txt'), `${Math.round((Date.now() - started) / 1000)}s ${step}\n`);
-test.beforeAll(async ({}, info) => {
+test.beforeAll(async () => {
   test.setTimeout(300_000);
   const result = spawnSync('bun', ['apps/web/tests/g-839-seed.ts'], { cwd: process.cwd(), env: process.env,
     encoding: 'utf8', timeout: 240_000 });
@@ -32,7 +29,6 @@ test.beforeAll(async ({}, info) => {
     await new Promise(done => setTimeout(done, 500));
   }
   if (still < 6) throw new Error('Main’s graph kept moving for 120 seconds after the seed');
-  mark(info, 'seeded');
 });
 
 const uuid = (iri: string) => iri.slice(-36);
@@ -52,18 +48,14 @@ async function shoot(page: Page, name: string, info: TestInfo) {
 }
 
 /** Main applies a write to its graph a moment after the receipt: read the page again until the record shows. */
-async function eventually(page: Page, path: string, check: () => Promise<void>, info?: TestInfo) {
+async function eventually(page: Page, path: string, check: () => Promise<void>) {
   await expect(async () => {
     await page.goto(path);
-    try { await check(); }
-    catch (error) {
-      if (info) mark(info, `${path}: ${(await page.locator('#main-content').innerText()).replace(/\s+/g, ' ').slice(0, 800)}`);
-      throw error;
-    }
+    await check();
   }).toPass({ timeout: 100_000 });
 }
 
-const receipt = (page: Page) => page.getByText(/Main’s receipt:/);
+const receipt = (page: Page) => page.getByText(/Receipt: /);
 
 test('an editor maintains parts, relations, realizations and releases; a reader sees no controls', async ({ page, context }, info) => {
   test.setTimeout(600_000);
@@ -80,7 +72,6 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await expect(page.locator('#main-content').locator('form, input, select, textarea, button')).toHaveCount(0);
   await signInAtAccounts(page, at(index.newTestament, 'edit/parts'), member);
 
-  mark(info, 'signed in');
   // Parts: add "22 Reverse" after "22".
   const list = page.getByRole('list', { name: 'Parts in publication order' });
   await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22']);
@@ -93,13 +84,11 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await expect(receipt(page)).toBeVisible();
   await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22', '22 Reverse']);
 
-  mark(info, 'added a part');
   // Move it above "22".
   await page.getByRole('button', { name: 'Move 22 Reverse up' }).click();
   await expect(list.locator('[data-part-label]')).toHaveText(['1', '2', '22 Reverse', '22']);
   await shoot(page, 'parts-after', info);
 
-  mark(info, 'moved it');
   // A second tab holds the list as it was: its edit is refused as stale, keeps what was typed, and succeeds after a reload.
   const other = await context.newPage();
   await other.goto(at(index.newTestament, 'edit/parts'));
@@ -124,7 +113,6 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await expect(receipt(other)).toBeVisible();
   await other.close();
 
-  mark(info, 'stale edit refused and retried');
   // G-837's Connections page shows the change after a reload.
   await page.goto(at(index.newTestament, 'connections'));
   await expect(page.getByRole('list', { name: 'Parts in publication order' }).getByRole('listitem'))
@@ -132,7 +120,6 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
       /^22 Reverse\s*New Testament 22 Reverse/]);
   await expect(page.getByRole('link', { name: 'Edit' })).toHaveAttribute('href', `/en/w/${uuid(index.newTestament.work)}/edit/parts`);
 
-  mark(info, 'connections page read');
   // Relations: Genesis Testament is a Sequel of New Testament, with evidence. Main words every label.
   await page.goto(at(index.genesisTestament, 'edit/relations'));
   const relation = page.getByRole('form', { name: 'Record a relation' });
@@ -143,11 +130,10 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await relation.getByRole('button', { name: 'Record relation' }).click();
   await expect(receipt(page)).toBeVisible();
   await eventually(page, at(index.genesisTestament, 'connections'), () => expect(page.locator('[data-relation-row]')
-    .filter({ hasText: 'Sequel to' })).toContainText('A Certain Magical Index: New Testament', { timeout: 15_000 }), info);
+    .filter({ hasText: 'Sequel to' })).toContainText('A Certain Magical Index: New Testament', { timeout: 15_000 }));
   await eventually(page, at(index.newTestament, 'connections'), () => expect(page.locator('[data-relation-row]')
-    .filter({ hasText: 'Sequel' })).toContainText('Genesis Testament', { timeout: 15_000 }), info);
+    .filter({ hasText: 'Sequel' })).toContainText('Genesis Testament', { timeout: 15_000 }));
 
-  mark(info, 'relation recorded');
   // Editions: a zh-Hans realization of volume 1, then an omnibus release covering volumes 1-3.
   const [volumeOne, volumeTwo, volumeThree] = sao.volumes as [typeof sao.volumes[number], ...typeof sao.volumes];
   await page.goto(at(volumeOne, 'edit/editions'));
@@ -163,7 +149,6 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
     await expect(page.locator('[data-language-group="zh-Hans"]')).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 45_000 });
 
-  mark(info, 'realization added');
   await page.goto(at(volumeOne, 'edit/editions'));
   const release = page.getByRole('form', { name: 'Add a release' });
   await release.getByRole('textbox', { name: 'Title', exact: true }).fill('Sword Art Online: Volumes 1–3 omnibus');
@@ -183,15 +168,8 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
   await shoot(page, 'editions-form', info);
   await release.getByRole('button', { name: 'Add release' }).click();
   await expect(receipt(page).last()).toBeVisible();
-  await eventually(page, at(volumeOne, 'editions'), async () => {
-    try { await expect(page.getByRole('region', { name: 'Releases' }).getByText('Covers 3 Works')).toBeVisible({ timeout: 15_000 }); }
-    catch (error) {
-      mark(info, `releases: ${(await page.locator('#main-content').innerText()).replace(/\s+/g, ' ').slice(0, 1500)}`);
-      throw error;
-    }
-  });
+  await eventually(page, at(volumeOne, 'editions'), () => expect(page.getByRole('region', { name: 'Releases' }).getByText('Covers 3 Works')).toBeVisible({ timeout: 15_000 }));
 
-  mark(info, 'release added');
   // A reader: a Work the member may read but not edit shows no edit link and no control.
   await page.goto(at(readOnly, 'connections'));
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -202,5 +180,4 @@ test('an editor maintains parts, relations, realizations and releases; a reader 
     await expect(page.locator('#main-content').locator('form, input, select, textarea, button')).toHaveCount(0);
   }
   await shoot(page, 'reader', info);
-  mark(info, 'reader checked');
 });

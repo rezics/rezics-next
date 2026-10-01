@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { EDIT_ACTION, mayEdit } from './allowed.ts';
 import { EditFrame, NoAuthority } from './edit-frame.tsx';
 import { RealizationEditor, ReleaseEditor } from './editions-editor.tsx';
 import * as fixture from './fixtures.ts';
@@ -21,7 +22,7 @@ function Page({ locale, allowed, section, answer }: { locale: UiLocale; allowed:
   const action = asAction(answer);
   return <div className="mx-auto max-w-[46rem] px-4 py-8 sm:px-8">
     <EditFrame workRef="new-testament" title="A Certain Magical Index: New Testament" current={section} t={t}>
-      {allowed.includes(fixture.editAction) ? <section className="grid gap-4" aria-labelledby="section">
+      {mayEdit(allowed) ? <section className="grid gap-4" aria-labelledby="section">
         <h2 id="section" className="font-semibold text-xl">{t.editStructure}</h2>
         {section === 'parts' ? <PartsEditor work={fixture.work} structure={fixture.structure} head={fixture.head}
           parts={fixture.parts} allowed={allowed} locale={locale} action={action} messages={messages[locale]} load={fixture.loadWorks} /> : null}
@@ -39,7 +40,7 @@ function Page({ locale, allowed, section, answer }: { locale: UiLocale; allowed:
 }
 
 const meta = { title: 'Work levels edit/Editors', component: Page,
-  args: { locale: 'en', allowed: [fixture.editAction], section: 'parts', answer: done } } satisfies Meta<typeof Page>;
+  args: { locale: 'en', allowed: [EDIT_ACTION], section: 'parts', answer: done } } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -84,6 +85,38 @@ export const StaleHead: Story = { args: { answer: stale },
     await expect(alert).toHaveTextContent('Expected composition head is stale');
     await expect(within(alert).getByRole('button', { name: 'Reload latest' })).toBeVisible();
     await expect(within(form).getByRole('textbox', { name: 'Label' })).toHaveValue('22 Reverse');
+  } };
+
+const refusedTarget: Answer = form => ({ status: 'error', problem: 'invalid', detail: null, field: 'target',
+  values: Object.fromEntries([...form.entries()].filter((entry): entry is [string, string] => typeof entry[1] === 'string')) });
+const conflict: Answer = () => ({ status: 'error', problem: 'conflict', detail: 'Composition already exists', field: null, values: {} });
+
+/** A refused input is explained with its own field, focus moves there, and no other form's field is marked. */
+export const RefusedFieldIsExplainedInPlace: Story = { args: { answer: refusedTarget },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const form = canvas.getByRole('form', { name: 'Add a part' });
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Label' }), '22 Reverse');
+    await userEvent.click(within(form).getByRole('button', { name: 'Add part' }));
+    const target = await within(form).findByRole('textbox', { name: 'Work' });
+    // The explanation fades in with the field, and is described by it.
+    await waitFor(() => expect(within(form).getByText('Name the Work by its address or ID.')).toBeVisible());
+    await expect(target).toHaveAttribute('aria-invalid', 'true');
+    await expect(target).toHaveFocus();
+    await expect(within(form).getByRole('textbox', { name: 'Label' })).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  } };
+
+/** A 409 that is not a moved head is a refusal with its reason, and offers no reload. */
+export const ConflictOffersNoReload: Story = { args: { answer: conflict },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(within(canvas.getByRole('form', { name: 'Add a part' })).getByRole('textbox', { name: 'Label' }), '22');
+    await userEvent.click(canvas.getByRole('button', { name: 'Add part' }));
+    const alert = await canvas.findByRole('alert');
+    await expect(alert).toHaveTextContent('This conflicts with what is already recorded');
+    await expect(alert).toHaveTextContent('Composition already exists');
+    await expect(within(alert).queryByRole('button', { name: 'Reload latest' })).toBeNull();
   } };
 
 /** A reader, or anyone without edit authority, gets no control at all, and a way back. */

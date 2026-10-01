@@ -16,7 +16,7 @@ const { PartsEditor } = await import('../features/work-levels-edit/parts-editor.
 const { RelationEditor } = await import('../features/work-levels-edit/relation-editor.tsx');
 const { RealizationEditor, ReleaseEditor } = await import('../features/work-levels-edit/editions-editor.tsx');
 const { NoAuthority } = await import('../features/work-levels-edit/edit-frame.tsx');
-const { WriteStatus } = await import('../features/work-levels-edit/write-status.tsx');
+const { WriteStatus, hintFor } = await import('../features/work-levels-edit/write-status.tsx');
 
 const id = '01944100-0000-7000-8000-000000000123';
 const t = copyOf('en');
@@ -40,12 +40,23 @@ describe('G-839 addresses and Work names', () => {
 
 describe('G-839 what Main answered', () => {
   test('a refusal is classed by Main’s status and keeps Main’s reason', () => {
-    expect(problemOf({ status: 409, value: { detail: 'Expected head is stale' } })).toEqual({ problem: 'stale', detail: 'Expected head is stale' });
+    expect(problemOf({ status: 409, value: { code: 'stale_composition_head', detail: 'Expected head is stale' } }))
+      .toEqual({ problem: 'stale', detail: 'Expected head is stale' });
     expect(problemOf({ status: 401 }).problem).toBe('sign-in');
     expect(problemOf({ status: 403 }).problem).toBe('denied');
     expect(problemOf({ status: 404 }).problem).toBe('denied');
     for (const status of [400, 413, 422]) expect(problemOf({ status, value: { title: 'Bad' } })).toEqual({ problem: 'invalid', detail: 'Bad' });
     for (const status of [500, 503]) expect(problemOf({ status }).problem).toBe('unavailable');
+  });
+
+  test('only a moved head or basis offers a reload; any other 409 is a refusal with its own reason', () => {
+    for (const code of ['stale_head', 'stale_composition_head', 'realization_basis_changed', 'release_basis_changed', 'read_basis_changed']) {
+      expect(problemOf({ status: 409, value: { code } }).problem).toBe('stale');
+    }
+    for (const code of ['composition_conflict', 'idempotency_conflict', 'structure_stage_conflict', 'generation_changed']) {
+      expect(problemOf({ status: 409, value: { code, title: 'Nope' } })).toEqual({ problem: 'conflict', detail: 'Nope' });
+    }
+    expect(problemOf({ status: 409 }).problem).toBe('conflict');
   });
 
   test('a receipt, a replay and a pending operation are told apart', () => {
@@ -92,7 +103,7 @@ describe('G-839 authority is Main’s answer', () => {
     expect(mayEdit(['work.read', 'work.edit.other'])).toBe(false);
   });
 
-  test('the relation kinds are keys only; Main words every label and its lexicon says which route writes it', () => {
+  test('the relation kinds are a fixed list of definition keys with their write route; only the labels come from the lexicon', () => {
     expect(relationKinds.map(kind => kind.key)).toEqual(['rewrite', 'reboot', 'adaptation', 'sequel', 'spin-off',
       'correspondence-equivalent', 'correspondence-partial', 'correspondence-revised']);
     expect(viaOf('reboot')).toBe('derivation');
@@ -175,10 +186,13 @@ describe('G-839 what Main refused is shown with its own reason', () => {
     expect(html).toContain('rcpt-7');
   });
 
-  test('a malformed field says what to fix', () => {
-    const html = renderToStaticMarkup(createElement(WriteStatus, { t, onReload() {}, state: { status: 'error', problem: 'invalid', detail: null,
-      field: 'evidence', values: {} } }));
-    expect(html).toContain(t.badEvidence);
+  test('a malformed field is explained with that field, not in the alert', () => {
+    const state = { status: 'error' as const, problem: 'invalid' as const, detail: null, field: 'evidence', values: {} };
+    expect(hintFor(state, 'evidence', t)).toBe(t.badEvidence);
+    expect(hintFor(state, 'label', t)).toBeNull();
+    expect(renderToStaticMarkup(createElement(WriteStatus, { t, onReload() {}, state }))).toBe('');
+    // A code with no control of its own is the alert's to report.
+    expect(renderToStaticMarkup(createElement(WriteStatus, { t, onReload() {}, state: { ...state, field: 'intent' } }))).toContain(t.badIntent);
   });
 });
 
@@ -188,6 +202,16 @@ describe('G-839 catalogs', () => {
     for (const locale of uiLocales) {
       expect(Object.keys(messages[locale]).sort()).toEqual([...english].sort());
     }
+  });
+
+  test('no copy names the service: "Main" appears only in the domain term Main Version', () => {
+    const domain = /Main Version|メインバージョン|主版本|Hauptversion|Version principale|Versión principal|메인 버전/g;
+    const offending = uiLocales.flatMap(locale => Object.entries(messages[locale]).flatMap(([key, value]) => {
+      // Native-i18n nodes keep their pattern in `pattern`; strings are the value itself.
+      const text = typeof value === 'string' ? value : (value as { pattern?: string }).pattern ?? '';
+      return /Main/.test(text.replace(domain, '')) ? [`${locale}.${key}`] : [];
+    }));
+    expect(offending).toEqual([]);
   });
 
   test('no English copy names a relation; Main words them', () => {

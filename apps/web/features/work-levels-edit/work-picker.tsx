@@ -49,7 +49,7 @@ export function WorkPicker({ name, locale, t, initial = '', load = searchWorks, 
     }, 200);
   }
   const value = chosen?.id ?? workIdFrom(text) ?? '';
-  return <div className="grid gap-2">
+  return <div data-field={name} className="grid gap-2">
     <input type="hidden" name={name} value={value} />
     {chosen ? <div className="flex items-center justify-between gap-2 rounded-xl border border-border/80 bg-primary/5 px-3 py-2 text-sm">
       <span lang={chosen.language} className="min-w-0 break-words">{t.pickerChosen({ title: chosen.title })}</span>

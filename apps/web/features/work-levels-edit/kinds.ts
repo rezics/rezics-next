@@ -6,6 +6,12 @@
 // reboots, continues or corresponds), and Access admits a change to whoever edits that Work, so
 // the Work being edited is always the subject and the person names the other Work.
 
+// This list and its `via` routing stand in for a listing Main does not serve yet: the Work-to-Work
+// definitions an editor may record, and whether each pins a source version (a derivation) or is a
+// plain relation occurrence. Neither the lexicon's roles nor `workSubjectRole` tells the two apart
+// (spin-off and the correspondences carry a `source` role too). Follow-up, owned by the manager:
+// Main serves that listing as data, and this file is deleted; the labels already come from Main.
+
 /** `derivation` kinds pin the source's Main Version (`POST /v1/resources/{id}/derivations`); the rest are relation occurrences. */
 export const relationKinds = [
   { key: 'rewrite', via: 'derivation' }, { key: 'reboot', via: 'derivation' }, { key: 'adaptation', via: 'derivation' },

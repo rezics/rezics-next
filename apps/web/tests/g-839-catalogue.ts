@@ -1,5 +1,5 @@
-// The records the G-839 e2e edits, written once into the isolated QA stack through Main's public
-// routes: the Index subseries whose "22 Reverse" volume is not yet one of its parts, Genesis
+// The records the G-839 e2e edits, written once into the isolated QA stack (Works are activated through the
+// Work modules, grants are inserted into Access, the rest goes through Main's routes, as in g-837-catalogue.ts): the Index subseries whose "22 Reverse" volume is not yet one of its parts, Genesis
 // Testament, Sword Art Online volumes 1-3 with their English texts, and a Work the signed-in
 // member may read but not edit. The browser signs in as the stack's web member, who is granted
 // edit authority on the Works an editor maintains.
