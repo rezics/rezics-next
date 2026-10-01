@@ -3,6 +3,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect } from 'bun:test';
+import { AuthorityValues } from './g-903-api-values.ts';
+import { AccessAuthorityRead } from '../../../services/main/src/modules/access/authority-read.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -123,10 +125,12 @@ export async function startAuthorityHarness(label: string) {
     clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
   access: new AccessAdmissionRegistry(accessPool), actingContexts: new AccessActingContexts(accessPool),
   grants, groups: new AccessGroups(accessPool), roles: new AccessRoles(accessPool),
+  authorityRead: new AccessAuthorityRead(accessPool),
   representations: new AccessRepresentations(accessPool) });
   await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ('work:create:root')
     ON CONFLICT DO NOTHING`);
 
+  const values = new AuthorityValues(main);
   const harness = {
     accessPool, accountPool, grants, accountBase: base, accountIssuer: `${base}/api/auth`,
     async user(name: string, scope = scopes, admitted = true): Promise<AuthorityUser> {
@@ -136,8 +140,10 @@ export async function startAuthorityHarness(label: string) {
         await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
           VALUES ($1,$2,$3)`, [principalId, `${base}/api/auth`, account.id]);
       }
+      const token = await tokenFor(account, scope);
+      values.user(principalId, token, scope);
       return { name, accountId: account.id, principalId,
-        token: await tokenFor(account, scope), sessionCookie: account.cookie,
+        token, sessionCookie: account.cookie,
         email: account.email, password: account.password };
     },
     tokenFor(user: { email: string; password: string }, scope = scopes): Promise<string> {
@@ -181,6 +187,7 @@ export async function startAuthorityHarness(label: string) {
         action, valid_until, max_path_edges) VALUES ($1,$2,$3,$4,
           CASE WHEN $5 = 'infinity' THEN 'infinity'::timestamptz ELSE now() + $5::interval END, $6)`,
       [id, principalId, subject, action, options.until ?? '2 hours', options.maxPathEdges ?? 0]);
+      values.mandate(principalId, subject, action);
       return id;
     },
     async grant(issuer: string, recipient: string, action: string, until = '2 hours'): Promise<string> {
@@ -192,8 +199,7 @@ export async function startAuthorityHarness(label: string) {
       return id;
     },
     async epoch(scope = 'work:create:root'): Promise<string> {
-      return (await accessPool.query<{ authority_epoch: string }>(
-        'SELECT authority_epoch FROM access.scope_gate WHERE id = $1', [scope])).rows[0]!.authority_epoch;
+      return values.epoch(scope);
     },
     request(method: string, path: string, token: string, body?: object,
       key = `${label}-${randomUUID()}`): Promise<Response> {

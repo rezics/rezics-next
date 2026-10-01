@@ -113,10 +113,7 @@ test('G-298: origin disclosure, all visibility/review transitions, indexed reads
     expect(JSON.stringify(feed.body)).not.toContain(h.realm);
     // A moderator veto still dominates automatic policy approval.
     await h.grant(h.actor, `review:decide:${h.realm}`, 'review.decide');
-    const decision = (await h.contentPool.query(`SELECT id,review_generation FROM content.realm_review_decision
-      WHERE realm=$1 AND revision_id=$2 ORDER BY review_generation DESC LIMIT 1`,
-    [h.realm,memberDirect.draft.body.revisionId])).rows[0];
-    expect((await h.call('POST', '/v1/realm-reply-reviews', { ...memberDirect.placement, profile: 'realm-reply-review-v1', expectedGeneration: decision.review_generation, supersedes: decision.id,
+    expect((await h.call('POST', '/v1/realm-reply-reviews', { ...memberDirect.placement, profile: 'realm-reply-review-v1', expectedGeneration: memberPlacement.body.reviewGeneration, supersedes: memberPlacement.body.reviewDecisionId,
       outcome: 'revoked', method: 'human', methodRevision: 'moderator-v1', dependencyDigest: 'a'.repeat(64),
       reasonReference: 'moderator-veto', expectedHead: undefined, reviewDecisionId: undefined })).status).toBe(201);
     expect((await h.call('GET', memberDirect.path)).status).toBe(404);

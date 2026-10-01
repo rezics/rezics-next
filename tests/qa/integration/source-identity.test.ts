@@ -94,18 +94,15 @@ test('LIVE06: acquired redirect assertion keeps source records separate', async 
     expect(captured.status).toBe(201);
     const run = await captured.json() as { run: { surfaces: Array<{ surface: string;
       outcome: { outcome: string } | null;
-      captures: Array<{ observation: string; externalId: string }> }> } };
+      captures: Array<{ observation: string; record: string; externalId: string }> }> } };
     const works = run.run.surfaces.find(surface => surface.surface === 'works');
     expect(works?.outcome?.outcome).toBe('qualified');
     const first = works?.captures.find(item => item.externalId === 'OL991902W');
     const second = works?.captures.find(item => item.externalId === 'OL991903W');
     expect(first?.observation).toBeString();
     expect(second?.observation).toBeString();
-    const rows = (await h.pool.query<{ id: string; record_id: string }>(`SELECT id, record_id
-      FROM source.observation WHERE id IN ($1,$2)`,
-    [short(first!.observation), short(second!.observation)])).rows;
-    const from = rows.find(row => row.id === short(first!.observation))!.record_id;
-    const to = rows.find(row => row.id === short(second!.observation))!.record_id;
+    const from = short(first!.record);
+    const to = short(second!.record);
     expect(from).not.toBe(to);
     const change = await h.post('/v1/sources/identity-changes', 'owner', {
       profile: 'source-record-identity-change-v1', kind: 'redirect',

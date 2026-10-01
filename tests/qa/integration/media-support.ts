@@ -174,6 +174,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
       id: randomUUID(), agent: actor, kind: 'person', displayName: name, digest: sha(actor),
     });
     const grant = async (scope: string, action: string) => {
+      const grantId = randomUUID();
       const client = await accessPool.connect();
       // Controller mandates are rejected unless they are open-ended.
       const openEnded = action === 'agent.control';
@@ -186,10 +187,11 @@ export async function startMediaStack(label: string, options: { contentProjectio
         await client.query(`INSERT INTO access.permission_grant
           (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
           VALUES ($1,$2,$2,$3,$4,CASE WHEN $5 THEN 'infinity'::timestamptz ELSE now() + interval '1 hour' END)`,
-          [randomUUID(), actor, scope, action, openEnded]);
+          [grantId, actor, scope, action, openEnded]);
         await client.query('COMMIT');
       } catch (error) { await client.query('ROLLBACK'); throw error; }
       finally { client.release(); }
+      return grantId;
     };
     const send = (method: string, path: string, body?: unknown, key = `${name}-${randomUUID()}`) =>
       call(method, path, { token, body, key });

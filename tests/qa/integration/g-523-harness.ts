@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect } from 'bun:test';
+import { AuthorityValues } from './g-903-api-values.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -222,6 +223,7 @@ export async function startAgentControlHarness(label: string) {
   await accessPool.query(`INSERT INTO access.scope_gate (id) VALUES ('work:create:root')
     ON CONFLICT DO NOTHING`);
 
+  const values = new AuthorityValues(main);
   const harness = {
     accessPool,
     accountPool,
@@ -251,11 +253,13 @@ export async function startAgentControlHarness(label: string) {
           [principalId, `${base}/api/auth`, account.id],
         );
       }
+      const token = await tokenFor(account, scope);
+      values.user(principalId, token, scope);
       return {
         name,
         accountId: account.id,
         principalId,
-        token: await tokenFor(account, scope),
+        token,
         sessionCookie: account.cookie,
         email: account.email,
         password: account.password,
@@ -333,6 +337,7 @@ export async function startAgentControlHarness(label: string) {
           CASE WHEN $5 = 'infinity' THEN 'infinity'::timestamptz ELSE now() + $5::interval END, $6)`,
         [id, principalId, subject, action, options.until ?? '2 hours', options.maxPathEdges ?? 0],
       );
+      values.mandate(principalId, subject, action);
       return id;
     },
     async grant(
@@ -351,12 +356,7 @@ export async function startAgentControlHarness(label: string) {
       return id;
     },
     async epoch(scope = 'work:create:root'): Promise<string> {
-      return (
-        await accessPool.query<{ authority_epoch: string }>(
-          'SELECT authority_epoch FROM access.scope_gate WHERE id = $1',
-          [scope],
-        )
-      ).rows[0]!.authority_epoch;
+      return values.epoch(scope);
     },
     request(
       method: string,
@@ -386,6 +386,11 @@ export async function startAgentControlHarness(label: string) {
     ): Promise<{ status: number; body: T }> {
       const response = await harness.request(method, path, token, body, key);
       const result = (await response.json()) as T;
+      if (response.status < 300 && result && typeof result === 'object') {
+        const value = result as { agent?: string; issuerSubject?: string };
+        if (typeof value.agent === 'string') values.created(token, value.agent);
+        if (typeof value.issuerSubject === 'string') values.created(token, value.issuerSubject);
+      }
       if (response.status === 401) {
         throw new Error(
           `fixture Account token rejected at ${method} ${path}: ${JSON.stringify(result)}`,

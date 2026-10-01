@@ -21,7 +21,7 @@ test('LIVE06: current Open Library redirect capture never transfers a native ide
         captures: Array<{ observation: string; record: string; externalId: string;
           byteDigest: string; fetchedAt: string }> }> } };
     const works = result.run.surfaces.find(surface => surface.surface === 'works')!;
-    expect(result.run.state).toBe('completed');
+    expect(result.run.state, JSON.stringify(works.outcome)).toBe('completed');
     expect(works.outcome.outcome).toBe('qualified');
     expect(works.captures).toHaveLength(1);
     const from = works.captures.find(capture => capture.externalId === fromId)!;
@@ -32,7 +32,10 @@ test('LIVE06: current Open Library redirect capture never transfers a native ide
     expect(stored.byte_digest).toBe(from.byteDigest);
     expect(stored.capture.url).toBe(`https://openlibrary.org/works/${fromId}.json`);
     expect(stored.capture.fetchedAt).toBe(from.fetchedAt);
-    const redirect = JSON.parse(stored.raw_bytes.toString('utf8')) as {
+    const observed = await h.get(`/v1/sources/observations/${short(from.observation)}`, 'owner');
+    expect(observed.status).toBe(200);
+    const observation = await observed.json() as { rawBytesBase64: string };
+    const redirect = JSON.parse(Buffer.from(observation.rawBytesBase64, 'base64').toString('utf8')) as {
       key: string; type: { key: string }; location: string };
     expect(redirect).toMatchObject({ key: `/works/${fromId}`, type: { key: '/type/redirect' } });
     const destination = /^\/works\/(OL[1-9][0-9]{0,11}W)$/.exec(redirect.location);

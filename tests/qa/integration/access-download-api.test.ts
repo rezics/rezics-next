@@ -16,7 +16,7 @@ test('IAM07: private media download is admitted, bounded, and drained by strong 
     const bytes = png(32, 32, 100_000);
     const asset = await owner.upload(bytes, 'private');
     const readScope = `work:read:${work.work}`;
-    await owner.grant(readScope, 'work.read');
+    const readGrantId = await owner.grant(readScope, 'work.read');
     await owner.grant(`media:avatar:${work.work}`, 'media.avatar');
     const targetId = work.work.slice('https://rezics.com/id/'.length);
     const selection = await owner.send('PUT', `/v1/resources/${targetId}/avatar`, {
@@ -39,13 +39,15 @@ test('IAM07: private media download is admitted, bounded, and drained by strong 
     expect(first.headers.get('content-length')).toBe(String(bytes.length));
     expect(first.headers.get('cache-control')).toBe('private, no-store');
 
-    const grant = await h.accessPool.query<{ id: string }>(`SELECT id FROM access.permission_grant
-      WHERE scope_id = $1 AND action = 'work.read' AND active ORDER BY id LIMIT 1`, [readScope]);
-    const gate = await h.accessPool.query<{ authority_epoch: string }>(
-      'SELECT authority_epoch::text FROM access.scope_gate WHERE id = $1', [readScope]);
+    const response = await owner.send('GET', `/v1/access/revocation-sources/${readGrantId}?`
+      + new URLSearchParams({ issuerSubject: owner.actor }));
+    expect(response.status).toBe(200);
+    const sources = await response.json() as { authorityEpoch: string;
+      source: { id: string; generation: string; action: string; active: boolean } };
+    const grant = sources.source;
     const body = { profile: 'access-revocation-v1', revocationId: randomUUID(), issuerSubject: owner.actor,
-      mode: 'strong', scopeId: readScope, expectedAuthorityEpoch: gate.rows[0]!.authority_epoch,
-      target: { kind: 'permission_grant', id: grant.rows[0]!.id, expectedGeneration: '0' } };
+      mode: 'strong', scopeId: readScope, expectedAuthorityEpoch: sources.authorityEpoch,
+      target: { kind: 'permission_grant', id: grant.id, expectedGeneration: grant.generation } };
     const revoked = await owner.send('POST', '/v1/access/revocations', body);
     if (revoked.status !== 200) throw new Error(`strong revoke: ${revoked.status} ${await revoked.text()}`);
     const revocation = await revoked.json() as { revocationId: string; state: string;

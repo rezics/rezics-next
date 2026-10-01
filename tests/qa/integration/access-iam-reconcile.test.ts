@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { groupGeneration as readGroupGeneration, workAuthorityEpoch } from './g-903-api-values.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -45,7 +46,7 @@ interface Owners {
   represent: (subject: string, action?: string) => Promise<string>;
   authorityEpoch: () => Promise<string>;
   check: (actingSubject: string,
-    authorityPath?: 'represented-agent' | 'direct-principal') => Promise<Response>;
+    authorityPath?: 'represented-agent' | 'direct-principal', expectedEpoch?: string) => Promise<Response>;
   discover: () => Promise<Response>;
   savedProof: (admissionId: string) => Promise<Record<string, string | null>>;
 }
@@ -130,8 +131,7 @@ async function withOwners(label: string, work: (owners: Owners) => Promise<void>
       jwksUrl: `${base}/api/auth/jwks`, introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: mainClient.client_id, clientSecret: mainClient.client_secret! }),
     access, actingContexts: new AccessActingContexts(accessPool), groups });
-    const authorityEpoch = async () => (await accessPool.query<{ authority_epoch: string }>(
-      "SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'")).rows[0]!.authority_epoch;
+    const authorityEpoch = () => workAuthorityEpoch(main, token);
     await work({
       accessPool, access, groups, main, token, principal, principalId,
       addAgents: async (...subjects) => {
@@ -146,12 +146,12 @@ async function withOwners(label: string, work: (owners: Owners) => Promise<void>
         return id;
       },
       authorityEpoch,
-      check: async (actingSubject, authorityPath = 'represented-agent') => main.handle(new Request(
+      check: async (actingSubject, authorityPath = 'represented-agent', expectedEpoch) => main.handle(new Request(
         'http://main.local/v1/me/acting-context-checks', { method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
           body: JSON.stringify({ profile: 'work-create-acting-context-check-v1',
             task: 'work.create', actingSubject, authorityPath,
-            expectedAuthorityEpoch: await authorityEpoch() }) })),
+            expectedAuthorityEpoch: expectedEpoch ?? await authorityEpoch() }) })),
       discover: () => main.handle(new Request('http://main.local/v1/me/acting-contexts?task=work.create',
         { headers: { authorization: `Bearer ${token}` } })),
       savedProof: async admissionId => (await accessPool.query<Record<string, string | null>>(`
@@ -220,6 +220,7 @@ test('IAM04: authority moved mid-selection cannot pool direct principal and repr
     // grants the Agent. Neither state has a complete represented path, and the new
     // Agent grant never completes the direct path, so selection must not combine them.
     const agentGrant = randomUUID();
+    const moveEpoch = await owners.authorityEpoch();
     const writer = await accessPool.connect();
     let committed = false;
     try {
@@ -232,7 +233,7 @@ test('IAM04: authority moved mid-selection cannot pool direct principal and repr
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
         VALUES ($1,$2,$2,'work:create:root','work.create',now() + interval '2 hours')`,
       [agentGrant, subject]);
-      const inFlight = Promise.all([check(subject, 'direct-principal'), check(subject),
+      const inFlight = Promise.all([check(subject, 'direct-principal', moveEpoch), check(subject, 'represented-agent', moveEpoch),
         owners.discover(), Promise.allSettled([access.register(request('direct-principal')),
           access.register(request('represented-agent'))])]);
       // Selections are genuinely in flight: they wait on the moved authority rows.
@@ -275,6 +276,7 @@ test('IAM04: authority moved mid-selection cannot pool direct principal and repr
 
     // Reverse move while the represented selection is in flight.
     const newDirectGrant = randomUUID();
+    const reverseEpoch = await owners.authorityEpoch();
     const reverse = await accessPool.connect();
     committed = false;
     try {
@@ -285,7 +287,7 @@ test('IAM04: authority moved mid-selection cannot pool direct principal and repr
         (id, issuer_subject, principal_id, scope_id, action, valid_until)
         VALUES ($1,$2,$3,'work:create:root','work.create',now() + interval '2 hours')`,
       [newDirectGrant, subject, principalId]);
-      const inFlight = Promise.all([check(subject), check(subject, 'direct-principal'),
+      const inFlight = Promise.all([check(subject, 'represented-agent', reverseEpoch), check(subject, 'direct-principal', reverseEpoch),
         Promise.allSettled([access.register(request('represented-agent'))]),
         Promise.allSettled([access.register(request('direct-principal'))])]);
       expect(await lockWaiters(accessPool, 2)).toBeGreaterThanOrEqual(1);
@@ -343,8 +345,7 @@ test('IAM36: child membership inherits the parent grant; parent membership never
       return response.status;
     };
     const validUntil = () => new Date(Date.now() + 60 * 60_000).toISOString();
-    generation = (await accessPool.query<{ group_generation: string }>(
-      "SELECT group_generation FROM access.scope_gate WHERE id = 'work:create:root'")).rows[0]!.group_generation;
+    generation = await readGroupGeneration(main, token, manager);
     const parent = randomUUID(), child = randomUUID();
     const parentGrant = randomUUID(), childGrant = randomUUID();
     expect(await change('create', { groupId: parent, parentId: null })).toBe(200);
@@ -403,7 +404,7 @@ test('IAM36: child membership inherits the parent grant; parent membership never
 
 test('IAM34: diamond group paths keep distinct bounded support when one edge is removed', async () => {
   await withOwners('iam34', async owners => {
-    const { accessPool, access, groups, principal, check } = owners;
+    const { accessPool, access, groups, principal, check, main, token } = owners;
     const manager = agent(), subject = agent();
     await owners.addAgents(manager, subject);
     await owners.represent(manager, 'access.group.manage');
@@ -414,8 +415,7 @@ test('IAM34: diamond group paths keep distinct bounded support when one edge is 
         VALUES ($1,$2,$2,'work:create:root',$3,now() + interval '2 hours')`,
       [randomUUID(), manager, action]);
     }
-    let groupGeneration = (await accessPool.query<{ group_generation: string }>(
-      "SELECT group_generation FROM access.scope_gate WHERE id = 'work:create:root'")).rows[0]!.group_generation;
+    let groupGeneration = await readGroupGeneration(main, token, manager);
     const mutation = () => ({ principal, issuerSubject: manager, expectedGroupGeneration: groupGeneration });
     const until = (ms: number) => new Date(Date.now() + ms);
     // A diamond: the Agent reaches root through a one-edge branch and through a

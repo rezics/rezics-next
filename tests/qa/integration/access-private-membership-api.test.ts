@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { groupGeneration, workAuthorityEpoch } from './g-903-api-values.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -296,9 +297,8 @@ test('IAM06/IAM10/IAM33/IAM34: private membership binds exact direct, group and 
       await roleClient.query('COMMIT');
     } catch (error) { await roleClient.query('ROLLBACK'); throw error; }
     finally { roleClient.release(); }
-    const epochs = async () => (await accessPool.query<{
-      authority_epoch: string; group_generation: string }>(`SELECT authority_epoch,
-      group_generation FROM access.scope_gate WHERE id = 'work:create:root'`)).rows[0]!;
+    const epochs = async () => ({ authority_epoch: await workAuthorityEpoch(main, managerToken),
+      group_generation: await groupGeneration(main, managerToken, org) });
     const groupChange = async (body: object, key = randomUUID()) => request(
       '/v1/access/private-group-member-changes', managerToken, body, key);
     const roleChange = async (body: object, key = randomUUID()) => request(

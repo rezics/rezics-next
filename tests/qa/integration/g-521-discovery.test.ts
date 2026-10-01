@@ -11,6 +11,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 import { startAgentControlHarness } from './g-523-harness.ts';
+import { workAuthorityEpoch } from './g-903-api-values.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
@@ -161,10 +162,10 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
     [randomUUID(), principalId, attributed]);
     const check = async (actingSubject: string) => call('POST', '/v1/me/acting-context-checks', {
       profile: 'work-create-acting-context-check-v1', task: 'work.create', actingSubject,
-      expectedAuthorityEpoch: (await h.accessPool.query<{ authority_epoch: string }>(
-        "SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'")).rows[0]!.authority_epoch }, h.wrongScopeToken);
+      expectedAuthorityEpoch: await workAuthorityEpoch(app, h.wrongScopeToken) }, h.wrongScopeToken);
     const work = (actingSubject: string) => call('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: 'G-521 denied work', language: 'en', actingSubject }, h.wrongScopeToken);
+      profile: 'metadata-only-v1', title: 'G-521 denied work', language: 'en', actingSubject,
+      semanticTypes: ['https://schema.org/Book'], authoring: 'own-work' }, h.wrongScopeToken);
     let sessionRevision: string | null = null;
     let mainRevision: string | null = null;
     const choose = async (actingSubject: string) => {

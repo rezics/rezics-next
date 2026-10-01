@@ -208,14 +208,13 @@ export async function seedHome(home: HomeStack, works = 6) {
     [`reply:place:${realm.realm}`, 'reply.place']] as const) await grant(scope, action);
   const reply = async (body: string, parent?: { reply: string; revisionId: string }) => {
     const id = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', {
+    const draft = await json<{ revisionId: string; revisionDigest: string }>(await call('POST', '/v1/member-reply-drafts', {
       profile: 'member-reply-draft-v1', reply: id, variantId, rootTarget: first.work, rootRevision,
       language: 'en', direction: 'ltr', expectedHead: null, body, actingSubject: reader }, b.token), 201);
     await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply: id, variantId,
       revisionId: draft.revisionId, author: reader, rootTarget: first.work, rootRevision,
       parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null }, b.token), 201);
-    const revisionDigest = (await stack.contentPool.query<{ byte_digest: string }>(
-      'SELECT byte_digest FROM content.revision WHERE id = $1', [draft.revisionId])).rows[0]!.byte_digest;
+    const revisionDigest = draft.revisionDigest;
     const identity = { reply: id, revisionId: draft.revisionId, revisionDigest };
     const approved = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', {
       profile: 'realm-reply-review-v1', realm: realm.realm, ...identity, expectedGeneration: '0', supersedes: null,
@@ -228,7 +227,7 @@ export async function seedHome(home: HomeStack, works = 6) {
     return identity;
   };
   const discussion = await reply('A reviewed Home discussion');
-  await reply('A reviewed Home response', discussion);
+  const response = await reply('A reviewed Home response', discussion);
   // Chapter cards, reader state and Continue's next chapter come from a real
   // book composition of public, search-eligible Content.
   const book = published[2]!;
@@ -238,6 +237,8 @@ export async function seedHome(home: HomeStack, works = 6) {
   const composition = await json<{ structure: string; revision: string }>(await call('POST', '/v1/compositions', {
     profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: author }, a.token), 201);
   const chapters: string[] = [];
+  const chapterRevisions: { resource_id: string; id: string }[] = [];
+  const chapterPhrase = `Published Home chapter ${randomUUID()}`;
   for (let ordinal = 1; ordinal <= 2; ordinal++) {
     const chapter = await stack.privateWork(author, `Home chapter ${ordinal}`);
     chapters.push(chapter.work);
@@ -248,7 +249,8 @@ export async function seedHome(home: HomeStack, works = 6) {
     const saved = await json<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
       profile: 'content-text-v1', resourceId: chapter.work, variantId: variant,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
-      body: `Published Home chapter ${ordinal}`, actingSubject: author }, a.token), 201);
+      body: `${chapterPhrase} ${ordinal}`, actingSubject: author }, a.token), 201);
+    chapterRevisions.push({ resource_id: chapter.work, id: saved.revisionId });
     const exact = (await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
     if (exact?.status !== 'available') throw new Error('Missing chapter fixture');
     const publication = await json<{ decision: string }>(await call('POST', '/v1/content-publications', {
@@ -270,7 +272,7 @@ export async function seedHome(home: HomeStack, works = 6) {
     actingSubject: reader, expectedVersion: 0, status: 'reading', startedOn: null, finishedOn: null }, b.token));
   await home.project();
   const signed = (path: string) => `${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(reader)}`;
-  return { author, reader, realm, works: published, signed };
+  return { author, reader, realm, works: published, signed, discussion, response, chapterRevisions, chapterPhrase };
 }
 
 /** One Home read with its graph queries, SQL statements and elapsed time. */

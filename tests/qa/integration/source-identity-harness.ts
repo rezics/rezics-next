@@ -62,7 +62,7 @@ export async function identityHarness(options: { realAccount?: boolean;
   const intake = new SourceIntakeStore(pool);
   const stores = { identity: new ProviderIdentityStore(pool), withdrawal: new SourceFieldWithdrawalStore(pool),
     score: new SourceScoreStore(pool) };
-  const work = { account, access, sourceProviderIdentity: stores.identity,
+  const work = { account, access, sourceIntake: intake, sourceProviderIdentity: stores.identity,
     actingContexts: new AccessActingContexts(accessPool),
     sourceFieldWithdrawals: stores.withdrawal, sourceScores: stores.score,
     ...(options.acquisition ? { sourceAcquisitions: sourceAcquisitionServices(pool,

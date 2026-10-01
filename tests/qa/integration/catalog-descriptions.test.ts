@@ -56,26 +56,27 @@ test('IAM37: a Realm content editor publishes an Organization description withou
     VALUES ($1,$2,$3,'content.draft',now() + interval '1 hour')`,
   [randomUUID(), realmEditor.principalId, realm]);
 
-  const gate = await accessPool.query<{ authority_epoch: string }>(
-    'SELECT authority_epoch::text FROM access.scope_gate WHERE id = $1', [draftScope]);
+  const state = await organizationOwner.send('GET', '/v1/access/authority-state?'
+    + new URLSearchParams({ scopeId: draftScope, actingSubject: organization, action: assignmentAction }));
+  expect(state.status).toBe(200);
+  const gate = await state.json() as { authorityEpoch: string };
   const issuedGrantInput = {
     profile: 'access-organization-content-draft-grant-change-v1', organizationSubject: organization,
-    recipientSubject: realm, grantId: draftGrantId, expectedAuthorityEpoch: gate.rows[0]!.authority_epoch,
+    recipientSubject: realm, grantId: draftGrantId, expectedAuthorityEpoch: gate.authorityEpoch,
     validUntil: new Date(Date.now() + 30 * 60_000).toISOString(),
   };
   const issuedGrant = await organizationOwner.send('POST', '/v1/access/organization-content-draft-grants',
     issuedGrantInput, 'iam37-org-issues-description-draft-grant');
   expect(issuedGrant.status).toBe(200);
-  expect(await issuedGrant.json()).toMatchObject({ organizationSubject: organization,
+  const issued = await issuedGrant.json() as { authorityEpoch: string };
+  expect(issued).toMatchObject({ organizationSubject: organization,
     recipientSubject: realm, grantId: draftGrantId, scope: draftScope, action: 'content.draft' });
   const issuedGrantReplay = await organizationOwner.send('POST', '/v1/access/organization-content-draft-grants',
     issuedGrantInput, 'iam37-org-issues-description-draft-grant');
   expect(issuedGrantReplay.status).toBe(200);
-  const currentDraftGate = await accessPool.query<{ authority_epoch: string }>(
-    'SELECT authority_epoch::text FROM access.scope_gate WHERE id = $1', [draftScope]);
   const deniedCheck = await ungrantedEditor.send('POST', '/v1/me/acting-context-checks', {
     profile: 'content-draft-acting-context-check-v1', task: 'content.draft',
-    resource: organization, actingSubject: realm, expectedAuthorityEpoch: currentDraftGate.rows[0]!.authority_epoch });
+    resource: organization, actingSubject: realm, expectedAuthorityEpoch: issued.authorityEpoch });
   expect(deniedCheck.status).toBe(403);
   const denied = await ungrantedEditor.send('PATCH',
     `/v1/catalog/resources/${organization.split('/').at(-1)}/descriptions`, {

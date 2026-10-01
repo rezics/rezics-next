@@ -54,11 +54,16 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
     const f = await seedOrgRealm(pool, account.issuer, { realm: account.a.id, org: account.b.id });
     const basis = (realm: string, generation = '0', revision = '1') => ({ realm,
       organizationSubject: f.org, expectedGeneration: generation, expectedPolicyRevision: revision });
+    const participation = async (realm: string, token = account.tokenA) => must<{
+      policyRevision: string; termsRevision: string;
+    }>(await app.handle(new Request('http://main.local/v1/access/org-realm-participation?'
+      + new URLSearchParams({ realm, organizationSubject: f.org, side: 'realm' }),
+    { headers: { authorization: `Bearer ${token}` } })));
     const issue = async (realm: string, generation = '0', token = account.tokenA) => {
-      const policy = (await pool.query('SELECT revision, terms_revision FROM access.org_realm_policy WHERE realm = $1', [realm])).rows[0];
+      const policy = await participation(realm, token);
       return await must<{ proposalId: string }>(await post('/v1/access/org-realm-proposals',
-        { profile: 'access-org-realm-proposal-v1', ...basis(realm, generation, policy.revision),
-          termsRevision: policy.terms_revision }, randomUUID(), token));
+        { profile: 'access-org-realm-proposal-v1', ...basis(realm, generation, policy.policyRevision),
+          termsRevision: policy.termsRevision }, randomUUID(), token));
     };
     const join = async (realm: string) => {
       const proposal = await issue(realm);
@@ -78,13 +83,13 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
       VALUES ($1,'org',$2,$3,1,'joined',1,'roster-terms','move-fixture')`, [randomUUID(), f.org, f.realmManager]);
     const prepare = async (): Promise<OrgRealmMoveInput> => {
       const proposal = await issue(f.otherRealm);
-      const policies = (await pool.query('SELECT realm, revision FROM access.org_realm_policy WHERE realm = ANY($1)',
-        [[f.realm, f.otherRealm]])).rows;
+      const sourcePolicy = await participation(f.realm);
+      const targetPolicy = await participation(f.otherRealm);
       return { organizationSubject: f.org,
         source: { realm: f.realm, participationId: source.participationId, expectedGeneration: '1',
-          expectedPolicyRevision: policies.find(p => p.realm === f.realm)!.revision, proposalId: source.proposalId },
+          expectedPolicyRevision: sourcePolicy.policyRevision, proposalId: source.proposalId },
         target: { realm: f.otherRealm, expectedGeneration: '0',
-          expectedPolicyRevision: policies.find(p => p.realm === f.otherRealm)!.revision,
+          expectedPolicyRevision: targetPolicy.policyRevision,
           proposalId: proposal.proposalId, termsRevision: 'terms-1' } };
     };
     const effectState = async () => (await pool.query(`SELECT
@@ -259,7 +264,8 @@ test('IAM24/IAM06: atomic Org Realm moves bind exact authorities, paired history
     for (const retry of retries) expect(await must(retry)).toEqual({ ...result, replayed: true });
     expect(await effectState()).toEqual(committed);
     await must(await move({ ...input, target: { ...input.target, termsRevision: 'changed' } }, winner.key), 409);
-    await must(await post('/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'No move authority', actingSubject: f.org }), 403);
+    await must(await post('/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'No move authority',
+      semanticTypes: ['https://schema.org/Book'], authoring: 'own-work', actingSubject: f.org }), 403);
     await pool.query('UPDATE access.org_realm_policy SET open = true, revision = revision + 1 WHERE realm = $1', [f.realm]);
     const returning = await issue(f.realm, '2');
     const returned = await must<OrgRealmMoveResult>(await move({ organizationSubject: f.org,

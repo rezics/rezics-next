@@ -4,7 +4,8 @@ import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { AccessManagedOrganizations } from '../../../services/main/src/modules/access/managed-organizations.ts';
+import { AccessManagedOrganizations, type ManagedGrantChangeResult, type OrgManagementState }
+  from '../../../services/main/src/modules/access/managed-organizations.ts';
 import { AccessProposalExecutions } from '../../../services/main/src/modules/proposal/access.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
 import { proposalDigest } from '../../../services/main/src/modules/proposal/execute.ts';
@@ -39,19 +40,35 @@ test('GOV23: adopted proposal executes one scoped roster effect and recovers the
     const fixture = await seedOrgRealm(pool, account.issuer, { org: account.a.id, realm: account.b.id });
     const managed = await seedManagedOrganization(pool, fixture);
     const owner = new AccessManagedOrganizations(pool);
-    const current = await owner.readOrganization(fixture.orgPrincipal, fixture.org);
-    const issued = await owner.change(fixture.orgPrincipal, {
-      operation: 'issue', organizationSubject: fixture.org, expectedAuthorityEpoch: current.authorityEpoch,
+    const readApp = createMainApp(fuseki, { environment: env, account: account.verifier, managedOrganizations: owner });
+    const readState = async () => {
+      const response = await readApp.handle(new Request('http://main.local/v1/access/organization-management?'
+        + new URLSearchParams({ organizationSubject: fixture.org }),
+      { headers: { authorization: `Bearer ${account.tokenA}` } }));
+      expect(response.status).toBe(200);
+      return await response.json() as OrgManagementState;
+    };
+    const current = await readState();
+    const issuedResponse = await readApp.handle(new Request('http://main.local/v1/access/managed-organization-grants', {
+      method: 'POST', headers: { authorization: `Bearer ${account.tokenA}`, 'content-type': 'application/json',
+        'idempotency-key': `proposal-grant-${randomUUID()}` }, body: JSON.stringify({
+      profile: 'access-managed-organization-grant-v1', operation: 'issue',
+      organizationSubject: fixture.org, expectedAuthorityEpoch: current.authorityEpoch,
       recipient: { kind: 'realm', id: fixture.realm }, actions: ['access.org.roster.policy'],
       delegationCeiling: 0, validFrom: new Date(Date.now() - 1000).toISOString(),
       validUntil: new Date(Date.now() + 1_200_000).toISOString(),
-    }, `proposal-grant-${randomUUID()}`);
-    const rep = (await pool.query<{ generation: string }>('SELECT generation::text FROM access.representation WHERE id = $1',
-      [managed.recipientRepresentation])).rows[0]!;
+    }) }));
+    expect(issuedResponse.status).toBe(200);
+    const issued = await issuedResponse.json() as ManagedGrantChangeResult;
+    const recipientResponse = await readApp.handle(new Request(
+      `http://main.local/v1/access/managed-organization-grants/${issued.grantId}?side=recipient`,
+      { headers: { authorization: `Bearer ${account.tokenB}` } }));
+    expect(recipientResponse.status).toBe(200);
+    const recipient = await recipientResponse.json() as { representation: { id: string; generation: string } };
     const effect = { profile: 'access-organization-roster-policy-v1' as const,
       organizationSubject: fixture.org, recipient: { kind: 'realm' as const, id: fixture.realm },
       grantId: issued.grantId, expectedGrantGeneration: issued.generation,
-      representationId: managed.recipientRepresentation, expectedRepresentationGeneration: rep.generation,
+      representationId: recipient.representation.id, expectedRepresentationGeneration: recipient.representation.generation,
       expectedPolicyRevision: current.policyRevision, admissionsOpen: false };
     const effectDigest = proposalDigest(effect);
     const expectedTargetState = proposalDigest({ profile: 'access-organization-roster-policy-state-v1',
@@ -123,8 +140,7 @@ test('GOV23: adopted proposal executes one scoped roster effect and recovers the
       representationId: executionRepresentation, capabilityGrantId: capabilityGrant,
       effectDigest, expectedTargetState, effect };
     const initialRevision = current.policyRevision;
-    const policyRevision = async () => (await pool.query<{ revision: string }>(`SELECT revision::text
-      FROM access.membership_policy WHERE kind = 'org' AND owner_subject = $1`, [fixture.org])).rows[0]!.revision;
+    const policyRevision = async () => (await readState()).policyRevision;
     expect((await post(account.noScope, input, 'no-scope')).status).toBe(401);
     expect((await post(account.tokenB, { ...input, effect: { ...effect, admissionsOpen: true } }, 'changed-effect')).status)
       .toBe(403);

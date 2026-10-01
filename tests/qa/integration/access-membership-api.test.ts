@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { groupGeneration, workAuthorityEpoch } from './g-903-api-values.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -326,12 +327,8 @@ test('IAM06: Org/Realm leave and rejoin fence dependent grants but retain bans',
     const realmJoined = await realmJoinedResponse.json() as { membershipId: string;
       generation: string; authorityEpoch: string };
     expect(realmJoined.generation).toBe('1');
-    const currentEpoch = () => accessPool.query<{ authority_epoch: string }>(`
-      SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
-      .then(result => result.rows[0]!.authority_epoch);
-    const currentGroupGeneration = () => accessPool.query<{ group_generation: string }>(`
-      SELECT group_generation FROM access.scope_gate WHERE id = 'work:create:root'`)
-      .then(result => result.rows[0]!.group_generation);
+    const currentEpoch = () => workAuthorityEpoch(main, token);
+    const currentGroupGeneration = () => groupGeneration(main, token, issuer);
     const admissionRequest = (label: string) => ({ principal: {
       issuer: `${base}/api/auth`, subject: manager.id }, actingSubject: member,
     scope: 'work:create:root', action: 'work.create',

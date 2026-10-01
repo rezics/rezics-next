@@ -145,15 +145,17 @@ test('IAM24/IAM23/IAM06: explicit managed organization grants protect a real ros
       expect(response.status).toBe(200);
       return await response.json() as ManagedGrantChangeResult;
     };
+    let representationGeneration = '0';
     const operation = async (grantId: string, overrides: Partial<OrgRosterPolicyInput> = {}) => {
       const representationId = overrides.representationId ?? managed.recipientRepresentation;
-      // Fixture mutations also advance the owner's generation trigger. Ordinary
-      // calls use that generation; the stale-input test overrides it explicitly.
-      const representation = await accessPool.query<{ generation: string }>(
-        'SELECT generation FROM access.representation WHERE id = $1', [representationId]);
+      const response = await get(`${grants}/${grantId}?side=recipient`, realmToken);
+      if (response.status === 200) {
+        const observed = await response.json() as { representation: { generation: string } };
+        representationGeneration = observed.representation.generation;
+      }
       return { profile: 'access-organization-roster-policy-v1', organizationSubject: org,
         recipient: { kind: 'realm', id: realm }, grantId, expectedGrantGeneration: '1',
-        representationId, expectedRepresentationGeneration: representation.rows[0]!.generation,
+        representationId, expectedRepresentationGeneration: representationGeneration,
         expectedPolicyRevision: (await readState()).policyRevision, admissionsOpen: false, ...overrides };
     };
     const revokeBody = async (grantId: string) => ({ profile: 'access-managed-organization-grant-v1', operation: 'revoke',

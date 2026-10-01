@@ -465,8 +465,7 @@ test('PKG17: rollback after artifact or authority revocation enforces current po
   const g4 = await activate({ operation: 'update', lock: l2.lock, expectedGeneration: g3.generation });
 
   // Artifact revocation: the rollback plan is rejected and nothing is resurrected.
-  const digest = (await contentPool.query('SELECT sha256 FROM pkg.artifact WHERE id = $1',
-    [r1.artifacts[0].artifact])).rows[0].sha256;
+  const digest = r1.artifacts[0].observedSha256;
   expect((await f.call('POST', '/v1/package-artifacts/revocations', 'owner package:read', { sha256: digest,
     reason: 'malicious', basis: { advisory: 'QA-1' } }, `revoke-${randomUUID()}`)).status).toBe(401);
   const revocationKey = `revoke-${randomUUID()}`;

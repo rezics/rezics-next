@@ -91,10 +91,8 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
       expectedContentEpoch: media.sourcePosition.dataEpoch, resourceId: work.work, variantId: variant,
       expectedPublicationHead: null, actingSubject: member.actor }, true), 201);
     await projectContent();
-    const replies = (await stack.contentPool.query<{ id: string; parent_reply: string | null; draft_head: string }>(`
-      SELECT r.id, r.parent_reply, v.draft_head::text FROM content.reply r
-      JOIN content.variant v ON v.id = r.variant_id WHERE r.root_target = $1`, [work.work])).rows;
-    const post = replies.find(row => row.parent_reply === null)!, reply = replies.find(row => row.parent_reply !== null)!;
+    const post = { id: seeded.discussion.reply, draft_head: seeded.discussion.revisionId, parent_reply: null };
+    const reply = { id: seeded.response.reply, draft_head: seeded.response.revisionId, parent_reply: seeded.discussion.reply };
     const thread = `/v1/realms/${short(seeded.realm.realm)}/threads/${short(post.id)}`;
     const exportBody = { profile: 'export-create-v1', actingSubject: actor, useScope: 'excerpt',
       selection: { kind: 'fixed-release', reference: release.release, expectedPosition: {
@@ -159,13 +157,11 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
     expect((await channels[4]!.read()).status).toBe(404);
     await restoreMedia();
     expect((await channels[4]!.read()).status).toBe(200);
-    const chapter = (await stack.contentPool.query<{ resource_id: string; id: string }>(`
-      SELECT v.resource_id, r.id FROM content.variant v JOIN content.revision r ON r.id = v.draft_head
-      WHERE r.body->>'body' = 'Published Home chapter 1' LIMIT 1`)).rows[0]!;
+    const chapter = seeded.chapterRevisions[0]!;
     const phrase = async () => {
       await projectContent();
       return json<{ total: number; results: { resource: string }[] }>(await call('POST', '/v1/queries',
-        { profile: 'public-content-phrase-v1', phrase: 'Published Home chapter', language: 'en' }));
+        { profile: 'public-content-phrase-v1', phrase: seeded.chapterPhrase, language: 'en' }));
     };
     expect((await phrase()).total).toBe(2);
     const restoreChapter = await restrict({ owner: 'content', resource: chapter.resource_id,

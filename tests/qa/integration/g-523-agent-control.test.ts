@@ -292,7 +292,8 @@ test('G-523: principal × Agent × action matrix keeps representation, resource 
       WHERE a.principal_id = $1 AND a.idempotency_key = $2`, [b.principalId,publishKey])).rows[0]!;
     expect(proof).toMatchObject({ edge_id: edgeId, grant_id: workCeiling });
     await h.accessPool.query('UPDATE access.representation_edge SET active = false WHERE id = $1', [unacceptedEdge]);
-    const admissionId = proof.id;
+    const admissionId = String(published.body.admissionId);
+    expect(admissionId).toBe(proof.id);
     expect((await readWorkTerminalReceipt(h.environment.fuseki, admissionId))?.outcome).toBe('succeeded');
     const credits = await h.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?agent WHERE { GRAPH <urn:rezics:graph:current> {
@@ -540,14 +541,15 @@ test('G-523: edge revocation cancels real registered and running Work commands a
     const organization = await create(h,a,'organization');
     const other = await create(h,a,'organization');
     expect((await h.call('POST','/v1/works',a.token,{ profile: 'metadata-only-v1',
-      actingSubject: organization,title: 'No Work ceiling',language: 'en' })).status).toBe(403);
+      actingSubject: organization,title: 'No Work ceiling',language: 'en',
+      semanticTypes: ['https://schema.org/Book'], authoring: 'own-work' })).status).toBe(403);
     await h.grant(organization,organization,'work.create');
     const invitationId = await offer(h,a,organization,person,'represent');
     const edgeId = randomUUID();
     expect((await h.call('POST','/v1/agents/invitation-acceptances',b.token,
       { profile: acceptProfile,invitationId,edgeId,expectedAuthorityEpoch: await h.epoch() })).status).toBe(200);
     const body = { profile: 'metadata-only-v1',actingSubject: organization,
-      title: 'Revoked before publishing',language: 'en',semanticTypes: ['https://schema.org/Book'] };
+      title: 'Revoked before publishing',language: 'en',semanticTypes: ['https://schema.org/Book'], authoring: 'own-work' };
     expect((await h.call('POST','/v1/works',b.token,{ ...body,actingSubject: other })).status).toBe(403);
     const idle = h.pauseWorkClaim('registered');
     releases.push(idle.resume);
@@ -778,13 +780,8 @@ test('G-523: stale, expired, concurrent and recovery-held acceptance has no part
     const queued = await h.agent();
     await h.mandate(a.principalId, queued, 'agent.control', { until: 'infinity' });
     await h.grant(queued, queued, 'work.create');
-    const mandate = (
-      await h.accessPool.query<{ id: string }>(
-        `SELECT id FROM access.representation
-      WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`,
-        [a.principalId, queued],
-      )
-    ).rows[0]!.id;
+    const mandate = ((await h.call('GET', accessPath(queued), a.token)).body.you as
+      { representationId: string }[])[0]!.representationId;
     const peer = await offer(h, a, queued, bPerson, 'control');
     expect(
       (
@@ -845,9 +842,8 @@ test('G-523: controller edge revocation and controller leave use Work then topol
       VALUES ($1,$2,$3,'agent.control',1,'infinity',$4,$5,0,'access.representation.manage',
         $6,0,'work:create:root','access.representation.assign.agent.control')`,
     [edgeId,person,organization,a.principalId,mandate,ceilingId]);
-    const controlId = (await h.accessPool.query<{ id: string }>(`SELECT id FROM access.representation
-      WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control' AND active`,
-    [a.principalId,organization])).rows[0]!.id;
+    const controlId = ((await h.call('GET', accessPath(organization), a.token)).body.you as
+      { representationId: string }[])[0]!.representationId;
     const gates: string[] = [];
     const observed = { connect: async () => {
       const client = await h.accessPool.connect();

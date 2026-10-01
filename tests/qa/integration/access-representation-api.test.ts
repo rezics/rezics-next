@@ -3,6 +3,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { authorityState, workAuthorityEpoch } from './g-903-api-values.ts';
+import { AccessAuthorityRead } from '../../../services/main/src/modules/access/authority-read.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -159,9 +161,7 @@ test('IAM25/IAM26/IAM33: recipient request admits one exact Agent mandate', asyn
     expect(managerRead.status).toBe(200);
     expect(JSON.stringify(await managerRead.json())).not.toContain(recipientPrincipal!);
     // Each accepted authority change advances the gate; use the owner's current epoch.
-    const epoch = () => accessPool.query<{ authority_epoch: string }>(`
-      SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
-      .then(result => result.rows[0]!.authority_epoch);
+    const epoch = () => workAuthorityEpoch(main, recipientToken);
     const selected = (authorityEpoch: string) => ({
       profile: 'work-create-acting-context-check-v1', task: 'work.create',
       actingSubject: subject, expectedAuthorityEpoch: authorityEpoch });
@@ -307,7 +307,7 @@ test('IAM26: exact P-to-A mandate and B-to-A grant change only B roster with pri
       client_name: 'IAM26 native client', application_type: 'native',
       redirect_uris: [callback], token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code'],
-      scope: 'openid access:manage access:grant access:represent access:representation-manage access:membership-consent',
+      scope: 'openid access:manage access:grant access:represent access:representation-manage access:membership-consent work:create',
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }, scope: string) {
       const signedIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
@@ -337,7 +337,7 @@ test('IAM26: exact P-to-A mandate and B-to-A grant change only B roster with pri
     const aManager = await signUp('a-manager');
     const bManager = await signUp('b-manager');
     const target = await signUp('target');
-    const pToken = await tokenFor(p, 'openid access:manage access:represent');
+    const pToken = await tokenFor(p, 'openid access:manage access:represent work:create');
     const aToken = await tokenFor(aManager, 'openid access:representation-manage');
     const bToken = await tokenFor(bManager, 'openid access:grant');
     const targetToken = await tokenFor(target, 'openid access:membership-consent');
@@ -408,16 +408,16 @@ test('IAM26: exact P-to-A mandate and B-to-A grant change only B roster with pri
       introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
     access: new AccessAdmissionRegistry(accessPool),
+    actingContexts: new AccessActingContexts(accessPool),
     memberships: new AccessMemberships(accessPool),
     membershipConsents: new AccessMembershipConsents(accessPool),
-    representedMembershipAuthority: new AccessRepresentedMembershipAuthority(accessPool) });
+    representedMembershipAuthority: new AccessRepresentedMembershipAuthority(accessPool),
+    authorityRead: new AccessAuthorityRead(accessPool) });
     const post = (path: string, token: string, body: object, key = randomUUID()) =>
       main.handle(new Request(`http://main.local${path}`, { method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
           'idempotency-key': key }, body: JSON.stringify(body) }));
-    const epoch = () => accessPool.query<{ authority_epoch: string }>(`
-      SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
-      .then(result => result.rows[0]!.authority_epoch);
+    const epoch = () => workAuthorityEpoch(main, pToken);
     const until = new Date(Date.now() + 60 * 60_000).toISOString();
     const grantId = randomUUID();
     const grant = { profile: 'access-represented-org-grant-change-v1', action: 'grant',
@@ -431,9 +431,7 @@ test('IAM26: exact P-to-A mandate and B-to-A grant change only B roster with pri
       (id, issuer_subject, principal_id, scope_id, action, valid_until)
       VALUES ($1,$2,$3,$4,'access.membership.manage.org',now() + interval '1 hour')`,
     [randomUUID(), B, ids[0], scope]);
-    const publishing = (await accessPool.query<{ id: string }>(`
-      SELECT id FROM access.representation WHERE principal_id = $1
-        AND subject_id = $2 AND action = 'work.create'`, [ids[0], A])).rows[0]!.id;
+    const publishing = (await authorityState(main, pToken, 'work:create:root', A!, 'work.create')).representation.id;
     const proof = (representationId: string, consentReference: string) => ({
       profile: 'access-represented-org-membership-change-v1', action: 'join',
       ownerSubject: B, memberSubject: C, expectedGeneration: '0',
@@ -613,9 +611,10 @@ test('IAM26: exact P-to-A mandate and B-to-A grant change only B roster with pri
       pToken, joinBody, 'join-b');
     expect(lostReply.status).toBe(200);
     expect((await lostReply.json() as { replayed: boolean }).replayed).toBe(true);
+    const beforeRecovery = await epoch();
     await accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     expect((await post('/v1/access/represented-org-membership-changes', pToken,
-      { ...leave, expectedAuthorityEpoch: await epoch() })).status).toBe(503);
+      { ...leave, expectedAuthorityEpoch: beforeRecovery })).status).toBe(503);
     await accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
   } finally {
     await account.stop();

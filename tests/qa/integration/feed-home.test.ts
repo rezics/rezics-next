@@ -445,14 +445,13 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       [`reply:place:${realm.realm}`, 'reply.place']] as const) await grant(scope, action);
     const makeReply = async (body: string, parent?: { reply: string; revisionId: string }) => {
       const reply = native(), variantId = `urn:rezics:variant:${randomUUID()}`;
-      const draft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', {
+      const draft = await json<{ revisionId: string; revisionDigest: string }>(await call('POST', '/v1/member-reply-drafts', {
         profile: 'member-reply-draft-v1', reply, variantId, rootTarget: first.work, rootRevision,
         language: 'en', direction: 'ltr', expectedHead: null, body, actingSubject: reader }, b.token), 201);
       await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply, variantId,
         revisionId: draft.revisionId, author: reader, rootTarget: first.work, rootRevision,
         parentReply: parent?.reply ?? null, parentRevision: parent?.revisionId ?? null, contextRevision: null }, b.token), 201);
-      const revisionDigest = (await stack.contentPool.query<{ byte_digest: string }>(
-        'SELECT byte_digest FROM content.revision WHERE id = $1', [draft.revisionId])).rows[0]!.byte_digest;
+      const revisionDigest = draft.revisionDigest;
       return { reply, revisionId: draft.revisionId, revisionDigest };
     };
     const approve = async (reply: Awaited<ReturnType<typeof makeReply>>) => {

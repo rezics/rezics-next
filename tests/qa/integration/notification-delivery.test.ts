@@ -150,6 +150,16 @@ async function notificationStack(name: string) {
   const deliveries = async (itemId: string) => (await pool.query<{ id: string; channel: string; state: string;
     cancel_reason: string | null; attempt_count: number }>(`SELECT id, channel, state, cancel_reason, attempt_count
     FROM access.notification_delivery WHERE item_id = $1 ORDER BY channel`, [itemId])).rows;
+  const deliveryInputs = async (created: { itemId: string; generation: string; sequence: string }) => {
+    const after = `${created.generation}:${BigInt(created.sequence) - 1n}`;
+    const page = await call('GET', '/v1/me/notifications?' + new URLSearchParams({ limit: '1', after }), account.tokenA);
+    expect(page.status, JSON.stringify(page.body)).toBe(200);
+    const item = page.body.items.find((item: { id: string }) => item.id === created.itemId);
+    expect(item).toBeDefined();
+    const inputs = item.deliveries as { id: string; channel: string }[];
+    expect(inputs.length).toBeLessThanOrEqual(8);
+    return inputs.sort((a, b) => a.channel.localeCompare(b.channel));
+  };
   const close = async () => {
     await account.close();
     if (app.server) await app.stop();
@@ -159,7 +169,7 @@ async function notificationStack(name: string) {
     rmSync(directory, { recursive: true, force: true });
   };
   return { pool, account, store, dispatcher, productionDispatcher, provider, disclosed, costs, call, principal,
-    principalId, revision, readerActor, allowWorkRead, revokeWorkRead, event, deliveries, app, close };
+    principalId, revision, readerActor, allowWorkRead, revokeWorkRead, event, deliveries, deliveryInputs, app, close };
 }
 
 test('GOV05: unsubscribe, subject access loss, deactivation and rotation are applied at delivery time', async () => {
@@ -193,6 +203,8 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
     const run1 = await s.productionDispatcher.runOnce();
     expect(run1).toMatchObject({ claimed: 1, delivered: 1, cancelled: 1 });
     const firstDeliveries = await s.deliveries(first!.itemId);
+    const firstDeliveryInputs = await s.deliveryInputs(first!);
+    expect(firstDeliveryInputs.map(d => d.id)).toEqual(firstDeliveries.map(d => d.id));
     expect(firstDeliveries.map(d => [d.channel, d.state, d.cancel_reason])).toEqual([
       ['email', 'cancelled', 'unsubscribed'], ['push', 'delivered', null]]);
     // Push without lock-screen disclosure carries no private subject field.
@@ -201,7 +213,7 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
 
     // Re-subscribing does not reactivate the cancelled delivery.
     expect((await unsubscribe('enabled', '1', 'resubscribe-1')).body).toMatchObject({ state: 'enabled', revision: '2' });
-    const cancelled = await s.call('GET', `/v1/deliveries/${firstDeliveries[0]!.id}`, account.tokenA);
+    const cancelled = await s.call('GET', `/v1/deliveries/${firstDeliveryInputs[0]!.id}`, account.tokenA);
     expect(cancelled.body).toMatchObject({ state: 'cancelled', cancelReason: 'unsubscribed', attempts: 0 });
     expect((await s.dispatcher.runOnce()).claimed).toBe(0);
 
@@ -245,9 +257,9 @@ test('GOV05: unsubscribe, subject access loss, deactivation and rotation are app
     await s.pool.query('UPDATE access.principal SET active = true WHERE id = $1', [a]);
 
     // Denials: missing scope, another recipient's delivery and an unknown one are indistinguishable.
-    expect((await s.call('GET', `/v1/deliveries/${firstDeliveries[1]!.id}`, account.noScope)).status).toBe(401);
-    expect((await s.call('GET', `/v1/deliveries/${firstDeliveries[1]!.id}`, null)).status).toBe(401);
-    expect((await s.call('GET', `/v1/deliveries/${firstDeliveries[1]!.id}`, account.tokenB)).status).toBe(404);
+    expect((await s.call('GET', `/v1/deliveries/${firstDeliveryInputs[1]!.id}`, account.noScope)).status).toBe(401);
+    expect((await s.call('GET', `/v1/deliveries/${firstDeliveryInputs[1]!.id}`, null)).status).toBe(401);
+    expect((await s.call('GET', `/v1/deliveries/${firstDeliveryInputs[1]!.id}`, account.tokenB)).status).toBe(404);
     expect((await s.call('GET', `/v1/deliveries/${randomUUID()}`, account.tokenA)).status).toBe(404);
   } finally { await s.close(); }
 }, 120_000);
@@ -263,7 +275,7 @@ test('GOV06: lost acknowledgements reconcile by stable delivery id and repeated 
     s.disclosed.add(`${a}:${r}`);
     const only = async () => {
       const [item] = await s.store.enqueue(s.event([a], r, { purpose: 'account', topic: 'notice' }));
-      return (await s.deliveries(item!.itemId))[0]!;
+      return (await s.deliveryInputs(item!))[0]!;
     };
 
     // Accepted, acknowledgement lost: explicit uncertain, then reconciliation without a resend.
@@ -469,8 +481,7 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
       .toMatchObject({ subject: null, display: null });
     expect((await s.call('GET', '/v1/me/notifications/unread-count', account.tokenA)).body)
       .toMatchObject({ count: 0, overflow: false });
-    const firstItemId = (await s.pool.query<{ id: string }>(`SELECT id FROM access.notification_item
-      WHERE principal_id = $1 AND sequence = 1`, [a])).rows[0]!.id;
+    const firstItemId = (await s.call('GET', '/v1/me/notifications?limit=1', account.tokenA)).body.items[0].id;
     const individuallyRead = await s.call('PUT', `/v1/me/notifications/${firstItemId}/read`, account.tokenA);
     expect(individuallyRead.status).toBe(200);
     expect((await s.call('PUT', `/v1/me/notifications/${firstItemId}/read`, account.tokenA)).body)
@@ -508,8 +519,7 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
     expect(pages).toBe(3);
 
     // Withdrawn and erased items keep their sequence as tombstones without subject fields.
-    const erasedItem = (await s.pool.query<{ id: string }>(`SELECT id FROM access.notification_item
-      WHERE principal_id = $1 AND sequence = 5`, [a])).rows[0]!.id;
+    const erasedItem = (await s.call('GET', '/v1/me/notifications?after=1:4&limit=1', account.tokenA)).body.items[0].id;
     await s.pool.query(`UPDATE access.notification_item SET state = 'erased', state_changed_at = now()
       WHERE id = $1`, [erasedItem]);
     const tomb = (await s.call('GET', '/v1/me/notifications?after=1:4&limit=1', account.tokenA)).body.items[0];
@@ -563,7 +573,7 @@ test('GOV08: monotonic read watermarks and a real realtime reconnect reconcile e
       expect(plan['Temp Read Blocks']).toBe(0);
       s.costs.statements = 0;
       await s.store.readStream(s.principal(account.a), { generation: '2', sequence: '0' });
-      expect(s.costs.statements).toBe(9);
+      expect(s.costs.statements).toBe(10); // One indexed delivery read for the one returned item.
     }
   } finally {
     await connection?.close();
@@ -591,8 +601,7 @@ test('G-286: unread badge saturates at 99+ only for currently disclosed items', 
     s.disclosed.add(`${a}:${revision}`);
     expect((await s.call('GET', '/v1/me/notifications/unread-count', s.account.tokenA)).body)
       .toMatchObject({ count: 99, overflow: true });
-    const id = (await s.pool.query<{ id: string }>(`SELECT id FROM access.notification_item
-      WHERE principal_id = $1 AND sequence = 1`, [a])).rows[0]!.id;
+    const id = (await s.call('GET', '/v1/me/notifications?limit=1', s.account.tokenA)).body.items[0].id;
     expect((await s.call('PUT', `/v1/me/notifications/${id}/read`, s.account.tokenA)).status).toBe(200);
     expect((await s.call('GET', '/v1/me/notifications/unread-count', s.account.tokenA)).body)
       .toMatchObject({ count: 99, overflow: false });

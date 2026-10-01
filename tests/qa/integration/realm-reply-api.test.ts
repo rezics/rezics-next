@@ -4,7 +4,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import { ContentCore, contentDraftIntentDigest, type SaveDraftCommand } from '../../../services/content/src/core.ts';
+import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -76,22 +76,12 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     const reply = ID + randomUUID();
     const variantId = `urn:rezics:variant:${randomUUID()}`;
     async function save(body: string, expectedHead: string | null) {
-      const command: SaveDraftCommand = { operationId: randomUUID(), variant: {
-        id: variantId, resourceId: reply,
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-      }, expectedHead, model: 'member-reply-v1', sourceRevision: work.workRevision,
-      provenance: {}, serializedJson: JSON.stringify({ body, deleted: false,
-        rootTarget: work.work, rootRevision: work.workRevision }) };
-      command.provenance = { kind: 'admitted-original-contribution-v1', author,
-        admissionId: randomUUID(), authorityEpoch: '0', scope: `content:draft:${reply}`,
-        expectedHead, rightsBasis: 'original-contribution', requestDigest: contentDraftIntentDigest(command, author) };
-      const saved = await content.saveDraft(command);
-      if (!saved.revisionId) throw new Error('Content revision was not saved');
-      const digest = await contentPool.query<{ byte_digest: string }>(
-        'SELECT byte_digest FROM content.revision WHERE id = $1', [saved.revisionId]);
-      return { revisionId: saved.revisionId, revisionDigest: digest.rows[0]!.byte_digest };
+      const saved = await post('/v1/member-reply-drafts', { profile: 'member-reply-draft-v1',
+        reply, variantId, rootTarget: work.work, rootRevision: work.workRevision,
+        language: 'en', direction: 'ltr', expectedHead, body, actingSubject: author });
+      expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+      return { revisionId: saved.body.revisionId as string, revisionDigest: saved.body.revisionDigest as string };
     }
-    const first = await save('first reviewed text', null);
     async function grant(scope: string, action: string) {
       await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [scope]);
       await accessPool.query(`INSERT INTO access.representation
@@ -109,9 +99,10 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       await grant(`review:decide:${realmId}`, 'review.decide');
       await grant(`reply:place:${realmId}`, 'reply.place');
     }
+    await grant(`content:draft:${reply}`, 'content.draft');
     const store = new RealmReplyStore(owner, content, access, env);
     const app = createMainApp(env.fuseki, { environment: env, access,
-      account: { verify: async () => principal }, realmReplies: store });
+      account: { verify: async () => principal }, realmReplies: store, content, contentAuthoring: content });
     async function post(path: string, body: Record<string, unknown>, key = randomUUID()) {
       const response = await app.handle(new Request(`http://main.local${path}`, { method: 'POST',
         headers: { authorization: 'Bearer qa', 'content-type': 'application/json',
@@ -130,6 +121,7 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
       { headers: { authorization: 'Bearer qa' } }));
       return { status: response.status, body: await response.json() as Record<string, any> };
     }
+    const first = await save('first reviewed text', null);
     const identity = { profile: 'realm-reply-identity-v1', reply, variantId,
       revisionId: first.revisionId, author, rootTarget: work.work,
       rootRevision: work.workRevision, parentReply: null, parentRevision: null,

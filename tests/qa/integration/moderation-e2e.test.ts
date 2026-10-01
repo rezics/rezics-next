@@ -105,8 +105,8 @@ async function setup() {
     return json<{ generation: string; ruleBasis: { ref: string; revision: string; digest: string } }>(await call(owner,'PUT',`${root}/settings`,{
       actingSubject: owner.actor,expectedGeneration: before.generation,expectedRulesRevision: before.ruleBasis.revision,
       reason: 'Set community admission and rules',settings: { visibility,reviewRequired: true,whoMaySubmit: 'granted',selfJoin: visibility === 'public' && selfJoin,
-        rules: [{ id: 'respect',title: { original: 'en',labels: { en: 'Respect others','zh-CN': '尊重他人' } },
-          body: { original: 'en',labels: { en: 'No personal abuse.','zh-CN': '禁止人身攻击。' } },governanceRule: null }] } }),201);
+        rules: [{ id: 'respect',title: { original: 'en',labels: { en: 'Respect others','zh-Hans': '尊重他人' } },
+          body: { original: 'en',labels: { en: 'No personal abuse.','zh-Hans': '禁止人身攻击。' } },governanceRule: null }] } }),201);
   };
   const invite = async (member: Member,expiresInSeconds = 300) => json<InvitationResult>(await call(owner,'POST',`${root}/invitations`,{
     actingSubject: owner.actor,member: member.actor,expiresInSeconds }));
@@ -373,7 +373,8 @@ test('G314 cost: exact queue aggregates stay constant across history growth and 
       expect(grown.sql).toBe(empty.sql);
       expect(grown.item.openCount).toEqual({ value: size,kind: 'exact' });
     }
-    const caseId = (await s.stack.accessPool.query<{ id: string }>('SELECT id FROM access.governance_case WHERE context = $1 LIMIT 1',[s.realm])).rows[0]!.id;
+    const queue = await json<{ items: { id: string }[] }>(await s.read(s.owner,`${s.root}/moderation?state=open&type=content_report`));
+    const caseId = queue.items[0]!.id;
     await json(await s.call(s.owner,'POST',`${s.root}/escalations`,{ actingSubject: s.owner.actor,expectedGeneration: '0',
       reason: 'Owner disposition needed',itemKind: 'report',itemId: caseId,expectedItemGeneration: '0' }),201);
     expect((await readCounts()).item.escalatedCount.value).toBe(1);

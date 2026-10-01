@@ -48,8 +48,7 @@ test('G-277: members place reviewed replies; direct policy respects membership, 
       variantId: input.variantId, revisionId: draft.body.revisionId, author: h.actor,
       rootTarget: input.rootTarget, rootRevision: input.rootRevision,
       parentReply: null, parentRevision: null, contextRevision: null })).status).toBe(201);
-    const bytes = (await h.contentPool.query('SELECT byte_digest FROM content.revision WHERE id = $1',
-      [draft.body.revisionId])).rows[0].byte_digest;
+    const bytes = draft.body.revisionDigest;
     const placement = { profile: 'realm-reply-placement-v1', realm, reply: input.reply,
       revisionId: draft.body.revisionId, revisionDigest: bytes, reviewDecisionId: null,
       expectedHead: null, actingSubject: h.actor };
@@ -71,16 +70,15 @@ test('G-277: members place reviewed replies; direct policy respects membership, 
     const policy = async (replyPolicy: 'moderated' | 'members-direct') => {
       const result = await publishRealmProfile(h.env, undefined, { verify: async () => principal }, h.access,
         new Request('http://main.local'), { realm, expectedHead: profileHead, actingSubject: h.actor,
-          idempotencyKey: randomUUID(), profile: { name: { en: 'Members', 'zh-CN': '成员' },
-            description: { en: 'Replies', 'zh-CN': '回复' }, iconSelection: null, bannerSelection: null,
+          idempotencyKey: randomUUID(), profile: { name: { original: 'en', labels: { en: 'Members', 'zh-Hans': '成员' } },
+            description: { original: 'en', labels: { en: 'Replies', 'zh-Hans': '回复' } }, iconSelection: null, bannerSelection: null,
             rules: [], moderators: [], count: { kind: 'unknown', value: null }, replyPolicy } });
       profileHead = result.revision;
     };
     await policy('members-direct');
     const edited = await h.post('/v1/member-reply-drafts', { ...input, expectedHead: draft.body.revisionId, body: 'Direct member reply.' });
     expect(edited.status).toBe(201);
-    const editedDigest = (await h.contentPool.query('SELECT byte_digest FROM content.revision WHERE id = $1',
-      [edited.body.revisionId])).rows[0].byte_digest;
+    const editedDigest = edited.body.revisionDigest;
     const direct = { ...placement, revisionId: edited.body.revisionId, revisionDigest: editedDigest,
       expectedHead: placed.body.placement };
     const key = randomUUID();
@@ -111,8 +109,7 @@ test('G-277: members place reviewed replies; direct policy respects membership, 
     await h.accessPool.query(`UPDATE access.private_membership_ban SET active=false
       WHERE kind='realm' AND owner_subject=$1 AND principal_id=$2`, [realm, principalId]);
     const latest = await h.post('/v1/member-reply-drafts', { ...input, expectedHead: edited.body.revisionId, body: 'Policy race.' });
-    const latestDigest = (await h.contentPool.query('SELECT byte_digest FROM content.revision WHERE id=$1',
-      [latest.body.revisionId])).rows[0].byte_digest;
+    const latestDigest = latest.body.revisionDigest;
     const prepare = h.owner.preparePlacement.bind(h.owner);
     h.owner.preparePlacement = async (...args) => {
       const prepared = await prepare(...args);

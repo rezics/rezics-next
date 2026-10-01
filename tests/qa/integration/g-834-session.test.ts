@@ -5,6 +5,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ReaderLibraryStatusStore, type StatusState } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
 import { SESSION_COST, type SessionState } from '../../../services/main/src/modules/session/contract.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
@@ -28,7 +30,9 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     const structureObjects = stack.objects('semantic/structure/');
     await structureObjects.initialize();
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      libraryStatus: library, sessions, media: stack.media, mediaAccess: stack.mediaAccess, structureObjects,
+      libraryStatus: library, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
+      profiles: new ProfilesAccess(stack.accessPool),
+      sessions, media: stack.media, mediaAccess: stack.mediaAccess, structureObjects,
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       account: { verify: async request => {
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
@@ -59,6 +63,8 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     const legacy = await stack.publicWork(person, ['en'], 'Legacy status without attempts');
     const putStatus = (changes: object, key = randomUUID()) => call('PUT',
       `/v1/works/${target.work.slice(-36)}/reader-status`, { actingSubject: person, ...changes }, key);
+    const statusVersion = async () => (await json<{ status: StatusState }>(await call('GET',
+      `/v1/works/${target.work.slice(-36)}/reader-state?actingSubject=${encodeURIComponent(person)}`), 200)).status.version;
     const shelfSnapshot = async () => ({
       row: (await stack.contentPool.query(`SELECT status, started_on::text, finished_on::text,
         version::text, changed_at::text, session_projection FROM reader.library_status WHERE agent = $1 AND work = $2`,
@@ -99,14 +105,15 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     const dnfShelf = await shelfSnapshot();
     const dnfHistory = await json<Page>(await page(target.work), 200);
     expect(dnfShelf.row).toMatchObject({ status: null, session_projection: attempt.id });
+    const dnfVersion = await statusVersion();
     const readded = await json<StatusState>(await putStatus({ status: 'want-to-read',
-      expectedVersion: Number(dnfShelf.row!.version) }), 200);
-    expect(readded).toMatchObject({ status: 'want-to-read', version: Number(dnfShelf.row!.version) + 1 });
+      expectedVersion: dnfVersion }), 200);
+    expect(readded).toMatchObject({ status: 'want-to-read', version: dnfVersion + 1 });
     const readdedShelf = await shelfSnapshot();
     expect(readdedShelf.row!.session_projection).toBeNull();
     expect(await json<Page>(await page(target.work), 200)).toEqual(dnfHistory);
     expect(await json<{ code: string }>(await putStatus({ status: 'read',
-      expectedVersion: Number(dnfShelf.row!.version) }), 409)).toMatchObject({ code: 'stale_reader_status' });
+      expectedVersion: dnfVersion }), 409)).toMatchObject({ code: 'stale_reader_status' });
     expect(await shelfSnapshot()).toEqual(readdedShelf);
     const reread = await json<Saved>(await create(target.work, { state: 'active' }), 201);
     expect(reread.id).not.toBe(attempt.id);
@@ -121,17 +128,17 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect(finished.completedAt).toBeTruthy();
     expect((await library.batch(person, [target.work]))[0]).toMatchObject({ status: 'read', startedOn: null, finishedOn: null });
     expect((await patch(finished, { state: 'active' })).status).toBe(400);
-    const [projected] = await library.batch(person, [target.work]);
+    const projectedVersion = await statusVersion();
     const historyBeforeQuickEdit = await json<Page>(await page(target.work), 200);
     const quickKey = randomUUID();
     const quickIntent = { status: 'want-to-read', startedOn: '2026-08-01', finishedOn: '2026-08-31',
-      expectedVersion: projected!.version };
+      expectedVersion: projectedVersion };
     const quick = await json<StatusState & { replayed: boolean }>(await putStatus(quickIntent, quickKey), 200);
     expect(quick).toMatchObject({ status: 'want-to-read', startedOn: '2026-08-01', finishedOn: '2026-08-31',
-      version: projected!.version + 1, replayed: false });
+      version: projectedVersion + 1, replayed: false });
     expect((await shelfSnapshot()).row!.session_projection).toBeNull();
     expect(await json<Page>(await page(target.work), 200)).toEqual(historyBeforeQuickEdit);
-    expect(await json<{ code: string }>(await putStatus({ status: 'read', expectedVersion: projected!.version }), 409))
+    expect(await json<{ code: string }>(await putStatus({ status: 'read', expectedVersion: projectedVersion }), 409))
       .toMatchObject({ code: 'stale_reader_status' });
     expect(await json<StatusState & { replayed: boolean }>(await putStatus(quickIntent, quickKey), 200))
       .toEqual({ ...quick, replayed: true });
@@ -192,7 +199,7 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     expect(await shelfSnapshot()).toEqual(shelfBeforeSelections);
     const historyBeforeLocatorQuickEdit = await json<Page>(await page(target.work), 200);
     await json<StatusState>(await putStatus({ status: 'want-to-read',
-      expectedVersion: Number(shelfBeforeSelections.row!.version) }), 200);
+      expectedVersion: await statusVersion() }), 200);
     expect(await json<Page>(await page(target.work), 200)).toEqual(historyBeforeLocatorQuickEdit);
     const manualShelf = await shelfSnapshot();
     expect(manualShelf.row).toMatchObject({ status: 'want-to-read', session_projection: null });
@@ -347,8 +354,10 @@ test('G-834: private exact-target attempts survive lifecycle, formats, races, re
     await expect(stack.contentPool.query(`UPDATE reader.consumption_session_command SET result = '{}'::jsonb
       WHERE principal_subject = $1`, [a.principal.subject])).rejects.toMatchObject({ code: '23514' });
 
-    const revoke = async () => stack.accessPool.query(`UPDATE access.representation SET active = false
-      WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`, [a.principalId, person]);
+    // Disabling the Person removes its baseline without violating the current
+    // controller floor by deleting its sole controller mandate.
+    const revoke = async () => stack.accessPool.query(`UPDATE access.authority_subject SET active = false
+      WHERE id = $1`, [person]);
     const authorityKey = randomUUID();
     const beforeRevoke = await count();
     library.write = async (...args) => { const result = await originalWrite(...args); await revoke(); return result; };

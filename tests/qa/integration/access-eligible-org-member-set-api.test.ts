@@ -3,6 +3,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { workAuthorityEpoch } from './g-903-api-values.ts';
+import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -72,7 +74,7 @@ test('IAM25: B grants the exact eligible A-member set; P exercises it as P', asy
       client_name: 'IAM25 native client', application_type: 'native',
       redirect_uris: [callback], token_endpoint_auth_method: 'none',
       grant_types: ['authorization_code'],
-      scope: 'openid access:manage access:grant access:membership-consent',
+      scope: 'openid access:manage access:grant access:membership-consent work:create',
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }, scope: string) {
       const signedIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
@@ -102,7 +104,7 @@ test('IAM25: B grants the exact eligible A-member set; P exercises it as P', asy
     const outsider = await signUp('outsider');
     const bManager = await signUp('b-manager');
     const target = await signUp('target');
-    const pToken = await tokenFor(p, 'openid access:manage');
+    const pToken = await tokenFor(p, 'openid access:manage work:create');
     const outsiderToken = await tokenFor(outsider, 'openid access:manage');
     const bToken = await tokenFor(bManager, 'openid access:grant');
     const targetToken = await tokenFor(target, 'openid access:membership-consent');
@@ -176,6 +178,7 @@ test('IAM25: B grants the exact eligible A-member set; P exercises it as P', asy
       introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
     access: new AccessAdmissionRegistry(accessPool),
+    actingContexts: new AccessActingContexts(accessPool),
     memberships: new AccessMemberships(accessPool),
     membershipConsents: new AccessMembershipConsents(accessPool),
     eligibleOrgMemberSet: new AccessEligibleOrgMemberSet(accessPool) });
@@ -185,9 +188,7 @@ test('IAM25: B grants the exact eligible A-member set; P exercises it as P', asy
           'idempotency-key': key }, body: JSON.stringify(body) }));
     const get = (path: string, token: string) => main.handle(new Request(
       `http://main.local${path}`, { headers: { authorization: `Bearer ${token}` } }));
-    const epoch = () => accessPool.query<{ authority_epoch: string }>(`
-      SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'`)
-      .then(result => result.rows[0]!.authority_epoch);
+    const epoch = () => workAuthorityEpoch(main, pToken);
     const selectorId = randomUUID(), grantId = randomUUID();
     const grantBody = { profile: 'access-eligible-org-member-set-grant-change-v1',
       action: 'grant', issuerSubject: B, recipientSubject: A, selectorId, grantId,

@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { workAuthorityEpoch } from './g-903-api-values.ts';
 import { Pool } from 'pg';
 import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -194,9 +195,7 @@ test('IAM05/IAM30/IAM36: group changes and independent impact approval preserve 
       id: memberId, groupId: child, generation: '0' });
     expect(groupState.grants.find(grant => grant.id === grantId)).toMatchObject({
       id: grantId, groupId: rootGroup, generation: '0' });
-    const authorityEpoch = (await accessPool.query<{ authority_epoch: string }>(
-      "SELECT authority_epoch FROM access.scope_gate WHERE id = 'work:create:root'"))
-      .rows[0]!.authority_epoch;
+    const authorityEpoch = await workAuthorityEpoch(main, token);
     const selected = { profile: 'work-create-acting-context-check-v1', task: 'work.create',
       actingSubject: subject, expectedAuthorityEpoch: authorityEpoch };
     expect((await request('POST', '/v1/me/acting-context-checks', selected)).status).toBe(200);
