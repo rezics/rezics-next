@@ -177,6 +177,14 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
     expect(toc.items.some(row => row.target === chapter.resource_id)).toBe(false);
     await restoreChapter();
     expect((await phrase()).total).toBe(2);
+    const book = seeded.works[2]!.work;
+    const bookHead = (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
+      GRAPH <urn:rezics:graph:current> { <${book}> rv:head ?head } }`)).results!.bindings[0]!.head!.value;
+    const restoreBook = await restrict({ owner: 'graph', resource: book, component: 'title', revision: bookHead });
+    expect((await phrase()).total).toBe(0);
+    expect((await phrase()).results).toEqual([]);
+    await restoreBook();
+    expect((await phrase()).total).toBe(2);
     for (const row of [reply, post]) {
       const restore = await restrict({ owner: 'content', resource: row.id, component: 'body', revision: row.draft_head }, seeded.realm.realm);
       expect((await call('GET', `/v1/realms/${short(seeded.realm.realm)}/threads/${short(row.id)}`)).status).toBe(404);

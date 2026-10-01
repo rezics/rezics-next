@@ -46,8 +46,12 @@ const suitabilityChannel = (channel: DisclosureChannel) =>
  * The recovery fence is held through evaluation; no policy result is cached.
  * Revocation fences future disclosure; independent bytes already delivered cannot be recalled. */
 export class DisclosureStore implements DisclosureReader {
-  environment?: WorkActivationEnvironment;
   constructor(private readonly pool: Pool) {}
+  get environment(): WorkActivationEnvironment | undefined { return poolEnvironments.get(this.pool); }
+  set environment(env: WorkActivationEnvironment | undefined) {
+    if (env) poolEnvironments.set(this.pool, env);
+    else poolEnvironments.delete(this.pool);
+  }
 
   async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
     if (targets.length > DISCLOSURE_COST.batch || !DISCLOSURE_CHANNELS.includes(channel)
@@ -120,6 +124,9 @@ export function hasDisclosure(env: WorkActivationEnvironment): boolean {
   return Boolean((env as ComposedEnvironment)[owner]);
 }
 const poolReaders = new WeakMap<Pool, DisclosureStore>();
+// Composition binds the pool once; additional owner stores on that same pool
+// still resolve current heads for notifications and reply counts.
+const poolEnvironments = new WeakMap<Pool, WorkActivationEnvironment>();
 export function configureDisclosurePool(pool: Pool, reader: DisclosureStore): void {
   poolReaders.set(pool, reader);
 }

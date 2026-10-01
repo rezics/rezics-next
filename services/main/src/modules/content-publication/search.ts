@@ -187,8 +187,9 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
   const { source, index, proof } = await prepareContentSearch(env, content, cursor, consumer);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
-    SELECT ?epoch ?sequence ?generation ?candidateCount ?unit ?score
-      ?resource ?variant ?revision ?decision ?eligibility ?language ?rightsBasis ?assessment WHERE {
+    PREFIX schema: <https://schema.org/>
+    SELECT DISTINCT ?epoch ?sequence ?generation ?candidateCount ?unit ?score
+      ?resource ?variant ?revision ?decision ?eligibility ?language ?rightsBasis ?assessment ?parentWork WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
         rv:sequence ?sequence ; rv:textIndexGeneration ?generation . }
       FILTER(?epoch = ${lit(index.dataEpoch)} && ?sequence = ${index.sequence}
@@ -208,10 +209,20 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
             rv:resource ?resource ; rv:variant ?variant ; rv:revision ?revision ;
             rv:publicationDecision ?decision ; rv:eligibility ?eligibility ;
             rv:projection ?unitProjection ; rv:language ?language .
+          OPTIONAL { ?unit rv:searchResultWork ?parentWork }
         }
         GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ?resource ; rv:contentPublicationHead ?decision ;
           rv:publicSearchEligibilityHead ?eligibility . }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+          ?parentWork rv:mainVersion ?parentMain .
+          ?structure a rv:Structure ; rv:structureOf ?parentMain ;
+            rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?placementGeneration .
+          ?placementGeneration rv:generationState rv:Active .
+          ?placement a rv:OccurrencePlacement ; rv:generation ?placementGeneration ;
+            rv:occurrenceRole rv:ChapterRole ; schema:item ?resource .
+          FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+        } }
         GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
           rv:variant ?variant ; rv:publicationDecision ?decision ;
           rv:disclosure rv:Public ; rv:rightsBasis ?rightsBasis .
@@ -246,14 +257,19 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
     return { matchUnit: row.unit.value, resource: row.resource.value,
       variant: row.variant.value, revision: row.revision.value,
       publicationDecision: row.decision.value, language: row.language.value, score,
+      parentWork: value(row, 'parentWork'),
       rightsBasis: value(row, 'rightsBasis'), assessment: value(row, 'assessment') };
   });
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
     throw new ContentProjectionUnavailable('Content phrase result has duplicate units');
   }
-  const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match, work: match.resource })));
+  const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match,
+    work: match.parentWork ?? match.resource,
+    ...(match.parentWork ? { matchedChapter: { work: match.resource } } : {}),
+  })));
   const visible = (await visibleContentSearchRights(disclosed, rights))
-    .map(({ rightsBasis: _rightsBasis, assessment: _assessment, work: _work, ...match }) => match);
+    .map(({ rightsBasis: _rightsBasis, assessment: _assessment, work: _work,
+      parentWork: _parentWork, matchedChapter: _matchedChapter, ...match }) => match);
   const [sourceAfter, checkpointAfter] = await Promise.all([
     content.ownerPosition(), cursor.read(consumer),
   ]);

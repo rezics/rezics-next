@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
-import { DISCLOSURE_CHANNELS, DisclosureStore, configureDisclosure, configureDisclosurePool, disclose,
+import { DISCLOSURE_CHANNELS, DisclosureStore, configureDisclosure, disclosurePoolReader, disclose,
   type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
@@ -20,6 +20,8 @@ import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import type { PublicTextPosition } from '../src/modules/work/search-readiness.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { discloseNotifications } from '../src/modules/disclosure/notifications.ts';
+import { GovernanceStore } from '../src/modules/governance/store.ts';
+import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const fixtures: DisclosureTarget[] = [
@@ -110,9 +112,15 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   })) } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(env, new DisclosureStore(s.pool));
-  const read = () => readResourceSummaries(env, undefined, {},
+  let wikiAllows = true;
+  const read = () => readResourceSummaries(env, undefined, {
+    visibleRecords: async refs => new Set(wikiAllows ? refs : []),
+  },
     { resources: [id(1), id(1)], context: DEFAULT_MEDIA_CONTEXT, language: null });
   expect((await read()).summaries.every(summary => summary.status === 'available')).toBe(true);
+  wikiAllows = false;
+  expect((await read()).summaries.every(summary => summary.status === 'unavailable')).toBe(true);
+  wikiAllows = true;
   s.set({ restricted: true });
   const result = await read();
   expect(result.summaries).toEqual([{ reference: id(1), status: 'unavailable' }, { reference: id(1), status: 'unavailable' }]);
@@ -121,7 +129,7 @@ test('G-542: summary assembly keeps unavailable entries in position and never hy
   expect((await read()).summaries.every(summary => summary.status === 'available')).toBe(true);
 });
 
-test('G-542: queued notification revisions do not pin a past Work name fence', async () => {
+test('G-542: two Governance stores on one pool retain current heads for notices and reply counts', async () => {
   const oldHead = id(11), newHead = id(12);
   let current = oldHead;
   const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
@@ -129,7 +137,9 @@ test('G-542: queued notification revisions do not pin a past Work name fence', a
     if (sql.includes('WITH requested')) {
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
       return { rows: targets.map(target => ({ ordinal: target.ordinal,
-        restricted: target.resource === id(1) && target.component === 'name' && target.revision === oldHead,
+        restricted: target.resource === id(1) && target.component === 'name'
+          && (target.revision == null || target.revision === oldHead)
+          || target.work === id(1) && (target.workRevision == null || target.workRevision === oldHead),
         assessments: [] })) };
     }
     return { rows: [] };
@@ -138,19 +148,28 @@ test('G-542: queued notification revisions do not pin a past Work name fence', a
   graph.query = async () => ({ results: { bindings: [{ work: { type: 'uri', value: id(1) },
     head: { type: 'uri', value: current } }] } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
-  const reader = new DisclosureStore(pool);
-  configureDisclosure(env, reader);
-  configureDisclosurePool(pool, reader);
+  const createOwner = () => new GovernanceStore(pool, { capture: async () => { throw new Error('capture is unused'); } },
+    { current: async () => null }, { current: async () => null });
+  const first = createOwner();
+  configureDisclosure(env, first.disclosure);
+  const second = createOwner();
+  expect(second.disclosure).not.toBe(first.disclosure);
+  expect(disclosurePoolReader(pool)).toBe(second.disclosure);
+  expect(second.disclosure.environment).toBe(env);
+  const replies = new RealmReplyThreadStore({ query: async () => ({ rows: [{ thread: id(3),
+    id: id(4), root_target: id(1), visible: true }] }) } as unknown as Pool, pool);
   const subjects = [{ input: { principalId: id(2).slice(-36), owner: 'graph', ref: id(1), revision: oldHead,
     disclosureBasis: 'g-542' }, result: { status: 'available' as const,
-    subject: { private: false, fields: { title: 'Current Work title' } } } }];
+    subject: { private: false, fields: { title: 'Current Work title', linkTarget: id(1) } } } }];
   for (const channel of ['inbox', 'digest', 'email', 'push'] as const) {
     expect((await discloseNotifications(pool, subjects, channel))[0]?.status).toBe('undisclosed');
   }
+  expect((await replies.counts(id(5), [id(3)])).counts.get(id(3))).toBe(0);
   current = newHead;
   for (const channel of ['inbox', 'digest', 'email', 'push'] as const) {
     expect((await discloseNotifications(pool, subjects, channel))[0]?.status).toBe('available');
   }
+  expect((await replies.counts(id(5), [id(3)])).counts.get(id(3))).toBe(1);
 });
 
 test('G-542: asset adapters and export manifests discard all denied payload and notices', async () => {

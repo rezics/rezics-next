@@ -22,8 +22,6 @@ export const SEARCH_FIELD_COST = { candidates: 512, graphQueries: 2, sourceQueri
   responseBytes: MAX_SEARCH_RESPONSE_BYTES, typeaheadItems: 10 } as const;
 export type SearchField = 'title' | 'credit' | 'tagline' | 'body';
 export interface SearchFieldOwners { names?: SourceAuthorNameStore;
-  /** The combined body/field owner gates its complete relation once. */
-  deferDisclosure?: boolean;
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) => Promise<ReadonlySet<string>> }
 const fieldReads = new WeakMap<SearchFieldOwners, { sourceGeneration: string | null }>();
 export async function fenceSearchFields(owners: SearchFieldOwners) {
@@ -126,7 +124,9 @@ export async function querySearchFields(env: WorkActivationEnvironment,
   } LIMIT ${SEARCH_FIELD_COST.candidates + 1}`, SEARCH_FIELD_COST.responseBytes)).results?.bindings ?? [];
   if (rows.length > SEARCH_FIELD_COST.candidates) throw new PublicQueryBudgetExceeded('Search field candidates exceed their bound');
   fieldReads.set(owners, { sourceGeneration: sourceRead?.generation ?? null });
-  const matches: FieldMatch[] = [];
+  // Localized aliases share one MatchUnit and the same disclosure targets.
+  // Retain its strongest field before applying the bounded audience batch.
+  const matches = new Map<string, FieldMatch>();
   for (const row of rows) {
     if (row.epoch?.value !== position.dataEpoch || row.sequence?.value !== position.sequence) {
       throw new SearchSnapshotMoved('Search fields crossed graph positions');
@@ -152,19 +152,21 @@ export async function querySearchFields(env: WorkActivationEnvironment,
       values.push({ field: row.field!.value as 'title' | 'credit', text, language: row.text?.['xml:lang'] ?? null });
     }
     for (const value of values.filter(value => matchesSearchText(value.text, term, prefix))) {
-      matches.push({ work: row.resultWork?.value ?? row.work.value,
+      const match: FieldMatch = { work: row.resultWork?.value ?? row.work.value,
         mainVersion: row.resultMain?.value ?? row.main.value, matchUnit: row.unit.value,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,
         language: row.language.value, score: 1, matchedField: value.field,
         matchedText: value.text, matchedLanguage: value.language,
         ...(row.reason ? { reason: row.reason.value } : {}),
         ...(row.resultWork ? { matchedChapter: { work: row.work.value,
-          title: row.chapterTitle!.value } } : {}) });
+          title: row.chapterTitle!.value } } : {}) };
+      const prior = matches.get(match.matchUnit);
+      if (!prior || tier[match.matchedField] > tier[prior.matchedField]) matches.set(match.matchUnit, match);
     }
   }
   await fenceSearchFields(owners);
   // The route's final uncached fence covers matching, facets and card facts.
-  const disclosed = owners.deferDisclosure ? matches : await discloseSearchMatches(env, matches, prefix ? 'typeahead' : 'search');
+  const disclosed = await discloseSearchMatches(env, [...matches.values()], prefix ? 'typeahead' : 'search');
   if (knownSearchPosition(env.fuseki, env.lineage)) return rankedSearchMatches(disclosed);
   const after = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .

@@ -194,8 +194,8 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
   const unique = new Set(matches.map(match => match.matchUnit));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
   const fields = input.publicFields ? await querySearchFields(env, input,
-    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, { ...input.publicFields, deferDisclosure: true }) : [];
-  const results = rankedSearchMatches(await discloseSearchMatches(env, [...matches, ...fields]));
+    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
+  const results = rankedSearchMatches([...await discloseSearchMatches(env, matches), ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   if (contentPosition && content) {
     const [sourceAfter, checkpointAfter] = await Promise.all([
@@ -338,8 +338,8 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
     throw new PublicQueryUnavailable('Realm query has ambiguous results');
   }
   const fields = input.publicFields ? await querySearchFields(env, input,
-    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, { ...input.publicFields, deferDisclosure: true }) : [];
-  const results = rankedSearchMatches(await discloseSearchMatches(env, [...matches, ...fields]));
+    { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
+  const results = rankedSearchMatches([...await discloseSearchMatches(env, matches), ...fields]);
   if (results.length > 512) throw new PublicQueryBudgetExceeded('Combined search candidates exceed their bound');
   return { contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: { kind: 'realm-local' as const, id: realm },
