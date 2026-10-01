@@ -1,6 +1,6 @@
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
-  TEXT_INDEX_PROFILE, TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_TITLE,
-  TEXT_INDEX_PROBE_GRAPH, type GraphLineage } from './activate.ts';
+  TEXT_INDEX_PROFILE, TEXT_INDEX_PROBE, TEXT_INDEX_PROBE_TITLE,
+  TEXT_INDEX_PROBE_GRAPH, textIndexProbePattern, type GraphLineage } from './activate.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
@@ -223,13 +223,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor .
       }
-      GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
-        ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
-        (${iri(TEXT_INDEX_PROBE)} ?probeScore ?probeLiteral ?probeGraph)
-          text:query (rv:searchBody ${lit('"中文检索"')} 2) .
-        FILTER(?probeLiteral = ${lit(TEXT_INDEX_PROBE_BODY)}@zh
-          && ?probeGraph = ${iri(TEXT_INDEX_PROBE_GRAPH)})
-      }
+      ${textIndexProbePattern()}
     }`, MAX_PROOF_RESPONSE_BYTES);
   const rows = control.results?.bindings ?? [];
   const row = rows[0];

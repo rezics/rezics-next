@@ -10,6 +10,35 @@ import org.apache.jena.rdf.model.Resource;
 /** Uses the reviewed Jena Lucene assembler for the physical index, then swaps
  * only the graph-scoped read behavior. */
 public final class FilteredGraphTextAssembler extends TextIndexLuceneAssembler {
+    /** cjk-bigram-v2. Fold before bigram generation on both index and query;
+     * stored values and their languages are never transformed. Each token
+     * stream owns its ICU transliterator (which is mutable, not thread-safe).
+     * Cost is streaming O(input characters), with Lucene's bounded tokenizer. */
+    public static final class CjkBigramV2 extends org.apache.lucene.analysis.Analyzer {
+        @Override protected java.io.Reader initReader(String field, java.io.Reader reader) {
+            // Normalize before tokenization: half-width voiced kana must compose
+            // before the tokenizer assigns script types and token boundaries.
+            return new org.apache.lucene.analysis.icu.ICUNormalizer2CharFilter(reader);
+        }
+        @Override protected java.io.Reader initReaderForNormalization(String field, java.io.Reader reader) {
+            return initReader(field, reader);
+        }
+        private org.apache.lucene.analysis.TokenStream fold(org.apache.lucene.analysis.TokenStream stream) {
+            return new org.apache.lucene.analysis.icu.ICUTransformFilter(stream,
+                com.ibm.icu.text.Transliterator.getInstance("Traditional-Simplified; Hiragana-Katakana"));
+        }
+        @Override protected TokenStreamComponents createComponents(String field) {
+            var tokenizer = new org.apache.lucene.analysis.standard.StandardTokenizer();
+            var bigrams = new org.apache.lucene.analysis.cjk.CJKBigramFilter(fold(tokenizer));
+            return new TokenStreamComponents(tokenizer, new org.apache.lucene.analysis.StopFilter(
+                bigrams, org.apache.lucene.analysis.cjk.CJKAnalyzer.getDefaultStopSet()));
+        }
+        @Override protected org.apache.lucene.analysis.TokenStream normalize(
+            String field, org.apache.lucene.analysis.TokenStream stream) {
+            return fold(stream);
+        }
+    }
+
     @Override public TextIndex open(Assembler assembler, Resource root, Mode mode) {
         TextIndex index = super.open(assembler, root, mode);
         if (!(index instanceof TextIndexLucene lucene))

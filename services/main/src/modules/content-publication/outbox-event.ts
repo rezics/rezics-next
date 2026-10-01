@@ -1,7 +1,7 @@
 import type { OwnerOutboxEventHandler } from '../outbox/event-handlers.ts';
 import { GRAPHS, RV, hash, iri, lit } from '../work/activate.ts';
 
-const rebuildPhases = ['quarantine', 'clear', 'cleared', 'activate'] as const;
+const rebuildPhases = ['quarantine', 'profile', 'clear', 'cleared', 'activate'] as const;
 
 export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
   { kind: `${RV}ContentPrivateProjectionEvent`, action: 'content.private-project',

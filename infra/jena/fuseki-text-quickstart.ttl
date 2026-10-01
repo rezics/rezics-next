@@ -27,8 +27,8 @@ PREFIX rv:     <https://rezics.com/vocab/>
 <#text_index> a text:TextIndexLucene ;
     text:directory "databases/rezics/lucene" ;
     text:entityMap <#entity_map> ;
-    # REZICS cjk-bigram-v1: index and query use the pinned Jena 6.2.0
-    # distribution's bundled Lucene CJKAnalyzer. A profile change rebuilds index.
+    # Standalone substrate drill: stock cjk-bigram-v1 needs no REZICS jar.
+    # Product/QA assemblers use the folded analyzer and dataset profile v3.
     text:analyzer [ a text:GenericAnalyzer ;
         text:class "org.apache.lucene.analysis.cjk.CJKAnalyzer" ] ;
     text:queryAnalyzer [ a text:GenericAnalyzer ;

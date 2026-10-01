@@ -23,11 +23,25 @@ export const CONTINUITY = 'https://rezics.com/definition/continuity/native-work-
 export const WORK_SEMANTIC_TYPES = workSemanticTypes;
 export const MAX_WORK_SEMANTIC_TYPES = 3;
 export const DATASET = 'urn:rezics:dataset:product';
-export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v2';
+// v2 added the public title field; v3 changes the analyzer to cjk-bigram-v2.
+export const TEXT_INDEX_PROFILE = 'https://rezics.com/definition/search-index-cjk-bigram-v3';
 export const TEXT_INDEX_PROBE_GRAPH = 'urn:rezics:search:probe';
 export const TEXT_INDEX_PROBE = 'urn:rezics:search:probe:cjk-bigram-v1';
-export const TEXT_INDEX_PROBE_BODY = '中文检索验证';
+export const TEXT_INDEX_PROBE_BODY = '中文检索验证 魔法禁書目錄 ガラス ＲＵＳＴ';
+export const TEXT_INDEX_PROBE_QUERIES = ['中文检索', '魔法禁书目录', 'がらす', 'ｶﾞﾗｽ', 'rust'] as const;
 export const TEXT_INDEX_PROBE_TITLE = '标题检索验证';
+/** Constant-size analyzer witness shared by request readiness and rebuild
+ * activation. Every query must return the original literal from this graph. */
+export function textIndexProbePattern(): string {
+  return `GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
+    ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
+    ${TEXT_INDEX_PROBE_QUERIES.map((query, index) => `
+      (${iri(TEXT_INDEX_PROBE)} ?probeScore${index} ?probeLiteral${index} ?probeGraph${index})
+        text:query (rv:searchBody ${lit(`"${query}"`)} 2) .
+      FILTER(?probeLiteral${index} = ${lit(TEXT_INDEX_PROBE_BODY)}@zh
+        && ?probeGraph${index} = ${iri(TEXT_INDEX_PROBE_GRAPH)})`).join('\n')}
+  }`;
+}
 export const PUBLIC_SEARCH_ANCHOR = 'urn:rezics:search:public:anchor';
 export const GRAPHS = {
   control: 'urn:rezics:graph:control',

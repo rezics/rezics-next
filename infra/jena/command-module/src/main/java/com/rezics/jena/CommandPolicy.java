@@ -101,6 +101,7 @@ final class CommandPolicy {
         boolean bootstrap = receipt.startsWith("urn:rezics:receipt:bootstrap:")
             && graphs.stream().allMatch(name -> Set.of(CONTROL, RECEIPTS, PUBLIC_SEARCH, PROBE_SEARCH).contains(name));
         boolean rebuild = receipt.startsWith("urn:rezics:receipt:content-rebuild:");
+        boolean analyzerProfile = receipt.matches("urn:rezics:receipt:content-rebuild:profile:[0-9a-f]{64}");
         boolean chapterBackfill = receipt.matches("urn:rezics:receipt:chapter-search-index:[0-9a-f]{64}");
         boolean sourceProjection = receipt.matches("urn:rezics:receipt:source-projection:[0-9a-f]{64}");
         if (graphs.contains(SOURCE) != sourceProjection) {
@@ -112,8 +113,8 @@ final class CommandPolicy {
             throw new IllegalArgumentException("source projection graph footprint differs");
         }
         if (dataInsert && !bootstrap) throw new IllegalArgumentException("unguarded INSERT DATA not admitted");
-        if (graphs.contains(PROBE_SEARCH) && !bootstrap)
-            throw new IllegalArgumentException("search probe graph is bootstrap only");
+        if (graphs.contains(PROBE_SEARCH) && !bootstrap && !analyzerProfile)
+            throw new IllegalArgumentException("search probe graph requires bootstrap or analyzer profile rebuild");
         if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && !chapterBackfill
             && current.isEmpty() && revisions.isEmpty())
             throw new IllegalArgumentException("search projection requires a product change");
@@ -137,14 +138,22 @@ final class CommandPolicy {
             throw new IllegalArgumentException("private projection requires a product revision change");
         if (rebuild) {
             String family = receipt.substring("urn:rezics:receipt:content-rebuild:".length());
-            if (!family.matches("(quarantine|clear|cleared|activate):[0-9a-f]{64}"))
+            if (!family.matches("(quarantine|profile|clear|cleared|activate):[0-9a-f]{64}"))
                 throw new IllegalArgumentException("unknown rebuild receipt family");
-            if (!graphs.stream().allMatch(name -> Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH).contains(name))
+            if (!graphs.stream().allMatch(name -> Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH, PROBE_SEARCH).contains(name))
                 || !graphs.contains(CONTROL) || !graphs.contains(RECEIPTS) || !graphs.contains(OUTBOX)
                 || !current.isEmpty() || !revisions.isEmpty())
                 throw new IllegalArgumentException("rebuild writes only control, receipt, outbox and public index");
             List<Quad> publicInserts = insert.stream()
                 .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI())).toList();
+            if (analyzerProfile) {
+                var probeInserts = insert.stream().filter(q -> PROBE_SEARCH.equals(q.getGraph().getURI())).toList();
+                var probeDeletes = delete.stream().filter(q -> PROBE_SEARCH.equals(q.getGraph().getURI())).toList();
+                if (graphs.contains(PUBLIC_SEARCH) || probeInserts.size() != 1 || probeDeletes.size() != 1
+                    || !isAnalyzerProbe(probeInserts.getFirst()) || !isAnalyzerProbe(probeDeletes.getFirst())
+                    || !probeInserts.getFirst().getObject().isLiteral())
+                    throw new IllegalArgumentException("analyzer profile rebuild may replace only its fixed body probe");
+            }
             if (family.startsWith("activate:")) {
                 if (publicInserts.size() != 1 || !isPublicAnchor(publicInserts.getFirst()))
                     throw new IllegalArgumentException("activation may insert only the public search anchor");
@@ -168,6 +177,13 @@ final class CommandPolicy {
             throw new IllegalArgumentException("update footprint too large");
         return new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
             Set.copyOf(revisions), Set.copyOf(source), bootstrap, rebuild, !delete.isEmpty());
+    }
+
+    private static boolean isAnalyzerProbe(Quad quad) {
+        return quad.getSubject().isURI()
+            && "urn:rezics:search:probe:cjk-bigram-v1".equals(quad.getSubject().getURI())
+            && quad.getPredicate().isURI()
+            && "https://rezics.com/vocab/searchBody".equals(quad.getPredicate().getURI());
     }
 
     private static boolean isPublicAnchor(Quad quad) {

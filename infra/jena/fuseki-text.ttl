@@ -1,6 +1,6 @@
 # Graph-substrate example for Apache Jena/Fuseki 6.2.0.
 # Product assembler: storage paths resolve against FUSEKI_BASE (/fuseki in the image).
-# Keep the documentation example in sync until its consumers move to this path.
+# The standalone substrate quickstart retains the stock cjk-bigram-v1 analyzer.
 PREFIX fuseki: <http://jena.apache.org/fuseki#>
 PREFIX ja: <http://jena.hpl.hp.com/2005/11/Assembler#>
 PREFIX tdb2:   <http://jena.apache.org/2016/tdb#>
@@ -31,10 +31,10 @@ PREFIX rv:     <https://rezics.com/vocab/>
 <#text_index> a <https://rezics.com/fuseki/FilteredGraphTextIndex> ;
     text:directory "databases/rezics/lucene" ;
     text:entityMap <#entity_map> ;
-    # REZICS cjk-bigram-v1: index and query use the pinned Jena 6.2.0
-    # distribution's bundled Lucene CJKAnalyzer. A profile change rebuilds index.
+    # REZICS cjk-bigram-v2: ICU NFKC case/width normalization, Chinese and kana
+    # folding, then CJK bigrams. Dataset profile v3 requires an index rebuild.
     text:analyzer [ a text:GenericAnalyzer ;
-        text:class "org.apache.lucene.analysis.cjk.CJKAnalyzer" ] ;
+        text:class "com.rezics.jena.FilteredGraphTextAssembler$CjkBigramV2" ] ;
     text:storeValues true ;
     text:ignoreIndexErrors false .
 

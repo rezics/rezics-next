@@ -7,10 +7,26 @@
   <dependencies>
     <dependency><groupId>org.apache.jena</groupId><artifactId>jena-fuseki-main</artifactId><version>6.2.0</version><scope>provided</scope></dependency>
     <dependency><groupId>org.apache.jena</groupId><artifactId>jena-text</artifactId><version>6.2.0</version><scope>provided</scope></dependency>
+    <!-- Match Jena 6.2.0's Lucene 10.3.1; never bundle another core/common jar. -->
+    <dependency><groupId>org.apache.lucene</groupId><artifactId>lucene-analysis-icu</artifactId><version>10.3.1</version></dependency>
     <dependency><groupId>junit</groupId><artifactId>junit</artifactId><version>4.13.2</version><scope>test</scope></dependency>
   </dependencies>
   <build>
     <finalName>fuseki-command</finalName>
+    <plugins>
+      <!-- Server and offline indexer already load this jar. Include ICU's data
+           and factories there so a rebuild cannot lose an extra classpath jar. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-shade-plugin</artifactId><version>3.6.1</version>
+        <executions><execution><phase>package</phase><goals><goal>shade</goal></goals>
+          <configuration>
+            <createDependencyReducedPom>false</createDependencyReducedPom>
+            <artifactSet><includes><include>org.apache.lucene:lucene-analysis-icu</include><include>com.ibm.icu:icu4j</include></includes></artifactSet>
+            <transformers><transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" /></transformers>
+          </configuration>
+        </execution></executions>
+      </plugin>
+    </plugins>
     <resources>
       <resource><directory>src/main/resources</directory><filtering>true</filtering><includes><include>com/rezics/jena/module.properties</include></includes></resource>
       <resource><directory>src/main/resources</directory><filtering>false</filtering><excludes><exclude>com/rezics/jena/module.properties</exclude></excludes></resource>

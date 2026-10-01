@@ -22,6 +22,7 @@ ENV FUSEKI_HOME=/opt/apache-jena-fuseki-6.2.0 \
     MAIN=server-plain \
     JVM_ARGS=-Xms256m\ -Xmx2g
 COPY --from=distribution /opt/apache-jena-fuseki-6.2.0 /opt/apache-jena-fuseki-6.2.0
+# Includes the pinned Lucene ICU analyzer and ICU4J data for server and indexer.
 COPY --from=module /build/target/fuseki-command.jar /fuseki/extra/fuseki-command.jar
 COPY infra/jena/fuseki-text.ttl /fuseki/fuseki-text.ttl
 COPY infra/jena/fuseki-text-qa.ttl /fuseki/fuseki-text-qa.ttl

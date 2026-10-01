@@ -24,8 +24,8 @@ export const INDEXER_ASSEMBLER = '/fuseki/fuseki-text.ttl';
 /** Relative to FUSEKI_BASE, so a restored volume can never resolve to the original. */
 export const PINNED_TDB2_LOCATION = 'databases/rezics/tdb2';
 export const PINNED_LUCENE_DIRECTORY = 'databases/rezics/lucene';
-/** Analyzer of TEXT_INDEX_PROFILE `search-index-cjk-bigram-v1`. */
-export const PINNED_ANALYZER = 'org.apache.lucene.analysis.cjk.CJKAnalyzer';
+/** cjk-bigram-v2 analyzer of dataset profile `search-index-cjk-bigram-v3`. */
+export const PINNED_ANALYZER = 'com.rezics.jena.FilteredGraphTextAssembler$CjkBigramV2';
 export const DEFAULT_RESERVE_BYTES = 268_435_456;
 export const OWNER_ENTRYPOINT = '/usr/local/bin/fuseki-owner';
 const JENA_JAR = '/opt/apache-jena-fuseki-6.2.0/fuseki-server.jar';
@@ -87,7 +87,7 @@ export function assertPinnedAssembler(facts: AssemblerFacts): void {
   if (facts.luceneDirectory !== PINNED_LUCENE_DIRECTORY) problems.push(`Lucene directory ${facts.luceneDirectory}`);
   if (facts.analyzer !== PINNED_ANALYZER) problems.push(`analyzer ${facts.analyzer}`);
   if (facts.textDatasets !== 1) problems.push(`${facts.textDatasets} text datasets`);
-  if (problems.length) throw new SearchStateRefused(`assembler differs from cjk-bigram-v1: ${problems.join(', ')}`);
+  if (problems.length) throw new SearchStateRefused(`assembler differs from cjk-bigram-v2: ${problems.join(', ')}`);
 }
 
 export interface StatePins {

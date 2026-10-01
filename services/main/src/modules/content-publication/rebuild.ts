@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, RV, TEXT_INDEX_PROBE,
-  TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_GRAPH, TEXT_INDEX_PROFILE, hash, iri, lit,
+  TEXT_INDEX_PROBE_BODY, TEXT_INDEX_PROBE_GRAPH, TEXT_INDEX_PROFILE, hash, iri, lit, textIndexProbePattern,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { relayContentProjectionOnce } from './relay.ts';
@@ -23,7 +23,7 @@ export interface ContentRebuildJob {
   consumer: string;
 }
 
-type Phase = 'quarantine' | 'clear' | 'cleared' | 'activate';
+type Phase = 'quarantine' | 'profile' | 'clear' | 'cleared' | 'activate';
 
 function receipt(phase: Phase, identity: string): string {
   return `urn:rezics:receipt:content-rebuild:${phase}:${hash(identity)}`;
@@ -158,6 +158,27 @@ export async function quarantinePublicContentSearch(env: WorkActivationEnvironme
     if (!cut) throw new ContentRebuildUnavailable('quarantine receipt is absent');
   }
   await assertQuarantined(env);
+  // A separate receipt also upgrades a job quarantined by an older release.
+  // Public reads stay closed until the offline rebuild and activation finish.
+  // Cost: one bounded receipt read and one constant-size guarded command.
+  const profileIdentity = `${id}\0${TEXT_INDEX_PROFILE}`;
+  if (!await isReceiptCommitted(env, 'profile', profileIdentity)) {
+    await command(env, 'profile', profileIdentity, {
+      family: 'content-rebuild-profile-v1', id, profile: TEXT_INDEX_PROFILE,
+      probe: TEXT_INDEX_PROBE_BODY,
+    }, {
+      controlDeletion: '; rv:textIndexProfile ?priorProfile',
+      controlInsertion: `; rv:textIndexProfile ${iri(TEXT_INDEX_PROFILE)}`,
+      deletion: `GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
+        ${iri(TEXT_INDEX_PROBE)} rv:searchBody ?priorProbe . }`,
+      insertion: `GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
+        ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh . }`,
+      condition: `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:textIndexProfile ?priorProfile . }
+        OPTIONAL { GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} { ${iri(TEXT_INDEX_PROBE)} rv:searchBody ?priorProbe . } }
+        FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`,
+    });
+  }
   return { id, cut, consumer };
 }
 
@@ -337,12 +358,7 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
       (?unit ?score ?literal ?graph) text:query (rv:searchBody "body:*" ${MAX_REBUILD_UNITS + 1}) .
     } }`),
     env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
-      ASK { GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
-      ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
-      (${iri(TEXT_INDEX_PROBE)} ?score ?literal ?graph)
-        text:query (rv:searchBody ${lit('"中文检索"')} 2) .
-      FILTER(?literal = ${lit(TEXT_INDEX_PROBE_BODY)}@zh
-        && ?graph = ${iri(TEXT_INDEX_PROBE_GRAPH)}) } }`),
+      ASK { ${textIndexProbePattern()} }`),
   ]);
   if (probeResult.boolean !== true) throw new ContentRebuildUnavailable('rebuilt CJK index probe is absent');
   const declared = declaredResult.results?.bindings ?? [];

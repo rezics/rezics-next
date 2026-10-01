@@ -84,6 +84,7 @@ final class CommandInvariant {
         }
         if (before == null) return "product control record was absent";
         boolean activation = receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:");
+        boolean analyzerProfile = receipt.startsWith("urn:rezics:receipt:content-rebuild:profile:");
         if (plan.rebuild() && data.contains(PUBLIC_SEARCH, PUBLIC_ANCHOR,
             RDF.type.asNode(), rv("SearchGraphAnchor")) != activation)
             return "rebuild public search anchor differs";
@@ -133,7 +134,7 @@ final class CommandInvariant {
                 || !(activation ? controlWritesOnlySequenceAndGeneration(plan)
                     && before.textGeneration() != null && after.textGeneration() != null
                     && !before.textGeneration().equals(after.textGeneration())
-                    : controlWritesOnlySequence(plan)
+                    : (analyzerProfile ? controlWritesOnlySequenceAndProfile(plan) : controlWritesOnlySequence(plan))
                     && (!plan.rebuild() || java.util.Objects.equals(before.textGeneration(), after.textGeneration()))))
                 return "invalid sequence advance";
         }
@@ -215,6 +216,19 @@ final class CommandInvariant {
             && (!PRODUCT.equals(quad.getSubject()) || !rv("sequence").equals(quad.getPredicate()))) return false;
         for (Quad quad : modify.getDeleteQuads()) if (CONTROL.equals(quad.getGraph())
             && (!PRODUCT.equals(quad.getSubject()) || !rv("sequence").equals(quad.getPredicate()))) return false;
+        return true;
+    }
+
+    private static boolean controlWritesOnlySequenceAndProfile(CommandPolicy.Plan plan) {
+        for (var operation : plan.request().getOperations()) {
+            if (!(operation instanceof UpdateModify modify)) return false;
+            for (Quad quad : java.util.stream.Stream.concat(modify.getDeleteQuads().stream(),
+                modify.getInsertQuads().stream()).toList()) {
+                if (quad.getGraph().equals(CONTROL) && (!quad.getSubject().equals(PRODUCT)
+                    || !(quad.getPredicate().equals(rv("sequence"))
+                        || quad.getPredicate().equals(rv("textIndexProfile"))))) return false;
+            }
+        }
         return true;
     }
 

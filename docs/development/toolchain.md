@@ -85,6 +85,27 @@ checks establish runtime compatibility and failure handling; they do not measure
 accuracy on REZICS uploads. Thresholds and the weights digest live in
 [`policy.ts`](../../services/main/src/modules/media-screen/policy.ts).
 
+## Chinese script and kana search folding
+
+The command jar bundles `lucene-analysis-icu` 10.3.1 (Apache-2.0), matching
+[Jena 6.2.0's Lucene pin](https://github.com/apache/jena/blob/jena-6.2.0/pom.xml),
+and its ICU4J 77.1 dependency (Unicode licence). Maven Shade 3.6.1 packages these
+two dependencies and their resources; Lucene core/common remain Jena's bundled
+copies. The same jar serves Fuseki and the offline indexer, including erasure
+rebuilds. The module tests and disposable integration fixtures qualify matching,
+original literals/languages and generation readiness.
+
+`CjkBigramV2` applies
+[ICU NFKC case/width normalization](https://github.com/apache/lucene/blob/releases/lucene/10.3.1/lucene/analysis/icu/src/java/org/apache/lucene/analysis/icu/ICUNormalizer2CharFilter.java)
+before tokenization, then
+[Traditional-to-Simplified and hiragana-to-katakana transforms](https://github.com/apache/lucene/blob/releases/lucene/10.3.1/lucene/analysis/icu/src/java/org/apache/lucene/analysis/icu/ICUTransformFilter.java)
+before CJK bigrams. Folding is many-to-one: original spellings stay stored for
+display, while voiced/unvoiced and small/large kana remain distinct. Dataset
+profile `search-index-cjk-bigram-v3` advances the prior v2 title-field profile.
+Run `task search:rebuild` with writers stopped to upgrade an existing volume;
+its quarantined profile step replaces the probe before rebuilding an empty
+index. Activation and requests require the Chinese, kana and width witnesses.
+
 ## Architecture evaluation exception (2026-09-24)
 
 The [storage research runner](../../scripts/research/storage_architecture/README.md)
