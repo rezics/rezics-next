@@ -3,6 +3,17 @@
 // branches append entries; git's union merge driver keeps both sides (see
 // .gitattributes), so add a comment line and a path line, never reorder.
 export const isolatedIntegrationFileList = [
+  // M6 replays reference suites that require fresh rating and catalogue inventories.
+  'tests/qa/integration/g-856-wiki.test.ts',
+  'tests/qa/integration/g-856-editorial.test.ts',
+  'tests/qa/integration/g-856-position.test.ts',
+  'tests/qa/integration/g-856-readers.test.ts',
+  'tests/qa/integration/g-856-sessions.test.ts',
+  'tests/qa/integration/g-856-library.test.ts',
+  'tests/qa/integration/g-856-discovery.test.ts',
+  'tests/qa/integration/g-856-series.test.ts',
+  'tests/qa/integration/g-856-zones.test.ts',
+  'tests/qa/integration/g-856-catalogue.test.ts',
   // Portable bundle imports assert the complete fresh Access rating inventory.
   'tests/qa/integration/g-854-library-bundle.test.ts',
   // G-724 consumes first-administrator configuration and needs empty owner/graph state.

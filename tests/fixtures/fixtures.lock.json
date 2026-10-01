@@ -52,6 +52,16 @@
       "seed": "tests/fixtures/gutenberg/ab1b1ea267cd64c4706ed5e6df37313d85e06e79db1de4b5169cececa0a57672.json"
     },
     {
+      "id": "pg45186",
+      "source": "gutenberg",
+      "requestUrl": "https://www.gutenberg.org/files/45186/45186-0.txt",
+      "fetchedAt": "2026-10-01T09:34:45.198Z",
+      "sha256": "6f70fe9c6e91c2eaf87e98634a8d090df4d92f60f9ede861dc8fc861d0b3eb9b",
+      "size": 766773,
+      "reuseBasis": "Public-domain literary text in the United States; UTF-8 editions with the license, header, footer and trademark references removed under section 1.C. Source attribution retained only as provenance. https://www.gutenberg.org/policy/license.html Finnish translation by O. A. Joutsen (1922); translator 1878–1936. Edition metadata: https://www.gutenberg.org/ebooks/45186",
+      "seed": "tests/fixtures/gutenberg/6f70fe9c6e91c2eaf87e98634a8d090df4d92f60f9ede861dc8fc861d0b3eb9b.json"
+    },
+    {
       "id": "pg514",
       "source": "gutenberg",
       "requestUrl": "https://www.gutenberg.org/cache/epub/514/pg514.txt",

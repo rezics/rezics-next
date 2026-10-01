@@ -31,10 +31,10 @@ test('G-854: G-833 ISBN lookup chooses an exact edition; VNDB Work identity neve
   const fake = { call: async (r: Request) => { paths.push(r.url);return Response.json({ items: [
     { id: release,title: { value: 'Native title' },coverage: [{ work }] } ],nextCursor: null }); } } as ReaderLibraryImportStore;
   const row = { ...emptyRow('v17','Ever17',{}),identifiers: [{ provider: 'https://vndb.org/vn',value: 'v17' }] };
-  expect(await matchLibraryRow(fake,request,agent,row)).toMatchObject({ kind: 'matched',work,target: null });
+  expect(await matchLibraryRow(fake,request,agent,row,async () => { throw new Error('Native matches must not contact a source'); })).toMatchObject({ kind: 'matched',work,target: null });
   expect(new URL(paths[0]!).searchParams.get('provider')).toBe('https://vndb.org/vn');
   row.identifiers = [{ provider: 'isbn13',value: '9780306406157' }];
-  expect(await matchLibraryRow(fake,request,agent,row)).toMatchObject({ kind: 'matched',work,target: release });
+  expect(await matchLibraryRow(fake,request,agent,row,async () => { throw new Error('Native matches must not contact a source'); })).toMatchObject({ kind: 'matched',work,target: release });
   expect(new URL(paths[1]!).searchParams.get('isbn13')).toBe('9780306406157');
 });
 test('G-854: review metadata is applied even when text is identical, and omitted legacy metadata is preserved',async () => {

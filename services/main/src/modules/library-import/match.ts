@@ -27,7 +27,7 @@ async function read<T>(store: ReaderLibraryImportStore, request: Request, path: 
   return response.json() as Promise<T>;
 }
 export async function matchLibraryRow(store: ReaderLibraryImportStore, request: Request, agent: string,
-  row: CanonicalRow): Promise<RowMatch> {
+  row: CanonicalRow, searchSource: (query: { actingSubject: string; isbn?: string; title?: string; author?: string }) => Promise<Response>): Promise<RowMatch> {
   const owner = `actingSubject=${encodeURIComponent(agent)}`;
   const native = row.work ?? row.session?.target;
   if (row.kind === 'retained' || row.kind === 'shelf') return { kind: 'matched', work: row.work, target: row.target,
@@ -81,11 +81,10 @@ export async function matchLibraryRow(store: ReaderLibraryImportStore, request: 
   const match = chooseCandidates(row,candidates,!!cursor);
   if (match.kind === 'not-found' && titleQuery && !row.identifiers.some(i => i.provider === 'https://vndb.org/vn')) {
     const isbn = row.identifiers.find(i => i.provider === 'isbn13')?.value;
-    const queries: Record<string,string>[] = [...(isbn ? [{ actingSubject: agent,isbn }] : []),{ actingSubject: agent,title: row.title.slice(0,200),
+    const queries: { actingSubject: string; isbn?: string; title?: string; author?: string }[] = [...(isbn ? [{ actingSubject: agent,isbn }] : []),{ actingSubject: agent,title: row.title.slice(0,200),
       ...(row.creators[0] ? { author: row.creators[0].slice(0,200) } : {}) }];
     for (const search of queries) {
-      const query = new URLSearchParams(search);
-      const response = await mainCall(store,request,'GET',`/v1/me/library-import/open-library?${query}`);
+      const response = await searchSource(search);
       match.openLibraryAvailability = response.ok ? 'available' : response.status === 429 ? 'budget-exceeded' : 'unavailable';
       if (response.ok) match.openLibrary = (await response.json() as { items: RowMatch['openLibrary'] }).items;
       if (!response.ok || match.openLibrary.length) break;

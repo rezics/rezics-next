@@ -5,6 +5,8 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { ReaderImportBudgetExceeded, ReaderImportConflict, ReaderLibraryImportStore }
   from '../../../services/main/src/modules/library-import/reader-import.ts';
 import { authorCreditFixture, nativeId } from '../fixtures/author-credit.ts';
+import { LibraryFileStore, importDigest } from '../../../services/main/src/modules/library-import/file-store.ts';
+import { emptyRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 
@@ -14,6 +16,7 @@ test('G428: two readers add one Open Library identity and receive one native Wor
   const h = await authorCreditFixture(Bun.env as Record<string, string>, directory);
   try {
     const libraryImport = new ReaderLibraryImportStore(h.pool);
+    const libraryFiles = new LibraryFileStore(h.pool);
     const access = new Proxy(h.access, { get(target, property) {
       if (property === 'canReadAsBaselineMember') return async () => true;
       const value = Reflect.get(target, property, target);
@@ -27,7 +30,7 @@ test('G428: two readers add one Open Library identity and receive one native Wor
     const app = createMainApp(h.nativeFuseki, {
       account: h.account.verifier, access, environment: h.env,
       accessPolicy: new AccessPolicyOwner(h.accessPool),
-      libraryImport, sourceIntake: h.intake, sourceConversions: h.conversions,
+      libraryImport, libraryFiles, sourceIntake: h.intake, sourceConversions: h.conversions,
       sourceGraph: h.graph, sourceProposals: h.proposals, sourceAdoptions: h.adoptions,
       openLibraryFetch: (async (url: string) => { fetched++;
         expect(url).toBe(`https://openlibrary.org/works/${workId}.json`);
@@ -37,13 +40,21 @@ test('G428: two readers add one Open Library identity and receive one native Wor
           title: 'Shared imported book', authors: [] });
       }) as typeof fetch,
     });
+    const otherActor = nativeId();
+    const uploads = new Map<string,string>();
+    for (const actor of [h.actor,otherActor]) {
+      const row = emptyRow('open-library-book','Shared imported book',{});
+      const file = await libraryFiles.create(actor,randomUUID(),importDigest([row]),'generic-csv',[row]);
+      await libraryFiles.saveMatch(actor,file.id,0,{ kind: 'not-found',work: null,target: null,truncated: false,
+        candidates: [],openLibraryAvailability: 'available',openLibrary: [{ workId,title: row.title,authors: [],coverId: null }] });
+      uploads.set(actor,file.id);
+    }
     const adopt = (token: string, actor: string) => app.handle(new Request(
-      'http://main.local/v1/me/library-import/open-library/adoptions', {
+      `http://main.local/v1/me/library-imports/${uploads.get(actor)}/rows/0/adoptions`, {
         method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
           'idempotency-key': `import-${actor.slice(-36)}` },
         body: JSON.stringify({ actingSubject: actor, workId, titleLanguage: 'en' }),
       }));
-    const otherActor = nativeId();
     const firstPending = adopt(h.account.tokenA, h.actor);
     await started;
     const secondPending = adopt(h.account.tokenB, otherActor);

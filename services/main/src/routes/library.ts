@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { pendingOperation, problemResult } from '../api-contract.ts';
+import { problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
   from '../modules/library/read.ts';
 import { readPublicShelves, readPublicStatusShelf } from '../modules/library/public.ts';
@@ -13,12 +13,6 @@ import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
-import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../modules/source/open-library.ts';
-import { OpenLibraryImportSearchUnavailable, searchOpenLibraryImport }
-  from '../modules/library-import/open-library-search.ts';
-import { ReaderImportBudgetExceeded, ReaderImportConflict, ReaderImportInvalid, ReaderImportUnavailable }
-  from '../modules/library-import/reader-import.ts';
-import { importReviewedBatch } from '../modules/library-import/batch.ts';
 import { readRichReadingYear } from '../modules/library/stats.ts';
 
 const shelfSort = t.Optional(t.Union([t.Literal('added'), t.Literal('title'), t.Literal('rating'),
@@ -84,17 +78,6 @@ const readingStats = t.Object({ detailsAvailability: t.Union([t.Literal('complet
 const privateReview = t.Object({ work: readId, text: t.String({ minLength: 1, maxLength: 8000 }),
   language: t.String(), spoiler: t.Boolean(), version: t.Integer({ minimum: 1 }),
   changedAt: t.String(), replayed: t.Optional(t.Boolean()) });
-const importRow = t.Object({ work: readId, status,
-  startedOn: t.Nullable(t.String({ format: 'date' })), finishedOn: t.Nullable(t.String({ format: 'date' })),
-  rating: t.Nullable(t.Integer({ minimum: 1, maximum: 5 })), hasRating: t.Boolean(),
-  review: t.Nullable(t.String({ maxLength: 8000 })),
-  reviewVisibility: t.Union([t.Literal('private'), t.Literal('public')]),
-  shelves: t.Array(t.String({ minLength: 1, maxLength: 300 }), { maxItems: 20 }),
-  conflictChoice: t.Optional(t.Union([t.Literal('keep'), t.Literal('replace')])) },
-{ additionalProperties: false });
-const importProgress = t.Object({ total: t.Integer({ minimum: 1, maximum: 500 }), pending: t.Boolean(),
-  items: t.Array(t.Object({ index: t.Integer({ minimum: 0 }), result: t.Object({ work: readId,
-    applied: t.Array(t.String()), issues: t.Array(t.String()) }) }), { maxItems: 500 }) });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
 const privateHeaders = { 'cache-control': 'private, no-store' };
@@ -112,9 +95,6 @@ export const openApiOperations = {
   '/v1/me/reading-stats': { get: { bearer: true } },
   '/v1/me/import-reviews': { get: { bearer: true } },
   '/v1/me/import-reviews/{id}': { put: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-import/batches': { post: { bearer: true, idempotencyKey: true } },
-  '/v1/me/library-import/open-library': { get: { bearer: true } },
-  '/v1/me/library-import/open-library/adoptions': { post: { bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown) {
@@ -292,130 +272,6 @@ export function libraryRoutes(work: MainWorkDependencies) {
           text: body.text, language: body.language, spoiler: body.spoiler,
           expectedVersion: body.expectedVersion, idempotencyKey }), { headers: privateHeaders });
       } catch (error) { return failure(error); }
-    })
-    .post('/v1/me/library-import/batches', {
-      body: t.Object({ actingSubject: readId, context: t.Nullable(readId),
-        language: t.String({ minLength: 2, maxLength: 35 }),
-        existingShelves: t.Array(t.Object({ name: t.String({ minLength: 1, maxLength: 300 }),
-          id: readId }), { maxItems: 100 }),
-        rows: t.Array(importRow, { minItems: 1, maxItems: 500 }) }, { additionalProperties: false }),
-      response: { 200: importProgress, 202: importProgress, ...errors },
-    }, async ({ request, body }) => {
-      if (!work.libraryImport) return problem(503, 'reader_import_unavailable', 'Reader import unavailable');
-      const key = request.headers.get('idempotency-key') ?? '';
-      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
-        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
-      }
-      try {
-        if (!await reader(request, body.actingSubject)) {
-          return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        }
-        const result = await importReviewedBatch(work.libraryImport, request, body, key);
-        return Response.json(result, { status: result.pending ? 202 : 200, headers: privateHeaders });
-      } catch (error) {
-        if (error instanceof ReaderImportInvalid) {
-          return problem(400, 'invalid_reader_import', 'Reviewed Library import is invalid');
-        }
-        if (error instanceof ReaderImportConflict) {
-          return problem(409, 'reader_import_intent_conflict', 'Library import key changed intent');
-        }
-        if (error instanceof ReaderImportUnavailable) {
-          return problem(503, 'reader_import_unavailable', 'Reader import is unavailable');
-        }
-        return commandError(error);
-      }
-    })
-    .get('/v1/me/library-import/open-library', {
-      query: t.Object({ actingSubject: readId, isbn: t.Optional(t.String({ pattern: '^\\d{13}$' })),
-        title: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
-        author: t.Optional(t.String({ maxLength: 200 })) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(t.Object({ workId: t.String(), title: t.String(),
-        authors: t.Array(t.String()), coverId: t.Nullable(t.Integer()) }), { maxItems: 6 }) }),
-        ...errors, 429: problemResult(429) },
-    }, async ({ request, query }) => {
-      try {
-        if (!await reader(request, query.actingSubject)) {
-          return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        }
-        if (!query.isbn && !query.title) return problem(400, 'invalid_request', 'Search for an ISBN or title');
-        if (!work.libraryImport) return problem(503, 'reader_import_unavailable', 'Reader import unavailable');
-        await work.libraryImport.takeBudget(query.actingSubject, 'search');
-        return Response.json({ items: await searchOpenLibraryImport(query, work.openLibraryFetch ?? fetch) },
-          { headers: privateHeaders });
-      } catch (error) {
-        if (error instanceof ReaderImportBudgetExceeded) {
-          return problem(429, 'reader_import_search_budget', 'Search limit reached; try again tomorrow');
-        }
-        if (error instanceof OpenLibraryImportSearchUnavailable) {
-          return problem(503, 'source_search_unavailable', 'Open Library search is unavailable');
-        }
-        return commandError(error);
-      }
-    })
-    .post('/v1/me/library-import/open-library/adoptions', {
-      body: t.Object({ actingSubject: readId, workId: t.String({ pattern: '^OL[1-9][0-9]{0,11}W$' }),
-        titleLanguage: t.Optional(t.String({ minLength: 2, maxLength: 35 })) },
-      { additionalProperties: false }),
-      response: { 200: t.Object({ work: readId, replayed: t.Boolean() }),
-        202: pendingOperation, ...errors, 422: problemResult(422), 429: problemResult(429) },
-    }, async ({ request, body }) => {
-      const key = request.headers.get('idempotency-key') ?? '';
-      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) {
-        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
-      }
-      if (!work.sourceIntake || !work.sourceConversions || !work.sourceGraph || !work.sourceProposals
-        || !work.sourceAdoptions || !work.libraryImport) {
-        return problem(503, 'source_unavailable', 'Source owner is unavailable');
-      }
-      try {
-        const principal = await work.account.verify(request, ['work:read', 'work:create']);
-        if (!await work.access.canReadAsBaselineMember?.(principal, body.actingSubject)) {
-          return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        }
-        const principalId = await work.access.activePrincipalId(principal);
-        if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const workId = checkedOpenLibraryWorkId(body.workId);
-        return await work.libraryImport.withOpenLibraryWork(workId, async () => {
-          let observation = await work.sourceIntake!.replay(principalId, key);
-          if (observation) {
-            if (observation.provider !== 'open-library' || observation.namespace !== 'work'
-              || observation.externalId !== workId
-              || observation.capture?.profile !== 'open-library-work-acquisition-v1') {
-              return problem(409, 'source_intent_conflict', 'Import key changed Work');
-            }
-          }
-          const existing = await work.libraryImport!.adoptedOpenLibraryWork(workId);
-          if (existing) return Response.json({ work: existing, replayed: true }, { headers: privateHeaders });
-          if (!observation) {
-            await work.libraryImport!.takeBudget(body.actingSubject, 'acquisition');
-            await work.sourceIntake!.reserveOpenLibrarySlot();
-            const captured = await fetchOpenLibraryWork(workId, work.openLibraryFetch ?? fetch);
-            observation = (await work.sourceIntake!.submit(principalId, key,
-              captured.input, captured.capture)).observation;
-          }
-          const conversion = await work.sourceConversions!.convert(principalId, observation.observation.slice(-36));
-          if (!conversion) return problem(503, 'source_unavailable', 'Source conversion is unavailable');
-          const conversionId = conversion.conversion.conversion.slice(-36);
-          await work.sourceGraph!.project(principalId, conversionId);
-          const proposal = await work.sourceProposals!.propose(principalId, conversionId);
-          if (!proposal) return problem(503, 'source_unavailable', 'Source proposal is unavailable');
-          const adopted = await work.sourceAdoptions!.adopt(principalId, request,
-            proposal.proposal.proposal.slice(-36), { actingSubject: body.actingSubject,
-              authorityPath: 'represented-agent', confirmedTitle: proposal.proposal.candidateTitle,
-              titleLanguage: body.titleLanguage });
-          if (!adopted) return problem(503, 'source_unavailable', 'Work adoption is unavailable');
-          return Response.json({ work: adopted.adoption.work, replayed: adopted.replayed },
-            { headers: privateHeaders });
-        });
-      } catch (error) {
-        if (error instanceof ReaderImportBudgetExceeded) {
-          return problem(429, 'reader_import_adoption_budget', 'Book addition limit reached; try again tomorrow');
-        }
-        if (error instanceof ReaderImportUnavailable) {
-          return problem(503, 'reader_import_unavailable', 'Reader import is temporarily unavailable');
-        }
-        return commandError(error);
-      }
     })
     .get('/v1/me/reading-stats', {
       query: t.Object({ actingSubject: readId, year: t.Numeric({ minimum: 1900, maximum: 2100 }) },

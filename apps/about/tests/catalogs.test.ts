@@ -109,7 +109,11 @@ test('launch capabilities and principles are distinct from sourced post-launch c
     expect(features[id].source, id).toBeUndefined();
   }
   const later = featureIds.filter((id) => features[id].status === 'later');
-  expect(later).toEqual([]);
+  expect(later).toEqual(['copies-loans', 'serial-scheduling', 'anime-episodes', 'acgn-zone']);
+  for (const id of later)
+    expect(features[id].source).toMatch(
+      /^https:\/\/github\.com\/rezics\/rezics-next\/blob\/main\/docs\//,
+    );
   expect(features['world-visuals']).toMatchObject({
     status: 'launch',
     milestone: 'M7',

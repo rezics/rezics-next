@@ -6,6 +6,7 @@ import { parseLibraryFile } from '../modules/library-import/formats/index.ts';
 import { inspectGenericCsv } from '../modules/library-import/formats/generic-csv.ts';
 import { importDigest, LibraryFileMissing } from '../modules/library-import/file-store.ts';
 import { mainCall, matchLibraryRow } from '../modules/library-import/match.ts';
+import { adoptLibrarySource, searchLibrarySource } from '../modules/library-import/open-library.ts';
 import { applyLibraryFile } from '../modules/library-import/apply.ts';
 import { ReaderImportConflict, ReaderImportInvalid, ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -110,7 +111,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
               openLibrary: [],openLibraryAvailability: 'not-requested' as const }
             : row.resolution?.work ? { kind: 'matched' as const,work: row.resolution.work,target: row.resolution.target ?? null,
               candidates: [],truncated: false,openLibrary: [],openLibraryAvailability: 'not-requested' as const }
-              : await matchLibraryRow(deps.libraryImport!,request,query.actingSubject,row.source);
+              : await matchLibraryRow(deps.libraryImport!,request,query.actingSubject,row.source, search => searchLibrarySource(deps,request,search));
           await deps.libraryFiles!.saveMatch(query.actingSubject,params.id,row.index,matched);
         }
         const saved = await deps.libraryFiles!.page(query.actingSubject,params.id,query.cursor ?? -1);
@@ -161,7 +162,7 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
         if (page.rows[0]?.index !== params.row || !page.rows[0].match?.openLibrary.some(c => c.workId === body.workId)) {
           throw new ReaderImportInvalid('Choose an Open Library candidate from this row');
         }
-        return mainCall(deps.libraryImport!,request,'POST','/v1/me/library-import/open-library/adoptions',body,key);
+        return await adoptLibrarySource(deps,request,body);
       } catch (error) { return failure(error); }
     });
 }

@@ -48,7 +48,13 @@ const plan = {
   'reading-sessions': ['reading', 'M6'],
   'library-import': ['reading', 'M6'],
   'library-export': ['reading', 'M5'],
-  'copies-loans': ['reading', 'M6'],
+  'copies-loans': [
+    'reading',
+    {
+      later:
+        'https://github.com/rezics/rezics-next/blob/main/docs/product/capabilities.md#deferred-rollouts',
+    },
+  ],
   'review-targets': ['reading', 'M7'],
   'reading-notes': ['reading', 'M7'],
   // Light novels
@@ -60,7 +66,13 @@ const plan = {
   'light-novels-zone': ['light-novels', 'M6'],
   // Serial fiction
   'serial-writing': ['serial-fiction', 'M5'],
-  'serial-scheduling': ['serial-fiction', 'M6'],
+  'serial-scheduling': [
+    'serial-fiction',
+    {
+      later:
+        'https://github.com/rezics/rezics-next/blob/main/docs/product/capabilities.md#deferred-rollouts',
+    },
+  ],
   'serial-reading': ['serial-fiction', 'M6'],
   'chapter-discussion': ['serial-fiction', 'M6'],
   collaborators: ['serial-fiction', 'M6'],
@@ -68,10 +80,22 @@ const plan = {
   // Visual novels, anime and manga
   'vn-releases': ['acgn', 'M6'],
   'release-provenance': ['acgn', 'M6'],
-  'anime-episodes': ['acgn', 'M6'],
+  'anime-episodes': [
+    'acgn',
+    {
+      later:
+        'https://github.com/rezics/rezics-next/blob/main/docs/product/capabilities.md#deferred-rollouts',
+    },
+  ],
   'one-list': ['acgn', 'M6'],
   'spoiler-position': ['acgn', 'M5'],
-  'acgn-zone': ['acgn', 'M6'],
+  'acgn-zone': [
+    'acgn',
+    {
+      later:
+        'https://github.com/rezics/rezics-next/blob/main/docs/product/capabilities.md#deferred-rollouts',
+    },
+  ],
   // Wikis and worldbuilding
   'realm-wikis': ['wikis', 'M7'],
   'chapter-citations': ['wikis', 'M7'],

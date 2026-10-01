@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, type Page, type TestInfo } from '@playwright/test';
+import { canonicalJson } from '../../../services/main/src/modules/connected-apps/json.ts';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 
 // Shared by the G-855 e2e files: the QA web member, a bounded sign-in, and a library of 1,200 records
@@ -72,7 +73,7 @@ export async function exportRows(page: Page, actingSubject: string): Promise<Row
 }
 
 /** What a library holds that the account cannot recompute: the retained records' own fields. */
-export const retainedFields = (rows: readonly Row[]) => rows.filter(row => row.kind === 'retained').map(row => JSON.stringify(row.raw)).sort();
+export const retainedFields = (rows: readonly Row[]) => rows.filter(row => row.kind === 'retained').map(row => canonicalJson(row.raw)).sort();
 
 export const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 

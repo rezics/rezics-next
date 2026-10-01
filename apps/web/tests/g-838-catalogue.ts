@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import { seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
@@ -86,7 +87,13 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   // The one correspondence kind the panel offers "also mark as read" for.
   await editor.grant('semantic:create:root', 'semantic.change');
   mkdirSync(scratch, { recursive: true });
-  const definitions = new Map((await seedRelationLexicon({
+  const current = await readDefinitionByKey(stack.env,'correspondence-equivalent');
+  // Other launch fixtures may already have admitted this stable meaning.
+  if (current) {
+    await editor.grant(`semantic:read:${current.definition}`,'semantic.read');
+    await grantReader(`semantic:read:${current.definition}`,'semantic.read');
+  }
+  const definitions = current ? new Map([['correspondence-equivalent',current]]) : new Map((await seedRelationLexicon({
     post: async <T>(path: string, body: object, key: string) => json<T>(await editor.send('POST', path, body, key), 201),
     authorizeDefinition: async receipt => {
       await editor.grant(`semantic:read:${receipt.component}`, 'semantic.read');
