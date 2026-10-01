@@ -581,6 +581,12 @@ async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'stack:clone') { await stackClone(args); return; }
   if (command === 'toolchain:install') { if (args.length) throw new Error('Unexpected arguments'); await install(); return; }
+  // Goal worker processes (goalctl sets GOAL_TASK_ID) share one host with a dozen
+  // peers: their own web, Accounts and Storybook servers or backend stacks drove it
+  // out of memory. They check UI through storybook:test and browser tests in QA slots.
+  if (command === 'dev' && process.env.GOAL_TASK_ID) {
+    throw new Error(`Goal worker ${process.env.GOAL_TASK_ID} may not start dev servers; use task storybook:test or browser tests through task goal -- test, and the shared stack's web app for manual checks.`);
+  }
   if (command === 'dev') { await devStart(args); return; }
   if (command === 'dev:stop') { devStop(args); return; }
   if (command === 'dev:reset') { await devReset(args); return; }
