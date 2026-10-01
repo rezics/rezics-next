@@ -12,7 +12,7 @@ import { DiscussionSection, StatementsSection } from '../entity-page/sections.ts
 import Link from '../shell/localized-link.tsx';
 import { SeriesProgressPanel } from '../tracking/series-progress-panel.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
-import { readNames, readParts, readRealizations, readReleases as readReleasePage } from '../work-levels/read.ts';
+import { readParts, readRealizations, readReleases as readReleasePage } from '../work-levels/read.ts';
 import { ConnectionsPreview, PartsPreview } from '../work-levels/previews-server.tsx';
 import { EditionsPreviewView } from '../work-levels/previews.tsx';
 import type { WorkPageMessages } from './messages.ts';
@@ -46,15 +46,19 @@ export async function PrimaryAction({ workRef, id, work, locale, messages }: Com
   return action ? <NextActionView action={action} workRef={workRef} locale={locale} messages={messages} /> : null;
 }
 
-/** The edition the reader chose and their progress, named in Main's words, under the primary action. */
+/**
+ * The edition the reader chose and their progress, named in Main's words, under the primary action. A chosen
+ * release is named by its own title; a chosen realization, which has none, by its language.
+ */
 export async function Status({ id, locale, messages }: Common & { id: string }) {
   const preference = await readEditionPreference(id);
-  const progress = await readProgressSummary(id, progressLanguage(preference, locale));
+  const [progress, releases] = await Promise.all([readProgressSummary(id, progressLanguage(preference, locale)),
+    readReleases(id)]);
   const chosen = preference.ok ? preference.data?.edition : null;
-  const names = chosen ? await readNames(chosen.resource) : null;
-  const summary = chosen ? names?.get(chosen.resource) : undefined;
-  return <IdentityStatus progress={progress} preference={preference}
-    editionName={summary?.status === 'available' ? summary.name.value : null} locale={locale} messages={messages} />;
+  const release = chosen?.kind === 'release' && releases.ok ? releases.data.items.find(item => item.id === chosen.resource)
+    : undefined;
+  return <IdentityStatus progress={progress} preference={preference} editionName={release?.title.value ?? null}
+    locale={locale} messages={messages} />;
 }
 
 /** "About" on expansion: every accepted fact with its sources, and the way to propose a correction. */

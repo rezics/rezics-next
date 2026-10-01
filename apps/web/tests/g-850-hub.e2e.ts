@@ -100,7 +100,9 @@ async function inFirstScreen(page: Page, what: Record<string, Locator>) {
 }
 
 /** The page's one primary action: the link the sticky bar repeats. */
-const primary = (page: Page) => page.locator('a[data-next-action]').first();
+const primary = (page: Page) => page.locator('a[data-next-action]:visible').first();
+/** The reader's edition and progress lines (streamed content can leave a hidden copy behind while it settles). */
+const status = (page: Page) => page.locator('[data-identity-status]:visible').first();
 
 test('choose a usable release and save it, mark progress and return to the right next part', async ({ browser }, info) => {
   test.setTimeout(240_000);
@@ -129,7 +131,7 @@ test('choose a usable release and save it, mark progress and return to the right
   await expect(availability.getByText('Saved.')).toBeVisible();
   // The edition is what the page says it is, after a reload and in the first screen.
   await page.goto(at(one!));
-  const edition = page.getByRole('list', { name: 'Your edition' });
+  const edition = status(page);
   await expect(edition).toContainText('Your edition: Sword Art Online 1: Aincrad (audiobook)');
   await inFirstScreen(page, { title: page.getByRole('heading', { level: 1 }), 'the reader’s edition': edition });
   await expect(page.getByRole('region', { name: 'Editions and releases' })).toContainText('Sword Art Online 1: Aincrad');
@@ -141,7 +143,7 @@ test('choose a usable release and save it, mark progress and return to the right
     data: { actingSubject, target: one!.work, expectedVersion: 0, state: 'finished' } });
   expect(written.status(), await written.text()).toBe(201);
   await page.goto(at(sao.series));
-  await expect(page.getByRole('list', { name: 'Your edition' })).toContainText('1 of 3 required parts finished');
+  await expect(status(page)).toContainText('1 of 3 required parts finished');
   // Main names volume 2 and, the reader having no edition for it, still asks for one: the right part either way.
   await expect(primary(page)).toHaveAttribute('href', `/en/w/${uuid(two!.work)}#availability`);
   await expect(page.getByText('Next: 2')).toBeVisible();
@@ -155,7 +157,7 @@ test('choose a usable release and save it, mark progress and return to the right
   await expect(primary(page)).toHaveAttribute('href', `/en/w/${uuid(two!.work)}`);
   await expect(page.getByText('Next: 2')).toBeVisible();
   await inFirstScreen(page, { title: page.getByRole('heading', { level: 1 }), 'the primary action': primary(page),
-    'progress': page.getByRole('list', { name: 'Your edition' }) });
+    'progress': status(page) });
   await info.attach('series-phone', { body: await page.screenshot(), contentType: 'image/png' });
   await primary(page).click();
   await expect(page).toHaveURL(`/en/w/${uuid(two!.work)}`);
@@ -216,7 +218,7 @@ test('the first screen and accessibility hold in light and dark, on a phone and 
         await expect(action, name).toBeVisible();
         if (viewport.width === phone.width) {
           await inFirstScreen(page, { title: heading, 'the primary action': action,
-            'the reader’s progress': page.locator('[data-identity-status]') });
+            'the reader’s progress': status(page) });
           await expect(page.getByRole('button', { name: onThisPage }), name).toBeVisible();
         } else {
           await expect(page.getByRole('button', { name: onThisPage }), name).toBeHidden();
