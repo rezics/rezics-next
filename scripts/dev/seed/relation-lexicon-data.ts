@@ -9,11 +9,15 @@ export type LexiconSeedLabel = readonly [
 export interface LexiconSeedDefinition {
   key: string;
   roles: readonly [string, string];
+  editorRecordable?: boolean;
+  writePath?: 'derivation' | 'relation';
   labels: readonly LexiconSeedLabel[];
 }
 export const relationLexiconSeed = [
   {
     key: 'adaptation',
+    editorRecordable: true,
+    writePath: 'derivation',
     roles: ['source', 'adaptation'],
     labels: [
       ['en', 'Adaptation', 'Adaptations', 'Adapted from', 'Adapted from'],
@@ -74,6 +78,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'rewrite',
+    editorRecordable: true,
+    writePath: 'derivation',
     roles: ['source', 'rewrite'],
     labels: [
       ['en', 'Rewrite', 'Rewrites', 'Rewrite of', 'Rewrites of'],
@@ -88,6 +94,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'reboot',
+    editorRecordable: true,
+    writePath: 'derivation',
     roles: ['source', 'reboot'],
     labels: [
       ['en', 'Reboot', 'Reboots', 'Reboot of', 'Reboots of'],
@@ -102,6 +110,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'sequel',
+    editorRecordable: true,
+    writePath: 'relation',
     roles: ['predecessor', 'sequel'],
     labels: [
       ['en', 'Sequel', 'Sequels', 'Sequel to', 'Sequels to'],
@@ -116,6 +126,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'spin-off',
+    editorRecordable: true,
+    writePath: 'relation',
     roles: ['source', 'spin-off'],
     labels: [
       ['en', 'Spin-off', 'Spin-offs', 'Spin-off of', 'Spin-offs of'],
@@ -130,6 +142,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'correspondence-equivalent',
+    editorRecordable: true,
+    writePath: 'relation',
     roles: ['source', 'target'],
     labels: [
       [
@@ -168,6 +182,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'correspondence-partial',
+    editorRecordable: true,
+    writePath: 'relation',
     roles: ['source', 'target'],
     labels: [
       [
@@ -206,6 +222,8 @@ export const relationLexiconSeed = [
   },
   {
     key: 'correspondence-revised',
+    editorRecordable: true,
+    writePath: 'relation',
     roles: ['source', 'revision'],
     labels: [
       ['en', 'Revised counterpart', 'Revised counterparts', 'Revised from', 'Revised from'],

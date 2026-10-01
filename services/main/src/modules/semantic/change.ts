@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, WORK_SEMANTIC_TYPES, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import { checkedEditorRecording, type EditorRecording } from '../lexicon/editor-recording.ts';
 import { checkedDefinitionKey, definitionKeyIri, definitionKeyTriples, KEY_NOTATION } from '../lexicon/definition-key.ts';
 import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGeneration,
   familyReceiptIri, readComponent, readSemanticTerminal, SemanticChangeRejected, SemanticTargetUnavailable,
@@ -50,7 +51,7 @@ function checkedSubjectRole(value: unknown, roles: RelationRole[]): string {
   }
   return value as string;
 }
-export interface DefinitionState {
+export interface DefinitionState extends EditorRecording {
   component: 'definition';
   kind: DefinitionKind;
   lifecycle: Lifecycle;
@@ -141,7 +142,7 @@ export function checkedComponentState(input: unknown): ComponentInput {
       properties: checked.sort((a, b) => keyOf(a).localeCompare(keyOf(b))), lifecycle: lifecycle as Lifecycle };
   }
   if (row.component === 'definition') {
-    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole'].includes(key))) {
+    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole', 'editorRecordable', 'writePath'].includes(key))) {
       fail('invalid', 'definition state has unsupported fields');
     }
     if (!DEFINITION_KINDS.includes(row.kind as DefinitionKind)) fail('invalid', 'definition kind is invalid');
@@ -170,7 +171,7 @@ export function checkedComponentState(input: unknown): ComponentInput {
     }).sort((a, b) => a.key.localeCompare(b.key));
     if (new Set(checkedRoles.map(role => role.key)).size !== checkedRoles.length) fail('invalid', 'role repeats');
     return { component: 'definition', kind: row.kind as DefinitionKind, lifecycle: lifecycle as Lifecycle,
-      successor: successor as string | null, roles: checkedRoles,
+      successor: successor as string | null, roles: checkedRoles, ...checkedEditorRecording(row),
       ...(row.notation === undefined ? {} : { notation: checkedDefinitionKey(row.notation) }),
       ...(row.workSubjectRole === undefined ? {} : { workSubjectRole: checkedSubjectRole(row.workSubjectRole, checkedRoles) }) };
   }

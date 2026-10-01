@@ -75,9 +75,9 @@ test('G-831: bootstrap persists canonical keys without conflicting with original
     },
     authorizeDefinition: async () => {},
   }, native(), 'g831-upgrade', relationLexiconSeed.slice(0, 1), '.temp/g831/bootstrap-unit.json');
-  expect(writes[0]!.key).toBe('g831-upgrade:lexicon:v2:adaptation:meaning');
+  expect(writes[0]!.key).toBe('g831-upgrade:lexicon:v3:adaptation:meaning');
   expect(writes[0]!.state).toMatchObject({ notation: 'adaptation', workSubjectRole: 'adaptation' });
-  expect(writes.every(write => write.key.startsWith('g831-upgrade:lexicon:v2:'))).toBe(true);
+  expect(writes.every(write => write.key.startsWith('g831-upgrade:lexicon:v3:'))).toBe(true);
 });
 
 test('G-831: a sixth derivation kind is an ordinary DefinitionRef, including unresolved sources', () => {

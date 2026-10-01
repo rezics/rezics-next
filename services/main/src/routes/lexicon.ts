@@ -5,6 +5,8 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { admittedPresentationChange } from '../modules/lexicon/admitted.ts';
 import { readPresentationCurrent, readPresentationRevision } from '../modules/lexicon/change.ts';
 import { renderRelation, type RelationRendering } from '../modules/lexicon/render.ts';
+import { listDefinitions, DEFINITION_LIST_LIMIT } from '../modules/lexicon/catalog.ts';
+import { editorRecording } from '../modules/lexicon/editor-recording.ts';
 import { LEXICON_LIMITS, PRESENTATION_PROFILE, type PresentationState } from '../modules/lexicon/schema.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
@@ -150,6 +152,7 @@ export const relationRenderingSchema = t.Object({
 });
 
 export const openApiOperations = {
+  '/v1/lexicon/definitions': { get: { bearer: false } },
   '/v1/lexicon/definitions/{key}': { get: { bearer: false } },
   '/v1/lexicon/presentations': {
     get: { bearer: false },
@@ -204,12 +207,53 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       : draftReadable(principal, actingSubject, row.definition!.value);
   };
   return new Elysia()
+    .get('/v1/lexicon/definitions', {
+      query: t.Object({
+        recordable: t.Optional(t.Union([t.Literal('true'), t.Literal('false')])),
+        limit: t.Optional(t.Integer({ minimum: 1, maximum: DEFINITION_LIST_LIMIT })),
+        cursor: t.Optional(t.String({ maxLength: 2048 })),
+        languages: t.Optional(t.String({ maxLength: 8192 })),
+      }, { additionalProperties: false }),
+      response: { 200: t.Object({ profile: t.Literal('relation-definition-list-v1'),
+        items: t.Array(t.Object({ key: t.String(), definition: native, revision: native,
+          lifecycle: t.Literal('active'), editorRecordable: t.Boolean(),
+          writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])),
+          workSubjectRole: t.Nullable(t.String()),
+          roles: relationRenderingSchema.properties.meaning.properties.roles,
+          rendering: relationRenderingSchema })),
+        next: t.Nullable(t.String({ description: 'Continue even after a short or empty page; null ends the live catalog.' })),
+      }), ...authorizedReadProblems },
+    }, async ({ request, query }) => {
+      try {
+        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+        // Discovery always lists the public catalog, including for authenticated editors.
+        const publicRead = (definition: string, revision?: string) => readable(null, undefined, definition, revision);
+        const languages = readerLanguages(query.languages, request.headers.get('accept-language'));
+        const page = await listDefinitions(work.environment, {
+          limit: query.limit ?? DEFINITION_LIST_LIMIT,
+          ...(query.recordable === undefined ? {} : { recordable: query.recordable === 'true' }),
+          cursor: query.cursor, languages,
+        }, publicRead);
+        const items = [];
+        for (const meaning of page.items) {
+          const rendering = await renderRelation(work.environment, { meaning, bindings: [] },
+            meaning.workSubjectRole ?? Object.values(meaning.roleKeys)[0]!, languages, publicRead);
+          if (!await publicRead(meaning.definition, meaning.revision)) continue;
+          items.push({ key: meaning.notation!, definition: meaning.definition, revision: meaning.revision,
+            lifecycle: 'active' as const, ...editorRecording(meaning),
+            workSubjectRole: meaning.workSubjectRole ?? null, roles: rendering.meaning.roles, rendering });
+        }
+        return Response.json({ profile: 'relation-definition-list-v1', items, next: page.next },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return semanticError(error); }
+    })
     .get('/v1/lexicon/definitions/:key', {
       params: t.Object({ key: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }) }),
       query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
         definition: native, revision: native, lifecycle: t.String(), roles: t.Array(t.Unknown()),
-        workSubjectRole: t.Nullable(t.String()) }), ...authorizedReadProblems },
+        workSubjectRole: t.Nullable(t.String()), editorRecordable: t.Boolean(),
+        writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])) }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const principal = await authenticate(request, query.actingSubject);
@@ -221,7 +265,7 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         return Response.json({ profile: 'relation-definition-key-v1', key: params.key,
           definition: meaning.definition, revision: meaning.revision, lifecycle: meaning.lifecycle,
           roles: meaning.roles.map(role => ({ ...role, key: meaning.roleKeys[role.role] })),
-          workSubjectRole: meaning.workSubjectRole ?? null }, { headers: { 'cache-control': 'no-store' } });
+          workSubjectRole: meaning.workSubjectRole ?? null, ...editorRecording(meaning) }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
     .post(

@@ -1,6 +1,7 @@
 import { GRAPHS, ID, IdempotencyConflict, PendingActivation, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
+import type { EditorRecording } from '../lexicon/editor-recording.ts';
 import { KEY_NOTATION } from '../lexicon/definition-key.ts';
 import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGeneration, familyReceiptIri,
   readComponent, readSemanticTerminal, SemanticChangeRejected, SemanticTargetUnavailable, sealComponentState,
@@ -39,7 +40,7 @@ export interface OccurrenceState {
   participations: (Participation & { iri: string; node?: string })[];
 }
 
-export interface ExactDefinition {
+export interface ExactDefinition extends EditorRecording {
   revision: string;
   definition: string;
   lifecycle: Lifecycle;
@@ -85,7 +86,8 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, PROFILES.definition));
   if (state.component !== 'definition') throw new RevisionCorrupt('definition revision names another component');
   if (state.kind !== 'relation') return null;
-  return { revision, definition, lifecycle: state.lifecycle,
+  return { revision, definition, lifecycle: state.lifecycle, ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
+    ...(state.writePath === undefined ? {} : { writePath: state.writePath }),
     ...(state.notation ? { notation: state.notation } : {}),
     ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),
     roles: state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),

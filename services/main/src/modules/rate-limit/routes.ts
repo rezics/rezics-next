@@ -39,6 +39,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['POST', '/v1/resources/{resource}/derivations', 'write'],
   ['GET', '/v1/resources/{resource}/relations', 'read'],
   ['GET', '/v1/lexicon/definitions/{key}', 'read'],
+  ['GET', '/v1/lexicon/definitions', 'read'],
   ['GET', '/v1/resources/{resource}/rating-contexts', 'read'],
   ['GET', '/v1/resources/{resource}/ratings', 'read'],
   ['GET', '/v1/resources/{resource}/discussion', 'read'],

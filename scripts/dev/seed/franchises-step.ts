@@ -6,9 +6,12 @@ import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorI
 import { relationLexiconSeed } from './relation-lexicon-data.ts';
 import { seedRelationLexicon } from './relation-lexicon.ts';
 import type { SeedState } from './state.ts';
+import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
 
 const COLLECTIONS = ['sao.franchise', 'index.franchise', 'index.original.reading'];
-const LEXICON = ['rewrite', 'reboot', 'sequel', 'spin-off', 'adaptation', 'credit-illustrator', 'credit-concept-supervision'];
+const LEXICON = ['rewrite', 'reboot', 'sequel', 'spin-off', 'adaptation',
+  'correspondence-equivalent', 'correspondence-partial', 'correspondence-revised',
+  'credit-illustrator', 'credit-concept-supervision'];
 
 /** Load the catalogue fixture through the same public API the acceptance test uses. */
 export async function seedFranchises(state: SeedState): Promise<void> {
@@ -49,21 +52,25 @@ async function ensureCatalogueLexicon(state: SeedState, input: LocalOperatorInpu
     if (!definition) throw new Error(`catalogue lexicon key ${key} is not in the seed catalogue`);
     return { ...definition, labels: definition.labels.filter(label => label[0] === 'en') };
   });
-  const missing = [];
   for (const spec of specs) {
-    try {
-      await state.api.get(`/v1/lexicon/definitions/${spec.key}?actingSubject=${encodeURIComponent(actingSubject)}`, token);
-    } catch (error) {
-      if (!(error instanceof SeedApiError) || error.status !== 404) throw error;
-      missing.push(spec);
-    }
-  }
-  for (const spec of missing) {
     try {
       await seedRelationLexicon({
         post: (path, body, key) => state.api.post(path, body, token, key),
+        currentDefinition: async key => {
+          try {
+            const current = await state.api.get<{ definition: string }>(
+              `/v1/lexicon/definitions/${key}?actingSubject=${encodeURIComponent(actingSubject)}`, token);
+            const retained = await state.api.get<{ revision: string; state: DefinitionState }>(
+              `/v1/semantic/resources/${current.definition.split('/').at(-1)}?actingSubject=${encodeURIComponent(actingSubject)}`, token);
+            return { component: current.definition, revision: retained.revision, state: retained.state };
+          } catch (error) {
+            if (error instanceof SeedApiError && error.status === 404) return null;
+            throw error;
+          }
+        },
         authorizeDefinition: async receipt => {
           await grantSeedAuthority(pool, input, `semantic:read:${receipt.component}`, 'semantic.read');
+          await grantSeedAuthority(pool, input, `semantic:edit:${receipt.component}`, 'semantic.change');
           await grantSeedAuthority(pool, input, `semantic:edit:${receipt.component}`, 'lexicon.presentation.change');
         } }, actingSubject, 'catalogue-dev', [spec]);
     } catch (error) {
