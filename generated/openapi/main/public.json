@@ -109596,6 +109596,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -109885,6 +109933,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -110218,6 +110314,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -110882,6 +111026,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -111283,6 +111475,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -111772,6 +112012,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -112061,6 +112349,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -112394,6 +112730,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -112733,6 +113117,54 @@
                             },
                             "required": [
                               "code"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "action": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "code": {
+                                "const": "owner_authority_required",
+                                "type": "string"
+                              },
+                              "scope": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "action",
+                              "scope"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "const": "owner_command_refused",
+                                "type": "string"
+                              },
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "key",
+                              "reason"
                             ],
                             "type": "object"
                           },
@@ -113545,6 +113977,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -113834,6 +114314,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -114167,6 +114695,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -114593,6 +115169,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -114994,6 +115618,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -115483,6 +116155,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -115772,6 +116492,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -116105,6 +116873,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -116475,6 +117291,54 @@
                           },
                           {
                             "properties": {
+                              "action": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "code": {
+                                "const": "owner_authority_required",
+                                "type": "string"
+                              },
+                              "scope": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "action",
+                              "scope"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "const": "owner_command_refused",
+                                "type": "string"
+                              },
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "key",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
                               "code": {
                                 "const": "required_approvals",
                                 "type": "string"
@@ -117224,6 +118088,54 @@
                             },
                             "required": [
                               "code"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "action": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "code": {
+                                "const": "owner_authority_required",
+                                "type": "string"
+                              },
+                              "scope": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "action",
+                              "scope"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "properties": {
+                              "code": {
+                                "const": "owner_command_refused",
+                                "type": "string"
+                              },
+                              "key": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "reason": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "key",
+                              "reason"
                             ],
                             "type": "object"
                           },
@@ -118036,6 +118948,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -118325,6 +119285,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -118658,6 +119666,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -119123,6 +120179,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -119524,6 +120628,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -120013,6 +121165,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -120302,6 +121502,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -120635,6 +121883,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -121046,6 +122342,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -121535,6 +122879,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -121824,6 +123216,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -122157,6 +123597,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -122735,6 +124223,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -123219,6 +124755,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -123508,6 +125092,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -123841,6 +125473,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -124215,6 +125895,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -124699,6 +126427,54 @@
                         },
                         {
                           "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
                             "code": {
                               "const": "required_approvals",
                               "type": "string"
@@ -124988,6 +126764,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
@@ -125321,6 +127145,54 @@
                           },
                           "required": [
                             "code"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "action": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "code": {
+                              "const": "owner_authority_required",
+                              "type": "string"
+                            },
+                            "scope": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "action",
+                            "scope"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "const": "owner_command_refused",
+                              "type": "string"
+                            },
+                            "key": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "maxLength": 512,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "key",
+                            "reason"
                           ],
                           "type": "object"
                         },
