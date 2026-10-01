@@ -46,6 +46,11 @@ function agentsInImpact(value: unknown): string[] {
 }
 
 export class NotificationProducer {
+  private safetyCorrespondence?: { enqueueDecision(decisionId: string): Promise<void> };
+
+  setSafetyCorrespondence(sender: { enqueueDecision(decisionId: string): Promise<void> }): void {
+    this.safetyCorrespondence = sender;
+  }
   constructor(private readonly access: Pool, private readonly relay: Pool | null,
     private readonly content: Pool, private readonly graph: Pick<FusekiClient, 'query'>,
     private readonly notifications: Pick<NotificationStore, 'enqueue'>,
@@ -128,31 +133,77 @@ export class NotificationProducer {
         display: { kind: 'submission_decision', actorAgent: row.reviewer, realm: row.realm, groupKey: row.id } };
     }
     if (event.kind === 'moderation_outcome') {
-      const row = (await this.access.query<{ case_id: string; principal_id: string;
-        acting_subject: string; context: string; target_resource: string }>(`
+      const row = (
+        await this.access.query<{
+          case_id: string;
+          principal_id: string;
+          acting_subject: string;
+          context: string;
+          target_resource: string;
+          statement_of_reasons: unknown;
+        }>(
+          `
         SELECT d.case_id, d.principal_id, d.acting_subject, d.context,
-          c.target_resource FROM access.moderation_decision d
-        JOIN access.governance_case c ON c.id = d.case_id WHERE d.id = $1`, [event.event_id])).rows[0];
+          c.target_resource, d.statement_of_reasons FROM access.moderation_decision d
+        JOIN access.governance_case c ON c.id = d.case_id
+        WHERE d.id = $1 AND c.decision_head = d.id
+          AND NOT EXISTS (SELECT 1 FROM access.safety_decision_operation op
+            WHERE op.decision_id = d.id AND op.cancelled)`,
+          [event.event_id],
+        )
+      ).rows[0];
       if (!row) return null;
-      const reporters = (await this.access.query<{ id: string }>(`
+      const reporters = (
+        await this.access.query<{ id: string }>(
+          `
         SELECT DISTINCT p.id FROM access.governance_report r
         JOIN access.principal p ON p.id = r.principal_id AND p.active
         WHERE r.case_id = $1 AND p.id <> $2 ORDER BY p.id LIMIT $3`,
-      [row.case_id, row.principal_id, PRODUCER_COST.recipientsPerEvent + 1])).rows;
-      if (reporters.length > PRODUCER_COST.recipientsPerEvent) throw new Error('moderation reporter bound exceeded');
-      const recipients = new Set(reporters.map(reporter => reporter.id));
-      for (const author of await this.contributionAuthors(row.target_resource)) {
+          [row.case_id, row.principal_id, PRODUCER_COST.recipientsPerEvent + 1],
+        )
+      ).rows;
+      if (reporters.length > PRODUCER_COST.recipientsPerEvent)
+        throw new Error('moderation reporter bound exceeded');
+      const recipients = new Set(reporters.map((reporter) => reporter.id));
+      const parties = (
+        await this.access.query<{ id: string }>(
+          `
+        SELECT n.principal_id AS id FROM access.safety_party_notice n
+        JOIN access.principal p ON p.id = n.principal_id AND p.active
+        WHERE n.decision_id = $1 ORDER BY n.principal_id LIMIT $2`,
+          [event.event_id, PRODUCER_COST.recipientsPerEvent + 1],
+        )
+      ).rows;
+      if (parties.length > PRODUCER_COST.recipientsPerEvent)
+        throw new Error('moderation party bound exceeded');
+      for (const party of parties) recipients.add(party.id);
+      // Older governance decisions have no private notice plan. Safety decisions
+      // use their recorded owner plan, including targets withdrawn by enforcement.
+      for (const author of row.statement_of_reasons
+        ? []
+        : await this.contributionAuthors(row.target_resource)) {
         if (author === row.acting_subject) continue;
-        for (const id of await represented(this.access, author, row.principal_id)) recipients.add(id);
+        for (const id of await represented(this.access, author, row.principal_id))
+          recipients.add(id);
       }
-      if (recipients.size > PRODUCER_COST.recipientsPerEvent) throw new Error('moderation recipient bound exceeded');
+      if (recipients.size > PRODUCER_COST.recipientsPerEvent)
+        throw new Error('moderation recipient bound exceeded');
       if (!recipients.size) return null;
-      return { sourceOwner: 'access', sourceEvent: `moderation:${event.event_id}`,
-        purpose: 'governance', topic: 'moderation-outcome',
+      return {
+        sourceOwner: 'access',
+        sourceEvent: `moderation:${event.event_id}`,
+        purpose: 'governance',
+        topic: 'moderation-outcome',
         subject: { owner: 'access', ref: event.event_id, revision: null },
-        disclosureBasis: 'moderation-outcome-v1', recipients: [...recipients],
-        display: { kind: 'moderation_outcome', actorAgent: row.acting_subject,
-          realm: native.test(row.context) ? row.context : null, groupKey: row.case_id } };
+        disclosureBasis: 'moderation-outcome-v1',
+        recipients: [...recipients],
+        display: {
+          kind: 'moderation_outcome',
+          actorAgent: row.acting_subject,
+          realm: native.test(row.context) ? row.context : null,
+          groupKey: row.case_id,
+        },
+      };
     }
     const row = (await this.access.query<{ realm: string; principal_id: string;
       acting_subject: string; result: unknown }>(`SELECT realm, principal_id, acting_subject, result
@@ -195,14 +246,22 @@ export class NotificationProducer {
   }
 
   async runAccessOnce(): Promise<number> {
+    let mail = 0;
+    try {
+      mail = await this.runSafetyCorrespondenceOnce();
+    } catch {
+      // Account intake has an independent cursor: an outage cannot hold staff
+      // deadline alerts, editorial mail or relay notifications behind it.
+      console.error('Safety correspondence intake unavailable');
+    }
     const count = (await this.runOtherAccessOnce()) + (await this.runEditorialOnce());
     try {
-      return count + (await this.safetyAlerts?.runOnce() ?? 0);
+      return count + mail + ((await this.safetyAlerts?.runOnce()) ?? 0);
     } catch (error) {
       // A missing responder or failed safety intake must not stall the other
       // Access producers or prevent the worker's following relay tick.
       console.error('Safety alerts:', error);
-      return count;
+      return count + mail;
     }
   }
 
@@ -232,6 +291,59 @@ export class NotificationProducer {
       }
       await client.query('COMMIT');
       return count;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Separate durable position; only queue intake advances it. Incomplete or
+   * lost acknowledgements replay the immutable private delivery identities. */
+  async runSafetyCorrespondenceOnce(): Promise<number> {
+    if (!this.safetyCorrespondence) return 0;
+    const consumer = 'safety-correspondence-v1';
+    const client = await this.access.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '10s'");
+      await requireAccessOpen(client);
+      await client.query(
+        `INSERT INTO access.notification_producer_cursor (consumer)
+        VALUES ($1) ON CONFLICT DO NOTHING`,
+        [consumer],
+      );
+      const cursor = (
+        await client.query<{ position: string }>(
+          `SELECT position::text
+        FROM access.notification_producer_cursor WHERE consumer = $1 FOR UPDATE SKIP LOCKED`,
+          [consumer],
+        )
+      ).rows[0];
+      if (!cursor) {
+        await client.query('COMMIT');
+        return 0;
+      }
+      const events = (
+        await client.query<AccessEvent>(
+          `SELECT position::text,kind,event_id
+        FROM access.notification_producer_event WHERE position > $1 ORDER BY position LIMIT $2`,
+          [cursor.position, PRODUCER_COST.accessEventsPerTick],
+        )
+      ).rows;
+      for (const event of events) {
+        if (event.kind === 'moderation_outcome')
+          await this.safetyCorrespondence.enqueueDecision(event.event_id);
+        await client.query(
+          `UPDATE access.notification_producer_cursor SET position = $2,
+          updated_at = clock_timestamp() WHERE consumer = $1`,
+          [consumer, event.position],
+        );
+      }
+      await client.query('COMMIT');
+      return events.length;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw error;
@@ -400,6 +512,9 @@ export class NotificationProducerWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running: Promise<void> | null = null;
   constructor(private readonly producer: NotificationProducer) {}
+  setSafetyCorrespondence(sender: { enqueueDecision(decisionId: string): Promise<void> }): void {
+    this.producer.setSafetyCorrespondence(sender);
+  }
   start(): void {
     if (this.timer) throw new Error('notification producer worker is already started');
     const poll = () => {

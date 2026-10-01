@@ -162,6 +162,7 @@ import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { NotificationDigestWorker } from './modules/notification/digest.ts';
 import { SafetyAlerts, SAFETY_ALERT_BASIS, safetyResponders } from './modules/safety-alerts/store.ts';
 import { SafetyAlertProvider } from './modules/safety-alerts/provider.ts';
+import { SafetyDecisionMail, accountSafetyNoticeIntake } from './modules/governance/notices-mail.ts';
 import { RightsStore } from './modules/rights/store.ts';
 import { ThemeStore } from './modules/theme/store.ts';
 import { ACCESS_OPERATIONAL_BOUNDS_V1, activateOperationalBounds } from './operations/bounds.ts';
@@ -346,6 +347,8 @@ for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatc
 const notificationProducerWorker = new NotificationProducerWorker(new NotificationProducer(
   pool, relayPool ? erasureRelayPool! : null, contentPool, fuseki,
   notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null, safetyAlerts));
+notificationProducerWorker.setSafetyCorrespondence(new SafetyDecisionMail(pool, config.ACCOUNT_ISSUER,
+  accountSafetyNoticeIntake(config.ACCOUNT_INTROSPECT_URL, config.ACCOUNT_MAIN_CLIENT_SECRET)));
 const notificationDigestWorker = new NotificationDigestWorker(pool, notificationStore,
   config.ACCOUNT_ISSUER, new URL('/api/internal/notification-digest',
     config.ACCOUNT_INTROSPECT_URL).toString(), config.ACCOUNT_MAIN_CLIENT_SECRET);

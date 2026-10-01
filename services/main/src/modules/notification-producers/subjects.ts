@@ -142,27 +142,60 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       row.realm, row.work, false);
     }
     if (input.disclosureBasis === 'moderation-outcome-v1') {
-      const row = (await access.query<{ case_id: string; target_resource: string;
-        context: string; outcome: string; reporter: boolean }>(`SELECT d.case_id,
-        c.target_resource, c.context, d.outcome, EXISTS (
+        const row = (
+          await access.query<{
+            case_id: string;
+            target_resource: string;
+            context: string;
+            outcome: string;
+            reporter: boolean;
+            affected: boolean;
+            safety: boolean;
+          }>(
+            `SELECT d.case_id,
+        c.target_resource, c.context, d.outcome, d.statement_of_reasons IS NOT NULL AS safety, EXISTS (
+          SELECT 1 FROM access.safety_party_notice n
+          WHERE n.decision_id = d.id AND n.principal_id = $2) AS affected, EXISTS (
           SELECT 1 FROM access.governance_report r
           WHERE r.case_id = d.case_id AND r.principal_id = $2) AS reporter
         FROM access.moderation_decision d JOIN access.governance_case c ON c.id = d.case_id
-        WHERE d.id = $1`, [input.ref, input.principalId])).rows[0];
-      if (!row || (input.realm ?? null) !== (native.test(row.context) ? row.context : null)) return hidden;
-      const authors = !row.reporter
-        ? await currentContributionAuthors(env, row.target_resource) : [];
-      let ownsTarget = false;
-      for (const author of authors) {
-        if (await represents(access, input.principalId, author)) { ownsTarget = true; break; }
+        WHERE d.id = $1 AND c.decision_head = d.id
+          AND NOT EXISTS (SELECT 1 FROM access.safety_decision_operation op
+            WHERE op.decision_id = d.id AND op.cancelled)`,
+            [input.ref, input.principalId],
+          )
+        ).rows[0];
+        if (!row || (input.realm ?? null) !== (native.test(row.context) ? row.context : null))
+          return hidden;
+        const authors =
+          !row.reporter && !row.affected && !row.safety
+            ? await currentContributionAuthors(env, row.target_resource)
+            : [];
+        let ownsTarget = false;
+        for (const author of authors) {
+          if (await represents(access, input.principalId, author)) {
+            ownsTarget = true;
+            break;
+          }
+        }
+        if (!row.reporter && !row.affected && !ownsTarget) return hidden;
+        return present(
+          {
+            status: 'available',
+            subject: {
+              private: true,
+              fields: {
+                linkTarget: row.target_resource,
+                excerpt: row.outcome,
+                ...(native.test(row.context) ? { realm: row.context } : {}),
+              },
+            },
+          },
+          native.test(row.context) ? row.context : null,
+          row.target_resource,
+        );
       }
-      if (!row.reporter && !ownsTarget) return hidden;
-      return present({ status: 'available', subject: { private: true,
-        fields: { linkTarget: row.target_resource, excerpt: row.outcome,
-          ...(native.test(row.context) ? { realm: row.context } : {}) } } },
-      native.test(row.context) ? row.context : null, row.target_resource);
-    }
-    if (input.disclosureBasis === 'realm-role-change-v1') {
+      if (input.disclosureBasis === 'realm-role-change-v1') {
       const row = (await access.query<{ realm: string; result: unknown }>(`
         SELECT realm, result FROM access.realm_admin_receipt WHERE id = $1
           AND action IN ('realm.roles.manage', 'realm.members.manage')`, [input.ref])).rows[0];

@@ -45,8 +45,7 @@ test('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the primary
   }
 }, 180_000);
 
-// Fails until G-918 queues mandatory safety mail; G-918 turns this back into test().
-test.todo('SAFETY07: G744-M1 media enforcement queues mandatory safety email with optional notifications disabled', async () => {
+test('SAFETY07: G744-M1 media enforcement queues mandatory safety email with optional notifications disabled', async () => {
   const f = await safetyFixture('g744-safety-mail');
   try {
     await f.notifications.registerEndpoint(f.author.principal, {
@@ -83,7 +82,7 @@ test.todo('SAFETY07: G744-M1 media enforcement queues mandatory safety email wit
     );
     expect(
       deliveries.rowCount,
-      'G744-M1: media authors never enter moderation email recipients; owner brief G744-FIX-SAFETY-MAIL',
+      'G744-M1: media notice owners must enter mandatory moderation email recipients',
     ).toBeGreaterThan(0);
   } finally {
     await f.stop();

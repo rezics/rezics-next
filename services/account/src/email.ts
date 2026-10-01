@@ -9,17 +9,35 @@ export type AccountLocale = 'en' | 'zh-Hant' | 'zh-Hans' | 'ja' | 'ko' | 'de' | 
 export type EmailPurpose = 'verify' | 'reset' | 'change-email' | 'notice' | 'digest';
 export interface AccountEmail {
   /** `message`: an operator's words to the user, sent only with `notice`. */
-  enqueue(input: { userId: string; to: string; url: string; purpose: EmailPurpose;
-    locale: AccountLocale; message?: string }): Promise<void>;
+  enqueue(input: {
+    userId: string;
+    to: string;
+    url: string;
+    purpose: EmailPurpose;
+    locale: AccountLocale;
+    message?: string;
+    safetyCorrespondence?: true;
+    retainedContact?: true;
+  }): Promise<void>;
 }
 
-export async function enqueueAccountEmail(db: Pool | PoolClient, secret: string,
-  input: Parameters<AccountEmail['enqueue']>[0], id: string = randomUUID()) {
-  if (input.purpose === 'digest' && await optionalMailSuppressed(db, input.to)) return;
+export async function enqueueAccountEmail(
+  db: Pool | PoolClient,
+  secret: string,
+  input: Parameters<AccountEmail['enqueue']>[0],
+  id: string = randomUUID(),
+) {
+  if ((input.safetyCorrespondence || input.retainedContact) && input.purpose !== 'notice')
+    throw new Error('Safety correspondence must be a mandatory notice');
+  if (input.retainedContact && !input.safetyCorrespondence)
+    throw new Error('Retained contact requires private safety correspondence');
+  if (input.purpose === 'digest' && (await optionalMailSuppressed(db, input.to))) return;
   const payload = await symmetricEncrypt({ key: secret, data: JSON.stringify(input) });
-  await db.query(`INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
+  await db.query(
+    `INSERT INTO rezics_account_email (id, user_id, payload, expires_at)
     VALUES ($1, $2, $3, now() + ($4::int * interval '1 minute')) ON CONFLICT (id) DO NOTHING`,
-  [id, input.userId, payload, input.purpose === 'digest' ? 1_440 : 30]);
+    [id, input.userId, payload, input.purpose === 'digest' || input.safetyCorrespondence ? 1_440 : 30],
+  );
 }
 
 export function accountLocale(request?: Request): AccountLocale {
@@ -104,20 +122,68 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
             Parameters<AccountEmail['enqueue']>[0];
           // A changed or deleted account must not receive an old reset link.
           // Verification of a new address legitimately targets a different email.
-          const user = await pool.query<{ email: string; emailVerified: boolean }>(
-            'SELECT email, "emailVerified" FROM "user" WHERE id = $1', [row.user_id]);
-          if (!user.rowCount) {
-            await pool.query(`UPDATE rezics_account_email SET state = 'queued', started_at = NULL,
-              available_at = now() + interval '10 seconds' WHERE id = $1`, [row.id]);
+          const user = input.retainedContact
+            ? null
+            : await pool.query<{
+                email: string;
+                emailVerified: boolean;
+                deletion_started_at: Date | null;
+              }>(
+                `SELECT u.email,u."emailVerified",s.deletion_started_at FROM "user" u
+              LEFT JOIN rezics_account_security s ON s.user_id = u.id WHERE u.id = $1`,
+                [row.user_id],
+              );
+          if (user && !user.rowCount) {
+            if (input.safetyCorrespondence) {
+              await pool.query(
+                `UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`,
+                [row.id],
+              );
+              continue;
+            }
+            await pool.query(
+              `UPDATE rezics_account_email SET state = 'queued', started_at = NULL,
+              available_at = now() + interval '10 seconds' WHERE id = $1`,
+              [row.id],
+            );
             continue;
           }
-          if (input.purpose !== 'verify' && (user.rows[0]!.email !== input.to
-            || input.purpose === 'digest' && !user.rows[0]!.emailVerified)) {
-            await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
+          if (input.safetyCorrespondence && user?.rows[0]?.deletion_started_at) {
+            await pool.query(
+              `UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`,
+              [row.id],
+            );
             continue;
           }
-          const mail = { id: row.id, to: input.to,
-            ...renderAccountEmail(input.purpose, input.locale, input.url, input.message) };
+          if (
+            user &&
+            input.purpose !== 'verify' &&
+            (user.rows[0]!.email !== input.to ||
+              (input.purpose === 'digest' && !user.rows[0]!.emailVerified))
+          ) {
+            await pool.query(
+              `UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`,
+              [row.id],
+            );
+            continue;
+          }
+          const rendered = renderAccountEmail(
+            input.purpose,
+            input.locale,
+            input.url,
+            input.message,
+          );
+          const mail = {
+            id: row.id,
+            to: input.to,
+            ...(input.safetyCorrespondence
+              ? {
+                  subject: emailCopy[input.locale].digestLine('moderation-outcome', 1),
+                  text: input.message!,
+                  html: `<!doctype html><html lang="${input.locale}"><body><p style="white-space:pre-wrap">${escapeHtml(input.message!)}</p></body></html>`,
+                }
+              : rendered),
+          };
           if (input.purpose === 'digest') {
             if (await optionalMailSuppressed(pool, input.to)) {
               await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL WHERE id = $1`, [row.id]);
