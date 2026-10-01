@@ -13,7 +13,7 @@ const daniel = { id: iri(802), name: 'Daniel Chen', handle: 'daniel_chen', avata
 const aria = { id: iri(803), name: 'Aria Wang 王雅', handle: 'aria_wang', avatar: null };
 
 function item(sequence: number, display: StreamItem['display'], read = false, minutes = sequence * 45): StreamItem {
-  return { id: id(sequence), sequence: String(sequence), purpose: 'social', topic: 'reply', read,
+  return { id: id(sequence), sequence: String(sequence), purpose: 'social', topic: 'reply', read, deliveries: [],
     state: display ? 'active' : 'withdrawn', subject: null, display, saved: false, done: false, triageRevision: null,
     reason: null, proposal: null, createdAt: new Date(NOW - minutes * 60_000).toISOString() };
 }
