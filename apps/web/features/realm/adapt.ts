@@ -47,8 +47,15 @@ export interface AdaptContext {
   avatarQuery?: string;
 }
 
-/** Where a Work opens from this Zone: its site, through the mount it came from when it did. */
-export function workLink(context: AdaptContext, work: string, mount: string | null = null, tab?: 'discussion') {
+/**
+ * Where a Work opens from this Zone: its site, through the mount it came from when it did. Main marks a Work
+ * `inZone: false` when it is not in the Zone's population (a discussion about a Work that lost its adoption, a
+ * list member removed since): the Zone's site has no page for it, so it opens on its canonical page. Membership
+ * is never decided here.
+ */
+export function workLink(context: AdaptContext, work: string, mount: string | null = null, tab?: 'discussion',
+  inZone?: boolean) {
+  if (inZone === false) return entityHref(work);
   return context.unrouted ? scopedWorkHref(work, context.realm) : realmWorkHref(context.ref, work, mount, tab);
 }
 
@@ -66,7 +73,7 @@ export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[]; inZ
   const href = credit?.handle ? authorHref({ kind: 'agent', handle: credit.handle })
     : credit?.provider === 'open-library' && credit.key
       ? authorHref({ kind: 'external', key: credit.key }) : null;
-  return { id: card.id, href: card.inZone === false ? entityHref(card.id) : workLink(context, card.id, mount),
+  return { id: card.id, href: workLink(context, card.id, mount, undefined, card.inZone),
     title: zoneText(card.title),
     cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types),
     author: author ? zoneContentText(author) : null,

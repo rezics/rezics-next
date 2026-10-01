@@ -62,12 +62,6 @@
       text-decoration: underline;
     }
 
-    .ln-detail {
-      display: grid;
-      gap: 2rem;
-      min-inline-size: 0;
-    }
-
     .ln-source {
       margin-block-start: 0.5rem;
       color: var(--muted-foreground);

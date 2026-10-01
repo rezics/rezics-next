@@ -16,7 +16,7 @@ import type { ReadStart } from './read.ts';
 import { type WorkAt, workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
-import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, hubAnchors, hubSections } from './hub.ts';
+import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, drawOrder, hubAnchors } from './hub.ts';
 import { WorkTabs } from './work-tabs.tsx';
 import { OnThisPage, StickyAction } from './work-nav.tsx';
 import { type WorkExperience, showsBookControls, workExperience } from '../entity-page/experience.ts';
@@ -164,10 +164,12 @@ export function ReadButton({ workRef, start, messages }: {
  * An unknown scope is reported in place of the scoped sections, with the switch to choose another; it is never
  * replaced by everyone's view.
  */
-export function OverviewLayout({ plan, type, about, facts, classification, availability, parts, wiki, scopeBar, ratings,
+export function OverviewLayout({ plan, lead, type, about, facts, classification, availability, parts, wiki, scopeBar, ratings,
   reviews, adoption, discussion, alsoEnjoyed, author, record, messages }: {
-  /** The sections the Work's projection binds (`hubPlan`); they are always drawn in the documented order. */
+  /** The sections the Work's projection binds (`hubPlan`); they are drawn in the documented order, led by `lead`. */
   plan: readonly HubSection[];
+  /** The sections a Zone's page leads with (`ZonePackage.hubOrder`); the rest keep the documented order. */
+  lead?: readonly HubSection[];
   /** A recipe, prompt, skill or guide leads the About section for types that have one. */
   type?: ReactNode;
   /** The Work's description; it does not change with scope, so it comes first. */
@@ -206,7 +208,7 @@ export function OverviewLayout({ plan, type, about, facts, classification, avail
     lists: <>{alsoEnjoyed}{author}</>,
   };
   return <div className="grid min-w-0 gap-10">
-    {hubSections.filter(section => plan.includes(section)).map(section => <div key={section} id={hubAnchors[section]} data-hub-section={section}
+    {drawOrder(plan, lead).map(section => <div key={section} id={hubAnchors[section]} data-hub-section={section}
       className="grid min-w-0 scroll-mt-20 content-start gap-8 empty:hidden">{slots[section]}</div>)}
     {record}
   </div>;

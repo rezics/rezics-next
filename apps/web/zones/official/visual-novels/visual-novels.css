@@ -19,7 +19,6 @@
       gap: 0.25rem;
       margin: 0;
       padding: 0;
-      padding-inline-start: 5.75rem;
       list-style: none;
     }
 
@@ -34,20 +33,8 @@
     }
 
     .vn-more {
-      padding-inline-start: 5.75rem;
       color: var(--muted-foreground);
       font-size: 0.8125rem;
-    }
-
-    .vn-detail {
-      display: grid;
-      gap: 2rem;
-      min-inline-size: 0;
-    }
-
-    .vn-availability {
-      display: grid;
-      gap: 0.75rem;
     }
 
     .vn-source {

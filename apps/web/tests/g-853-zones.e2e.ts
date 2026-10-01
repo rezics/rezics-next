@@ -179,19 +179,14 @@ test('Visual Novels: a page leads with where the novel can be played, and credit
     await page.setViewportSize(viewport);
     await page.goto(`/en/r/visual-novels/catalogue/${uuid(seed.vn.garden.work)}`);
     await ready(page);
-    const availability = page.locator('#vn-availability');
-    await expect(availability).toBeAttached();
-    await expect(page.locator('#vn-about')).toBeAttached();
-    // Availability comes first in the page's order.
-    const order = await page.evaluate(() => {
-      const first = document.getElementById('vn-availability')!;
-      const second = document.getElementById('vn-about')!;
-      return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
-    });
-    expect(order).toBe(true);
-    await expect(page.locator('.vn-availability')).toContainText('Moonlit Garden release');
-    await expect(page.locator('.vn-availability')).toContainText('English');
-    await expect(page.locator('.vn-source').first()).toContainText('VNDB');
+    // The hub's own sections, reordered by the Zone: availability comes first in the page's order.
+    const sections = await page.locator('[data-hub-section]').evaluateAll(nodes => nodes.map(node => node.id));
+    expect(sections.indexOf('availability')).toBeGreaterThanOrEqual(0);
+    expect(sections.indexOf('availability')).toBe(0);
+    expect(sections.indexOf('about')).toBeGreaterThan(sections.indexOf('availability'));
+    await expect(page.locator('#availability')).toContainText('Moonlit Garden release');
+    await expect(page.locator('#availability')).toContainText('English');
+    await expect(page.locator('.vn-footer .vn-source')).toContainText('VNDB');
     await expect(page.getByRole('link', { name: 'Open the Light Novels Zone' })).toBeVisible();
     await expect(page.getByText('does not sell games, link to stores, show prices')).toBeVisible();
     await check(page, info, `vn-detail-${viewport.name}`);
@@ -223,16 +218,29 @@ test('Light Novels and Visual Novels show the same Works with the same library s
   await expect(shelf.locator('[data-next-volume]')).toContainText('Next part: 2');
   await expect(shelf.getByRole('link', { name: '2', exact: true })).toHaveAttribute('href', new RegExp(`/w/${uuid(second.work)}$`));
   await check(page, info, 'ln-home-desktop');
+  // The same page on a phone and in Traditional Chinese: the next volume is Main's, in the reader's language.
+  for (const [viewport, locale] of [[viewports[0], 'en'], [viewports[0], 'zh-Hant'], [viewports[1], 'zh-Hant']] as const) {
+    await page.setViewportSize(viewport);
+    await page.goto(`/${locale}/r/light-novels/catalogue`);
+    await ready(page);
+    const here = page.locator('[data-next-volume-shelf]');
+    await expect(here).toBeVisible({ timeout: 30_000 });
+    await expect(here).toContainText('Sword Art Online');
+    await expect(here.locator('[data-next-volume]')).toContainText('2');
+    await check(page, info, `ln-catalogue-${locale}-${viewport.name}`);
+  }
+  await page.setViewportSize(viewports[1]);
 
   // The series page shows Main's progress panel with the same next volume.
   await page.goto(`/en/r/light-novels/catalogue/${uuid(seed.sao.series.work)}`);
   await ready(page);
-  const panel = page.getByRole('region', { name: 'Series progress' });
+  // The Zone leads the hub with the parts section, which carries the series progress and its next part.
+  const sections = await page.locator('[data-hub-section]').evaluateAll(nodes => nodes.map(node => node.id));
+  expect(sections[0]).toBe('parts');
+  const panel = page.locator('#parts').getByRole('region', { name: 'Series progress' });
   await expect(panel).toBeVisible({ timeout: 30_000 });
   await expect(panel.locator('[data-next]')).toContainText('2');
-  // The Work page's scroll rows ("also enjoyed", more by the author) have 20px page dots and short author links;
-  // they are the Work page's, so this page's check leaves them to its own owner.
-  await check(page, info, 'ln-series-desktop', ['.snap-start', 'button[aria-label^="Page "]']);
+  await check(page, info, 'ln-series-desktop');
 
   // One Work, one library state: shelved as read in the Light Novels Zone, the Visual Novels Zone and on its own page.
   const shared = uuid(seed.vn.shared.work);

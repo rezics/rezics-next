@@ -1,12 +1,8 @@
-import type { ZoneContext, ZoneDetailRegions, ZonePackage } from '@rezics/zone-sdk';
+import type { ZonePackage } from '@rezics/zone-sdk';
 import { notFound } from 'next/navigation';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
-import { zoneText } from '../realm/adapt.ts';
-import { coverKindOf } from '../catalogue/work.ts';
-import LocalizedLink from '../shell/localized-link.tsx';
 import { loadWork } from '../work-page/read.ts';
-import { SlotBoundary } from './slot-boundary.tsx';
 import { idOf, iriOf, parseContentsQuery, parseCursor, parseHistoryQuery, parseVersionQuery, scopeAt, type WorkTab,
   workTabs, type ZoneWorkBase } from '../work-page/route.ts';
 import { WorkContents, WorkDiscussion, WorkFrameView, WorkHistory, WorkOverview, WorkVersions }
@@ -32,29 +28,20 @@ export function workBase(ref: string, id: string, mount: string | null, realm: s
  * The Work's own page and tabs inside the Zone's frame, with the Zone's Realm as their scope unless the URL
  * names another. Nothing here is a second copy of the Work page; `base` only moves its addresses.
  */
-export async function ZoneWorkPage({ base, tab, search, locale, detail }: {
+export async function ZoneWorkPage({ base, tab, search, locale, pkg }: {
   base: ZoneWorkBase; tab: WorkTab; search: Search; locale: UiLocale;
-  /** The Zone and its running package; the package's `workDetail` slot orders the overview's first block. */
-  detail?: { zone: ZoneContext; pkg: ZonePackage | null };
+  /** The Zone's running package; its `hubOrder` chooses the hub sections the page leads with. */
+  pkg?: ZonePackage | null;
 }) {
   const [work, messages] = await Promise.all([loadWork(base.ref, locale), getMessages('workPage', locale)]);
   if (!work.ok) return <WorkUnavailable messages={messages} />;
   const common = { workRef: base, id: work.id, locale, messages };
   const scope = scopeAt(base, search);
   const context = typeof search.context === 'string' && idOf(iriOf(search.context)) ? search.context : undefined;
-  const Slot = detail?.pkg?.slots.workDetail;
-  const arrange = Slot && detail ? (regions: ZoneDetailRegions) => {
-    // Without the package: the description, then where it can be read, then the series.
-    const fallback = <div className="grid gap-8">{regions.about}{regions.availability}{regions.volumes}
-      {regions.progress}</div>;
-    return <SlotBoundary slot="workDetail" fallback={fallback}>
-      <Slot zone={detail.zone} work={{ id: work.header.id, title: zoneText(work.header.title),
-        kind: coverKindOf(work.header.types) }} regions={regions} fallback={fallback} Link={LocalizedLink} />
-    </SlotBoundary>;
-  } : undefined;
-  return <WorkFrameView {...common} work={work.header}>
+  const lead = pkg?.hubOrder;
+  return <WorkFrameView {...common} work={work.header} lead={lead}>
     {tab === 'overview' ? <WorkOverview {...common} work={work.header} scope={scope} context={context}
-      arrange={arrange} />
+      lead={lead} />
       : tab === 'contents' ? <WorkContents {...common} work={work.header} query={parseContentsQuery(search)} />
         : tab === 'versions' ? <WorkVersions {...common} query={parseVersionQuery(search)} />
           : tab === 'history' ? <WorkHistory {...common} query={parseHistoryQuery(search)} />

@@ -279,24 +279,41 @@ export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotPr
   data: ZoneModuleData[Type];
 }
 
-/** One option of a release-filter field: `value` is the Main value, `label` the Zone's word for it. */
+/** One value a release-filter field offers: `value` is the Main value, `label` the Zone's word for it. */
 export interface ZoneReleaseOption { value: string; label: string }
-/** A release-filter field: the Zone's name for it, the words for "no choice" and the values it offers. */
-export interface ZoneReleaseField { label: string; any: string; options: ZoneReleaseOption[] }
+
+/**
+ * One field of the release filter: a facet of Main's registry that sits inside the release group
+ * (`releaseLanguage`, `releasePlatform`, `releaseTerritory`, ...). The registry decides whether the facet exists,
+ * which values it admits (its pattern; a closed pattern is the closed set) and its label in each locale; the Zone
+ * adds its own words and suggestions.
+ */
+export interface ZoneReleaseField {
+  /** The registry facet's name. A facet the registry does not serve as current is not offered. */
+  facet: string;
+  /** The Zone's name for the field; the registry's label in the reader's language when omitted. */
+  label?: string;
+  /** The words for "no choice". */
+  any: string;
+  /**
+   * Values the field offers, with the Zone's words for them. For a registry facet with a closed set only members of
+   * that set are offered (omitted, the whole set, labelled with the values themselves); for an open one these are
+   * suggestions, and an address may carry any value the registry's pattern admits.
+   */
+  options?: ZoneReleaseOption[];
+  /** Values the group applies while the reader chooses nothing (for example the usable statuses). */
+  unchosen?: string[];
+}
 
 /**
  * The release filter a Zone offers: one release of a Work must meet every chosen condition (Main's `where`
- * group over releases), so a translated title never counts as a playable translation. The platform renders
- * the control, sends the group to Main and shows what Main matched; the Zone names the fields, the values
- * it offers and the words around them. A field left out is not offered. Books use `platform` as "Format".
+ * group over releases), so a translated title never counts as a playable translation. The platform renders the
+ * control from the registry and this spec, sends the group to Main and shows what Main matched.
  */
 export interface ZoneReleaseFilterSpec {
   /** The control's accessible name and heading. */
   label: string;
-  language: ZoneReleaseField;
-  platform?: ZoneReleaseField;
-  completeness?: ZoneReleaseField;
-  origin?: ZoneReleaseField;
+  fields: ZoneReleaseField[];
   apply: string;
   clear: string;
   /** Said under the control while it is applied: what the results are. */
@@ -319,25 +336,9 @@ export interface BrowseHeaderSlotProps extends ZoneSlotProps {
   filtered: boolean;
 }
 
-/**
- * The first block of a Work's overview in a Zone, as regions the platform has already rendered. A package
- * returns them in its own order (a visual novel leads with `availability`, a series with `progress`);
- * the ratings, classification, adoption and record the platform keeps on every Work follow the block.
- */
-export interface ZoneDetailRegions {
-  /** The Work's realizations and releases: where, and in what language, it can be read or played. */
-  availability: ReactNode;
-  /** The Work's description, and what its type adds. */
-  about: ReactNode;
-  /** The parts (volumes) of a series, with a link to every one; nothing for a Work that has none. */
-  volumes: ReactNode;
-  /** The signed-in reader's progress through a series and the next part; draws nothing when there is none. */
-  progress: ReactNode;
-}
-export interface WorkDetailSlotProps extends ZoneSlotProps {
-  work: Pick<ZoneWork, 'id' | 'title' | 'kind'>;
-  regions: ZoneDetailRegions;
-}
+/** The sections of a Work's overview (the hub); a Zone may lead with some of them. */
+export const zoneHubSections = ['about', 'availability', 'parts', 'wiki', 'ratings', 'discussion', 'lists'] as const;
+export type ZoneHubSection = (typeof zoneHubSections)[number];
 
 /** A mounted Collection's index page: the Works on this page, set out by the platform as `fallback`. */
 export interface IndexSlotProps extends ZoneSlotProps, ZoneWorkRenderers {
@@ -350,8 +351,6 @@ export interface ZoneSlots {
   index?: ComponentType<IndexSlotProps>;
   /** Above the Zone's browse results: the release filter and the words around it. */
   browseHeader?: ComponentType<BrowseHeaderSlotProps>;
-  /** A Work's overview page inside the Zone. */
-  workDetail?: ComponentType<WorkDetailSlotProps>;
   header?: ComponentType<HeaderSlotProps>;
   /** The search and filters the home leads with; the platform's is a search field and chip rows. */
   browseBar?: ComponentType<BrowseBarSlotProps>;
@@ -374,6 +373,12 @@ export interface ZonePackage {
   slots: ZoneSlots;
   /** Offers the release filter on the browse page, in the reader's language (`locale` is the interface locale). */
   releaseFilter?: (locale: string) => ZoneReleaseFilterSpec;
+  /**
+   * The hub sections a Work's page in this Zone leads with, in this order; the others follow in the hub's own
+   * order. The platform draws every section the Work's page binds whatever this says, so it reorders and never
+   * hides (a visual novel leads with `availability`, a series with `parts`).
+   */
+  hubOrder?: readonly ZoneHubSection[];
 }
 
 export function defineZonePackage<const Package extends ZonePackage>(pkg: Package): Package {

@@ -41,12 +41,24 @@ export function hubPlan(page: { target: { base: TargetBase }; sections: readonly
     || (section === 'lists' && page.target.base === 'work'));
 }
 
+/**
+ * The order the plan's sections are drawn in: the documented one, except that the sections a Zone leads with
+ * (`ZonePackage.hubOrder`) come first, in the Zone's order. It only moves sections the plan already draws; a Zone
+ * cannot add or hide one, and whatever order a plan is handed over in, the rest keep the documented order.
+ */
+export function drawOrder(plan: readonly HubSection[], lead: readonly HubSection[] = []): readonly HubSection[] {
+  const documented = hubSections.filter(section => plan.includes(section));
+  const first = [...new Set(lead)].filter(section => documented.includes(section));
+  return [...first, ...documented.filter(section => !first.includes(section))];
+}
+
 /** The container the primary action sits in; the sticky bar watches it leave the screen. */
 export const ACTION_ID = 'work-primary-action';
 /** Marks the one link that is the page's primary action, so the sticky bar can repeat it. */
 export const ACTION_ATTRIBUTE = 'data-next-action';
 
 /** The overview's sections by name, for "On this page", in the order they are drawn. */
-export const hubLabels = (t: Record<`section${Capitalize<HubSection>}`, string>, plan: readonly HubSection[]) =>
-  hubSections.filter(section => plan.includes(section)).map(section => ({ id: hubAnchors[section],
+export const hubLabels = (t: Record<`section${Capitalize<HubSection>}`, string>, plan: readonly HubSection[],
+  lead: readonly HubSection[] = []) =>
+  drawOrder(plan, lead).map(section => ({ id: hubAnchors[section],
     label: t[`section${section[0]!.toUpperCase()}${section.slice(1)}` as `section${Capitalize<HubSection>}`] }));

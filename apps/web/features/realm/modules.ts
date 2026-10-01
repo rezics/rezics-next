@@ -23,13 +23,17 @@ const failed = { state: 'failed' } as const;
 const empty = { state: 'empty' } as const;
 const unsupported = { state: 'unsupported' } as const;
 
-function summaryWork(item: { id: string; title: MainName; cover?: MainAvatar }, context: AdaptContext,
-  mount: string | null = null): ZoneWork {
+export function summaryWork(item: { id: string; title: MainName; cover?: MainAvatar; inZone?: boolean },
+  context: AdaptContext, mount: string | null = null): ZoneWork {
   return zoneWork({ id: item.id, title: item.title,
     cover: item.cover ?? { kind: 'fallback', policy: 'zone', key: item.id, resourceType: 'work' },
     types: [], tagline: null, completionStatus: null, chapterCount: null,
-    wordCount: null, lastUpdatedAt: null }, context, null, mount);
+    wordCount: null, lastUpdatedAt: null, inZone: item.inZone }, context, null, mount);
 }
+
+/** Where a quote or discussion about a Work leads: its discussion in the Zone, or on the canonical page if not in it. */
+export const replyHref = (context: AdaptContext, work: { id: string; inZone: boolean }) =>
+  workLink(context, work.id, null, 'discussion', work.inZone);
 
 /**
  * The Realm's own cards for its Works, by ID: the Realm's list pairs each
@@ -190,7 +194,7 @@ async function quotes(module: PresentationModule, context: AdaptContext): Promis
   const items = page.data.items.slice(0, module.options?.limit ?? 6).map(item => ({
     id: item.id, body: zoneContentText(item.excerpt),
     reader: item.authorName, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
-    href: workLink(context, item.work.id, null, 'discussion'),
+    href: replyHref(context, item.work),
   }));
   return items.length ? { state: 'ready', data: { quotes: items } } : empty;
 }
@@ -202,7 +206,7 @@ async function discussions(module: PresentationModule, context: AdaptContext):
   if (!page.ok) return failed;
   const items = page.data.items.slice(0, module.options?.limit ?? 8).map(item => ({
     id: item.id, title: zoneContentText(item.excerpt),
-    href: workLink(context, item.work.id, null, 'discussion'),
+    href: replyHref(context, item.work),
     replies: null, work: withRealmCard(summaryWork(item.work, context), cards.get(item.work.id)),
   }));
   return items.length ? { state: 'ready', data: { items } } : empty;

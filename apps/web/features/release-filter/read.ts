@@ -9,6 +9,7 @@ import { readAgent } from '../realm/read.ts';
 import { readRealization, readRelease } from '../work-levels/read.ts';
 import type { Realization, Release } from '../work-levels/types.ts';
 import { type ReleaseHit, type ReleaseResult, releaseWork, SHOWN_MATCHES } from './adapt.ts';
+import type { ResolvedReleaseFilter } from './registry.ts';
 import { type ReleaseFilterState, releaseGroup } from './state.ts';
 
 // The release-filtered browse read: Main's one `where` group over releases (`POST /v1/query`, the
@@ -20,9 +21,9 @@ export const RELEASE_PAGE = 20;
 
 export interface ReleaseBrowsePage { items: ReleaseResult[]; next: string | null }
 
-async function readHits(realm: string, locale: UiLocale, state: ReleaseFilterState):
+async function readHits(realm: string, locale: UiLocale, state: ReleaseFilterState, filter: ResolvedReleaseFilter):
   Promise<Loaded<{ hits: ReleaseHit[]; next: string | null }>> {
-  const group = releaseGroup(state);
+  const group = releaseGroup(state, filter);
   if (!group) return { ok: false, failure: 'invalid' };
   const { main } = await reader();
   // The view names the Realm by its UUID; Main's Query names it by its native IRI.
@@ -70,8 +71,8 @@ async function readRecords(hits: readonly ReleaseHit[]) {
 
 /** One page of a Zone's release-filtered browse; a failed record read only drops that release's line. */
 export async function readReleaseBrowse(realm: string, locale: UiLocale, state: ReleaseFilterState,
-  context: AdaptContext, spec: Pick<ZoneReleaseFilterSpec, 'coverKind'>): Promise<Loaded<ReleaseBrowsePage>> {
-  const page = await readHits(realm, locale, state);
+  filter: ResolvedReleaseFilter, context: AdaptContext, spec: Pick<ZoneReleaseFilterSpec, 'coverKind'>): Promise<Loaded<ReleaseBrowsePage>> {
+  const page = await readHits(realm, locale, state, filter);
   if (!page.ok) return page;
   const records = await readRecords(page.data.hits);
   return { ok: true, data: { next: page.data.next,

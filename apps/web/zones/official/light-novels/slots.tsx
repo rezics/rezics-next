@@ -1,4 +1,4 @@
-import type { IndexSlotProps, ModuleSlotProps, WorkCardSlotProps, WorkDetailSlotProps, ZoneSlotProps } from '@rezics/zone-sdk';
+import type { IndexSlotProps, ModuleSlotProps, WorkCardSlotProps, ZoneSlotProps } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
 // Slots of the official Light Novels Zone. They render only what the platform passes in: the platform
@@ -37,29 +37,6 @@ export function LightNovelShelf({ zone, module, data, card, nextVolumes, Link }:
         {card(work, { layout: 'cover' })}</li>)}</ul>
     </div>)}
   </section>;
-}
-
-/** A series' page leads with the reader's place in it and its volumes, then the description and editions. */
-export function LightNovelDetail({ zone, regions }: WorkDetailSlotProps) {
-  const t = strings(zone.locale);
-  return <div className="ln-detail">
-    <section aria-labelledby="ln-progress" className="ln-progress">
-      <h2 id="ln-progress" className="sr-only">{t.progress}</h2>
-      {regions.progress}
-    </section>
-    <section aria-labelledby="ln-volumes" className="ln-volumes">
-      <h2 id="ln-volumes" className="sr-only">{t.volumes}</h2>
-      {regions.volumes}
-    </section>
-    <section aria-labelledby="ln-about" className="ln-about">
-      <h2 id="ln-about" className="sr-only">{t.about}</h2>
-      {regions.about}
-    </section>
-    <section aria-labelledby="ln-availability" className="ln-availability">
-      <h2 id="ln-availability" className="sr-only">{t.availability}</h2>
-      {regions.availability}
-    </section>
-  </div>;
 }
 
 /** What this Zone does not cover, the data's source and the sibling Zone over the same library. */

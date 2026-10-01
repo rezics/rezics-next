@@ -1,5 +1,4 @@
-import type { BrowseHeaderSlotProps, WorkCardSlotProps, WorkDetailSlotProps, ZoneMatchedRelease, ZoneSlotProps }
-  from '@rezics/zone-sdk';
+import type { BrowseHeaderSlotProps, WorkCardSlotProps, ZoneMatchedRelease, ZoneSlotProps } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
 // Slots of the official Visual Novels Zone. They render only what the platform passes in: the release
@@ -19,18 +18,28 @@ function languageName(tag: string, locale: string): string {
 const completenessWord = (value: ZoneMatchedRelease['completeness'], t: Strings) => ({ complete: t.releaseComplete,
   partial: t.releasePartial, trial: t.releaseTrial, unknown: t.releaseUnknown })[value];
 
+/** The translators as a list in the reader's language ("A, B and C"), each name in its own language and direction. */
+function Translators({ names, locale }: { names: ZoneMatchedRelease['translators']; locale: string }) {
+  const parts = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
+    .formatToParts(names.map((_, index) => String(index)));
+  return <>{parts.map((part, index) => {
+    const name = part.type === 'element' ? names[Number(part.value)] : undefined;
+    return name ? <bdi key={index} lang={name.lang || undefined} dir={name.dir}>{name.value}</bdi>
+      : <span key={index}>{part.value}</span>;
+  })}</>;
+}
+
 /** "English · Windows · complete · fan translation by Foo": one matched release, fact by fact. */
 export function ReleaseLine({ match, locale }: { match: ZoneMatchedRelease; locale: string }) {
   const t = strings(locale);
   const facts = [match.language ? languageName(match.language, locale) : null, match.platform,
     completenessWord(match.completeness, t)].filter(fact => fact !== null);
   const origin = match.origin === 'official' ? t.officialRelease
-    : match.translators.length ? t.fanTranslationBy('⁣').split('⁣') : t.fanTranslation;
+    : match.translators.length ? t.fanTranslationBy('\u2063').split('\u2063') : t.fanTranslation;
   return <span data-release-line="">
     {facts.join(' · ')}{' · '}
-    {typeof origin === 'string' ? origin : <>{origin[0]}{match.translators.map((translator, index) =>
-      <span key={`${translator.value}-${index}`}>{index ? ', ' : ''}<bdi lang={translator.lang || undefined}
-        dir={translator.dir}>{translator.value}</bdi></span>)}{origin[1]}</>}
+    {typeof origin === 'string' ? origin : <>{origin[0]}<Translators names={match.translators} locale={locale} />
+      {origin[1]}</>}
   </span>;
 }
 
@@ -62,22 +71,6 @@ export function VisualNovelBrowseHeader({ zone, filter }: BrowseHeaderSlotProps)
   return <div className="vn-browse-head">
     {filter}
     <Source zone={zone} note />
-  </div>;
-}
-
-/** A visual novel's page leads with where it can be played, then the description. */
-export function VisualNovelDetail({ zone, regions }: WorkDetailSlotProps) {
-  const t = strings(zone.locale);
-  return <div className="vn-detail">
-    <section aria-labelledby="vn-availability" className="vn-availability">
-      <h2 id="vn-availability" className="sr-only">{t.availability}</h2>
-      {regions.availability}
-      <Source zone={zone} />
-    </section>
-    <section aria-labelledby="vn-about" className="vn-about">
-      <h2 id="vn-about" className="sr-only">{t.about}</h2>
-      {regions.about}
-    </section>
   </div>;
 }
 

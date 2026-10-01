@@ -8,6 +8,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { languageName } from '../tracking/display.ts';
 import { copyOf } from '../tracking/messages.ts';
 import { reasonText } from '../tracking/series-progress-panel.tsx';
+import type { TrackingApi } from '../tracking/api.ts';
 import type { SeriesSummary } from '../tracking/types.ts';
 
 // The next volume of a series as Main reports it for the signed-in reader, in the language they
@@ -16,6 +17,51 @@ import type { SeriesSummary } from '../tracking/types.ts';
 // out, or for a Work that is not a series, these draw nothing.
 
 interface Reading { language: string; series: SeriesSummary }
+
+/**
+ * One read per Work per page, shared by every card and the shelf. Main answers a series' progress one Work
+ * at a time, in the language of the reader's edition choice (the `language` given only stands where there is
+ * none), so the cards of a page would otherwise each ask again. The first `MAX_READS` Works a page asks about
+ * are read, four at a time; the rest show no line, which keeps a page far under a reader's request limits.
+ */
+export const MAX_READS = 12;
+const CONCURRENCY = 4;
+const FRESH_MS = 30_000;
+
+interface Store { readings: Map<string, { at: number; read: Promise<Reading | null> }>; waiting: (() => void)[]; running: number }
+const stores = new WeakMap<TrackingApi, Map<string, Store>>();
+
+function storeOf(api: TrackingApi, locale: string): Store {
+  const byLocale = stores.get(api) ?? new Map<string, Store>();
+  stores.set(api, byLocale);
+  const store = byLocale.get(locale) ?? { readings: new Map(), waiting: [], running: 0 };
+  byLocale.set(locale, store);
+  return store;
+}
+
+/** The reader's progress through a Work, read at most once per page; null when it is no series, has no next part or is over the cap. */
+export function readingOf(api: TrackingApi, work: string, locale: UiLocale): Promise<Reading | null> {
+  const store = storeOf(api, locale);
+  const known = store.readings.get(work);
+  // A reading is a page's: one the reader may have changed since (finishing a volume elsewhere) is read again.
+  if (known && Date.now() - known.at < FRESH_MS) return known.read;
+  if (known) store.readings.delete(work);
+  if (store.readings.size >= MAX_READS) return Promise.resolve(null);
+  const read = (async () => {
+    while (store.running >= CONCURRENCY) await new Promise<void>(resume => store.waiting.push(resume));
+    store.running += 1;
+    try {
+      const answer = await api.series(work, locale);
+      return answer.ok && answer.data.scope === 'disclosed-composition'
+        ? { language: answer.data.language ?? locale, series: answer.data } : null;
+    } finally {
+      store.running -= 1;
+      store.waiting.shift()?.();
+    }
+  })();
+  store.readings.set(work, { at: Date.now(), read });
+  return read;
+}
 
 function useReadings(works: readonly string[], locale: UiLocale): ReadonlyMap<string, Reading> {
   const actions = useReaderActions();
@@ -26,10 +72,8 @@ function useReadings(works: readonly string[], locale: UiLocale): ReadonlyMap<st
     if (!api) return;
     let current = true;
     void Promise.all(works.map(async (work): Promise<[string, Reading] | null> => {
-      const saved = await api.preference(work);
-      const language = saved.ok && saved.data ? saved.data.language : locale;
-      const read = await api.series(work, language);
-      return read.ok && read.data.scope === 'disclosed-composition' ? [work, { language, series: read.data }] : null;
+      const reading = await readingOf(api, work, locale);
+      return reading ? [work, reading] : null;
     })).then(items => {
       if (current) setFound(new Map(items.filter(item => item !== null)));
     });

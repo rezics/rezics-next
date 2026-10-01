@@ -1,6 +1,6 @@
 import { defineZonePackage } from '@rezics/zone-sdk';
 import { releaseFilter } from './release-filter.ts';
-import { VisualNovelBrowseHeader, VisualNovelCard, VisualNovelDetail, VisualNovelFooter } from './slots.tsx';
+import { VisualNovelBrowseHeader, VisualNovelCard, VisualNovelFooter } from './slots.tsx';
 import css from './visual-novels.css?raw';
 
 /**
@@ -13,6 +13,7 @@ export default defineZonePackage({
   slug: 'visual-novels',
   css,
   releaseFilter,
-  slots: { browseHeader: VisualNovelBrowseHeader, workCard: VisualNovelCard, workDetail: VisualNovelDetail,
-    footer: VisualNovelFooter },
+  // Where a novel can be played comes before its description.
+  hubOrder: ['availability', 'about'],
+  slots: { browseHeader: VisualNovelBrowseHeader, workCard: VisualNovelCard, footer: VisualNovelFooter },
 });

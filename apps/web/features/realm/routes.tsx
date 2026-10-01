@@ -14,7 +14,8 @@ import { browseEntry, browseModel, type FacetCounts } from '../zones/browse-view
 import { cardRenderer, ZoneHome } from '../zones/zone-home.tsx';
 import { ReleaseBrowse, ReleaseBrowseHeader } from '../release-filter/browse.tsx';
 import { readReleaseBrowse } from '../release-filter/read.ts';
-import { parseReleaseFilter, releaseFilterActive } from '../release-filter/state.ts';
+import { resolveReleaseFilter } from '../release-filter/registry.ts';
+import { noReleaseFilter, parseReleaseFilter, releaseFilterActive } from '../release-filter/state.ts';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadModules } from './modules.ts';
 import { readAgent, readFacets, readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, readRoster,
@@ -123,16 +124,20 @@ export function RealmBrowseRoute(props: RealmRouteProps) {
     const base = view.zone.links.browse;
     const card = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
     const spec = view.pkg?.releaseFilter?.(locale) ?? null;
-    const release = parseReleaseFilter(search);
-    const header = spec ? <ReleaseBrowseHeader zone={view.zone} pkg={view.pkg} spec={spec} state={release}
-      base={base} /> : null;
-    if (spec && releaseFilterActive(release)) {
-      const found = await readReleaseBrowse(view.context.realm, locale, release, view.context, spec);
+    // The registry names the release facets and the values they admit; a Zone's spec only adds its words.
+    const served = spec ? await readFacets() : null;
+    const release = spec && served?.ok ? resolveReleaseFilter(spec, served.data.facets, locale) : null;
+    const releaseState = release ? parseReleaseFilter(search, release) : noReleaseFilter;
+    const header = spec && release ? <ReleaseBrowseHeader zone={view.zone} pkg={view.pkg} spec={spec} filter={release}
+      state={releaseState} base={base} /> : null;
+    if (spec && release && releaseFilterActive(releaseState)) {
+      const found = await readReleaseBrowse(view.context.realm, locale, releaseState, release, view.context, spec);
       if (!found.ok) return <>
         <PageContainer className="py-0 sm:py-0 lg:py-0">{header}</PageContainer>
         {failure(view, 'browse', found.failure === 'sign-in' || found.failure === 'identity' ? 'unavailable' : found.failure)}</>;
-      return <ReleaseBrowse header={header} spec={spec} state={release} base={base} items={found.data.items}
-        next={found.data.next} card={card} messages={view.zoneMessages} locale={locale} />;
+      return <ReleaseBrowse header={header} spec={spec} filter={release} state={releaseState} base={base}
+        items={found.data.items} next={found.data.next} card={card} messages={view.zoneMessages} locale={locale}
+        firstPage={view.messages.firstPage} />;
     }
     const state = parseBrowseState(search);
     const [page, facets] = await Promise.all([readZoneBrowse(view.context.realm, locale, mainBrowseQuery(state)),

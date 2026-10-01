@@ -40,8 +40,6 @@ const en = {
   siblingTitle: 'Read it as a book',
   siblingBody: 'Many visual novels have light novels or books. The Light Novels Zone shows the same Works with the same library state.',
   siblingLink: 'Open the Light Novels Zone',
-  availability: 'Availability',
-  about: 'About',
 };
 
 type Strings = typeof en;
@@ -89,8 +87,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: '当作书来读',
     siblingBody: '许多视觉小说也有轻小说或图书。轻小说专区展示同样的作品，书架状态也相同。',
     siblingLink: '打开轻小说专区',
-    availability: '可获得的版本',
-    about: '简介',
   },
   'zh-Hant': {
     filterLabel: '尋找可玩的發行版',
@@ -131,8 +127,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: '當作書來讀',
     siblingBody: '許多視覺小說也有輕小說或書籍。輕小說專區顯示相同的作品，書架狀態也相同。',
     siblingLink: '開啟輕小說專區',
-    availability: '可取得的版本',
-    about: '簡介',
   },
   ja: {
     filterLabel: 'プレイできるリリースを探す',
@@ -173,8 +167,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: '本として読む',
     siblingBody: '多くのビジュアルノベルにはライトノベルや書籍があります。ライトノベルゾーンでは同じ作品が同じライブラリ状態で表示されます。',
     siblingLink: 'ライトノベルゾーンを開く',
-    availability: '入手できる版',
-    about: '概要',
   },
   ko: {
     filterLabel: '플레이할 수 있는 릴리스 찾기',
@@ -215,8 +207,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: '책으로 읽기',
     siblingBody: '많은 비주얼 노벨에는 라이트 노벨이나 책이 있습니다. 라이트 노벨 Zone은 같은 작품을 같은 라이브러리 상태로 보여 줍니다.',
     siblingLink: '라이트 노벨 Zone 열기',
-    availability: '구할 수 있는 판',
-    about: '소개',
   },
   de: {
     filterLabel: 'Eine spielbare Veröffentlichung finden',
@@ -257,8 +247,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: 'Als Buch lesen',
     siblingBody: 'Zu vielen Visual Novels gibt es Light Novels oder Bücher. Die Light-Novels-Zone zeigt dieselben Werke mit demselben Bibliotheksstatus.',
     siblingLink: 'Light-Novels-Zone öffnen',
-    availability: 'Verfügbarkeit',
-    about: 'Über das Werk',
   },
   fr: {
     filterLabel: 'Trouver une édition jouable',
@@ -299,8 +287,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: 'À lire comme un livre',
     siblingBody: 'Beaucoup de visual novels ont des light novels ou des livres. La Zone Light Novels montre les mêmes œuvres avec le même état de bibliothèque.',
     siblingLink: 'Ouvrir la Zone Light Novels',
-    availability: 'Disponibilité',
-    about: 'À propos',
   },
   es: {
     filterLabel: 'Encontrar una edición jugable',
@@ -341,8 +327,6 @@ const translations: Record<ZoneLocale, Strings> = {
     siblingTitle: 'Léela como libro',
     siblingBody: 'Muchas novelas visuales tienen novelas ligeras o libros. La Zone de Novelas ligeras muestra las mismas obras con el mismo estado de biblioteca.',
     siblingLink: 'Abrir la Zone de Novelas ligeras',
-    availability: 'Disponibilidad',
-    about: 'Acerca de',
   },
 };
 

@@ -131,8 +131,10 @@ export const readHubPlan = async (id: string): Promise<readonly HubSection[]> =>
 };
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
-export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
+export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
+  /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
+  lead?: readonly HubSection[];
 }) {
   const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience, plan] = await Promise.all([readingAgent(),
     browseReader(), readReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types),
@@ -149,7 +151,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, child
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       <Credits id={id} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} locale={locale} messages={messages} /></Suspense>}
-    sections={hubLabels(messages, plan)}
+    sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
       <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />
@@ -300,14 +302,16 @@ async function TypeExperience({ id, work, experience, locale, messages }: Common
  * Overview: the hub's sections below the identity, in the documented order. Each region reads in parallel under
  * its own Suspense boundary; `OverviewLayout` draws only the sections the Work's projection binds.
  */
-export async function WorkOverview({ workRef, id, work, scope, context, locale, messages }: Common & {
+export async function WorkOverview({ workRef, id, work, scope, context, locale, messages, lead }: Common & {
   workRef: WorkAt; id: string; work: Header; scope: WorkScope | null; context: string | undefined;
+  /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
+  lead?: readonly HubSection[];
 }) {
   const [experience, plan] = await Promise.all([readExperience(id, work.types), readHubPlan(id)]);
   const t = messages;
   const loading = t.loadingRegion;
   const common = { id, locale, messages };
-  return <OverviewLayout messages={messages} plan={plan}
+  return <OverviewLayout messages={messages} plan={plan} lead={lead}
     // Specialist reading or cooking leads; the description and tags follow.
     type={experience.kind === 'book' || experience.kind === 'plain' ? null : <Suspense fallback={<RegionSkeleton
       id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
