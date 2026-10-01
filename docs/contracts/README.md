@@ -5,7 +5,7 @@ service owners implement them; UI, SDK and MCP adapters preserve their meaning.
 
 | Area | Contract |
 | --- | --- |
-| Shared identity and meaning | [Semantic model](semantic-model.md), [model profiles](model-profiles.md), [data map](data-contract-map.md), [standards](standards.md), [system invariants](system-invariants.md). |
+| Shared identity and meaning | [Semantic model](semantic-model.md), [model profiles](model-profiles.md), [standards](standards.md), [system invariants](system-invariants.md). |
 | Identity and security | [Identity/access](identity-and-access.md), [connected apps](connected-apps.md), [quotas](quotas.md), [license grants](license-grants.md). |
 | Product spine | [Space](space.md), [shared Contexts, interpretation and preferences](context.md), [Main Version](main-version.md), [Work/release](work-and-release.md). |
 | Knowledge | [Objects, statements and classification](classification.md), [judgments](classification-judgments.md), [ratings](ratings.md), [event time](../../services/main/src/modules/event/README.md), [information verification](information-verification.md). |

@@ -42,43 +42,19 @@ verified historical bytes and private uncached responses.
 
 ## Executable capability registry
 
-Main serves declared agent operations at `/mcp` using the official TypeScript
-SDK's stateless Streamable HTTP transport for MCP 2026-07-28, with stateless
-compatibility for 2025 clients. Route modules export `capabilities` alongside
-`openApiOperations`; generation attaches each declaration as
-`x-rezics-capability` and refuses declarations for missing operations, duplicate
-tool names and unsupported tool shapes. Only supported declarations with an
-`mcp` binding become tools. The initial resource, relation and edition bindings
-are in the [MCP adapter](../../services/main/src/routes/mcp.ts); catalogue and
-wiki owners declare their own bindings.
-
-Tool arguments group the operation's `path`, `query`, `headers` and JSON `body`
-schemas, keeping colliding names and omitted/null/empty values distinct. Calls
-dispatch once through Main's HTTP app with the caller's bearer and explicit
-`Idempotency-Key`. Acting Agents, current authority, receipts and rate budgets
-remain the HTTP handler's responsibility. Results preserve the HTTP `status`,
-response `headers` (including `Retry-After`) and `body`, including problems and
-continuation cursors; HTTP errors also set MCP `isError`.
-
-OAuth protected-resource metadata at
-`/.well-known/oauth-protected-resource/mcp` names Account and Main's existing
-resource identifier. Account's `/api/auth/oauth2/register` admits public
-authorization-code clients with PKCE and exact redirects, optionally with
-refresh tokens. Registration is limited to Main and the declared agent scope
-ceiling (required `mcp.scopes`, plus `openid` and `offline_access`
-for authorization). It grants no Resource rights. The existing installation,
-explicit consent and live introspection fences remain authoritative; revocation
-ends the next MCP request. Protected-resource discovery and its authorization
-challenge advertise the union of declared tool scopes. Anonymous registration
-allows ten requests per client IP per five minutes, using Account's persistent
-budget; only configured proxy peers may supply the client address. Registration
-rejects app logos, websites, privacy policies and terms links. Consent marks
-apps outside the first-party registry as unverified and shows the redirect host
-from the signed request. Native clients may register an HTTP loopback callback.
-This registration profile uses
-[RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html), the compatibility option
-in the [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization);
-client metadata documents require a separately qualified discovery profile.
+Route modules declare `capabilities` beside `openApiOperations`; generation
+attaches each declaration to the OpenAPI operation and refuses declarations for
+missing operations, duplicate tool names and unsupported shapes. Declarations
+with an `mcp` binding become tools in the [MCP adapter](../../services/main/src/routes/mcp.ts),
+which dispatches each call once through Main's HTTP app with the caller's bearer
+and `Idempotency-Key`. MCP is therefore an adapter, never a second write path:
+acting Agents, authority, receipts and rate budgets stay with the HTTP handler,
+and results keep the HTTP status, headers and body. Agent clients register
+through Account using [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html),
+the compatibility option in the [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization);
+registration grants no Resource rights and is limited to Main and the declared
+agent scope ceiling. Client metadata documents need a separately qualified
+discovery profile.
 
 Decision 14, product manager under maintainer delegation, 2026-09-29.
 Each supported capability is to declare authority, inputs, outcomes, pagination,

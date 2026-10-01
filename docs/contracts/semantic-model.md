@@ -43,19 +43,6 @@ their operation and storage contracts. A general runtime compiler for all seven
 families remains prospective; untrusted definitions cannot install executable
 code or grant authority.
 
-### Bounded Work scalar state profile
-
-`work-scalar-state-v1` owns one optional `rv:scalarValue` on a metadata Work.
-The [tagged codec](../../services/main/src/modules/work/scalar-value.ts) and
-[semantic value codec](../../services/main/src/modules/semantic/value.ts) preserve
-zero, false, empty string, absent, explicit unknown and explicit no-value as
-different states. The request digest includes tag and lexical form; the exact
-Work manifest and JSON-LD export retain the same distinction. An old revision
-never substitutes the current head. The [MODEL02 cases](../../scripts/qa/cases/model-contracts.ts)
-and [recorded qualification](../plan/qualification.md) name the exercised paths.
-This profile does not grant a general semantic-change API. Its choice of the
-Work component avoids a separate null-first-head relay protocol.
-
 ## Types, capabilities and Access
 
 Maintainer and product manager, 2026-09-30. Types describe; capabilities behave;
@@ -142,13 +129,7 @@ gender from a name. Selection and fallback follow
 Narrative role (protagonist), prominence (main, supporting), credit role
 (author, voice actor) and participant slot (character) stay distinct concepts:
 a prominent antagonist is main without being the protagonist, and a source's
-"main" maps only after review. Presentations are written through
-`POST /v1/lexicon/presentations` independently of the
-[definition change operation](../../services/main/src/modules/semantic/change.ts).
-Main renders their structured labels, grammatical forms and fallback provenance;
-`GET /v1/lexicon/presentations` batches up to 64 definitions. Draft writes require
-`lexicon.presentation.change`; submitting or retaining reviewed status requires
-the separate `lexicon.presentation.review` authority. The combined
-`GET /v1/resources/{id}/relations` read includes bindings and the selected labels,
-grammatical forms and fallback provenance for each viewing direction and
-requested language. MessageFormat 2 templates remain to be built.
+"main" maps only after review. Presentation writes are separate from the
+[definition change operation](../../services/main/src/modules/semantic/change.ts),
+and reviewing a presentation is a separate authority from drafting one.
+MessageFormat 2 templates remain to be built.

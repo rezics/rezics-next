@@ -6,7 +6,6 @@
 - [Services](services.md): business owners, deployable processes and dependencies.
 - [System invariants](../contracts/system-invariants.md): cross-domain correctness.
 - [Semantic model](../contracts/semantic-model.md): identities, values and model admission.
-- [Data contract map](../contracts/data-contract-map.md): complete domain coverage.
 - [Storage ownership](../storage/ownership-and-placement.md): one writer, multiple stores and placement.
 - [Decision evidence](evidence.md): sources, selected lessons and remaining qualification.
 - [Coverage and invariant traceability](coverage.md): capability realization and prospective acceptance.

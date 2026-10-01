@@ -1,9 +1,5 @@
 # Identity correction, merge and split
 
-The installed Work-address resolution and source-identity proposal are bounded
-slices. General identity merge, split and cross-owner authority transfer remain
-prospective [pending cases](../../scripts/qa/cases/identity-correction.ts).
-
 An identity merge is an evidenced decision, not a rewrite of every incoming edge.
 Equal names, bytes or external identifiers only suggest candidates. Keep original
 identities, exact revisions, references and provenance; ordinary navigation may
@@ -86,51 +82,27 @@ editor minutes per trustworthy addition, by language and grain.
 
 The older checkout's merge contracts (`services/main/src/services/units/merge/contracts.ts`
 in the sibling `rezics` repository) hold preflight, two-review admission, redirects, reconciliation items and
-recovery fixtures worth adapting, not porting wholesale. Today address
-redirects exist (`services/main/src/modules/address/`), provider identity and
-corrections are proposal-only, and creation has no candidate, grain or evidence
-step.
+recovery fixtures worth adapting, not porting wholesale.
 
 ### Launch scope
 
-The section above preserves the broader intent and its earlier implementation
-baseline. The installed launch slice is described here.
+The launch slice is the duplicate-Work merge through the shared editorial
+`merge` adapter in the [Work owner](../../services/main/src/modules/work/); its
+tests hold the ordering, receipt and compensation outcomes. The choices that
+code does not explain:
 
-The launch duplicate-Work merge is an evidenced decision through the shared
-editorial `merge` adapter. A plan pins source and survivor revisions and evidence;
-preflight compares multilingual headers and bounded person-state counts. Two
-independent human approvals are required for merge and unmerge. A bot and its
-operator, or two Agents controlled by the same person, are not independent.
+- Graph facts (statements, relations, realizations, compositions, collections
+  and source bindings) stay on their original Work and are read through the
+  merge, so unmerge never has to unpick rewritten facts.
+- Personal slots (library status, follows, effective standing rating vote,
+  public review) are reconciled with the survivor's slot winning, including
+  cleared statuses and explicit unfollows, because the survivor is what the
+  person last saw. A slot changed after page capture is kept and cannot block
+  completion or enter compensation.
+- Exact daily/occasion ratings, historical Main Version votes, reading
+  progress, sessions and owned copies keep their own grain and stay independent.
 
-The Work owner writes `rv:mergedInto` first, with a native Jena receipt; unmerge
-removes it first. Later library, follow and reading-progress writes resolve their
-Work through the shared target resolver. Ordered owner commands reconcile library
-statuses, follows, effective standing rating votes and public reviews. A survivor
-slot wins each conflict (including cleared statuses and explicit unfollows); a
-source-only slot moves. If either personal slot changes after page capture, its
-current state is retained and the item cannot block completion or enter unmerge
-compensation. Ratings keep original observations and sealed receipts,
-selecting at most one effective vote per Account principal and Context. Exact
-daily/occasion ratings and historical Main Version votes retain their original
-grain. Exact reading progress, sessions and owned copies remain independent.
-
-Graph facts remain on their original Work: statements, relations, realizations,
-compositions, collections and source bindings are not rewritten. The survivor
-entity page includes disclosed original headers and native fact inventories in
-bounded `mergedFacts` pages through `rv:mergedInto+`. Original IDs and exact Work,
-Main and address revisions remain readable with a separate typed resolution.
-Address GET 200 preserves its old shape and adds optional `resolution`. Disclosure,
-grants, account control and creator rights never transfer.
-
-PostgreSQL and Jena effects have native receipts; Access retains per-item snapshots
-and outcomes behind the shared ordered editorial commands. Explicit decision retry
-resumes delivery; receipt-only reads cannot dispatch. Unmerge compensates the
-original moved/history items using exact post-effect state. Later edits become
-`ambiguous` and remain intact. SQL person-state coverage requires an owner handler
-or an exact explained exclusion, including empty new tables. Graph predicate
-scanning, incoming-reference fencing and identity reservations are outside the
-launch scope.
-
-Split beyond compensating unmerge, the workbench UI and batch queues are deferred.
-General Resource and Account-controlled Agent corrections need their own grain and
-recovery authority; the Work adapter does not admit them.
+Split beyond compensating unmerge, the workbench UI, batch queues, graph
+predicate scanning, incoming-reference fencing and identity reservations are
+deferred. General Resource and Account-controlled Agent corrections need their
+own grain and recovery authority; the Work adapter does not admit them.

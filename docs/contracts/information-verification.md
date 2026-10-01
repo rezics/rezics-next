@@ -1,10 +1,5 @@
 # Claims, evidence and information verification
 
-Status: source lineage, claim analysis and bounded summaries have owner slices;
-general verdict, quality-query and campaign qualification remain prospective.
-[FACT01–06](../../scripts/qa/cases/information-verification.ts) retain their
-existing evidence; added combinations remain explicitly pending.
-
 ## Model
 
 A claim is a precise proposition with referent, context, edition and valid time.
@@ -145,49 +140,29 @@ the wiki+ positioning. The rules it relies on:
   with character, location, timeline, chapter-guide and relationship pages,
   read at each reader's spoiler position. Its infoboxes and lists are the same
   records that filters, lists and other Zones read, so a correction in one wiki
-  improves every view of that fact.
-  Published wiki claims can appear without a Statement acceptance
-  (`acceptance: null`); `publication.kind = 'wiki-bundle'` identifies publication
-  separately from an editorial decision. Public disclosure follows the owning
-  public Work through the shared audience and reading-position boundary. A
-  private Work's wiki stays absent to anonymous and ungranted readers; readers
-  with the Work's read authority may read its claims and evidence through the
-  same boundary.
+  improves every view of that fact. Wiki publication is not an editorial
+  acceptance, and its disclosure follows the owning Work's audience and
+  reading-position boundary.
 - **Readers choose how far to see.** Anonymous readers start before the first
   revelation. Signed-in readers default to their own furthest completed
   occurrence; a Library status of `read` counts as finishing that Work. Anyone
   may choose an occurrence or show everything with `position=all`. A position
   applies only within its continuity; unrelated or unreadable continuities
   withhold their affected records without suppressing the rest of the page.
-  Ordinary records without a revelation position keep their existing disclosure
-  rules. Wiki publication registers its record identities and writes positions
-  before the owner graph commit; a registered wiki record without a position is
-  hidden, including when a reader chooses `position=all`.
 - **The Work page stays the hub.** It shows the wiki's summary beside ratings,
   reviews, library status, discussion, relations and lists; the wiki Zone is its
   deep end, not a replacement.
 
-External-text evidence, reviewed bundle publication, dependency outcomes and
-revelation positions now share the existing proposal and owner-command lifecycle.
-Every owner command requires the applying steward's ordinary Access authority
-for its target in addition to the candidate-bound review permit. Editing a
-matched entity also requires the authority of each Work that owns it. Personal
-Statements can be withdrawn only under their original speaker's ordinary path.
-Chapter updates use `wiki-delta-v1` candidates in the same `wiki-bundle` lifecycle.
-The history API/MCP read returns a compact, digest-checked pin of the complete
-applied journal; keyset pages keep both history reads and delta-base inventory
-usable beyond 64 proposals. The next delta reuses that pin as `base`, publishes
-new records through the ordinary owners and names every amendment or retraction
-with its accepted claim/revision, cited evidence and reason. Omitted claims stay
-accepted. A stale base fails before delivery; interrupted owner delivery resumes
-its retained commands. A reviewed reversal appends compensating occurrences.
-Historical names and claims remain pinned, with current merge resolution reported
-separately. Rights withholding removes quotations on every read. If that changes
-a sealed export's manifest, its read becomes stale; a fresh seal of the same pins
-retains a complete manifest with explicit withheld markers.
+The [wiki owner](../../services/main/src/modules/wiki/) carries bundle and
+chapter-delta publication through the shared proposal and owner-command
+lifecycle; its tests hold the delivery, history and export outcomes. Applying a
+reviewed bundle needs the steward's ordinary Access authority for every target
+in addition to the review permit, so review never widens authority. A delta
+names every amendment or retraction with its reason; omitted claims stay
+accepted, a reversal appends compensation rather than rewriting history, and
+rights withholding applies to every read and export.
 
-R51's chapter-delta reconciliation and MCP bindings are implemented. The first
-editorial benchmark still needs one Work with two language
+The first editorial benchmark still needs one Work with two language
 editions, a wiki Zone and a chapter update, measured in editor minutes per accepted
 claim against manual work at equal quality.
 

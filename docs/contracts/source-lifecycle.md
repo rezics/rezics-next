@@ -84,22 +84,13 @@ when applying the file is unfinished. Main excludes expired uploads from reads
 and exports immediately; its retention worker deletes them in bounded batches
 on a one-minute poll. Re-uploading an identical file does not extend its expiry.
 
-Before expiry, `GET /v1/me/library-export` is the reader's Main data export:
-it includes all retained source fields alongside the applied Library records.
-Save its pages to retain unsupported fields after the upload expires. Account's
-separate credential/profile export does not contain Main-owned Library data.
-`DELETE /v1/me/library-imports/{id}?actingSubject=…` deletes an upload sooner;
-it requires the owner's bearer and an `Idempotency-Key`. Deleting the upload
-leaves applied sessions, shelves, ratings and reviews in their ordinary stores.
-Only source identity hashes and session IDs remain to prevent invented rereads.
-
-Account deletion removes uploaded source evidence and import receipts for its
-own Persons, including replay plans containing private review text. The operator
-Account-erasure relay and restored-owner reconciliation perform this cleanup;
-the Main retention worker also reconciles principals with an Account deletion
-fence. Other principal deactivations do not erase uploads. This is logical
-deletion. Prior PostgreSQL row versions, WAL and backups remain governed by the
+Before expiry, the reader's Main library export includes all retained source
+fields alongside the applied Library records, so unsupported fields can be kept
+by saving it; Account's credential/profile export does not contain Main-owned
+Library data. Deleting an upload sooner leaves applied sessions, shelves,
+ratings and reviews in their ordinary stores; only source identity hashes and
+session IDs remain, to prevent invented rereads. Account deletion removes
+uploaded source evidence and import receipts for its own Persons, including
+replay plans containing private review text. This is logical deletion; prior
+PostgreSQL row versions, WAL and backups follow the
 [erasure and recovery procedure](../operations/erasure.md#backups-and-completion).
-Library export cursors last up to 30 minutes (or until the earliest upload
-expires). Changes to that reader's exported records require a new export;
-unrelated catalogue or other reader writes do not.

@@ -1,9 +1,5 @@
 # Editorial protection and reviewed corrections
 
-Status: Work-title and Content-draft slices exist; general selection, inherited
-scope and cross-owner protocols remain prospective. [Pending subcases](../../scripts/qa/cases/editorial-protection.ts)
-retain unqualified owner-boundary, recovery and workload obligations.
-
 ## Independent state and authority
 
 Access admits an actor/action; the target owner guards its state in the effect

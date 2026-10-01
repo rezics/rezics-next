@@ -131,10 +131,8 @@ proper names. Each embedded name keeps its own language and direction and is
 bidi-isolated (`bdi` with `lang` in HTML, Unicode isolates in plain text), so
 Arabic or Hebrew around a Latin or CJK name keeps its order.
 
-Shared [display-language selection](../../services/main/src/modules/display-language/select.ts)
-now follows the recorded or likely script, or the text's first letter when no
-script is known. It marks cross-script fallbacks and prefers the original label;
-stored labels have a UTF-8 byte budget rather than a twenty-label limit.
+[Display-language selection](../../services/main/src/modules/display-language/select.ts)
+carries these rules for stored labels.
 
 Current gaps to fix: some adapters still use ad-hoc language-tag parsers and
 selection rules;

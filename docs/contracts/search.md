@@ -42,15 +42,12 @@ reader. [SEARCH01–20 declarations](../../scripts/qa/cases/search.ts) retain th
 required outcomes and pending extensions, while
 [coverage declarations](../../scripts/qa/coverage/search.ts) identify asserted tests.
 
-`GET /v1/search/catalogue` returns ranked pages with a lower-bound count while
-more candidates remain. Its continuation binds the query, graph position,
-Lucene commit and reader presentation state. Score ties follow the stable
-document order within that commit. Reusing a continuation after any committed
-graph write, index commit, rebuild or presentation change returns HTTP 409 with
-`search_restart_required`; start again without the cursor. Changing the query
-while reusing a cursor returns HTTP 422 with `invalid_search_continuation`.
-The native writer fences every text-wrapper commit, including private and
-metadata writes, because Lucene may publish a merge on those commits.
+Ranked catalogue pages report a lower-bound count while more candidates remain,
+and their continuation is valid only within one Lucene commit: score ties follow
+document order inside that commit, so any later commit requires a restart rather
+than a page that may skip or repeat hits. The native writer fences every
+text-wrapper commit, including private and metadata writes, because Lucene may
+publish a merge on those commits.
 
 ## Statement aggregation
 

@@ -150,12 +150,9 @@ Use shared React renderers and typed locale resources for product UI; content
 languages remain independent. SDK/API editors preserve unknown-to-editor advanced
 fields. Qualify exact selection, malformed nodes, private embeds, query budget
 composition, responsive/accessibility behavior and exported representation fidelity.
-The existing backend has image/fallback summary descriptors. The 2026-09-27
-emoji/icon avatar, cover/banner and Post preview extensions above are adopted
-designs awaiting implementation; this documentation update adds no API behavior
-or rendered acceptance. Grouped-statement response shapes retain their own owner
-implementation status. Future implementation must verify the owner APIs before
-their frontend consumers and record rendered evidence separately.
+The emoji/icon avatar, cover/banner and Post preview extensions above are
+adopted designs (2026-09-27); verify their owner APIs before their frontend
+consumers.
 
 ## Document editor choice
 

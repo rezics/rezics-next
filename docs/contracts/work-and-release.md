@@ -14,9 +14,6 @@ the Work. A release announcement is a separate utterance.
 
 ## Closed records and open axes
 
-Closed release corrections are enforced by `services/main/src/modules/release/schema.ts`
-and `ReleasePolicy`: evidence may replace a record, and a later translation is a new one.
-
 What REZICS records about the world is closed; what REZICS maintains is open. A
 Main Version and a [virtual release](distribution.md#release-kinds-and-status)
 accept new content versions. An external edition or physical release, each web
@@ -34,18 +31,13 @@ manifestations and expressions, and MusicBrainz places translations that appear
 on no actual release on a [Pseudo-Release](https://musicbrainz.org/doc/Style/Specific_types_of_releases/Pseudo-Releases)
 rather than on the official one.
 
-## Installed release and translation grain
+## Release and translation grain
 
-The first [fixed release](../../services/main/src/modules/work/fixed-release.ts)
-seals one published native text draft and its exact Main Version selection. Its
-manifest preserves the selected contribution, decision, language and body digest;
-current metadata and default-selection edits cannot rewrite those references.
-[WORK05 evidence](../../scripts/qa/coverage/work.ts) covers stale, denied,
-concurrent and replayed seals plus exact read and graph recovery. The first
-[translation link](../../services/main/src/modules/work/translation-links.ts)
-pins a target Main Version revision and either an exact source revision or
-explicitly unresolved source status. Official authority is version scoped; a
-newer target revision does not inherit its link.
+[`ReleasePolicy`](../../services/main/src/modules/release/schema.ts) enforces
+closed release corrections, and the [fixed release](../../services/main/src/modules/work/fixed-release.ts)
+and [translation link](../../services/main/src/modules/work/translation-links.ts)
+owners carry their exact pins. Official authority is version scoped: a newer
+target revision does not inherit a translation link.
 
 Membership in an album or anthology does not absorb a child Work's identity,
 rights, ratings or future content. Domain measurements apply only to their
@@ -159,23 +151,15 @@ release window reports continuation and partial results: aggregate finish and
 caught-up states are unknown, and the next part and primary action are null.
 Unreadable parts are withheld from identifiers, labels and counts.
 
-The summary names its composition revision, session versions, Library status
-versions, immutable coverage pins and graph position. Its furthest completed
-part can carry a locator from one exact target or an occurrence ordered inside
-one exact Structure revision; an omnibus locator cannot identify a position
-inside its last volume. A series' own ratings stay separate from its volumes'
-ratings; a derived statistic, if shown, states its formula and denominator.
-
-Work-level membership and publication order now use the `work-composition`
-Structure profile, with local labels, inclusion and evidenced completion.
-The resource `parts` and `wholes` APIs traverse these levels while withholding
-unreadable uses. Membership does not write `schema:isPartOf`, so composed
-volumes remain discoverable in search, author listings and Zone browse.
-The private progress-summary API reads Work composition and pinned multi-Work
-release coverage (`services/main/src/routes/progress-summaries.ts`). Series pages
-and fragment correspondence remain separate work. The M6 series briefs (G-602, G-608, G-609, G-611,
-G-612) become adapters over the shared Composed, Versioned and Trackable
-capabilities, never a book-only store. The SAO and Index franchises and a set of
+An omnibus locator cannot identify a position inside its last volume. A
+series' own ratings stay separate from its volumes' ratings; a derived
+statistic, if shown, states its formula and denominator. Work-level membership
+does not write `schema:isPartOf`, so composed volumes remain discoverable in
+search, author listings and Zone browse; the
+[progress-summary route](../../services/main/src/routes/progress-summaries.ts)
+carries the read. Series pages and fragment correspondence remain separate
+work; series features are adapters over the shared Composed, Versioned and
+Trackable capabilities, never a book-only store. The SAO and Index franchises and a set of
 works whose web and published versions diverge are the acceptance fixtures.
 
 ## Catalogue acceptance fixtures
