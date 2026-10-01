@@ -243,7 +243,7 @@ test('G-724 one API journey creates empty mounts, vocabulary and bounded intake;
     expect(JSON.stringify(creation.description)).toContain('observation');
     expect(h.requests.filter((request) => request.path === '/v1/works')).toHaveLength(1);
     const wiki = first.zones.find((zone) => zone.id === 'franchise-wiki')!;
-    expect(Object.keys(wiki.collections)).toEqual(['characters', 'places', 'events', 'chapters']);
+    expect(Object.keys(wiki.collections)).toEqual(['franchise', 'characters', 'places', 'events', 'chapters']);
     for (const collection of Object.values(wiki.collections))
       expect(h.collections.get(collection.slice(-36))!.occurrences).toEqual([]);
   } finally {

@@ -26,7 +26,7 @@ export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 
  */
 export function RealmPageStory({ zone, modules = [], pkg = null, execution = { mode: 'fallback', reason: 'none-approved' },
   look = true, reader = 'light', members = null, navigation = [], membership = null,
-  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, locale, children }: {
+  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, position, locale, children }: {
   zone: ZoneContext; modules?: readonly PlacedModule[]; pkg?: ZonePackage | null; execution?: Execution;
   look?: boolean; reader?: ReaderTheme; members?: string | null;
   navigation?: readonly { label: string; href: string }[];
@@ -34,6 +34,8 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
   membership?: Membership | null; membershipActions?: MembershipActions;
   /** The search and filters the home leads with. */
   browse?: ZoneBrowseEntry;
+  /** The position control of a Zone that reads at the reader's place in a story. */
+  position?: ReactNode;
   locale: UiLocale; children?: ReactNode;
 }) {
   const zoneMessages = zoneMessagesFor(locale);
@@ -54,6 +56,7 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
       labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
         discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
+    position={position}
     notice={<ExecutionNotice execution={execution} showDesignHref={zone.links.home} messages={zoneMessages} />}>
     {/* Signed out, as a first visit: shelf controls lead to sign-in. */}
     <ReaderActionsProvider signedIn={false} signInHref="/auth/start">

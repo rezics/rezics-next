@@ -326,7 +326,7 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     expect(saved.result.zones).toHaveLength(3);
     expect(
       Object.keys(saved.result.zones.find((zone) => zone.id === 'franchise-wiki')!.collections),
-    ).toEqual(['characters', 'places', 'events', 'chapters']);
+    ).toEqual(['franchise', 'characters', 'places', 'events', 'chapters']);
     expect(
       (await accessPool.query('SELECT count(*)::int AS n FROM access.platform_administrator'))
         .rows[0]!.n,

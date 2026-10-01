@@ -6,12 +6,14 @@
   "preset": "editorial",
   "navigation": [
     { "label": "Home", "href": "/" },
+    { "label": "Works", "href": "/franchise" },
     { "label": "Characters", "href": "/characters" },
     { "label": "Places", "href": "/places" },
     { "label": "Events", "href": "/events" },
     { "label": "Chapters", "href": "/chapters" }
   ],
   "mounts": [
+    { "id": "franchise", "name": "Works", "routeSegment": "franchise" },
     { "id": "characters", "name": "Characters", "routeSegment": "characters" },
     { "id": "places", "name": "Places", "routeSegment": "places" },
     { "id": "events", "name": "Events", "routeSegment": "events" },
