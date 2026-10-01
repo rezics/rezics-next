@@ -77,11 +77,6 @@ export interface RecordedItem extends MergeItem { owner: string; result: ItemOut
 export interface OwnerPage { items: MergeItem[]; next: string | null }
 export interface OwnerCheckpoint { after: string | null; exhausted: boolean; page: number }
 export interface TaskCompletion { receipt: string; commandKey: string; result: Json }
-export interface TaskProgress {
-  key: string; state: 'pending' | 'complete'; processed: number;
-  /** All outcomes, including ambiguity, are durably retained and paged. */
-  completion: TaskCompletion | null;
-}
 export interface MergeHandler<Dependencies = unknown> {
   owner: string; version: string;
   /** SQL person-state coverage is exact. Authority and immutable provenance

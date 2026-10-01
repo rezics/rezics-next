@@ -1,7 +1,7 @@
 import { canonicalCandidate } from '../editorial-review/contract.ts';
-import { checkedItem, checkedOutcome, checkedPlan, InvalidMerge, itemCommandKey, MERGE_COST,
+import { checkedItem, checkedOutcome, InvalidMerge, itemCommandKey, MERGE_COST,
   mergeDigest, MergeConflict, MergeUnavailable, type MergeHandler, type MergeTask,
-  type RecordedItem, type TaskCompletion, type TaskProgress } from './contract.ts';
+  type RecordedItem, type TaskCompletion } from './contract.ts';
 import { checkedHandlers } from './handlers.ts';
 import { checkedPage, checkedTask, type MergeJournal, type MergeJournalScope } from './journal.ts';
 
@@ -107,41 +107,27 @@ export async function runMergeOwner<Dependencies>(wanted: MergeTask, owner: stri
   });
 }
 
-/** One bounded run of one duplicate pair. Checkpoint writes precede owner
- * delivery and receipt writes follow it; either crash gap safely replays the
- * SAME owner command. A later run resumes from the latest bounded page rather
- * than scanning or reconstructing a completed inventory. */
-export async function runMergeTask<Dependencies>(wanted: MergeTask, journal: MergeJournal,
-  handlers: readonly MergeHandler<Dependencies>[], runtime: MergeTaskRuntime<Dependencies>): Promise<TaskProgress> {
-  checkedPlan(wanted.plan); checkedTask(wanted);
-  const installed = checkedHandlers(handlers);
-  if (wanted.dataEpoch !== runtime.dataEpoch
-    || mergeDigest(wanted.handlers) !== mergeDigest(installed.map(handler => ({ owner: handler.owner, version: handler.version })))) {
-    throw new MergeUnavailable('Merge task owner versions or data epoch are unavailable');
-  }
-  return journal.locked(wanted.key, async scope => {
-    const old = await scope.task();
-    if (old) sameTask(old, wanted);
-    const completed = await scope.completion();
-    if (completed) return { key: wanted.key, state: 'complete', processed: 0, completion: completed };
-    await checkOriginal(scope, wanted);
-    runtime.checkDeadline();
-    // Retain the decision before the first replayable identity command.
-    if (!old) await scope.prepare(wanted);
-    await runtime.begin(wanted);
-    const budget = { processed: 0 };
-    for (const handler of installed) {
-      if (!await reconcileOwner(scope, wanted, handler, runtime, budget)) {
-        return { key: wanted.key, state: 'pending', processed: budget.processed, completion: null };
-      }
+/** Ordered review calls this only after every owner stage has completed.
+ * Both delivery and recovery retain the same exact final receipt. */
+export async function finishMergeTask<Dependencies>(scope: MergeJournalScope, task: MergeTask,
+  runtime: MergeTaskRuntime<Dependencies>): Promise<TaskCompletion> {
+  checkedTask(task);
+  const retained = await scope.task();
+  if (!retained) throw new MergeUnavailable('Merge task is unavailable');
+  sameTask(retained, task);
+  const completed = await scope.completion();
+  if (completed) return completed;
+  for (const handler of task.handlers) {
+    if (!(await scope.checkpoint(handler.owner)).exhausted || (await scope.pending(handler.owner, 1)).length) {
+      throw new MergeConflict('Owner stage is incomplete');
     }
-    runtime.checkDeadline();
-    const commandKey = itemCommandKey(wanted.key, 'identity-merge', '$finalize');
-    const completion = await runtime.finish(wanted, commandKey);
-    if (!completion || completion.commandKey !== commandKey || !completion.receipt
-      || completion.receipt.length > 512) throw new InvalidMerge('Identity finalization lacks an exact owner receipt');
-    canonicalCandidate(completion, { bytes: MERGE_COST.taskBytes, depth: 40 });
-    await scope.finish(completion);
-    return { key: wanted.key, state: 'complete', processed: budget.processed, completion };
-  });
+  }
+  runtime.checkDeadline();
+  const commandKey = itemCommandKey(task.key, 'identity-merge', '$finalize');
+  const completion = await runtime.finish(task, commandKey);
+  if (!completion || completion.commandKey !== commandKey || !completion.receipt
+    || completion.receipt.length > 512) throw new InvalidMerge('Identity finalization lacks an exact owner receipt');
+  canonicalCandidate(completion, { bytes: MERGE_COST.taskBytes, depth: 40 });
+  await scope.finish(completion);
+  return completion;
 }

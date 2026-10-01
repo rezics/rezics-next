@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { canonicalCandidate, type Json } from '../../../services/main/src/modules/editorial-review/contract.ts';
-import { runMergeTask, type MergeTaskRuntime } from '../../../services/main/src/modules/identity-merge/engine.ts';
+import type { MergeTaskRuntime } from '../../../services/main/src/modules/identity-merge/engine.ts';
+import { runMergeFixture } from '../../../services/main/tests/g-836-task-driver.ts';
 import { AccessMergeJournal } from '../../../services/main/src/modules/identity-merge/journal.ts';
 import { assertMergeCoverage } from '../../../services/main/src/modules/identity-merge/handlers.ts';
 import { discoverOwnerIdentityReferences }
@@ -137,7 +138,7 @@ test('G836: Access task/item ledger survives delivery loss, races, paging and ex
       FROM generate_series(0,64) n`, [source]);
     const wanted = await makeTask();
     const journal = new AccessMergeJournal(pool);
-    await expect(runMergeTask(wanted, journal, [handler], runtime)).rejects.toThrow('killed after native commit');
+    await expect(runMergeFixture(wanted, journal, [handler], runtime)).rejects.toThrow('killed after native commit');
     expect(effects).toBe(1);
     expect((await pool.query('SELECT count(*)::int AS n FROM access.identity_merge_item_outcome WHERE task_key=$1', [wanted.key])).rows[0].n).toBe(0);
     await expect(pool.query(`INSERT INTO access.identity_merge_page (task_key,owner,page,after_key,next_key,exhausted)
@@ -148,11 +149,11 @@ test('G836: Access task/item ledger survives delivery loss, races, paging and ex
       [wanted.key, '0'.repeat(64)])).rejects.toMatchObject({ code: '23514' });
     // A fresh runtime/journal models restart; no in-memory delivery state is reused.
     const fresh = new AccessMergeJournal(pool);
-    let result = await runMergeTask(wanted, fresh, [handler], runtime);
+    let result = await runMergeFixture(wanted, fresh, [handler], runtime);
     expect(result.state).toBe('pending');
-    while (result.state === 'pending') result = await runMergeTask(wanted, fresh, [handler], runtime);
+    while (result.state === 'pending') result = await runMergeFixture(wanted, fresh, [handler], runtime);
     expect(effects).toBe(65); expect(finalizations).toBe(1);
-    expect((await runMergeTask(wanted, fresh, [handler], runtime)).completion).toEqual(result.completion);
+    expect((await runMergeFixture(wanted, fresh, [handler], runtime)).completion).toEqual(result.completion);
     expect(effects).toBe(65);
     await expect(pool.query('UPDATE access.identity_merge_item SET before_state=before_state WHERE task_key=$1', [wanted.key]))
       .rejects.toMatchObject({ code: '23514' });
@@ -161,8 +162,8 @@ test('G836: Access task/item ledger survives delivery loss, races, paging and ex
     await pool.query(`UPDATE ${schema}.item SET head=gen_random_uuid()::text,value='later edit' WHERE id='item-00001'`);
     await pool.query(`INSERT INTO ${schema}.item VALUES ('new-survivor-item',$1,gen_random_uuid()::text,'never moved')`, [survivor]);
     const undo = await makeTask(wanted);
-    let undone = await runMergeTask(undo, fresh, [handler], runtime);
-    while (undone.state === 'pending') undone = await runMergeTask(undo, fresh, [handler], runtime);
+    let undone = await runMergeFixture(undo, fresh, [handler], runtime);
+    while (undone.state === 'pending') undone = await runMergeFixture(undo, fresh, [handler], runtime);
     const rows = (await pool.query<NativeRow>(`SELECT * FROM ${schema}.item ORDER BY id`)).rows;
     expect(rows.filter(row => row.target === source)).toHaveLength(64);
     expect(rows.find(row => row.id === 'item-00001')).toMatchObject({ target: survivor, value: 'later edit' });
@@ -170,7 +171,7 @@ test('G836: Access task/item ledger survives delivery loss, races, paging and ex
     expect((await pool.query(`SELECT item_key,outcome FROM access.identity_merge_item_outcome
       WHERE task_key=$1 AND outcome='ambiguous'`, [undo.key])).rows).toEqual([{ item_key: 'item-00001', outcome: 'ambiguous' }]);
     expect(effects).toBe(129);
-    await runMergeTask(undo, fresh, [handler], runtime); expect(effects).toBe(129);
+    await runMergeFixture(undo, fresh, [handler], runtime); expect(effects).toBe(129);
 
     // Journal lock contention returns pending, rather than dispatching in parallel.
     let release!: () => void, enter!: () => void;

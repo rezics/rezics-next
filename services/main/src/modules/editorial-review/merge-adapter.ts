@@ -2,10 +2,11 @@ import { canonicalCandidate, checkedHeads, EditorialBlocked, EditorialInvalid, h
   type EditorialAdapter, type EditorialAdapterModule, type OwnerReceipt } from './contract.ts';
 import type { EditorialRuntime } from './runtime.ts';
 import { applyOrderedCommands } from './ordered.ts';
-import { checkedPlan, itemCommandKey, MergeConflict, type MergeTask } from '../identity-merge/contract.ts';
+import { checkedPlan, type MergeTask } from '../identity-merge/contract.ts';
 import { discoverMergeHandlers } from '../identity-merge/handlers.ts';
 import { previewMerge, MergeConflictWithHeads } from '../identity-merge/preflight.ts';
 import { AccessMergeJournal } from '../identity-merge/journal.ts';
+import { finishMergeTask } from '../identity-merge/engine.ts';
 import { mergeEditorialCommands } from '../identity-merge/editorial-commands.ts';
 import { mergeDependencies, mergePreflightOwner, mergeTaskRuntime } from '../identity-merge/runtime.ts';
 import { mergeTargets, requireMergeDisclosure } from '../identity-merge/pair-authority.ts';
@@ -55,13 +56,7 @@ export const adapterModule = { kind: 'merge',
         return journal.locked(input.operationKey,async scope => {
           const task = await scope.task();
           if (!task) throw new EditorialInvalid('Merge task is unavailable');
-          let completion = await scope.completion();
-          if (!completion) {
-            for (const handler of task.handlers) if (!(await scope.checkpoint(handler.owner)).exhausted
-              || (await scope.pending(handler.owner,1)).length) throw new MergeConflict('Owner stage is incomplete');
-            completion = await mergeTaskRuntime(runtime).finish(task,itemCommandKey(task.key,'identity-merge','$finalize'));
-            await scope.finish(completion);
-          }
+          const completion = await finishMergeTask(scope,task,mergeTaskRuntime(runtime));
           return { receipt: completion.receipt,proposal: input.revision.proposal,revision: input.revision.n,
             candidateDigest: input.revision.candidateDigest,operationKey: input.operationKey,beforeHeads: input.expectedHeads,
             afterHeads: input.expectedHeads,candidate: input.revision.candidate,before: input.revision.before,owner: completion.result };
