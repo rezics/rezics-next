@@ -3,7 +3,6 @@ import { cases as backend_integration } from './backend-integration.ts';
 import { cases as book_and_creation } from './book-and-creation.ts';
 import { cases as classification } from './classification.ts';
 import { cases as content_composition } from './content-composition.ts';
-import { cases as contribution_loop } from './contribution-loop.ts';
 import { cases as governance_and_delivery } from './governance-and-delivery.ts';
 import { cases as identity_and_access } from './identity-and-access.ts';
 import { cases as information_verification } from './information-verification.ts';
@@ -29,7 +28,6 @@ export const declaredCases: readonly DeclaredCase[] = [
   book_and_creation,
   classification,
   content_composition,
-  contribution_loop,
   governance_and_delivery,
   identity_and_access,
   information_verification,
