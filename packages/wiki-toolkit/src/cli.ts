@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
+import { openTxtFile } from './txt.ts';
+import { once } from 'node:events';
 import { parseFile, parseLocator } from './index.ts';
 
 try {
@@ -28,13 +30,22 @@ try {
   if (extension !== 'txt' && extension !== 'epub' && extension !== 'rpy')
     throw new Error('Unsupported input; expected .txt, .epub or literal .rpy');
   if (encoding && extension !== 'txt') throw new Error('--encoding is supported only for TXT');
-  const parsed = parseFile(readFileSync(file), extension, { encoding });
-  if (command === 'units')
-    for (const unit of parsed.units) process.stdout.write(`${JSON.stringify(unit)}\n`);
-  else
-    process.stdout.write(
-      `${JSON.stringify(parsed.verify(parseLocator(JSON.parse(locator === '-' ? readFileSync(0, 'utf8') : locator!))))}\n`,
-    );
+  const parsed =
+    extension === 'txt'
+      ? openTxtFile(file, encoding)
+      : parseFile(readFileSync(file), extension, { encoding });
+  try {
+    if (command === 'units')
+      for (const unit of parsed.units) {
+        if (!process.stdout.write(`${JSON.stringify(unit)}\n`)) await once(process.stdout, 'drain');
+      }
+    else
+      process.stdout.write(
+        `${JSON.stringify(parsed.verify(parseLocator(JSON.parse(locator === '-' ? readFileSync(0, 'utf8') : locator!))))}\n`,
+      );
+  } finally {
+    if ('close' in parsed) parsed.close();
+  }
 } catch (error) {
   process.stderr.write(
     `rezics-wiki: ${error instanceof Error ? error.message : 'Unable to parse input'}\n`,

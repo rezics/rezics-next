@@ -27,7 +27,8 @@ test('G-848: all source import edges stay local or declared and cannot fetch or 
   for (const file of files(resolve(root, 'src')).filter((file) => file.endsWith('.ts'))) {
     const ast = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node) => {
-      if (ts.isIdentifier(node)) expect(node.text).not.toBe('fetch');
+      if (ts.isIdentifier(node))
+        expect(['fetch', 'Bun', 'WebSocket', 'XMLHttpRequest']).not.toContain(node.text);
       let specifier: string | undefined;
       if (
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
@@ -49,7 +50,7 @@ test('G-848: all source import edges stay local or declared and cannot fetch or 
         if (specifier.startsWith('.'))
           expect(relative(root, resolve(dirname(file), specifier)).startsWith('..')).toBe(false);
         else if (specifier.startsWith('node:'))
-          expect(['node:crypto', 'node:fs', 'node:path']).toContain(specifier);
+          expect(['node:crypto', 'node:fs', 'node:path', 'node:events']).toContain(specifier);
         else
           expect(Object.keys(manifest.dependencies)).toContain(
             specifier.startsWith('@')

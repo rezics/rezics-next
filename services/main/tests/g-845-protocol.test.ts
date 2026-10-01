@@ -36,9 +36,10 @@ const bundle = (): WikiExtraction => ({ profile: 'wiki-extraction-v1', target: i
 test('G-845: emitted extraction/candidate schemas bound all text and cannot admit a corpus body', () => {
   for (const [file, schema] of [['wiki-extraction', WikiExtractionSchema], ['wiki-candidates', WikiCandidatesSchema]] as const) {
     const emitted = JSON.parse(readFileSync(resolve(protocol, `${file}.schema.json`), 'utf8'));
-    const { $schema, $id, ...wire } = emitted;
+    const { $schema, $id, $comment, ...wire } = emitted;
     expect($schema).toBe('https://json-schema.org/draft/2020-12/schema');
     expect($id).toContain(`${file}-v1`);
+    expect($comment).toBe('SPDX-License-Identifier: Apache-2.0');
     expect(wire).toEqual(JSON.parse(JSON.stringify(schema)));
     const walk = (value: unknown) => {
       if (!value || typeof value !== 'object') return;
@@ -91,7 +92,7 @@ test('G-845: Apache protocol imports stay within its package or TypeBox and mode
   expect(manifest.license).toBe('Apache-2.0');
   expect(manifest.private).not.toBe(true);
   expect(readFileSync(resolve(protocol, '../LICENSE'), 'utf8')).toContain('Version 2.0, January 2004');
-  expect(readFileSync(resolve(root, 'packages/model/src/locator.ts'), 'utf8')).toContain('wiki-toolkit/protocol/locator.ts');
+  expect(readFileSync(resolve(root, 'packages/model/src/locator.ts'), 'utf8')).toContain('@rezics/wiki-toolkit/protocol');
   for (const rule of ['no-dynamic-code', 'no-math-random']) {
     expect(readFileSync(resolve(root, `scripts/static/ast-grep/rules/${rule}.yml`), 'utf8'))
       .toContain('packages/wiki-toolkit/**/*.ts');

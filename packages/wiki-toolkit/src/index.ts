@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { parseLocator } from '../protocol/locator.ts';
-import { parseTxt } from './txt.ts';
+import { parseTxt, checkTxtSize } from './txt.ts';
 import { parseEpub } from './epub.ts';
 import { parseRenpy } from './renpy.ts';
 import { digest, type ParsedText } from './types.ts';
@@ -18,6 +18,7 @@ export function parseFile(
   format: 'txt' | 'epub' | 'rpy',
   options: { encoding?: string } = {},
 ): ParsedText {
+  if (format === 'txt') checkTxtSize(bytes.byteLength);
   // A copy isolates parsing and verification from caller mutation.
   const original = Uint8Array.from(bytes);
   const parsed =

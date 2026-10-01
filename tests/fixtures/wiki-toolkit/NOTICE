@@ -1,11 +1,13 @@
 SPDX-License-Identifier: Apache-2.0
 Fixture provenance
 
-pride.txt: Jane Austen, Pride and Prejudice (1813), admitted Project Gutenberg
+TXT/EPUB fixtures: Jane Austen, Pride and Prejudice (1813), admitted Project Gutenberg
 entry 1342, https://www.gutenberg.org/cache/epub/1342/pg1342.txt.
-Reused from tests/fixtures/gutenberg/6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb.json.
+Tests read the existing admitted JSON and write CLI input under .temp from
+tests/fixtures/gutenberg/6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb.json.
 Original source SHA-256: 3f6bb9d6f78e0293b56acd4714dd68cb7d6d1d293402031ce9d5a216bcaf9d75.
-The admitted fixture removes the Gutenberg header, footer and trademark wrapper.
+No duplicate pride.txt is stored here. The admitted fixture removes the
+Gutenberg header, footer and trademark wrapper.
 The novel is public domain in the United States; no worldwide clearance is claimed.
 
 pride-shift-jis.txt and pride-shift-jis.utf8.txt: a Japanese translation of the

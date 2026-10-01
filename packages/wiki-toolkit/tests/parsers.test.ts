@@ -8,7 +8,18 @@ import { epubFixture } from './epub-fixture.ts';
 
 const fixture = (name: string) =>
   readFileSync(new URL(`../../../tests/fixtures/wiki-toolkit/${name}`, import.meta.url));
-const pride = fixture('pride.txt');
+const root = resolve(import.meta.dir, '../../..');
+const pride = Buffer.from(
+  JSON.parse(
+    readFileSync(
+      resolve(
+        root,
+        'tests/fixtures/gutenberg/6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb.json',
+      ),
+      'utf8',
+    ),
+  ).text,
+);
 function roundtrip(bytes: Uint8Array, format: 'txt' | 'epub' | 'rpy', encoding?: string) {
   const parsed = parseFile(bytes, format, { encoding });
   expect(parsed.units.length).toBeGreaterThan(0);
@@ -115,8 +126,8 @@ test('G-848: Ren’Py preserves branch guards, jumps, dynamic speakers and disti
 });
 
 test('G-848: units then verify on stdin round-trips every fixture locator through the actual CLI', () => {
-  const temp = mkdtempSync(resolve('.temp/g848-cli-'));
-  const cli = resolve('packages/wiki-toolkit/src/cli.ts');
+  const temp = mkdtempSync(resolve(root, '.temp/g848-cli-'));
+  const cli = resolve(root, 'packages/wiki-toolkit/src/cli.ts');
   try {
     const fixtures: [string, Uint8Array, string[]][] = [
       ['pride.txt', pride, []],

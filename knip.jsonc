@@ -80,7 +80,13 @@
       ]
     },
     "packages/wiki-toolkit": {
-      "entry": ["src/cli.ts", "src/index.ts", "protocol/index.ts", "tests/**/*.test.ts"],
+      "entry": [
+        "src/cli.ts",
+        "src/index.ts",
+        "protocol/index.ts",
+        "tests/**/*.test.ts",
+        "tests/txt-memory-probe.ts"
+      ],
       "project": ["src/**/*.ts", "protocol/**/*.ts", "tests/**/*.ts"],
       "ignoreDependencies": ["typescript"]
     },

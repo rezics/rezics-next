@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -176,11 +176,29 @@ test('G-848: model-free skill units, alignment, candidates and validation produc
         actingSubject: f.actor,
       }),
     );
-    const file = 'tests/fixtures/wiki-toolkit/pride.txt';
-    const lines = execFileSync('bun', ['packages/wiki-toolkit/src/cli.ts', 'units', file], {
-      encoding: 'utf8',
-      maxBuffer: 4 * 1024 * 1024,
-    })
+    const root = resolve(import.meta.dir, '../../..');
+    mkdirSync(directory, { recursive: true });
+    const file = resolve(directory, 'pride.txt');
+    const pride = Buffer.from(
+      JSON.parse(
+        readFileSync(
+          resolve(
+            root,
+            'tests/fixtures/gutenberg/6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb.json',
+          ),
+          'utf8',
+        ),
+      ).text,
+    );
+    writeFileSync(file, pride);
+    const lines = execFileSync(
+      'bun',
+      [resolve(root, 'packages/wiki-toolkit/src/cli.ts'), 'units', file],
+      {
+        encoding: 'utf8',
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    )
       .trim()
       .split('\n');
     expect(lines.length).toBeGreaterThanOrEqual(61);
@@ -206,7 +224,12 @@ test('G-848: model-free skill units, alignment, candidates and validation produc
     const verified = JSON.parse(
       execFileSync(
         'bun',
-        ['packages/wiki-toolkit/src/cli.ts', 'verify', file, JSON.stringify(evidence.locator)],
+        [
+          resolve(root, 'packages/wiki-toolkit/src/cli.ts'),
+          'verify',
+          file,
+          JSON.stringify(evidence.locator),
+        ],
         { encoding: 'utf8' },
       ),
     );
@@ -224,4 +247,4 @@ test('G-848: model-free skill units, alignment, candidates and validation produc
   }
 }, 180_000);
 
-test.skip('G-848: submit wiki-bundle and later-chapter deltas — pending G-865 proposal contract', () => {});
+test.skip('G-848: submit wiki-bundle and later-chapter deltas — pending G-846 wiki publishing adapter', () => {});

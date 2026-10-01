@@ -27,7 +27,11 @@ TXT verification uses the same `--encoding` choice as extraction.
   UTF-8, UTF-16LE/BE, Shift_JIS, Windows-1252, Latin-1 and ASCII. Detection reports
   uncertainty rather than claiming the language or encoding is certain. Original
   bytes, BOM displacement and CRLF are preserved for half-open byte ranges.
-  Chapter headings and separators propose boundaries; confirm Work alignment.
+  TXT CLI hashing and decoding stream through 64 KiB chunks with stdout
+  backpressure. Files over 128 MiB fail before output; chapters/long lines split
+  into byte-pinned segments of at most 256 KiB. The in-memory `parseFile` helper
+  additionally caps retained units at 4096. Verification accepts ranges of at most
+  256 KiB. Chapter headings and separators propose boundaries; confirm Work alignment.
 - **EPUB 2/3:** XHTML in package spine order, with navigation labels when present.
   Ruby bases remain in unit text; readings have separate `ruby` records. Range
   [CFIs](https://idpf.org/epub/linking/cfi/) use UTF-16 offsets and escaped IDs,

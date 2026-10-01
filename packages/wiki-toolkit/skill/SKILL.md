@@ -38,8 +38,10 @@ connection; the toolkit has no authentication or network client. Read the instal
 Run `rezics-wiki units <file>`; for ambiguous TXT decoding, inspect the reported
 encoding and uncertainty, then rerun with the holder's declared `--encoding`.
 Each stdout line is a unit with text, ordinal, label and `rezics-locator-v1` locator.
-Check proposed chapter boundaries. For EPUB, keep ruby readings separate from the
-base; for Ren’Py, keep route guards and uncertain speakers. Never treat branches
+Check proposed chapter boundaries and continuation warnings: TXT chapters over
+256 KiB become multiple segments, all of which must be aligned to the same Work
+part. Inputs over 128 MiB fail before extraction. For EPUB, keep ruby readings
+separate from the base; for Ren’Py, keep route guards and uncertain speakers. Never treat branches
 as events that all occurred or interpolation as evaluated dialogue.
 
 Extract entities, names, relationships, events and places as atomic claims.
@@ -91,8 +93,8 @@ retry through another account, translation or Zone to evade a budget.
 
 ## Propose and continue
 
-Discover the server's `wiki-bundle` proposal operation and its current schema
-(G-865). Submit the validated bundle with the discovered authority, source position
+Discover the server's `wiki-bundle` proposal operation and its current schema.
+Submit the validated bundle with the discovered authority, source position
 and idempotency contract, then report the proposal/status link to the holder.
 If that capability is unavailable, retain the validated bundle locally and report
 that submission is pending. Never invent a submit endpoint or present a validation
