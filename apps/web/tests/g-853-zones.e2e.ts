@@ -45,6 +45,18 @@ test.beforeAll(async () => {
     await new Promise(done => setTimeout(done, 500));
   }
   if (still < 4) throw new Error('Main’s graph kept moving for two minutes after the seed');
+  // The Zones are read through their route segments, and the packages run only once Main reports them approved.
+  for (const segment of ['visual-novels', 'light-novels']) {
+    let state = '';
+    for (const deadline = Date.now() + 120_000; Date.now() < deadline && state !== 'package';) {
+      const zone = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/zones/by-segment/${segment}`).catch(() => null);
+      const id = zone?.ok ? (await zone.json() as { zone: string }).zone.slice(-36) : null;
+      const presentation = id ? await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/zones/${id}/presentation`).catch(() => null) : null;
+      state = presentation?.ok ? (await presentation.json() as { execution: { state: string } }).execution.state : '';
+      if (state !== 'package') await new Promise(done => setTimeout(done, 1000));
+    }
+    if (state !== 'package') throw new Error(`The ${segment} Zone never reported its package approved`);
+  }
 });
 
 const uuid = (iri: string) => iri.slice(-36);
