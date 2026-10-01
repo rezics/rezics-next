@@ -17,7 +17,7 @@ import { RV } from '../../../services/main/src/modules/work/activate.ts';
 import { type ResourceSummary } from '../../../services/main/src/modules/media/summary.ts';
 import { type Static } from 'typebox';
 import { subjectStatementPage } from '../../../services/main/src/modules/entity-page/contract.ts';
-import { readCurrentOccurrence } from '../../../services/main/src/modules/relation/change.ts';
+import { readCurrentOccurrence, readExactDefinition } from '../../../services/main/src/modules/relation/change.ts';
 import { startMediaStack } from './media-support.ts';
 
 test('G-920: published franchise entities, contradictory claims and relations disclose evidence and names at the reader position', async () => {
@@ -808,6 +808,12 @@ test('G-920: published franchise entities, contradictory claims and relations di
     // the page nor the evidence endpoint can disclose the changed occurrence
     // under a citation retained for its earlier state.
     const current = (await readCurrentOccurrence(f.env, earlyRelation))!;
+    const meaning = (await readExactDefinition(f.env, current.state.definition))!;
+    const participations = current.state.participations.map(({ role, participant, position }) => ({
+      role: meaning.roleKeys[role]!,
+      participant,
+      ...(position === undefined ? {} : { position }),
+    }));
     await reviewerB.grant(`relation:edit:${earlyRelation}`, 'relation.change');
     const changed = await json<{ revision: string }>(
       await call(
@@ -819,7 +825,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
           expectedHead: current.head,
           actingSubject: reviewerB.actor,
           definition: current.state.definition,
-          participations: current.state.participations,
+          participations,
           applicability: current.state.applicability,
         },
         reviewerB.token,
@@ -842,7 +848,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
           expectedHead: changed.revision,
           actingSubject: reviewerB.actor,
           definition: current.state.definition,
-          participations: current.state.participations,
+          participations,
           applicability: current.state.applicability,
           evidence: current.state.evidence,
         },
