@@ -18,7 +18,7 @@ const card = cardRenderer(zone, null, 'en', zoneMessagesFor('en'));
 const items = works.slice(0, 6).map(work => ({ id: work.id, revision: work.id, mainVersion: work.id,
   title: { value: work.title?.value ?? '', language: 'en', direction: 'ltr' as const, basis: 'requested' as const },
   cover: { kind: 'fallback' as const, policy: 'zone', key: work.id, resourceType: 'work' }, types: [],
-  tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null }));
+  tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null, inZone: true }));
 const route = { name: 'Books', language: 'en', direction: 'ltr' as const, profile: 'zone-route-v1' as const, zone: 'z', path: '/picks', realm: null, revision: 'r',
   sourcePosition: { dataEpoch: 'e', sequence: '1' }, cost: {} as never, kind: 'index' as const,
   mount: { occurrence: 'o', segment: 'picks', target: 't' }, collection: 'c', items, nextCursor: 'next' };
