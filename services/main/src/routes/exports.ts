@@ -14,6 +14,7 @@ import { RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../modul
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid } from './shared.ts';
+import { WikiRevisionSetSchema } from '../modules/wiki/delta.ts';
 
 export const openApiOperations = {
   '/v1/exports': { post: { bearer: true, idempotencyKey: true } },
@@ -23,6 +24,11 @@ export const openApiOperations = {
 const position = t.Object({ dataEpoch: t.String({ minLength: 1, maxLength: 100 }),
   sequence: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) }, { additionalProperties: false });
 const selection = t.Union([
+  t.Object({ kind: t.Literal('wiki-revision-set'), reference: groupAgent,
+    revisions: WikiRevisionSetSchema, expectedPosition: position,
+    scope: t.Optional(t.Object({ entity: t.Optional(groupAgent),
+      section: t.Optional(t.Union([t.Literal('characters'),t.Literal('places'),t.Literal('events'),t.Literal('chapters')])) }, { additionalProperties: false })),
+  }, { additionalProperties: false }),
   t.Object({ kind: t.Union([t.Literal('fixed-release'), t.Literal('assessment')]),
     reference: groupAgent, expectedPosition: position }, { additionalProperties: false }),
   t.Object({ kind: t.Literal('composition-seal'), reference: groupAgent,
@@ -70,7 +76,7 @@ export function exportRoutes(work: MainWorkDependencies) {
   const dependencies = () => {
     if (!work.exports) throw new ExportUnavailable('export owner is unavailable');
     return { account: work.account, access: work.access, store: work.exports,
-      readers: { env: work.environment,
+      readers: { env: work.environment, wiki: work,
         canReadWork: (principal: { issuer: string; subject: string }, actor: string, workId: string) =>
           work.access.canReadWork(principal, actor, workId),
         canReadSemantic: async (principal: { issuer: string; subject: string }, actor: string,

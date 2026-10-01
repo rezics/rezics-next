@@ -16,6 +16,9 @@ import { attachRightsIdentities, canonicalExport, InvalidExportPlan, planExport,
   type ExportLoss, type ExportPlan, type ExportRightsIdentity, type LicenseScopeHook,
   type PortableValue, type VerifiedExportMember } from './planner.ts';
 import { planVndbSourceExport } from './vndb-source.ts';
+import { readWikiExport } from './wiki.ts';
+import type { WikiRevisionSet } from '../wiki/delta.ts';
+import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { discloseInventory, type DisclosureTarget } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
@@ -31,12 +34,15 @@ const unknownRights: LicenseScopeHook = async (members, useScope) => [{ basisKin
 
 type OwnerPosition = { dataEpoch: string; sequence: string };
 export type ExportSelection =
+  | { kind: 'wiki-revision-set'; reference: string; revisions: WikiRevisionSet; expectedPosition: OwnerPosition;
+    scope?: import('../wiki/history-read.ts').WikiHistoryScope }
   | { kind: 'fixed-release' | 'assessment'; reference: string; expectedPosition: OwnerPosition }
   | { kind: 'composition-seal'; reference: string; structure: string; expectedPosition: OwnerPosition }
   | { kind: 'semantic-revision'; reference: string; resource: string; expectedPosition: OwnerPosition }
   | { kind: 'vndb-concept-run'; reference: string; expectedPosition: OwnerPosition };
 
 export interface ExportReaderDependencies {
+  wiki?: MainWorkDependencies;
   env: WorkActivationEnvironment;
   canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean>;
   canReadSemantic?: (principal: VerifiedPrincipal, actingSubject: string, resource: string, revision?: string) => Promise<boolean>;
@@ -118,6 +124,12 @@ function portable(value: SemanticValue | { kind: 'unavailable-reference' }): Por
 /** Exact readers decide the member payload. No caller-provided member or basis is trusted. */
 async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal: VerifiedPrincipal,
   actingSubject: string, selection: ExportSelection, useScope: ExportPlan['useScope']): Promise<ExportPlan> {
+  if (selection.kind === 'wiki-revision-set') {
+    if (!deps.wiki) throw new ExportSourceUnavailable('Wiki owner is unavailable');
+    if (selection.expectedPosition.dataEpoch !== deps.env.lineage.dataEpoch) throw new ExportStale('Wiki epoch changed');
+    return readWikiExport(deps.wiki, principal, actingSubject, selection.reference, selection.revisions,
+      selection.expectedPosition, useScope, deps.rights, selection.scope);
+  }
   if (selection.kind === 'vndb-concept-run') {
     const runId = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(selection.reference)?.[1];
     const principalId = await deps.principalIdOf?.(principal);

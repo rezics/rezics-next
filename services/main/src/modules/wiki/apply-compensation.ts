@@ -57,7 +57,8 @@ export async function validateWikiRetraction(runtime: EditorialRuntime, target: 
   }
   return { ...compensateWikiReceipt(original),baseHeads: expected };
 }
-export async function wikiRetractionCommands(runtime: EditorialRuntime, input: ApplyInput): Promise<EditorialCommand[]> {
+export async function wikiRetractionCommands(runtime: EditorialRuntime, input: ApplyInput,
+  claimKey = (index: number) => wikiItemKey(input,`retract-claim:${index}`)): Promise<EditorialCommand[]> {
   if (!isWikiRetraction(input.revision.candidate)) throw new EditorialInvalid('Invalid wiki retraction');
   const original = await originalWikiReceipt(runtime,input.revision.candidate.proposal), bundle = extractionCandidate(original.candidate);
   const snapshot = original.before as unknown as WikiSnapshot, outcomes = original.commands ?? [], env = runtime.work.environment;
@@ -99,7 +100,7 @@ export async function wikiRetractionCommands(runtime: EditorialRuntime, input: A
     const result = oldResult(`claim:${index}`);
     if (!result || typeof result.component !== 'string' || typeof result.revision !== 'string') continue;
     const component = result.component, head = result.revision;
-    commands.push(wikiGraphCommand(runtime,wikiItemKey(input,`retract-claim:${index}`),async () => {
+    commands.push(wikiGraphCommand(runtime,claimKey(index),async () => {
       const predicate = snapshot.predicates[claim.predicate]!;
       if (predicate.kind === 'property') {
         const originalOwner = original.owner as Record<string,Json>;

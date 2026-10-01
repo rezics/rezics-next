@@ -71,7 +71,8 @@ function cursorDecode(cursor: string | undefined, binding: unknown): unknown {
 }
 
 export class EditorialReviewStore {
-  constructor(private readonly pool: Pool, private readonly modules = discoverEditorialAdapters()) {}
+  /** Owner adapters append their bounded bookkeeping in the same Access store. */
+  constructor(readonly pool: Pool, private readonly modules = discoverEditorialAdapters()) {}
   /** Internal immutable receipt lookup for an owner's compensation validator. */
   async appliedReceipt(proposal: string): Promise<OwnerReceipt | null> {
     return (await this.pool.query<{ owner_receipt: OwnerReceipt }>(`SELECT owner_receipt FROM access.editorial_decision
