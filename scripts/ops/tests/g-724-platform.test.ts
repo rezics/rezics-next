@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import {
   platformAdministratorAction,
+  platformAdministratorTargetAllowed,
+  AccessPlatformAdministrators,
   platformAdministratorProofCurrent,
   type PlatformAdministratorProof,
 } from '../../../services/main/src/modules/access/platform-administrator.ts';
@@ -16,6 +19,9 @@ test('G-724 platform role has closed actions and exact controller/principal fenc
   expect(platformAdministratorAction('catalogue.verify', 'catalogue:verify:root')).toBe(true);
   expect(platformAdministratorAction('zone.edit', `zone:edit:${actor}`)).toBe(true);
   expect(platformAdministratorAction('content.draft', `content:draft:${actor}`)).toBe(false);
+  for (const action of ['work.read', 'work.edit', 'collection.edit']) {
+    expect(platformAdministratorAction(action, `${action.replace('.', ':')}:${actor}`)).toBe(false);
+  }
   expect(platformAdministratorAction('work.create', `work:edit:${actor}`)).toBe(false);
   expect(platformAdministratorAction('semantic.change', 'semantic:edit:anything')).toBe(false);
   expect(platformAdministratorAction('toString', 'work:create:root')).toBe(false);
@@ -48,4 +54,73 @@ test('G-724 platform role has closed actions and exact controller/principal fenc
   }
   current = null;
   expect(await platformAdministratorProofCurrent(client, saved, principal, actor)).toBe(false);
+});
+
+test('G-724 first designation refuses missing or inactive principals without creating one', async () => {
+  for (const principal of [undefined, { id: actor, active: false }]) {
+    const statements: string[] = [];
+    const client = {
+      release() {},
+      query: async (sql: string) => {
+        statements.push(sql);
+        return {
+          rows: sql.includes('FROM access.recovery_fence')
+            ? [{ open: true }]
+            : sql.includes('FROM access.principal') && principal
+              ? [principal]
+              : [],
+        };
+      },
+    };
+    const pool = { connect: async () => client } as unknown as Pool;
+    await expect(
+      new AccessPlatformAdministrators(pool).designateFirst(
+        'https://account.example',
+        'typo-or-inactive',
+      ),
+    ).rejects.toThrow('existing active');
+    expect(statements.some((sql) => sql.includes('INSERT'))).toBe(false);
+    expect(statements.at(-1)).toBe('ROLLBACK');
+  }
+});
+
+test('G-724 administrator resource authority is restricted to owned Zones and created definitions', async () => {
+  const client = { query: async () => ({ rows: [], rowCount: 0 }) } as unknown as PoolClient;
+  let calls = 0;
+  const graph = {
+    query: async () => {
+      calls++;
+      return { boolean: false };
+    },
+  };
+  for (const [action, scope] of [
+    ['semantic.read', `semantic:read:${actor}`],
+    ['zone.edit', `zone:edit:${actor}`],
+    ['zone.official', `zone:official:${actor}`],
+  ]) {
+    expect(
+      await platformAdministratorTargetAllowed(client, graph, principal, actor, action!, scope!),
+    ).toBe(false);
+  }
+  expect(calls).toBe(3);
+  expect(
+    await platformAdministratorTargetAllowed(
+      client,
+      undefined,
+      principal,
+      actor,
+      'semantic.read',
+      `semantic:read:${actor}`,
+    ),
+  ).toBe(false);
+  expect(
+    await platformAdministratorTargetAllowed(
+      client,
+      graph,
+      principal,
+      actor,
+      'semantic.change',
+      'semantic:create:root',
+    ),
+  ).toBe(true);
 });

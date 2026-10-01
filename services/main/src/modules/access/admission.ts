@@ -25,7 +25,7 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
 import { publicSemantics } from './semantic-disclosure.ts';
 import { checkEditorialAdmission, registerEditorialAdmission } from '../editorial-review/admission.ts';
-import { platformAdministratorAction, platformAdministratorProof,
+import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
 
@@ -721,7 +721,8 @@ export class AccessAdmissionRegistry {
       }
       if (platformAdministratorAction(action, scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
-        && await platformAdministratorProof(client, principalId, actingSubject)) {
+        && await platformAdministratorProof(client, principalId, actingSubject)
+        && await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId, actingSubject, action, scope)) {
         await client.query('COMMIT');
         return true;
       }
@@ -884,6 +885,8 @@ export class AccessAdmissionRegistry {
         const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await platformAdministratorProofCurrent(client, savedAdministrator, principalId, request.actingSubject)
+          && await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId,
+            request.actingSubject, request.action, request.scope)
           && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount;
         if (!transaction) await client.query('COMMIT');
         return { id: existing.id, principalId, actingSubject: existing.acting_subject,
@@ -998,10 +1001,13 @@ export class AccessAdmissionRegistry {
       let roleRevision: string | null = null;
       let publishingProof: RepresentedWorkProof | null = null;
       await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
-      const administrator = !existing && authorityPath === 'represented-agent'
+      const administratorCandidate = !existing && authorityPath === 'represented-agent'
         && platformAdministratorAction(request.action, request.scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
         ? await platformAdministratorProof(client, principalId, request.actingSubject) : null;
+      const administrator = administratorCandidate && await platformAdministratorTargetAllowed(client,
+        this.baselineGraph, principalId, request.actingSubject, request.action, request.scope)
+        ? administratorCandidate : null;
       const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
       if (administrator || baseline) {
         // A named grant source with its own pinned proof, recorded below in the
@@ -1254,6 +1260,8 @@ export class AccessAdmissionRegistry {
           || current.subject !== principal.rows[0]!.account_subject
           || !platformAdministratorAction(row.action, row.scope_id)
           || !await platformAdministratorProofCurrent(client, administrator, row.principal_id, row.acting_subject)
+          || !await platformAdministratorTargetAllowed(client, this.baselineGraph, row.principal_id,
+            row.acting_subject, row.action, row.scope_id)
           || (await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [row.scope_id])).rowCount) {
           throw new AdmissionDenied('platform administrator authority changed before claim');
         }

@@ -4,10 +4,13 @@ Deployment follows the production-readiness [Goal](../../GOAL.md); that Goal
 delivers what this page lists as [ready to deploy](#ready-to-deploy) and does not
 deploy. The maintainer has prepared the hosts and the Cloudflare side.
 
-For the first Main boot, set `PLATFORM_FIRST_ADMIN_ACCOUNT` to the first real
-operator's Account subject. Access consumes this configuration through its own
+Boot Main with `PLATFORM_FIRST_ADMIN_ACCOUNT` unset. Have the first real
+operator sign in through Account and provision its Agent through Main. Then set
+the variable to that existing active Account subject and restart Main.
+Access consumes this configuration through its own
 startup command only when no platform administrator exists, committing the role
-and an audit receipt together. After successful startup, remove the setting.
+and an audit receipt together. Verify the startup receipt and bootstrap, then
+remove the setting. An unknown or inactive principal fails without designation.
 Later boots log that a supplied setting is ignored once a designation exists;
 it cannot restore a deactivated administrator or designate a second one.
 Follow [first installation and launch intake](production-install.md#operator-and-authority)

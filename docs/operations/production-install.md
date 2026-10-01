@@ -7,7 +7,8 @@ ratings. Its command is `task ops:bootstrap`.
 
 ## Operator and authority
 
-Register the first real operator through Account and verify its email. Record
+Boot Account and Main with `PLATFORM_FIRST_ADMIN_ACCOUNT` unset. Register the
+first real operator through Account and verify its email. Record
 the returned Account subject in `ACCOUNT_OPERATOR_USER_IDS`, restart Account,
 and confirm the one-time bootstrap assigned `owner` at
 `GET /api/account/admin/me`. Account selects an existing configured candidate;
@@ -23,18 +24,23 @@ Supply them as `BOOTSTRAP_ACCOUNT_COOKIE` and `BOOTSTRAP_MAIN_TOKEN`; neither is
 written to the journal. Renew the token through Account if it expires, then
 repeat the command with the same plan and namespace.
 
-For Main's first boot, set `PLATFORM_FIRST_ADMIN_ACCOUNT` to that Account subject
-in Main's operator environment. Access's startup owner command designates the
-first platform administrator and commits an immutable audit receipt atomically.
-Remove the setting after successful startup. Once any designation exists, Access
+After signing in and provisioning the Agent, set `PLATFORM_FIRST_ADMIN_ACCOUNT`
+to that Account subject in Main's operator environment and restart Main.
+Access requires the existing active principal; a missing, mistyped or inactive
+subject fails startup without consuming the designation. Its startup owner
+command designates the first platform administrator and commits an immutable
+audit receipt atomically. Verify the designation receipt in Main's startup log
+and run bootstrap verification, then remove the setting. Once any designation exists, Access
 logs that the setting is ignored, including a replay with the same subject or
 a different candidate. Deactivating the principal never lets the configuration
 restore it. There is no additional administrator assignment path.
 
 Account ownership and the Main role are separate. The platform administrator's
-live Agent controller can create/configure official Zones, change semantic
-definitions and reviewed labels, create/verify catalogue Works, admit sources,
-and operate platform moderation. OAuth scopes remain ceilings. Scope closure,
+live Agent controller can create/configure its own official Zones, change its
+created semantic definitions and reviewed labels, create/verify catalogue Works,
+admit sources, and operate platform moderation. Work and Collection reads and
+edits use ordinary creator/curator authority; the role never grants access to a
+member's private shelves, lists, Works or exports. OAuth scopes remain ceilings. Scope closure,
 recovery holds, explicit policies, principal and controller revocation still
 fence operations. The role receives the existing `trusted` rate-limit class;
 bootstrap uses its ordinary budget without installing a service client or

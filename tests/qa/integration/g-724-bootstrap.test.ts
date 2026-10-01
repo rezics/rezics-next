@@ -9,6 +9,10 @@ import { startAccount, freePort, qaEnvironment } from './account-boundary-fixtur
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
+import {
+  readExportPlan,
+  ExportSourceNotFound,
+} from '../../../services/main/src/modules/export/readers.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
@@ -48,37 +52,28 @@ test('G-724: first administrator is granted once, replay/other configuration is 
       (await accessPool.query('SELECT receipt FROM access.platform_administrator')).rowCount,
     ).toBe(0);
     const administrators = new AccessPlatformAdministrators(accessPool);
-    const logs: string[] = [];
-    const first = await administrators.designateFirst(
-      account.issuer,
+    const principalsBefore = (await accessPool.query('SELECT id FROM access.principal')).rowCount;
+    await expect(
+      administrators.designateFirst(account.issuer, 'mistyped-account-subject'),
+    ).rejects.toThrow('existing active');
+    expect((await accessPool.query('SELECT id FROM access.principal')).rowCount).toBe(
+      principalsBefore,
+    );
+    expect(
+      (
+        await accessPool.query(
+          'SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2',
+          [account.issuer, 'mistyped-account-subject'],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (await accessPool.query('SELECT receipt FROM access.platform_administrator')).rowCount,
+    ).toBe(0);
+    // Account fixture stands in for completed email verification, not Access authority.
+    await account.pool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [
       account.operator.id,
-      (message) => logs.push(message),
-    );
-    expect(first.status).toBe('granted');
-    const replay = await administrators.designateFirst(
-      account.issuer,
-      account.operator.id,
-      (message) => logs.push(message),
-    );
-    const ignored = await administrators.designateFirst(
-      account.issuer,
-      'another-account-subject',
-      (message) => logs.push(message),
-    );
-    expect(replay).toEqual({ status: 'ignored', receipt: 'receipt' in first ? first.receipt : '' });
-    expect(ignored).toEqual(replay);
-    expect(logs.filter((message) => message.includes('ignored'))).toHaveLength(2);
-    const designation = (
-      await accessPool.query<{ receipt: string; account_subject: string; role: string }>(`
-      SELECT a.receipt,p.account_subject,a.role FROM access.platform_administrator a
-      JOIN access.principal p ON p.id = a.principal_id`)
-    ).rows;
-    expect(designation).toHaveLength(1);
-    expect(designation[0]).toMatchObject({
-      account_subject: account.operator.id,
-      role: 'platform.administrator',
-    });
-    expect(designation[0]!.receipt).toMatch(/^urn:rezics:access-receipt:[0-9a-f]{64}$/);
+    ]);
 
     const scopes =
       'openid agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate';
@@ -123,30 +118,23 @@ test('G-724: first administrator is granted once, replay/other configuration is 
       clientIpHeader: 'x-rezics-client-ip',
     };
     const limits = new PostgresRateLimitStore(accessPool, limitOptions);
-    expect(
-      await limits.classify(
-        await verifier.verify(
-          new Request('http://main.local', {
-            headers: { authorization: `Bearer ${token}` },
-          }),
-          [],
-        ),
-      ),
-    ).toBe('trusted');
+
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    main = createMainApp(fuseki, {
-      environment: env,
-      account: verifier,
-      access,
-      agentProvisioning: new AgentProvisioning(accessPool, env),
-      actingContexts: new AccessActingContexts(accessPool, env),
-      structureObjects,
-      catalogueIntake: new CatalogueIntakeStore(accessPool, env),
-      sourceIntake: intake,
-      types: new AdmittedTypeStore(accessPool),
-      rateLimit: { options: limitOptions, store: limits, budgets: RATE_LIMIT_V1 },
-    }).listen({ hostname: '127.0.0.1', port });
+    const startMain = () =>
+      createMainApp(fuseki, {
+        environment: env,
+        account: verifier,
+        access,
+        agentProvisioning: new AgentProvisioning(accessPool, env),
+        actingContexts: new AccessActingContexts(accessPool, env),
+        structureObjects,
+        catalogueIntake: new CatalogueIntakeStore(accessPool, env),
+        sourceIntake: intake,
+        types: new AdmittedTypeStore(accessPool),
+        rateLimit: { options: limitOptions, store: limits, budgets: RATE_LIMIT_V1 },
+      }).listen({ hostname: '127.0.0.1', port });
+    main = startMain();
     const before = await fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.current)} { ?work a <https://schema.org/CreativeWork> } }`);
     expect(before.boolean).toBe(false);
@@ -165,6 +153,53 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     });
     expect(agentResponse.status, await agentResponse.clone().text()).toBe(201);
     const agent = (await agentResponse.json()) as { agent: string };
+    // Match deployment: provision first, then stop Main, consume operator
+    // configuration at startup and build a fresh request/rate-limit lifecycle.
+    await main.stop(true);
+    main = undefined;
+    const logs: string[] = [];
+    const first = await administrators.designateFirst(
+      account.issuer,
+      account.operator.id,
+      (message) => logs.push(message),
+    );
+    expect(first.status).toBe('granted');
+    const replay = await administrators.designateFirst(
+      account.issuer,
+      account.operator.id,
+      (message) => logs.push(message),
+    );
+    const ignored = await administrators.designateFirst(
+      account.issuer,
+      'another-account-subject',
+      (message) => logs.push(message),
+    );
+    expect(replay).toEqual({ status: 'ignored', receipt: 'receipt' in first ? first.receipt : '' });
+    expect(ignored).toEqual(replay);
+    expect(logs.filter((message) => message.includes('ignored'))).toHaveLength(2);
+    const designation = (
+      await accessPool.query<{ receipt: string; account_subject: string; role: string }>(`
+      SELECT a.receipt,p.account_subject,a.role FROM access.platform_administrator a
+      JOIN access.principal p ON p.id = a.principal_id`)
+    ).rows;
+    expect(designation).toHaveLength(1);
+    expect(designation[0]).toMatchObject({
+      account_subject: account.operator.id,
+      role: 'platform.administrator',
+    });
+    expect(designation[0]!.receipt).toMatch(/^urn:rezics:access-receipt:[0-9a-f]{64}$/);
+
+    expect(
+      await limits.classify(
+        await verifier.verify(
+          new Request('http://main.local', {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+          [],
+        ),
+      ),
+    ).toBe('trusted');
+    main = startMain();
     const plan = YAML.parse(
       await readFile(join(root, 'tests/fixtures/launch/plan.yaml'), 'utf8'),
     ) as BootstrapPlan;
@@ -316,6 +351,112 @@ test('G-724: first administrator is granted once, replay/other configuration is 
         )
       ).rows[0]!.n,
     ).toBeGreaterThan(0);
+    // The launch proof above has exactly one real operator. An additional
+    // member below is a privacy adversary fixture, never bootstrap/demo data.
+    const member = await account.signUp('private-library-member');
+    await account.pool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [member.id]);
+    const memberToken = (await account.issue(client.client_id, member, scopes)).access_token;
+    const send = (bearer: string, method: string, path: string, body?: unknown) =>
+      fetch(`${origin}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': `${namespace}:privacy:${randomUUID()}`,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const memberAgentResponse = await send(memberToken, 'POST', '/v1/agents', {
+      profile: 'agent-provision-v1',
+      kind: 'person',
+      displayName: 'Private library member',
+    });
+    expect(memberAgentResponse.status, await memberAgentResponse.clone().text()).toBe(201);
+    const memberAgent = ((await memberAgentResponse.json()) as { agent: string }).agent;
+    const shelf = `https://rezics.com/id/${randomUUID()}`;
+    const shelfResponse = await send(memberToken, 'POST', '/v1/collections', {
+      collection: shelf,
+      name: 'Private shelf',
+      language: 'en',
+      disclosure: 'private',
+      actingSubject: memberAgent,
+    });
+    expect(shelfResponse.status, await shelfResponse.clone().text()).toBe(201);
+    const shelfReceipt = (await shelfResponse.json()) as { revision: string };
+    const privateWorkResponse = await send(memberToken, 'POST', '/v1/works', {
+      profile: 'metadata-only-v1',
+      authoring: 'own-work',
+      title: 'Private member work',
+      language: 'en',
+      semanticTypes: ['https://schema.org/Book'],
+      actingSubject: memberAgent,
+    });
+    expect(privateWorkResponse.status, await privateWorkResponse.clone().text()).toBe(201);
+    const privateWork = ((await privateWorkResponse.json()) as { work: string }).work;
+    const principal = await verifier.verify(
+      new Request(origin, { headers: { authorization: `Bearer ${token}` } }),
+      [],
+    );
+    const memberPrincipal = await verifier.verify(
+      new Request(origin, { headers: { authorization: `Bearer ${memberToken}` } }),
+      [],
+    );
+    expect(await access.canReadSemanticResource(memberPrincipal, memberAgent, shelf)).toBe(true);
+    expect(await access.canReadWork(memberPrincipal, memberAgent, privateWork)).toBe(true);
+    expect(await access.canReadSemanticResource(principal, agent.agent, shelf)).toBe(false);
+    expect(await access.canReadWork(principal, agent.agent, privateWork)).toBe(false);
+    expect(
+      (
+        await send(
+          token,
+          'GET',
+          `/v1/collections/${shelf.slice(-36)}?actingSubject=${encodeURIComponent(agent.agent)}`,
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await send(
+          token,
+          'GET',
+          `/v1/works/${privateWork.slice(-36)}?actingSubject=${encodeURIComponent(agent.agent)}`,
+        )
+      ).status,
+    ).toBe(404);
+    for (const [action, scope] of [
+      ['collection.edit', `collection:edit:${shelf}`],
+      ['work.edit', `work:edit:${privateWork}`],
+    ]) {
+      await expect(
+        access.register({
+          principal,
+          actingSubject: agent.agent,
+          action: action!,
+          scope: scope!,
+          idempotencyKey: `${namespace}:denied:${action}`,
+          requestDigest: 'a'.repeat(64),
+        }),
+      ).rejects.toThrow();
+    }
+    await expect(
+      readExportPlan(
+        {
+          env,
+          canReadWork: (person, actor, work) => access.canReadWork(person, actor, work),
+          canReadSemantic: (person, actor, resource, revision) =>
+            access.canReadSemanticResource(person, actor, resource, revision),
+        },
+        principal,
+        agent.agent,
+        {
+          kind: 'semantic-revision',
+          resource: shelf,
+          reference: shelfReceipt.revision,
+          expectedPosition: { dataEpoch: qa.dataEpoch, sequence: '0' },
+        },
+        'full',
+      ),
+    ).rejects.toBeInstanceOf(ExportSourceNotFound);
     await writeFile(
       join(artifact, 'g-724-bootstrap-proof.json'),
       JSON.stringify(

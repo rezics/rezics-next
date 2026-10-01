@@ -1,5 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
+import { definitionCreatorAllowed } from './definition-creator.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const rootActions: Record<string, string> = {
@@ -9,11 +12,8 @@ const rootActions: Record<string, string> = {
   'catalogue.verify': 'catalogue:verify:root',
 };
 const resourceActions: Record<string, string[]> = {
-  'work.edit': ['work:edit'],
-  'work.read': ['work:read'],
   'zone.edit': ['zone:edit'],
   'zone.official': ['zone:official'],
-  'collection.edit': ['collection:edit'],
   'semantic.read': ['semantic:read'],
   'semantic.change': ['semantic:edit'],
   'lexicon.presentation.change': ['semantic:edit'],
@@ -26,6 +26,44 @@ export function platformAdministratorAction(action: string, scope: string): bool
   if (Object.hasOwn(rootActions, action) && rootActions[action] === scope) return true;
   return (Object.hasOwn(resourceActions, action) ? resourceActions[action]! : []).some(
     (prefix) => scope.startsWith(`${prefix}:`) && native.test(scope.slice(prefix.length + 1)),
+  );
+}
+
+/** Resource authority is limited to this administrator's Zones and definitions.
+ * Work/Collection reads and edits retain their ordinary curator/creator policy.
+ * Cost: one exact 1 KiB Zone ASK, or the bounded definition-creation proof.
+ * A missing Zone can only be created: its owner command checks the Space owner. */
+export async function platformAdministratorTargetAllowed(
+  client: PoolClient,
+  graph: Pick<FusekiClient, 'query'> | undefined,
+  principal: string,
+  actor: string,
+  action: string,
+  scope: string,
+): Promise<boolean> {
+  if (!platformAdministratorAction(action, scope)) return false;
+  if (Object.hasOwn(rootActions, action) && rootActions[action] === scope) return true;
+  if (!graph || !native.test(actor)) return false;
+  const target = scope.slice(scope.indexOf('https://rezics.com/id/'));
+  if (scope.startsWith('semantic:edit:')) {
+    return definitionCreatorAllowed(client, graph, principal, actor, target);
+  }
+  return (
+    (
+      await graph.query(
+        `PREFIX rv: <https://rezics.com/vocab/> ASK {
+    { GRAPH ${iri(GRAPHS.current)} { ${iri(target)} a rv:Zone ; rv:space ?space .
+      ?space a rv:Space ; rv:owner ${iri(actor)} . } }
+    ${
+      action === 'zone.edit'
+        ? `UNION { FILTER NOT EXISTS {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(target)} ?p ?o } } }`
+        : ''
+    }
+  }`,
+        1024,
+      )
+    ).boolean === true
   );
 }
 
@@ -153,18 +191,14 @@ export class AccessPlatformAdministrators {
       if (!fence?.open) throw new Error('First platform administrator: Access recovery is held');
       if (!issuer || !/^[^\s\0]{1,256}$/.test(subject))
         throw new Error('Invalid PLATFORM_FIRST_ADMIN_ACCOUNT');
-      await client.query(
-        `INSERT INTO access.principal (id,account_issuer,account_subject)
-        VALUES ($1,$2,$3) ON CONFLICT (account_issuer,account_subject) DO NOTHING`,
-        [randomUUID(), issuer, subject],
-      );
       const principal = (
         await client.query<{ id: string; active: boolean }>(
           'SELECT id, active FROM access.principal WHERE account_issuer = $1 AND account_subject = $2 FOR UPDATE',
           [issuer, subject],
         )
       ).rows[0];
-      if (!principal?.active) throw new Error('First platform administrator principal is inactive');
+      if (!principal?.active)
+        throw new Error('First platform administrator needs an existing active Access principal');
       const digest = createHash('sha256')
         .update(JSON.stringify(['platform-first-administrator-v1', issuer, subject]))
         .digest('hex');
