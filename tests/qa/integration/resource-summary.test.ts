@@ -404,7 +404,9 @@ test('VIEW08: Character, Context, Realm, Role and RelationDefinition summaries o
   };
   const denied = await summaries();
   expect(denied.map(item => item.status)).toEqual([
-    'unavailable', 'unavailable', 'unavailable', 'available', 'unavailable', 'available']);
+    'unavailable', 'unavailable', 'available', 'available', 'unavailable', 'available']);
+  // Relation definitions are public vocabulary; characters and roles retain their own disclosure.
+  expect(denied[2]).toMatchObject({ type: 'relation', disclosure: 'public' });
   expect(denied[5]).toMatchObject({ type: 'realm', name: { value: spaceInput.name },
     avatar: { kind: 'fallback' } });
   for (const resource of [character, role, relation]) await owner.grant(`semantic:read:${resource}`, 'semantic.read');

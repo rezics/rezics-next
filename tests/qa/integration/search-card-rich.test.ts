@@ -165,12 +165,12 @@ test('CTX02/CTX09: cached card facts retry graph movement and still fence live t
     let summaryChecks = 0;
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       account: { verify: async () => member.principal }, governance: { store: {
-        restrictedTitles: async () => {
-          // Matching uses its original client; card reads have a batch client.
-          // Switch the Access decision after the first summary was admitted.
-          if (cardBatches >= 3) summaryChecks++;
-          return summaryChecks >= 2 ? new Set([work.work]) : new Set<string>();
-        },
+        disclosure: { read: async (targets: readonly { resource: string }[], _viewer: unknown, channel: string) => {
+          // Switch the live Disclosure owner after the first card summary was admitted.
+          if (channel === 'summary' && cardBatches >= 3) summaryChecks++;
+          return targets.map(target => summaryChecks >= 2 && target.resource === work.work
+            ? channel === 'summary' ? 'tombstone' : 'hidden' : 'visible');
+        } },
       } } } as unknown as Parameters<typeof createMainApp>[1]);
     const response = await search(app);
     const result = await response.text();

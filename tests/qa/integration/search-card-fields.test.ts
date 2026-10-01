@@ -77,7 +77,8 @@ test('search cards use public native credit names and sealed standing ratings; h
     expect((await search('searchable')).results).toMatchObject([{ rating: null, ratingStatus: 'context-required' }]);
 
     const restrictedApp = createMainApp(stack.fuseki, { ...deps, governance: { store: {
-      restrictedTitles: async () => restricted,
+      disclosure: { read: async (targets: readonly { resource: string }[]) =>
+        targets.map(target => restricted.has(target.resource) ? 'hidden' : 'visible') },
     } } } as unknown as Parameters<typeof createMainApp>[1]);
     restricted = new Set([work.work]);
     const response = await restrictedApp.handle(new Request('http://main.local/v1/queries/page', {

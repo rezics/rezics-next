@@ -217,6 +217,14 @@ test.each(['initial context', 'retained context'])(
     await grant(`collection:edit:${collection}`, 'collection.edit');
     await grant(`collection:edit:${olderCollection}`, 'collection.edit');
     await grant(`work:read:${publicWork.work}`, 'work.read');
+    const nativeCommand = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
+    stack.fuseki.commandWithReceipt = async command => {
+      try {
+        const result = await nativeCommand(command);
+        if (result.status !== 'committed') console.error('Collection fixture graph result', result);
+        return result;
+      } catch (error) { console.error('Collection fixture graph error', error); throw error; }
+    };
     const olderResponse = await app.handle(new Request('http://main.local/v1/collections', { method: 'POST',
       headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
         'idempotency-key': randomUUID() },

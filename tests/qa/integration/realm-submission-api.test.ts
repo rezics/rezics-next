@@ -214,6 +214,7 @@ test('Realm submissions: exact adoption, private decisions, stale offers, races,
     const staleInput = await candidate();
     const staleOffer = await submit(staleInput);
     await author.grant(`contribution:edit:${staleInput.contribution}`, 'contribution.edit');
+    await author.grant(`contribution:read:${staleInput.contribution}`, 'contribution.read');
     await author.grant(`contribution:publish:${staleInput.contribution}`, 'contribution.publish');
     const edited = await author.send('POST', '/v1/contribution-edits', { profile: 'text-contribution-v1',
       contribution: staleInput.contribution, expectedHead: staleInput.selectedDraft,

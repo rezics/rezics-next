@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -137,6 +138,7 @@ test('G-585: a v1 analyzer volume stays closed until a resumable profile upgrade
   const original = '魔法禁書目錄 ガラス ＲＵＳＴ', unit = `urn:rezics:g585:${identity}`;
   const priorGeneration = `urn:rezics:text-index-generation:${randomUUID()}`;
   try {
+    await migrateContent(pool);
     docker(['volume', 'create', volume], dockerEnv, 15_000);
     server = await standaloneFuseki(dockerEnv, { name, volume, image: pinnedImage(), secrets,
       mounts: [`${assembler}:/fuseki/fuseki-text.ttl:ro,Z`] });

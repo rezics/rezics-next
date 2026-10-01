@@ -33,6 +33,7 @@ test('RECIPE04: two Realms independently adopt published Recipe variants of one 
       const draft = await f.json<{ contribution: string; draftRevision: string }>(await f.call('POST',
         '/v1/contributions', { profile: 'text-contribution-v1', work: work.work,
           language: 'en', body, actingSubject: f.actor }, `recipe-draft-${randomUUID()}`), 201);
+      await f.grant(`contribution:read:${draft.contribution}`, 'contribution.read');
       await f.grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
       const publication = await f.json<{ publicationDecision: string }>(await f.call('POST',
         '/v1/contribution-publications', { profile: 'text-publication-v1',

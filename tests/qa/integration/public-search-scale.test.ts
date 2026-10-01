@@ -38,14 +38,16 @@ const root = resolve(import.meta.dir, '../../..');
 
 class CountingFusekiClient extends FusekiClient {
   inventories = 0;
+  readinessReads = 0;
   queryCalls = 0;
   phraseQueries = 0;
   healthCalls = 0;
   joinedQueries = 0;
   override async query(sparql: string, maxResponseBytes?: number): Promise<SparqlResult> {
     this.queryCalls++;
+    if (sparql.includes('?probeScore')) this.readinessReads++;
     if (sparql.includes('?candidateCount') && sparql.includes('text:query')) this.phraseQueries++;
-    if (sparql.includes('"body:*"')) this.inventories++;
+    if (sparql.includes('rv:publicTextInventory()')) this.inventories++;
     if (sparql.includes('ratingPopulation') && sparql.includes('text:query')) this.joinedQueries++;
     return super.query(sparql, maxResponseBytes);
   }
@@ -202,9 +204,9 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(late.population).toBe(existingPopulation + 102);
     expect(late.total).toBe(1);
     expect(late.results[0]?.work).toBe(lateWork);
-    expect(fuseki.inventories).toBe(1);
+    expect(fuseki.inventories).toBe(fuseki.readinessReads);
     // 3c2a6a52 batches card hydration and adds one final search-health fence.
-    // Preserve the query upper bounds; the core-only corpus probes above still cost 4/3/1.
+    // Bypass-writer datasets audit each readiness proof; preserve the graph and health bounds.
     expect(fuseki.queryCalls - coldStart.queries).toBeLessThanOrEqual(14);
     expect(fuseki.healthCalls - coldStart.health).toBe(4);
     const warmStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
@@ -213,7 +215,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(all.population).toBe(existingPopulation + 102);
     expect(all.total).toBe(102);
     expect(new Set(all.results.map(row => row.work))).toEqual(new Set([...works, lateWork]));
-    expect(fuseki.inventories).toBe(1);
+    expect(fuseki.inventories).toBe(fuseki.readinessReads);
     expect(fuseki.queryCalls - warmStart.queries).toBeLessThanOrEqual(13);
     expect(fuseki.healthCalls - warmStart.health).toBe(4);
     expect(all.cardWindow).toMatchObject({ hydrated: 20, limit: 20 });
@@ -231,7 +233,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const suggested = await suggestions.json() as { items: unknown[]; hasMore: boolean };
     expect(suggested.items).toHaveLength(10);
     expect(suggested.hasMore).toBe(true);
-    const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories,
+    const pageStart = { queries: fuseki.queryCalls, inventories: fuseki.inventories, readinessReads: fuseki.readinessReads,
       phrases: fuseki.phraseQueries };
     const firstPageResponse = await page();
     expect(firstPageResponse.status).toBe(200);
@@ -249,7 +251,8 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect([...firstPage.results, ...secondPage.results, ...thirdPage.results]
       .map(row => row.work)).toEqual(all.results.map(row => row.work));
     expect(fuseki.phraseQueries - pageStart.phrases).toBe(3);
-    expect(fuseki.inventories).toBe(pageStart.inventories);
+    expect(fuseki.inventories - pageStart.inventories)
+      .toBe(fuseki.readinessReads - pageStart.readinessReads);
     // Each page adds current-field matching/fencing and a rating-context lookup
     // to the existing bounded card reads; the population does not multiply calls.
     expect(fuseki.queryCalls - pageStart.queries).toBeLessThanOrEqual(42);
@@ -262,7 +265,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(afterWrite.population).toBe(existingPopulation + 103);
     expect(afterWrite.total).toBe(2);
     expect(new Set(afterWrite.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
-    expect(fuseki.inventories).toBe(2);
+    expect(fuseki.inventories).toBe(fuseki.readinessReads);
     const corpus = [...works, lateWork, nextWork];
     const beforeAuthorSwitch = await selectedHeads(corpus);
     const alternateInput = { work: lateWork, language: 'en',
@@ -305,7 +308,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     const afterSwap = await query('en');
     expect(afterSwap.population).toBe(existingPopulation + 103);
     expect(new Set(afterSwap.results.map(row => row.work))).toEqual(new Set([lateWork, nextWork]));
-    expect(fuseki.inventories).toBe(3);
+    expect(fuseki.inventories).toBe(fuseki.readinessReads);
     const authorStart = { queries: fuseki.queryCalls, health: fuseki.healthCalls };
     const firstAuthor = await query('en', actor);
     expect(firstAuthor.complete).toBe(true);
@@ -318,7 +321,7 @@ test('IAM18/SEARCH01/SEARCH02/SEARCH04/SEARCH07/SEARCH08/SEARCH16/SEARCH18: rate
     expect(secondAuthor.results.map(row => row.work)).toEqual([lateWork]);
     expect(fuseki.queryCalls - secondAuthorStart.queries).toBeLessThanOrEqual(13);
     expect(fuseki.healthCalls - secondAuthorStart.health).toBe(4);
-    expect(fuseki.inventories).toBe(3);
+    expect(fuseki.inventories).toBe(fuseki.readinessReads);
 
     const spaceInput = { name: `Scale Realm ${randomUUID()}`, actingSubject: actor };
     const space = await createRealmSpace(env,
