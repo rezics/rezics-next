@@ -27,9 +27,11 @@ export function SlotBoundary({ slot, fallback, children }: { slot: string; fallb
 }
 
 /** A module whose read failed: its title stays, with a way to try again. */
-export function ModuleFailed({ module, title, retry }: { module: ZoneModule; title: string; retry: string }) {
+export function ModuleFailed({ module, title, retry, more }: {
+  module: ZoneModule; title: string; retry: string; more: string;
+}) {
   const router = useRouter();
-  return <ModuleFrame module={module}>
+  return <ModuleFrame module={module} more={more}>
     <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/60 px-4 py-3
       text-muted-foreground text-sm">
       <p>{title}</p>

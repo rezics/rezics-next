@@ -1,5 +1,6 @@
 import type { RankingInterval, RankingMetric, ZoneModule, ZoneModuleType, ZonePreset, ZoneTokens }
   from '@rezics/zone-sdk';
+import type { UiLocale } from '../../i18n/define.ts';
 
 // A Zone's presentation as the web renders it: the shape of Main's
 // `zone-presentation-v1` document (services/main/src/modules/zone/presentation-format.ts).
@@ -33,6 +34,11 @@ export interface PresentationModule {
   tabs?: { id: string; label: string; source: ModuleSource }[];
   options?: { layout?: 'covers' | 'rows'; shuffle?: boolean; rail?: boolean; limit?: number;
     metric?: RankingMetric; interval?: RankingInterval };
+}
+
+/** A translation overrides the configured title; a missing translation preserves the author's default. */
+export function moduleTitle(module: { title: string; titles?: Partial<Record<UiLocale, string>> }, locale: UiLocale) {
+  return module.titles?.[locale] ?? module.title;
 }
 
 export interface PresentationBanner {

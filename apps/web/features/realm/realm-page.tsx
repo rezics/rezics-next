@@ -15,8 +15,8 @@ import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
 import { decideExecution, type Execution, isSafeMode, ZONE_LOOK_COOKIE, zoneLookEnabled } from '../zones/execution.ts';
 import { LookMenu } from '../zones/look-menu.tsx';
-import { defaultModuleTitle, type ZoneMessages } from '../zones/messages.ts';
-import { defaultPresentation, type ZonePresentation } from '../zones/presentation.ts';
+import type { ZoneMessages } from '../zones/messages.ts';
+import { defaultPresentation, moduleTitle, type ZonePresentation } from '../zones/presentation.ts';
 import { zoneTheme } from '../zones/theme.ts';
 import type { SiteCrumb, SiteLink } from '../zones/site-navigation.tsx';
 import { PositionBar } from '../wiki/position-bar.tsx';
@@ -104,7 +104,7 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
   const presentation: ZonePresentation = read?.ok ? { ...read.data.presentation,
     modules: read.data.presentation.modules.map(({ titles, tabs, ...module }) => ({ ...module,
-      title: titles?.[locale] ?? defaultModuleTitle(module.type, zoneMessages),
+      title: moduleTitle({ title: module.title, titles }, locale),
       ...tabs ? { tabs: tabs.map(({ labels, ...tab }) => ({ ...tab, label: labels?.[locale] ?? tab.label })) } : {} })) }
     : defaultPresentation(zoneMessages);
   const bannerMedia = read?.ok ? read.data.bannerMedia : [];
@@ -129,7 +129,8 @@ export async function loadRealmView(ref: string, locale: UiLocale, search: Searc
     membership,
     mounts,
     context: { locale, ref, realm: realm.realm, avatarQuery: reader.avatarQuery,
-      ...realm.zone ? { mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) } : { unrouted: true } } };
+      ...realm.zone ? { zone: realm.zone.id, mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }
+        : { unrouted: true } } };
 }
 
 /** A mounted page's address and its name, as the Zone's navigation and breadcrumbs link to it. */

@@ -12,7 +12,7 @@ import { catalogueWork } from '../features/zones/card.tsx';
 import { contrast, inkOn, mix, parseHex, readableOn, toHex } from '../features/zones/color.ts';
 import { isZonePage, zoneCsp, zoneNonce } from '../features/zones/csp.ts';
 import { decideExecution, isSafeMode, zoneLookEnabled } from '../features/zones/execution.ts';
-import { defaultPresentation, feedOf, placedModule, presetTokens, realmFeeds } from '../features/zones/presentation.ts';
+import { defaultPresentation, feedOf, moduleTitle, placedModule, presetTokens, realmFeeds } from '../features/zones/presentation.ts';
 import { accentRoles, auraSurfaces, weakestContrast, zoneScheme, zoneTheme } from '../features/zones/theme.ts';
 import type { CopyButton } from '../zones/official/ai-workshop/copy-button.tsx';
 import type { ShelfCarousel } from '../zones/official/books/carousel.tsx';
@@ -25,6 +25,13 @@ type TakesOnlyData<Component extends (props: never) => unknown> =
   Parameters<Component>[0] extends { readonly [key: string]: ServerSent } ? true : false;
 // Slots render on the server; a function prop makes React refuse the client component.
 const clientComponentsTakeData: [TakesOnlyData<typeof CopyButton>, TakesOnlyData<typeof ShelfCarousel>] = [true, true];
+
+test('module titles keep configured copy when a translation is absent', () => {
+  const module = { title: 'Series and volumes from the shared catalogue.', titles: { ja: 'シリーズと巻' } };
+  expect(moduleTitle(module, 'en')).toBe(module.title);
+  expect(moduleTitle(module, 'zh-Hant')).toBe(module.title);
+  expect(moduleTitle(module, 'ja')).toBe(module.titles.ja);
+});
 
 describe('Zone color arithmetic', () => {
   test('WCAG contrast matches the reference values', () => {

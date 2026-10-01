@@ -39,6 +39,8 @@ export function bannerImage(banner: PresentationBanner,
 
 export interface AdaptContext {
   locale: UiLocale; ref: string; realm: string;
+  /** The Zone UUID whose mounted Collection routes supply home shelves. */
+  zone?: string;
   /** A Realm with no Zone has no site to open a Work in; its Works open on their own pages. */
   unrouted?: boolean;
   /** The Zone's mounted Collections by their IRI, to the route segment their members open under. */

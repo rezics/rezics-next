@@ -1,7 +1,6 @@
 import type { RankingMetric as ChartMetric, ZoneBanner, ZoneModuleData, ZoneShelfTab, ZoneWork }
   from '@rezics/zone-sdk';
-import type { UiLocale } from '../../i18n/define.ts';
-import { feedOf, placedModule, type PresentationModule, type RealmFeed, type ZonePresentation }
+import { feedOf, placedModule, type ModuleSource, type PresentationModule, type RealmFeed, type ZonePresentation }
   from '../zones/presentation.ts';
 import type { ModuleState, PlacedModule } from '../zones/zone-home.tsx';
 import { zoneContentText } from '../language/untagged.ts';
@@ -11,8 +10,8 @@ import { type AdaptContext, bannerImage, liveBanners, type ModuleCredit, workLin
   zoneWork } from './adapt.ts';
 import { readLatestChapters, readNewAdoptions, readRankings, readRealmWorks, readRecentDecisions,
   readRecentlyCompleted, readRising, readZoneDiscussions, readZoneEditorLists, readZoneGenres,
-  readZoneQuotes } from './read.ts';
-import { idOf, realmHref } from './route.ts';
+  readZoneQuotes, readZoneRoute } from './read.ts';
+import { idOf, realmHref, siteHref } from './route.ts';
 import type { Loaded, MainAvatar, MainName, RankingMetric, ZonePresentationRead } from './types.ts';
 
 // Loads each module of a Zone's presentation from Main's Realm module reads.
@@ -107,14 +106,31 @@ async function hero(module: PresentationModule, presentation: ZonePresentation, 
     title: work.title ?? zoneContentText(''), href: work.href, image: null, work })) } } : empty;
 }
 
+/** A mounted Collection shelf uses the same public, visibility-filtered index read as its full catalogue. */
+async function shelfWorks(source: ModuleSource, context: AdaptContext): Promise<Loaded<ZoneWork[]>> {
+  if (source.kind !== 'collection') {
+    const feed = feedOf(source);
+    return feed ? feedWorks(feed, context) : { ok: false, failure: 'invalid' };
+  }
+  const mount = context.mounts?.get(source.collection);
+  if (!context.zone || !mount) return { ok: false, failure: 'missing' };
+  const page = await readZoneRoute(context.zone, `/${mount}`);
+  if (!page.ok) return page;
+  if (page.data.kind !== 'index' || page.data.collection !== source.collection) {
+    return { ok: false, failure: 'unavailable' };
+  }
+  return { ok: true, data: page.data.items.flatMap(item => 'title' in item
+    ? [zoneWork(item, context, null, mount)] : []) };
+}
+
 async function shelf(module: PresentationModule, context: AdaptContext): Promise<ModuleState<'shelf'>> {
   const sources = module.tabs ?? [{ id: module.id, label: module.title, source: module.source }];
-  const supported = sources.flatMap(tab => {
+  const supported = sources.filter(tab => {
     const feed = feedOf(tab.source);
-    return feed && feed !== 'recent-decisions' ? [{ ...tab, feed }] : [];
+    return tab.source.kind === 'collection' || feed && feed !== 'recent-decisions';
   });
   if (!supported.length) return unsupported;
-  const loaded = await Promise.all(supported.map(async tab => ({ tab, works: await feedWorks(tab.feed, context) })));
+  const loaded = await Promise.all(supported.map(async tab => ({ tab, works: await shelfWorks(tab.source, context) })));
   const tabs: ZoneShelfTab[] = loaded.flatMap(({ tab, works }) => works.ok && works.data.length
     ? [{ id: tab.id, label: tab.label, items: works.data.slice(0, module.options?.limit ?? 14) }] : []);
   if (tabs.length) return { state: 'ready', data: { tabs } };
@@ -265,7 +281,12 @@ async function load(module: PresentationModule, presentation: ZonePresentation, 
 }
 
 /** Where a module's "More" leads, when the Realm has a view for it. */
-function moreOf(module: PresentationModule, locale: UiLocale, ref: string): string | null {
+function moreOf(module: PresentationModule, context: AdaptContext): string | null {
+  const { locale, ref } = context;
+  if (module.type === 'shelf' && module.source.kind === 'collection') {
+    const mount = context.mounts?.get(module.source.collection);
+    return mount ? siteHref(locale, ref, [mount]) : null;
+  }
   if (module.type === 'decision-log') return realmHref(locale, ref, 'decisions');
   if (module.type === 'shelf') return realmHref(locale, ref, 'browse');
   return null;
@@ -274,7 +295,7 @@ function moreOf(module: PresentationModule, locale: UiLocale, ref: string): stri
 export async function loadModules(presentation: ZonePresentation, context: AdaptContext,
   bannerMedia: ZonePresentationRead['bannerMedia'] = []): Promise<PlacedModule[]> {
   return Promise.all(presentation.modules.map(async module => ({
-    module: placedModule(module, moreOf(module, context.locale, context.ref)),
+    module: placedModule(module, moreOf(module, context)),
     state: await load(module, presentation, context, bannerMedia),
   }) as PlacedModule));
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { zoneWork } from '../features/realm/adapt.ts';
 import { loadModules } from '../features/realm/modules.ts';
+import { isType } from '../features/zones/zone-home.tsx';
 import { realmWorkHref, siteHref } from '../features/realm/route.ts';
 import { messages as zoneMessages } from '../features/zones/messages.ts';
 import { defaultPresentation, type ZonePresentation } from '../features/zones/presentation.ts';
@@ -12,6 +13,7 @@ const realm = '7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
 const iri = (id: string) => `https://rezics.com/id/${id}`;
 const workId = (n: number) => `00000000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const collection = iri('11111111-1111-4111-8111-111111111111');
+const zone = '22222222-2222-4222-8222-222222222222';
 const ref = 'books';
 const name = (value: string) => ({ value, language: 'en', direction: 'ltr' as const, basis: 'requested' as const });
 const cover = (id: string) => ({ kind: 'fallback' as const, policy: 'zone', key: id, resourceType: 'work' });
@@ -19,6 +21,10 @@ const card = (n: number) => ({ id: iri(workId(n)), title: name(`Work ${n}`), cov
   types: ['https://schema.org/Book'], tagline: null, completionStatus: null, chapterCount: null, wordCount: null,
   lastUpdatedAt: null, evidence: null, primaryCredits: [], hub: null });
 const thin = (n: number) => ({ id: iri(workId(n)), title: name(`Work ${n}`), cover: cover(iri(workId(n))) });
+const indexPage = { kind: 'index', collection, mount: { segment: 'catalogue' },
+  items: [card(8), card(9)], nextCursor: 'more' };
+let indexRead: unknown = indexPage;
+let indexStatus = 200;
 
 /** Main's module reads for one Realm, served from fixtures; every other read is a 404, like an unmounted route. */
 const reads: Record<string, unknown> = {
@@ -37,12 +43,59 @@ const reads: Record<string, unknown> = {
 
 const realFetch = globalThis.fetch;
 beforeEach(() => {
+  indexRead = indexPage;
+  indexStatus = 200;
   globalThis.fetch = (async (input: string | URL | Request) => {
     const path = new URL(typeof input === 'string' || input instanceof URL ? input : input.url).pathname;
+    if (path === `/v1/zones/${zone}/routes`) return Response.json(indexRead, { status: indexStatus });
     const read = path.replace(`/v1/realms/${realm}/`, '');
     const found = path.startsWith(`/v1/realms/${realm}/`) ? reads[read] : undefined;
     return found === undefined ? Response.json({ code: 'missing' }, { status: 404 }) : Response.json(found);
   }) as typeof fetch;
+});
+
+describe('mounted Collection shelves on Zone homes', () => {
+  const presentation: ZonePresentation = { ...defaultPresentation(zoneMessages), modules: [
+    { id: 'catalogue', type: 'shelf', title: 'Catalogue', source: { kind: 'collection', collection },
+      options: { limit: 1 } },
+  ] };
+  const context = { locale: 'en' as const, ref: 'light-novels', realm, zone,
+    mounts: new Map([[collection, 'catalogue']]) };
+  const load = async () => {
+    const shelf = (await loadModules(presentation, context))[0]!;
+    if (!isType(shelf, 'shelf')) throw new Error('Expected a shelf');
+    return shelf;
+  };
+
+  test('loads the catalogue preview, preserves mounted links and sends More to the full catalogue', async () => {
+    const shelf = await load();
+    expect(shelf.module.more).toBe('/en/r/light-novels/catalogue');
+    expect(shelf.state.state).toBe('ready');
+    if (shelf.state.state !== 'ready') throw new Error('Catalogue shelf did not load');
+    expect(shelf.state.data.tabs[0]!.items.map(item => item.href))
+      .toEqual([`/r/light-novels/catalogue/${workId(8)}`]);
+  });
+
+  test('collection and feed tabs both load, each keeping its source links', async () => {
+    const modules = await loadModules({ ...presentation, modules: [{ ...presentation.modules[0]!,
+      tabs: [{ id: 'catalogue', label: 'Catalogue', source: { kind: 'collection', collection } },
+        { id: 'new', label: 'New', source: { kind: 'query-block', block: 'new-adoptions' } }] }] }, context);
+    const shelf = modules[0]!;
+    if (!isType(shelf, 'shelf') || shelf.state.state !== 'ready') throw new Error('Tabbed shelf did not load');
+    expect(shelf.state.data.tabs.map(tab => tab.items[0]!.href))
+      .toEqual([`/r/light-novels/catalogue/${workId(8)}`, `/r/light-novels/w/${workId(1)}`]);
+  });
+
+  test('an empty catalogue is empty; a failed or mismatched read stays visibly failed', async () => {
+    indexRead = { ...indexPage, items: [], nextCursor: null };
+    expect((await load()).state.state).toBe('empty');
+    indexStatus = 503;
+    expect((await load()).state.state).toBe('failed');
+    indexStatus = 200;
+    indexRead = { ...indexPage, collection: iri(workId(99)) };
+    expect((await load()).state.state).toBe('failed');
+    expect((await loadModules(presentation, { ...context, mounts: new Map() }))[0]!.state.state).toBe('failed');
+  });
 });
 afterEach(() => { globalThis.fetch = realFetch; });
 

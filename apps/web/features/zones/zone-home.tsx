@@ -78,7 +78,7 @@ function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage 
   locale: UiLocale, messages: ZoneMessages, avatarQuery?: string): ReactNode {
   const t = materializeData(messages, { locale });
   if (placed.state.state === 'failed') {
-    return <ModuleFailed key={placed.module.id} module={placed.module} retry={messages.retry}
+    return <ModuleFailed key={placed.module.id} module={placed.module} retry={messages.retry} more={messages.more}
       title={t.failed({ module: placed.module.title })} />;
   }
   if (placed.state.state !== 'ready') return null;
@@ -109,6 +109,8 @@ export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, em
 }) {
   const card = cardRenderer(zone, pkg, locale, messages, avatarQuery);
   const visible = modules.filter(shows);
+  // Navigation and dismissible notices cannot stand in for the home's actual content.
+  const hasContent = visible.some(placed => placed.module.type !== 'announcement' && placed.module.type !== 'chip-nav');
   const hero = visible.find(placed => isType(placed, 'hero-carousel'));
   const main = visible.filter(placed => placed !== hero && !placed.module.rail);
   const rail = visible.filter(placed => placed !== hero && placed.module.rail);
@@ -127,7 +129,7 @@ export function ZoneHome({ modules, zone, pkg, locale, messages, avatarQuery, em
         {...workRenderers(card, locale, messages)} /></SlotBoundary> : heroNode}
     <PageContainer className="grid grid-cols-1 gap-(--zone-gap) py-0 sm:py-0 lg:grid-cols-[minmax(0,1fr)_18.5rem] lg:items-start
       lg:py-0">
-      {visible.length ? null : <div className="lg:col-span-2">{empty}</div>}
+      {hasContent ? null : <div className="lg:col-span-2">{empty}</div>}
       {main.length ? <div className="grid min-w-0 grid-cols-1 gap-(--zone-gap)">
         {main.map(placed => renderModule(placed, zone, pkg, card, locale, messages, avatarQuery))}</div> : null}
       {rail.length ? <div className="grid min-w-0 grid-cols-1 gap-(--zone-gap) lg:sticky lg:top-20">
