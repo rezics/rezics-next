@@ -86,3 +86,20 @@ test('G-909: remote Account policy refusals never trigger automatic acceptance',
     expect(calls).toEqual(['/api/auth/oauth2/authorize']);
   } finally { await server.stop(true); }
 });
+
+test('G-909: transient OAuth authorization failures retry the same PKCE request', async () => {
+  const requests: string[] = [];
+  const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch(request) {
+    if (new URL(request.url).pathname.endsWith('/oauth2/token')) return Response.json({ access_token: 'token' });
+    requests.push(request.url);
+    return requests.length < 3 ? new Response(null, { status: requests.length === 1 ? 500 : 503 })
+      : new Response(null, { status: 302, headers: { location: 'http://localhost:3000/callback?code=code' } });
+  } });
+  try {
+    const api = new SeedApi({ account: server.url.origin, main: 'http://localhost:3001', mailpit: '', clientId: 'client',
+      redirectUri: 'http://localhost:3000/callback', resource: 'http://localhost:3001', scope: 'openid work:read' });
+    expect(await api.token('session=seed')).toBe('token');
+    expect(requests).toHaveLength(3);
+    expect(new Set(requests).size).toBe(1);
+  } finally { await server.stop(true); }
+});

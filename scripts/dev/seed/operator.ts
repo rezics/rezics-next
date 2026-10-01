@@ -133,6 +133,8 @@ export async function grantImportedWorkSeedAuthority(input: LocalOperatorInput,
     throw new Error('Imported Work seed authority requires a Work and Main Version');
   }
   return grantImportedSeedScopes(input, [
+    // CAS recovery also needs the current basis before the first publication.
+    { action: 'work.read', scope: `work:read:${work}` },
     { action: 'work.edit', scope: `work:edit:${work}` },
     { action: 'contribution.create', scope: `contribution:create:${work}` },
     { action: 'publication.select', scope: `publication:select:${mainVersion}` },

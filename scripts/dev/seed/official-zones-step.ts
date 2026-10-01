@@ -325,6 +325,9 @@ async function lighterTexts(o: Official) {
       const target = await createWork(o, { profile: 'metadata-only-v1', title: extra.title,
         semanticTypes: [kinds[extra.type]], language: extra.language, authoring: 'own-work',
         actingSubject: as.actingSubject }, as.token, seedKey('official-work', extra.id));
+      // Restricted kinds are created with the administrator's bearer. Grant the
+      // named writer's fixture authority before their first metadata command.
+      await grantImportedWorkSeedAuthority(o.input(as, as.actingSubject), target.work, target.mainVersion);
       await describeWork(o, extra.id, target, as.actingSubject, as, extra.language, extra.tagline, null,
         extra.id === 'lumen-fabric');
       o.works.set(extra.id, { work: target, language: extra.language,

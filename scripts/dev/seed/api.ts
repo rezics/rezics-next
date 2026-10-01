@@ -153,7 +153,14 @@ export class SeedApi {
       redirect_uri: redirectUri, scope, state: randomUUID(), resource,
       code_challenge: createHash('sha256').update(verifier).digest('base64url'),
       code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const requestAuthorization = () => this.accountFetch(authorize, { headers: { cookie }, redirect: 'manual' });
+    const requestAuthorization = async () => {
+      for (let attempt = 0; ; attempt++) {
+        const response = await this.accountFetch(authorize, { headers: { cookie }, redirect: 'manual' });
+        if (response.status < 500 || attempt >= 3) return response;
+        await response.body?.cancel();
+        await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    };
     let authorized = await requestAuthorization();
     if (authorized.status === 403 && [account, this.endpoints.accountService ?? account].every(origin =>
       ['127.0.0.1', 'localhost'].includes(new URL(origin).hostname))) {
