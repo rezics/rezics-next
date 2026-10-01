@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
-import { appEnvironment, readEnv, savePrivate, stackDirectory, type StackOptions } from '../dev/config.ts';
+import { appEnvironment, readEnv, replacePrivate, stackDirectory, type StackOptions } from '../dev/config.ts';
 import { ownerReady } from '../load/restore.ts';
 import { readManifest } from './build.ts';
 import { DEFAULT_SEED, type FixtureProfile } from './corpus.ts';
@@ -94,8 +94,9 @@ export async function restoreFixture(id: string, target: string,
     const configurePorts = async () => {
       const saved = { ...readEnv(join(fixtureDirectory(id), 'compose.env')), ...await freshPorts(),
         REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '0' };
-      savePrivate(join(targetDir, 'compose.env'), saved);
-      savePrivate(join(targetDir, 'apps.env'), appEnvironment(saved, targetDir));
+      // A port collision retries configuration in the same isolated directory.
+      replacePrivate(join(targetDir, 'compose.env'), saved);
+      replacePrivate(join(targetDir, 'apps.env'), appEnvironment(saved, targetDir));
     };
     await phase('configure', async () => {
       mkdirSync(targetDir, { recursive: true, mode: 0o700 });

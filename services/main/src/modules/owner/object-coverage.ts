@@ -19,6 +19,8 @@ export interface ObjectRecoveryStore {
   directory: string;
   workObjects?: ImmutableObjects;
   structureObjects?: ImmutableObjects;
+  /** Maintenance commands may overlap a bounded window of immutable reads. */
+  readConcurrency?: number;
 }
 
 /** A graph reference, including retained anchors and mutable context dependencies. */
@@ -54,28 +56,51 @@ const OBJECT = /^sha256:([0-9a-f]{64})$/;
 const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const record = (value: unknown): string => `${JSON.stringify(value)}\n`;
 
-/** One graph scan, O(Q) engine work and O(M log M) client sort for M manifest references. */
+/** Four predicate-index scans avoid a large OPTIONAL join and its request timeout.
+ * Writers must be quiesced for recovery. O(Q + M log M) work, O(M) references. */
 export async function graphObjectReferences(fuseki: FusekiClient): Promise<GraphObjectReference[]> {
   const result = await fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?graph ?subject ?manifest ?component ?model ?shape WHERE {
-      GRAPH ?graph { ?subject rv:manifest ?manifest .
-        OPTIONAL { ?subject rv:component ?component }
-        OPTIONAL { ?subject rv:modelRevision ?model }
-        OPTIONAL { ?subject rv:shapeRevision ?shape }
-      }
+    SELECT ?graph ?subject ?manifest WHERE {
+      GRAPH ?graph { ?subject rv:manifest ?manifest }
     }`);
   if (!result.results?.bindings) throw new ObjectRecoveryConflict('graph object reference scan is incomplete');
   const references = result.results.bindings.map(row => {
     if (row.graph?.type !== 'uri' || row.subject?.type !== 'uri'
-      || row.manifest?.type !== 'uri' || (row.component && row.component.type !== 'uri')
-      || (row.model && row.model.type !== 'uri') || (row.shape && row.shape.type !== 'uri')) {
+      || row.manifest?.type !== 'uri') {
       throw new ObjectRecoveryConflict('graph object reference is not an IRI');
     }
     return { graph: row.graph.value, subject: row.subject.value,
-      manifest: row.manifest.value, component: row.component?.value ?? null,
-      model: row.model?.value ?? null, shape: row.shape?.value ?? null };
+      manifest: row.manifest.value };
   });
-  for (const reference of references) {
+  const identity = (graph: string, subject: string) => JSON.stringify([graph, subject]);
+  const subjects = new Set(references.map(ref => identity(ref.graph, ref.subject)));
+  const fields = new Map<string, Map<string, string[]>>();
+  for (const [field, predicate] of [['component', 'component'], ['model', 'modelRevision'],
+    ['shape', 'shapeRevision']] as const) {
+    const scanned = await fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?graph ?subject ?value WHERE { GRAPH ?graph { ?subject rv:${predicate} ?value } }`);
+    if (!scanned.results?.bindings) throw new ObjectRecoveryConflict('graph object reference scan is incomplete');
+    const values = new Map<string, string[]>();
+    for (const row of scanned.results.bindings) {
+      const key = identity(row.graph?.value ?? '', row.subject?.value ?? '');
+      if (!subjects.has(key)) continue;
+      if (row.value?.type !== 'uri') throw new ObjectRecoveryConflict('graph object reference is not an IRI');
+      const found = values.get(key) ?? [];
+      found.push(row.value.value);
+      values.set(key, found);
+    }
+    fields.set(field, values);
+  }
+  // Preserve the OPTIONAL join's Cartesian product, including absent metadata.
+  const expanded: GraphObjectReference[] = [];
+  for (const ref of references) {
+    const key = identity(ref.graph, ref.subject);
+    for (const component of fields.get('component')!.get(key) ?? [null])
+      for (const model of fields.get('model')!.get(key) ?? [null])
+        for (const shape of fields.get('shape')!.get(key) ?? [null])
+          expanded.push({ ...ref, component, model, shape });
+  }
+  for (const reference of expanded) {
     if (!reference.graph || !reference.subject || !MANIFEST.test(reference.manifest)
       || (reference.component !== null && !reference.component)
       || (reference.model !== null && !reference.model)
@@ -83,8 +108,8 @@ export async function graphObjectReferences(fuseki: FusekiClient): Promise<Graph
       throw new ObjectRecoveryConflict('graph object reference is malformed');
     }
   }
-  references.sort((a, b) => record(a).localeCompare(record(b)));
-  return references;
+  expanded.sort((a, b) => record(a).localeCompare(record(b)));
+  return expanded;
 }
 
 async function exactBytes(store: ObjectRecoveryStore, digest: string,
@@ -129,6 +154,9 @@ export async function captureObjectRecoveryCoverage(
   fuseki: FusekiClient, store: ObjectRecoveryStore, retainedDigests?: Set<string>,
 ): Promise<ObjectRecoveryCoverage> {
   if (!store?.directory) throw new ObjectRecoveryConflict('immutable object owner is unavailable');
+  const concurrency = store.readConcurrency ?? 1;
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 32)
+    throw new ObjectRecoveryConflict('immutable read concurrency is outside 1..32');
   const references = await graphObjectReferences(fuseki);
   const referenceHash = createHash('sha256');
   const anchorHash = createHash('sha256');
@@ -136,7 +164,7 @@ export async function captureObjectRecoveryCoverage(
   let anchorCount = 0;
   const objects = new Map<string, number>();
   const manifests = new Map<string, Record<string, unknown>>();
-  const payloads = new Map<string, ParsedPayload>();
+  const payloads = new Map<string, Promise<ParsedPayload>>();
   const manifestObject = async (digest: string, kind: 'work' | 'structure' = 'work'):
     Promise<Record<string, unknown>> => {
     const cached = manifests.get(digest);
@@ -153,16 +181,19 @@ export async function captureObjectRecoveryCoverage(
   const payloadObject = async (digest: string): Promise<ParsedPayload> => {
     const cached = payloads.get(digest);
     if (cached) return cached;
-    const bytes = await exactBytes(store, digest);
-    let body: Record<string, unknown>;
-    try { body = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; }
-    catch { throw new ObjectRecoveryConflict('committed payload is corrupt', 'corrupt'); }
-    const parsed = { length: bytes.length, component: body.component,
-      format: body.format, state: body.state };
-    objects.set(digest, bytes.length);
-    retainedDigests?.add(digest);
-    payloads.set(digest, parsed);
-    return parsed;
+    const pending = (async () => {
+      const bytes = await exactBytes(store, digest);
+      let body: Record<string, unknown>;
+      try { body = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>; }
+      catch { throw new ObjectRecoveryConflict('committed payload is corrupt', 'corrupt'); }
+      const parsed = { length: bytes.length, component: body.component,
+        format: body.format, state: body.state };
+      objects.set(digest, bytes.length);
+      retainedDigests?.add(digest);
+      return parsed;
+    })();
+    payloads.set(digest, pending);
+    return pending;
   };
   const structureObject = async (digest: string): Promise<Uint8Array> => {
     const bytes = await exactBytes(store, digest, 'structure');
@@ -224,6 +255,20 @@ export async function captureObjectRecoveryCoverage(
     await tree(manifest.order.page, 'order', manifest.order.level, manifest.order.count);
     checkedStructureRoots.add(key);
   };
+  // Unique Work manifests share payload promises; Structure's paged traversal
+  // keeps its own serial validation. Settle a failed window before cleanup.
+  const workDigests = [...new Set(references
+    .filter(ref => ref.model !== 'https://rezics.com/definition/structure-composition-v1')
+    .map(ref => ref.manifest.slice(-64)))];
+  if (concurrency > 1) for (let offset = 0; offset < workDigests.length; offset += concurrency) {
+    const results = await Promise.allSettled(workDigests.slice(offset, offset + concurrency).map(async digest => {
+      const manifest = await manifestObject(digest);
+      if (typeof manifest.payload === 'string' && /^sha256:[0-9a-f]{64}$/.test(manifest.payload))
+        await payloadObject(manifest.payload.slice(7));
+    }));
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  }
   for (const ref of references) {
     referenceHash.update(record(ref));
     if (ref.graph === GRAPHS.revisions) {

@@ -351,7 +351,11 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       if (!coverage.content || !coverage.objects)
         throw new Error('Complete owner coverage is missing');
       await assertContentRecoveryCoverage(restoredPools.content, fuseki, coverage.content);
-      await assertObjectRecoveryCoverage(fuseki, objectStore(context!.apps), coverage.objects);
+      await assertObjectRecoveryCoverage(
+        fuseki,
+        objectStore(context!.apps, budget),
+        coverage.objects,
+      );
       for (const sealedSet of manifest.sealedDeletionSets)
         await assertDeletionRecoverySet(
           restoredPools.account,

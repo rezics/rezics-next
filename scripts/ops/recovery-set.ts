@@ -182,6 +182,8 @@ export class RecoveryBudget {
       const result = await work();
       this.remaining();
       return result;
+    } catch (error) {
+      throw new Error(`Recovery phase ${name} failed; serving remains held`, { cause: error });
     } finally {
       this.phases[name] = Math.round(performance.now() - at);
     }

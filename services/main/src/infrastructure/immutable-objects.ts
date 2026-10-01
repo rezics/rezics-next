@@ -23,6 +23,8 @@ export interface S3ObjectOptions {
   region?: string;
   /** One privacy/retention domain. A digest in another domain has a distinct key. */
   prefix: string;
+  /** Recovery reads share the enclosing command's remaining deadline. */
+  readSignal?: () => AbortSignal;
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -42,6 +44,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
   private readonly signer: AwsClient;
   private readonly bucketUrl: string;
   private readonly prefix: string;
+  private readonly readSignal: (() => AbortSignal) | undefined;
 
   constructor(options: S3ObjectOptions) {
     const endpoint = new URL(options.endpoint);
@@ -56,6 +59,7 @@ export class S3ImmutableObjects implements ImmutableObjects {
     const region = options.region ?? 'us-east-1';
     this.bucketUrl = `${endpoint.origin}/${options.bucket}`;
     this.prefix = options.prefix;
+    this.readSignal = options.readSignal;
     this.signer = new AwsClient({ accessKeyId: options.accessKeyId,
       secretAccessKey: options.secretAccessKey, service: 's3', region, retries: 0 });
   }
@@ -115,7 +119,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
   async get(digest: string): Promise<Uint8Array> {
     const key = this.key(digest);
     let response: Response;
-    try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`, { method: 'GET' }); }
+    try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
+      { method: 'GET', signal: this.readSignal?.() }); }
     catch { throw new ObjectUnavailable('committed immutable object is unavailable'); }
     if (!response.ok) throw new ObjectUnavailable(`committed immutable object is unavailable (${response.status})`);
     let bytes: Uint8Array;

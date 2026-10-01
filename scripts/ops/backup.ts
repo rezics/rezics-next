@@ -66,7 +66,9 @@ export async function releaseInputs(): Promise<Record<string, string>> {
     ),
   };
 }
-export function objectStore(apps: Record<string, string>) {
+export function objectStore(apps: Record<string, string>, budget?: RecoveryBudget) {
+  // Share one command deadline, rather than allocating a timer per object.
+  const signal = budget ? AbortSignal.timeout(budget.remaining()) : undefined;
   const store = (prefix: string) =>
     new S3ImmutableObjects({
       endpoint: apps.MAIN_S3_ENDPOINT!,
@@ -75,11 +77,20 @@ export function objectStore(apps: Record<string, string>) {
       accessKeyId: apps.MAIN_S3_ACCESS_KEY!,
       secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
       prefix,
+      ...(budget
+        ? {
+            readSignal: () => {
+              budget.remaining();
+              return signal!;
+            },
+          }
+        : {}),
     });
   return {
     directory: apps.MAIN_OBJECT_DIRECTORY!,
     workObjects: store('semantic/work/'),
     structureObjects: store('semantic/structure/'),
+    readConcurrency: 32,
   };
 }
 
@@ -291,7 +302,7 @@ export async function backupRecoverySet(
             pools.relay,
             context.apps.MAIN_RELAY_CONSUMER!,
             pools.content,
-            objectStore(context.apps),
+            objectStore(context.apps, budget),
           );
         } catch (error) {
           if (

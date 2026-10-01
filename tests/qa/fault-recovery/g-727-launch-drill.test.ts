@@ -69,6 +69,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
   const key = Bun.env.RECOVERY_MANIFEST_HMAC_KEY ?? randomBytes(32).toString('hex');
   let custody: ReturnType<typeof recoveryTestCustody> | undefined;
   const pools: Pool[] = [];
+  let phase = 'preparation';
   try {
     if (!preparedSource) {
       const profile = (requestedProfile ?? 'small') as FixtureProfile;
@@ -119,14 +120,17 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       apps.FUSEKI_MAINTENANCE_TOKEN,
       apps.FUSEKI_COMMAND_TOKEN,
     );
+    phase = 'source Work count';
     const count =
       await fuseki.query(`SELECT (COUNT(?work) AS ?n) WHERE { GRAPH <${GRAPHS.current}> {
       ?work a <https://schema.org/CreativeWork> } }`);
     expect(count.results?.bindings[0]?.n?.value).toBe(expectedWorks);
+    phase = 'source relay checkpoint';
     await initializeRelayCheckpoint(owners.relay, apps.MAIN_RELAY_CONSUMER!, apps.MAIN_DATA_EPOCH!);
     while (await relayMainOutboxOnce(fuseki, owners.relay, apps.MAIN_RELAY_CONSUMER!)) {
       /* drain handoff */
     }
+    phase = 'source recovery probes';
     const probes = await captureRecoveryProbes(
       { apps, pools: owners, fuseki },
       {
@@ -139,6 +143,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       },
     );
     if (!retainedRecipient) custody = recoveryTestCustody(custodyDirectory, nonce);
+    phase = 'backup';
     const backup = await backupRecoverySet({
       out: set,
       recipient: retainedRecipient ?? custody!.recipient,
@@ -149,6 +154,7 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
     });
     const backupEvidence = JSON.parse(readFileSync(join(set, 'backup-evidence.json'), 'utf8'));
     expect(backupEvidence.elapsedMs).toBeLessThanOrEqual(600_000);
+    phase = 'restore';
     const restored = await restoreRecoverySet({
       set,
       project: `rezics-qa-${targetId}`,
@@ -184,6 +190,8 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
         2,
       ),
     );
+  } catch (error) {
+    throw new Error(`Launch recovery drill failed during ${phase}`, { cause: error });
   } finally {
     await Promise.allSettled(pools.map((pool) => pool.end()));
     try {

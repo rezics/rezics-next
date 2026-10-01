@@ -12,6 +12,7 @@ import { OwnerOperations } from '../../../services/main/src/modules/owner/operat
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
+import { objectStore } from '../../../scripts/ops/backup.ts';
 import type { RestoredContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
 
 export type RecoveryProbeSource = Pick<RestoredContext, 'apps' | 'pools' | 'fuseki'>;
@@ -198,6 +199,7 @@ export function recoveryChecks(
     },
     reconcile: async (context, body, idempotencyKey) => {
       expect(verifiedBeforeRelease).toBe(true);
+      const objects = objectStore(context.apps, context.budget);
       const env = {
         fuseki: context.fuseki,
         lineage: {
@@ -205,6 +207,7 @@ export function recoveryChecks(
           routingEpoch: context.apps.MAIN_ROUTING_EPOCH!,
         },
         objectDirectory: context.apps.MAIN_OBJECT_DIRECTORY!,
+        workObjects: objects.workObjects,
       };
       const registry = new AccessAdmissionRegistry(context.pools.access);
       const operations = new OwnerOperations(context.pools.relay, env, {
@@ -212,7 +215,7 @@ export function recoveryChecks(
         accessPool: context.pools.access,
         contentPool: context.pools.content,
         hmacKey: key,
-        objectStore: { directory: env.objectDirectory },
+        objectStore: objects,
       });
       const app = createMainApp(context.fuseki, {
         environment: env,
