@@ -1,39 +1,15 @@
 # Implementation questions and experiments
 
-The [social-reading reference](reference-social-reading.md) compares public
-reading, community and feed experiences for the current frontend Goal.
-
-The maintainer selected **PostgreSQL + Jena/TDB2/jena-text/Lucene** on 2026-09-24
-after the [storage architecture evaluation](storage-architecture.md). The
-[architecture owner](../architecture/overview.md) and storage/search contracts
-now define implementation. PostgreSQL owns Content bodies/revisions, drafts and
-operations; Jena owns semantic aggregates and joint graph/text execution. The
-first body binding extracts derived RDF MatchUnits and uses Jena's embedded
-Lucene. OpenSearch and SQL text extensions are not startup dependencies.
-
-The report retains measurements and complete-system comparisons as decision
-evidence and possible responses to a material failed gate. It does not leave the
-startup engine unselected. Wikimedia informs ingestion/recovery; proprietary
-MarkLogic/GraphDB/Siren systems are architecture references only. Required
-deployment components must be self-hosted open-source or suitable source-available.
-Native i18n, exact history with owner adapters, delayed content visibility and
-fixed whole-request budgets remain requirements. P0.8 qualifies the complete
-Content/publication/search/recovery path; prior component probes do not pass it.
-
-Apache Jena Fuseki + TDB2 + jena-text/Lucene is the current runtime baseline.
-Native Semantic Web, Main Version, Space/context classification and universal
-package management remain product requirements.
-Research resolves their implementation details. Main uses Elysia 2/Bun over HTTP and
-Access remains a Main module backed by PostgreSQL; a single Fuseki JVM owns graph
-and index files. The [plan](../plan/README.md) distinguishes quickstart substrate,
-authenticated vertical slices and the full retained product requirements.
-
-Results from the retired Fluree architecture remain historical evidence. Their
-engine identities, versions, tables and raw artifacts are preserved; none validates
-Jena, supplies a Jena capacity claim or advances current runtime acceptance.
-
-The [games, mods and software store comparison](reference-stores.md) records
-product references for the current [frontend direction](../plan/frontend.md).
+Research pages keep the evidence behind selected choices and the questions that
+still affect implementation. The [storage architecture evaluation](storage-architecture.md)
+records why PostgreSQL + Jena/TDB2/jena-text/Lucene was selected on 2026-09-24;
+the [architecture owner](../architecture/overview.md) states the result.
+Proprietary MarkLogic/GraphDB/Siren systems were architecture references only:
+required deployment components must be self-hosted open-source or suitable
+source-available. Results from the retired Fluree architecture validate nothing
+about Jena. The [social-reading](reference-social-reading.md) and
+[store](reference-stores.md) comparisons are product references for the
+[frontend direction](../plan/frontend.md).
 
 | Question | Investigation and decision criterion | Owner |
 | --- | --- | --- |
@@ -51,8 +27,7 @@ product references for the current [frontend direction](../plan/frontend.md).
 | History retention and erasure | Verify application-owned immutable RevisionAnchor manifests, retained object payloads and epoch fences through TDB2 backup/restore/movement; history is not supplied by MVCC. | [Jena](../storage/jena.md), [security](../operations/security.md). |
 | Ecosystem adapters | Compare current native-tool semantics against captured manifests/versions; preserve unsupported clauses explicitly. | [Package profiles](../contracts/package-profiles.md). |
 | Placement and resource allocation | Measure disk/network/existing load; assess principal-host concentration and optional remote Account. | [Deployment](../operations/deployment.md). |
-| Jena model-validation integration | [Historical model evidence](model-profile-engine-evidence.md) preserves engine-specific counterexamples. Qualify complete affected-focus validation and all-dependency conditional guards on Jena; ordinary Fuseki updates do not automatically run SHACL. | [Model validation](../implementation/model-profile-validation.md). |
-| Retired interaction mechanisms | [Historical Fluree evidence](retired-interaction-engine-evidence.md) retains the eleven-assertion probe and its limits; it is not Jena evidence or a launch step. | [Jena interactions](../implementation/interactions-and-cache.md). |
+| Jena model-validation integration | Qualify complete affected-focus validation and all-dependency conditional guards on Jena; ordinary Fuseki updates do not automatically run SHACL. | [Model validation](../implementation/model-profile-validation.md). |
 | Executable hosting envelope | Choose admitted runtime/isolation/secrets/cost policies before persistent hosting activation. | [Execution design](ai-hub-execution.md). |
 | Tag, filter and reverse-query references | [AO3 and VNDB](reference-ao3-vndb.md), with MyAnimeList as contrast: which of their tag, release, list and value pages the Work page, listings and Library should adopt. The query contract already names the shape. | [Queries](../contracts/queries.md), [frontend](../plan/frontend.md). |
 | Reader and author patterns on web-novel sites | [Web-novel reference](reference-webnovel.md): what 起点, 晋江, KadoKado, Royal Road, Webnovel and Wattpad do well for serials, and which of those patterns the reader, Studio and Fiction zone should adopt. | [Frontend](../plan/frontend.md), [creation](../contracts/creation.md). |

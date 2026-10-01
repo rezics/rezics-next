@@ -12,9 +12,7 @@ Access's [interaction decisions](../../services/main/src/modules/access/interact
 admit or refuse interactions. They do not implement durable like/favorite state,
 desired-state commands, revisions, receipts, outbox or bounded reads. Those
 commands and their denied, concurrent, stale and recovery outcomes need a
-separate feature delivery and acceptance. The historical
-[Fluree probe](../research/retired-interaction-engine-evidence.md) is not Jena
-qualification. [Commands](../contracts/commands.md),
+separate feature delivery and acceptance. [Commands](../contracts/commands.md),
 [votes/references](../contracts/votes-and-references.md) and the
 [authorization bridge](authorization-bridge.md) remain the applicable contracts.
 

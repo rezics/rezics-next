@@ -29,5 +29,6 @@ ledger, saved Fluree configuration or project dependency is modified.
 
 Some successful checks deliberately demonstrate a missing guarantee: both anchor
 states conform, OWL infers equal identity, and removing a class target leaves no
-validation focus. Their interpretation is recorded in the
-[historical engine evidence](../../../docs/research/model-profile-engine-evidence.md).
+validation focus. They are Fluree-era lessons, not Jena evidence; the
+[validation procedure](../../../docs/implementation/model-profile-validation.md)
+records how the current command path closes those gaps.
