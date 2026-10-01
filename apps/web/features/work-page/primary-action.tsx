@@ -23,15 +23,16 @@ export type NextAction =
   | { kind: 'read'; start: NonNullable<ReadStart> }
   /** The next part of a composition, as Main names it. `continue` once the reader has finished a part. */
   | { kind: 'part'; mode: 'continue' | 'start'; href: string; part: string | null }
-  /** The Work has releases and nothing says which edition the reader uses. */
-  | { kind: 'choose' };
+  /** The reader has no edition for what comes next: the page that lets them choose one. */
+  | { kind: 'choose'; href: string; part: string | null };
 
 type Series = Extract<ProgressSummary, { scope: 'disclosed-composition' }>;
 
 /**
- * Which action leads, in this order: text the reader can open here, the next part Main names, choosing an
- * edition when releases exist and none is chosen. A Work with none of these has no primary action, and the
- * shelf leads instead.
+ * Which action leads, in this order: text the reader can open here, the next part Main names (its
+ * `primaryAction`), choosing an edition when releases exist and none is chosen. A language-only preference is a
+ * choice ("any edition in Japanese"), so only a reader with neither an edition nor a preference is asked. A Work
+ * with none of these has no primary action, and the shelf leads instead.
  */
 export function nextAction({ start, progress, preference, releases }: {
   start: ReadStart; progress: Loaded<ProgressSummary> | null; preference: Loaded<EditionPreference | null> | null;
@@ -40,33 +41,37 @@ export function nextAction({ start, progress, preference, releases }: {
 }): NextAction | null {
   if (start) return { kind: 'read', start };
   const series: Series | null = progress?.ok && progress.data.scope === 'disclosed-composition' ? progress.data : null;
-  const next = series?.next;
-  const chosen = Boolean(preference?.ok && preference.data?.edition);
-  // A part with no text in the reader's language is a choice of edition, not something to start.
-  if (next && next.reason !== 'awaiting_chosen_language') {
-    const work = idOf(next.part.work);
-    if (work) {
-      return { kind: 'part', mode: series?.furthestCompleted ? 'continue' : 'start', href: `/w/${work}`,
-        part: next.part.displayLabel || null };
+  const target = series?.primaryAction;
+  const work = target ? idOf(target.work) : null;
+  if (series && target && work) {
+    const part = series.next?.part.displayLabel || null;
+    const chosen = Boolean(target.edition || series.preference);
+    // A part with no text in the reader's language is a choice of edition, not something to start.
+    if (!chosen || series.next?.reason === 'awaiting_chosen_language') {
+      return { kind: 'choose', href: `/w/${work}#${hubAnchors.availability}`, part };
     }
+    return { kind: 'part', mode: series.furthestCompleted ? 'continue' : 'start', href: `/w/${work}`, part };
   }
-  return releases > 0 && !chosen ? { kind: 'choose' } : null;
+  const chosen = Boolean(preference?.ok && preference.data?.edition);
+  return releases > 0 && !chosen ? { kind: 'choose', href: `#${hubAnchors.availability}`, part: null } : null;
 }
 
 export function NextActionView({ action, workRef, locale, messages }: {
   action: NextAction; workRef: WorkAt; locale: UiLocale; messages: WorkPageMessages;
 }) {
   if (action.kind === 'read') return <ReadButton workRef={workRef} start={action.start} messages={messages} />;
+  const t = materializeData(messages, { locale });
   const button = cn(buttonVariants({ size: 'lg', pill: true }), 'w-full');
-  if (action.kind === 'choose') {
-    return <a href={`#${hubAnchors.availability}`} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}><LayersIcon aria-hidden="true" />
-      {messages.chooseRelease}</a>;
-  }
+  const choose = action.kind === 'choose';
+  // `#availability` is this page's own section; anything else is another page.
+  const link = <>{choose ? <LayersIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}
+    {choose ? t.chooseRelease : action.mode === 'continue' ? t.continueNext : t.startFirst}</>;
   return <div className="grid gap-1.5">
-    <Link href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>
-      <PlayIcon aria-hidden="true" />{action.mode === 'continue' ? messages.continueNext : messages.startFirst}</Link>
-    {action.part ? <p className="truncate text-center text-muted-foreground text-xs">
-      {materializeData(messages, { locale }).upNext({ part: action.part })}</p> : null}
+    {action.href.startsWith('#')
+      ? <a href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>{link}</a>
+      : <Link href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>{link}</Link>}
+    {action.part ? <p className="truncate text-center text-muted-foreground text-xs">{t.upNext({ part: action.part })}</p>
+      : null}
   </div>;
 }
 

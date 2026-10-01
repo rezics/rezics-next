@@ -24,7 +24,7 @@ import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
 import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage, CreditPage, Loaded, RatingRead,
   WorkHeader, WorkStats } from './types.ts';
 import type { ReadStart } from './read.ts';
-import { hubSections } from './hub.ts';
+import { hubLabels, hubSections } from './hub.ts';
 import { OverviewLayout, ReadButton, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 
@@ -55,7 +55,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
     .map(credit => ({ name: credit.displayName ?? credit.key,
       href: authorHref({ kind: 'external', key: credit.key }) })) : []];
   return <WorkFrame workRef={fixture.workRef} work={work} authors={authors} locale={locale} messages={t}
-    readerActions={readerActions}
+    readerActions={readerActions} sections={hubLabels(t, hubSections)}
     signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=%2F${locale}%2Fw%2F${fixture.workRef}`}
     credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}
     ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} stats={stats} locale={locale} messages={t} />
@@ -148,9 +148,10 @@ export const Global: Story = {
     // Each opens its Concept's page.
     await expect(within(values).getByRole('link', { name: 'Adventure' }))
       .toHaveAttribute('href', expect.stringMatching(/^\/en\/concepts\/[0-9a-f-]{36}$/));
-    // What readers also enjoyed follows the details, before the ratings, as on Goodreads.
+    // Lists and discovery come after ratings and reviews, as the Work page documents.
     const regions = canvas.getAllByRole('region').map(region => region.getAttribute('aria-labelledby'));
-    await expect(regions.indexOf('work-also-co-readers')).toBeLessThan(regions.indexOf('work-ratings'));
+    await expect(regions.indexOf('work-also-co-readers')).toBeGreaterThan(regions.indexOf('work-ratings'));
+    await expect(regions.indexOf('work-ratings')).toBeLessThan(regions.indexOf('work-adoption'));
     await expect(within(canvas.getByRole('region', { name: 'Readers also enjoyed' })).getAllByRole('article'))
       .toHaveLength(9);
     await expect(within(canvas.getByRole('region', { name: 'Communities' })).getByRole('link', { name: /Tidewater Readers/ }))
@@ -478,7 +479,9 @@ export const LongCjkTitle: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveAttribute('lang', 'zh-Hans');
-    await expect(canvas.getByRole('link', { name: '概览' })).toHaveAttribute('aria-current', 'page');
+    // Tabs give way to "On this page" on a phone.
+    await expect(canvas.getByRole('button', { name: '本页内容' })).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: '概览' })).toBeNull();
     await expect(canvas.getByRole('region', { name: '评分' })).toHaveTextContent('1,287 个评分');
     await expect(canvas.getByRole('link', { name: '214 篇书评' })).toHaveAttribute('href', '#work-reviews');
     await expect(canvas.getByText('38 人正在读')).toBeVisible();

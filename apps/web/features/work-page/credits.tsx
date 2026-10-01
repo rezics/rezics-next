@@ -46,26 +46,25 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
     ...external.map(credit => credit.displayName ?? credit.key)]);
   const others = (['translator', 'editor'] as const).map(role => ({ role,
     people: native.filter(credit => credit.role === role) })).filter(group => group.people.length);
-  // Centred under the cover on a phone, beside it from lg, as the title is.
+  // Start-aligned beside the cover, as the title is; a long name wraps instead of widening a phone's column.
   return <div className="grid gap-1.5">
-    {authors.length || external.length ? <p className="flex flex-wrap items-baseline justify-center gap-y-1
-      font-work-title text-foreground/85 text-xl sm:text-2xl lg:justify-start">
+    {authors.length || external.length ? <p className="flex flex-wrap items-baseline justify-start gap-y-1
+      font-work-title text-foreground/85 text-lg sm:text-2xl">
       <span className="sr-only">{authors.length + external.length > 1 ? t.authors : t.author}: </span>
-      {authors.map((credit, index) => <span key={credit.id} className="whitespace-nowrap">{index ? separator : null}
+      {authors.map((credit, index) => <span key={credit.id} className="min-w-0 max-w-full [overflow-wrap:anywhere]">{index ? separator : null}
         <Link href={authorHref({ kind: 'agent', handle: credit.handle })}
         title={`@${credit.handle}`}
         className={authorLink}><LocalizedText text={contentText(credit.displayName)} /></Link></span>)}
       {external.map((credit, index) => {
         const key = openLibraryAuthorKey(credit.key);
-        return <span key={credit.id} className="whitespace-nowrap">{authors.length + index ? separator : null}
+        return <span key={credit.id} className="min-w-0 max-w-full [overflow-wrap:anywhere]">{authors.length + index ? separator : null}
           <Link href={authorHref({ kind: 'external', key: credit.key })}
           title={credit.displayName ? t.openLibraryListed : undefined}
           className={cn(authorLink, !credit.displayName && 'font-sans font-medium text-primary text-sm')}>
           {credit.displayName ? <LocalizedText text={contentText(credit.displayName)} /> : t.openLibraryAuthor({ key })}</Link></span>;
       })}
     </p> : null}
-    {others.length ? <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-muted-foreground text-sm
-      lg:justify-start">
+    {others.length ? <p className="flex flex-wrap justify-start gap-x-4 gap-y-1 text-muted-foreground text-sm">
       {others.map(group => <span key={group.role}>
         {group.role === 'translator' ? t.translatedBy : t.editedBy}{' '}
         {group.people.map((credit, index) => <span key={credit.id}>{index ? ', ' : ''}

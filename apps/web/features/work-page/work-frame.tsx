@@ -15,7 +15,7 @@ import type { ReadStart } from './read.ts';
 import { type WorkAt, workHref } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { WorkHeader } from './work-header.tsx';
-import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, hubAnchors } from './hub.ts';
+import { ACTION_ATTRIBUTE, ACTION_ID, type HubSection, hubAnchors, hubSections } from './hub.ts';
 import { WorkTabs } from './work-tabs.tsx';
 import { OnThisPage, StickyAction } from './work-nav.tsx';
 import { type WorkExperience, showsBookControls, workExperience } from '../entity-page/experience.ts';
@@ -84,7 +84,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
         <div className="grid min-w-0 gap-5 border-border/60 border-b pb-6 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="grid min-w-0 content-start gap-3">
             <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale}
-              messages={messages} compact />
+              messages={messages} />
             {shortcuts}
           </div>
           <div id={ACTION_ID} className="flex flex-wrap content-start items-center gap-2 sm:max-w-56 sm:flex-col sm:items-stretch">
@@ -120,7 +120,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
         </div>
       </div>
       <div className="col-start-2 row-start-1 grid min-w-0 content-start gap-3 lg:col-start-2">
-        <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale} messages={messages} compact />
+        <WorkHeader work={work} credits={credits} ratingLine={ratingLine} locale={locale} messages={messages} />
         {shortcuts}
       </div>
       <div className="col-span-2 row-start-3 grid min-w-0 content-start gap-8 lg:col-span-1 lg:col-start-2 lg:row-start-2">
@@ -163,7 +163,7 @@ export function ReadButton({ workRef, start, messages }: {
  */
 export function OverviewLayout({ plan, type, about, facts, classification, availability, parts, wiki, scopeBar, ratings,
   reviews, adoption, discussion, alsoEnjoyed, author, record, messages }: {
-  /** The sections the Work's projection binds, in the documented order (`hubPlan`). */
+  /** The sections the Work's projection binds (`hubPlan`); they are always drawn in the documented order. */
   plan: readonly HubSection[];
   /** A recipe, prompt, skill or guide leads the About section for types that have one. */
   type?: ReactNode;
@@ -203,7 +203,7 @@ export function OverviewLayout({ plan, type, about, facts, classification, avail
     lists: <>{alsoEnjoyed}{author}</>,
   };
   return <div className="grid min-w-0 gap-10">
-    {plan.map(section => <div key={section} id={hubAnchors[section]} data-hub-section={section}
+    {hubSections.filter(section => plan.includes(section)).map(section => <div key={section} id={hubAnchors[section]} data-hub-section={section}
       className="grid min-w-0 scroll-mt-20 content-start gap-8 empty:hidden">{slots[section]}</div>)}
     {record}
   </div>;

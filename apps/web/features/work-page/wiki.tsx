@@ -1,11 +1,9 @@
 import { buttonVariants } from '@rezics/ui/button';
 import { BookMarkedIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { readEntityProjection, readRelations, readStatements, sectionOf } from '../entity-page/read.ts';
 import { entityHref } from '../entity-page/route.ts';
-import type { EntityProjection, RelationsPage, StatementPage } from '../entity-page/types.ts';
+import type { RelationsPage } from '../entity-page/types.ts';
 import Link from '../shell/localized-link.tsx';
 import { SummaryLink } from '../work-levels/names.tsx';
 import { copyOf } from '../work-levels/messages.ts';
@@ -13,7 +11,7 @@ import { hubAnchors } from './hub.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import type { Loaded } from './types.ts';
-import { mainCharacters, wikiHref, wikiRealmOf, wikiRoutes } from './wiki.ts';
+import { mainCharacters, wikiHref, wikiRoutes } from './wiki.ts';
 
 // "Explore the wiki": the Work's wiki Zone is its deep end. The section names where the wiki is, shows the
 // Work's main characters as far as the reader has read, and links the Zone's characters, chapter guide and
@@ -81,30 +79,4 @@ export function WikiShortcutView({ realm, locale, messages }: { realm: string | 
   const t = materializeData(messages, { locale });
   return <div><a href={`#${hubAnchors.wiki}`} className={buttonVariants({ variant: 'ghost', size: 'sm', pill: true })}>
     <BookMarkedIcon aria-hidden="true" />{t.wikiShortcut}</a></div>;
-}
-
-/** The Zone a Work's statements name, read once per request for the shortcut and the section. */
-const readWikiZone = cache(async (id: string): Promise<Loaded<string | null>> => {
-  const page = await readEntityProjection(id);
-  if (!page.ok) return page;
-  const statements = sectionOf(page.data, 'statements');
-  if (!statements) return { ok: true, data: null };
-  const read: Loaded<StatementPage> = await readStatements(statements, undefined);
-  return read.ok ? { ok: true, data: wikiRealmOf(read.data.groups) } : read;
-});
-
-export async function WikiSection({ id, locale, messages }: { id: string; locale: UiLocale; messages: WorkPageMessages }) {
-  const zone = await readWikiZone(id);
-  let characters: Loaded<RelationsPage> | null = null;
-  if (zone.ok && zone.data) {
-    const page = await readEntityProjection(id);
-    const relations = page.ok ? sectionOf(page.data as EntityProjection, 'relations') : undefined;
-    characters = relations ? await readRelations(relations, undefined) : null;
-  }
-  return <WikiSectionView wiki={{ zone, characters }} locale={locale} messages={messages} />;
-}
-
-export async function WikiShortcut({ id, locale, messages }: { id: string; locale: UiLocale; messages: WorkPageMessages }) {
-  const zone = await readWikiZone(id);
-  return <WikiShortcutView realm={zone.ok ? zone.data : null} locale={locale} messages={messages} />;
 }

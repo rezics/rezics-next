@@ -49,7 +49,7 @@ describe('title language note', () => {
     }
     expect(languageName('und', 'en')).toBe('Unknown language');
     expect(languageName('und', 'zh-Hans')).toBe('未知语言');
-    expect(languageName('und', 'ja')).toBe('Unknown language');
+    expect(languageName('und', 'ja')).toBe('不明な言語');
     expect(languageName('en', 'zh-Hans')).toBe('英语');
   });
 

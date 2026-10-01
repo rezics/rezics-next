@@ -45,3 +45,8 @@ export function hubPlan(page: { target: { base: TargetBase }; sections: readonly
 export const ACTION_ID = 'work-primary-action';
 /** Marks the one link that is the page's primary action, so the sticky bar can repeat it. */
 export const ACTION_ATTRIBUTE = 'data-next-action';
+
+/** The overview's sections by name, for "On this page", in the order they are drawn. */
+export const hubLabels = (t: Record<`section${Capitalize<HubSection>}`, string>, plan: readonly HubSection[]) =>
+  hubSections.filter(section => plan.includes(section)).map(section => ({ id: hubAnchors[section],
+    label: t[`section${section[0]!.toUpperCase()}${section.slice(1)}` as `section${Capitalize<HubSection>}`] }));

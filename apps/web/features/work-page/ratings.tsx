@@ -121,7 +121,7 @@ export function RatingLine({ ratings, stats, locale, messages }: {
   const counts = stats?.ok ? stats.data : null;
   const reading = counts ? <ReadingNow count={counts.reading} locale={locale} t={t} /> : null;
   const want = counts ? <WantToRead count={counts.wantToRead} locale={locale} /> : null;
-  const group = 'grid justify-items-center gap-1.5 lg:justify-items-start';
+  const group = 'grid justify-items-start gap-1.5';
   if (!ratings.ok || ratings.data.summary.status !== 'available' || !ratings.data.summary.scale) return <>{reading}{want}</>;
   const { summary } = ratings.data;
   if (!summary.count) {
@@ -131,7 +131,7 @@ export function RatingLine({ ratings, stats, locale, messages }: {
     {counted(counts.reviews, t.reviewCount, t.reviewCountAtLeast, locale)}</Link> : null;
   return <div className={group}>
     <Mean summary={summary} locale={locale} messages={messages} size="md" href={`#${RATINGS_REGION}`} reviews={reviews}
-      className="justify-center lg:justify-start" />
+      className="justify-start" />
     {reading}
     {want}
   </div>;

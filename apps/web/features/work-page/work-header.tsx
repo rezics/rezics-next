@@ -1,6 +1,5 @@
 import { Badge } from '@rezics/ui/badge';
 import { LocalizedText } from '@rezics/ui/localized-text';
-import { cn } from '@rezics/ui/utils';
 import { LockIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
@@ -41,10 +40,10 @@ export function WorkStats({ work, now, locale, messages }: {
   const stats = serialStats(work, now, locale, materializeData(messages, { locale }));
   if (stats.length < 2) return null;
   // On a phone the cells narrow their padding and share what is left, so four facts stay on one line.
-  return <dl className="flex flex-wrap justify-center divide-x divide-border/70 rounded-2xl border border-border/60
-    py-2.5 lg:justify-start">
-    {stats.map(stat => <div key={stat.term} className="grid flex-auto gap-0.5 whitespace-nowrap px-2.5 text-center
-      sm:min-w-20 sm:flex-none sm:px-4 lg:text-start">
+  return <dl className="flex max-w-full flex-wrap justify-start divide-x divide-border/70 rounded-2xl border
+    border-border/60 py-2.5">
+    {stats.map(stat => <div key={stat.term} className="grid flex-auto gap-0.5 whitespace-nowrap px-2.5 text-start
+      sm:min-w-20 sm:flex-none sm:px-4">
       <dt className="order-last text-muted-foreground text-xs">{stat.term}</dt>
       <dd className="font-semibold text-base tabular-nums">{stat.value}</dd>
     </div>)}
@@ -56,12 +55,11 @@ export function WorkStats({ work, now, locale, messages }: {
  * Work-title face, who made it, the rating summary, a plain line of what it
  * is and, for a serial, its state. Model detail lives in Details below.
  */
-export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale, messages, compact = false }: {
+export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale, messages }: {
   work: Header; credits: ReactNode; ratingLine?: ReactNode;
   /** The moment "Updated 3 days ago" is measured from; stories fix it. */
   now?: Date;
   locale: UiLocale; messages: WorkPageMessages;
-  compact?: boolean;
 }) {
   const t = materializeData(messages, { locale });
   const kindLabel = typeLabel(work.types, locale);
@@ -69,8 +67,8 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
   const single = serialStats(work, now, locale, t);
   const facts = [kindLabel, work.selectedLanguage ? languageName(work.selectedLanguage, locale) : null,
     single.length === 1 ? single[0]!.text : null].filter(fact => fact !== undefined && fact !== null);
-  return <header className={cn('grid min-w-0 content-start gap-3',
-    compact ? 'justify-items-start text-start' : 'justify-items-center text-center lg:justify-items-start lg:text-start')}>
+  // One column that may shrink (`minmax(0, 1fr)`): beside a phone's thumbnail the stats would otherwise widen it.
+  return <header className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start justify-items-start gap-3 text-start">
     {work.disclosure === 'restricted'
       ? <Badge variant="warning" title={t.restrictedHelp}><LockIcon aria-hidden="true" />{t.restricted}</Badge> : null}
     <h1 lang={work.title.language} dir={work.title.direction} className="text-balance font-semibold font-work-title
@@ -83,7 +81,7 @@ export function WorkHeader({ work, credits, ratingLine, now = new Date(), locale
     {work.originalTitle && work.originalTitle.value !== work.title.value
       ? <p className="text-muted-foreground text-sm">{t.originalTitle}{': '}
         <LocalizedText text={work.originalTitle} className="font-work-title text-foreground" /></p> : null}
-    {compact ? <div className="w-full [&_p]:justify-start">{credits}</div> : credits}
+    <div className="w-full [&_p]:justify-start">{credits}</div>
     {ratingLine}
     {facts.length ? <p className="text-muted-foreground text-sm">{facts.join(' · ')}</p> : null}
     <WorkStats work={work} now={now} locale={locale} messages={messages} />

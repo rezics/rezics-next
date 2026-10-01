@@ -40,8 +40,8 @@ import { InvalidScope, OverviewLayout, ReadButton, WorkFrame, WorkPageCover } fr
 import { WorkAbout } from './work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
 import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, Status } from './hub-sections.tsx';
-import { type HubSection, hubPlan } from './hub.ts';
-import { WikiSection, WikiShortcut } from './wiki.tsx';
+import { type HubSection, hubLabels, hubPlan } from './hub.ts';
+import { WikiSection, WikiShortcut } from './wiki-server.tsx';
 import { readEntityProjection } from '../entity-page/read.ts';
 import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { WorkKindActions } from './types/actions.tsx';
@@ -129,11 +129,6 @@ export const readHubPlan = async (id: string): Promise<readonly HubSection[]> =>
   const page = await readEntityProjection(id);
   return hubPlan(page.ok ? page.data : null);
 };
-
-/** The overview's section names, for "On this page". */
-export const hubLabels = (t: WorkPageMessages, plan: readonly HubSection[]) => plan.map(section => ({ id: section,
-  label: { about: t.sectionAbout, availability: t.sectionAvailability, parts: t.sectionParts, wiki: t.sectionWiki,
-    ratings: t.sectionRatings, discussion: t.sectionDiscussion, lists: t.sectionLists }[section] }));
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
 export async function WorkFrameView({ workRef, id, work, locale, messages, children }: Common & {
