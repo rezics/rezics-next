@@ -78,7 +78,6 @@ export default {
   materialLocation: 'Wo die Kopie auf REZICS liegt',
   copyrightGoodFaith: 'Ich glaube in gutem Glauben, dass diese Nutzung weder von der Rechteinhaberin oder dem Rechteinhaber, noch von deren Vertretung oder dem Gesetz erlaubt ist.',
   copyrightPerjury: 'Ich erkläre unter Strafandrohung für falsche Angaben, dass diese Mitteilung zutrifft und dass ich Rechteinhaber bin oder bevollmächtigt, für sie zu handeln.',
-  declarationsRequired: 'Fülle alle Felder aus und setze bei jeder Erklärung ein Häkchen.',
 
   statusTitle: 'Deine Meldung',
   statusIntro: 'Jeder, der die Adresse dieser Seite kennt, kann diese Meldung lesen und uns dazu schreiben. Behalte sie für dich.',
@@ -132,7 +131,6 @@ export default {
   sendRefused: 'Es wurde abgelehnt. Prüfe, was du geschrieben hast.',
   messageRequired: 'Schreibe eine Nachricht.',
   appealHeading: 'Gegen diese Entscheidung Widerspruch einlegen',
-  appealHelp: 'Wenn diese Entscheidung deine eigenen Inhalte oder dein Konto betrifft, sag, warum sie falsch ist. Eine Person, die nicht an der Entscheidung beteiligt war, liest es.',
   appealLabel: 'Warum sollte sie sich ändern?',
   sendAppeal: 'Widerspruch senden',
   counterHeading: 'Gegendarstellung senden',
@@ -169,4 +167,15 @@ export default {
   uploadRejectedBody: 'Dieses Bild kann nicht verwendet werden. Wähle ein anderes.',
   uploadLimited: 'Du hast das Upload-Limit vorerst erreicht. Du kannst es in {time} erneut versuchen.',
   uploadLimitedShort: 'Upload-Limit erreicht',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: 'Bevor du meldest',
+  childSafetyNoCopy: 'Lade das Material nicht herunter, kopiere es nicht, lade es nicht erneut hoch und sende es nicht. Nenne uns stattdessen den Ort und eine kurze Beschreibung.',
+  dangerChild: 'Wenn ein Kind in unmittelbarer Gefahr sein könnte, wende dich an den örtlichen Notruf.',
+  dangerSomeone: 'Wenn jemand in unmittelbarer Gefahr sein könnte, wende dich an den örtlichen Notruf.',
+  cybertip: 'Den Verdacht auf sexuelle Ausbeutung von Kindern kannst du auch direkt an die NCMEC CyberTipline melden.',
+  cybertipLink: 'NCMEC CyberTipline öffnen',
+  fieldRequired: 'Bitte ausfüllen.',
+  confirmRequired: 'Setze für diese Erklärung ein Häkchen, um fortzufahren.',
+  appealHelp: 'Wenn du mit dieser Entscheidung nicht einverstanden bist, sag, warum. Eine Person, die nicht an der Entscheidung beteiligt war, liest es.',
 } satisfies SafetyMessages;

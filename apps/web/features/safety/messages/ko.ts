@@ -78,7 +78,6 @@ export default {
   materialLocation: 'REZICS에서 복제본이 있는 위치',
   copyrightGoodFaith: '이 사용이 권리자, 그 대리인 또는 법률에 의해 허가되지 않았다고 성실하게 믿습니다.',
   copyrightPerjury: '이 통지의 내용이 정확하며 제가 권리자이거나 권리자를 대리할 권한이 있음을 위증 처벌을 전제로 진술합니다.',
-  declarationsRequired: '모든 항목을 입력하고 모든 진술에 체크하세요.',
 
   statusTitle: '내 신고',
   statusIntro: '이 페이지 주소를 아는 사람은 누구나 이 신고를 읽고 저희에게 글을 보낼 수 있습니다. 다른 사람에게 알리지 마세요.',
@@ -132,7 +131,6 @@ export default {
   sendRefused: '거부되었습니다. 작성한 내용을 확인하세요.',
   messageRequired: '메시지를 작성하세요.',
   appealHeading: '이 결정에 이의 제기',
-  appealHelp: '이 결정이 내 콘텐츠나 계정에 영향을 준다면 왜 잘못되었는지 적어 주세요. 결정에 관여하지 않은 사람이 검토합니다.',
   appealLabel: '왜 바뀌어야 하나요?',
   sendAppeal: '이의 제기 보내기',
   counterHeading: '반대 통지 보내기',
@@ -169,4 +167,15 @@ export default {
   uploadRejectedBody: '이 이미지는 사용할 수 없습니다. 다른 이미지를 선택하세요.',
   uploadLimited: '지금은 업로드 한도에 도달했습니다. {time} 후에 다시 시도할 수 있습니다.',
   uploadLimitedShort: '업로드 한도 도달',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: '신고하기 전에',
+  childSafetyNoCopy: '해당 자료를 다운로드, 복사, 재업로드하거나 보내지 마세요. 대신 위치와 간단한 설명을 알려 주세요.',
+  dangerChild: '아동이 즉각적인 위험에 처해 있을 수 있다면 현지 응급 서비스에 연락하세요.',
+  dangerSomeone: '누군가 즉각적인 위험에 처해 있을 수 있다면 현지 응급 서비스에 연락하세요.',
+  cybertip: '아동 성착취가 의심되면 NCMEC CyberTipline에 직접 신고할 수도 있습니다.',
+  cybertipLink: 'NCMEC CyberTipline 열기',
+  fieldRequired: '이 항목을 입력하세요.',
+  confirmRequired: '계속하려면 이 진술에 체크하세요.',
+  appealHelp: '이 결정에 동의하지 않는다면 이유를 적어 주세요. 결정에 관여하지 않은 사람이 검토합니다.',
 } satisfies SafetyMessages;

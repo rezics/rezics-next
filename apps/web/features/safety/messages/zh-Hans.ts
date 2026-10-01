@@ -78,7 +78,6 @@ export default {
   materialLocation: '复制内容在 REZICS 上的位置',
   copyrightGoodFaith: '我善意相信这项使用未经版权人、其代理人或法律授权。',
   copyrightPerjury: '我在伪证罪责之下声明，本通知内容准确，且我是版权人或获授权代表版权人。',
-  declarationsRequired: '请填写所有字段并勾选所有声明。',
 
   statusTitle: '你的举报',
   statusIntro: '任何人只要有这个页面的网址，就能读取这项举报并就此给我们写信。请勿与他人分享。',
@@ -132,7 +131,6 @@ export default {
   sendRefused: '被拒绝了。请检查你写的内容。',
   messageRequired: '请输入消息。',
   appealHeading: '对此决定提出申诉',
-  appealHelp: '如果此决定影响到你自己的内容或账号，请说明为什么不正确。会由未参与此决定的人审阅。',
   appealLabel: '为什么应该改变？',
   sendAppeal: '提交申诉',
   counterHeading: '发出反通知',
@@ -169,4 +167,15 @@ export default {
   uploadRejectedBody: '无法使用这张图片。请选择另一张。',
   uploadLimited: '你目前已达上传上限。你可以在 {time} 后重试。',
   uploadLimitedShort: '已达上传上限',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: '提交举报前',
+  childSafetyNoCopy: '请勿下载、复制、重新上传或发送该内容。请改为告诉我们它的位置，并简要描述。',
+  dangerChild: '如果儿童可能面临紧迫的危险，请联系当地紧急服务。',
+  dangerSomeone: '如果有人可能面临紧迫的危险，请联系当地紧急服务。',
+  cybertip: '你也可以直接向 NCMEC CyberTipline 举报疑似的儿童性剥削。',
+  cybertipLink: '打开 NCMEC CyberTipline',
+  fieldRequired: '请填写此项。',
+  confirmRequired: '请勾选此项声明才能继续。',
+  appealHelp: '如果你不同意这项决定，请说明原因。会由未参与此决定的人审阅。',
 } satisfies SafetyMessages;

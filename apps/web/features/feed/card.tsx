@@ -342,7 +342,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
   const comments = item.target.work ? item.links.comments : null;
   const count = new Intl.NumberFormat(locale, { notation: 'compact' }).format(item.comments.value);
   const plainTitle = card.kind === 'review' ? workTitle : typeof title === 'string' ? title : workTitle;
-  return <PostRow kind={item.kind} href={href} report={item.target.work} position={position} total={total}
+  return <PostRow kind={item.kind} href={href} report={card.kind === 'review' ? null : item.target.work} reportKind="work" position={position} total={total}
     meta={<FeedMeta item={item} end={<>
       {item.realm ? <FollowRealmButton realm={item.realm} /> : null}
       <MoreMenu item={item} share={href ? { href, title: plainTitle } : null} onDismiss={setDismissed} />

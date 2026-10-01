@@ -78,7 +78,6 @@ export default {
   materialLocation: 'Dónde está la copia en REZICS',
   copyrightGoodFaith: 'Creo de buena fe que este uso no está autorizado por el titular, su representante ni la ley.',
   copyrightPerjury: 'Declaro bajo pena de perjurio que esta notificación es exacta y que soy el titular o estoy autorizado/a para actuar en su nombre.',
-  declarationsRequired: 'Rellena todos los campos y marca todas las declaraciones.',
 
   statusTitle: 'Tu denuncia',
   statusIntro: 'Cualquiera que tenga la dirección de esta página puede leer esta denuncia y escribirnos sobre ella. No la compartas.',
@@ -132,7 +131,6 @@ export default {
   sendRefused: 'Se rechazó. Revisa lo que escribiste.',
   messageRequired: 'Escribe un mensaje.',
   appealHeading: 'Apelar esta decisión',
-  appealHelp: 'Si esta decisión afecta a tu propio contenido o cuenta, explica por qué es errónea. Lo lee una persona que no tomó la decisión.',
   appealLabel: '¿Por qué debería cambiar?',
   sendAppeal: 'Enviar apelación',
   counterHeading: 'Enviar una contranotificación',
@@ -169,4 +167,15 @@ export default {
   uploadRejectedBody: 'Esta imagen no se puede usar. Elige otra.',
   uploadLimited: 'Has alcanzado el límite de subidas por ahora. Puedes intentarlo de nuevo en {time}.',
   uploadLimitedShort: 'Límite de subidas alcanzado',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: 'Antes de denunciar',
+  childSafetyNoCopy: 'No descargues, copies, vuelvas a subir ni envíes ese material. En su lugar, indícanos dónde está y descríbelo brevemente.',
+  dangerChild: 'Si un menor puede estar en peligro inmediato, contacta con los servicios de emergencia locales.',
+  dangerSomeone: 'Si alguien puede estar en peligro inmediato, contacta con los servicios de emergencia locales.',
+  cybertip: 'También puedes denunciar directamente una sospecha de explotación sexual infantil a la CyberTipline del NCMEC.',
+  cybertipLink: 'Abrir la CyberTipline del NCMEC',
+  fieldRequired: 'Rellena este campo.',
+  confirmRequired: 'Marca esta declaración para continuar.',
+  appealHelp: 'Si no estás de acuerdo con esta decisión, explica por qué. Lo lee una persona que no tomó la decisión.',
 } satisfies SafetyMessages;

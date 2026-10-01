@@ -92,7 +92,6 @@ const en = {
   materialLocation: 'Where the copy is on REZICS',
   copyrightGoodFaith: 'I believe in good faith that this use is not authorized by the owner, its agent or the law.',
   copyrightPerjury: 'I state under penalty of perjury that this notice is accurate and that I am the owner or authorized to act for the owner.',
-  declarationsRequired: 'Fill in every field and tick every statement.',
 
   // The private status page
   statusTitle: 'Your report',
@@ -148,7 +147,6 @@ const en = {
   sendRefused: 'It was refused. Check what you wrote.',
   messageRequired: 'Write a message.',
   appealHeading: 'Appeal this decision',
-  appealHelp: 'If this decision affects your own content or account, say why it is wrong. A person who did not make the decision reads it.',
   appealLabel: 'Why should it change?',
   sendAppeal: 'Send appeal',
   counterHeading: 'Send a counter-notice',
@@ -187,6 +185,17 @@ const en = {
   uploadRejectedBody: 'This image cannot be used. Choose another one.',
   uploadLimited: 'You have reached the upload limit for now. You can try again in {time}.',
   uploadLimitedShort: 'Upload limit reached',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: 'Before you report',
+  childSafetyNoCopy: 'Do not download, copy, re-upload or send the material. Give us its location and a brief description instead.',
+  dangerChild: 'If a child may be in immediate danger, contact local emergency services.',
+  dangerSomeone: 'If someone may be in immediate danger, contact local emergency services.',
+  cybertip: 'You may also report suspected child sexual exploitation directly to the NCMEC CyberTipline.',
+  cybertipLink: 'Open the NCMEC CyberTipline',
+  fieldRequired: 'Fill this in.',
+  confirmRequired: 'Tick this statement to continue.',
+  appealHelp: 'If you disagree with this decision, say why. A person who did not make the decision reads it.',
 };
 
 export type SafetyMessages = typeof en;

@@ -45,7 +45,7 @@ export const Open: Story = {
     await expect(write.url).toBe(`/en/report/relay/v1/public-reports/${caseId}/correspondence`);
     await expect(write.credential).toBe(credential);
     await expect(write.url).not.toContain(credential);
-    await expect(write.body).toMatchObject({ kind: 'message', statement: 'Here is the link again.', contentLanguage: 'en' });
+    await expect(write.body).toMatchObject({ kind: 'message', statement: 'Here is the link again.', contentLanguage: 'und' });
   },
 };
 
@@ -86,7 +86,10 @@ export const CounterNotice: Story = {
     await expect(canvas.getByRole('heading', { name: 'Send a counter-notice' })).toBeVisible();
     await expect(canvas.getByText(/given to the person who sent the original notice/)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Send counter-notice' }));
-    await expect(canvas.getAllByRole('alert').at(-1)).toHaveTextContent(/Write a message|Fill in every field/);
+    // Each missing field and statement says so itself, and focus goes to the first.
+    await expect(await canvas.findAllByText('Fill this in.')).toHaveLength(7);
+    await expect(canvas.getAllByText('Tick this statement to continue.')).toHaveLength(3);
+    await expect(canvas.getByRole('textbox', { name: 'What was removed by mistake, and why?' })).toHaveFocus();
     await expect(sent.some(call => call.body.kind === 'counter_notice')).toBe(false);
     await userEvent.type(canvas.getByRole('textbox', { name: 'What was removed by mistake, and why?' }), 'It is my own work.');
     for (const [name, value] of [['Where the material was before it was removed', '/w/0001'], ['Your full name', 'Bo Li'],
@@ -102,6 +105,37 @@ export const CounterNotice: Story = {
     const counter = sent.find(call => call.body.kind === 'counter_notice')!;
     await expect(counter.body.counterNotice).toMatchObject({ name: 'Bo Li', goodFaithMistakeUnderPerjury: true,
       consentToJurisdiction: true, acceptService: true });
+  },
+};
+
+/** A follow-up with nothing written says so on the field and focuses it. */
+export const EmptyMessage: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Send message' }));
+    await expect(await canvas.findByText('Write a message.')).toBeInTheDocument();
+    await expect(canvas.getByRole('textbox', { name: 'Your message' })).toHaveFocus();
+  },
+};
+
+/** A link Main does not know says so; it is not told it lacks the right to send a counter-notice. */
+export const ExpiredLink: Story = {
+  args: { send: (async (input: URL | RequestInfo) => String(input).includes('/correspondence')
+    ? new Response(null, { status: 404 }) : Response.json(status())) as typeof fetch },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(canvas.getByRole('textbox', { name: 'Your message' }), 'Hello?');
+    await userEvent.click(canvas.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(canvas.getByRole('alert')).toHaveTextContent('The link may be wrong or incomplete.'));
+    await expect(canvas.queryByText(/Only the person whose material was removed/)).toBeNull();
+  },
+};
+
+/** Anyone with a decision on their case can disagree with it, the reporter included. */
+export const AppealWording: Story = {
+  args: { initial: { kind: 'loaded', status: status({ state: 'closed', outcome: 'dismiss' }) } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByText(/If you disagree with this decision, say why/)).toBeVisible();
   },
 };
 

@@ -78,7 +78,6 @@ export default {
   materialLocation: 'REZICS 上の複製の場所',
   copyrightGoodFaith: 'この使用が権利者、その代理人、または法律により許可されていないと、誠実に信じています。',
   copyrightPerjury: 'この通知の内容が正確であり、私が権利者であるか権利者から権限を与えられていることを、偽証罪に問われることを前提に陳述します。',
-  declarationsRequired: 'すべての項目を入力し、すべての陳述にチェックを入れてください。',
 
   statusTitle: 'あなたの報告',
   statusIntro: 'このページのアドレスを知っている人は、この報告を読み、私たちに連絡できます。他の人には教えないでください。',
@@ -132,7 +131,6 @@ export default {
   sendRefused: '受け付けられませんでした。内容を確認してください。',
   messageRequired: 'メッセージを書いてください。',
   appealHeading: 'この判断に異議を申し立てる',
-  appealHelp: 'この判断があなた自身の内容やアカウントに影響する場合は、なぜ誤りかを書いてください。判断に関わっていない人が確認します。',
   appealLabel: 'なぜ変更すべきですか？',
   sendAppeal: '異議を送信',
   counterHeading: '反論通知を送る',
@@ -169,4 +167,15 @@ export default {
   uploadRejectedBody: 'この画像は使えません。別の画像を選んでください。',
   uploadLimited: '現在、アップロードの上限に達しています。{time}後にもう一度お試しください。',
   uploadLimitedShort: 'アップロードの上限に達しました',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: '報告の前に',
+  childSafetyNoCopy: '該当の内容をダウンロード、コピー、再アップロード、送信しないでください。代わりに、その場所と簡単な説明を教えてください。',
+  dangerChild: '子どもが差し迫った危険にさらされている可能性がある場合は、地域の緊急通報サービスに連絡してください。',
+  dangerSomeone: '誰かが差し迫った危険にさらされている可能性がある場合は、地域の緊急通報サービスに連絡してください。',
+  cybertip: '児童への性的搾取の疑いは、NCMEC の CyberTipline に直接報告することもできます。',
+  cybertipLink: 'NCMEC CyberTipline を開く',
+  fieldRequired: 'この項目を入力してください。',
+  confirmRequired: '続けるにはこの陳述にチェックを入れてください。',
+  appealHelp: '判断に同意できない場合は、その理由を書いてください。判断に関わっていない人が確認します。',
 } satisfies SafetyMessages;

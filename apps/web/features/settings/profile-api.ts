@@ -1,7 +1,7 @@
 import { serviceOrigin } from '../api/origins.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 import { UNSPECIFIED, writingTag } from '../content-language/writing-language.ts';
-import { retryAfterSeconds } from '../safety/report-api.ts';
+import { retryAfterSeconds } from '../safety/retry-after.ts';
 import { type Clearance, clearanceOf } from '../safety/upload-state.ts';
 
 export type ProfileSaveResult = 'saved' | 'invalid' | 'conflict' | 'denied' | 'unavailable'

@@ -19,9 +19,11 @@ export default async function ReportRoute({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [locale, query, session] = await Promise.all([requestLocale(), searchParams, readSession()]);
+  const actingSubject = session?.agent.status === 'selected' ? session.agent.agent.iri : null;
   return <PageContainer className="grid gap-10">
     <PageHeader title={safetyText.title[locale]} description={safetyText.intro[locale]} />
-    <ReportForm locale={locale} target={first(query.target)} realm={first(query.realm) || null} />
+    <ReportForm locale={locale} target={first(query.target)} realm={first(query.realm) || null}
+      actingSubject={actingSubject} />
     {session ? <ReportsList locale={locale} /> : null}
   </PageContainer>;
 }

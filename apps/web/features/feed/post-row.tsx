@@ -146,11 +146,13 @@ export function WorkAttachment({ work }: { work: AttachedWork }) {
  * of preview, the Work attached, then the bare action bar, spaced as
  * `postRhythm` measures X. There is one view: dense lists are for catalogues.
  */
-export function PostRow({ kind, href, report, meta, title, titleLang, titleDir, titleClass, label, preview, thumbnail,
+export function PostRow({ kind, href, report, reportKind = 'post', meta, title, titleLang, titleDir, titleClass, label, preview, thumbnail,
   attachment, vote, comments, actions, below, position, total }: {
   kind: string;
   /** The REZICS ID of what the post is about, which the Report action sends; a post with none cannot be reported here. */
   report?: string | null;
+  /** What `report` is: the post itself, or the Work it is about (a review is not a Work and passes no ID until Main accepts review IDs). */
+  reportKind?: 'post' | 'work';
   /** Where the row leads; a post with nowhere to go is not clickable. */
   href: string | null;
   meta: ReactNode;
@@ -190,7 +192,7 @@ export function PostRow({ kind, href, report, meta, title, titleLang, titleDir, 
     <div className={cn('-ms-2 flex items-center', postRhythm.section, postRhythm.bar)}>
       <div role="group" aria-label={t.actions} className="relative z-10 flex items-center gap-x-1 sm:gap-x-3">
         {vote}{comments}{actions}</div>
-      {report ? <ReportAction target={report} kind="post" iconOnly className={cn(barAction, 'ms-auto w-8 justify-center px-0')} /> : null}
+      {report ? <ReportAction target={report} kind={reportKind} iconOnly className={cn(barAction, 'ms-auto w-8 justify-center px-0')} /> : null}
     </div>
   </article>;
 }

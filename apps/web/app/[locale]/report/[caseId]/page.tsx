@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { readSession } from '../../../../features/auth/session.ts';
 import { CaseView } from '../../../../features/safety/case-view.tsx';
 import { safetyText } from '../../../../features/safety/messages.ts';
 import { PageContainer, PageHeader } from '../../../../features/shell/page.tsx';
@@ -15,9 +16,10 @@ export async function generateMetadata(): Promise<Metadata> {
  * `CaseView` reads the credential on the client.
  */
 export default async function CaseRoute({ params }: { params: Promise<{ caseId: string }> }) {
-  const [locale, { caseId }] = await Promise.all([requestLocale(), params]);
+  const [locale, { caseId }, session] = await Promise.all([requestLocale(), params, readSession()]);
+  const actingSubject = session?.agent.status === 'selected' ? session.agent.agent.iri : null;
   return <PageContainer className="grid gap-8">
     <PageHeader title={safetyText.statusTitle[locale]} />
-    <CaseView locale={locale} caseId={caseId} />
+    <CaseView locale={locale} caseId={caseId} actingSubject={actingSubject} />
   </PageContainer>;
 }

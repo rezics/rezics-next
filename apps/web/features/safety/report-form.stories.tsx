@@ -39,12 +39,14 @@ export const Harassment: Story = {
     await expect(canvas.getByText('Optional. We use it only to tell you about this report.')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Send report' }));
     await expect(await canvas.findByText('Describe the problem.')).toBeInTheDocument();
+    await expect(canvas.getByRole('textbox', { name: 'What is wrong?' })).toHaveFocus();
     await userEvent.type(canvas.getByRole('textbox', { name: 'What is wrong?' }), 'Repeated abuse in the replies.');
     await userEvent.click(canvas.getByRole('button', { name: 'Send report' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     await expect(sent[0]!.url).toBe('/api/main/v1/public-reports');
+    // The interface is English, but nothing says the statement is: the language stays unspecified until chosen.
     await expect(sent[0]!.body).toMatchObject({ profile: 'public-report-v1', target, category: 'harassment',
-      contentLanguage: 'en' });
+      contentLanguage: 'und' });
     await expect(sent[0]!.body.ncii).toBeUndefined();
   },
 };
@@ -60,7 +62,11 @@ export const NonConsensualImages: Story = {
     await expect(canvas.queryByRole('button', { name: /upload/i })).toBeNull();
     await expect(canvas.getByText('Required for this kind of report, so we can reach you safely.')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Send report' }));
-    await expect((await canvas.findAllByText('Fill in every field and tick every statement.'))[0]).toBeInTheDocument();
+    // Each problem is on its own field, and focus goes to the first in reading order.
+    await expect(await canvas.findAllByText('Tick this statement to continue.')).toHaveLength(2);
+    await expect(await canvas.findAllByText('Fill this in.')).toHaveLength(2);
+    await expect(canvas.getByRole('checkbox', { name: /I am the person shown/ })).toHaveFocus();
+    await expect(canvas.getByRole('checkbox', { name: /I am the person shown/ })).toBeInvalid();
     await expect(sent).toHaveLength(0);
 
     await userEvent.click(canvas.getByRole('checkbox', { name: /I am the person shown/ }));
@@ -74,6 +80,33 @@ export const NonConsensualImages: Story = {
     await expect(sent[0]!.body).toMatchObject({ category: 'ncii', contactEmail: 'ada@example.com',
       ncii: { signature: 'Ada Lovelace', depictedPersonOrAuthorized: true, goodFaithWithoutConsent: true,
         supportingInformation: 'It was posted by my former partner.' } });
+  },
+};
+
+/** The child-safety guidance comes before anything is typed: never copy the material, call for help, NCMEC. */
+export const ChildSafety: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText('Before you report')).toBeNull();
+    await userEvent.click(canvas.getByRole('radio', { name: /Child sexual exploitation/ }));
+    await expect(canvas.getByRole('heading', { name: 'Before you report' })).toBeVisible();
+    await expect(canvas.getByText(/Do not download, copy, re-upload or send the material/)).toBeVisible();
+    await expect(canvas.getByText(/Give us its location and a brief description instead/)).toBeVisible();
+    await expect(canvas.getByText('If a child may be in immediate danger, contact local emergency services.')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /NCMEC CyberTipline/ }))
+      .toHaveAttribute('href', 'https://www.ncmec.org/gethelpnow/cybertipline');
+    await expect(canvas.queryByLabelText(/image file/i)).toBeNull();
+    await expect(canvasElement.querySelector('input[type=file]')).toBeNull();
+  },
+};
+
+/** A credible threat reminds the reporter to call emergency services. */
+export const CredibleThreat: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('radio', { name: /Credible threat of harm/ }));
+    await expect(canvas.getByText('If someone may be in immediate danger, contact local emergency services.')).toBeVisible();
+    await expect(canvas.queryByText('Before you report')).toBeNull();
   },
 };
 
@@ -158,6 +191,17 @@ export const TraditionalChinese: Story = {
     await userEvent.click(canvas.getByRole('radio', { name: /未經同意散布的私密影像/ }));
     await expect(canvas.getByText(/最遲在收到後 48 小時內完成/)).toBeVisible();
     await expect(canvas.getByRole('button', { name: '送出檢舉' })).toBeVisible();
+  },
+};
+
+/** The child-safety guidance is in the reader's language. */
+export const ChildSafetyJapanese: Story = {
+  args: { locale: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('radio', { name: /児童への性的搾取/ }));
+    await expect(canvas.getByText(/ダウンロード、コピー、再アップロード、送信しないでください/)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /NCMEC CyberTipline/ })).toBeVisible();
   },
 };
 

@@ -1,6 +1,6 @@
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { retryAfterSeconds } from './report-api.ts';
+import { retryAfterSeconds } from './retry-after.ts';
 import { fill, textFor, waitText } from './report.ts';
 
 /**

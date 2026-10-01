@@ -1,4 +1,5 @@
 import { BFF_PREFIX } from '../api/browser.ts';
+import { retryAfterSeconds } from './retry-after.ts';
 import type { CaseStatus, CorrespondenceInput, ReportInput, ReportList, ReportReceipt } from './report.ts';
 
 // Report calls are Main's `/v1/public-reports` routes. Intake and the signed-in
@@ -10,12 +11,6 @@ export type Failure =
   | { ok: false; reason: 'invalid' | 'unavailable' | 'denied' | 'failed' }
   | { ok: false; reason: 'limited'; retryAfter: number };
 export type Result<T> = { ok: true; data: T } | Failure;
-
-/** A spent budget names when to come back: `Retry-After` in seconds, as G-543's `429` states it. */
-export function retryAfterSeconds(response: Pick<Response, 'headers'>): number {
-  const value = Number(response.headers.get('retry-after'));
-  return Number.isFinite(value) && value > 0 ? Math.ceil(value) : 60;
-}
 
 async function settle<T>(response: Response): Promise<Result<T>> {
   if (response.ok) {

@@ -78,7 +78,6 @@ export default {
   materialLocation: 'Où se trouve la copie sur REZICS',
   copyrightGoodFaith: 'Je crois de bonne foi que cet usage n’est autorisé ni par le titulaire des droits, ni par son représentant, ni par la loi.',
   copyrightPerjury: 'Je déclare sous peine de parjure que cette notification est exacte et que je suis le titulaire des droits ou autorisé(e) à agir pour lui.',
-  declarationsRequired: 'Remplissez tous les champs et cochez toutes les déclarations.',
 
   statusTitle: 'Votre signalement',
   statusIntro: 'Toute personne qui connaît l’adresse de cette page peut lire ce signalement et nous écrire à son sujet. Gardez-la pour vous.',
@@ -132,7 +131,6 @@ export default {
   sendRefused: 'Il a été refusé. Vérifiez ce que vous avez écrit.',
   messageRequired: 'Écrivez un message.',
   appealHeading: 'Faire appel de cette décision',
-  appealHelp: 'Si cette décision touche votre propre contenu ou compte, dites pourquoi elle est erronée. Une personne qui n’a pas pris la décision le lit.',
   appealLabel: 'Pourquoi devrait-elle changer ?',
   sendAppeal: 'Envoyer le recours',
   counterHeading: 'Envoyer une contre-notification',
@@ -169,4 +167,15 @@ export default {
   uploadRejectedBody: 'Cette image ne peut pas être utilisée. Choisissez-en une autre.',
   uploadLimited: 'Vous avez atteint la limite de téléversement pour le moment. Vous pourrez réessayer dans {time}.',
   uploadLimitedShort: 'Limite de téléversement atteinte',
+
+  // Guidance before a child-safety or threat report, and field errors
+  childSafetyHeading: 'Avant de signaler',
+  childSafetyNoCopy: 'Ne téléchargez pas, ne copiez pas, ne téléversez pas de nouveau et n’envoyez pas ce contenu. Indiquez-nous plutôt où il se trouve et décrivez-le brièvement.',
+  dangerChild: 'Si un enfant peut être en danger immédiat, contactez les services d’urgence locaux.',
+  dangerSomeone: 'Si quelqu’un peut être en danger immédiat, contactez les services d’urgence locaux.',
+  cybertip: 'Vous pouvez aussi signaler directement une exploitation sexuelle d’enfants présumée à la CyberTipline du NCMEC.',
+  cybertipLink: 'Ouvrir la CyberTipline du NCMEC',
+  fieldRequired: 'Renseignez ce champ.',
+  confirmRequired: 'Cochez cette déclaration pour continuer.',
+  appealHelp: 'Si vous contestez cette décision, dites pourquoi. Une personne qui n’a pas pris la décision le lit.',
 } satisfies SafetyMessages;

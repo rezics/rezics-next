@@ -2,46 +2,47 @@
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
-import { Checkbox } from '@rezics/ui/checkbox';
-import { Field, FieldContent, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
+import { Field, FieldError } from '@rezics/ui/field';
 import { RadioGroup, RadioGroupItem, RadioGroupLabel } from '@rezics/ui/radio-group';
-import { Textarea } from '@rezics/ui/textarea';
-import { CircleAlertIcon, ShieldAlertIcon } from 'lucide-react';
+import { CircleAlertIcon, ExternalLinkIcon, HeartHandshakeIcon, ShieldAlertIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
+import { Confirm, Line, useFocusProblem } from './form-parts.tsx';
 import { type Failure, submitReport } from './report-api.ts';
 import { casePath, type CopyrightDeclaration, categoriesFor, declarationOf, fill, isUrgent, keyed, needsEmail,
   type NciiDeclaration, plausibleTarget, type ReportCategory, textFor, waitText } from './report.ts';
 
-type Problem = 'target' | 'category' | 'statement' | 'email' | 'declarations';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CYBERTIPLINE = 'https://www.ncmec.org/gethelpnow/cybertipline';
 
 const blankNcii = { signature: '', authorized: false, goodFaith: false, supportingInformation: '' };
 const blankCopyright = { signature: '', claimantName: '', claimantAddress: '', claimantPhone: '', claimedWork: '',
   materialLocation: '', goodFaith: false, perjury: false };
+const nciiFields = ['signature', 'supportingInformation'] as const;
+const copyrightFields = ['claimantName', 'claimantAddress', 'claimantPhone', 'claimedWork', 'materialLocation',
+  'signature'] as const;
 
-function Statement({ checked, onChange, children }: { checked: boolean; onChange: (checked: boolean) => void;
-  children: string }) {
-  return <Field orientation="horizontal">
-    <Checkbox checked={checked} onCheckedChange={details => onChange(details.checked === true)} />
-    <FieldContent><FieldLabel>{children}</FieldLabel></FieldContent>
-  </Field>;
-}
-
-function Line({ label, value, onChange, help, multiline = false, type = 'text', invalid = false, maxLength }: {
-  label: string; value: string; onChange: (value: string) => void; help?: string; multiline?: boolean;
-  type?: 'text' | 'email' | 'tel'; invalid?: boolean; maxLength?: number;
-}) {
-  return <Field invalid={invalid}>
-    <FieldLabel>{label}</FieldLabel>
-    {multiline ? <Textarea value={value} rows={3} maxLength={maxLength} onChange={event => onChange(event.currentTarget.value)} />
-      : <Input type={type} value={value} maxLength={maxLength} onChange={event => onChange(event.currentTarget.value)} />}
-    {help ? <FieldHelper>{help}</FieldHelper> : null}
-  </Field>;
+/** What to do first, before the form: never copy the material; when someone may be in danger, call for help. */
+function Guidance({ category, t }: { category: ReportCategory | null; t: ReturnType<typeof textFor> }) {
+  if (category === 'child_exploitation') {
+    return <section aria-labelledby="child-safety-heading" className="grid gap-2 rounded-2xl bg-muted/60 p-4 text-sm">
+      <h2 id="child-safety-heading" className="flex items-center gap-2 font-semibold">
+        <HeartHandshakeIcon aria-hidden="true" className="size-4" />{t.childSafetyHeading}</h2>
+      <p>{t.childSafetyNoCopy}</p>
+      <p>{t.dangerChild}</p>
+      <p>{t.cybertip}{' '}
+        <a href={CYBERTIPLINE} rel="noopener noreferrer" target="_blank"
+          className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline">
+          {t.cybertipLink}<ExternalLinkIcon aria-hidden="true" className="size-3.5" /></a></p>
+    </section>;
+  }
+  return category === 'credible_threat'
+    ? <p role="note" className="rounded-2xl bg-muted/60 p-4 text-sm font-medium">{t.dangerSomeone}</p> : null;
 }
 
 /**
@@ -49,44 +50,63 @@ function Line({ label, value, onChange, help, multiline = false, type = 'text', 
  * A person chooses a kind of problem and sees only that kind's own form. What
  * a kind needs is what Main requires of it; Main decides what is valid.
  * Retrying after a lost response sends the same Idempotency-Key, so it files
- * one case, and a changed report gets a new key.
+ * one case, and a changed report gets a new key. The statement's language is
+ * the writer's to state: their first reading language, or unspecified, never
+ * the interface locale (docs/contracts/content-languages.md, Decision 7).
  */
-export function ReportForm({ locale, target: initialTarget = '', realm = null, send }: {
-  locale: UiLocale; target?: string; realm?: string | null; send?: typeof fetch;
+export function ReportForm({ locale, target: initialTarget = '', realm = null, actingSubject = null, send }: {
+  locale: UiLocale; target?: string; realm?: string | null;
+  /** The signed-in Agent, whose saved reading languages start the language choice. */
+  actingSubject?: string | null; send?: typeof fetch;
 }) {
   const t = textFor(locale);
   const router = useRouter();
+  const form = useRef<HTMLFormElement>(null);
   const [target, setTarget] = useState(initialTarget);
   const [category, setCategory] = useState<ReportCategory | null>(null);
   const [statement, setStatement] = useState('');
-  const [language, setLanguage] = useState<string>(locale);
+  const reading = useReadingLanguages(actingSubject);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const language = writingLanguage({ chosen, reading });
   const [email, setEmail] = useState('');
   const [ncii, setNcii] = useState(blankNcii);
   const [copyright, setCopyright] = useState(blankCopyright);
-  const [problems, setProblems] = useState<ReadonlySet<Problem>>(new Set());
+  const [attempted, setAttempted] = useState(0);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   // Until the page is interactive a native submit would put the report in the address; the button waits.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
+  useFocusProblem(form, attempted);
   const declaration = category ? declarationOf(category) : null;
   const emailRequired = category ? needsEmail(category) : false;
+
+  // Each problem is said on its own field, once a submit has been tried.
+  const tried = attempted > 0;
+  const missing = (value: string) => tried && !value.trim() ? t.fieldRequired : null;
+  const unticked = (value: boolean) => tried && !value ? t.confirmRequired : null;
+  const problems = {
+    target: tried && !plausibleTarget(target) ? t.targetInvalid : null,
+    category: tried && !category ? t.categoryRequired : null,
+    statement: tried && !statement.trim() ? t.statementRequired : null,
+    email: !tried ? null : email.trim() ? EMAIL.test(email.trim()) ? null : t.emailInvalid
+      : emailRequired ? t.emailRequiredHelp : null,
+  };
+  const declarationProblem = (tried && declaration === 'ncii' && (nciiFields.some(key => !ncii[key].trim())
+    || !ncii.authorized || !ncii.goodFaith)) || (tried && declaration === 'copyright'
+    && (copyrightFields.some(key => !copyright[key].trim()) || !copyright.goodFaith || !copyright.perjury));
+  const invalid = Object.values(problems).some(Boolean) || declarationProblem;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const found = new Set<Problem>();
-    if (!plausibleTarget(target)) found.add('target');
-    if (!category) found.add('category');
-    if (!statement.trim()) found.add('statement');
-    if (email.trim() ? !EMAIL.test(email.trim()) : emailRequired) found.add('email');
-    if (declaration === 'ncii' && (!ncii.signature.trim() || !ncii.authorized || !ncii.goodFaith
-      || !ncii.supportingInformation.trim())) found.add('declarations');
-    if (declaration === 'copyright' && (!copyright.goodFaith || !copyright.perjury || Object.entries(copyright)
-      .some(([, value]) => typeof value === 'string' && !value.trim()))) found.add('declarations');
-    setProblems(found);
-    if (found.size || !category) return;
+    const complete = plausibleTarget(target) && category && statement.trim()
+      && (email.trim() ? EMAIL.test(email.trim()) : !emailRequired)
+      && (declaration !== 'ncii' || nciiFields.every(key => ncii[key].trim()) && ncii.authorized && ncii.goodFaith)
+      && (declaration !== 'copyright' || copyrightFields.every(key => copyright[key].trim())
+        && copyright.goodFaith && copyright.perjury);
+    if (!complete || !category) { setAttempted(count => count + 1); return; }
     const body = {
       target: target.trim(), category, statement: statement.trim(), contentLanguage: language,
       ...(email.trim() ? { contactEmail: email.trim() } : {}),
@@ -109,18 +129,16 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
     router.push(localizedPath(casePath(result.data.caseId, result.data.credential), locale));
   }
 
+  const written = textAttributes(language, statement);
   const categories = categoriesFor(realm);
-  return <form noValidate onSubmit={event => void submit(event)} className="grid max-w-2xl gap-6"
-    aria-label={t.title}>
-    <Field invalid={problems.has('target')}>
-      <FieldLabel>{t.targetLabel}</FieldLabel>
-      <Input value={target} inputMode="url" autoComplete="off" onChange={event => setTarget(event.currentTarget.value)} />
-      {problems.has('target') ? <FieldError>{t.targetInvalid}</FieldError> : <FieldHelper>{t.targetHelp}</FieldHelper>}
-    </Field>
+  return <form ref={form} noValidate onSubmit={event => void submit(event)} className="grid max-w-2xl gap-6"
+    aria-label={t.title} data-invalid={invalid ? 'true' : undefined}>
+    <Line label={t.targetLabel} value={target} onChange={setTarget} help={t.targetHelp} error={problems.target}
+      maxLength={2048} />
 
-    <div className="grid gap-2">
+    <Field invalid={Boolean(problems.category)}>
       <RadioGroup value={category ?? ''} onValueChange={details => setCategory((details.value || null) as ReportCategory | null)}
-        className="gap-2">
+        className="gap-2 data-invalid:text-foreground dark:data-invalid:text-foreground">
         <RadioGroupLabel>{t.categoryLabel}</RadioGroupLabel>
         {categories.map(item => <RadioGroupItem key={item} value={item}>
           <span className="grid gap-0.5">
@@ -129,70 +147,62 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, s
           </span>
         </RadioGroupItem>)}
       </RadioGroup>
-      {problems.has('category') ? <p role="alert" className="text-destructive-foreground text-sm">{t.categoryRequired}</p> : null}
-    </div>
+      {problems.category ? <FieldError>{problems.category}</FieldError> : null}
+    </Field>
+
+    <Guidance category={category} t={t} />
 
     {declaration === 'ncii' ? <section aria-labelledby="ncii-heading" className="grid gap-4 rounded-2xl bg-muted/60 p-4">
       <h2 id="ncii-heading" className="flex items-center gap-2 font-semibold">
         <ShieldAlertIcon aria-hidden="true" className="size-4" />{t.nciiHeading}</h2>
       <p className="text-sm">{t.nciiNoImage}</p>
       <p role="note" className="text-sm font-medium">{t.nciiNotice}</p>
-      <Statement checked={ncii.authorized} onChange={authorized => setNcii({ ...ncii, authorized })}>
-        {t.nciiAuthorized}</Statement>
-      <Statement checked={ncii.goodFaith} onChange={goodFaith => setNcii({ ...ncii, goodFaith })}>
-        {t.nciiGoodFaith}</Statement>
+      <Confirm checked={ncii.authorized} error={unticked(ncii.authorized)}
+        onChange={authorized => setNcii({ ...ncii, authorized })}>{t.nciiAuthorized}</Confirm>
+      <Confirm checked={ncii.goodFaith} error={unticked(ncii.goodFaith)}
+        onChange={goodFaith => setNcii({ ...ncii, goodFaith })}>{t.nciiGoodFaith}</Confirm>
       <Line label={t.nciiSupporting} help={t.nciiSupportingHelp} multiline maxLength={4000}
-        value={ncii.supportingInformation}
+        value={ncii.supportingInformation} error={missing(ncii.supportingInformation)}
         onChange={supportingInformation => setNcii({ ...ncii, supportingInformation })} />
-      <Line label={t.nciiSignature} value={ncii.signature} maxLength={300}
+      <Line label={t.nciiSignature} value={ncii.signature} maxLength={300} error={missing(ncii.signature)}
         onChange={signature => setNcii({ ...ncii, signature })} />
-      {problems.has('declarations') ? <p role="alert" className="text-destructive-foreground text-sm">
-        {t.declarationsRequired}</p> : null}
     </section> : null}
 
     {declaration === 'copyright' ? <section aria-labelledby="copyright-heading"
       className="grid gap-4 rounded-2xl bg-muted/60 p-4">
       <h2 id="copyright-heading" className="font-semibold">{t.copyrightHeading}</h2>
       <p role="note" className="text-sm font-medium">{t.copyrightNotice}</p>
-      <Line label={t.claimantName} value={copyright.claimantName} maxLength={300}
+      <Line label={t.claimantName} value={copyright.claimantName} maxLength={300} error={missing(copyright.claimantName)}
         onChange={claimantName => setCopyright({ ...copyright, claimantName })} />
       <Line label={t.claimantAddress} value={copyright.claimantAddress} maxLength={500}
+        error={missing(copyright.claimantAddress)}
         onChange={claimantAddress => setCopyright({ ...copyright, claimantAddress })} />
       <Line label={t.claimantPhone} type="tel" value={copyright.claimantPhone} maxLength={100}
+        error={missing(copyright.claimantPhone)}
         onChange={claimantPhone => setCopyright({ ...copyright, claimantPhone })} />
       <Line label={t.claimedWork} multiline value={copyright.claimedWork} maxLength={1000}
-        onChange={claimedWork => setCopyright({ ...copyright, claimedWork })} />
+        error={missing(copyright.claimedWork)} onChange={claimedWork => setCopyright({ ...copyright, claimedWork })} />
       <Line label={t.materialLocation} multiline value={copyright.materialLocation} maxLength={1000}
+        error={missing(copyright.materialLocation)}
         onChange={materialLocation => setCopyright({ ...copyright, materialLocation })} />
-      <Statement checked={copyright.goodFaith} onChange={goodFaith => setCopyright({ ...copyright, goodFaith })}>
-        {t.copyrightGoodFaith}</Statement>
-      <Statement checked={copyright.perjury} onChange={perjury => setCopyright({ ...copyright, perjury })}>
-        {t.copyrightPerjury}</Statement>
+      <Confirm checked={copyright.goodFaith} error={unticked(copyright.goodFaith)}
+        onChange={goodFaith => setCopyright({ ...copyright, goodFaith })}>{t.copyrightGoodFaith}</Confirm>
+      <Confirm checked={copyright.perjury} error={unticked(copyright.perjury)}
+        onChange={perjury => setCopyright({ ...copyright, perjury })}>{t.copyrightPerjury}</Confirm>
       <Line label={t.copyrightSignature} value={copyright.signature} maxLength={300}
-        onChange={signature => setCopyright({ ...copyright, signature })} />
-      {problems.has('declarations') ? <p role="alert" className="text-destructive-foreground text-sm">
-        {t.declarationsRequired}</p> : null}
+        error={missing(copyright.signature)} onChange={signature => setCopyright({ ...copyright, signature })} />
     </section> : null}
 
-    <Field invalid={problems.has('statement')}>
-      <FieldLabel>{t.statementLabel}</FieldLabel>
-      <Textarea value={statement} rows={5} maxLength={4000} onChange={event => setStatement(event.currentTarget.value)} />
-      {problems.has('statement') ? <FieldError>{t.statementRequired}</FieldError>
-        : <FieldHelper>{t.statementHelp}</FieldHelper>}
-    </Field>
+    <Line label={t.statementLabel} multiline value={statement} onChange={setStatement} maxLength={4000}
+      help={t.statementHelp} error={problems.statement} lang={written.lang} dir={written.dir} />
 
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="text-sm font-medium">{t.languageLabel}</span>
-      <LanguageSelect value={language} onChange={setLanguage} locale={locale} label={t.languageLabel} />
+      <LanguageSelect value={language} onChange={setChosen} locale={locale} reading={reading} label={t.languageLabel} />
     </div>
 
-    <Field invalid={problems.has('email')}>
-      <FieldLabel>{t.emailLabel}</FieldLabel>
-      <Input type="email" value={email} autoComplete="email" maxLength={320}
-        onChange={event => setEmail(event.currentTarget.value)} />
-      {problems.has('email') ? <FieldError>{email.trim() ? t.emailInvalid : t.emailRequiredHelp}</FieldError>
-        : <FieldHelper>{emailRequired ? t.emailRequiredHelp : t.emailHelp}</FieldHelper>}
-    </Field>
+    <Line label={t.emailLabel} type="email" value={email} onChange={setEmail} maxLength={320}
+      help={emailRequired ? t.emailRequiredHelp : t.emailHelp} error={problems.email} />
 
     <p className="text-muted-foreground text-sm">{t.privateNote}</p>
     {failure ? <Alert variant="destructive" role="alert"><CircleAlertIcon aria-hidden="true" />

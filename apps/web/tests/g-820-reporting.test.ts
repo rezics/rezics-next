@@ -4,7 +4,8 @@ import { uiLocales } from '../i18n/define.ts';
 import { isPublicPagePath, isReportPath, localizedPath } from '../i18n/locale.ts';
 import { uploadCommunityImage, ImageRefused } from '../features/communities/images.ts';
 import { saveAgentProfile, profileSaveInput, type AvatarReport } from '../features/settings/profile-api.ts';
-import { listReports, readCase, retryAfterSeconds, submitReport, writeCase } from '../features/safety/report-api.ts';
+import { listReports, readCase, submitReport, writeCase } from '../features/safety/report-api.ts';
+import { retryAfterSeconds } from '../features/safety/retry-after.ts';
 import { casePath, categoriesFor, credentialFromHash, declarationOf, discussionTarget, fill, keyed, needsEmail,
   plausibleTarget, reportHref, textFor, waitText } from '../features/safety/report.ts';
 import { CASE_CREDENTIAL_HEADER, relays, withCredential } from '../features/safety/relay.ts';
@@ -22,7 +23,7 @@ const AGENT = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000aa';
 // wiki areas add their rows when they place it.
 const surfaces = [
   { surface: 'profile', file: '../features/profile/profile-page.tsx', places: /<ReportAction[^>]*kind="profile"/ },
-  { surface: 'every post row', file: '../features/feed/post-row.tsx', places: /<ReportAction[^>]*kind="post"/ },
+  { surface: 'every post row', file: '../features/feed/post-row.tsx', places: /<ReportAction[^>]*kind=\{reportKind\}/ },
   { surface: 'feed posts', file: '../features/feed/card.tsx', places: /<PostRow[^>]*report=\{/ },
   { surface: 'discussions and replies as posts', file: '../features/feed/discussion-card.tsx', places: /<PostRow[^>]*report=\{/ },
   { surface: 'reply thread', file: '../features/feed/reply-tree.tsx', places: /<ReportAction[^>]*kind="reply"/ },
@@ -288,4 +289,27 @@ test('G-820 the old "done means visible" assumption is gone from every upload pa
     '../features/communities/images.ts']) {
     expect(source(file), file).toContain('clearanceOf');
   }
+});
+
+test('G-820 the statement language is the writer\'s, never the interface locale (content-languages Decision 7)', () => {
+  for (const file of ['../features/safety/report-form.tsx', '../features/safety/case-view.tsx']) {
+    const code = source(file);
+    expect(code, file).toContain('writingLanguage(');
+    expect(code, file).not.toMatch(/useState<string>\(locale\)/);
+    expect(code, file).toContain('textAttributes(');
+  }
+});
+
+test('G-820 a review is not reported as its Work, and a reply names its Realm', () => {
+  expect(source('../features/feed/card.tsx')).toContain("card.kind === 'review' ? null : item.target.work");
+  expect(source('../features/feed/reply-tree.tsx')).toContain('realm={context.target.realm}');
+});
+
+test('G-820 child-safety guidance exists in every locale and links the CyberTipline', () => {
+  for (const locale of uiLocales) {
+    for (const key of ['childSafetyHeading', 'childSafetyNoCopy', 'dangerChild', 'dangerSomeone', 'cybertip',
+      'cybertipLink'] as const) expect(safetyText[key][locale].length).toBeGreaterThan(2);
+  }
+  expect(source('../features/safety/report-form.tsx')).toContain('https://www.ncmec.org/gethelpnow/cybertipline');
+  expect(source('../features/safety/report-form.tsx')).not.toContain('type="file"');
 });

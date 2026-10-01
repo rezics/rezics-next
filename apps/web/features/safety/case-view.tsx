@@ -2,15 +2,14 @@
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
-import { Checkbox } from '@rezics/ui/checkbox';
-import { Field, FieldContent, FieldHelper, FieldLabel } from '@rezics/ui/field';
-import { Input } from '@rezics/ui/input';
-import { Textarea } from '@rezics/ui/textarea';
 import { CheckIcon, CircleAlertIcon, ClockIcon, CopyIcon, KeyRoundIcon, TriangleAlertIcon } from 'lucide-react';
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
+import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
+import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import { Notice } from '../discover/notice.tsx';
+import { Confirm, Line, useFocusProblem } from './form-parts.tsx';
 import { type Failure, readCase, writeCase } from './report-api.ts';
 import { type CaseStatus, type CaseStep, type CounterNotice, credentialFromHash, fill, keyed, textFor, type Text,
   waitText } from './report.ts';
@@ -42,54 +41,64 @@ function Step({ step, t, locale }: { step: CaseStep; t: Text; locale: UiLocale }
   </li>;
 }
 
-/** Why a send did not go through, in the words the form can act on. */
-const sendProblem = (failure: Failure, t: Text, locale: UiLocale, refused: string) =>
+/** Why a send did not go through. A link Main does not know says so; only a counter-notice is about who may send it. */
+const sendProblem = (failure: Failure, t: Text, locale: UiLocale, refused: string, kind: string) =>
   failure.reason === 'limited' ? fill(t.retryIn, { time: waitText(failure.retryAfter, locale) })
-    : failure.reason === 'invalid' ? refused : failure.reason === 'denied' ? t.counterOnlyAffected : t.sendFailed;
+    : failure.reason === 'invalid' ? refused
+      : failure.reason === 'denied' ? kind === 'counter_notice' ? t.counterOnlyAffected : t.unavailableBody
+        : t.sendFailed;
 
 /**
  * A form that writes to the case. The key is kept until the words change, so a
- * lost response and a second press file one entry.
+ * lost response and a second press file one entry. A missing statement or
+ * (`ready` false) declaration is said on its field and focus goes to the first.
+ * The language is the writer's to state, never the interface locale.
  */
-function Correspondence({ heading, help, children, submitLabel, locale, caseId, credential, kind, build, onSent, valid,
-  refused, confirm, send }: {
-  heading: string; help: string; children: (controls: { statement: string; setStatement: (value: string) => void }) => ReactNode;
+function Correspondence({ heading, help, children, submitLabel, locale, caseId, credential, kind, build, onSent,
+  ready = true, refused, confirm, actingSubject = null, send }: {
+  heading: string; help: string;
+  children: (controls: { statement: string; setStatement: (value: string) => void; tried: boolean;
+    written: { lang: string | undefined; dir: 'ltr' | 'rtl' } }) => ReactNode;
   submitLabel: string; locale: UiLocale; caseId: string; credential: string; kind: 'message' | 'appeal' | 'counter_notice';
-  build: (statement: string) => { counterNotice?: CounterNotice } | null; onSent: () => void;
-  valid: (statement: string) => string | null; refused: string; confirm?: ReactNode; send?: typeof fetch;
+  build: () => { counterNotice?: CounterNotice }; onSent: () => void;
+  /** Whether the declarations around the statement are complete. */
+  ready?: boolean; refused: string; confirm?: ReactNode; actingSubject?: string | null; send?: typeof fetch;
 }) {
   const t = textFor(locale);
+  const form = useRef<HTMLFormElement>(null);
   const [statement, setStatement] = useState('');
-  const [language, setLanguage] = useState<string>(locale);
+  const reading = useReadingLanguages(actingSubject);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const language = writingLanguage({ chosen, reading });
+  const [attempted, setAttempted] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const attempt = useRef<{ body: string; key: string } | null>(null);
+  useFocusProblem(form, attempted);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const problem = valid(statement);
-    const extra = build(statement);
-    if (problem || !extra) { setError(problem ?? t.declarationsRequired); return; }
-    const body = { kind, statement: statement.trim(), contentLanguage: language, ...extra };
+    if (!statement.trim() || !ready) { setAttempted(count => count + 1); return; }
+    const body = { kind, statement: statement.trim(), contentLanguage: language, ...build() };
     const serialized = JSON.stringify(body);
     if (attempt.current?.body !== serialized) attempt.current = { body: serialized, key: crypto.randomUUID() };
     setBusy(true); setError(null); setSent(false);
     const result = await writeCase({ locale, caseId, credential, key: attempt.current.key, body }, send);
     setBusy(false);
-    if (!result.ok) { setError(sendProblem(result, t, locale, refused)); return; }
-    setStatement(''); attempt.current = null; setSent(true);
+    if (!result.ok) { setError(sendProblem(result, t, locale, refused, kind)); return; }
+    setStatement(''); attempt.current = null; setAttempted(0); setSent(true);
     onSent();
   }
   return <section className="grid max-w-2xl gap-3 rounded-2xl border border-border/60 p-4 sm:p-5">
     <h2 className="font-semibold">{heading}</h2>
     <p className="text-muted-foreground text-sm">{help}</p>
     {confirm}
-    <form noValidate onSubmit={event => void submit(event)} className="grid gap-4" aria-label={heading}>
-      {children({ statement, setStatement })}
+    <form ref={form} noValidate onSubmit={event => void submit(event)} className="grid gap-4" aria-label={heading}>
+      {children({ statement, setStatement, tried: attempted > 0, written: textAttributes(language, statement) })}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium">{t.languageLabel}</span>
-        <LanguageSelect value={language} onChange={setLanguage} locale={locale} label={t.languageLabel} />
+        <LanguageSelect value={language} onChange={setChosen} locale={locale} reading={reading} label={t.languageLabel} />
       </div>
       {error ? <Alert variant="destructive" role="alert"><CircleAlertIcon aria-hidden="true" />
         <AlertDescription>{error}</AlertDescription></Alert> : null}
@@ -102,55 +111,58 @@ function Correspondence({ heading, help, children, submitLabel, locale, caseId, 
 
 const blankCounter = { signature: '', materialLocation: '', name: '', address: '', phone: '', courtJurisdiction: '',
   goodFaith: false, consent: false, service: false };
-
-function Line({ label, value, onChange, help, maxLength, type = 'text' }: { label: string; value: string;
-  onChange: (value: string) => void; help?: string; maxLength: number; type?: 'text' | 'tel' }) {
-  return <Field><FieldLabel>{label}</FieldLabel>
-    <Input type={type} value={value} maxLength={maxLength} onChange={event => onChange(event.currentTarget.value)} />
-    {help ? <FieldHelper>{help}</FieldHelper> : null}</Field>;
-}
+const counterFields = ['materialLocation', 'name', 'address', 'phone', 'courtJurisdiction', 'signature'] as const;
 
 /** The DMCA counter-notice: its declarations, and the warning that the sender's details are disclosed. */
 function CounterNoticeForm(props: { locale: UiLocale; caseId: string; credential: string; onSent: () => void;
-  send?: typeof fetch }) {
+  actingSubject?: string | null; send?: typeof fetch }) {
   const t = textFor(props.locale);
   const [counter, setCounter] = useState(blankCounter);
-  const complete = Object.entries(counter).every(([, value]) => typeof value === 'boolean' ? value : value.trim());
+  const ready = counterFields.every(key => counter[key].trim()) && counter.goodFaith && counter.consent && counter.service;
   return <Correspondence {...props} kind="counter_notice" heading={t.counterHeading} help={t.counterHelp}
-    submitLabel={t.sendCounter} refused={t.sendRefused}
+    submitLabel={t.sendCounter} refused={t.sendRefused} ready={ready}
     confirm={<Alert variant="warning" role="note"><TriangleAlertIcon aria-hidden="true" />
       <AlertDescription>{t.counterDisclosure}</AlertDescription></Alert>}
-    valid={statement => statement.trim() ? null : t.messageRequired}
-    build={() => complete ? { counterNotice: { signature: counter.signature.trim(),
+    build={() => ({ counterNotice: { signature: counter.signature.trim(),
       materialLocation: counter.materialLocation.trim(), goodFaithMistakeUnderPerjury: true as const,
       name: counter.name.trim(), address: counter.address.trim(), phone: counter.phone.trim(),
       courtJurisdiction: counter.courtJurisdiction.trim(), consentToJurisdiction: true as const,
-      acceptService: true as const } } : null}>
-    {({ statement, setStatement }) => <>
-      <Field><FieldLabel>{t.counterStatement}</FieldLabel>
-        <Textarea value={statement} rows={3} maxLength={8000} onChange={event => setStatement(event.currentTarget.value)} /></Field>
-      <Line label={t.counterLocation} value={counter.materialLocation} maxLength={1000}
-        onChange={materialLocation => setCounter({ ...counter, materialLocation })} />
-      <Line label={t.counterName} value={counter.name} maxLength={300} onChange={name => setCounter({ ...counter, name })} />
-      <Line label={t.counterAddress} value={counter.address} maxLength={500}
-        onChange={address => setCounter({ ...counter, address })} />
-      <Line label={t.counterPhone} type="tel" value={counter.phone} maxLength={100}
-        onChange={phone => setCounter({ ...counter, phone })} />
-      <Line label={t.counterCourt} help={t.counterCourtHelp} value={counter.courtJurisdiction} maxLength={1000}
-        onChange={courtJurisdiction => setCounter({ ...counter, courtJurisdiction })} />
-      {([['goodFaith', t.counterMistake], ['consent', t.counterConsent], ['service', t.counterService]] as const)
-        .map(([key, label]) => <Field key={key} orientation="horizontal">
-          <Checkbox checked={counter[key]} onCheckedChange={details => setCounter({ ...counter, [key]: details.checked === true })} />
-          <FieldContent><FieldLabel>{label}</FieldLabel></FieldContent></Field>)}
-      <Line label={t.counterSignature} value={counter.signature} maxLength={300}
-        onChange={signature => setCounter({ ...counter, signature })} />
-    </>}
+      acceptService: true as const } })}>
+    {({ statement, setStatement, tried, written }) => {
+      const missing = (value: string) => tried && !value.trim() ? t.fieldRequired : null;
+      const unticked = (value: boolean) => tried && !value ? t.confirmRequired : null;
+      return <>
+        <Line label={t.counterStatement} multiline value={statement} onChange={setStatement} maxLength={8000}
+          error={missing(statement)} lang={written.lang} dir={written.dir} />
+        <Line label={t.counterLocation} value={counter.materialLocation} maxLength={1000}
+          error={missing(counter.materialLocation)} onChange={materialLocation => setCounter({ ...counter, materialLocation })} />
+        <Line label={t.counterName} value={counter.name} maxLength={300} error={missing(counter.name)}
+          onChange={name => setCounter({ ...counter, name })} />
+        <Line label={t.counterAddress} value={counter.address} maxLength={500} error={missing(counter.address)}
+          onChange={address => setCounter({ ...counter, address })} />
+        <Line label={t.counterPhone} type="tel" value={counter.phone} maxLength={100} error={missing(counter.phone)}
+          onChange={phone => setCounter({ ...counter, phone })} />
+        <Line label={t.counterCourt} help={t.counterCourtHelp} value={counter.courtJurisdiction} maxLength={1000}
+          error={missing(counter.courtJurisdiction)}
+          onChange={courtJurisdiction => setCounter({ ...counter, courtJurisdiction })} />
+        <Confirm checked={counter.goodFaith} error={unticked(counter.goodFaith)}
+          onChange={goodFaith => setCounter({ ...counter, goodFaith })}>{t.counterMistake}</Confirm>
+        <Confirm checked={counter.consent} error={unticked(counter.consent)}
+          onChange={consent => setCounter({ ...counter, consent })}>{t.counterConsent}</Confirm>
+        <Confirm checked={counter.service} error={unticked(counter.service)}
+          onChange={service => setCounter({ ...counter, service })}>{t.counterService}</Confirm>
+        <Line label={t.counterSignature} value={counter.signature} maxLength={300} error={missing(counter.signature)}
+          onChange={signature => setCounter({ ...counter, signature })} />
+      </>;
+    }}
   </Correspondence>;
 }
 
 /** The report page: reads the credential from the address and shows the case it opens. */
-export function CaseView({ locale, caseId, initial, credential: given, send }: {
+export function CaseView({ locale, caseId, initial, credential: given, actingSubject = null, send }: {
   locale: UiLocale; caseId: string;
+  /** The signed-in Agent, whose saved reading languages start the language choice. */
+  actingSubject?: string | null;
   /** Stories and tests start from a known state, and a known credential, instead of reading the address. */
   initial?: CaseState; credential?: string; send?: typeof fetch;
 }) {
@@ -243,20 +255,20 @@ export function CaseView({ locale, caseId, initial, credential: given, send }: {
     {credential ? <>
       <Correspondence heading={t.followUpHeading} help={t.followUpHelp} submitLabel={t.sendMessage} locale={locale}
         caseId={caseId} credential={credential} kind="message" build={() => ({})} onSent={sent} send={send}
-        refused={t.sendRefused} valid={statement => statement.trim() ? null : t.messageRequired}>
-        {({ statement, setStatement }) => <Field><FieldLabel>{t.messageLabel}</FieldLabel>
-          <Textarea value={statement} rows={4} maxLength={8000} onChange={event => setStatement(event.currentTarget.value)} />
-        </Field>}
+        actingSubject={actingSubject} refused={t.sendRefused}>
+        {({ statement, setStatement, tried, written }) => <Line label={t.messageLabel} multiline value={statement}
+          onChange={setStatement} maxLength={8000} error={tried && !statement.trim() ? t.messageRequired : null}
+          lang={written.lang} dir={written.dir} />}
       </Correspondence>
       {decided ? <Correspondence heading={t.appealHeading} help={t.appealHelp} submitLabel={t.sendAppeal}
-        locale={locale} caseId={caseId} credential={credential} kind="appeal" build={() => ({})} onSent={sent} send={send}
-        refused={t.sendRefused} valid={statement => statement.trim() ? null : t.messageRequired}>
-        {({ statement, setStatement }) => <Field><FieldLabel>{t.appealLabel}</FieldLabel>
-          <Textarea value={statement} rows={4} maxLength={8000} onChange={event => setStatement(event.currentTarget.value)} />
-        </Field>}
+        locale={locale} caseId={caseId} credential={credential} kind="appeal" build={() => ({})} onSent={sent}
+        send={send} actingSubject={actingSubject} refused={t.sendRefused}>
+        {({ statement, setStatement, tried, written }) => <Line label={t.appealLabel} multiline value={statement}
+          onChange={setStatement} maxLength={8000} error={tried && !statement.trim() ? t.messageRequired : null}
+          lang={written.lang} dir={written.dir} />}
       </Correspondence> : null}
       {decided && status.process === 'dmca_512' ? <CounterNoticeForm locale={locale} caseId={caseId}
-        credential={credential} onSent={sent} send={send} /> : null}
+        credential={credential} onSent={sent} send={send} actingSubject={actingSubject} /> : null}
     </> : null}
   </div>;
 }
