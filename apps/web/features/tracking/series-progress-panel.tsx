@@ -52,7 +52,8 @@ function PartLine({ part, t }: { part: SeriesPart; t: Copy }) {
   </span>;
 }
 
-function reasonText(reason: NonNullable<SeriesSummary['next']>['reason'], t: Copy) {
+/** Main's reason for the next part, in the reader's language. */
+export function reasonText(reason: NonNullable<SeriesSummary['next']>['reason'], t: Copy) {
   return reason === 'next_available_required_part' ? t.reasonNextAvailable
     : reason === 'awaiting_chosen_language' ? t.reasonAwaiting : t.reasonOptional;
 }

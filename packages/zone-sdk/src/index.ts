@@ -83,6 +83,30 @@ export interface ZoneWork {
   hub?: ZoneHubItem | null;
 }
 
+/** One release of a Work that met every condition of the release filter, with the facts a card states. */
+export interface ZoneMatchedRelease {
+  /** Native IRI of the release. */
+  id: string;
+  /** The language tag the release's matched text is in (`en`, `zh-Hant`). */
+  language: string | null;
+  platform: string | null;
+  completeness: 'complete' | 'partial' | 'trial' | 'unknown';
+  /** `official`, or `unofficial` for a fan or community release. */
+  origin: 'official' | 'unofficial';
+  /** Translators credited on the realization the release carries in `language`; empty when none is recorded. */
+  translators: ZoneText[];
+}
+
+/**
+ * The releases Main named for a Work on a release-filtered browse page (at most eight). A card shows
+ * exactly these and never infers a release from a title or a language.
+ */
+export interface ZoneReleaseMatches {
+  releases: ZoneMatchedRelease[];
+  /** More releases satisfy the filter than `releases` lists. */
+  more: boolean;
+}
+
 /** A published prompt or Skill, as its author disclosed it. */
 export interface ZoneHubItem {
   kind: 'prompt' | 'skill';
@@ -213,12 +237,23 @@ export interface HeaderSlotProps extends ZoneSlotProps {
 export type ZoneCardLayout = 'cover' | 'row' | 'rail';
 
 /** How a module asks for a card: its layout, chart position and the row's tallest cover proportion. */
-export interface ZoneCardOptions { layout?: ZoneCardLayout; rank?: number; slot?: number }
+export interface ZoneCardOptions {
+  layout?: ZoneCardLayout; rank?: number; slot?: number;
+  /** Present on a release-filtered browse page: the releases that matched the reader's filter. */
+  matches?: ZoneReleaseMatches;
+}
 
 export interface WorkCardSlotProps extends ZoneSlotProps {
   work: ZoneWork;
   layout: ZoneCardLayout;
   rank?: number;
+  /** The releases that matched the reader's release filter, when the card is a filtered result. */
+  matches?: ZoneReleaseMatches;
+  /**
+   * The signed-in reader's next volume of this Work when it is a series, in the language they chose, as
+   * Main reports it; draws nothing signed out or for any other Work. A package places it where it likes.
+   */
+  nextVolume: ReactNode;
 }
 /** How a slot that sets out Works shows them, so every pick keeps its author and "Why here?" stamp. */
 export interface ZoneWorkRenderers {
@@ -231,6 +266,11 @@ export interface ZoneWorkRenderers {
    * why it is in the Zone.
    */
   whyHere: (work: Pick<ZoneWork, 'title' | 'decision'>) => ReactNode;
+  /**
+   * "Continue your series" for the Works given: the series the signed-in reader has started, each with
+   * its next volume as Main reports it. Draws nothing signed out or when none has been started.
+   */
+  nextVolumes: (works: readonly Pick<ZoneWork, 'id' | 'href' | 'title'>[], heading: string) => ReactNode;
 }
 export interface HeroSlotProps extends ZoneSlotProps, ZoneWorkRenderers { banners: ZoneBanner[] }
 export interface BrowseBarSlotProps extends ZoneSlotProps { browse: ZoneBrowseEntry }
@@ -239,8 +279,72 @@ export interface ModuleSlotProps<Type extends ZoneModuleType> extends ZoneSlotPr
   data: ZoneModuleData[Type];
 }
 
+/** One option of a release-filter field: `value` is the Main value, `label` the Zone's word for it. */
+export interface ZoneReleaseOption { value: string; label: string }
+/** A release-filter field: the Zone's name for it, the words for "no choice" and the values it offers. */
+export interface ZoneReleaseField { label: string; any: string; options: ZoneReleaseOption[] }
+
+/**
+ * The release filter a Zone offers: one release of a Work must meet every chosen condition (Main's `where`
+ * group over releases), so a translated title never counts as a playable translation. The platform renders
+ * the control, sends the group to Main and shows what Main matched; the Zone names the fields, the values
+ * it offers and the words around them. A field left out is not offered. Books use `platform` as "Format".
+ */
+export interface ZoneReleaseFilterSpec {
+  /** The control's accessible name and heading. */
+  label: string;
+  language: ZoneReleaseField;
+  platform?: ZoneReleaseField;
+  completeness?: ZoneReleaseField;
+  origin?: ZoneReleaseField;
+  apply: string;
+  clear: string;
+  /** Said under the control while it is applied: what the results are. */
+  summary: string;
+  /** Said when no release meets the group. */
+  noMatch: { title: string; body: string };
+  /**
+   * Said on a page with no result that Main continues past (it examines a bounded stretch of the library
+   * at a time): this stretch had no match, and the next may.
+   */
+  keepLooking: string;
+  /** The cover a card draws for a Work found this way (Main's answer carries no type). */
+  coverKind: ZoneWork['kind'];
+}
+
+export interface BrowseHeaderSlotProps extends ZoneSlotProps {
+  /** The platform's release filter, already bound to the page's address. */
+  filter: ReactNode;
+  /** Whether the results below are filtered by a release group. */
+  filtered: boolean;
+}
+
+/**
+ * The first block of a Work's overview in a Zone, as regions the platform has already rendered. A package
+ * returns them in its own order (a visual novel leads with `availability`, a series with `progress`);
+ * the ratings, classification, adoption and record the platform keeps on every Work follow the block.
+ */
+export interface ZoneDetailRegions {
+  /** The Work's realizations and releases: where, and in what language, it can be read or played. */
+  availability: ReactNode;
+  /** The Work's description, and what its type adds. */
+  about: ReactNode;
+  /** The parts (volumes) of a series, with a link to every one; nothing for a Work that has none. */
+  volumes: ReactNode;
+  /** The signed-in reader's progress through a series and the next part; draws nothing when there is none. */
+  progress: ReactNode;
+}
+export interface WorkDetailSlotProps extends ZoneSlotProps {
+  work: Pick<ZoneWork, 'id' | 'title' | 'kind'>;
+  regions: ZoneDetailRegions;
+}
+
 /** The slots a package may fill; an empty slot keeps the platform rendering. */
 export interface ZoneSlots {
+  /** Above the Zone's browse results: the release filter and the words around it. */
+  browseHeader?: ComponentType<BrowseHeaderSlotProps>;
+  /** A Work's overview page inside the Zone. */
+  workDetail?: ComponentType<WorkDetailSlotProps>;
   header?: ComponentType<HeaderSlotProps>;
   /** The search and filters the home leads with; the platform's is a search field and chip rows. */
   browseBar?: ComponentType<BrowseBarSlotProps>;
@@ -261,6 +365,8 @@ export interface ZonePackage {
    */
   css: string;
   slots: ZoneSlots;
+  /** Offers the release filter on the browse page, in the reader's language (`locale` is the interface locale). */
+  releaseFilter?: (locale: string) => ZoneReleaseFilterSpec;
 }
 
 export function defineZonePackage<const Package extends ZonePackage>(pkg: Package): Package {

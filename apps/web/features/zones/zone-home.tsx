@@ -11,6 +11,7 @@ import { WhyHere, ZoneWorkCard, ZoneWorkRow } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
 import { AnnouncementModule, type CardRenderer, ChipModule, DecisionModule, DiscussionModule, EditorialModule,
   HeroModule, type ModuleProps, PeopleModule, QuoteModule, RankingModule, RisingModule, ShelfModule } from './modules.tsx';
+import { NextVolume, NextVolumeShelf } from './next-volume.tsx';
 import { ModuleFailed, SlotBoundary } from './slot-boundary.tsx';
 
 /**
@@ -59,8 +60,8 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
     const fallback = platform(work, options, false);
     return <div key={work.id} className="relative">
       <SlotBoundary slot="workCard" fallback={fallback}>
-        <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} fallback={fallback}
-          Link={LocalizedLink} />
+        <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} matches={options.matches}
+          nextVolume={<NextVolume work={work.id} locale={locale} />} fallback={fallback} Link={LocalizedLink} />
       </SlotBoundary>
       <WhyHere work={work} locale={locale} messages={messages} className="absolute end-1 top-1 bg-card/90 shadow-sm" />
     </div>;
@@ -69,7 +70,8 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
 
 /** What a package's hero and module slots set Works out with: the platform card and "Why here?" stamp. */
 function workRenderers(card: CardRenderer, locale: UiLocale, messages: ZoneMessages): ZoneWorkRenderers {
-  return { card, whyHere: work => <WhyHere work={work} locale={locale} messages={messages} /> };
+  return { card, whyHere: work => <WhyHere work={work} locale={locale} messages={messages} />,
+    nextVolumes: (works, heading) => <NextVolumeShelf works={works} heading={heading} locale={locale} /> };
 }
 
 function renderModule(placed: PlacedModule, zone: ZoneContext, pkg: ZonePackage | null, card: CardRenderer,

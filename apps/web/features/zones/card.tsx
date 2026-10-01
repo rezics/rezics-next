@@ -7,6 +7,7 @@ import { BFF_PREFIX } from '../api/browser.ts';
 import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import type { CatalogueWork } from '../catalogue/work.ts';
 import { AuthorNames } from '../catalogue/author-names.tsx';
+import { ShelfMark } from '../catalogue/reader-actions.tsx';
 import { CoverLink, WorkTile } from '../catalogue/work-tile.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { ZoneMessages } from './messages.ts';
@@ -153,7 +154,8 @@ export function ZoneWorkRow({ work, rank, locale, messages, avatarQuery, heading
     ? compact ? 'grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[auto_5rem_minmax(0,1fr)_auto]'
     : compact ? 'grid-cols-[4.5rem_minmax(0,1fr)_auto]' : 'grid-cols-[5rem_minmax(0,1fr)_auto]')}>
     {rank ? <RankBadge rank={rank} label={t.rank({ rank: String(rank) })} className="mt-1" /> : null}
-    <CoverLink work={card} avatarQuery={avatarQuery} />
+    <CoverLink work={card} avatarQuery={avatarQuery}>
+      <ShelfMark work={work.id} title={title} locale={locale} /></CoverLink>
     <div className="grid min-w-0 content-start gap-0.5">
       <Heading lang={work.title?.lang} dir={work.title?.dir}
         className={cn('text-pretty font-medium font-work-title', compact ? 'line-clamp-1 text-[0.9375rem]/snug'

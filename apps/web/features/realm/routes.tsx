@@ -12,6 +12,9 @@ import { ZoneBrowse } from '../zones/browse.tsx';
 import { type BrowseFacet, browseFacets, mainBrowseQuery, parseBrowseState } from '../zones/browse-state.ts';
 import { browseEntry, browseModel, type FacetCounts } from '../zones/browse-view.ts';
 import { cardRenderer, ZoneHome } from '../zones/zone-home.tsx';
+import { ReleaseBrowse, ReleaseBrowseHeader } from '../release-filter/browse.tsx';
+import { readReleaseBrowse } from '../release-filter/read.ts';
+import { parseReleaseFilter, releaseFilterActive } from '../release-filter/state.ts';
 import { zoneDecision, zoneText, zoneWork } from './adapt.ts';
 import { loadModules } from './modules.ts';
 import { readAgent, readFacets, readRealmDecision, readRealmDecisions, readRealmDirectory, readRealmWorks, readRoster,
@@ -111,21 +114,39 @@ export function RealmHomeRoute(props: RealmRouteProps) {
 
 /**
  * A Zone's browse page: its newest picks filtered by the Facets Main reads
- * for them and sorted as the reader chose, in a list or a grid.
+ * for them and sorted as the reader chose, in a list or a grid. A Zone whose package offers a
+ * release filter (`releaseFilter`) leads with it; once a condition is chosen the results are the
+ * Works Main finds with one release meeting every condition, each saying which release matched.
  */
 export function RealmBrowseRoute(props: RealmRouteProps) {
   return realmRoute(props, 'browse', async (view, locale, search) => {
+    const base = view.zone.links.browse;
+    const card = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
+    const spec = view.pkg?.releaseFilter?.(locale) ?? null;
+    const release = parseReleaseFilter(search);
+    const header = spec ? <ReleaseBrowseHeader zone={view.zone} pkg={view.pkg} spec={spec} state={release}
+      base={base} /> : null;
+    if (spec && releaseFilterActive(release)) {
+      const found = await readReleaseBrowse(view.context.realm, locale, release, view.context, spec);
+      if (!found.ok) return <>
+        <PageContainer className="py-0 sm:py-0 lg:py-0">{header}</PageContainer>
+        {failure(view, 'browse', found.failure === 'sign-in' || found.failure === 'identity' ? 'unavailable' : found.failure)}</>;
+      return <ReleaseBrowse header={header} spec={spec} state={release} base={base} items={found.data.items}
+        next={found.data.next} card={card} messages={view.zoneMessages} locale={locale} />;
+    }
     const state = parseBrowseState(search);
     const [page, facets] = await Promise.all([readZoneBrowse(view.context.realm, locale, mainBrowseQuery(state)),
       readFacets()]);
     if (!page.ok) return failure(view, 'browse', page.failure);
     const admitted = new Map((facets.ok ? facets.data.facets : []).filter(facet => facet.current)
       .map(facet => [facet.name, facet.labels[locale]] as const));
-    const model = browseModel({ base: view.zone.links.browse, zoneName: view.zone.name.value, state, admitted, locale,
+    const model = browseModel({ base, zoneName: view.zone.name.value, state, admitted, locale,
       messages: view.zoneMessages, page: { ...page.data, facets: facetCounts(page.data), sort: page.data.query.sort,
         items: page.data.items.map(item => zoneWork(item, view.context, item.evidence)) } });
-    return <ZoneBrowse model={model} messages={view.zoneMessages}
-      card={cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery)} />;
+    return <>
+      {header ? <PageContainer className="pb-0 sm:pb-0 lg:pb-0">{header}</PageContainer> : null}
+      <ZoneBrowse model={model} messages={view.zoneMessages} card={card} />
+    </>;
   });
 }
 

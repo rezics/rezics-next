@@ -140,7 +140,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
           const work = await loadWork(id, locale);
           const title = work.ok ? zoneText(work.header.title) : { value: shortId(id), lang: '', dir: 'ltr' as const };
           return frame(<ZoneWorkPage base={workBase(ref, id, route.mount?.segment ?? null, view.context.realm)}
-            tab={tab} search={search} locale={locale} />,
+            tab={tab} search={search} locale={locale} detail={{ zone: view.zone, pkg: view.pkg }} />,
           [home, ...mount ? [mount] : [], { label: title, href: null }]);
         }
         case 'other': return frame(<PageNotAvailable messages={view.messages} />,

@@ -5,6 +5,7 @@ import { profileHref } from '../profile/route.ts';
 import { authorHref } from '../author/route.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { coverKindOf } from '../catalogue/work.ts';
+import { entityHref } from '../entity-page/route.ts';
 import { isoMoment, zoneWorkCards } from '../zones/adapt-cards.ts';
 import type { FallbackReason, MainExecution, PresentationBanner } from '../zones/presentation.ts';
 import { decisionHref, realmWorkHref, scopedWorkHref } from './route.ts';
@@ -54,8 +55,10 @@ export function workLink(context: AdaptContext, work: string, mount: string | nu
 /**
  * A Work card in this Zone. `decision` is the public Decision that placed
  * it here (the adoption's selection); `mount` is the mounted Collection it came from, if any.
+ * Main marks a card `inZone: false` when the Work is not in this Zone's population: it then opens on its
+ * canonical page, since the Zone's site has no page for it. Membership is never decided here.
  */
-export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[] }
+export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[]; inZone?: boolean }
   & Parameters<typeof zoneWorkCards>[0],
   context: AdaptContext, decision: string | null, mount: string | null = null): ZoneWork {
   const credit = card.primaryCredits?.find(item => item.displayName);
@@ -63,7 +66,8 @@ export function zoneWork(card: WorkCard & { primaryCredits?: ModuleCredit[] }
   const href = credit?.handle ? authorHref({ kind: 'agent', handle: credit.handle })
     : credit?.provider === 'open-library' && credit.key
       ? authorHref({ kind: 'external', key: credit.key }) : null;
-  return { id: card.id, href: workLink(context, card.id, mount), title: zoneText(card.title),
+  return { id: card.id, href: card.inZone === false ? entityHref(card.id) : workLink(context, card.id, mount),
+    title: zoneText(card.title),
     cover: zoneImage(card.cover, context.avatarQuery), kind: coverKindOf(card.types),
     author: author ? zoneContentText(author) : null,
     authorHref: href,
