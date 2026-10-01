@@ -10,15 +10,22 @@ test.use({ actionTimeout: 15_000 });
 test.beforeAll(async () => {
   test.setTimeout(540_000);
   data = seeded();
-  // A Realm's public header comes from a projection that can trail the Zone, and a Zone's site needs it.
-  for (const realm of [data.acceptance.zones.sao.realm, data.acceptance.zones.crossover.realm]) {
-    let found = false;
-    for (const deadline = Date.now() + 120_000; Date.now() < deadline && !found;) {
-      const header = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/realms/${uuid(realm)}`).catch(() => null);
-      found = Boolean(header?.ok);
-      if (!found) await new Promise(done => setTimeout(done, 1000));
+  // A Zone's site reads projections that trail the Zone: the Realm's header, its Zone, and the route to a mounted Work.
+  const main = (path: string) => fetch(`http://127.0.0.1:${process.env.MAIN_PORT}${path}`).catch(() => null);
+  const mounted = { sao: data.manifest.works['sao.bunko']!.work, crossover: data.manifest.works['sao.aggo']!.work };
+  for (const [name, { realm, zone }] of Object.entries(data.acceptance.zones)) {
+    const paths = [`/v1/realms/${uuid(realm)}`, `/v1/realms/${uuid(realm)}/zone`,
+      `/v1/zones/${uuid(zone)}/routes?path=${encodeURIComponent(`/franchise/${uuid(mounted[name as keyof typeof mounted])}`)}`];
+    for (const path of paths) {
+      let last = '';
+      for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
+        const response = await main(path);
+        last = response ? `${response.status} ${(await response.text()).slice(0, 200)}` : 'no answer';
+        if (response?.ok) break;
+        await new Promise(done => setTimeout(done, 1000));
+      }
+      if (!last.startsWith('200')) throw new Error(`${path} never became readable: ${last}`);
     }
-    if (!found) throw new Error(`The Realm ${realm} never became readable`);
   }
 });
 

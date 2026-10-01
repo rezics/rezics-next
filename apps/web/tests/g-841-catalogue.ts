@@ -18,6 +18,7 @@ import { readDefinitionByKey } from '../../../services/main/src/modules/relation
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
+import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { type AcceptanceAnswers, answerAcceptance, seedAcceptance } from './g-914-acceptance.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
@@ -248,7 +249,17 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
     actingSubject: person }, 'g841:correspondence:spider'), 201);
 
   // Queries 5 and 12 (G-914): two Zones, the related Works, and a review on each grain in the SAO Zone's Realm.
-  const acceptance = await seedAcceptance(port, manifest, { digitalRelease: digital.release, digitalRealization: english.realization });
+  const publish = async (item: { work: string; mainVersion: string; title: string }) => {
+    const text = await stack.contribution(item.work, person, 'en', `${item.title}, as published for the catalogue fixtures`);
+    const selection = { context: { kind: 'main-version-default' as const, id: item.mainVersion }, work: item.work,
+      contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
+      selectionBasis: 'main-maintainer' as const, actingSubject: person };
+    const selected = await selectMainDefault(stack.env, stack.admission(person, `publication:select:${item.mainVersion}`,
+      'publication.select', mainSelectionDigest(selection)), selection);
+    if (selected.outcome !== 'succeeded') throw new Error(`${item.title}: publication failed`);
+  };
+  const acceptance = await seedAcceptance(port, manifest, { digitalRelease: digital.release,
+    digitalRealization: english.realization, publish });
 
   // Main keeps processing the writes' events for a while, moving the graph under every read (409).
   let last = '';

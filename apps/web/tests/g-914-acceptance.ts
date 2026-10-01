@@ -3,7 +3,8 @@
 // those of `tests/qa/integration/g-840-catalogue.test.ts` (G-913); the answers recorded after the graph settles are
 // what Main says for each, so the browser is compared with the API and not with a copy of its rules.
 import { randomUUID } from 'node:crypto';
-import { catalogueCollection, catalogueZone } from '../../../tests/fixtures/catalogue/acceptance.ts';
+import { catalogueCollection, catalogueRequest, catalogueZone } from '../../../tests/fixtures/catalogue/acceptance.ts';
+import { ZONE_PRESETS } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import type { CatalogueManifest, CataloguePort } from '../../../tests/fixtures/catalogue/load.ts';
 
 const short = (iri: string) => iri.slice(-36);
@@ -50,14 +51,27 @@ export interface AcceptanceAnswers {
 
 export interface AcceptanceSeed { planned: Planned[]; zones: Zones; manga: string; anime: string }
 
+/** A Zone is a site once its configuration names its default Realm; this one has the plain preset and no modules. */
+async function openZone(port: CataloguePort, zone: string, realm: string, name: string) {
+  const head = await catalogueRequest<{ revision: string }>(port, 'GET',
+    `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(port.actingSubject)}`);
+  await written(port, 'PUT', `/v1/zones/${short(zone)}/configuration`, { expectedHead: head.revision,
+    actingSubject: port.actingSubject, name, language: 'en', defaultRealm: realm,
+    presentation: { profile: 'zone-presentation-v1', preset: 'clean', tokens: ZONE_PRESETS.clean, navigation: [], banners: [], modules: [] } });
+}
+
 /** Writes the Zones, the related Works and the reviews; nothing is read back before the graph has settled. */
 export async function seedAcceptance(port: CataloguePort, manifest: CatalogueManifest,
-  input: { digitalRelease: string; digitalRealization: string }): Promise<AcceptanceSeed> {
+  input: { digitalRelease: string; digitalRealization: string;
+    /** Gives a Work a public text, which is what makes a Zone's site show it: its routes answer anonymous readers. */
+    publish: (work: { work: string; mainVersion: string; title: string }) => Promise<void> }): Promise<AcceptanceSeed> {
   const work = (id: string) => manifest.works[id]!;
   const saoFranchise = manifest.collections['sao.franchise']!.collection;
   const sao = await catalogueZone(port, 'SAO catalogue', { franchise: saoFranchise });
   const crossover = await catalogueCollection(port, 'Synthetic crossover catalogue', [work('sao.aggo').work, work('index.original').work]);
   const other = await catalogueZone(port, 'Crossover catalogue', { franchise: crossover });
+  await openZone(port, sao.zone, sao.realm, 'SAO catalogue');
+  await openZone(port, other.zone, other.realm, 'Crossover catalogue');
 
   // Independent manga and anime Works the SAO story is adapted into (the fixture specification's expand_independent_works).
   const adaptations: Record<'manga' | 'anime', string> = { manga: '', anime: '' };
@@ -104,6 +118,8 @@ export async function seedAcceptance(port: CataloguePort, manifest: CatalogueMan
       spoiler: false })).review;
     planned.push({ ...item, generic, context, review, text });
   }
+  // A Zone's site is public, so the Works it mounts need a public text. Done last: it changes nothing the above pinned.
+  for (const key of ['sao.bunko', 'sao.aggo']) await input.publish(work(key));
   return { planned, zones: { sao: { zone: sao.zone, realm: sao.realm }, crossover: { zone: other.zone, realm: other.realm } },
     manga: adaptations.manga, anime: adaptations.anime };
 }
