@@ -78,6 +78,9 @@ export async function checkScreen(page: Page, name: string, found: Findings, inf
       for (const [label, size] of Object.entries(sizes)) {
         await page.setViewportSize(size);
         await setTheme(page, theme);
+        // From the top, where a fixed bar covers nothing a reader has not scrolled to: axe's target-size check counts a
+        // control half under a bar as undersized, which depends on where the page happens to be scrolled.
+        await page.evaluate(() => scrollTo(0, 0));
         const label2 = `${name} ${theme} ${label}`;
         const violations = await axeViolations(page, options.exclude ? { exclude: options.exclude } : {});
         if (violations.length) found.push(`${label2}\n${formatViolations(violations)}`);
