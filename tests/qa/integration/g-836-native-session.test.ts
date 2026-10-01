@@ -10,14 +10,24 @@ import type { MainWorkDependencies } from '../../../services/main/src/routes/dep
 import { independenceKey, requireReview, reviewBasis } from '../../../services/main/src/modules/editorial-review/authority.ts';
 import { controlTransaction } from '../../../services/main/src/modules/access/topology-control.ts';
 import { AccessMergeJournal } from '../../../services/main/src/modules/identity-merge/journal.ts';
-import { checkedPlan, itemCommandKey, type MergeTask } from '../../../services/main/src/modules/identity-merge/contract.ts';
+import { checkedPlan, itemCommandKey, type MergeTask, type IdentityPlan } from '../../../services/main/src/modules/identity-merge/contract.ts';
 import { sessionMergeHandler } from '../../../services/main/src/modules/session/merge-handler.ts';
+import { followsMergeHandler } from '../../../services/main/src/modules/follows/merge-handler.ts';
+import { runMergeTask } from '../../../services/main/src/modules/identity-merge/engine.ts';
+import { mergeEditorialCommands } from '../../../services/main/src/modules/identity-merge/editorial-commands.ts';
+import { mergeOwnerBinding } from '../../../services/main/src/modules/identity-merge/authority.ts';
+import { EditorialCommandJournal } from '../../../services/main/src/modules/editorial-review/command-journal.ts';
+import { applyOrderedCommands } from '../../../services/main/src/modules/editorial-review/ordered.ts';
+import type { ApplyInput } from '../../../services/main/src/modules/editorial-review/contract.ts';
+import { MergeUnavailable } from '../../../services/main/src/modules/identity-merge/contract.ts';
+import { libraryMergeHandler } from '../../../services/main/src/modules/library/merge-handler.ts';
+import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import type { SessionState } from '../../../services/main/src/modules/session/contract.ts';
 import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 /** Native retained-attempt coverage and shared Access/Jena review authority.
  * This is deliberately separate from the outstanding SAO public merge journey. */
-test('G836: native sessions remain separate, indexed by source and selection, under two independent human reviews', async () => {
+test('G836: native sessions, library statuses and follows recover under two independent human reviews and ordered owner authority', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
@@ -54,8 +64,9 @@ test('G836: native sessions remain separate, indexed by source and selection, un
     } }`);
     const plan = checkedPlan({ operation: 'merge', source: { resource: source, revision: sourceRevision },
       survivor: { resource: survivor, revision: survivorRevision }, evidence: [{ resource: source, revision: sourceRevision, locator: null }] });
-    const createTask = async (approve: boolean, overlappingHistory = false) => {
-      const proposal = randomUUID(), application = randomUUID(), candidate = canonicalCandidate(plan);
+    const createTask = async (approve: boolean, overlappingHistory = false,
+      selectedHandler = { owner: handler.owner, version: handler.version }, taskPlan: IdentityPlan = plan) => {
+      const proposal = randomUUID(), application = randomUUID(), candidate = canonicalCandidate(taskPlan);
       const target = { resource: source, revision: sourceRevision, context: 'urn:rezics:context:global' as const, work: source };
       await accessPool.query(`INSERT INTO access.editorial_proposal
         (id,kind,target,resource,context,work,proposer_principal,proposer_agent,proposer_key,proposer_controllers)
@@ -65,7 +76,7 @@ test('G836: native sessions remain separate, indexed by source and selection, un
         (proposal,n,candidate,candidate_digest,before_state,base_heads,evidence,owner_command,author_agent)
         VALUES ($1,1,$2,$3,'null',$4,$5,$6,$7)`, [proposal, JSON.stringify(candidate.candidate), candidate.digest,
         JSON.stringify([{ component: source, head: sourceRevision }, { component: survivor, head: survivorRevision }]),
-        JSON.stringify(plan.evidence), { action: 'work.edit', scope: `work:edit:${source}`, digest: candidate.digest }, agents[0]]);
+        JSON.stringify(taskPlan.evidence), { action: 'work.edit', scope: `work:edit:${source}`, digest: candidate.digest }, agents[0]]);
       for (const [principal, agent] of overlappingHistory
         ? [[principals[3]!, agents[4]!], [principals[2]!, agents[2]!], [principals[1]!, agents[1]!]]
         : [[principals[1]!, agents[1]!]]) {
@@ -78,8 +89,8 @@ test('G836: native sessions remain separate, indexed by source and selection, un
         (id,proposal,revision,principal,actor,operation_key,command_key,command_digest,approve,required,message)
         VALUES ($1::uuid,$2,1,$3,$4,$5,$1::text,$6,$7,2,'Second human')`,
       [application, proposal, principals[2], agents[2], `editorial:${proposal}:1`, candidate.digest, approve]);
-      const task: MergeTask = { key: `editorial:${proposal}:1`, application, candidateDigest: candidate.digest, plan, dataEpoch: epoch,
-        handlers: [{ owner: handler.owner, version: handler.version }] };
+      const task: MergeTask = { key: `editorial:${proposal}:1`, application, candidateDigest: candidate.digest, plan: taskPlan, dataEpoch: epoch,
+        handlers: [selectedHandler] };
       await journal.locked(task.key, owner => owner.prepare(task));
       const proposalObject: Proposal = { id: proposal, kind: 'merge', target, proposer: agents[0]!,
         proposerKey: independenceKey(proposal, principals[0]!), latestRevision: 1, decision: null };
@@ -148,6 +159,117 @@ test('G836: native sessions remain separate, indexed by source and selection, un
     const indexes = (await contentPool.query<{ indexname: string }>(`SELECT indexname FROM pg_indexes
       WHERE schemaname='reader' AND indexname IN ('consumption_session_merge_inventory','consumption_session_selection_merge_inventory')`)).rows;
     expect(indexes).toHaveLength(2);
+
+    // Native person-slot commands share Access's inventory and authority locks.
+    // The finalizer here is a test port: this is not public merge acceptance.
+    await accessPool.query('UPDATE access.permission_grant SET active=true WHERE recipient_subject=$1 AND scope_id=$2', [agents[2], scope]);
+    for (let n = 0; n < 3; n++) {
+      await accessPool.query('INSERT INTO access.follow_inventory(principal_id,revision,active_count) VALUES ($1,$2,$3)',
+        [principals[n], randomUUID(), n === 0 ? 2 : 1]);
+      await accessPool.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision)
+        VALUES ($1,$2,'work',$3,true,$4)`, [principals[n], source, agents[n], randomUUID()]);
+      if (n < 2) await accessPool.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision)
+        VALUES ($1,$2,'work',$3,$4,$5)`, [principals[n], survivor, agents[n], n === 0, randomUUID()]);
+    }
+    const follows = followsMergeHandler(deps);
+    const followTask = (await createTask(true, false, { owner: follows.owner, version: follows.version })).task;
+    expect(await follows.preview(plan, deps)).toEqual({ owner: 'follows', count: 3, complete: true });
+    const followRuntime = { dependencies: deps, dataEpoch: epoch, begin: () => Promise.resolve(), checkDeadline() {},
+      finish(task: MergeTask, commandKey: string) { return Promise.resolve({ receipt: `urn:g836:follow-test:${task.key}`, commandKey, result: null }); } };
+    let lost = false;
+    const losingFollows = { ...follows, async apply(...args: Parameters<typeof follows.apply>) {
+      const result = await follows.apply(...args);
+      if (!lost) { lost = true; throw new Error('lost follow effect acknowledgement'); }
+      return result;
+    } };
+    const followInput = (task: MergeTask): ApplyInput => ({ operationKey: task.key,
+      target: { resource: source, revision: sourceRevision, work: source, context: 'urn:rezics:context:global' },
+      expectedHeads: [{ component: source, head: sourceRevision }, { component: survivor, head: survivorRevision }],
+      permit: { proof: task.application, proposal: task.key.split(':')[1]!, revision: 1,
+        candidateDigest: task.candidateDigest, decidingAgent: agents[2]! },
+      revision: { proposal: task.key.split(':')[1]!, n: 1, candidate: canonicalCandidate(task.plan).candidate,
+        candidateDigest: task.candidateDigest, before: null, baseHeads: [], evidence: plan.evidence },
+      commands: new EditorialCommandJournal(accessPool) });
+    const wrongBindingTask = (await createTask(true, false, { owner: follows.owner, version: follows.version })).task;
+    const wrongInput = followInput(wrongBindingTask), wrongKey = itemCommandKey(wrongBindingTask.key, 'follows', '$stage');
+    await wrongInput.commands!.plan(wrongInput, [wrongKey]);
+    await wrongInput.commands!.bind(wrongInput, 0, { ...mergeOwnerBinding(wrongBindingTask, 'follows'), scope: `identity:merge:${survivor}` });
+    const wrongItem = (await follows.plan(wrongBindingTask, null, 1, deps)).items[0]!;
+    await expect(follows.apply(wrongBindingTask, wrongItem, itemCommandKey(wrongBindingTask.key, 'follows', wrongItem.key), deps))
+      .rejects.toBeInstanceOf(MergeUnavailable);
+    const input = followInput(followTask);
+    const nativeAdapter: EditorialAdapter = { kind: 'merge', requiredApprovals: 2,
+      validate() { throw new Error('Delivery check only'); }, preview: () => Promise.resolve([]),
+      apply() { throw new Error('Ordered merge must not call the legacy application port'); },
+      commands: next => Promise.resolve(mergeEditorialCommands(next, followTask, new AccessMergeJournal(accessPool), [losingFollows], followRuntime)),
+      complete: next => Promise.resolve(ownerReceipt(next, `urn:g836:follow-test:${followTask.key}`, id(), { task: followTask.key })),
+      compensate() { throw new Error('Compensation checked separately'); } };
+    await expect(applyOrderedCommands(nativeAdapter, input)).rejects.toThrow('lost follow effect acknowledgement');
+    expect((await applyOrderedCommands(nativeAdapter, { ...input, commands: new EditorialCommandJournal(accessPool) })).outcome).toBe('applied');
+    expect((await accessPool.query('SELECT 1 FROM access.editorial_command_outcome WHERE application=$1', [followTask.application])).rowCount).toBe(2);
+    expect((await runMergeTask(followTask, new AccessMergeJournal(accessPool), [follows], followRuntime)).state).toBe('complete');
+    expect((await accessPool.query('SELECT 1 FROM access.follow_merge_receipt WHERE task_key=$1', [followTask.key])).rowCount).toBe(3);
+    const afterFollow = (await accessPool.query<{ principal_id: string; target: string; following: boolean }>(
+      'SELECT principal_id::text,target,following FROM access.follow WHERE target=ANY($1::text[])', [[source, survivor]])).rows;
+    expect(afterFollow.filter(row => row.target === source && row.following)).toHaveLength(0);
+    expect(afterFollow.filter(row => row.target === survivor && row.following).map(row => row.principal_id).sort())
+      .toEqual([principals[0]!, principals[2]!].sort());
+    // An unrelated later follow survives compensation; a changed survivor
+    // choice makes only its exact original item ambiguous.
+    const later = id();
+    await accessPool.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision)
+      VALUES ($1,$2,'work',$3,true,$4)`, [principals[0], later, agents[0], randomUUID()]);
+    await accessPool.query('UPDATE access.follow_inventory SET active_count=active_count+1,revision=$2 WHERE principal_id=$1', [principals[0], randomUUID()]);
+    await accessPool.query('UPDATE access.follow SET revision=$3 WHERE principal_id=$1 AND target=$2', [principals[2], survivor, randomUUID()]);
+    // Owner deletion is also a later change; compensation never recreates a
+    // withdrawn inventory or its relationships from retained snapshots.
+    await accessPool.query('DELETE FROM access.follow WHERE principal_id=$1', [principals[2]]);
+    await accessPool.query('DELETE FROM access.follow_inventory WHERE principal_id=$1', [principals[2]]);
+    const unmerge = checkedPlan({ ...plan, operation: 'unmerge', original: followTask.key });
+    const unmergeTask = (await createTask(true, false, { owner: follows.owner, version: follows.version }, unmerge)).task;
+    expect((await runMergeTask(unmergeTask, journal, [follows], followRuntime)).state).toBe('complete');
+    expect((await accessPool.query('SELECT 1 FROM access.identity_merge_item_outcome WHERE task_key=$1 AND outcome=\'ambiguous\'', [unmergeTask.key])).rowCount).toBe(1);
+    expect((await accessPool.query('SELECT 1 FROM access.follow WHERE target=$1 AND following', [later])).rowCount).toBe(1);
+    expect((await accessPool.query('SELECT 1 FROM access.follow WHERE target=$1 AND following', [source])).rowCount).toBe(2);
+    const inconsistent = (await accessPool.query(`SELECT i.principal_id FROM access.follow_inventory i
+      WHERE i.principal_id=ANY($1::uuid[]) AND i.active_count <> (SELECT count(*) FROM access.follow f WHERE f.principal_id=i.principal_id AND f.following)`, [principals])).rowCount;
+    expect(inconsistent).toBe(0);
+
+    const library = libraryMergeHandler(deps), statuses = new ReaderLibraryStatusStore(contentPool);
+    for (let n = 0; n < 3; n++) await statuses.write({ agent: agents[n]!, work: source,
+      status: n === 1 ? 'reading' : 'read', startedOn: '2009-04-10', finishedOn: n === 1 ? null : '2009-04-11',
+      expectedVersion: 0, idempotencyKey: randomUUID() });
+    await statuses.write({ agent: agents[0]!, work: survivor, status: 'want-to-read', expectedVersion: 0, idempotencyKey: randomUUID() });
+    await statuses.write({ agent: agents[1]!, work: survivor, status: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    const libraryTask = (await createTask(true, false, { owner: library.owner, version: library.version })).task;
+    expect(await library.preview(plan, deps)).toEqual({ owner: 'library', count: 3, complete: true });
+    let libraryLost = false;
+    const losingLibrary = { ...library, async apply(...args: Parameters<typeof library.apply>) {
+      const result = await library.apply(...args);
+      if (!libraryLost) { libraryLost = true; throw new Error('lost library effect acknowledgement'); }
+      return result;
+    } };
+    await expect(runMergeTask(libraryTask, journal, [losingLibrary], followRuntime)).rejects.toThrow('lost library effect acknowledgement');
+    expect((await runMergeTask(libraryTask, new AccessMergeJournal(accessPool), [library], followRuntime)).state).toBe('complete');
+    expect((await contentPool.query('SELECT 1 FROM reader.library_status_merge_receipt WHERE task_key=$1', [libraryTask.key])).rowCount).toBe(3);
+    const sourceSlots = await statuses.batch(agents[0]!, [source]);
+    expect(sourceSlots[0]).toMatchObject({ status: null, startedOn: null, finishedOn: null, version: 2 });
+    expect((await statuses.batch(agents[0]!, [survivor]))[0]).toMatchObject({ status: 'want-to-read', version: 1 });
+    expect((await statuses.batch(agents[1]!, [survivor]))[0]).toMatchObject({ status: null, version: 1 });
+    const moved = (await statuses.batch(agents[2]!, [survivor]))[0]!;
+    expect(moved).toMatchObject({ status: 'read', startedOn: '2009-04-10', finishedOn: '2009-04-11', version: 1 });
+    // Derived keys can refresh without turning an unchanged personal slot into
+    // an ambiguous edit. An actual personal status edit remains ambiguous.
+    await contentPool.query('UPDATE reader.library_status SET own_rating=4,title_key=\'localized\' WHERE agent=$1 AND work=$2', [agents[0], survivor]);
+    await statuses.write({ agent: agents[2]!, work: survivor, status: 'reading', expectedVersion: moved.version, idempotencyKey: randomUUID() });
+    const undoLibrary = (await createTask(true, false, { owner: library.owner, version: library.version },
+      checkedPlan({ ...plan, operation: 'unmerge', original: libraryTask.key }))).task;
+    expect((await runMergeTask(undoLibrary, journal, [library], followRuntime)).state).toBe('complete');
+    expect((await accessPool.query('SELECT 1 FROM access.identity_merge_item_outcome WHERE task_key=$1 AND outcome=\'ambiguous\'', [undoLibrary.key])).rowCount).toBe(1);
+    expect((await statuses.batch(agents[0]!, [source]))[0]).toMatchObject({ status: 'read', startedOn: '2009-04-10', finishedOn: '2009-04-11', version: 3 });
+    expect((await statuses.batch(agents[0]!, [survivor]))[0]).toMatchObject({ status: 'want-to-read', version: 1 });
+    expect((await statuses.batch(agents[1]!, [source]))[0]).toMatchObject({ status: 'reading', version: 3 });
+    expect((await statuses.batch(agents[2]!, [survivor]))[0]).toMatchObject({ status: 'reading', version: 2 });
 
     // Exercise G-865's actual persisted resume path through a controlled owner
     // port. The native identity finalizer is still outstanding; this fixture

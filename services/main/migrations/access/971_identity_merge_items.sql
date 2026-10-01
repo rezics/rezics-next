@@ -95,3 +95,22 @@ CREATE TRIGGER identity_merge_outcome_immutable BEFORE UPDATE OR DELETE ON acces
   FOR EACH ROW EXECUTE FUNCTION access.editorial_immutable();
 CREATE TRIGGER identity_merge_completion_immutable BEFORE UPDATE OR DELETE ON access.identity_merge_completion
   FOR EACH ROW EXECUTE FUNCTION access.editorial_immutable();
+
+-- Follows owns its person-slot reconciliation and aggregate in this same
+-- database. Its effect receipt is distinct from the executor's later journal
+-- acknowledgement, so a lost acknowledgement never repeats the effect.
+CREATE TABLE access.follow_merge_receipt (
+  command_key text PRIMARY KEY CHECK (command_key ~ '^merge:[0-9a-f]{64}$'),
+  task_key text NOT NULL REFERENCES access.identity_merge_task(task_key),
+  principal_id uuid NOT NULL,
+  request_digest text NOT NULL CHECK (request_digest ~ '^[0-9a-f]{64}$'),
+  result jsonb NOT NULL CHECK (jsonb_typeof(result) = 'object' AND octet_length(result::text) <= 65536
+    AND (result->>'outcome') IN ('moved','history','retained','ambiguous')
+    AND (result->>'outcome') IS NOT NULL
+    AND (result->>'commandKey') IS NOT DISTINCT FROM command_key
+    AND (result->>'receipt') IS NOT DISTINCT FROM ('urn:rezics:follows:' || command_key)),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CHECK (command_key = access.identity_merge_command_key(task_key,'follows',principal_id::text))
+);
+CREATE TRIGGER follow_merge_receipt_immutable BEFORE UPDATE OR DELETE ON access.follow_merge_receipt
+  FOR EACH ROW EXECUTE FUNCTION access.editorial_immutable();

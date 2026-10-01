@@ -66,9 +66,15 @@ G-506's `resolveTargets` follows `mergedInto` by default in bounded batches,
 disclosing each visited source and survivor before returning the terminal target.
 Converging paths preserve input order and duplicates. Its native direct-edge
 hook and old-read envelope are exported by `resolution.ts`, with epoch/sequence,
-cycle, disclosure and the shared 32-hop address bound. The shared resource
-summary and ID route are claimed by G-542; their public merged-read integration
-is still required, as are slug and exact-history read bindings.
+cycle, disclosure and the shared 32-hop address bound. Public ID reads return
+`status: merged`; summary batches retain the requested reference and carry a
+typed `resolution`. Each visited source and survivor passes the same disclosure
+policy. Summary traversal batches converging paths; G-506 uses single-hop
+summaries inside its own traversal, avoiding repeated walks. Old Work slugs
+resolve even when the survivor has no slug. Exact Work, Main and address revision
+reads add a separate resolution while preserving original identities, route
+states and verified retained payloads. A moved graph or hidden survivor fails
+closed. No extra graph probe is added to an ordinary unmerged read.
 
 G-865's explicit decision retry can call an adapter's `resume`, with the retained
 application/candidate/operation key and fresh current authority. Public reads and
@@ -76,13 +82,46 @@ receipt recovery call `resolve` only. A completed retry also saves its new HTTP
 key, so losing that response does not dispatch again. Merge proposals and revert
 retain the original source identity rather than canonicalizing it to the survivor.
 
+`editorial-commands.ts` binds the executor to G-846's shared ordered application
+journal. Each native owner has one retained stage binding; the identity finalizer
+follows every exhausted owner stage. A stage advances the existing per-item
+journal, at most 32 effects per run. Public recovery reads resolve receipts and
+exhaustion witnesses without dispatching. Native session/follow effects check
+their exact stage, candidate, pair, owner version and preceding applied stages,
+then current shared review authority. This bridge does not install a public
+adapter or supply missing native identity reservation/finalization.
+
+The native follows handler serializes with the existing person inventory lock,
+updates its aggregate in the effect transaction, and stores an immutable Access
+971 receipt. A survivor slot, including an explicit unfollow, wins; a source-only
+follow moves. A fresh source tombstone prevents replaying an old revision.
+Unmerge compares both post-merge slots against the retained native receipt,
+restores unchanged choices with fresh revisions, and records changed items as
+ambiguous. Unrelated later follows remain intact. Receipt lookup precedes current
+authority/CAS checks, and Access stores the later executor acknowledgement
+separately from the native effect.
+
+The native library handler calls `ReaderLibraryStatusStore.write` for each
+changed slot, retaining its version/date/session rules and metadata hydration.
+Content 718 adds the source-wide status index and immutable merge-effect receipts.
+A survivor slot, including a cleared status, wins; a source-only status moves.
+Both native writes and their merge receipt commit in one Content transaction
+while Access holds current review authority. Source history stays in the retained
+item. Unmerge compares both personal slots, restores unchanged source statuses
+with fresh versions, and leaves later status/date/session edits ambiguous.
+Derived title/rating keys can refresh without making a personal slot ambiguous;
+they are hydrated by the native library command rather than copied from the
+source. Exact attempts and their independent native state remain unchanged.
+
 Remaining bindings:
 
-- Library and rating: survivor value wins each person's conflict; the other
-  value remains history. Rating graph slots/manifests and Access completeness
+- Rating: survivor value wins each person's conflict; the other value remains
+  history. Rating graph slots/manifests and Access completeness
   witnesses must agree, preserving one Account-principal vote.
 - Progress and owned copies: preserve independently owned copies and exact
   historical locator/occurrence semantics through their owners.
+- Private imported reviews: define their independent archive/reference policy
+  and indexed inventory separately from the installed status handler.
 - Realization: add an identity correction command. `assertRealizationCorrection`
   forbids changing Work, and its retained source continuity requires a deliberate
   correction instead of an incoming `rv:work` rewrite.
@@ -92,15 +131,15 @@ Remaining bindings:
   Statement and new meaning/decision keys, preserving speakers, supports and
   alternatives. Relation participation remains owner-validated; creator rights
   and authority bindings never move.
-- Review/follows: reconcile person slots and maintain revision history, counts,
+- Review: reconcile person slots and maintain revision history, counts,
   collection/discovery fences and later-edit ambiguity.
 - Editorial runtime: install the discovered `merge` adapter and its shared
   conformance fixture after the owners above exist, binding the bounded task run
-  to the authorized resume port and native identity reservation/finalization.
-- Identity/read owners: commit/remove `mergedInto` with a native receipt and
-  retain source IDs, slugs and exact revisions; wire the exported bounded
-  resolver into the ID/slug/exact read envelopes. Capability targets already use
-  G-506's default resolver; public old-read envelopes remain outstanding.
+  to G-846's ordered owner stages and native identity reservation/finalization.
+- Identity owner: commit/remove `mergedInto` with a native receipt and fence
+  incoming source references throughout reconciliation. The installed read
+  envelopes have native read acceptance using fixture identity edges; they do
+  not establish that a production merge can safely create/remove those edges.
 
 `services/main/tests/g-836-merge.test.ts` exercises the kernel with deterministic
 owner ports. `tests/qa/integration/g-836-journal.test.ts` exercises the actual
@@ -108,7 +147,13 @@ Access migrations and transaction/receipt recovery with a disposable probe
 owner. It does not substitute for the public catalogue owner acceptance test.
 `g-836-resolver.test.ts` covers default resolution and disclosure. The native
 session integration test exercises Content 718, current human review policy and
-G-865's persisted resume/replay path with an explicit fixture adapter. That fixture
-does not install a production merge adapter or qualify the SAO journey.
+G-865's persisted resume/replay path with an explicit fixture adapter, native
+follow effect/aggregate recovery, library native-command recovery, compensation
+ambiguity, owner deletion and G-846's actual
+ordered journal with a rejected wrong-owner binding. The ordered-command unit
+test checks a 65-item owner before a second owner/finalizer and receipt-only reads.
+The old-address integration test exercises public old IDs/slugs and exact retained
+Work/Main/address revisions against Jena and Account OAuth. These fixtures do not
+install a production merge adapter or qualify the full SAO journey.
 
 Split beyond unmerge, the workbench UI and batch queues are deferred.

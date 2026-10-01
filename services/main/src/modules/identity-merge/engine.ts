@@ -51,6 +51,62 @@ async function compensationItem(scope: MergeJournalScope, task: MergeTask, raw: 
   return { ...original, result: original.result };
 }
 
+async function reconcileOwner<Dependencies>(scope: MergeJournalScope, task: MergeTask,
+  handler: MergeHandler<Dependencies>, runtime: MergeTaskRuntime<Dependencies>, budget: { processed: number }): Promise<boolean> {
+  for (;;) {
+    runtime.checkDeadline();
+    const checkpoint = await scope.checkpoint(handler.owner);
+    if (checkpoint.exhausted && !(await scope.pending(handler.owner, 1)).length) return true;
+    if (budget.processed >= MERGE_COST.itemsPerRun) return false;
+    const pending = await scope.pending(handler.owner, Math.min(MERGE_COST.itemsPerRun - budget.processed, handler.cost.page));
+    if (pending.length) {
+      for (const item of pending) {
+        runtime.checkDeadline();
+        const key = itemCommandKey(task.key, handler.owner, item.key);
+        const outcome = task.plan.operation === 'merge'
+          ? await handler.apply(task, item, key, runtime.dependencies)
+          : await handler.compensate(task, await compensationItem(scope, task, item, handler.owner), key, runtime.dependencies);
+        checkedOutcome(outcome, key);
+        if (task.plan.operation === 'merge' && outcome.outcome === 'ambiguous') {
+          throw new InvalidMerge('A forward merge cannot silently skip an ambiguous item');
+        }
+        await scope.record(handler.owner, item.key, outcome); budget.processed++;
+      }
+    } else {
+      if (checkpoint.exhausted) return true;
+      const page = task.plan.operation === 'merge'
+        ? await handler.plan(task, checkpoint.after, handler.cost.page, runtime.dependencies)
+        : await scope.compensationPage(task.plan.original, handler.owner, checkpoint.after, handler.cost.page);
+      checkedPage(page, checkpoint.after, handler.cost.page);
+      await scope.capture(handler.owner, checkpoint, page);
+    }
+  }
+}
+
+/** G-846 owns delivery order and retained per-command authority. One stage
+ * advances only its native owner's existing item journal, at most 32 effects.
+ * A stage's completion is not a terminal identity merge decision. */
+export async function runMergeOwner<Dependencies>(wanted: MergeTask, owner: string, journal: MergeJournal,
+  handlers: readonly MergeHandler<Dependencies>[], runtime: MergeTaskRuntime<Dependencies>) {
+  checkedTask(wanted);
+  const installed = checkedHandlers(handlers), handler = installed.find(candidate => candidate.owner === owner);
+  if (!handler || wanted.dataEpoch !== runtime.dataEpoch
+    || mergeDigest(wanted.handlers) !== mergeDigest(installed.map(candidate => ({ owner: candidate.owner, version: candidate.version })))) {
+    throw new MergeUnavailable('Merge owner versions or data epoch are unavailable');
+  }
+  return journal.locked(wanted.key, async scope => {
+    const old = await scope.task();
+    if (old) sameTask(old, wanted);
+    if (await scope.completion()) return { complete: true, processed: 0 };
+    await checkOriginal(scope, wanted);
+    runtime.checkDeadline();
+    if (!old) await scope.prepare(wanted);
+    await runtime.begin(wanted);
+    const budget = { processed: 0 }, complete = await reconcileOwner(scope, wanted, handler, runtime, budget);
+    return { complete, processed: budget.processed };
+  });
+}
+
 /** One bounded run of one duplicate pair. Checkpoint writes precede owner
  * delivery and receipt writes follow it; either crash gap safely replays the
  * SAME owner command. A later run resumes from the latest bounded page rather
@@ -74,36 +130,10 @@ export async function runMergeTask<Dependencies>(wanted: MergeTask, journal: Mer
     // effect, so a killed process never leaves an unlocatable reservation.
     if (!old) await scope.prepare(wanted);
     await runtime.begin(wanted);
-    let processed = 0;
+    const budget = { processed: 0 };
     for (const handler of installed) {
-      while (true) {
-        runtime.checkDeadline();
-        if (processed >= MERGE_COST.itemsPerRun) return { key: wanted.key, state: 'pending', processed, completion: null };
-        const remaining = MERGE_COST.itemsPerRun - processed;
-        const pending = await scope.pending(handler.owner, Math.min(remaining, handler.cost.page));
-        if (pending.length) {
-          for (const item of pending) {
-            runtime.checkDeadline();
-            const commandKey = itemCommandKey(wanted.key, handler.owner, item.key);
-            const outcome = wanted.plan.operation === 'merge'
-              ? await handler.apply(wanted, item, commandKey, runtime.dependencies)
-              : await handler.compensate(wanted, await compensationItem(scope, wanted, item, handler.owner), commandKey, runtime.dependencies);
-            checkedOutcome(outcome, commandKey);
-            if (wanted.plan.operation === 'merge' && outcome.outcome === 'ambiguous') {
-              throw new InvalidMerge('A forward merge cannot silently skip an ambiguous item');
-            }
-            await scope.record(handler.owner, item.key, outcome);
-            processed++;
-          }
-          continue;
-        }
-        const checkpoint = await scope.checkpoint(handler.owner);
-        if (checkpoint.exhausted) break;
-        const page = wanted.plan.operation === 'merge'
-          ? await handler.plan(wanted, checkpoint.after, handler.cost.page, runtime.dependencies)
-          : await scope.compensationPage(wanted.plan.original, handler.owner, checkpoint.after, handler.cost.page);
-        checkedPage(page, checkpoint.after, handler.cost.page);
-        await scope.capture(handler.owner, checkpoint, page);
+      if (!await reconcileOwner(scope, wanted, handler, runtime, budget)) {
+        return { key: wanted.key, state: 'pending', processed: budget.processed, completion: null };
       }
     }
     runtime.checkDeadline();
@@ -113,6 +143,6 @@ export async function runMergeTask<Dependencies>(wanted: MergeTask, journal: Mer
       || completion.receipt.length > 512) throw new InvalidMerge('Identity finalization lacks an exact owner receipt');
     canonicalCandidate(completion, { bytes: MERGE_COST.taskBytes, depth: 40 });
     await scope.finish(completion);
-    return { key: wanted.key, state: 'complete', processed, completion };
+    return { key: wanted.key, state: 'complete', processed: budget.processed, completion };
   });
 }

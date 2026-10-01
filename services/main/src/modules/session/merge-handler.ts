@@ -77,7 +77,7 @@ export function sessionMergeHandler(dependencies: SessionMergeDependencies): Mer
         // receipt commit. A lost acknowledgement replays the Content receipt
         // before rechecking a now-terminal editorial application.
         return await controlTransaction(accessPool, async authority => {
-          await checkMergeAuthority(authority, task, graph);
+          await checkMergeAuthority(authority, task, graph, owner);
           const current = (await client.query<Row>(`SELECT ${columns} FROM reader.consumption_session
             WHERE id=$1 FOR SHARE`, [item.key])).rows[0];
           if (!current) throw new MergeUnavailable('Consumption attempt is unavailable');
