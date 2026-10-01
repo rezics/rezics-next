@@ -8,6 +8,7 @@ import {
   typeLocales,
   typePresentations,
   typePrimaryActions,
+  typeWikiSegments,
 } from '../../../../../packages/model/src/generated/types.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -30,6 +31,7 @@ export const typeDefinition = t.Object(
     cover: t.String({ enum: typeCovers }),
     /** Lower values win when choosing one presentation for a multiply typed Work. */
     priority: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    wikiSegment: t.Optional(t.Unsafe<(typeof typeWikiSegments)[number]>({ type: 'string',enum: [...typeWikiSegments] })),
     labels: t.Object(
       Object.fromEntries(typeLocales.map((locale) => [locale, forms])) as Record<
         (typeof typeLocales)[number],

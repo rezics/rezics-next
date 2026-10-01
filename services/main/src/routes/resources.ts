@@ -17,7 +17,8 @@ import { resourceSummaryBatch } from '../modules/media/summary-contract.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { problem } from './problems.ts';
 import { readingPositionQuery } from './reading-positions.ts';
-import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { boundedReadingPositionRead } from '../modules/reading-position/read.ts';
+import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import { workReadError } from './work-reads.ts';
 
@@ -39,13 +40,14 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     canReadSemantics: work.mediaAccess
       ? resources => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
       : undefined };
-  const readerFor = async (request: Request, actingSubject: string | undefined, batch = true): Promise<SummaryReader> => {
-    if (!request.headers.get('authorization')) return anonymousReader;
+  const readerFor = async (request: Request, actingSubject: string | undefined, batch = true): Promise<{ reader: SummaryReader; principal: VerifiedPrincipal | null }> => {
+    if (!request.headers.get('authorization')) return { reader: anonymousReader,principal: null };
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
     const contextPrincipal = () => work.account.verify(request, ['context:read']);
-    return { viewer: disclosureViewer(await workPrincipal()), canReadWorks: batch && work.mediaAccess
+    const principal = await workPrincipal();
+    return { principal,reader: { viewer: disclosureViewer(principal), canReadWorks: batch && work.mediaAccess
       ? async resources => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources) : undefined,
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
@@ -57,17 +59,16 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       && work.contextSelections.canReadPrivate(await contextPrincipal(), actingSubject, context),
     canReadPrivateContexts: work.mediaAccess
       ? async contexts => work.mediaAccess!.canReadPrivateContexts(await contextPrincipal(), actingSubject, contexts)
-      : undefined };
+      : undefined } };
   };
   const summarize = async (request: Request, input: { resources: string[]; actingSubject?: string;
     context?: string; language?: string; position?: string }, batch = true) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-    const reader = await readerFor(request, input.actingSubject, batch);
-    const principal = request.headers.has('authorization') ? await work.account.verify(request,['work:read']) : null;
+    const { reader,principal } = await readerFor(request, input.actingSubject, batch);
     const url = new URL(request.url);
     if (input.position !== undefined) url.searchParams.set('position',input.position);
     const selected = new Request(url,{ headers: request.headers,signal: request.signal });
-    return readingPositionRead(work,selected,principal,input.actingSubject,boundary =>
+    return boundedReadingPositionRead(work,selected,principal,input.actingSubject,boundary =>
       readResourceSummaries(work.environment, work.media?.store,
       { ...reader,visibleRecords: records => boundary.visible(records) }, { resources: input.resources,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,

@@ -18,6 +18,7 @@ export const typeCovers = ['portrait', 'landscape', 'square', 'document'] as con
 export const typeInterests = ['books', 'software', 'ai', 'recipes', 'media'] as const;
 export const typePrimaryActions = ['read', 'install', 'copy', 'watch', 'visit'] as const;
 export const typeCreationPolicies = ['administrator', 'contributor'] as const;
+export const typeWikiSegments = ['characters', 'places', 'events'] as const;
 
 export interface TypeMetadata {
   base: (typeof typeBases)[number];
@@ -28,6 +29,8 @@ export interface TypeMetadata {
   cover: (typeof typeCovers)[number];
   /** Lower values select the more specific presentation when a Work has multiple types. */
   priority: number;
+  /** Optional franchise-wiki placement for a descriptive resource type. */
+  wikiSegment?: (typeof typeWikiSegments)[number];
   labels: Readonly<Record<(typeof typeLocales)[number], { one: string; other: string }>>;
 }
 
@@ -98,6 +101,7 @@ export function compileTypes(
           'presentation',
           'cover',
           'priority',
+          'wikiSegment',
           'labels',
         ],
         type,
@@ -110,7 +114,9 @@ export function compileTypes(
         !typePresentations.includes(metadata.presentation) ||
         !typeCovers.includes(metadata.cover) ||
         !Number.isSafeInteger(metadata.priority) ||
-        metadata.priority < 0
+        metadata.priority < 0 ||
+        (metadata.wikiSegment !== undefined &&
+          (metadata.base !== 'resource' || !typeWikiSegments.includes(metadata.wikiSegment)))
       )
         throw new Error(`Invalid Type metadata for ${type}`);
       knownFields(metadata.labels, typeLocales, `${type} labels`);
@@ -141,6 +147,7 @@ export function compileTypes(
         presentation: metadata.presentation,
         cover: metadata.cover,
         priority: metadata.priority,
+        ...(metadata.wikiSegment ? { wikiSegment: metadata.wikiSegment } : {}),
         labels: Object.fromEntries(
           typeLocales.map((locale) => [locale, metadata.labels[locale]]),
         ) as TypeMetadata['labels'],
@@ -185,6 +192,7 @@ export function renderTypeRegistry(
     `export const typeInterests = ${JSON.stringify(typeInterests)} as const;\n` +
     `export const typePrimaryActions = ${JSON.stringify(typePrimaryActions)} as const;\n` +
     `export const typeCreationPolicies = ${JSON.stringify(typeCreationPolicies)} as const;\n` +
+    `export const typeWikiSegments = ${JSON.stringify(typeWikiSegments)} as const;\n` +
     '/** Owner profile order, retained by Main admission enums and catalogue consumers. */\n' +
     `export const workSemanticTypeOrder = ${JSON.stringify(profileWorkTypes(workKind).filter((type) => type !== iri('schema:CreativeWork')))} as const;\n` +
     `export const creatableWorkTypeOrder = ${JSON.stringify(profileWorkTypes(workType).filter((type) => type !== iri('schema:CreativeWork')))} as const;\n` +

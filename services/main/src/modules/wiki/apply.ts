@@ -128,7 +128,8 @@ export async function wikiCommands(runtime: EditorialRuntime, input: ApplyInput)
           relationDefinition: predicate.head,value: claim.object.kind === 'entity' ? { kind: 'resource',iri: object! }
             : { kind: 'literal',lexical: claim.object.value,language: claim.object.language ?? null,
               datatype: 'http://www.w3.org/2001/XMLSchema#string' },applicability: [claim.continuity],
-          interpretation: { kind: 'selected' },evidence: ids,actingSubject: input.permit.decidingAgent };
+          interpretation: { kind: 'selected' },evidence: ids,actingSubject: input.permit.decidingAgent,
+          wikiPublicationWork: bundle.target };
         const request = recordStatementRequest(statement);
         return { binding: { action: request.action,scope: request.scope,digest: request.digest },
           read: id => readCommandReceipt(env,id,STATEMENT_FAMILIES.record),

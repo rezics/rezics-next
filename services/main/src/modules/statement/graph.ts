@@ -42,6 +42,9 @@ export interface RecordStatementInput {
   expectedInterpretation?: { semanticRevision: string | null; definition: string | null };
   evidence: string[];
   actingSubject: string;
+  /** Internal publisher binding, absent from the public Statement write contract.
+   * The existing source slot indexes candidates; evidence still authorizes reads. */
+  wikiPublicationWork?: string;
 }
 
 export class StatementInterpretationUnresolved extends Error {
@@ -56,7 +59,8 @@ export function recordStatementRequest(input: RecordStatementInput) {
   if (!nativeId.test(input.actingSubject) || !nativeId.test(input.subject)
     || (input.speaker.kind === 'realm' && !nativeId.test(input.speaker.realm))
     || (input.interpretation.kind === 'explicit' && !nativeId.test(input.interpretation.semanticRevision))
-    || input.evidence.length > STATEMENT_LIMITS.evidence || new Set(input.evidence).size !== input.evidence.length) {
+    || input.evidence.length > STATEMENT_LIMITS.evidence || new Set(input.evidence).size !== input.evidence.length
+    || input.wikiPublicationWork !== undefined && (!nativeId.test(input.wikiPublicationWork) || !input.evidence.length)) {
     throw new InvalidContextCommand('invalid Statement request');
   }
   for (const value of input.evidence) term(value);
@@ -67,7 +71,8 @@ export function recordStatementRequest(input: RecordStatementInput) {
   return { ...STATEMENT_AUTHORITY.speak(speakerIri(input)), digest: hash(JSON.stringify([
     STATEMENT_FAMILIES.record, input.speaker, input.subject, input.predicate, input.relationDefinition,
     input.value, [...input.applicability].sort(), input.interpretation, input.expectedInterpretation ?? null,
-    [...input.evidence].sort(), input.actingSubject])) };
+    [...input.evidence].sort(), input.actingSubject,
+    ...(input.wikiPublicationWork ? [input.wikiPublicationWork] : [])])) };
 }
 
 export function objectTerm(value: StatementValue): string {
@@ -132,7 +137,8 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
   const speakerId = speakerIri(input);
   const manifest = prepareComponent(env.objectDirectory, statement, { revision, meaning, meaningKey,
     speaker: speakerId, semanticContextRevision: interpretation.semanticRevision, state: 'active',
-    evidence: [...input.evidence].sort(), recordedBy: input.actingSubject }, STATEMENT_PROFILE);
+    evidence: [...input.evidence].sort(), recordedBy: input.actingSubject,
+    ...(input.wikiPublicationWork ? { source: input.wikiPublicationWork } : {}) }, STATEMENT_PROFILE);
   const validations = await profileValidations(env.fuseki, 'statement-v1', [
     { shape: `${STATEMENT_PROFILE}/statement-shape`, focus: [statement], graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: `${STATEMENT_PROFILE}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
@@ -156,6 +162,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         ${meaning.interpretationDefinitions.map(value => `rv:interpretationDefinition ${term(value)} ;`).join(' ')}
         ${interpretation.semanticRevision ? `rv:semanticContextRevision ${iri(interpretation.semanticRevision)} ;` : ''}
         ${input.applicability.map(value => `rv:applicability ${term(value)} ;`).join(' ')}
+        ${input.wikiPublicationWork ? `rv:source ${iri(input.wikiPublicationWork)} ;` : ''}
         rv:speaker ${iri(speakerId)} ; rv:meaningKey ${iri(meaningKey)} ; rv:statementState rv:Active ;
         rv:head ${iri(revision)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StatementRevision, rv:RevisionAnchor ;

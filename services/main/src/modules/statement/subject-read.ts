@@ -254,6 +254,16 @@ export async function readSubjectStatements(
   }
   if (items.length <= limit) {
     const pattern = inherit === null ? '' : acceptedStatementPattern(context, inherit);
+    const active = `GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
+      rdf:predicate ?predicate ; rv:statementState rv:Active ; rv:meaningKey ?key . }`;
+    // Join acceptance or the publisher's source marker before paging. Ordinary
+    // proposals never enter hydration; the marker alone cannot authorize a read.
+    const candidates = [
+      ...(pattern ? [`${active} ${pattern}`] : []),
+      ...(session.deps.wikiEvidence ? [`${active} GRAPH ${iri(GRAPHS.current)} {
+        ?statement rv:source ?publicationWork . ?publicationWork a schema:CreativeWork . }
+        OPTIONAL { ${pattern || 'FILTER(false)'} }`] : []),
+    ];
     let statementAfter =
       cursor && after.phase === 'statement'
         ? { predicate: after.predicate!, statement: cursor.after }
@@ -261,14 +271,12 @@ export async function readSubjectStatements(
     while (items.length <= limit) {
       const batchSize = SUBJECT_STATEMENT_COST.candidates;
       const rows =
-        inherit === null && !session.deps.wikiEvidence
+        !candidates.length
           ? []
           : await session.query(
               `SELECT ?predicate ?statement
       (MIN(CONCAT(STR(?decision), "|", ?decisionSource)) AS ?acceptance) WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
-        rdf:predicate ?predicate ; rv:statementState rv:Active ; rv:meaningKey ?key . }
-      ${session.deps.wikiEvidence ? `OPTIONAL { ${pattern || 'FILTER(false)'} }` : pattern}
+      ${candidates.map(candidate => `{ ${candidate} }`).join(' UNION ')}
       ${
         statementAfter
           ? `FILTER(STR(?predicate) > ${lit(statementAfter.predicate)} ||

@@ -10,7 +10,7 @@ export const WIKI_CLAIM_READ_COST = {
 } as const;
 
 /** A published citation supplies provenance, not an editorial acceptance or a
- * semantic grant. Its public Work and the shared audience/position boundary
+ * semantic grant. Its readable Work and the shared audience/position boundary
  * disclose the claim together. Callers still check active heads and references. */
 export async function readWikiClaimEvidence(
   session: WorkReadSession,
@@ -20,7 +20,7 @@ export async function readWikiClaimEvidence(
 ) {
   const evidence = (await session.deps.wikiEvidence?.forClaims(claims, kind)) ?? [];
   const works = [...new Set(evidence.map((row) => row.sourceWork))];
-  const publicWorks = new Set<string>();
+  const readableWorks = new Set<string>();
   for (let at = 0; at < works.length; at += WIKI_CLAIM_READ_COST.workBatch) {
     for (const summary of (
       await targetSummaries(session, works.slice(at, at + WIKI_CLAIM_READ_COST.workBatch))
@@ -28,13 +28,16 @@ export async function readWikiClaimEvidence(
       if (
         summary.status === 'available' &&
         summary.type === 'work' &&
-        summary.disclosure === 'public'
+        (summary.disclosure === 'public' ||
+          (summary.disclosure === 'restricted' &&
+            session.principal &&
+            session.options.actingSubject))
       ) {
-        publicWorks.add(summary.reference);
+        readableWorks.add(summary.reference);
       }
     }
   }
-  const candidates = evidence.filter((row) => row.claim && publicWorks.has(row.sourceWork));
+  const candidates = evidence.filter((row) => row.claim && readableWorks.has(row.sourceWork));
   const decisions = candidates.length
     ? await session.disclosure(
         candidates.map((row) => ({

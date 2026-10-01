@@ -173,7 +173,7 @@ test('G-637: non-Work types stay open without widening Work admission', () => {
     types: {
       ...typesV1.types,
       'rv:NewResource': metadata,
-      'rv:NewRecord': { ...metadata, base: 'record' },
+      'rv:NewRecord': { ...metadata, base: 'record',wikiSegment: undefined },
     },
   });
   expect(entries).toEqual(

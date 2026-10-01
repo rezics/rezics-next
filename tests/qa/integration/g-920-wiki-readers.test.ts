@@ -9,7 +9,6 @@ import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evide
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
-import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { nativeId, shortId } from '../fixtures/author-credit.ts';
 import { prideExample } from '../../../packages/wiki-toolkit/skill/examples/pride.ts';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
@@ -17,20 +16,25 @@ import { RV } from '../../../services/main/src/modules/work/activate.ts';
 import { type ResourceSummary } from '../../../services/main/src/modules/media/summary.ts';
 import { type Static } from 'typebox';
 import { subjectStatementPage } from '../../../services/main/src/modules/entity-page/contract.ts';
-import { readCurrentOccurrence, readExactDefinition } from '../../../services/main/src/modules/relation/change.ts';
+import {
+  readCurrentOccurrence,
+  readExactDefinition,
+} from '../../../services/main/src/modules/relation/change.ts';
 import { startMediaStack } from './media-support.ts';
 
 test('G-920: published franchise entities, contradictory claims and relations disclose evidence and names at the reader position', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration QA tier');
   const directory = resolve('.temp', `g-920-${randomUUID()}`);
-  const f = await startMediaStack('g-920');
+  const f = await startMediaStack('g-920', { profileCredits: true });
   const holder = await f.member('holder');
   const reviewerA = await f.member('reviewer-a');
   const reviewerB = await f.member('reviewer-b');
+  const outsider = await f.member('outsider');
   const tokens = new Map<string, { issuer: string; subject: string }>([
     [holder.token, holder.principal],
     [reviewerA.token, reviewerA.principal],
     [reviewerB.token, reviewerB.principal],
+    [outsider.token, outsider.principal],
   ]);
   const objects = f.objects('semantic/structure/');
   await objects.initialize();
@@ -54,7 +58,6 @@ test('G-920: published franchise entities, contradictory claims and relations di
     readingPositions: new ReadingPositionStore(f.contentPool),
     editorialReview: new EditorialReviewStore(f.accessPool),
     rights: { store: new RightsStore(f.contentPool, f.accessPool) },
-    catalogueIntake: new CatalogueIntakeStore(f.accessPool, f.env),
     content: f.content,
     contentAuthoring: f.content,
   };
@@ -87,26 +90,15 @@ test('G-920: published franchise entities, contradictory claims and relations di
     return JSON.parse(await textOf(response, status)) as T;
   }
   try {
-    for (const person of [holder, reviewerA, reviewerB]) {
+    for (const person of [holder, reviewerA, reviewerB, outsider]) {
       await person.grant(`agent:self:${person.actor}`, 'agent.control');
     }
     await holder.grant('work:create:root', 'work.create');
-    const { candidateReceipt } = await json<{ candidateReceipt: string }>(
-      await call('POST', '/v1/catalogue/candidates', {
-        profile: 'catalogue-candidates-v1',
-        originalTitle: { value: 'Pride and Prejudice', language: 'en' },
-        aliases: [],
-        romanizations: [],
-        creators: [],
-        dates: [],
-        identifiers: [],
-      }),
-    );
     const createdWork = await json<{ work: string; mainVersion: string }>(
       await call('POST', '/v1/works', {
         profile: 'metadata-only-v1',
         grain: 'new-creative-scope',
-        candidateReceipt,
+        authoring: 'own-work',
         title: 'Pride and Prejudice',
         language: 'en',
         semanticTypes: ['https://schema.org/Book'],
@@ -116,6 +108,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
     );
     await holder.grant(`work:read:${createdWork.work}`, 'work.read');
     await holder.grant(`work:edit:${createdWork.work}`, 'work.edit');
+    expect((await call('GET',`/v1/resources/${shortId(createdWork.work)}`,undefined,null)).status).toBe(404);
     for (const reviewer of [reviewerA, reviewerB]) {
       await reviewer.grant(`work:read:${createdWork.work}`, 'work.read');
       await reviewer.grant(`work:edit:${createdWork.work}`, 'work.edit');
@@ -198,7 +191,7 @@ test('G-920: published franchise entities, contradictory claims and relations di
     const occurrence = chapter.occurrences[0];
     if (!occurrence) throw new Error('Book composition returned no chapter');
     await holder.grant('semantic:create:root', 'semantic.change');
-    const predicate = await json<{ component: string }>(
+    const predicate = await json<{ component: string; revision: string }>(
       await call('POST', '/v1/semantic/changes', {
         profile: 'semantic-change-v1',
         expectedHead: null,
@@ -551,6 +544,74 @@ test('G-920: published franchise entities, contradictory claims and relations di
         undefined,
         signed ? holder.token : null,
       );
+    const recordProposal = async (index: number) =>
+      json(
+        await call(
+          'POST',
+          '/v1/statements',
+          {
+            profile: 'statement-v1',
+            speaker: { kind: 'personal' },
+            subject: entity,
+            predicate: predicate.component,
+            relationDefinition: predicate.revision,
+            value: {
+              kind: 'literal',
+              lexical: `Unaccepted proposal ${index}`,
+              language: null,
+              datatype: 'http://www.w3.org/2001/XMLSchema#string',
+            },
+            applicability: [],
+            interpretation: { kind: 'selected' },
+            evidence: [],
+            actingSubject: reviewerB.actor,
+          },
+          reviewerB.token,
+        ),
+        201,
+      );
+
+    // A real owner write lands after the summary's first graph probe. Both
+    // transports replay the read, retaining one Account verification.
+    for (const method of ['GET', 'POST']) {
+      const query = f.env.fuseki.query.bind(f.env.fuseki),
+        verify = deps.account.verify;
+      let raced = false,
+        verifications = 0,
+        summaries = 0;
+      deps.account.verify = async (request, scopes) => {
+        if (new URL(request.url).pathname.startsWith('/v1/resources')) verifications++;
+        return verify(request, scopes);
+      };
+      f.env.fuseki.query = async (sparql, maxBytes) => {
+        const result = await query(sparql, maxBytes);
+        if (sparql.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
+          summaries++;
+          if (!raced) {
+            raced = true;
+            await recordProposal(-1);
+          }
+        }
+        return result;
+      };
+      try {
+        const response =
+          method === 'GET'
+            ? await at(`/v1/resources/${shortId(createdWork.work)}`, undefined, true)
+            : await call('POST', '/v1/resources/summaries', {
+                profile: 'resource-summary-batch-v1',
+                resources: [createdWork.work],
+                actingSubject: holder.actor,
+              });
+        await json(response);
+        expect(raced).toBe(true);
+        expect(summaries).toBeGreaterThanOrEqual(2);
+        expect(verifications).toBe(1);
+      } finally {
+        f.env.fuseki.query = query;
+        deps.account.verify = verify;
+      }
+    }
     for (const signed of [false, true]) {
       expect((await at(`/v1/resources/${shortId(entity)}/page`, undefined, signed)).status).toBe(
         404,
@@ -766,6 +827,38 @@ test('G-920: published franchise entities, contradictory claims and relations di
     expect(routes).toContain(entity);
     // Pages retain every disclosed contradictory claim; changing the position
     // cannot reuse a cursor from an earlier disclosure basis.
+    // Unaccepted proposals are real API writes, but do not become hydration
+    // candidates. Page cost stays independent of this subject's proposal count.
+    const countRead = async () => {
+      const query = f.env.fuseki.query.bind(f.env.fuseki);
+      let calls = 0,
+        inventories = 0;
+      f.env.fuseki.query = async (sparql, maxBytes) => {
+        calls++;
+        if (sparql.includes('MIN(CONCAT(STR(?decision)')) inventories++;
+        return query(sparql, maxBytes);
+      };
+      try {
+        const page = await json<Static<typeof subjectStatementPage>>(
+          await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+        );
+        expect(
+          page.groups
+            .flatMap((group) => group.items)
+            .flatMap((item) => (item.kind === 'statement' ? [item.statement] : []))
+            .sort(),
+        ).toEqual([statement, laterStatement].sort());
+        return { calls, inventories };
+      } finally {
+        f.env.fuseki.query = query;
+      }
+    };
+    const beforeProposals = await countRead();
+    for (let index = 0; index < 320; index++) await recordProposal(index);
+    const afterProposals = await countRead();
+    expect(afterProposals.inventories).toBe(1);
+    expect(afterProposals.calls).toBeLessThanOrEqual(beforeProposals.calls + 2);
+
     const statementPath = `/v1/resources/${shortId(entity)}/statements?limit=1`;
     const first = await json<Static<typeof subjectStatementPage>>(
       await at(statementPath, occurrence, false),
@@ -886,6 +979,40 @@ test('G-920: published franchise entities, contradictory claims and relations di
         .flatMap((item) => (item.kind === 'statement' ? [item.statement] : [])),
     ).toEqual([laterStatement]);
     expect((await at(`/v1/wiki/evidence/${evidenceId}`, 'all', false)).status).toBe(404);
+
+    // A replacement public decision has not been selected yet: the old default
+    // is no longer a public Work proof. Work grants retain private wiki reads.
+    await json(
+      await call('POST', '/v1/contribution-publications', {
+        profile: 'text-publication-v1',
+        contribution: draft.contribution,
+        expectedDraftHead: draft.draftRevision,
+        expectedPublicationHead: decision.publicationDecision,
+        rightsBasis: 'original-contribution',
+        disclosure: 'public',
+        actingSubject: holder.actor,
+      }),
+      201,
+    );
+    const privateEvidence = `/v1/wiki/evidence/${shortId(evidenceIds[1]!)}`;
+    expect((await at(privateEvidence, 'all', false)).status).toBe(404);
+    expect(
+      (
+        await call(
+          'GET',
+          `${privateEvidence}?position=all&actingSubject=${encodeURIComponent(outsider.actor)}`,
+          undefined,
+          outsider.token,
+        )
+      ).status,
+    ).toBe(404);
+    await holder.grant(`semantic:read:${entity}`, 'semantic.read');
+    const granted = await json<{ sourceWork: string; claim: string }>(
+      await at(privateEvidence, 'all', true),
+    );
+    expect(granted.sourceWork).toBe(createdWork.work);
+    expect(granted.claim).toBe(laterStatement);
+    expect((await at(privateEvidence, 'start', true)).status).toBe(404);
   } finally {
     await f.stop();
     rmSync(directory, { recursive: true, force: true });

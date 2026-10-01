@@ -16,7 +16,10 @@ import { projectWikiEvidence, readWikiClaimEvidence } from '../src/modules/wiki/
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { ReadingBoundary } from '../src/modules/reading-position/boundary.ts';
-import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
+import { boundedReadingPositionRead } from '../src/modules/reading-position/read.ts';
+import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
+import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { pageRegistry } from '../src/modules/entity-page/read.ts';
 
 test('G-920: wiki entity types follow live registry admission and retirement, preserving structural owners', () => {
@@ -45,12 +48,66 @@ test('G-920: wiki entity types follow live registry admission and retirement, pr
     installRegisteredTypes([{ definition, revision: '1', lifecycle: 'active' }]);
     expect(resourceTypeAdmitted(definition.type)).toBe(true);
     expect(wikiTypes.has(definition.type)).toBe(true);
+    expect(wikiSegment(definition.type)).toBe('characters');
+    installRegisteredTypes([
+      { definition: { ...definition, wikiSegment: 'places' }, revision: '2', lifecycle: 'active' },
+    ]);
+    expect(wikiSegment(definition.type)).toBe('places');
+    installRegisteredTypes([
+      { definition: { ...definition, wikiSegment: undefined }, revision: '3', lifecycle: 'active' },
+    ]);
+    expect(wikiTypes.has(definition.type)).toBe(false);
     installRegisteredTypes([{ definition, revision: '2', lifecycle: 'retired' }]);
     expect(resourceTypeAdmitted(definition.type)).toBe(false);
     expect(wikiTypes.has(definition.type)).toBe(false);
   } finally {
     installRegisteredTypes([]);
   }
+});
+
+test('G-920: moving reading-position reads exhaust one shared retry budget and report unavailable', async () => {
+  let sequence = 1,
+    attempts = 0;
+  const deps = {
+    environment: {
+      fuseki: {
+        query: async () => ({
+          results: {
+            bindings: [
+              {
+                epoch: { type: 'literal', value: 'epoch' },
+                sequence: { type: 'literal', value: String(sequence) },
+              },
+            ],
+          },
+        }),
+      },
+    },
+  } as unknown as MainWorkDependencies;
+  const budgets: number[] = [];
+  await expect(
+    boundedReadingPositionRead(
+      deps,
+      new Request('http://main.local/v1/resources/summaries'),
+      null,
+      undefined,
+      async () => {
+        attempts++;
+        const budget = fusekiReadBudget.getStore()!;
+        budgets.push(budget.callsLeft);
+        budget.callsLeft--;
+        sequence++;
+        return 'moved';
+      },
+    ),
+  ).rejects.toBeInstanceOf(WorkReadUnavailable);
+  expect(attempts).toBe(WORK_READ_COST.attempts);
+  expect(budgets).toEqual(
+    Array.from(
+      { length: WORK_READ_COST.attempts },
+      (_, index) => WORK_READ_COST.graphCalls - index,
+    ),
+  );
 });
 
 test('G-920: evidence uses one indexed claim batch and rejects overflow instead of truncating citations', async () => {
@@ -121,10 +178,11 @@ test('G-920: one rights batch projects quotes, and denied quotes redact every em
   });
 });
 
-test('G-920: claim disclosure batches source Works and hides private and later claims even for a granted reader', async () => {
+test('G-920: claim disclosure batches source Works, preserves private grants and withholds later claims', async () => {
   const id = (n: number) =>
     `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
   const graph = new FusekiClient('http://graph.invalid');
+  let granted = false;
   let graphBatches = 0,
     claimBatches = 0;
   graph.query = async (query) => {
@@ -168,7 +226,7 @@ test('G-920: claim disclosure batches source Works and hides private and later c
         return evidence;
       },
     },
-    access: { canReadWork: async () => true },
+    access: { canReadWork: async () => granted },
     account: {},
   } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(
@@ -181,14 +239,19 @@ test('G-920: claim disclosure batches source Works and hides private and later c
     visible: async (records: readonly string[]) =>
       new Set(records.filter((record) => record !== id(5))),
   } as ReadingBoundary;
-  for (const signed of [false, true]) {
+  for (const [signed, hasGrant] of [
+    [false, false],
+    [true, false],
+    [true, true],
+  ]) {
+    granted = hasGrant!;
     session.principal = signed ? { issuer: 'https://account.test', subject: 'reader' } : null;
     expect([
       ...(
         await readWikiClaimEvidence(session, [id(3), id(4), id(5)], 'statement', boundary)
       ).keys(),
-    ]).toEqual([id(3)]);
+    ]).toEqual(hasGrant ? [id(3), id(4)] : [id(3)]);
   }
-  expect(claimBatches).toBe(2);
-  expect(graphBatches).toBe(2);
+  expect(claimBatches).toBe(3);
+  expect(graphBatches).toBe(3);
 });

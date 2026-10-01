@@ -357,6 +357,7 @@ export const typesV1 = {
       ),
     },
     'rv:Character': {
+      wikiSegment: 'characters',
       base: 'resource',
       interest: null,
       primaryAction: 'visit',
@@ -376,6 +377,7 @@ export const typesV1 = {
       ),
     },
     'rv:Role': {
+      wikiSegment: 'characters',
       base: 'resource',
       interest: null,
       primaryAction: 'visit',
@@ -395,6 +397,7 @@ export const typesV1 = {
       ),
     },
     'schema:Place': {
+      wikiSegment: 'places',
       base: 'resource',
       interest: null,
       primaryAction: 'visit',
@@ -414,6 +417,7 @@ export const typesV1 = {
       ),
     },
     'schema:Event': {
+      wikiSegment: 'events',
       base: 'resource',
       interest: null,
       primaryAction: 'visit',

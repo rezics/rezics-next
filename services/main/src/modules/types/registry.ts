@@ -56,6 +56,7 @@ function registrySnapshot(rows: readonly RegisteredType[]) {
       !Value.Check(typeDefinition, row.definition) ||
       row.definition.default ||
       !['work', 'resource'].includes(row.definition.base) ||
+      (row.definition.wikiSegment !== undefined && row.definition.base !== 'resource') ||
       (row.lifecycle === 'active' && row.definition.creatable !== (row.definition.base === 'work')) ||
       !['active', 'retired'].includes(row.lifecycle) ||
       !/^[1-9][0-9]*$/.test(row.revision) ||

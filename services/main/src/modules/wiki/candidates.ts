@@ -17,7 +17,7 @@ const admittedWikiTypes = new Set<string>();
 export const wikiTypes: ReadonlySet<string> = admittedWikiTypes;
 function refreshWikiTypes() {
   admittedWikiTypes.clear();
-  for (const entry of admittedTypes) if (entry.base === 'resource' && !entry.default
+  for (const entry of admittedTypes) if (entry.base === 'resource' && !entry.default && entry.wikiSegment
     && resourceTypeAdmitted(entry.type) && semanticTypeOutcome(entry.type) === 'admitted'
     && !CANONICAL_TYPES.has(entry.type)) admittedWikiTypes.add(entry.type);
 }

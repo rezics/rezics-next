@@ -5,11 +5,12 @@ import { readCurrentComponent, type ComponentInput } from '../semantic/change.ts
 import { readExactDefinition, type ExactDefinition } from '../relation/change.ts';
 import { readCompositionHeader } from '../structure/graph.ts';
 import { readZonePublication } from '../zone/publication.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
 import { wikiRead } from './read.ts';
 import { checkWikiExtraction, validateWikiExtraction } from './validate.ts';
 import type { WikiExtraction } from './protocol.ts';
 import { WikiRejected } from './errors.ts';
+import { admittedTypes } from '../types/registry.ts';
 
 export interface WikiSnapshot {
   submitter: string;
@@ -75,8 +76,7 @@ export async function wikiSnapshot(runtime: EditorialRuntime & { actingSubject: 
   });
 }
 export function wikiSegment(type: string): 'characters' | 'places' | 'events' {
-  if (type === `${RV}Character` || type === `${RV}Role`) return 'characters';
-  if (type === 'https://schema.org/Event' || type === `${RV}Event`) return 'events';
-  if (type === 'https://schema.org/Place' || type === `${RV}Place`) return 'places';
+  const segment = admittedTypes.find(entry => entry.type === type)?.wikiSegment;
+  if (segment) return segment;
   throw new WikiRejected('wiki_entity_type');
 }
