@@ -324639,6 +324639,9 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "inZone": {
+                                    "type": "boolean"
+                                  },
                                   "lastUpdatedAt": {
                                     "~elyTyp": 7,
                                     "format": "date-time",
@@ -324931,6 +324934,7 @@
                                   "chapterCount",
                                   "wordCount",
                                   "lastUpdatedAt",
+                                  "inZone",
                                   "primaryCredits",
                                   "evidence",
                                   "dataEpoch",
@@ -354699,6 +354703,9 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "inZone": {
+                            "type": "boolean"
+                          },
                           "lastUpdatedAt": {
                             "~elyTyp": 7,
                             "format": "date-time",
@@ -354991,6 +354998,7 @@
                           "chapterCount",
                           "wordCount",
                           "lastUpdatedAt",
+                          "inZone",
                           "primaryCredits",
                           "evidence",
                           "dataEpoch",
@@ -355652,6 +355660,9 @@
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
                               },
+                              "inZone": {
+                                "type": "boolean"
+                              },
                               "title": {
                                 "properties": {
                                   "basis": {
@@ -355687,7 +355698,8 @@
                             },
                             "required": [
                               "id",
-                              "title"
+                              "title",
+                              "inZone"
                             ],
                             "type": "object"
                           }
@@ -356200,6 +356212,9 @@
                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 },
+                                "inZone": {
+                                  "type": "boolean"
+                                },
                                 "title": {
                                   "properties": {
                                     "basis": {
@@ -356236,7 +356251,8 @@
                               "required": [
                                 "id",
                                 "title",
-                                "cover"
+                                "cover",
+                                "inZone"
                               ],
                               "type": "object"
                             },
@@ -357434,6 +357450,9 @@
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
                               },
+                              "inZone": {
+                                "type": "boolean"
+                              },
                               "lastUpdatedAt": {
                                 "~elyTyp": 7,
                                 "format": "date-time",
@@ -357723,6 +357742,7 @@
                               "chapterCount",
                               "wordCount",
                               "lastUpdatedAt",
+                              "inZone",
                               "primaryCredits"
                             ],
                             "type": "object"
@@ -358348,6 +358368,9 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "inZone": {
+                            "type": "boolean"
+                          },
                           "lastUpdatedAt": {
                             "~elyTyp": 7,
                             "format": "date-time",
@@ -358640,6 +358663,7 @@
                           "chapterCount",
                           "wordCount",
                           "lastUpdatedAt",
+                          "inZone",
                           "primaryCredits",
                           "evidence",
                           "dataEpoch",
@@ -359120,6 +359144,9 @@
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
                               },
+                              "inZone": {
+                                "type": "boolean"
+                              },
                               "title": {
                                 "properties": {
                                   "basis": {
@@ -359155,7 +359182,8 @@
                             },
                             "required": [
                               "id",
-                              "title"
+                              "title",
+                              "inZone"
                             ],
                             "type": "object"
                           }
@@ -360308,6 +360336,9 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "inZone": {
+                            "type": "boolean"
+                          },
                           "lastUpdatedAt": {
                             "~elyTyp": 7,
                             "format": "date-time",
@@ -360600,6 +360631,7 @@
                           "chapterCount",
                           "wordCount",
                           "lastUpdatedAt",
+                          "inZone",
                           "primaryCredits",
                           "evidence",
                           "dataEpoch",
@@ -517597,6 +517629,9 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "inZone": {
+                                    "type": "boolean"
+                                  },
                                   "lastUpdatedAt": {
                                     "~elyTyp": 7,
                                     "format": "date-time",
@@ -517718,7 +517753,8 @@
                                   "completionStatus",
                                   "chapterCount",
                                   "wordCount",
-                                  "lastUpdatedAt"
+                                  "lastUpdatedAt",
+                                  "inZone"
                                 ],
                                 "type": "object"
                               },
@@ -517727,6 +517763,9 @@
                                   "id": {
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
+                                  },
+                                  "inZone": {
+                                    "type": "boolean"
                                   },
                                   "types": {
                                     "items": {
@@ -517738,7 +517777,8 @@
                                 },
                                 "required": [
                                   "id",
-                                  "types"
+                                  "types",
+                                  "inZone"
                                 ],
                                 "type": "object"
                               }
