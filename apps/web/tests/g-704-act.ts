@@ -6,12 +6,23 @@ import { readFileSync } from 'node:fs';
 import { loopStack, type Roles } from '../../../tests/qa/integration/g-704-support.ts';
 
 const [statePath, requestJson] = process.argv.slice(2);
-if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '') || !statePath || !requestJson) {
+if (
+  !/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '') ||
+  !statePath ||
+  !requestJson
+) {
   throw new Error('Usage: bun g-704-act.ts <state file> <request json>, inside an isolated QA run');
 }
 const { roles } = JSON.parse(readFileSync(statePath, 'utf8')) as { roles: Roles };
-const request = JSON.parse(requestJson) as { as?: keyof Roles; method?: string; path?: string; body?: object; key?: string;
-  revoke?: 'assistant'; settle?: boolean };
+const request = JSON.parse(requestJson) as {
+  as?: keyof Roles;
+  method?: string;
+  path?: string;
+  body?: object;
+  key?: string;
+  revoke?: 'assistant';
+  settle?: boolean;
+};
 const L = await loopStack('g704-act', roles);
 try {
   if (request.revoke) {
@@ -20,13 +31,15 @@ try {
   } else {
     const who = L[request.as!];
     // Ordered owners answer 202 until their bounded deliveries finish; the same key finishes them.
-    const key = request.key ?? crypto.randomUUID();
+    const key: string = request.key ?? crypto.randomUUID();
     let response = await L.call(request.method!, request.path!, request.body, who.token, key);
     for (let attempt = 0; request.settle && response.status === 202 && attempt < 100; attempt++) {
       await response.text();
       response = await L.call(request.method!, request.path!, request.body, who.token, key);
     }
-    console.log(JSON.stringify({ status: response.status, body: await response.json().catch(() => null) }));
+    console.log(
+      JSON.stringify({ status: response.status, body: await response.json().catch(() => null) }),
+    );
   }
 } finally {
   await L.close();

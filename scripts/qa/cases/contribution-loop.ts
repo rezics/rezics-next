@@ -34,13 +34,15 @@ export const cases = defineCases('docs/goals/tasks/G-704.md', [
   },
   {
     id: 'CLP05',
-    scenario: 'Historical wiki rendering and export survive renames, merges and rights changes of their dependencies',
+    scenario:
+      'Historical wiki rendering and export survive renames, merges and rights changes of their dependencies',
     requiredResult:
       'A pinned revision set renders unchanged after a rename or merge; a rights restriction withholds the quote everywhere and an export made before it stops serving.',
   },
   {
     id: 'CLP06',
-    scenario: 'A replaced or revoked assistant credential keeps the artifacts it was authorized to make',
+    scenario:
+      'A replaced or revoked assistant credential keeps the artifacts it was authorized to make',
     requiredResult:
       'Proposals, receipts, claims and attribution stay readable after the credential changes hands or ends; the old bearer is refused; the replacement is no more independent of its Agent’s work.',
   },
@@ -48,6 +50,7 @@ export const cases = defineCases('docs/goals/tasks/G-704.md', [
     id: 'CLP07',
     scenario:
       'Distribution, worldbuilding, developer extras, Agent mode, the document editor, Realm prose wikis and recognition stay closed in M7',
-    requiredResult: 'The public API and the site expose no operation, route, setting or navigation entry for them.',
+    requiredResult:
+      'The public API and the site expose no operation, route, setting or navigation entry for them.',
   },
 ]);
