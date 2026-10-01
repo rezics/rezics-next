@@ -324299,7 +324299,7 @@
                                     ],
                                     "type": "object"
                                   },
-                                  "maxItems": 60,
+                                  "maxItems": 256,
                                   "type": "array"
                                 },
                                 "length": {
@@ -324351,7 +324351,7 @@
                                     ],
                                     "type": "object"
                                   },
-                                  "maxItems": 60,
+                                  "maxItems": 256,
                                   "type": "array"
                                 },
                                 "status": {
@@ -324403,7 +324403,7 @@
                                     ],
                                     "type": "object"
                                   },
-                                  "maxItems": 60,
+                                  "maxItems": 256,
                                   "type": "array"
                                 },
                                 "type": {
@@ -324455,7 +324455,7 @@
                                     ],
                                     "type": "object"
                                   },
-                                  "maxItems": 60,
+                                  "maxItems": 256,
                                   "type": "array"
                                 }
                               },
@@ -324976,6 +324976,13 @@
                             },
                             "query": {
                               "properties": {
+                                "appliedSort": {
+                                  "enum": [
+                                    "newest",
+                                    "updated"
+                                  ],
+                                  "type": "string"
+                                },
                                 "filter": {
                                   "properties": {
                                     "all": {
@@ -325083,11 +325090,20 @@
                                     "string",
                                     "null"
                                   ]
+                                },
+                                "textMatch": {
+                                  "enum": [
+                                    "title",
+                                    "none"
+                                  ],
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "text",
                                 "sort",
+                                "appliedSort",
+                                "textMatch",
                                 "filter"
                               ],
                               "type": "object"
@@ -325125,7 +325141,7 @@
                                   "type": "boolean"
                                 },
                                 "scanned": {
-                                  "maximum": 60,
+                                  "maximum": 512,
                                   "minimum": 0,
                                   "type": "integer"
                                 }
@@ -354343,7 +354359,7 @@
                             ],
                             "type": "object"
                           },
-                          "maxItems": 60,
+                          "maxItems": 256,
                           "type": "array"
                         },
                         "length": {
@@ -354395,7 +354411,7 @@
                             ],
                             "type": "object"
                           },
-                          "maxItems": 60,
+                          "maxItems": 256,
                           "type": "array"
                         },
                         "status": {
@@ -354447,7 +354463,7 @@
                             ],
                             "type": "object"
                           },
-                          "maxItems": 60,
+                          "maxItems": 256,
                           "type": "array"
                         },
                         "type": {
@@ -354499,7 +354515,7 @@
                             ],
                             "type": "object"
                           },
-                          "maxItems": 60,
+                          "maxItems": 256,
                           "type": "array"
                         }
                       },
@@ -355020,6 +355036,13 @@
                     },
                     "query": {
                       "properties": {
+                        "appliedSort": {
+                          "enum": [
+                            "newest",
+                            "updated"
+                          ],
+                          "type": "string"
+                        },
                         "filter": {
                           "properties": {
                             "all": {
@@ -355127,11 +355150,20 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "textMatch": {
+                          "enum": [
+                            "title",
+                            "none"
+                          ],
+                          "type": "string"
                         }
                       },
                       "required": [
                         "text",
                         "sort",
+                        "appliedSort",
+                        "textMatch",
                         "filter"
                       ],
                       "type": "object"
@@ -355169,7 +355201,7 @@
                           "type": "boolean"
                         },
                         "scanned": {
-                          "maximum": 60,
+                          "maximum": 512,
                           "minimum": 0,
                           "type": "integer"
                         }
