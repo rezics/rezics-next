@@ -406,7 +406,7 @@ test.each(['initial context', 'retained context'])(
           'idempotency-key': randomUUID() },
         body: JSON.stringify({ actingSubject: person.agent, expectedVersion: 2,
           status: 'want-to-read', startedOn: null, finishedOn: null }) }));
-    expect(chapterShelf.status).toBe(200);
+    expect(chapterShelf.status, await chapterShelf.clone().text()).toBe(200);
     expect(await chapterShelf.json()).toMatchObject({ work: book.work,
       status: 'want-to-read', version: 3 });
     expect((await status.batch(person.agent, [chapter.work, book.work])).map(row => row.status))
