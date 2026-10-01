@@ -5,6 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
@@ -41,6 +42,7 @@ test('G905: franchise fixture search-first intake replays every Work into the Li
       catalogueIntake: new CatalogueIntakeStore(stack.accessPool, stack.env),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       libraryStatus: new ReaderLibraryStatusStore(stack.contentPool),
+      libraryRatings: new ReaderLibraryRatings(stack.accessPool),
       profiles: new ProfilesAccess(stack.accessPool),
       personPreferences: new PersonPreferencesStore(stack.accessPool),
       account: {
