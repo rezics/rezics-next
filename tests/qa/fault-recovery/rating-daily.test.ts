@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -130,8 +131,9 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     await grant('space:create:root', 'space.create');
     const preparationMs = Date.now() - preparationStart;
     expect(preparationMs).toBeLessThan(600_000);
+    await provisionFixtureAuthor(env, personaA);
     const work = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: `Daily target ${nonce}`, actingSubject: personaA }));
+      { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Daily target ${nonce}`, actingSubject: personaA }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces',
       { profile: 'space-realm-v1', name: `Daily Realm ${nonce}`, capabilities: ['realm'], actingSubject: personaA }))).realm;
     await grant(`rating:context:${realm}`, 'rating.context.create');

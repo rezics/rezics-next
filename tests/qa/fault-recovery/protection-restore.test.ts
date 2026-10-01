@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -169,9 +170,10 @@ test('SYS13: stopped graph cut retains old intent and delivery until protected c
       if (response.status !== status) throw new Error(`HTTP ${response.status}: ${JSON.stringify(body)}`);
       return body as T;
     };
+    await provisionFixtureAuthor(environment, actor);
     await grant(0, 'work:create:root', 'work.create');
     const created = await read<{ work: string; workRevision: string }>(await call(app, 'POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: 'Original protected title', actingSubject: actor }), 201);
+      { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: 'Original protected title', actingSubject: actor }), 201);
     const work = created.work;
     await grant(0, `work:read:${work}`, 'work.read');
     // The graph owner cut is stopped and copied before the later correction commits.

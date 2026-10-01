@@ -192,6 +192,7 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
     const request = new Request('https://main.rezics.test/v1/works', {
       headers: { authorization: bearer } });
     const expectedUnaffectedAccount = { issuer, subject: unaffected.id, accountAuthMode: 'trusted',
+      accountExpiresAt: JSON.parse(Buffer.from(bearer.split('.')[1]!, 'base64url').toString()).exp,
       accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${baseURL}/api/auth/oauth2/userinfo`],
       accountClientId: browserClient.client_id, accountConsentGeneration: undefined,
       accountConsentId: undefined, accountScopes: ['openid', 'work:create', 'work:edit'],

@@ -193,7 +193,8 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
     expect(principal).toEqual({ issuer: `${base}/api/auth`, subject: member.id,
       currentAssertion: expect.any(Function),
       accountAudiences: [apps.ACCOUNT_MAIN_RESOURCE!, `${base}/api/auth/oauth2/userinfo`],
-      accountAuthMode: 'trusted', accountClientId: browserClient.client_id,
+      accountAuthMode: 'trusted',
+      accountExpiresAt: JSON.parse(Buffer.from(bearer.split('.')[1]!, 'base64url').toString()).exp, accountClientId: browserClient.client_id,
       accountConsentGeneration: undefined, accountConsentId: undefined,
       accountScopes: ['openid', 'work:create', 'work:edit', 'owner:operate'] });
 
