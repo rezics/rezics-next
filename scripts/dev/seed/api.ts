@@ -148,12 +148,7 @@ export class SeedApi {
   private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
     token: string, key: string): Promise<T> {
     assertSeedRequest(method, path, body);
-    // A PUT is addressed by its URL, so binding its key to the body digest is safe:
-    // after a contract change the seed sends a new idempotent write instead of a
-    // conflicting replay of the old key on a long-lived stack. POST keys stay
-    // stable because a changed key would create a second record.
-    let attemptKey = method === 'PUT'
-      ? `${key}:${createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16)}` : key;
+    let attemptKey = key;
     for (let attempt = 0; attempt < 8; attempt++) {
       const response = await fetch(`${this.endpoints.main}${path}`, { method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
@@ -162,6 +157,14 @@ export class SeedApi {
       // explicit conflict; optimistic-head conflicts must remain failures.
       if (response.status === 409 && attempt < 7) {
         const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
+        // On a long-lived stack a contract change can give a PUT a new body under
+        // its old key. A PUT is addressed by its URL, so retry once under a key bound
+        // to the body; POST keys stay stable because a new key would create a record.
+        if (detail?.code === 'idempotency_conflict' && method === 'PUT' && attemptKey === key) {
+          attemptKey = `${key}:${createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16)}`;
+          await response.body?.cancel();
+          continue;
+        }
         if (detail?.code === 'read_basis_changed') {
           // This owner cancels its admission when the second root probe moves,
           // before saving Content. That cancelled key cannot be re-admitted.
