@@ -47,6 +47,7 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     await objects.initialize();
     (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
     await f.grant('semantic:create:root', 'semantic.change');
+    await f.grant('catalogue:verify:root', 'catalogue.verify');
     const namespace = `g831-${randomUUID()}`;
     // The QA shard shares its registry across files. Reuse canonical definitions
     // established by G-832, admitting this fixture actor separately to those IDs.
@@ -76,7 +77,10 @@ test('G-831: catalogue relations, open derivation kinds, both directions, privac
     readGrants.set(aggo.work, await f.grant(`work:read:${aggo.work}`, 'work.read'));
     const original = await work('Index Original'), sequel = await work('New Testament');
     const railgunManga = await work('Railgun manga'), railgunAnime = await work('Railgun anime');
-    const spiderWeb = await work('Spider web'), spiderBook = await work('Spider book'), hidden = await work('Hidden participant');
+    const spiderWeb = await work('Spider web'), spiderBook = await work('Spider book');
+    const hidden = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
+      profile: 'metadata-only-v1', language: 'en', title: 'Hidden participant', actingSubject: f.actor })), 201);
+    readGrants.set(hidden.work, await f.grant(`work:read:${hidden.work}`, 'work.read'));
     const query = `actingSubject=${encodeURIComponent(f.actor)}`;
     const page = async (resource: string, language = 'en', extra = '') => await f.json<Page>(await f.call('GET',
       `/v1/resources/${shortId(resource)}/relations?${query}&languages=${language}${extra}`), 200);

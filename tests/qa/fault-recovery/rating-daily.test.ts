@@ -1,4 +1,3 @@
-import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +10,7 @@ import { FusekiClient, fusekiReadBudget, FusekiReadBudgetExceeded, type CommandE
   from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry, engageAccessRecoveryFence }
   from '../../../services/main/src/modules/access/admission.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce, readMainOutboxEnvelope }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { dailyRatingSlotIri } from '../../../services/main/src/modules/rating/calendar.ts';
@@ -104,7 +104,8 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
         VALUES ($1, $2, $2, $3, $4, now() + interval '1 hour')`, [randomUUID(), actor, scope, action]);
     }
     const access = new AccessAdmissionRegistry(accessPool);
-    const main = createMainApp(liveFuseki, { environment: env, account: identity.verifier, access });
+    const main = createMainApp(liveFuseki, { environment: env, account: identity.verifier, access,
+      catalogueIntake: new CatalogueIntakeStore(accessPool, env) });
     const costs: { branch: string; calls: number; responseBytes: number; writes: number; writeBytes: number }[] = [];
     async function measured<T>(branch: string, operation: () => Promise<T>): Promise<T> {
       const budget = { signal: AbortSignal.timeout(10_000), callsLeft: 24, bytesLeft: 65_536 };
@@ -131,9 +132,14 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     await grant('space:create:root', 'space.create');
     const preparationMs = Date.now() - preparationStart;
     expect(preparationMs).toBeLessThan(600_000);
-    await provisionFixtureAuthor(env, personaA);
+    const title = `Daily target ${nonce}`;
+    const { candidateReceipt } = await success<{ candidateReceipt: string }>(await post('/v1/catalogue/candidates', {
+      profile: 'catalogue-candidates-v1', originalTitle: { value: title, language: 'en' },
+      aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
+    }), 200);
     const work = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Daily target ${nonce}`, actingSubject: personaA }));
+      { profile: 'metadata-only-v1', grain: 'new-creative-scope', candidateReceipt,
+        language: 'en', title, actingSubject: personaA }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces',
       { profile: 'space-realm-v1', name: `Daily Realm ${nonce}`, capabilities: ['realm'], actingSubject: personaA }))).realm;
     await grant(`rating:context:${realm}`, 'rating.context.create');

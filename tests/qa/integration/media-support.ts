@@ -11,6 +11,7 @@ import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/im
 import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
@@ -30,7 +31,7 @@ import type { MediaDependencies } from '../../../services/main/src/modules/media
 import { MediaScreenStore } from '../../../services/main/src/modules/media-screen/store.ts';
 import { screenVerdict } from '../../../services/main/src/modules/media-screen/policy.ts';
 import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
-import { activateMetadataWork, ID, metadataWorkRequestDigest,
+import { activateMetadataWork, GRAPHS, ID, RV, iri, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
@@ -223,10 +224,15 @@ export async function startMediaStack(label: string, options: { contentProjectio
       expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'claimed',
       dispatchEligible: true, replayed: false };
   };
-  /** A metadata-only Work: no Main selection, so it is never public. */
+  /** A native author draft stays private until its Main selection is public. */
   const privateWork = async (actor: string, title = `${label} private ${randomUUID()}`) => {
-    const created = await activateMetadataWork(env, { title, language: 'en',
-      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, undefined, 'en')) });
+    if (!(await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(actor)} a <${RV}Agent> ; <${RV}head> ?head } }`)).boolean) {
+      await provisionFixtureAuthor(env, actor);
+    }
+    const created = await activateMetadataWork(env, { title, language: 'en', authorAgent: actor,
+      admission: admission(actor, 'work:create:root', 'work.create',
+        metadataWorkRequestDigest(title, undefined, 'en', { authorAgent: actor })) });
     return { work: created.work, mainVersion: created.mainVersion, title };
   };
   const contribution = async (work: string, actor: string, language: string, body: string) => {
@@ -245,7 +251,9 @@ export async function startMediaStack(label: string, options: { contentProjectio
   };
   /** A Work whose Main Version selects a public native contribution; further languages stay eligible variants. */
   const publicWork = async (actor: string, languages: string[] = ['en'], title = `${label} public ${randomUUID()}`) => {
-    const created = await privateWork(actor, title);
+    const metadata = await activateMetadataWork(env, { title, language: 'en',
+      admission: admission(actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, undefined, 'en')) });
+    const created = { work: metadata.work, mainVersion: metadata.mainVersion, title };
     const variants = [];
     for (const language of languages) {
       variants.push(await contribution(created.work, actor, language, `${label} ${language} ${randomUUID()}`));

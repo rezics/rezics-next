@@ -110,6 +110,9 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-585-script-folding.test.ts',
   // Relation history must use the same immutable object directory as its graph.
   'tests/qa/integration/g-905-catalogue.test.ts',
+  // These probes finish or rank the complete graph population within fixed budgets.
+  'tests/qa/integration/concept-page.test.ts',
+  'tests/qa/integration/g-556-ranked-catalogue.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

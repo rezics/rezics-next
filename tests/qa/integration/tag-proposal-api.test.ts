@@ -90,7 +90,7 @@ test('G-354 tags: author-only proposals, CJK language lookup, independent Global
     // An overflow is unavailable, never a false-negative search result.
     await h.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${Array.from({ length: CONCEPT_SEARCH_COST.candidates + 1 }, () =>
-        `<https://rezics.com/id/${randomUUID()}> a <http://www.w3.org/2004/02/skos/core#Concept> ;
+        `<https://rezics.com/id/${randomUUID()}> a <http://www.w3.org/2004/02/skos/core#Concept>, <${RV}AuthorTagConcept> ;
         <http://www.w3.org/2004/02/skos/core#prefLabel> "予算"@ja ; <${RV}conceptRealm> ${iri(realm)} .`).join('\n')}
     } }`);
     expect((await search('ja', realm)).status).toBe(503);

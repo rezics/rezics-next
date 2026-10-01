@@ -121,8 +121,13 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
           (section) => section.count === undefined && section.actions.length === 0,
         ),
       ).toBe(true);
-      expect((await read(work.work, 'page', '', f.account.tokenB)).status).toBe(404);
+      expect((await read(work.work, 'page', '', f.account.tokenB)).status).toBe(200);
     }
+    const privateDraft = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
+      profile: 'metadata-only-v1', language: 'en', title: 'Unpublished indexing notes', actingSubject: f.actor })), 201);
+    await f.grant(`work:read:${privateDraft.work}`, 'work.read');
+    expect((await read(privateDraft.work)).status).toBe(200);
+    expect((await read(privateDraft.work, 'page', '', f.account.tokenB)).status).toBe(404);
     await f.grant(`work:edit:${sao.bunko.work}`, 'work.edit');
     const editor = await f.json<Page>(await read(sao.bunko.work), 200);
     expect(

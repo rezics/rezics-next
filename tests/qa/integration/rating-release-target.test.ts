@@ -1,4 +1,3 @@
-import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -15,6 +14,7 @@ import { AccessAdmissionRegistry, engageAccessRecoveryFence, releaseAccessRecove
   from '../../../services/main/src/modules/access/admission.ts';
 import { ReleaseRatingInventoryStore, RELEASE_RATING_INVENTORY_SQL,
   readReleaseRatingAggregateInventory } from '../../../services/main/src/modules/access/rating-aggregate-inventory.ts';
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { queryReleaseRatingAggregate } from '../../../services/main/src/modules/rating/release-aggregate.ts';
 import { RELEASE_RATING_WRITE_COST } from '../../../services/main/src/modules/rating/release.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce,
@@ -85,12 +85,12 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
       Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
     const environment = { fuseki, objectDirectory: join(state, 'objects'),
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
-    await provisionFixtureAuthor(environment, actor.a);
     const content = new ContentCore(contentPool);
     const access = new AccessAdmissionRegistry(accessPool);
     const inventory = new ReleaseRatingInventoryStore(accessPool);
     const main = createMainApp(fuseki, { environment, account: identity.verifier,
-      access, content, contentAuthoring: content, releaseRatingInventory: inventory });
+      access, content, contentAuthoring: content, releaseRatingInventory: inventory,
+      catalogueIntake: new CatalogueIntakeStore(accessPool, environment) });
     const token = { a: identity.tokenA, b: identity.tokenB };
     const post = (path: string, body: object, who: 'a' | 'b' = 'a', key = randomUUID(),
       bearer = token[who]) => main.handle(new Request(`http://main.local${path}`, {
@@ -122,8 +122,13 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     await grant('work:create:root', 'work.create');
     await grant('space:create:root', 'space.create');
     expect(Date.now() - preparation).toBeLessThan(600_000);
+    const title = `Release rating ${randomUUID()}`;
+    const { candidateReceipt } = await success<{ candidateReceipt: string }>(await post('/v1/catalogue/candidates', {
+      profile: 'catalogue-candidates-v1', originalTitle: { value: title, language: 'en' },
+      aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
+    }), 200);
     const work = await success<Target>(await post('/v1/works', { language: 'en',
-      profile: 'metadata-only-v1', authoring: 'own-work', title: `Release rating ${randomUUID()}`, actingSubject: actor.a }));
+      profile: 'metadata-only-v1', grain: 'new-creative-scope', candidateReceipt, title, actingSubject: actor.a }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces', {
       profile: 'space-realm-v1', name: `Rating Realm ${randomUUID()}`,
       capabilities: ['realm'], actingSubject: actor.a }))).realm;

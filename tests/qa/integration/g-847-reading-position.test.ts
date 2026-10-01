@@ -51,7 +51,8 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
         const member = [editor, outsider].find(member => member.token === token);
         if (!member) throw new AccountAssertionDenied('Unknown bearer');
-        return { ...member.principal, emailVerified: verifiedEmail };
+        return { ...member.principal, emailVerified: verifiedEmail,
+          currentAssertion: async () => ({ ...member.principal, emailVerified: verifiedEmail }) };
       } } };
     const app = createMainApp(stack.fuseki, deps);
     const call = (method: string, path: string, body?: object, token = editor.token) => app.handle(new Request(`http://main.local${path}`, {
