@@ -178,7 +178,12 @@ tasks:
     desc: Run Storybook stories as Vitest browser tests with accessibility checks.
     dir: apps/web
     cmds:
-      - ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+      # A Goal worker's run takes a shared QA slot: unbounded parallel browser runs exhausted the host.
+      - |
+        if [ -n "${GOAL_TASK_ID:-}" ] && [ -z "${GOAL_IN_SLOT:-}" ]; then
+          exec bun ../../scripts/goal/goalctl.ts slot -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+        fi
+        exec ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
 
   # Accounts site (apps/accounts): the public Account origin
 

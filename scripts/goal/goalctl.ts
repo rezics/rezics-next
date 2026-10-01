@@ -1185,7 +1185,8 @@ async function withSlot(command: string[]): Promise<number> {
   const release = () => rmSync(slot, { recursive: true, force: true });
   reapStaleQaStacks();
   try {
-    const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit' });
+    const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit',
+      env: { ...process.env, GOAL_IN_SLOT: '1' } });
     const forward = (signal: NodeJS.Signals) => child.kill(signal);
     process.on('SIGINT', forward);
     process.on('SIGTERM', forward);
