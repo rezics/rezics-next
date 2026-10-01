@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 const WORK = /^OL[1-9][0-9]{0,11}W$/;
 const AGENT = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const READER_IMPORT_COST = { sourceSearchesPerDay: 200, acquisitionsPerDay: 50,
-  sourceBindings: 2, batchRows: 500, rowsPerRequest: 8,
+  sourceBindings: 2, batchRows: 5_000, rowsPerRequest: 8,
   shelvesPerRow: 20, reviewCharacters: 8_000 } as const;
 export class ReaderImportBudgetExceeded extends Error {
   constructor(readonly kind: 'search' | 'acquisition') { super(`reader import ${kind} budget exceeded`); }

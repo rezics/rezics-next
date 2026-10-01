@@ -5,17 +5,21 @@ import { READER_IMPORT_COST, ReaderImportInvalid } from './reader-import.ts';
 export interface ReviewedImportRow {
   work: string;
   status: 'want-to-read' | 'reading' | 'read' | null;
+  applyStatus?: boolean;
   startedOn: string | null;
   finishedOn: string | null;
   rating: number | null;
   hasRating: boolean;
   review: string | null;
   reviewVisibility: 'private' | 'public';
+  reviewLanguage?: string;
+  reviewSpoiler?: boolean;
   shelves: string[];
   conflictChoice?: 'keep' | 'replace';
 }
 export interface ReviewedImportBatch { actingSubject: string; context: string | null;
   language: string; existingShelves: Array<{ name: string; id: string }>;
+  shelfDisclosures?: Record<string, 'private' | 'public'>;
   rows: ReviewedImportRow[] }
 export interface ReviewedImportResult { work: string; applied: string[]; issues: string[] }
 export interface ReviewedImportProgress { items: Array<{ index: number; result: ReviewedImportResult }>;
@@ -28,12 +32,13 @@ const date = (value: string | null) => value === null || /^\d{4}-\d{2}-\d{2}$/.t
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const uuid = (value: string) => value.slice(-36);
 const key = (...values: unknown[]) => `library-import:${digest(values).slice(0, 40)}`;
-const shelfId = (agent: string, name: string) => {
+export const importShelfId = (agent: string, name: string) => {
   const hex = digest([agent, 'custom-shelf', name]);
   return `https://rezics.com/id/${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-`
     + `${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
 const builtin = new Set(['read', 'to-read', 'currently-reading', 'want-to-read']);
+export const portableShelfId = (agent: string, sourceId: string) => importShelfId(agent,`portable:${sourceId}`);
 
 function validate(batch: ReviewedImportBatch): void {
   if (!ID.test(batch.actingSubject) || batch.context !== null && !ID.test(batch.context)
@@ -58,13 +63,13 @@ function validate(batch: ReviewedImportBatch): void {
 interface State { status: { status: ReviewedImportRow['status']; startedOn: string | null;
   finishedOn: string | null; version: number }; rating: { global: { value: number | null;
     revision: string; context: string } | null }; customShelves: Array<{ id: string }> }
-interface Note { text: string; version: number }
+interface Note { text: string; version: number; language?: string; spoiler?: boolean }
 interface Review { text: string; revision: string; author: string }
 type StepResult = 'complete' | 'stale' | 'retry' | 'failed';
 
 /** All writes go through Main's ordinary authenticated commands. Planned
  * command bodies and keys survive lost responses before a row is completed. */
-class ImportCommands {
+export class ImportCommands {
   constructor(private readonly store: ReaderLibraryImportStore, private readonly request: Request,
     private readonly batch: ReviewedImportBatch, private readonly importKey: string) {}
 
@@ -101,9 +106,9 @@ class ImportCommands {
     const agent = this.batch.actingSubject;
     let shelf = existing.get(name);
     if (!shelf) {
-      shelf = shelfId(agent, name);
+      shelf = importShelfId(agent, name);
       const made = await this.call('POST', '/v1/collections', {
-        collection: shelf, name, disclosure: 'private', actingSubject: agent }, key(agent, 'shelf', name));
+        collection: shelf, name, disclosure: this.batch.shelfDisclosures?.[name] ?? 'private', actingSubject: agent }, key(agent, 'shelf', name));
       if (made.status !== 200 && made.status !== 201) return made.status >= 400 && made.status < 500
         ? 'failed' : 'retry';
       existing.set(name, shelf);
@@ -139,14 +144,13 @@ class ImportCommands {
     const result: ReviewedImportResult = { work, applied: [], issues: [] };
     const state = await this.read<State>(`/v1/works/${uuid(work)}/reader-state?actingSubject=${encodeURIComponent(agent)}`);
     if (!state) return null;
-    const desiredDates = row.status === 'read' ? { startedOn: row.startedOn, finishedOn: row.finishedOn }
-      : { startedOn: null, finishedOn: null };
-    const statusSame = row.status === state.status.status && (row.status !== 'read'
-      || state.status.startedOn === row.startedOn && state.status.finishedOn === row.finishedOn);
-    const fillsDates = row.status === 'read' && state.status.status === 'read'
+    const desiredDates = { startedOn: row.startedOn, finishedOn: row.finishedOn };
+    const statusSame = row.status === state.status.status
+      && state.status.startedOn === row.startedOn && state.status.finishedOn === row.finishedOn;
+    const fillsDates = row.status !== null && row.status === state.status.status
       && (state.status.startedOn === null || state.status.startedOn === row.startedOn)
       && (state.status.finishedOn === null || state.status.finishedOn === row.finishedOn);
-    const statusConflict = row.status !== null && !statusSame && !fillsDates && state.status.status !== null;
+    const statusConflict = (row.status !== null || row.applyStatus) && !statusSame && !fillsDates && state.status.status !== null;
     const ratingConflict = row.hasRating && row.rating !== null && state.rating.global?.value != null
       && state.rating.global.value !== row.rating;
     let note: Note | null = null, review: Review | null = null;
@@ -165,7 +169,10 @@ class ImportCommands {
     if (statusConflict && !row.conflictChoice) result.issues.push('status-changed');
     if (row.hasRating && row.rating === null) result.issues.push('rating-needs-choice');
     else if (ratingConflict && !row.conflictChoice) result.issues.push('rating-changed');
-    if (row.review && row.reviewVisibility === 'private' && note && note.text !== row.review
+    const privateReviewSame = note !== null && note.text === row.review
+      && (row.reviewLanguage === undefined || note.language === row.reviewLanguage)
+      && (row.reviewSpoiler === undefined || note.spoiler === row.reviewSpoiler);
+    if (row.review && row.reviewVisibility === 'private' && note && !privateReviewSame
       && !row.conflictChoice) result.issues.push('review-changed');
     if (row.review && row.reviewVisibility === 'public' && review && review.text !== row.review
       && !row.conflictChoice) result.issues.push('review-changed');
@@ -173,7 +180,7 @@ class ImportCommands {
       || row.rating === null && state.rating.global?.value == null)) result.issues.push('review-needs-rating');
     if (result.issues.length) return result;
 
-    if (row.status && !statusSame && (!statusConflict || row.conflictChoice === 'replace')) {
+    if ((row.status !== null || row.applyStatus) && !statusSame && (!statusConflict || row.conflictChoice === 'replace')) {
       const body = { actingSubject: agent, expectedVersion: state.status.version, status: row.status,
         startedOn: fillsDates ? state.status.startedOn ?? row.startedOn : desiredDates.startedOn,
         finishedOn: fillsDates ? state.status.finishedOn ?? row.finishedOn : desiredDates.finishedOn };
@@ -199,9 +206,9 @@ class ImportCommands {
       result.applied.push('rating');
     }
     if (row.review && row.reviewVisibility === 'private'
-      && (!note || note.text !== row.review && row.conflictChoice === 'replace')) {
-      const body = { actingSubject: agent, text: row.review, language: this.batch.language,
-        spoiler: false, expectedVersion: note?.version ?? 0 };
+      && (!note || !privateReviewSame && row.conflictChoice === 'replace')) {
+      const body = { actingSubject: agent, text: row.review, language: row.reviewLanguage ?? note?.language ?? this.batch.language,
+        spoiler: row.reviewSpoiler ?? note?.spoiler ?? false, expectedVersion: note?.version ?? 0 };
       const step = await this.step(index, 'private-review', 'PUT', `/v1/me/import-reviews/${uuid(work)}`, body);
       if (step === 'retry') return null;
       if (step !== 'complete') return { ...result, issues: [step === 'stale'

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vndb-export version="1.0" date="2026-10-01T00:00:00Z">
+  <user><name>reader</name><url>https://vndb.org/u123</url></user>
+  <labels><label id="4" label="Stalled" private="true"/><label id="5" label="Dropped" private="true"/></labels>
+  <vns>
+    <vn id="v17" private="true"><title original="Ever17">Ever17 -The Out of Infinity-</title><label id="4" label="Stalled"/><vote timestamp="2026-09-01T00:00:00Z">8.5</vote><started>2026-09-01</started><notes>Private note &amp; evidence</notes><release id="r1"><title>Edition</title><status>Obtained</status></release></vn>
+    <vn id="v24" private="false"><title>CLANNAD</title><label id="5" label="Dropped"/><started>2026-08</started><finished>2026-09</finished></vn>
+  </vns>
+  <length-votes><vn id="v17" private="true"><title>Ever17</title><minutes>1200</minutes><speed>slow</speed></vn></length-votes>
+  <reviews><review id="w1" spoiler="true"><vn id="v17">Ever17</vn><text>Private imported review</text></review></reviews>
+</vndb-export>

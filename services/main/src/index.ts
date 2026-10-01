@@ -56,6 +56,8 @@ import { ConsumptionSessionStore } from './modules/session/store.ts';
 import { EditionPreferenceStore } from './modules/session/preference-store.ts';
 import { SeriesSessionReader } from './modules/session/series-store.ts';
 import { ReaderLibraryImportStore } from './modules/library-import/reader-import.ts';
+import { LibraryFileStore } from './modules/library-import/file-store.ts';
+import { LibraryBundleExporter } from './modules/library-export/bundle.ts';
 import { ReaderLibraryRatings } from './modules/library/ratings.ts';
 import { ProtectionAdmissionSigner } from './modules/access/protection-admission.ts';
 import { ErasureService } from './modules/erasure/request.ts';
@@ -384,6 +386,8 @@ const app = createMainApp(fuseki, {
   editionPreferences: new EditionPreferenceStore(contentPool),
   seriesSessions: new SeriesSessionReader(contentPool),
   libraryImport,
+  libraryFiles: new LibraryFileStore(contentPool),
+  libraryBundle: new LibraryBundleExporter(contentPool, pool),
   authorReaders: new AuthorReaders(contentPool, pool),
   workStats: new WorkReaderStats(contentPool, pool),
   libraryRatings: new ReaderLibraryRatings(pool),

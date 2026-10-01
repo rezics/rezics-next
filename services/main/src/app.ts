@@ -99,6 +99,8 @@ import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { studioRoutes } from './routes/studio.ts';
 import { libraryRoutes } from './routes/library.ts';
+import { libraryImportsRoutes } from './routes/library-imports.ts';
+import { libraryExportRoutes } from './routes/library-export.ts';
 import { realmProfileRoutes } from './routes/realm-profile.ts';
 import { workMetadataRoutes } from './routes/work-metadata.ts';
 import { releaseRoutes } from './routes/releases.ts';
@@ -165,6 +167,8 @@ function contentCommunityRoutes(fuseki: FusekiClient, work: SearchRouteDependenc
 
 function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
+    .use(libraryImportsRoutes(work))
+    .use(libraryExportRoutes(work))
     .use(collectionGrainRoutes(work))
     .use(accessReadRoutes(work))
     .use(catalogueCandidateRoutes(work))
