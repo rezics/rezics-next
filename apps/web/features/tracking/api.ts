@@ -43,6 +43,9 @@ export interface TrackingApi {
 }
 
 const RELATION_PAGES = 5;
+/** A read Main asked to restart is restarted this many times, waiting twice as long after each. */
+const MOVED_RESTARTS = 4;
+const MOVED_DELAY_MS = 250;
 const headers = () => ({ headers: { 'idempotency-key': commandKey() } });
 
 interface Failed { status: number; value: unknown }
@@ -69,6 +72,20 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
     }
   }
 
+  async function relationPages(resource: string): Promise<Loaded<Relations>> {
+    // Follow Main's pages up to a bound; a Work with more relations than that offers no more than it has read.
+    let all: Relations | null = null;
+    for (let page = 0, after: string | undefined; page < RELATION_PAGES; page++) {
+      const read = await settle(() => main().v1.resources({ resource: uuidOf(resource) }).relations.get({ query: {
+        actingSubject, limit: 20, ...(after ? { after } : {}) } }));
+      if (!read.ok) return all && read.failure !== 'moved' ? { ok: true, data: all } : read;
+      all = all ? { ...read.data, items: [...all.items, ...read.data.items] } : read.data;
+      if (!read.data.next) break;
+      after = read.data.next;
+    }
+    return all ? { ok: true, data: all } : { ok: false, failure: 'unavailable' };
+  }
+
   return {
     sessions: (work, cursor) => settle<SessionPage>(() => main().v1.me.sessions.get({ query: { actingSubject, target: work,
       limit: 50, ...(cursor ? { cursor } : {}) } })).then(read => (read.ok
@@ -90,17 +107,12 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
     series: (resource, language) => settle(() => main().v1.me['progress-summaries']({ resource: uuidOf(resource) }).get({
       query: { actingSubject, ...(language ? { language } : {}) } })),
     async relations(resource) {
-      // Follow Main's pages up to a bound; a Work with more relations than that offers no more than it has read.
-      let all: Relations | null = null;
-      for (let page = 0, after: string | undefined; page < RELATION_PAGES; page++) {
-        const read = await settle(() => main().v1.resources({ resource: uuidOf(resource) }).relations.get({ query: {
-          actingSubject, limit: 20, ...(after ? { after } : {}) } }));
-        if (!read.ok) return all ? { ok: true, data: all } : read;
-        all = all ? { ...read.data, items: [...all.items, ...read.data.items] } : read.data;
-        if (!read.data.next) break;
-        after = read.data.next;
+      // Main answers 409 when its graph moved under the read and asks for the read to restart from its first page.
+      for (let attempt = 0; ; attempt++) {
+        const read = await relationPages(resource);
+        if (read.ok || read.failure !== 'moved' || attempt === MOVED_RESTARTS) return read;
+        await new Promise(done => setTimeout(done, MOVED_DELAY_MS * 2 ** attempt));
       }
-      return all ? { ok: true, data: all } : { ok: false, failure: 'unavailable' };
     },
     definition: key => settle(() => main().v1.lexicon.definitions({ key }).get({ query: { actingSubject } })),
     preference: work => settle(() => main().v1.me['edition-preferences']({ work: uuidOf(work) }).get({

@@ -92,6 +92,8 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
     const valueIris = groups.flatMap(group => group.items.flatMap(item =>
       item.kind === 'statement' && item.value.kind === 'resource' ? [item.value.iri] : []));
     const names = await namesOf(predicates);
+    // Their own call: a batch with a vocabulary predicate in it is refused whole, and would leave the Works unnamed.
+    const continuityNames = await namesOf(groups.flatMap(group => group.items.flatMap(item => item.qualifiers.applicability)));
     const named = new Map(await Promise.all([...new Set(valueIris)].map(async iri => {
       const valueId = idOf(iri);
       const page = valueId ? await readEntityProjection(valueId, main) : null;
@@ -105,6 +107,7 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
         return uuidLike.test(word) ? null : word;
       })();
       const values: ZoneFact['values'] = [];
+      const applies: string[] = [];
       for (const item of group.items) {
         const text = literalText(item);
         if (group.predicate === NAME) {
@@ -121,10 +124,20 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
           values.push({ text: zoneText(target.name), href: await zoneLink(site, item.value.iri, target.type) });
         } else if (text) values.push({ text, href: null });
         else continue;
+        const continuity: NonNullable<ZoneFact['values'][number]['continuity']> = [];
+        for (const iri of item.qualifiers.applicability) {
+          const where = continuityNames.get(iri);
+          if (where?.status === 'available') continuity.push({ name: zoneText(where.name), href: await zoneLink(site, iri, where.type) });
+        }
+        if (continuity.length) values.at(-1)!.continuity = continuity;
+        applies.push([...item.qualifiers.applicability].sort().join(' '));
         const sources = item.kind === 'statement' ? evidenceIds(item.sources) : [];
         if (sources.length) claims.push({ ids: sources, supports: claimText(label, values.at(-1)!.text.value) });
       }
       if (group.predicate !== NAME && group.predicate !== ALTERNATE && values.length) {
+        // Claims that differ by continuity say which each belongs to, by the Work's name; a property all of one
+        // continuity needs no such note.
+        if (new Set(applies).size < 2) for (const value of values) delete value.continuity;
         facts.push({ label: label ?? '', values });
       }
     }

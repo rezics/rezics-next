@@ -18,6 +18,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/**
+ * The open dialog, once focus has moved into it. The dialog takes focus a moment after it appears, and on a busy
+ * host that comes after typing has begun, so keystrokes sent before it settles land outside the field.
+ */
+async function openedDialog() {
+  const dialog = await within(document.body).findByRole('dialog');
+  await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+  return dialog;
+}
+
 /** A steward sees before and after, the evidence, the history and only the actions Main allows. */
 export const Open: Story = {
   async play({ canvasElement }) {
@@ -39,6 +49,7 @@ export const RequestChanges: Story = {
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Review' }));
+    await openedDialog();
     const dialog = within(document.body);
     await userEvent.click(await dialog.findByRole('radio', { name: /Request changes/ }));
     await userEvent.type(dialog.getByRole('textbox', { name: 'Message' }), 'Add the page number.');
@@ -89,6 +100,7 @@ export const RebasesOnRefusal: Story = {
     const api = args.api as ReturnType<typeof proposalApi>;
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Revise' }));
+    await openedDialog();
     const dialog = within(document.body);
     const synopsis = await dialog.findByRole('textbox', { name: 'Synopsis' });
     await userEvent.clear(synopsis);

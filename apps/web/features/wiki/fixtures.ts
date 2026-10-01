@@ -71,6 +71,11 @@ export const elizabeth: ZoneEntity = { id: id('e1'), kind: 'Character', name: te
   firstSeen: { name: text('Chapter 1'), href: page('chapters', 'c1') }, more: false,
   fullPage: `/e/${id('e1').slice(-36)}`, chapter: null };
 
+/** Two claims about one property, each recorded for a different continuity (Work) and named as such. */
+export const elizabethContinuities: ZoneEntity = { ...elizabeth, facts: [{ label: 'Lives at', values: [
+  { text: text('Longbourn'), href: null, continuity: [{ name: text('Pride and Prejudice'), href: page('franchise', 'w1') }] },
+  { text: text('Netherfield'), href: null, continuity: [{ name: text('Pride and Prejudice: an alternate telling'), href: page('franchise', 'w2') }] }] }] };
+
 /** The same page when the quotation is under a rights restriction: the passage is withheld, its source stays. */
 export const elizabethWithheld: ZoneEntity = { ...elizabeth, evidence: [{ ...elizabeth.evidence[0]!, text: null, withheld: true }] };
 /** A young record: a name and nothing else yet. */

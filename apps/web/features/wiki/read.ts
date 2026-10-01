@@ -34,8 +34,11 @@ export interface Chooser {
 }
 interface ChooserPage { resolved: string; items: ChooserItem[]; next: string | null }
 
-/** At most this many pages of the chooser are read (Main's pages are 100 positions each). */
-const CHOOSER_PAGES = 5;
+/**
+ * At most this many pages of the chooser are read (Main's pages are 100 positions each): a story of a thousand
+ * chapters lists every one, and a longer one continues under "Show everything".
+ */
+const CHOOSER_PAGES = 10;
 
 /** The positions a reader may choose in a Work, in reading order, and where Main put them by default. */
 export const readChooser = cache(async (work: string, position: string | undefined): Promise<Loaded<Chooser>> => {

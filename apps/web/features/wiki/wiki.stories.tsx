@@ -150,6 +150,19 @@ export const Character: Story = {
   },
 };
 
+/** Contradictory claims each say which continuity they belong to, by a link to that Work, so neither reads as the truth. */
+export const ClaimsByContinuity: Story = {
+  render: ({ locale }) => <EntityPage locale={locale} entity={data.elizabethContinuities} position={data.atEverything} />,
+  async play({ canvasElement }) {
+    const infobox = within(canvasElement).getByRole('complementary', { name: 'At a glance' });
+    await expect(within(infobox).getByRole('link', { name: 'Pride and Prejudice' })).toBeVisible();
+    await expect(within(infobox).getByRole('link', { name: 'Pride and Prejudice: an alternate telling' })).toBeVisible();
+    await expect(within(infobox).getByText('Longbourn').closest('li')).toHaveTextContent('Longbourn (Pride and Prejudice)');
+    await expect(within(infobox).getByText('Netherfield').closest('li')).toHaveTextContent('(Pride and Prejudice: an alternate telling)');
+    await fits();
+  },
+};
+
 export const CharacterDarkPhone: Story = {
   globals: { theme: 'dark', viewport: { value: 'phone' } },
   render: Character.render,

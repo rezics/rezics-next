@@ -132,11 +132,13 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   // Spider: the book and the web serial are recorded as equivalent; finishing one completes neither.
   const web = await work('So I’m a Spider, So What? (web)');
   const book = await work('So I’m a Spider, So What?');
-  await json(await editor.send('POST', '/v1/relations/changes', {
+  const relation = await json<{ occurrence: string }>(await editor.send('POST', '/v1/relations/changes', {
     profile: 'relation-change-v1', expectedHead: null, definition: definitions.get('correspondence-equivalent')!.revision,
     participations: [{ role: 'source', participant: { kind: 'resource', ref: web.work } },
       { role: 'target', participant: { kind: 'resource', ref: book.work } }],
     evidence: 'https://example.com/relation', actingSubject: editor.actor }), 201);
+  // Main withholds a relation whose occurrence the reader may not read, so the panel never hears of the counterpart.
+  await grantReader(`semantic:read:${relation.occurrence}`, 'semantic.read');
 
   return { sao: { series: saoSeries, volumes: saoVolumes, paperback, audiobook, omnibus },
     index: { series: indexSeries, volumes: indexVolumes }, spider: { web, book } };

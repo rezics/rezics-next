@@ -377,7 +377,15 @@ export interface ZonePositionState {
 }
 
 /** One line of a page's infobox: a property Main recorded and its values. */
-export interface ZoneFact { label: string; values: { text: ZoneText; href: string | null }[] }
+export interface ZoneFact {
+  label: string;
+  values: {
+    text: ZoneText;
+    href: string | null;
+    /** The continuities (Works) the claim is recorded for; set only when the property's claims differ by continuity. */
+    continuity?: { name: ZoneText; href: string | null }[];
+  }[];
+}
 
 /** A relationship as a structured row: what it is, and the other participants. */
 export interface ZoneRelationship { label: string; others: { name: ZoneText; href: string | null }[] }

@@ -130,7 +130,9 @@ function Infobox({ entity, t, Link }: { entity: ZoneEntity; t: Strings; Link: Li
   if (entity.kind && !entity.chapter) rows.push([t.kind, entity.kind]);
   for (const fact of entity.facts) rows.push([fact.label, <ul key={fact.label} className="fw-values">
     {fact.values.map((value, index) => <li key={index}>{value.href
-      ? <Link href={value.href}><Text text={value.text} /></Link> : <Text text={value.text} />}</li>)}</ul>]);
+      ? <Link href={value.href}><Text text={value.text} /></Link> : <Text text={value.text} />}
+      {value.continuity?.length ? <span data-wiki-continuity="" className="fw-quiet">{' ('}{value.continuity.map((where, at) =>
+        <span key={at}>{at ? ', ' : ''}{where.href ? <Link href={where.href}><Text text={where.name} /></Link> : <Text text={where.name} />}</span>)}{')'}</span> : null}</li>)}</ul>]);
   if (entity.firstSeen) rows.push([t.firstAppears, entity.firstSeen.href
     ? <Link href={entity.firstSeen.href}><Text text={entity.firstSeen.name} /></Link> : <Text text={entity.firstSeen.name} />]);
   if (!rows.length) return null;
