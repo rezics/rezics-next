@@ -2,6 +2,7 @@ import type { ZoneReleaseFilterSpec, ZoneText } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AdaptContext } from '../realm/adapt.ts';
 import { reader, settle } from '../work-page/read.ts';
+import { iriOf } from '../work-page/route.ts';
 import type { Loaded } from '../work-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { readAgent } from '../realm/read.ts';
@@ -24,7 +25,9 @@ async function readHits(realm: string, locale: UiLocale, state: ReleaseFilterSta
   const group = releaseGroup(state);
   if (!group) return { ok: false, failure: 'invalid' };
   const { main } = await reader();
-  const query = { context: { realm }, scope: { kind: 'realm' as const, realm }, filter: { all: [group] },
+  // The view names the Realm by its UUID; Main's Query names it by its native IRI.
+  const iri = iriOf(realm);
+  const query = { context: { realm: iri }, scope: { kind: 'realm' as const, realm: iri }, filter: { all: [group] },
     sort: 'newest' as const, page: { size: RELEASE_PAGE, ...state.cursor ? { continuation: state.cursor } : {} } };
   const answer = await settle(() => main.v1.query.post(query, { headers: { 'accept-language': locale } }),
     state.cursor ?? undefined);
