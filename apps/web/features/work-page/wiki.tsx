@@ -43,7 +43,7 @@ export function WikiSectionView({ wiki, locale, messages }: {
   if (!realm) {
     return <Region id="work-wiki" title={title}>
       <p className="text-muted-foreground text-sm">{t.wikiNone}{' '}
-        <a href={WIKI_GUIDE(locale)} className="text-primary underline-offset-4 hover:underline">{t.wikiBuild}</a></p>
+        <a href={WIKI_GUIDE(locale)} className="text-primary underline underline-offset-4 hover:no-underline">{t.wikiBuild}</a></p>
     </Region>;
   }
   const characters = wiki.characters?.ok ? mainCharacters(wiki.characters.data, MAIN_CHARACTERS) : [];

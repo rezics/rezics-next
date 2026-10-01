@@ -42,7 +42,7 @@ export function YourEdition({ work, signInHref, locale, messages }: {
   }, [api, work]);
   if (actions.kind === 'signed-out') {
     return <p className="text-muted-foreground text-sm">
-      <Link href={signInHref} className="text-primary underline-offset-4 hover:underline">{t.signInForEdition}</Link></p>;
+      <Link href={signInHref} className="text-primary underline underline-offset-4 hover:no-underline">{t.signInForEdition}</Link></p>;
   }
   if (!api || !setup) return null;
   return <div data-your-edition>

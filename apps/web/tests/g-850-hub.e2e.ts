@@ -214,6 +214,13 @@ test('the first screen and accessibility hold in light and dark, on a phone and 
         await page.setViewportSize(viewport);
         await page.goto(at(sao.series, locale));
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
+        // A signed-in reader's saved display mode is adopted once the page is up and wins over the cookie, so the
+        // theme under test is set on the page itself, as the display menu does.
+        await page.waitForLoadState('networkidle');
+        await page.evaluate(chosen => {
+          document.documentElement.classList.remove('light', 'dark');
+          document.documentElement.classList.add(chosen);
+        }, theme);
         const heading = page.getByRole('heading', { level: 1, name: title, exact: true });
         await expect(heading, name).toBeVisible();
         const action = primary(page);

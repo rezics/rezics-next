@@ -115,7 +115,7 @@ export async function Parts({ workRef, id, locale, messages }: Common & { workRe
       <p className="text-muted-foreground text-sm">
         <Link href={signedIn ? localizedPath(`/identity?next=${encodeURIComponent(localizedPath(workHref(workRef), locale))}`, locale)
           : signInPath(localizedPath(workHref(workRef), locale))}
-        className="text-primary underline-offset-4 hover:underline">{t.signInForParts}</Link></p>
+        className="text-primary underline underline-offset-4 hover:no-underline">{t.signInForParts}</Link></p>
     </Region>;
   }
   const embedded = { id, workRef: workRefOf(workRef), locale, pageMessages: messages };

@@ -84,10 +84,11 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(ratings).toContainText('3 ratings');
   await expect(ratings).toContainText('4.67');
   await expect(ratings.getByRole('list', { name: 'Rating distribution' }).getByRole('listitem')).toHaveCount(5);
-  await expect(page.getByRole('region', { name: 'Genres' }).getByRole('listitem'))
+  // Accepted Concepts open their own page, grouped under the Facet Main names them by.
+  await expect(page.getByRole('region', { name: 'Classification' }).getByRole('list', { name: 'Tags' }).getByRole('listitem'))
     .toHaveText(['AdventureRelevance: Central']);
-  await expect(page.getByRole('region', { name: 'Genres' }).getByRole('link', { name: 'Adventure' }))
-    .toHaveAttribute('href', /^\/en\/discover\?term=[0-9a-f-]{36}$/);
+  await expect(page.getByRole('region', { name: 'Classification' }).getByRole('link', { name: 'Adventure' }))
+    .toHaveAttribute('href', /^\/en\/concepts\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Reads the English version');
   // The overview follows the documented order, each section under a stable anchor, and omits what the Work's
   // projection does not bind (docs/plan/frontend.md#work-page).
@@ -122,9 +123,11 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await expect(scope.getByRole('link', { name: 'Community: Tidewater Readers' })).toHaveAttribute('aria-current', 'true');
   await expect(ratings).toContainText('2 ratings');
   await expect(ratings.getByRole('list', { name: 'Rating distribution' }).getByRole('listitem')).toHaveCount(10);
-  const classification = page.getByRole('region', { name: 'Genres' });
-  await expect(classification.getByRole('list', { name: 'Chosen in Tidewater Readers' })).toHaveText(['Estuary cycle']);
-  await expect(classification.getByRole('list', { name: 'Chosen by everyone' })).toHaveText([/^Adventure/]);
+  const classification = page.getByRole('region', { name: 'Classification' });
+  await expect(classification).toContainText('Accepted in Tidewater Readers');
+  await expect(classification).toContainText('Estuary cycle');
+  await expect(classification).toContainText('Accepted by everyone');
+  await expect(classification).toContainText('Adventure');
   await expect(page.getByRole('region', { name: 'Communities' })).toContainText('Showing');
 
   // Tabs are links that keep the scope; each view has its own URL.
@@ -236,7 +239,7 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   await page.goto(`/en/w/${id}?scope=mine`);
   await expect(ratings.getByRole('link', { name: 'Sign in' }))
     .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${id}?scope=mine`)}`);
-  await expect(page.getByRole('region', { name: 'Genres' })).toContainText('Genres aren’t personal');
+  await expect(page.getByRole('region', { name: 'Classification' })).toContainText('Classification isn’t personal');
   await page.goto(`/en/w/${id}?scope=everyone`);
   await expect(page.getByRole('alert')).toContainText('This view isn’t available');
   await expect(page.getByRole('region', { name: 'Ratings' })).toHaveCount(0);
