@@ -61,6 +61,8 @@ export interface CataloguePort {
   actingSubject: string;
   request(method: string, path: string, body?: unknown, key?: string): Promise<CatalogueResponse>;
   grant(scope: string, action: string): Promise<void>;
+  /** Creates one Work where the public create route is not the way (it now needs an own-work claim or a reviewed candidate). */
+  createWork?(item: PlannedWork): Promise<{ work: string; mainVersion: string; mainRevision: string }>;
 }
 export interface CatalogueWork { work: string; mainVersion: string; mainRevision: string; title: string }
 export interface CatalogueManifest {
@@ -276,9 +278,10 @@ export async function loadCatalogue(port: CataloguePort): Promise<CatalogueManif
 
   for (const item of plan.works) {
     const key = idempotency(`work:${item.id}`);
-    const body = await catalogueWorkBody({ ...port, request: send }, {
-      title: item.title, language: 'ja', semanticTypes: [item.semanticType] }, key);
-    const receipt = await written<{ work: string; mainVersion: string; mainRevision: string }>('POST', '/v1/works', body, key);
+    const receipt = port.createWork ? await port.createWork(item)
+      : await written<{ work: string; mainVersion: string; mainRevision: string }>('POST', '/v1/works',
+        await catalogueWorkBody({ ...port, request: send }, {
+          title: item.title, language: 'ja', semanticTypes: [item.semanticType] }, key), key);
     manifest.works[item.id] = { ...receipt, title: item.title };
     await port.grant(`work:read:${receipt.work}`, 'work.read');
     await port.grant(`work:edit:${receipt.work}`, 'work.edit');
