@@ -17,12 +17,13 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import { agentLabel } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { bffSafetyApi, type SafetyApi } from './safety-api.ts';
-import { categoryName, ClaimChip, DeadlineChip, decisionKey, type CaseProblem, SafetyCasePanel,
+import { categoryName, ClaimChip, DeadlineChip, decisionKey, type CaseProblem, type PendingView, SafetyCasePanel,
   summaryOf } from './safety-case-panel.tsx';
 import { SafetyDecisionDialog } from './safety-decision-dialog.tsx';
-import { type Claim, claimOf, mergeCases, orderCases, permittedOutcomes, SITE_SAFETY_PATH, stepFor,
+import { type Attempt, clearAttempt, loadAttempt, refusedForGood, saveAttempt, settleDecision } from './safety-pending.ts';
+import { type Claim, claimOf, mergeCases, type Offer, offersFor, orderCases, SITE_SAFETY_PATH, stepsOf,
   type SafetyView } from './safety-state.ts';
-import type { ReportEvidence, SafetyCase, SafetyDecisionResult, SafetyDueStep, SafetyItem, SafetyOutcome,
+import type { ReportEvidence, SafetyCase, SafetyDecisionResult, SafetyItem, SafetyOutcome,
   SafetyPage } from './safety-types.ts';
 import type { Loaded } from './types.ts';
 
@@ -96,11 +97,14 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
   const [current, setCurrent] = useState<string | null>(openCase ?? null);
   const [details, setDetails] = useState<Record<string, Loaded<SafetyCase>>>({});
   const [evidence, setEvidence] = useState<Record<string, Loaded<ReportEvidence> | null>>({});
-  const [steps, setSteps] = useState<SafetyDueStep[]>([]);
+  const [attempts, setAttempts] = useState<Record<string, Attempt>>({});
+  const [resumes, setResumes] = useState<Record<string, PendingView>>({});
   const [advanced, setAdvanced] = useState(startAdvanced);
   const [claiming, setClaiming] = useState<string | null>(null);
   const [problems, setProblems] = useState<Record<string, CaseProblem>>({});
-  const [dialog, setDialog] = useState<SafetyOutcome | null>(null);
+  /** The case, read, evidence and offer as they were when the dialog opened; a re-read cannot change the request under it. */
+  const [dialog, setDialog] = useState<{ open: boolean; outcome: SafetyOutcome; item: SafetyItem; detail: SafetyCase;
+    evidence: ReportEvidence | null; offer: Offer } | null>(null);
   const [last, setLast] = useState<{ result: SafetyDecisionResult; facts: string } | null>(null);
   const [paging, setPaging] = useState<'idle' | 'loading' | 'failed'>('idle');
   const rows = useRef(new Map<string, HTMLElement>());
@@ -129,7 +133,12 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
   }, [safety]);
 
   useEffect(() => { if (current && !details[current]) void load(current); }, [current, details, load]);
-  useEffect(() => { void safety.due().then(read => { if (read.ok) setSteps(read.data); }); }, [safety]);
+  // A request kept from an earlier visit (same device) comes back when its case is opened.
+  useEffect(() => {
+    if (!current || attempts[current]) return;
+    const kept = loadAttempt(current);
+    if (kept) setAttempts(known => ({ ...known, [current]: kept }));
+  }, [current, attempts]);
   // Rows keep real focus with the current case, so screen readers follow keyboard triage.
   const focusRow = useRef(false);
   useEffect(() => { if (focusRow.current && current) { focusRow.current = false; rows.current.get(current)?.focus(); } }, [current]);
@@ -173,9 +182,39 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
     if (failure === 'claim-taken') void refresh();
   }, [claiming, safety, refresh]);
 
+  const read = item ? details[item.caseId] : undefined;
+  const offers = useMemo(() => item && read?.ok ? offersFor({ item, steps: stepsOf(read.data), now: clock,
+    decision: read.data.decision ? { outcome: read.data.decision.outcome, operationStatus: read.data.decision.operation.status }
+      : null }) : [], [item, read, clock]);
+  const attempt = item ? attempts[item.caseId] ?? null : null;
+
+  const keep = useCallback((caseId: string, next: Attempt | null) => {
+    if (next) saveAttempt(next); else clearAttempt(caseId);
+    setAttempts(known => { const { [caseId]: _old, ...rest } = known; return next ? { ...rest, [caseId]: next } : rest; });
+  }, []);
+
   const decide = useCallback((outcome: SafetyOutcome) => {
-    if (item && claimOf(item, actingSubject) === 'mine' && permittedOutcomes(item).includes(outcome)) setDialog(outcome);
-  }, [item, actingSubject]);
+    const offer = offers.find(entry => entry.outcome === outcome);
+    const evidenceRead = item ? evidence[item.caseId] : null;
+    if (!item || !read?.ok || !offer || offer.blocked || attempt || claimOf(item, actingSubject) !== 'mine') return;
+    setDialog({ open: true, outcome, item, detail: read.data, offer, evidence: evidenceRead?.ok ? evidenceRead.data : null });
+  }, [offers, item, read, evidence, attempt, actingSubject]);
+
+  const resume = useCallback(async (target: Attempt) => {
+    const caseId = target.caseId;
+    setResumes(known => ({ ...known, [caseId]: { resuming: true, problem: null } }));
+    const settled = await settleDecision(safety.decide, target.input);
+    if (settled.kind === 'completed') {
+      keep(caseId, null);
+      setResumes(known => { const { [caseId]: _done, ...rest } = known; return rest; });
+      setLast({ result: settled.result, facts: target.reasons.facts });
+      void refresh();
+      return;
+    }
+    if (settled.kind === 'failed' && !settled.recorded && refusedForGood(settled.failure)) keep(caseId, null);
+    setResumes(known => ({ ...known, [caseId]: { resuming: false, problem: settled.kind === 'pending' ? 'still' : 'failed' } }));
+    void load(caseId);
+  }, [safety, keep, refresh, load]);
 
   useEffect(() => {
     if (!advanced) return;
@@ -190,23 +229,23 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
         focusRow.current = true; setCurrent(next.caseId);
       } else if (event.key === 'c' && item && claimOf(item, actingSubject) === 'free') void claim(item);
       else {
-        const outcome = item ? permittedOutcomes(item).find(candidate => decisionKey(candidate) === event.key) : undefined;
-        if (!outcome) return;
-        decide(outcome);
+        const offer = offers.find(candidate => !candidate.blocked && decisionKey(candidate.outcome) === event.key);
+        if (!offer) return;
+        decide(offer.outcome);
       }
       event.preventDefault();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [advanced, ordered, current, item, dialog, actingSubject, claim, decide]);
+  }, [advanced, ordered, current, item, dialog, actingSubject, claim, decide, offers]);
 
   const waiting = cursor ? t.safetyWaitingAtLeast({ count: String(ordered.length) }) : t.safetyWaiting(ordered.length);
   const filtered = view.urgent !== null || view.category !== null || view.language !== null || view.due !== null;
-  const read = item ? details[item.caseId] : undefined;
   const panel = item ? <SafetyCasePanel item={item} detail={read} evidence={item ? evidence[item.caseId] : undefined}
     claim={claimOf(item, actingSubject)} claimedLabel={label(item.claimedBy)} claiming={claiming === item.caseId}
     problem={problems[item.caseId] ?? null} now={clock} locale={locale} messages={messages} advanced={advanced}
-    lastDecision={last} onClaim={() => void claim(item)} onDecide={decide} onRefresh={() => void refresh()}
+    lastDecision={last} offers={offers} pending={attempt ? resumes[item.caseId] ?? { resuming: false, problem: null } : null}
+    onClaim={() => void claim(item)} onDecide={decide} onResume={() => { if (attempt) void resume(attempt); }} onRefresh={() => void refresh()}
     className={advanced ? 'lg:sticky lg:top-4' : undefined} /> : null;
   const single = !advanced && item !== null;
   // A case opened from its address that Main will not show: staff without the specialist role see that it is restricted.
@@ -278,14 +317,15 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
       </div>
       {advanced ? panel ?? null : null}
     </div>}
-    {item && read?.ok ? <SafetyDecisionDialog item={item} detail={read.data} outcome={dialog}
-      evidence={(() => { const found = evidence[item.caseId]; return found?.ok ? found.data : null; })()}
-      step={stepFor(item.caseId, steps)} api={safety} actingSubject={actingSubject} locale={locale} messages={messages}
-      onClose={() => { setDialog(null); void load(item.caseId); }} finalFocus={() => rows.current.get(item.caseId) ?? null}
+    {dialog ? <SafetyDecisionDialog item={dialog.item} detail={dialog.detail} outcome={dialog.open ? dialog.outcome : null}
+      evidence={dialog.evidence} offer={dialog.offer} api={safety} actingSubject={actingSubject} locale={locale}
+      messages={messages} onAttempt={next => keep(dialog.item.caseId, next)}
+      onClose={() => { setDialog(known => known && { ...known, open: false }); void load(dialog.item.caseId); }}
+      finalFocus={() => rows.current.get(dialog.item.caseId) ?? null}
       onDone={(result, reasons) => {
         setLast({ result, facts: reasons.facts });
-        // Until every effect is confirmed the dialog stays and the case is not re-read: resuming must replay the same body.
-        if (result.operation.status === 'completed') { setDialog(null); void refresh(); }
+        setDialog(known => known && { ...known, open: false });
+        void refresh();
       }} /> : null}
   </div>;
 }

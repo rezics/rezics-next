@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { orderCases, parseSafetyView, permittedOutcomes, queueQuery, safetyHref, span, stepFor,
+import { orderCases, parseSafetyView, offersFor, queueQuery, safetyHref, span, stepsOf,
   deadlineOf, claimOf, mergeCases, restricts } from '../features/manage/safety-state.ts';
+import { clearAttempt, loadAttempt, refusedForGood, saveAttempt, settleDecision } from '../features/manage/safety-pending.ts';
 import { planTargets, decideLabelKey } from '../features/manage/safety-decision-dialog.tsx';
 import type { SafetyItem } from '../features/manage/safety-types.ts';
 import { messages } from '../features/manage/messages.ts';
@@ -60,21 +61,106 @@ test('G-821 claims come from Main’s claimedBy, and loaded pages merge by case'
   expect(merged[1]!.claimedBy).toBe(ME);
 });
 
-test('G-821 the decisions offered are the ones Main accepts for the case', () => {
-  expect(permittedOutcomes(item(1))).toEqual(['restrict', 'dismiss']);
-  expect(permittedOutcomes(item(1, { kind: 'rights_complaint' }))).toEqual(['interim_restrict', 'final_restrict', 'dismiss']);
-  expect(permittedOutcomes(item(1, { decisionHead: '00000000-0000-4000-8000-0000000000dd' }))).toEqual(['reverse', 'restore']);
-  expect(restricts('restrict') && restricts('interim_restrict') && restricts('final_restrict')).toBe(true);
-  expect(restricts('dismiss') || restricts('restore') || restricts('reverse')).toBe(false);
+const offered = (input: Parameters<typeof offersFor>[0]) => offersFor(input).map(offer =>
+  offer.blocked ? `${offer.outcome}:${offer.blocked}` : offer.outcome);
+const decided = (outcome: string, operationStatus = 'completed') => ({ outcome, operationStatus });
+const base = { steps: [], now: NOW };
+
+test('G-821 the decisions offered follow the case’s state, as Main’s decide accepts them', () => {
+  const report = item(1);
+  const rights = item(1, { kind: 'rights_complaint' });
+  // No decision, or a head that is not restricting (a dismissal, a release), is decided afresh.
+  expect(offered({ ...base, item: report, decision: null })).toEqual(['restrict', 'dismiss']);
+  expect(offered({ ...base, item: report, decision: decided('dismiss') })).toEqual(['restrict', 'dismiss']);
+  expect(offered({ ...base, item: report, decision: decided('reverse') })).toEqual(['restrict', 'dismiss']);
+  expect(offered({ ...base, item: rights, decision: null })).toEqual(['interim_restrict', 'final_restrict', 'dismiss']);
+  expect(offered({ ...base, item: rights, decision: decided('restore') })).toEqual(['interim_restrict', 'final_restrict', 'dismiss']);
+  // A restricting head is reversed; a report's restoration needs no step.
+  expect(offered({ ...base, item: report, decision: decided('restrict') })).toEqual(['reverse', 'restore']);
+  // After an interim restriction the final one is offered; a rights restoration needs a step of an accepted kind.
+  expect(offered({ ...base, item: rights, decision: decided('interim_restrict') }))
+    .toEqual(['final_restrict', 'reverse', 'restore:step']);
+  expect(offered({ ...base, item: rights, decision: decided('final_restrict') })).toEqual(['reverse', 'restore:step']);
+  const counter = { stepId: 'c1', kind: 'counter_notice' };
+  const offer = offersFor({ ...base, item: rights, decision: decided('final_restrict'), steps: [counter] });
+  expect(offer.find(entry => entry.outcome === 'restore')).toEqual({ outcome: 'restore', blocked: null, step: counter });
+  // A restoration date or a due step is never an accepted kind.
+  expect(offered({ ...base, item: rights, decision: decided('final_restrict'),
+    steps: [{ stepId: 'x', kind: 'restoration_not_before' }] })).toEqual(['reverse', 'restore:step']);
+});
+
+test('G-821 NCII is only reversed on an upheld appeal, never restored, and never without its step', () => {
+  const ncii = item(1, { category: 'ncii', urgent: true });
+  expect(offered({ ...base, item: ncii, decision: decided('restrict') })).toEqual(['reverse:step']);
+  expect(offered({ ...base, item: ncii, decision: decided('restrict'), steps: [{ stepId: 'a', kind: 'counter_notice' }] }))
+    .toEqual(['reverse:step']);
+  const appeal = { stepId: 'a1', kind: 'appeal' };
+  expect(offersFor({ ...base, item: ncii, decision: decided('restrict'), steps: [appeal] }))
+    .toEqual([{ outcome: 'reverse', blocked: null, step: appeal }]);
+});
+
+test('G-821 copyright releases wait for the earliest restoration date; unconfirmed effects block everything', () => {
+  const copyright = (dueAt: string | null) => item(1, { category: 'copyright', dueAt });
+  expect(offered({ ...base, item: copyright(null), decision: decided('restrict') })).toEqual(['reverse:window', 'restore:window']);
+  expect(offered({ ...base, item: copyright(hours(2)), decision: decided('restrict') })).toEqual(['reverse:window', 'restore:window']);
+  expect(offered({ ...base, item: copyright(hours(-2)), decision: decided('restrict') })).toEqual(['reverse', 'restore']);
+  expect(offered({ ...base, item: item(1), decision: decided('restrict', 'accepted') })).toEqual(['reverse:pending', 'restore:pending']);
+  for (const outcome of ['restrict', 'interim_restrict', 'final_restrict'] as const) expect(restricts(outcome)).toBe(true);
+  for (const outcome of ['dismiss', 'restore', 'reverse'] as const) expect(restricts(outcome)).toBe(false);
   for (const outcome of ['restrict', 'interim_restrict', 'final_restrict', 'dismiss', 'restore', 'reverse'] as const) {
     expect(messages[decideLabelKey[outcome]]).toBeString();
   }
 });
 
-test('G-821 a restoration answers the step Main lists for the case', () => {
-  const steps = [{ stepId: 'a', caseId: item(1).caseId, step: 'restoration_not_before', dueAt: hours(-1) }];
-  expect(stepFor(item(1).caseId, steps)?.stepId).toBe('a');
-  expect(stepFor(item(2).caseId, steps)).toBeNull();
+test('G-821 steps come from the staff read, and are empty until it carries them', () => {
+  expect(stepsOf({ caseId: 'c' })).toEqual([]);
+  expect(stepsOf({ steps: [{ stepId: 'a', kind: 'appeal' }, { id: 'b', step: 'counter_notice' }, { nothing: true }] }))
+    .toEqual([{ stepId: 'a', kind: 'appeal' }, { stepId: 'b', kind: 'counter_notice' }]);
+});
+
+const result = (status: 'completed' | 'accepted') => ({ ok: true as const, data: { operation: { status } } as never });
+const noWait = { sleep: async () => undefined };
+const request = { caseId: 'c1', idempotencyKey: 'k1' } as never;
+
+test('G-821 a 202 decision is replayed with the same request until the API reports it applied', async () => {
+  const sent: unknown[] = [];
+  const settled = await settleDecision(async input => { sent.push(input); return result(sent.length < 3 ? 'accepted' : 'completed'); },
+    request, noWait);
+  expect(settled.kind).toBe('completed');
+  expect(sent).toHaveLength(3);
+  expect(new Set(sent).size).toBe(1);
+});
+
+test('G-821 a decision that never completes stays pending after a bounded number of replays', async () => {
+  let calls = 0;
+  const settled = await settleDecision(async () => { calls += 1; return result('accepted'); }, request, { ...noWait, tries: 4 });
+  expect(settled.kind).toBe('pending');
+  expect(calls).toBe(4);
+});
+
+test('G-821 a failure after the API answered keeps the request; a refusal before it lets it go', async () => {
+  let calls = 0;
+  const lost = await settleDecision(async () => { calls += 1; return calls === 1 ? result('accepted') : { ok: false as const, failure: 'unavailable' as const }; },
+    request, noWait);
+  expect(lost).toEqual({ kind: 'failed', failure: 'unavailable', recorded: true });
+  const refused = await settleDecision(async () => ({ ok: false as const, failure: 'invalid' as const }), request, noWait);
+  expect(refused).toEqual({ kind: 'failed', failure: 'invalid', recorded: false });
+  expect(refusedForGood('invalid') && refusedForGood('stale') && refusedForGood('denied')).toBe(true);
+  expect(refusedForGood('unavailable') || refusedForGood('sign-in') || refusedForGood('pending')).toBe(false);
+});
+
+test('G-821 the kept request is stored per case and survives a reload', () => {
+  const data = new Map<string, string>();
+  const store = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => void data.set(key, value),
+    removeItem: (key: string) => void data.delete(key) };
+  const attempt = { caseId: 'c1', input: { caseId: 'c1', idempotencyKey: 'k1' } as never, reasons: { facts: 'F' } as never };
+  saveAttempt(attempt, store);
+  expect(loadAttempt('c1', store)).toEqual(attempt);
+  expect(loadAttempt('c2', store)).toBeNull();
+  data.set('rezics:manage:safety-attempt:c3', '{"caseId":"c9"}');
+  expect(loadAttempt('c3', store)).toBeNull();
+  clearAttempt('c1', store);
+  expect(loadAttempt('c1', store)).toBeNull();
 });
 
 test('G-821 a decision plans the retained evidence, and a reversal repeats the decision it releases', () => {

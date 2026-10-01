@@ -38,11 +38,12 @@ const operation = (status: 'completed' | 'accepted') => ({ operationId: 'op1', s
   items: [{ ordinal: 1, target: 'content:body', state: status === 'completed' ? 'confirmed' as const : 'pending' as const,
     receipt: status === 'completed' ? 'receipt' : null, continuation: null, error: null }] });
 
-const detailOf = (entry: SafetyItem): SafetyCase => ({ caseId: entry.caseId, kind: entry.kind, urgent: entry.urgent,
+interface Extra { outcome?: string; steps?: Array<{ stepId: string; kind: string }>; operation?: 'completed' | 'accepted' }
+const detailOf = (entry: SafetyItem, extra: Extra = {}): SafetyCase => ({ ...extra.steps ? { steps: extra.steps } : {}, caseId: entry.caseId, kind: entry.kind, urgent: entry.urgent,
   generation: entry.generation, state: 'open', reports: [{ reportId: id(500 + Number(entry.caseId.slice(-2))),
     evidenceDigest: digest('e'), category: entry.category ?? 'harassment' }], reportsNextCursor: null,
   decision: entry.decisionHead ? { profile: 'moderation-decision-v1', decisionId: entry.decisionHead, caseId: entry.caseId,
-    caseGeneration: '1', outcome: 'restrict', replayed: false, operation: operation('completed'),
+    caseGeneration: '1', outcome: extra.outcome ?? 'restrict', replayed: false, operation: operation(extra.operation ?? 'completed'),
     enforcement: [{ owner: 'content', resource: entry.target.resource, component: 'body', revision: 'r1',
       effect: 'disclosure', state: 'confirmed', fenceEpoch: '1' }] } : null,
   targets: entry.decisionHead ? [{ owner: 'content', resource: entry.target.resource, component: 'body', locator: null,
@@ -60,26 +61,27 @@ const recorder = (): Recorded => ({ claims: [], decisions: [], pages: 0 });
 
 /** A stand-in for Main's safety-case routes. `denied` lists cases whose read it refuses, as for evidence staff may not see. */
 function safetyApi(recorded: Recorded, options: { items?: SafetyItem[]; denied?: string[]; status?: 'completed' | 'accepted';
-  claimFails?: boolean } = {}): SafetyApi {
+  /** With `status: 'accepted'`, the request count from which the API reports every effect confirmed. */
+  completeAfter?: number; claimFails?: boolean; extra?: Record<string, Extra>; lookupFails?: boolean } = {}): SafetyApi {
   const items = options.items ?? cases;
   const find = (caseId: string) => items.find(entry => entry.caseId === caseId)!;
   return {
     async page() { recorded.pages += 1; return { ok: true, data: page(items) }; },
     async detail(caseId): Promise<Loaded<SafetyCase>> {
-      return options.denied?.includes(caseId) ? { ok: false, failure: 'denied' } : { ok: true, data: detailOf(find(caseId)) };
+      return options.denied?.includes(caseId) ? { ok: false, failure: 'denied' } : { ok: true, data: detailOf(find(caseId), options.extra?.[caseId]) };
     },
     async evidence(reportId) { return { ok: true, data: evidenceOf(find(id(Number(reportId.slice(-2))))) }; },
-    async due() { return { ok: true, data: [] }; },
     async claim(caseId, key) {
       recorded.claims.push({ caseId, key });
       return options.claimFails ? { ok: false, failure: 'conflict' }
         : { ok: true, data: { caseId, claimedBy: acting.iri } };
     },
-    async rule(ref) { return ref === rule.ref ? { ok: true, data: rule } : { ok: false, failure: 'missing' }; },
+    async rule(ref) { return ref === rule.ref && !options.lookupFails ? { ok: true, data: rule } : { ok: false, failure: 'missing' }; },
     async decide(input) {
       recorded.decisions.push(input);
       const result: SafetyDecisionResult = { profile: 'moderation-decision-v1', decisionId: id(77), caseId: input.caseId,
-        caseGeneration: '2', outcome: input.outcome, replayed: false, operation: operation(options.status ?? 'completed'),
+        caseGeneration: '2', outcome: input.outcome, replayed: false, operation: operation(options.status !== 'accepted' || (options.completeAfter !== undefined
+          && recorded.decisions.length >= options.completeAfter) ? 'completed' : 'accepted'),
         enforcement: [] };
       return { ok: true, data: result };
     },
@@ -90,7 +92,10 @@ const view: SafetyView = { urgent: null, category: null, language: null, due: nu
 const recorded = recorder();
 const reset = () => {
   recorded.claims.length = 0; recorded.decisions.length = 0; recorded.pages = 0;
-  try { localStorage.removeItem('rezics:manage:safety-advanced'); localStorage.removeItem('rezics:manage:safety-rule'); } catch { /* */ }
+  try {
+    localStorage.removeItem('rezics:manage:safety-advanced'); localStorage.removeItem('rezics:manage:safety-rule');
+    for (const key of Object.keys(localStorage)) if (key.startsWith('rezics:manage:safety-attempt:')) localStorage.removeItem(key);
+  } catch { /* */ }
 };
 const chinese = { ...messages, ...zhHans };
 
@@ -206,19 +211,6 @@ export const ClaimRace: Story = {
   },
 };
 
-/** Staff without the specialist role see that the evidence is restricted, and nothing to claim or decide. */
-export const RestrictedEvidence: Story = {
-  args: { api: safetyApi(recorded, { denied: [urgentNcii.caseId] }) },
-  async play({ canvasElement }) {
-    reset();
-    const canvas = within(canvasElement);
-    await userEvent.click(rows(canvas)[0]!);
-    await expect(await canvas.findByText('Restricted evidence')).toBeVisible();
-    await expect(canvas.getByText(/visible only to the safety specialist role/)).toBeVisible();
-    await expect(canvas.queryByRole('button', { name: 'Claim this case' })).toBeNull();
-  },
-};
-
 /** Opened from its address, a case staff may not see says only that its evidence is restricted. */
 export const RestrictedFromAddress: Story = {
   args: { openCase: id(88), api: safetyApi(recorded, { items: [{ ...urgentNcii, caseId: id(88) }], denied: [id(88)] }) },
@@ -240,7 +232,7 @@ export const RevisitDecision: Story = {
     await expect(await canvas.findByText('Restricted · generation 1')).toBeVisible();
     await expect(canvas.getByText('Every effect is confirmed.')).toBeVisible();
     await expect(canvas.getByText(/Earliest restoration:/)).toBeVisible();
-    await expect(canvas.getByText(/Latest restoration: Main lists this step once it is due/)).toBeVisible();
+    await expect(canvas.getByText(/Latest restoration: shown once that step is due/)).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Reverse' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Restore' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Dismiss' })).toBeNull();
@@ -286,27 +278,188 @@ export const DecisionDialog: Story = {
   },
 };
 
-/** A decision Main only accepted keeps the dialog open; resuming replays the same key and body. */
-export const ResumeAcceptedDecision: Story = {
-  args: { initial: page([mine]), api: safetyApi(recorded, { items: [mine], status: 'accepted' }) },
+const fillDialog = async (dialog: ReturnType<typeof within>, rulePrefix = 'urn:rezics:rule:harassment') => {
+  await typeValue(() => dialog.getByRole('textbox', { name: /^Rule/ }), rulePrefix);
+  await userEvent.click(dialog.getByRole('button', { name: 'Look up' }));
+  await dialog.findByText(/Revision 3/);
+  for (const [label, text] of [[/^Facts/, 'The post threatens a private person.'], [/^Scope/, 'The post.'], [/^Duration/, 'None.']] as const) {
+    await typeValue(() => dialog.getByRole('textbox', { name: label }), text);
+  }
+};
+const openDecision = async (canvas: ReturnType<typeof within>, name: string) => {
+  await userEvent.click(rows(canvas)[0]!);
+  await userEvent.click(await canvas.findByRole('button', { name }));
+  return within(await within(document.body).findByRole('dialog'));
+};
+
+/** The API answers 202 until a replay finishes the effects: the request is replayed by itself, with one key. */
+export const ReplaysUntilApplied: Story = {
+  args: { initial: page([mine]), api: safetyApi(recorded, { items: [mine], status: 'accepted', completeAfter: 3 }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const dialog = await openDecision(canvas, 'Restrict');
+    await fillDialog(dialog);
+    await userEvent.click(dialog.getByRole('button', { name: 'Record decision' }));
+    await waitFor(() => expect(recorded.decisions).toHaveLength(3), { timeout: 5000 });
+    await expect(new Set(recorded.decisions.map(sent => sent.idempotencyKey)).size).toBe(1);
+    await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull(), { timeout: 4000 });
+    await expect(Object.keys(localStorage).filter(key => key.startsWith('rezics:manage:safety-attempt:'))).toEqual([]);
+  },
+};
+
+/** Effects that stay unconfirmed keep the request: closing the dialog leaves a Resume that replays the same key and body. */
+export const ResumeAfterClosing: Story = {
+  args: { initial: page([mine]), api: safetyApi(recorded, { items: [mine], status: 'accepted', completeAfter: 6 }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const dialog = await openDecision(canvas, 'Restrict');
+    await fillDialog(dialog);
+    await userEvent.click(dialog.getByRole('button', { name: 'Record decision' }));
+    await expect(await dialog.findByText(/The decision is recorded, but not every effect is confirmed yet/, {}, { timeout: 8000 })).toBeVisible();
+    await expect(recorded.decisions).toHaveLength(4);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull());
+    await expect(await canvas.findByText('Effects not confirmed')).toBeVisible();
+    // Nothing else can be decided while the request is open, and the kept request is on this device.
+    await expect(canvas.queryByRole('button', { name: 'Dismiss' })).toBeNull();
+    await expect(Object.keys(localStorage).some(key => key.startsWith('rezics:manage:safety-attempt:'))).toBe(true);
+    await userEvent.click(canvas.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(canvas.queryByText('Effects not confirmed')).toBeNull(), { timeout: 8000 });
+    await expect(new Set(recorded.decisions.map(sent => sent.idempotencyKey)).size).toBe(1);
+    await expect(new Set(recorded.decisions.map(sent => JSON.stringify(sent))).size).toBe(1);
+  },
+};
+
+/** A request kept from before a reload comes back with its case. */
+export const ResumeAfterReload: Story = {
+  args: { initial: page([mine]), api: safetyApi(recorded, { items: [mine], extra: { [mine.caseId]: { outcome: 'restrict',
+    operation: 'accepted' } } }) },
+  async play({ canvasElement }) {
+    reset();
+    const input = { caseId: mine.caseId, expectedGeneration: '1', actingSubject: acting.iri, outcome: 'restrict' as const,
+      targets: [], reasons: { facts: 'F', scope: 'S', duration: 'D', automation: false,
+        appealRoute: '/v1/public-reports/{caseId}/correspondence' as const, contentLanguage: 'en' },
+      rule: { ref: rule.ref, revision: '3', digest: digest('a') }, evidenceDigest: digest('e'), reversesDecisionId: null,
+      answersStepId: null, rationale: null, disclosure: 'parties' as const, idempotencyKey: 'kept-key-1' };
+    localStorage.setItem(`rezics:manage:safety-attempt:${mine.caseId}`, JSON.stringify({ caseId: mine.caseId, input, reasons: input.reasons }));
+    const canvas = within(canvasElement);
+    await userEvent.click(rows(canvas)[0]!);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(recorded.decisions.length).toBeGreaterThan(0), { timeout: 5000 });
+    await expect(recorded.decisions[0]!.idempotencyKey).toBe('kept-key-1');
+  },
+};
+
+/** A head decision with unconfirmed effects and no request on this device: nothing to send, and the reason is said. */
+export const PendingElsewhere: Story = {
+  args: { initial: page([{ ...overdueDmca, claimedBy: acting.iri, dueAt: hours(-3) }]), api: safetyApi(recorded,
+    { items: [{ ...overdueDmca, claimedBy: acting.iri }], extra: { [overdueDmca.caseId]: { operation: 'accepted' } } }) },
   async play({ canvasElement }) {
     reset();
     const canvas = within(canvasElement);
     await userEvent.click(rows(canvas)[0]!);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Dismiss' }));
-    const dialog = within(await within(document.body).findByRole('dialog'));
-    await typeValue(() => dialog.getByRole('textbox', { name: /^Rule/ }), 'urn:rezics:rule:harassment');
-    await userEvent.click(dialog.getByRole('button', { name: 'Look up' }));
-    await dialog.findByText(/Revision 3/);
-    for (const [label, text] of [[/^Facts/, 'No violation found.'], [/^Scope/, 'The post.'], [/^Duration/, 'None.']] as const) {
-      await typeValue(() => dialog.getByRole('textbox', { name: label }), text);
-    }
+    await expect(await canvas.findByRole('button', { name: 'Reverse' })).toBeDisabled();
+    await expect(canvas.getAllByText(/Only the device that recorded it can resume it/).length).toBeGreaterThan(0);
+  },
+};
+
+const nciiRevisit = { ...urgentNcii, decisionHead: id(93), claimedBy: acting.iri };
+
+/** NCII is released only by upholding an appeal: without the appeal's step the action is disabled, with its reason. */
+export const NciiReverseNeedsAppealStep: Story = {
+  args: { initial: page([nciiRevisit]), api: safetyApi(recorded, { items: [nciiRevisit] }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(rows(canvas)[0]!);
+    const reverse = await canvas.findByRole('button', { name: 'Reverse' });
+    await expect(reverse).toBeDisabled();
+    await expect(canvas.getByText(/Needs the case’s process step/)).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Restore' })).toBeNull();
+    await expect(within(document.body).queryByRole('dialog')).toBeNull();
+    await expect(recorded.decisions).toHaveLength(0);
+  },
+};
+
+/** With the appeal's step in the read, the reversal answers it and reverses the decision it releases. */
+export const NciiReverseAnswersAppeal: Story = {
+  args: { initial: page([nciiRevisit]), api: safetyApi(recorded, { items: [nciiRevisit], extra: { [nciiRevisit.caseId]: {
+    steps: [{ stepId: id(300), kind: 'appeal' }] } } }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const dialog = await openDecision(canvas, 'Reverse');
+    await fillDialog(dialog);
     await userEvent.click(dialog.getByRole('button', { name: 'Record decision' }));
-    await expect(await dialog.findByText(/Main accepted the decision and is applying its effects/)).toBeVisible();
-    await userEvent.click(dialog.getByRole('button', { name: 'Resume' }));
-    await waitFor(() => expect(recorded.decisions).toHaveLength(2));
-    await expect(recorded.decisions[1]!.idempotencyKey).toBe(recorded.decisions[0]!.idempotencyKey);
-    await expect(recorded.decisions[0]!.targets).toEqual([]);
+    await waitFor(() => expect(recorded.decisions).toHaveLength(1));
+    await expect(recorded.decisions[0]).toMatchObject({ outcome: 'reverse', reversesDecisionId: id(93), answersStepId: id(300) });
+  },
+};
+
+/** After a dismissal the case is decided afresh; after an interim restriction a rights complaint can be made final. */
+export const OutcomesFollowTheDecision: Story = {
+  args: { initial: page([{ ...mine }]), api: safetyApi(recorded, { items: [{ ...mine, decisionHead: id(94) }],
+    extra: { [mine.caseId]: { outcome: 'dismiss' } } }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(rows(canvas)[0]!);
+    await expect(await canvas.findByRole('button', { name: 'Restrict' })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Dismiss' })).toBeEnabled();
+    await expect(canvas.queryByRole('button', { name: 'Reverse' })).toBeNull();
+  },
+};
+
+const rightsInterim = item(5, { kind: 'rights_complaint', category: 'privacy', decisionHead: id(95), claimedBy: acting.iri });
+export const FinalAfterInterim: Story = {
+  args: { initial: page([rightsInterim]), api: safetyApi(recorded, { items: [rightsInterim], extra: { [rightsInterim.caseId]: {
+    outcome: 'interim_restrict' } } }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(rows(canvas)[0]!);
+    await expect(await canvas.findByRole('button', { name: 'Restrict finally' })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Reverse' })).toBeEnabled();
+    // A rights restoration answers a counter-notice, appeal or restoration window: none is known, so it is disabled.
+    await expect(canvas.getByRole('button', { name: 'Restore' })).toBeDisabled();
+  },
+};
+
+/** Copyright releases wait for the earliest restoration date. */
+export const CopyrightWindowClosed: Story = {
+  args: { initial: page([{ ...overdueDmca, dueAt: hours(48), claimedBy: acting.iri }]), api: safetyApi(recorded,
+    { items: [{ ...overdueDmca, dueAt: hours(48), claimedBy: acting.iri }] }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(rows(canvas)[0]!);
+    await expect(await canvas.findByRole('button', { name: 'Reverse' })).toBeDisabled();
+    await expect(canvas.getAllByText(/Opens at the earliest restoration date/).length).toBeGreaterThan(0);
+  },
+};
+
+/** A rule that Main does not have says so on its field. */
+export const RuleNotFound: Story = {
+  args: { ...decideArgs },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    const dialog = await openDecision(canvas, 'Restrict');
+    await typeValue(() => dialog.getByRole('textbox', { name: /^Rule/ }), 'urn:rezics:rule:none');
+    await userEvent.click(dialog.getByRole('button', { name: 'Look up' }));
+    await waitFor(async () => expect(await dialog.findByText('No platform rule has this reference.')).toBeVisible());
+  },
+};
+
+/** An NCII case opened from its address, outside the loaded pages, shows without a receipt time instead of failing. */
+export const NciiFromAddress: Story = {
+  args: { initial: page([]), openCase: urgentNcii.caseId, api: safetyApi(recorded, { items: [urgentNcii] }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(/removal is due 48 hours after receipt/)).toBeVisible();
   },
 };
 

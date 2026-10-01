@@ -12,7 +12,7 @@ import { type Text, textFor, keyed } from '../safety/report.ts';
 import { dateTime, readableCode } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { decideLabelKey } from './safety-decision-dialog.tsx';
-import { type Claim, deadlineOf, isRevisit, permittedOutcomes, restricts, span } from './safety-state.ts';
+import { type Blocked, type Claim, deadlineOf, isRevisit, type Offer, restricts, span } from './safety-state.ts';
 import type { ReportEvidence, SafetyCase, SafetyDecisionResult, SafetyItem, SafetyOutcome } from './safety-types.ts';
 import type { Loaded } from './types.ts';
 
@@ -72,25 +72,34 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 export type CaseProblem = 'claim-taken' | 'claim-denied' | 'claim-failed' | null;
 
+/** A decision whose request is kept because its effects are not all confirmed; Resume replays it unchanged. */
+export interface PendingView { resuming: boolean; problem: 'still' | 'failed' | null }
+const blockedKeys = { step: 'decideNeedsStep', window: 'decideWindowClosed', pending: 'decidePendingBlocked' } as const satisfies
+  Record<Blocked, string>;
+
 /**
  * One case as staff read it: what Main says about it, its deadline, its
  * evidence, any decision, and the decisions that fit. Nothing here is decided
  * locally; a refused read shows as restricted evidence.
  */
 export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, claiming, problem, now, locale, messages,
-  advanced, lastDecision, onClaim, onDecide, onRefresh, className }: {
+  advanced, lastDecision, offers, pending, onClaim, onDecide, onResume, onRefresh, className }: {
   item: SafetyItem; detail: Loaded<SafetyCase> | undefined; evidence: Loaded<ReportEvidence> | null | undefined;
   claim: Claim; claimedLabel: string | null; claiming: boolean; problem: CaseProblem; now: number; locale: UiLocale;
   messages: ManageMessages; advanced: boolean;
   /** What this session just recorded, kept so its words stay readable after the dialog closes. */
   lastDecision: { result: SafetyDecisionResult; facts: string } | null;
-  onClaim: () => void; onDecide: (outcome: SafetyOutcome) => void; onRefresh: () => void; className?: string;
+  /** The decisions the case's state allows; blocked ones are shown disabled with the reason. */
+  offers: readonly Offer[];
+  /** Set when this device holds the request of a decision whose effects are not all confirmed. */
+  pending: PendingView | null;
+  onClaim: () => void; onDecide: (outcome: SafetyOutcome) => void; onResume: () => void; onRefresh: () => void;
+  className?: string;
 }) {
   const t = materializeData(messages, { locale });
   const text = textFor(locale);
   const restricted = detail !== undefined && !detail.ok && detail.failure === 'denied' && item.urgent;
   const category = categoryName(item.category, text);
-  const outcomes = permittedOutcomes(item);
   return <article aria-label={summaryOf(item, t, text)} className={cn('grid content-start gap-5 rounded-2xl border border-border/60 bg-card p-4 sm:p-5', className)}>
     <header className="grid gap-2">
       <h2 className="flex flex-wrap items-center gap-2 font-semibold text-lg tracking-tight">
@@ -115,7 +124,7 @@ export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, c
     {item.category === 'ncii' ? <Section title={t.deadlineHeading}>
       <p className="font-medium text-sm">{t.nciiNotice}</p>
       <p className="flex flex-wrap items-center gap-2 text-sm">
-        <span>{t.caseReceived({ time: dateTime(item.openedAt, locale) })}</span>
+        {item.openedAt ? <span>{t.caseReceived({ time: dateTime(item.openedAt, locale) })}</span> : null}
         <DeadlineChip dueAt={item.dueAt} now={now} locale={locale} messages={messages} /></p>
     </Section> : null}
     {item.category === 'copyright' ? <Section title={t.deadlineHeading}>
@@ -168,13 +177,24 @@ export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, c
           <div><Button type="button" onClick={onClaim} isLoading={claiming} disabled={claiming}>
             {claiming ? t.claiming : t.claimCase}{advanced ? <Kbd aria-hidden="true" className="ms-2">C</Kbd> : null}</Button></div>
         </> : claim === 'other' ? <p className="text-muted-foreground text-sm">{t.decideNeedsClaim}</p> : <>
-          {isRevisit(item) ? <p className="text-muted-foreground text-sm">{t.revisitHelp}</p> : null}
-          <div className="flex flex-wrap gap-2" role="group" aria-label={t.decisionHeading}>
-            {outcomes.map(outcome => <Button key={outcome} type="button"
-              variant={restricts(outcome) ? 'destructive' : 'outline'} onClick={() => onDecide(outcome)}>
-              {t[decideLabelKey[outcome]]}{advanced ? <Kbd aria-hidden="true" className="ms-2">{decisionKey(outcome).toUpperCase()}</Kbd>
-                : null}</Button>)}
-          </div>
+          {pending ? <Alert role="status"><AlertDescription>
+            <strong className="block">{t.decisionPendingTitle}</strong>{t.decisionPendingHelp}
+            {pending.problem ? <span className="block">{pending.problem === 'still' ? t.decisionStillPending : t.decisionFailed}</span> : null}
+            <Button type="button" size="xs" className="mt-2" onClick={onResume} isLoading={pending.resuming}
+              disabled={pending.resuming}>{t.decisionResume}</Button></AlertDescription></Alert> : <>
+            {isRevisit(item) ? <p className="text-muted-foreground text-sm">{t.revisitHelp}</p> : null}
+            <div className="flex flex-wrap gap-2" role="group" aria-label={t.decisionHeading}>
+              {offers.map(offer => <Button key={offer.outcome} type="button" disabled={offer.blocked !== null}
+                variant={restricts(offer.outcome) ? 'destructive' : 'outline'} onClick={() => onDecide(offer.outcome)}
+                aria-describedby={offer.blocked ? `blocked-${offer.outcome}` : undefined}>
+                {t[decideLabelKey[offer.outcome]]}{advanced && !offer.blocked ? <Kbd aria-hidden="true" className="ms-2">
+                  {decisionKey(offer.outcome).toUpperCase()}</Kbd> : null}</Button>)}
+            </div>
+            <ul className="grid gap-0.5 text-muted-foreground text-xs">
+              {offers.filter(offer => offer.blocked).map(offer => <li key={offer.outcome} id={`blocked-${offer.outcome}`}>
+                {t[decideLabelKey[offer.outcome]]}: {t[blockedKeys[offer.blocked!]]}</li>)}
+            </ul>
+          </>}
         </>}
         {problem ? <Alert variant="destructive" role="alert"><AlertDescription>{
           problem === 'claim-taken' ? t.claimTaken : problem === 'claim-denied' ? t.claimDenied : t.claimFailed}

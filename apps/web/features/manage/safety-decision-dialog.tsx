@@ -12,11 +12,12 @@ import { materializeData } from 'native-i18n';
 import { useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { Confirm } from '../safety/form-parts.tsx';
-import type { Outcome } from './commands.ts';
+import type { CommandFailure } from './commands.ts';
 import type { ManageMessages } from './messages.ts';
 import type { SafetyApi } from './safety-api.ts';
-import { restricts } from './safety-state.ts';
-import type { GovernanceRule, ReportEvidence, SafetyCase, SafetyDecisionInput, SafetyDecisionResult, SafetyDueStep,
+import { type Attempt, refusedForGood, settleDecision } from './safety-pending.ts';
+import { type Offer, restricts } from './safety-state.ts';
+import type { GovernanceRule, ReportEvidence, SafetyCase, SafetyDecisionInput, SafetyDecisionResult,
   SafetyEffect, SafetyItem, SafetyOutcome, SafetyReasons, SafetyTarget } from './safety-types.ts';
 
 const RULE_MEMORY = 'rezics:manage:safety-rule';
@@ -27,6 +28,11 @@ const effects: ReadonlyArray<{ effect: SafetyEffect; label: 'effectDisclosure' |
   { effect: 'search', label: 'effectSearch' }, { effect: 'media_delivery', label: 'effectMedia' },
   { effect: 'raw_delivery', label: 'effectRaw' }, { effect: 'export', label: 'effectExport' }];
 
+const writing = ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'];
+function languageLabel(code: string, locale: UiLocale): string {
+  if (code === 'und') return '—';
+  try { return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code; } catch { return code; }
+}
 const recall = () => { try { return globalThis.localStorage?.getItem(RULE_MEMORY) ?? ''; } catch { return ''; } };
 const remember = (ref: string) => { try { globalThis.localStorage?.setItem(RULE_MEMORY, ref); } catch { /* private mode */ } };
 
@@ -63,7 +69,7 @@ export type DecisionState =
   | { kind: 'accepted' }
   | { kind: 'failed'; reason: 'stale' | 'invalid' | 'denied' | 'conflict' | 'failed' };
 
-const failureReason = (outcome: Extract<Outcome<unknown>, { ok: false }>) =>
+const failureReason = (outcome: { failure: CommandFailure }) =>
   outcome.failure === 'stale' ? 'stale' : outcome.failure === 'invalid' || outcome.failure === 'budget' ? 'invalid'
     : outcome.failure === 'denied' || outcome.failure === 'missing' ? 'denied'
       : outcome.failure === 'conflict' ? 'conflict' : 'failed';
@@ -74,12 +80,15 @@ const failureReason = (outcome: Extract<Outcome<unknown>, { ok: false }>) =>
  * its revision and digest are what the decision cites. The same key is kept
  * until the words change, so resuming or pressing twice never records twice.
  */
-export function SafetyDecisionDialog({ item, detail, outcome, evidence, step, api, actingSubject, locale, messages,
-  onClose, onDone, finalFocus }: {
+export function SafetyDecisionDialog({ item, detail, outcome, evidence, offer, api, actingSubject, locale, messages,
+  onClose, onDone, onAttempt, finalFocus }: {
+  /** The case, its read, its evidence and the offer as they were when the dialog opened: a later re-read cannot change the request. */
   item: SafetyItem; detail: SafetyCase; outcome: SafetyOutcome | null; evidence: ReportEvidence | null;
-  step: SafetyDueStep | null; api: Pick<SafetyApi, 'rule' | 'decide'>; actingSubject: string; locale: UiLocale;
+  offer: Offer | null; api: Pick<SafetyApi, 'rule' | 'decide'>; actingSubject: string; locale: UiLocale;
   messages: ManageMessages; onClose: () => void; finalFocus?: () => HTMLElement | null;
   onDone: (result: SafetyDecisionResult, reasons: SafetyReasons) => void;
+  /** The request is kept (or dropped, with `null`) by the queue, which offers Resume once the dialog is closed. */
+  onAttempt: (attempt: Attempt | null) => void;
 }) {
   const t = materializeData(messages, { locale });
   const [shown, setShown] = useState<SafetyOutcome>(outcome ?? 'restrict');
@@ -97,6 +106,7 @@ export function SafetyDecisionDialog({ item, detail, outcome, evidence, step, ap
   const [tried, setTried] = useState(false);
   const [state, setState] = useState<DecisionState>({ kind: 'idle' });
   const attempt = useRef<{ body: string; key: string } | null>(null);
+  const [written, setWritten] = useState(item.contentLanguage ?? 'und');
   const factsRef = useRef<HTMLTextAreaElement>(null);
   const ruleInput = useRef<HTMLInputElement>(null);
 
@@ -106,14 +116,13 @@ export function SafetyDecisionDialog({ item, detail, outcome, evidence, step, ap
     if (outcome) {
       setShown(outcome); setRef(recall()); setRule(null); setLookup('idle'); setFacts(''); setScope(''); setDuration('');
       setAutomation(false); setEffect('disclosure'); setExpiry(''); setNote(''); setTried(false);
+      setWritten(item.contentLanguage ?? 'und');
       setState({ kind: 'idle' }); attempt.current = null;
     }
   }
-  const releasing = !restricts(shown) && shown !== 'dismiss';
-  const language = item.contentLanguage ?? 'und';
-  const languageName = (() => {
-    try { return new Intl.DisplayNames([locale], { type: 'language' }).of(language) ?? language; } catch { return language; }
-  })();
+  const language = written;
+  const languages = [...new Set([item.contentLanguage ?? 'und', ...writing, 'und'])];
+  const languageName = languageLabel(language, locale);
   const label = t[decideLabelKey[shown]];
   const missing = (value: string) => tried && !value.trim() ? t.decisionFieldRequired : null;
 
@@ -139,16 +148,24 @@ export function SafetyDecisionDialog({ item, detail, outcome, evidence, step, ap
     const body: Omit<SafetyDecisionInput, 'idempotencyKey'> = { caseId: item.caseId, expectedGeneration: detail.generation,
       actingSubject, outcome: shown, targets, reasons, rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest },
       evidenceDigest: detail.reports[0]?.evidenceDigest ?? '', reversesDecisionId: shown === 'reverse' ? item.decisionHead : null,
-      answersStepId: releasing ? step?.stepId ?? null : null, rationale: note.trim() || null, disclosure: 'parties' };
+      answersStepId: offer?.step?.stepId ?? null, rationale: note.trim() || null, disclosure: 'parties' };
     const serialized = JSON.stringify(body);
     if (attempt.current?.body !== serialized) attempt.current = { body: serialized, key: crypto.randomUUID() };
     setState({ kind: 'sending' });
-    const sent = await api.decide({ ...body, idempotencyKey: attempt.current.key });
-    if (!sent.ok) { setState({ kind: 'failed', reason: failureReason(sent) }); return; }
+    const input = { ...body, idempotencyKey: attempt.current.key };
+    // Written down before it is sent: a lost response leaves the request on record, and only this key can finish it.
+    onAttempt({ caseId: item.caseId, input, reasons });
+    setState({ kind: 'sending' });
+    const settled = await settleDecision(api.decide, input);
+    if (settled.kind === 'failed') {
+      if (!settled.recorded && refusedForGood(settled.failure)) onAttempt(null);
+      setState({ kind: 'failed', reason: failureReason(settled) });
+      return;
+    }
     remember(rule.ref);
-    // Anything short of `completed` keeps the dialog open: resuming replays the same key until every effect is confirmed.
-    setState(sent.data.operation.status === 'completed' ? { kind: 'idle' } : { kind: 'accepted' });
-    onDone(sent.data, reasons);
+    if (settled.kind === 'completed') { onAttempt(null); setState({ kind: 'idle' }); onDone(settled.result, reasons); return; }
+    // Recorded, but not every effect is confirmed: the dialog stays and the request waits for Resume.
+    setState({ kind: 'accepted' });
   }
 
   const problem = state.kind === 'failed' ? { stale: t.decisionStale, invalid: t.decisionInvalid, denied: t.decisionDenied,
@@ -160,7 +177,7 @@ export function SafetyDecisionDialog({ item, detail, outcome, evidence, step, ap
       <form noValidate onSubmit={event => { event.preventDefault(); void submit(); }} className="contents">
         <DialogHeader title={t.decisionTitle({ action: label })} description={t.decisionIntro} />
         <DialogBody className="grid gap-4">
-          <Field invalid={tried && !rule}>
+          <Field invalid={(tried && !rule) || lookup === 'missing'}>
             <FieldLabel>{t.ruleRefLabel}</FieldLabel>
             <div className="flex gap-2">
               <Input ref={ruleInput} value={ref} maxLength={512} className="min-w-0 flex-1"
@@ -192,6 +209,12 @@ export function SafetyDecisionDialog({ item, detail, outcome, evidence, step, ap
             </Field>
           </div>
           <Confirm checked={automation} onChange={setAutomation}>{t.automationLabel}</Confirm>
+          <Field>
+            <FieldLabel>{t.reasonLanguageLabel}</FieldLabel>
+            <NativeSelect value={written} onChange={event => setWritten(event.currentTarget.value)}>
+              {languages.map(code => <option key={code} value={code}>{languageLabel(code, locale)}</option>)}
+            </NativeSelect>
+          </Field>
           {restricts(shown) ? <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel>{t.effectLabel}</FieldLabel>

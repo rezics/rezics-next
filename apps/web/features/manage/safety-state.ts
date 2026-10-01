@@ -1,5 +1,5 @@
 import type { ReportCategory } from '../safety/report.ts';
-import type { SafetyCase, SafetyDueStep, SafetyItem, SafetyOutcome } from './safety-types.ts';
+import type { SafetyCase, SafetyItem, SafetyOutcome } from './safety-types.ts';
 
 // What the platform safety queue decides on its own: the order it shows, the
 // filters in its address, deadlines as read from Main's timestamps and which
@@ -83,26 +83,67 @@ export const claimOf = (item: SafetyItem, actingSubject: string): Claim =>
 /** A case Main already decided and put back for review: an appeal, a counter-notice or a newer report. */
 export const isRevisit = (item: Pick<SafetyItem, 'decisionHead'>) => item.decisionHead !== null;
 
+export interface CaseStep { stepId: string; kind: string }
+
 /**
- * Which decisions fit a case, as Main's `decide` accepts them: a report takes
- * restrict, dismiss, restore and reverse; a rights complaint takes interim and
- * final restriction instead of restrict. A case with a decision is revisited
- * (reverse, or restore after a counter-notice); one without is decided.
+ * The process steps a staff case read carries. The read gains `steps` with G-906; until the contract has them this
+ * is empty, and every decision that must answer a step stays disabled instead of sending a missing one.
  */
-export function permittedOutcomes(item: Pick<SafetyItem, 'kind' | 'decisionHead'>): SafetyOutcome[] {
+export function stepsOf(detail: unknown): CaseStep[] {
+  const steps = typeof detail === 'object' && detail !== null && 'steps' in detail ? (detail as { steps: unknown }).steps : null;
+  if (!Array.isArray(steps)) return [];
+  return steps.flatMap((entry: Record<string, unknown>) => {
+    const stepId = entry.stepId ?? entry.id;
+    const kind = entry.kind ?? entry.step;
+    return typeof stepId === 'string' && typeof kind === 'string' ? [{ stepId, kind }] : [];
+  });
+}
+
+/** Why a decision is shown but cannot be sent: it needs a process step the read does not carry, the legal window is not
+ * open, or an earlier decision still has unconfirmed effects. */
+export type Blocked = 'step' | 'window' | 'pending';
+export interface Offer { outcome: SafetyOutcome; blocked: Blocked | null; step: CaseStep | null }
+export interface OfferInput {
+  item: Pick<SafetyItem, 'kind' | 'category' | 'dueAt'>;
+  /** The case's current decision, as the staff read returns it. */
+  decision: { outcome: string; operationStatus: string } | null;
+  steps: readonly CaseStep[]; now: number;
+}
+
+/** Step kinds a rights restoration may answer (`decide` in the governance store). */
+const rightsRestorationSteps: readonly string[] = ['counter_notice', 'appeal', 'restoration_window'];
+
+/**
+ * The decisions Main's `decide` accepts for the case's state. A case with no restricting decision (new, or after a
+ * dismissal or release) is decided afresh; one with a restricting decision can be reversed. Releases that answer a
+ * process step are blocked until the step is known: NCII only reverses an upheld appeal, never restores; a rights
+ * restoration answers a counter-notice, appeal or restoration window. Copyright releases wait for the earliest
+ * restoration date.
+ */
+export function offersFor({ item, decision, steps, now }: OfferInput): Offer[] {
   const rights = item.kind === 'rights_complaint';
-  return isRevisit(item) ? ['reverse', 'restore']
-    : rights ? ['interim_restrict', 'final_restrict', 'dismiss'] : ['restrict', 'dismiss'];
+  const head = decision?.outcome ?? null;
+  const open = (outcome: SafetyOutcome): Offer => ({ outcome, blocked: null, step: null });
+  if (head === null || !restricts(head as SafetyOutcome)) {
+    return (rights ? ['interim_restrict', 'final_restrict', 'dismiss'] as const : ['restrict', 'dismiss'] as const).map(open);
+  }
+  const pending = decision!.operationStatus !== 'completed';
+  const ncii = item.category === 'ncii';
+  const windowOpen = item.category !== 'copyright' || (item.dueAt !== null && Date.parse(item.dueAt) <= now);
+  const release = (outcome: 'reverse' | 'restore'): Offer => {
+    const step = ncii ? steps.find(entry => entry.kind === 'appeal') ?? null
+      : rights && outcome === 'restore' ? steps.find(entry => rightsRestorationSteps.includes(entry.kind)) ?? null : null;
+    const needsStep = ncii || (rights && outcome === 'restore');
+    return { outcome, step, blocked: needsStep && !step ? 'step' : !windowOpen ? 'window' : null };
+  };
+  const offers: Offer[] = ncii ? [release('reverse')]
+    : [...head === 'interim_restrict' ? [open('final_restrict')] : [], release('reverse'), release('restore')];
+  return pending ? offers.map(offer => ({ ...offer, blocked: 'pending' as const })) : offers;
 }
 
 /** Outcomes that take content or access away; the others release or end the case. */
 export const restricts = (outcome: SafetyOutcome) => outcome === 'restrict' || outcome === 'interim_restrict'
   || outcome === 'final_restrict';
-
-/** The process step a restoration answers, when Main lists one for the case among its due steps. */
-export function stepFor(caseId: string, steps: readonly SafetyDueStep[]): SafetyDueStep | null {
-  return steps.find(step => step.caseId === caseId) ?? null;
-}
 
 export function evidenceDigestOf(view: Pick<SafetyCase, 'reports'>): string | null {
   return view.reports[0]?.evidenceDigest ?? null;
