@@ -20,6 +20,7 @@ import { NewShelf, SortControl, VisibilityControl } from './controls.tsx';
 import { LibraryProvider } from './library-context.tsx';
 import { statusLabel } from './labels.ts';
 import { LibraryList } from './library-list.tsx';
+import { LibraryExport } from '../library-backup/library-export.tsx';
 import { LibraryImport } from './library-import.tsx';
 import { ReadingGoal } from './reading-goal.tsx';
 import { ReadingStats } from './reading-stats.tsx';
@@ -353,8 +354,8 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
       </header>
       {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} /> : null}
       {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
-      <LibraryImport agent={data.agent} context={data.ratingContext} customShelves={data.customShelves}
-        locale={locale} messages={messages} />
+      <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages} />
+      <LibraryExport agent={data.agent} locale={locale} messages={messages} />
       {firstUse ? <>
         <FirstUse locale={locale} messages={messages} />
         {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}

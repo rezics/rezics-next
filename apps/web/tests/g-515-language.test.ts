@@ -6,7 +6,7 @@ import { communityNames } from '../features/communities/name-fields.ts';
 import { suggestedLanguages, textAttributes, UNSPECIFIED, writingLanguage } from '../features/content-language/writing-language.ts';
 import { mainThreadApi, replyProgress, type ReplyInput } from '../features/feed/thread-api.ts';
 import { newPostProgress, submitPost } from '../features/post-composer/api.ts';
-import { submitReviewedBatch } from '../features/library/import-api.ts';
+import { mainImportApi } from '../features/library/import-api.ts';
 import { profileSaveInput, saveAgentProfile } from '../features/settings/profile-api.ts';
 
 // G-515: what a person writes is in the language they chose. The interface
@@ -130,11 +130,11 @@ describe('a bio is saved in the language its writer chose', () => {
 describe('imported reviews carry the language given, not the page\u2019s', () => {
   test.each(['ko', 'und'])('%s', async language => {
     let body: { language: string } | undefined;
-    const main = { v1: { me: { 'library-import': { batches: { post: async (sent: { language: string }) => {
+    const main = { v1: { me: { 'library-imports': () => ({ apply: { post: async (sent: { language: string }) => {
       body = sent;
-      return { data: { pending: false, items: [] } };
-    } } } } } };
-    await submitReviewedBatch('agent', null, language, [], [], () => undefined, (() => main) as never);
+      return { status: 200, data: { total: 0, completed: 0, issues: 0, pending: false } };
+    } } }) } } };
+    await mainImportApi('agent', (() => main) as never).apply('file', { context: null, language });
     expect(body?.language).toBe(language);
   });
 });

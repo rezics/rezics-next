@@ -17,6 +17,7 @@ import { RatingInline } from '../catalogue/rating.tsx';
 import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink, WorkTile, workTitle } from '../catalogue/work-tile.tsx';
 import Link from '../shell/localized-link.tsx';
+import { TrackingControl } from '../tracking/tracking-control.tsx';
 import { formatDay } from './format.ts';
 import { isUseWork, rowStatusLabel, statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
@@ -104,8 +105,10 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
         </>}
         <RowMeta row={row} now={now} locale={locale} t={t} />
       </div>
-      <div className="col-start-2 mt-3 self-start sm:col-start-3 sm:mt-0">
+      <div className="col-start-2 mt-3 grid gap-2 self-start sm:col-start-3 sm:mt-0">
         <ShelfButton work={row.work.id} title={title} locale={locale} size="sm" variant="outline" className="w-44" />
+        {/* Attempts (paused, did not finish, reread) are kept and edited in G-838's sheet. */}
+        {unavailable ? null : <TrackingControl work={row.work.id} title={title} locale={locale} size="sm" className="w-44" />}
       </div>
     </article>
   </li>;

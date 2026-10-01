@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { bookClub, comfortReads, followedAuthors, libraryItems, libraryState, memoryLibraryApi, readingRows, storyNow,
   storyOverview, storyReaderActions, storyView } from './fixtures.ts';
+import { createMemoryMain, memoryTracking } from '../tracking/memory.ts';
+import * as attempts from '../tracking/fixtures.ts';
 import { LibraryPage } from './library-page.tsx';
 import { messages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
@@ -143,7 +145,7 @@ export const PrivateImportedReview: Story = {
   })(),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('Private review', { exact: false })).toBeVisible();
+    await expect(canvas.getByText(/^Private review ·/)).toBeVisible();
     await expect(canvas.getByText('A note I kept for myself.')).toBeVisible();
   },
 };
@@ -501,5 +503,28 @@ export const AuthorsOnFirstUse: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 2, name: 'Authors you follow' })).toBeVisible();
+  },
+};
+
+/** Each row opens G-838's attempts sheet, where a paused and a finished attempt of one Work both show. */
+export const Attempts: Story = {
+  args: (() => {
+    const state = libraryState({ shelf: 'reading' });
+    const serial = libraryItems[0]!.work.id;
+    const target = { ...attempts.session().target, resource: serial, work: serial };
+    const main = createMemoryMain({ sessions: [
+      attempts.session({ id: attempts.iri('a02'), target, state: 'paused', selections: [{ ...attempts.session().selections[0]!, target }] }),
+      attempts.session({ id: attempts.iri('a01'), target, state: 'finished', selections: [{ ...attempts.session().selections[0]!, target }] })] });
+    return { state, view: { ok: true as const, data: storyView(state) }, reading: [],
+      readerActions: { ...storyReaderActions(), tracking: memoryTracking(main) } };
+  })(),
+  parameters: { route: { pathname: '/en/library', search: '?shelf=reading' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const [details] = await canvas.findAllByRole('button', { name: 'Details' });
+    await userEvent.click(details!);
+    const sheet = await page().findByRole('dialog');
+    await expect(await within(sheet).findByText('Paused')).toBeVisible();
+    await expect(within(sheet).getByText('Finished')).toBeVisible();
   },
 };

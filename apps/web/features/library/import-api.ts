@@ -1,29 +1,48 @@
 import { browserMainApi } from '../api/browser.ts';
-import type { MainClient } from '../discover/types.ts';
-import type { ImportedBook } from './import-csv.ts';
-import { ReaderImportBudgetError } from './import-match.ts';
+import { type MainClient, problemCode } from '../discover/types.ts';
 
-export type ImportIssue = 'state-unavailable' | 'status-changed' | 'status-failed' | 'rating-needs-choice'
-  | 'rating-changed' | 'rating-failed' | 'review-needs-rating' | 'review-changed' | 'review-failed' | 'shelf-failed';
-export interface ImportRowResult { work: string; applied: string[]; issues: ImportIssue[] }
-export interface ReviewedBatchRow { work: string; status: ImportedBook['status'];
-  startedOn: string | null; finishedOn: string | null; rating: number | null; hasRating: boolean;
-  review: string | null; reviewVisibility: 'private' | 'public'; shelves: string[];
-  conflictChoice?: 'keep' | 'replace' }
-export interface ImportBatchProgress { items: Array<{ index: number; result: ImportRowResult }>;
-  total: number; pending: boolean }
-export const REVIEWED_IMPORT_MAX_ROWS = 500;
+// Main parses, matches and applies library files (`services/main/src/routes/library-imports.ts`). The
+// browser sends the file text, pages through the rows Main reports, forwards the reader's choices and
+// repeats `apply` until Main says nothing is pending. Shapes come from the typed Eden client.
+type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
+type Imports = MainClient['v1']['me']['library-imports'];
+type Upload = NonNullable<Parameters<Imports['post']>[0]>;
+type Rows = Ok<ReturnType<Imports>['rows']['get']>;
 
-async function stableKey(parts: unknown[]): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify(parts));
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return `library-import:${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 40)}`;
+export type ImportFormat = Upload['format'];
+export type CsvMapping = NonNullable<Upload['mapping']>;
+export type SourceStatus = CsvMapping['statuses'][string] & string;
+export type ImportRow = Rows['rows'][number];
+export type RowMatch = NonNullable<ImportRow['match']>;
+export type RowResolution = NonNullable<ImportRow['resolution']>;
+export interface CsvInspection { headers: string[]; distinctValues: Record<string, string[]> }
+export interface ApplyProgress { total: number; completed: number; issues: number; pending: boolean }
+/** What Main keeps once a row is applied: the same intent is sent on every resumed `apply`. */
+export interface ApplyIntent { context: string | null; language: string }
+
+export type ImportFailure = 'missing' | 'conflict' | 'invalid' | 'unavailable' | 'denied' | 'budget';
+export class ImportError extends Error {
+  constructor(readonly failure: ImportFailure, message: string = failure) { super(message); }
 }
 
-/** Retry the same idempotent intent after Main's short-window admission.
- * Retry-After accepts seconds or an HTTP date; an absent value waits one second. */
-async function waitForAdmission(response: { response: Response }): Promise<void> {
-  const value = response.response.headers.get('retry-after');
+export interface ImportApi {
+  /** A CSV without a mapping is only inspected: Main answers its headers and distinct values and stores nothing. */
+  inspect: (file: string) => Promise<CsvInspection>;
+  create: (input: { format: ImportFormat; file: string; mapping?: CsvMapping }) => Promise<{ id: string; total: number }>;
+  /** Up to eight rows after `cursor` (-1 for the first), matching any Main has not matched yet. */
+  rows: (id: string, cursor: number) => Promise<{ rows: ImportRow[]; nextCursor: number | null }>;
+  resolve: (id: string, row: ImportRow, choice: RowResolution) => Promise<void>;
+  apply: (id: string, intent: ApplyIntent) => Promise<ApplyProgress>;
+  discard: (id: string) => Promise<void>;
+  /** Adds an Open Library candidate of this row to the catalogue; answers the Work to resolve the row to. */
+  adopt: (id: string, row: number, workId: string, locale: string) => Promise<string>;
+}
+
+const key = () => `library-import:${crypto.randomUUID()}`;
+
+/** Retry-After accepts seconds or an HTTP date; an absent value waits one second. */
+async function waitForAdmission(response: Response | undefined): Promise<void> {
+  const value = response?.headers.get('retry-after');
   const seconds = value && /^\d+$/.test(value) ? Number(value) : undefined;
   const date = value && seconds === undefined ? Date.parse(value) : NaN;
   const delay = seconds !== undefined ? seconds * 1000
@@ -31,46 +50,68 @@ async function waitForAdmission(response: { response: Response }): Promise<void>
   await new Promise(resolve => setTimeout(resolve, delay));
 }
 
-/** One reviewed intent is sent to Main. Main resumes at most eight rows per
- * response and retains each row result; the browser only polls the same intent. */
-export async function submitReviewedBatch(agent: string, context: string | null, language: string,
-  existingShelves: readonly { name: string; id: string }[], rows: ReviewedBatchRow[],
-  onProgress: (progress: ImportBatchProgress) => void = () => {},
-  main: () => MainClient = browserMainApi): Promise<ImportBatchProgress> {
-  const body = { actingSubject: agent, context, language,
-    existingShelves: existingShelves.map(shelf => ({ name: shelf.name, id: shelf.id })), rows };
-  const idempotencyKey = await stableKey(['reviewed-batch', body]);
-  let last = -1, stalled = 0;
-  const limit = Math.ceil(rows.length / 8) + 12;
-  for (let attempt = 0; attempt < limit; attempt++) {
-    const answer = await main().v1.me['library-import'].batches.post(body,
-      { headers: { 'idempotency-key': idempotencyKey } });
-    if (answer.status === 429) { await waitForAdmission(answer); continue; }
-    if (!answer.data) throw new Error('Library import is unavailable');
-    const progress = answer.data as ImportBatchProgress;
-    onProgress(progress);
-    if (!progress.pending) return progress;
-    if (progress.items.length === last && ++stalled >= 5) break;
-    if (progress.items.length !== last) stalled = 0;
-    last = progress.items.length;
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-  throw new Error('Library import is still in progress');
+function failure(status: number): ImportError {
+  return new ImportError(status === 404 ? 'missing' : status === 409 ? 'conflict'
+    : status === 400 || status === 422 ? 'invalid' : status === 401 || status === 403 ? 'denied' : 'unavailable');
 }
 
-/** Main owns the source path and returns the same Work to all readers. */
-export async function adoptOpenLibraryBook(agent: string, workId: string, locale: string,
-  main: () => MainClient = browserMainApi): Promise<string> {
-  const idempotencyKey = await stableKey([agent, 'open-library', workId]);
+interface Reply<Data> { status: number; data: Data | null; error?: { value?: unknown } | null; response?: Response }
+
+/** One command or read with its own `Idempotency-Key`; Main's short-window admission is waited out, never surfaced. */
+async function call<Data>(send: (headers: { 'idempotency-key': string }) => Promise<Reply<Data>>,
+  accepted: readonly number[] = [200], idempotencyKey = key()): Promise<{ status: number; data: Data }> {
+  const headers = { 'idempotency-key': idempotencyKey };
   for (let attempt = 0; attempt < 8; attempt++) {
-    const written = await main().v1.me['library-import']['open-library'].adoptions.post({
-      actingSubject: agent, workId, titleLanguage: locale }, { headers: { 'idempotency-key': idempotencyKey } });
-    if (written.data && 'work' in written.data) return written.data.work;
-    if (written.status === 429 && (written.error?.value as { code?: string } | undefined)?.code
-      === 'reader_import_adoption_budget') throw new ReaderImportBudgetError('adoption');
-    if (written.status === 429) { await waitForAdmission(written); continue; }
-    if (written.status !== 202) throw new Error('Could not add Open Library Work');
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    const reply = await send(headers);
+    // A daily search or adoption budget is a refusal, not a short-window admission to wait out.
+    if (reply.status === 429 && problemCode(reply.error?.value)?.endsWith('_budget')) throw new ImportError('budget');
+    if (reply.status === 429) { await waitForAdmission(reply.response); continue; }
+    if (accepted.includes(reply.status) && reply.data !== null) return { status: reply.status, data: reply.data };
+    throw failure(reply.status);
   }
-  throw new Error('Open Library Work is still being added');
+  throw new ImportError('unavailable');
+}
+
+export function mainImportApi(agent: string, main: () => MainClient = browserMainApi): ImportApi {
+  const imports = () => main().v1.me['library-imports'];
+  return {
+    async inspect(file) {
+      const { data } = await call(headers => imports().post({ actingSubject: agent, format: 'generic-csv', file },
+        { headers }) as Promise<Reply<CsvInspection>>);
+      return data;
+    },
+    async create({ format, file, mapping }) {
+      const { data } = await call(headers => imports().post({ actingSubject: agent, format, file,
+        ...(mapping ? { mapping } : {}) }, { headers }) as Promise<Reply<{ id: string; total: number }>>, [201]);
+      return data;
+    },
+    async rows(id, cursor) {
+      const { data } = await call(headers => imports()({ id }).rows.get({ query: { actingSubject: agent,
+        ...(cursor >= 0 ? { cursor } : {}) }, headers }) as Promise<Reply<Rows>>);
+      return data;
+    },
+    async resolve(id, row, choice) {
+      await call(headers => imports()({ id }).rows({ row: row.index }).put({ actingSubject: agent,
+        expectedVersion: row.version, ...choice }, { headers }));
+    },
+    async apply(id, intent) {
+      const { data } = await call(headers => imports()({ id }).apply.post({ actingSubject: agent, ...intent },
+        { headers }) as Promise<Reply<ApplyProgress>>, [200, 202]);
+      return data;
+    },
+    async discard(id) {
+      await call(headers => imports()({ id }).delete(undefined, { query: { actingSubject: agent }, headers }));
+    },
+    async adopt(id, row, workId, locale) {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const answer = await call(headers => imports()({ id }).rows({ row }).adoptions.post({
+          actingSubject: agent, workId, titleLanguage: locale }, { headers }), [200, 202],
+        `library-import:adopt:${id}:${row}:${workId}`);
+        const data = answer.data as { work?: string };
+        if (data.work) return data.work;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      throw new ImportError('unavailable');
+    },
+  };
 }

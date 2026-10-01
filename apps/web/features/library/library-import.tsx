@@ -2,305 +2,304 @@
 
 import { Button } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
-import { LocalizedText } from '@rezics/ui/localized-text';
-import { ChoiceSelect } from '@rezics/ui/select';
+import { Progress } from '@rezics/ui/progress';
+import { cn } from '@rezics/ui/utils';
 import { UploadCloudIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
-import { contentText, untaggedName } from '../language/untagged.ts';
-import { CatalogueCover } from '../catalogue/cover.tsx';
-import { adoptOpenLibraryBook, REVIEWED_IMPORT_MAX_ROWS, submitReviewedBatch,
-  type ImportBatchProgress, type ImportIssue, type ImportRowResult } from './import-api.ts';
-import { LIBRARY_IMPORT_COST, LibraryImportInvalid, parseLibraryImport, type ImportedBook } from './import-csv.ts';
-import { lookupImportedBook, lookupOpenLibraryBook, matchImportedBook, ReaderImportBudgetError,
-  type ImportMatch, type OpenLibraryCandidate } from './import-match.ts';
-import type { LibraryMessages } from './messages.ts';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { writingLanguage } from '../content-language/writing-language.ts';
-import type { CustomShelf } from './types.ts';
+import { type ApplyProgress, type CsvInspection, type CsvMapping, type ImportApi, ImportError, type ImportFormat,
+  type ImportRow, mainImportApi, type RowResolution } from './import-api.ts';
+import { browserImportShelf, type ImportShelf, type PendingImport } from './import-store.ts';
+import { applyFinished, applyStarted, countGroups, groupOf, loadAllRows, needsChoice, replaceRow, reloadRow,
+  type RowGroup, rowGroups } from './import-rows.ts';
+import { CsvMapper } from './library-import-map.tsx';
+import { ImportRowItem } from './library-import-rows.tsx';
+import type { LibraryMessages } from './messages.ts';
 
-interface PreviewRow { book: ImportedBook; match: ImportMatch | null; lookupFailed: boolean;
-  selected: string; rating: number | null; visibility: 'private' | 'public'; result: ImportRowResult | null;
-  search: string; searching: boolean; skipped: boolean; conflictChoice?: 'keep' | 'replace';
-  openLibrary: OpenLibraryCandidate[] | null; openLibraryBusy: boolean;
-  openLibraryError: 'search-budget' | 'adoption-budget' | 'failed' | null;
-  manual: boolean }
-const id = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const PAGE = 20;
+const formats = ['goodreads', 'storygraph', 'mal', 'vndb', 'rezics', 'generic-csv'] as const satisfies readonly ImportFormat[];
+const accept: Record<ImportFormat, string> = { goodreads: '.csv,text/csv', storygraph: '.csv,text/csv',
+  'generic-csv': '.csv,text/csv', mal: '.xml,text/xml,application/xml', vndb: '.xml,text/xml,application/xml',
+  rezics: '.json,application/json' };
 
-/** Matching stays in the browser; reviewed rows and their intent go to Main as
- * one resumable import with durable per-row outcomes. */
-export function LibraryImport({ agent, context, customShelves = [], locale, messages, lookup = lookupImportedBook,
-  lookupSource = lookupOpenLibraryBook, adoptSource = adoptOpenLibraryBook,
-  importBatch = submitReviewedBatch }: { agent: string; context: string | null;
-  customShelves?: readonly CustomShelf[]; locale: UiLocale; messages: LibraryMessages;
-  lookup?: typeof lookupImportedBook;
-  lookupSource?: typeof lookupOpenLibraryBook; adoptSource?: typeof adoptOpenLibraryBook;
-  importBatch?: typeof submitReviewedBatch }) {
+/** One working import: the rows Main reported so far, and where the reader is in reviewing, applying and finishing. */
+interface Active { entry: PendingImport; rows: ImportRow[]; loaded: boolean; progress: ApplyProgress | null;
+  stopped: boolean; finished: boolean }
+
+/**
+ * Library import. Main parses the file, matches every row and applies the reviewed result; this component
+ * uploads the text, shows each row Main reports (matched, ambiguous with candidates, not found), forwards
+ * the reader's choices and repeats apply until Main has none pending. A reload or a second visit comes
+ * back to the same upload, because Main keeps it for seven days and this browser remembers its id.
+ */
+export function LibraryImport({ agent, context, locale, messages, api, shelf = browserImportShelf, initialOpen = false }: {
+  agent: string; context: string | null; locale: UiLocale; messages: LibraryMessages; api?: ImportApi;
+  shelf?: ImportShelf; initialOpen?: boolean;
+}) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
+  const [client] = useState(() => api ?? mainImportApi(agent));
   // Imported reviews are in a language the reader knows, not the page's: their first reading language, else unspecified.
   const reviewLanguage = writingLanguage({ reading: useReadingLanguages(agent) });
   const run = useRef(0);
-  const [rows, setRows] = useState<PreviewRow[]>([]);
-  const [matching, setMatching] = useState(false);
-  const [matched, setMatched] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(0);
-  const [page, setPage] = useState(0);
-  const [filter, setFilter] = useState<'all' | 'attention'>('all');
+  const [open, setOpen] = useState(initialOpen);
+  const [pending, setPending] = useState<PendingImport[]>([]);
+  const [format, setFormat] = useState<ImportFormat>('goodreads');
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [mapping, setMapping] = useState<{ file: string; name: string; inspection: CsvInspection } | null>(null);
+  const [active, setActive] = useState<Active | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [summary, setSummary] = useState<{ done: number; issues: number } | null>(null);
+  const [group, setGroup] = useState<RowGroup | 'issues' | 'all'>('ambiguous');
+  const [page, setPage] = useState(0);
+  const [resolving, setResolving] = useState(false);
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
-  const issueText = (issue: ImportIssue) => ({
-    'state-unavailable': t.importStateUnavailable, 'status-changed': t.importStatusChanged,
-    'status-failed': t.importStatusFailed, 'rating-needs-choice': t.importRatingChoiceNeeded,
-    'rating-changed': t.importRatingChanged, 'rating-failed': t.importRatingFailed,
-    'review-needs-rating': t.importReviewNeedsRating, 'review-changed': t.importReviewChanged,
-    'review-failed': t.importReviewFailed, 'shelf-failed': t.importShelfFailed,
-  })[issue];
 
-  function change(index: number, patch: Partial<PreviewRow>) {
-    setRows(current => current.map((row, at) => at === index ? { ...row, ...patch } : row));
-  }
-  async function load(file: File) {
+  useEffect(() => { setPending(shelf.list(agent)); }, [agent, shelf]);
+  const refreshPending = () => setPending(shelf.list(agent));
+  const patch = (change: Partial<Active>) => setActive(current => current && { ...current, ...change });
+  const failureText = (failure: unknown) => failure instanceof ImportError
+    ? failure.failure === 'missing' ? t.importExpired : failure.failure === 'invalid' ? t.importInvalid
+      : t.importUnavailable : t.importUnavailable;
+
+  async function openImport(entry: PendingImport) {
     const generation = ++run.current;
-    setFileName(file.name);
-    setError(null); setSummary(null); setPage(0); setMatched(0);
-    let books: ImportedBook[];
+    const live = () => generation === run.current;
+    setOpen(true); setError(null); setMapping(null); setPage(0);
+    setActive({ entry, rows: [], loaded: false, progress: null, stopped: false, finished: false });
+    let rows: ImportRow[];
     try {
-      if (file.size > LIBRARY_IMPORT_COST.bytes) throw new LibraryImportInvalid('File too large');
-      books = parseLibraryImport(await file.text()).books;
-    } catch { setRows([]); setError(t.importInvalid); return; }
-    if (books.length > REVIEWED_IMPORT_MAX_ROWS) {
-      setRows([]); setError(t.importTooManyRows({ count: number(REVIEWED_IMPORT_MAX_ROWS) })); return;
+      rows = await loadAllRows(client, entry.id, entry.total, loaded => live() && patch({ rows: loaded }), live);
+    } catch (failure) {
+      if (!live()) return;
+      if (failure instanceof ImportError && failure.failure === 'missing') { shelf.remove(agent, entry.id); refreshPending(); setActive(null); }
+      else patch({ loaded: false, stopped: true });
+      setError(failureText(failure));
+      return;
     }
-    setRows(books.map(book => ({ book, match: null, lookupFailed: false, selected: '',
-      rating: Number.isInteger(book.rating) ? book.rating : null,
-      visibility: 'private', result: null, search: book.title, searching: false, skipped: false,
-      openLibrary: null, openLibraryBusy: false, openLibraryError: null, manual: false })));
-    setMatching(true);
-    let next = 0;
-    await Promise.all(Array.from({ length: Math.min(3, books.length) }, async () => {
-      while (next < books.length && generation === run.current) {
-        const index = next++;
-        const book = books[index]!;
-        try {
-          const match = matchImportedBook(book, await lookup(book, locale));
-          if (generation === run.current) change(index, { match, selected: match.selected ?? '' });
-        } catch { if (generation === run.current) change(index, { lookupFailed: true }); }
-        if (generation === run.current) setMatched(count => count + 1);
+    if (!live()) return;
+    const finished = applyFinished(rows);
+    setGroup(finished ? 'issues' : countGroups(rows).ambiguous ? 'ambiguous' : 'matched');
+    patch({ rows, loaded: true, finished });
+    if (finished) { shelf.remove(agent, entry.id); refreshPending(); }
+    else if (applyStarted(rows) || entry.intent) void apply(entry, rows);
+  }
+
+  async function upload(file: File, chosen: CsvMapping | null = null, text?: string) {
+    setError(null); setUploading(true);
+    try {
+      const content = text ?? await file.text();
+      if (format === 'generic-csv' && !chosen) {
+        setMapping({ file: content, name: file.name, inspection: await client.inspect(content) });
+        return;
       }
-    }));
-    if (generation === run.current) setMatching(false);
+      const created = await client.create({ format, file: content, ...chosen ? { mapping: chosen } : {} });
+      const entry: PendingImport = { id: created.id, format, name: file.name, total: created.total,
+        createdAt: Date.now(), intent: null };
+      shelf.save(agent, entry); refreshPending();
+      void openImport(entry);
+    } catch (failure) { setError(failureText(failure)); }
+    finally { setUploading(false); }
   }
-  async function search(index: number) {
-    const row = rows[index];
-    if (!row?.search.trim()) return;
-    change(index, { searching: true, lookupFailed: false });
+
+  async function resolveRow(id: string, row: ImportRow, choice: RowResolution) {
+    await client.resolve(id, row, choice);
+    const fresh = await reloadRow(client, id, row.index);
+    if (fresh) setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, fresh) } : current);
+  }
+  async function adoptRow(id: string, row: ImportRow, workId: string) {
+    const work = await client.adopt(id, row.index, workId, locale);
+    await resolveRow(id, row, { choice: 'apply', work });
+  }
+  /** Not reloaded one by one: a reviewed choice only becomes sealed when apply starts. */
+  async function keepPrivate(id: string, targets: readonly ImportRow[]) {
+    for (const row of targets) {
+      await client.resolve(id, row, { choice: 'private' });
+      const kept = { ...row, resolution: { choice: 'private' as const }, version: row.version + 1 };
+      setActive(current => current?.entry.id === id ? { ...current, rows: replaceRow(current.rows, kept) } : current);
+    }
+  }
+  async function keepAllPrivate() {
+    if (!active) return;
+    setResolving(true); setError(null);
+    try { await keepPrivate(active.entry.id, active.rows.filter(needsChoice)); } catch { setError(t.importResolveFailed); }
+    setResolving(false);
+  }
+
+  async function apply(entry: PendingImport, current: readonly ImportRow[]) {
+    const generation = run.current;
+    const live = () => generation === run.current;
+    const intent = entry.intent ?? { context, language: reviewLanguage };
+    const sealed = { ...entry, intent };
+    shelf.save(agent, sealed);
+    setError(null);
+    patch({ entry: sealed, stopped: false, progress: { total: entry.total, completed: 0, issues: 0, pending: true } });
     try {
-      const candidates = await lookup({ ...row.book, title: row.search.trim(), isbn: null }, locale);
-      change(index, { match: { kind: candidates.length ? 'ambiguous' : 'not-found', selected: null,
-        candidates, reason: candidates.length ? 'review' : null }, searching: false });
-    } catch { change(index, { searching: false, lookupFailed: true }); }
-  }
-  async function findSource(index: number) {
-    const row = rows[index];
-    if (!row) return;
-    change(index, { openLibraryBusy: true, openLibraryError: null });
-    try { change(index, { openLibrary: await lookupSource(agent, row.book), openLibraryBusy: false }); }
-    catch (error) { change(index, { openLibraryBusy: false,
-      openLibraryError: error instanceof ReaderImportBudgetError ? 'search-budget' : 'failed' }); }
-  }
-  async function addSource(index: number, workId: string) {
-    change(index, { openLibraryBusy: true, openLibraryError: null });
-    try {
-      const selected = await adoptSource(agent, workId, locale);
-      change(index, { selected, skipped: false, openLibraryBusy: false,
-        match: { kind: 'matched', selected, candidates: [], reason: 'review' } });
-    } catch (error) { change(index, { openLibraryBusy: false,
-      openLibraryError: error instanceof ReaderImportBudgetError ? 'adoption-budget' : 'failed' }); }
-  }
-  async function save() {
-    const selected = rows.flatMap((row, index) => !row.skipped && id.test(row.selected) ? [{ row, index }] : []);
-    if (!selected.length) return;
-    setSaving(true); setSaved(0); setSummary(null);
-    const reviewed = selected.map(({ row }) => ({ work: row.selected, status: row.book.status,
-      startedOn: row.book.startedOn, finishedOn: row.book.finishedOn,
-      rating: row.rating, hasRating: row.book.rating !== null,
-      review: row.book.review, reviewVisibility: row.visibility, shelves: row.book.shelves,
-      ...(row.conflictChoice ? { conflictChoice: row.conflictChoice } : {}) }));
-    const showProgress = (progress: ImportBatchProgress) => {
-      const found = new Map(progress.items.map(item => [selected[item.index]?.index, item.result]));
-      setRows(current => current.map((row, index) => found.has(index)
-        ? { ...row, result: found.get(index)! } : row));
-      setSaved(progress.items.length);
-    };
-    try {
-      const progress = await importBatch(agent, context, reviewLanguage, customShelves, reviewed, showProgress);
-      showProgress(progress);
-      const issues = progress.items.filter(item => item.result.issues.length).length;
-      setSummary({ done: progress.items.length - issues, issues });
+      // Main will not seal while a row has neither a match nor a choice: what was not found stays private.
+      if (!applyStarted(current)) await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'));
+      let last = -1, stalled = 0;
+      for (;;) {
+        const progress = await client.apply(entry.id, intent);
+        if (!live()) return;
+        patch({ progress });
+        if (!progress.pending) break;
+        stalled = progress.completed === last ? stalled + 1 : 0;
+        last = progress.completed;
+        if (stalled >= 5) throw new ImportError('unavailable');
+      }
+      const rows = await loadAllRows(client, entry.id, entry.total, () => {}, live);
+      if (!live()) return;
+      patch({ rows, finished: true, stopped: false });
+      setGroup(rows.some(row => row.outcome?.issues.length) ? 'issues' : 'all'); setPage(0);
+      shelf.remove(agent, entry.id); refreshPending();
       router.refresh();
-    } catch { setError(t.importStateUnavailable); }
-    setSaving(false);
+    } catch (failure) {
+      if (!live()) return;
+      if (failure instanceof ImportError && failure.failure === 'missing') { shelf.remove(agent, entry.id); refreshPending(); setActive(null); }
+      else patch({ stopped: true });
+      setError(failureText(failure));
+    }
   }
-  const needsAttention = (row: PreviewRow) => !row.skipped && (!id.test(row.selected) || !!row.result?.issues.length);
-  const shown = filter === 'attention' ? rows.flatMap((row, index) => needsAttention(row) ? [{ row, index }] : [])
-    : rows.map((row, index) => ({ row, index }));
+
+  async function discard(entry: PendingImport) {
+    try { await client.discard(entry.id); } catch (failure) {
+      if (!(failure instanceof ImportError && failure.failure === 'missing')) { setError(failureText(failure)); return; }
+    }
+    shelf.remove(agent, entry.id); refreshPending();
+    if (active?.entry.id === entry.id) { run.current += 1; setActive(null); }
+  }
+
+  const rows = active?.rows ?? [];
+  const counts = countGroups(rows);
+  const sealed = applyStarted(rows) || !!active?.entry.intent;
+  const unresolved = rows.filter(needsChoice);
+  const choose = unresolved.filter(row => groupOf(row) === 'ambiguous').length;
+  const issues = rows.filter(row => row.outcome?.issues.length).length;
+  const tabs: Array<{ key: RowGroup | 'issues' | 'all'; label: string; count: number }> = active?.finished
+    ? [{ key: 'issues', label: t.importTabIssues, count: issues }, { key: 'all', label: t.importTabAll, count: rows.length }]
+    : rowGroups.map(key => ({ key, count: counts[key], label: key === 'ambiguous' ? t.importGroupAmbiguous
+      : key === 'not-found' ? t.importGroupNotFound : key === 'matched' ? t.importGroupMatched : t.importGroupPrivate }));
+  const shown = rows.filter(row => group === 'all' || (group === 'issues' ? row.outcome?.issues.length : groupOf(row) === group));
   const visible = shown.slice(page * PAGE, (page + 1) * PAGE);
   const pages = Math.ceil(shown.length / PAGE);
-  const selectedCount = rows.filter(row => !row.skipped && id.test(row.selected)).length;
-  const attentionCount = rows.filter(needsAttention).length;
-  const skippedCount = rows.filter(row => row.skipped).length;
+  const others = pending.filter(entry => entry.id !== active?.entry.id);
+  const busy = uploading || (!!active && !active.finished && !active.stopped && (!active.loaded || !!active.progress?.pending));
+
   return <section aria-labelledby="library-import" className="rounded-2xl border border-border/70 p-4 sm:p-5">
-    <details>
+    <details open={open} onToggle={event => setOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer rounded-sm font-semibold text-lg outline-none focus-visible:ring-2
-        focus-visible:ring-ring"><h2 id="library-import" className="inline">{t.importTitle}</h2></summary>
-    <div className="grid gap-4 pt-4">
-    <div className="grid gap-1">
-      <p className="text-muted-foreground text-sm">{t.importHelp}</p>
-      <p className="text-muted-foreground text-xs">{t.importShelvesPrivate}</p>
-    </div>
-    <label htmlFor="library-import-file" onDragEnter={event => { event.preventDefault(); setDragging(true); }}
-      onDragOver={event => event.preventDefault()} onDragLeave={() => setDragging(false)}
-      onDrop={event => { event.preventDefault(); setDragging(false);
-        const file = event.dataTransfer.files[0]; if (file && !matching && !saving) void load(file); }}
-      className={`flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed
-        px-4 py-5 text-center text-sm transition-colors ${dragging ? 'border-primary bg-primary/10' : 'border-border bg-muted/30 hover:border-primary'}`}>
-      <UploadCloudIcon aria-hidden="true" className="size-6 text-primary" />
-      <span>{t.importFile}</span><span className="text-muted-foreground text-xs">{t.importDrop}</span>
-      <Input id="library-import-file" type="file" aria-label={t.importFile} accept=".csv,text/csv"
-        disabled={matching || saving}
-        className="sr-only" onChange={event => { const file = event.target.files?.[0]; if (file) void load(file); }} /></label>
-    {fileName ? <p className="text-muted-foreground text-xs">{t.importFileSelected({ name: fileName })}</p> : null}
-    {error ? <p role="alert" className="text-destructive text-sm">{error}</p> : null}
-    {matching ? <p role="status" className="text-muted-foreground text-sm">
-      {t.importMatching({ done: number(matched), total: number(rows.length) })}</p> : null}
-    {rows.length ? <>
-      {!matching ? <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/60 px-3 py-2 text-sm"
-        role="status"><span>{t.importFound(selectedCount)}</span>
-        <span>{t.importNeedMatch(attentionCount)}</span>
-        <span>{t.importSkipped(skippedCount)}</span></div> : null}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant={filter === 'all' ? 'default' : 'outline'} onClick={() => { setFilter('all'); setPage(0); }}>
-          {t.importAll}</Button>
-        <Button size="sm" variant={filter === 'attention' ? 'default' : 'outline'}
-          onClick={() => { setFilter('attention'); setPage(0); }}>{t.importAttention}</Button>
-        <Button size="sm" variant="outline" disabled={matching || !attentionCount}
-          onClick={() => setRows(current => current.map(row => needsAttention(row)
-            ? { ...row, skipped: true, selected: '' } : row))}>{t.importSkipAttention}</Button>
-      </div>
-      <ol className="grid divide-y divide-border/70">
-        {visible.map(({ row, index }) => {
-          const { book, match } = row;
-          const candidates = match?.candidates ?? [];
-          return <li key={`${book.row}:${book.sourceId}`} className="grid gap-3 py-4 first:pt-0 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)]">
-            <div className="flex min-w-0 gap-3">
-              {candidates[0] ? <CatalogueCover work={{ id: candidates[0].work, title: untaggedName(candidates[0].title), authors: candidates[0].authors.map(name => ({ name, href: null })),
-                cover: candidates[0].cover ?? null, kind: candidates[0].kind ?? 'book' }}
-                size="xs" className="w-12 shrink-0" /> : null}
-              <div className="grid min-w-0 content-start gap-1">
-              <p><LocalizedText text={contentText(book.title)} as="span" className="font-medium" /></p>
-              <p className="text-muted-foreground text-sm"><LocalizedText text={contentText(book.author)} as="span" /></p>
-              {book.status ? <p className="text-muted-foreground text-xs">{book.status === 'read' ? t.read
-                : book.status === 'reading' ? t.reading : t.wantToRead}</p> : null}
-              {book.rating !== null ? <p className="text-muted-foreground text-xs">
-                {t.importSourceRating({ value: String(book.rating) })}</p> : null}
-              {book.review ? <p className="line-clamp-2 text-muted-foreground text-xs">{book.review}</p> : null}
-              {row.result?.issues.length ? <p role="alert" className="text-destructive text-xs">
-                {row.result.issues.map(issueText).join(' ')}</p> : null}
-              {row.result?.issues.some(issue => issue.endsWith('-changed')) ? <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant={row.conflictChoice === 'keep' ? 'default' : 'outline'}
-                  onClick={() => change(index, { conflictChoice: 'keep' })}>{t.importKeepMine}</Button>
-                <Button size="sm" variant={row.conflictChoice === 'replace' ? 'default' : 'outline'}
-                  onClick={() => change(index, { conflictChoice: 'replace' })}>{t.importUseImported}</Button>
-              </div> : null}
+        focus-visible:ring-ring"><h2 id="library-import" className="inline">{t.importTitle}</h2>
+        {others.length && !open ? <span className="ms-2 font-normal text-muted-foreground text-sm">
+          {t.importUnfinishedCount(others.length)}</span> : null}</summary>
+      <div className="grid gap-4 pt-4">
+        <p className="text-muted-foreground text-sm">{t.importHelp}</p>
+        {others.length ? <section aria-labelledby="library-import-unfinished" className="grid gap-2 rounded-xl bg-muted/50 p-3">
+          <h3 id="library-import-unfinished" className="font-medium text-sm">{t.importUnfinishedTitle}</h3>
+          <ul className="grid gap-2">
+            {others.map(entry => <li key={entry.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="min-w-0 break-words">{t.importUnfinishedItem({ name: entry.name, count: number(entry.total) })}</span>
+              <span className="flex gap-2">
+                <Button size="sm" disabled={busy} onClick={() => void openImport(entry)}>{t.importContinue}
+                  <span className="sr-only"> — {entry.name}</span></Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => void discard(entry)}>{t.importDiscard}
+                  <span className="sr-only"> — {entry.name}</span></Button>
+              </span>
+            </li>)}
+          </ul>
+          <p className="text-muted-foreground text-xs">{t.importDiscardNote}</p>
+        </section> : null}
+        {active ? null : <>
+          <fieldset className="grid gap-2" disabled={uploading}>
+            <legend className="mb-1 font-medium text-sm">{t.importFormatLabel}</legend>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {formats.map(value => <label key={value} className={cn('flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm',
+                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', format === value ? 'border-primary bg-primary/10' : 'border-border')}>
+                <input type="radio" name="library-import-format" value={value} checked={format === value}
+                  className="accent-primary" onChange={() => { setFormat(value); setMapping(null); setError(null); }} />
+                {value === 'goodreads' ? 'Goodreads' : value === 'storygraph' ? 'The StoryGraph' : value === 'mal' ? 'MyAnimeList'
+                  : value === 'vndb' ? 'VNDB' : value === 'rezics' ? 'REZICS' : t.importFormatCsv}</label>)}
+            </div>
+          </fieldset>
+          <p className="text-muted-foreground text-sm">{({ goodreads: t.importHowGoodreads, storygraph: t.importHowStorygraph,
+            mal: t.importHowMal, vndb: t.importHowVndb, rezics: t.importHowRezics, 'generic-csv': t.importHowCsv })[format]}</p>
+          <p className="text-muted-foreground text-xs">{t.importAnilist}</p>
+          {mapping ? <CsvMapper inspection={mapping.inspection} locale={locale} messages={messages} busy={uploading}
+            onCancel={() => setMapping(null)}
+            onSubmit={chosen => void upload(new File([], mapping.name), chosen, mapping.file)} /> : <label htmlFor="library-import-file"
+            onDragEnter={event => { event.preventDefault(); setDragging(true); }}
+            onDragOver={event => event.preventDefault()} onDragLeave={() => setDragging(false)}
+            onDrop={event => { event.preventDefault(); setDragging(false);
+              const file = event.dataTransfer.files[0]; if (file && !uploading) void upload(file); }}
+            className={cn('flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed',
+              'px-4 py-5 text-center text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+              dragging ? 'border-primary bg-primary/10' : 'border-border bg-muted/30 hover:border-primary')}>
+            <UploadCloudIcon aria-hidden="true" className="size-6 text-primary" />
+            <span>{t.importFile}</span><span className="text-muted-foreground text-xs">{t.importDrop}</span>
+            <Input id="library-import-file" type="file" aria-label={t.importFile} accept={accept[format]} disabled={uploading}
+              className="sr-only" onChange={event => { const file = event.target.files?.[0]; event.target.value = '';
+                if (file) void upload(file); }} /></label>}
+          {uploading ? <p role="status" className="text-muted-foreground text-sm">{t.importUploading}</p> : null}
+        </>}
+        {error ? <p role="alert" className="text-destructive text-sm">{error}</p> : null}
+        {active ? <div className="grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-muted-foreground text-sm">{t.importFileSelected({ name: active.entry.name })}</p>
+            {!active.finished ? <Button size="sm" variant="outline" disabled={resolving || !!active.progress?.pending}
+              onClick={() => void discard(active.entry)}>{t.importDiscard}</Button>
+              : <Button size="sm" variant="outline" onClick={() => { run.current += 1; setActive(null); }}>{t.importClose}</Button>}
+          </div>
+          {!active.loaded && !active.stopped ? <div className="grid gap-1" role="status">
+            <Progress value={Math.round((rows.length / Math.max(1, active.entry.total)) * 100)} aria-label={t.importMatching({
+              done: number(rows.length), total: number(active.entry.total) })} />
+            <p className="text-muted-foreground text-sm">{t.importMatching({ done: number(rows.length), total: number(active.entry.total) })}</p>
+          </div> : null}
+          {active.stopped && !active.loaded ? <div><Button size="sm" onClick={() => void openImport(active.entry)}>{t.importContinue}</Button></div> : null}
+          {active.loaded || rows.length ? <>
+            {active.finished ? <p role="status" className="text-sm">{t.importApplyDone({ done: number(rows.length - issues),
+              total: number(rows.length) })}{issues ? ` ${t.importIssues(issues)}` : ''} <Link href="/library"
+                className="text-primary underline">{t.importViewLibrary}</Link></p> : null}
+            <div role="group" aria-label={t.importGroups} className="flex flex-wrap gap-2">
+              {tabs.map(tab => <Button key={tab.key} size="sm" variant={group === tab.key ? 'default' : 'outline'}
+                aria-pressed={group === tab.key} onClick={() => { setGroup(tab.key); setPage(0); }}>
+                {tab.label} <span className="tabular-nums opacity-80">{number(tab.count)}</span></Button>)}
+            </div>
+            {shown.length ? <ol className="grid divide-y divide-border/70">
+              {visible.map(row => <ImportRowItem key={row.index} row={row} sealed={sealed} locale={locale} messages={messages}
+                onResolve={(item, choice) => resolveRow(active.entry.id, item, choice)}
+                onAdopt={(item, workId) => adoptRow(active.entry.id, item, workId)} />)}
+            </ol> : <p className="text-muted-foreground text-sm">{t.importNoRows}</p>}
+            {pages > 1 ? <nav aria-label={t.pages} className="flex items-center justify-between gap-3">
+              <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>{t.previousPage}</Button>
+              <span className="text-muted-foreground text-sm">{t.pageOf({ page: number(page + 1), pages: number(pages) })}</span>
+              <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>{t.nextPage}</Button>
+            </nav> : null}
+            {active.loaded && !active.finished ? <div className="grid gap-3 rounded-xl bg-muted/50 p-3">
+              {!sealed && unresolved.length ? <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span>{t.importUnmatchedCount(unresolved.length)}</span>
+                <Button size="sm" variant="outline" disabled={resolving}
+                  onClick={() => void keepAllPrivate()}>{t.importKeepAllPrivate}</Button></div> : null}
+              {!sealed && counts['not-found'] ? <p className="text-muted-foreground text-xs">{t.importNotFoundPrivate(counts['not-found'])}</p> : null}
+              <div className="flex flex-wrap items-center gap-3">
+                {active.progress?.pending || active.stopped ? null : <Button disabled={busy || resolving || !!choose}
+                  onClick={() => void apply(active.entry, rows)}>{t.importApply}</Button>}
+                {active.stopped && active.loaded ? <Button onClick={() => void apply(active.entry, rows)}>{t.importContinue}</Button> : null}
+                {choose && !sealed ? <p className="text-muted-foreground text-sm">{t.importNeedChoices(choose)}</p> : null}
               </div>
-            </div>
-            <div className="grid content-start gap-2">
-              <Button size="sm" variant={row.skipped ? 'default' : 'ghost'} className="justify-self-start"
-                onClick={() => change(index, { skipped: !row.skipped })}>{row.skipped ? t.importUnskip : t.importSkip}</Button>
-              {match?.kind === 'matched' ? <p className="text-primary text-xs">{t.importMatched}</p>
-                : <p className="text-muted-foreground text-xs">{row.lookupFailed ? t.shelfUnavailable
-                  : match?.kind === 'ambiguous' ? t.importAmbiguous : match ? t.importMissing : t.importMatching({
-                    done: '0', total: '1' })}</p>}
-              {row.selected && !row.manual ? <Button size="sm" variant="outline" className="justify-self-start"
-                onClick={() => change(index, { manual: true, selected: '' })}>{t.importChangeMatch}</Button> : null}
-              {candidates.length && (match?.kind !== 'matched' || row.manual) ? <div className="grid gap-2"><ChoiceSelect value={row.selected} label={t.importPick}
-                options={[{ value: '', label: t.importSkip }, ...candidates.map(candidate => ({ value: candidate.work,
-                  label: `${candidate.title} — ${candidate.authors.join(', ')}` }))]}
-                onValueChange={selected => change(index, { selected, skipped: false })} />
-                {candidates.map(candidate => <Button key={candidate.work} size="sm" variant="outline"
-                  onClick={() => change(index, { selected: candidate.work, skipped: false })}
-                  className="h-auto w-full justify-start gap-2 whitespace-normal p-2 text-left text-xs">
-                  <CatalogueCover work={{ id: candidate.work, title: untaggedName(candidate.title), authors: candidate.authors.map(name => ({ name, href: null })),
-                    cover: candidate.cover ?? null, kind: candidate.kind ?? 'book' }} size="xs" className="w-9 shrink-0" />
-                  <span><LocalizedText text={contentText(candidate.title)} /><br />{candidate.authors.map((author, index) =>
-                    <span key={index}>{index ? ', ' : ''}<LocalizedText text={contentText(author)} /></span>)}</span></Button>)}</div> : null}
-              {(!row.selected || row.manual) ? <div className="flex gap-2"><Input aria-label={t.importSearch} value={row.search}
-                onChange={event => change(index, { search: event.target.value })}
-                onKeyDown={event => { if (event.key === 'Enter') void search(index); }} />
-                <Button size="sm" variant="outline" disabled={row.searching} onClick={() => void search(index)}>
-                  {t.importSearch}</Button></div> : null}
-              {!row.selected && !row.skipped ? <div className="grid gap-2">
-                <Button size="sm" variant="outline" disabled={row.openLibraryBusy}
-                  onClick={() => void findSource(index)}>{t.importFindOpenLibrary}</Button>
-                {row.openLibraryError ? <p role="alert" className="text-destructive text-xs">
-                  {row.openLibraryError === 'search-budget' ? t.importSearchBudget
-                    : row.openLibraryError === 'adoption-budget' ? t.importAdoptionBudget
-                      : t.importOpenLibraryFailed}</p> : null}
-                {row.openLibrary?.length === 0 ? <p className="text-muted-foreground text-xs">
-                  {t.importOpenLibraryMissing}</p> : null}
-                {row.openLibrary?.map(candidate => <div key={candidate.workId}
-                  className="flex items-center justify-between gap-2 rounded-lg border p-2 text-xs">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <CatalogueCover work={{ id: candidate.workId, title: untaggedName(candidate.title),
-                      authors: candidate.authors.map(name => ({ name, href: null })), cover: null, kind: 'book' }}
-                      size="xs" className="w-9 shrink-0" />
-                    <span><LocalizedText text={contentText(candidate.title)} /><br />{candidate.authors.map((author, index) =>
-                      <span key={index}>{index ? ', ' : ''}<LocalizedText text={contentText(author)} /></span>)}</span>
-                  </div>
-                  <Button size="sm" variant="outline" disabled={row.openLibraryBusy}
-                    onClick={() => void addSource(index, candidate.workId)}>{t.importAddOpenLibrary}</Button>
-                </div>)}
+              {active.progress?.pending ? <div className="grid gap-1" role="status">
+                <Progress value={Math.round((active.progress.completed / Math.max(1, active.progress.total)) * 100)}
+                  aria-label={t.importApplying({ done: number(active.progress.completed), total: number(active.progress.total) })} />
+                <p className="text-sm">{t.importApplying({ done: number(active.progress.completed), total: number(active.progress.total) })}</p>
               </div> : null}
-              {book.rating !== null && !Number.isInteger(book.rating) ? <>
-                <p className="text-muted-foreground text-xs">{t.importRatingUnsupported}</p>
-                <ChoiceSelect value={row.rating?.toString() ?? ''} label={t.importRatingChoice}
-                  options={[{ value: '', label: t.importSkip }, ...[1, 2, 3, 4, 5].map(value => ({
-                    value: String(value), label: String(value) }))]}
-                  onValueChange={value => change(index, { rating: value ? Number(value) : null })} />
-              </> : null}
-              {book.review ? <ChoiceSelect value={row.visibility} label={t.importReviewVisibility}
-                options={[{ value: 'private', label: t.importReviewPrivate },
-                  { value: 'public', label: t.importReviewPublic }]}
-                onValueChange={value => change(index, { visibility: value === 'public' ? 'public' : 'private' })} /> : null}
-            </div>
-          </li>;
-        })}
-      </ol>
-      {pages > 1 ? <nav aria-label={t.pages} className="flex items-center justify-between gap-3">
-        <Button size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>
-          {t.previousPage}</Button>
-        <span className="text-muted-foreground text-sm">{t.pageOf({ page: number(page + 1), pages: number(pages) })}</span>
-        <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>
-          {t.nextPage}</Button></nav> : null}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => void save()} disabled={matching || saving || !selectedCount}>{t.importSave}</Button>
-        {saving ? <p role="status" className="text-muted-foreground text-sm">
-          {t.importSaving({ done: number(saved), total: number(selectedCount) })}</p> : null}
+              {active.stopped ? <p role="status" className="text-sm">{t.importApplyStopped}</p> : null}
+            </div> : null}
+          </> : null}
+        </div> : null}
       </div>
-      {summary ? <p role="status" className="text-sm">{t.importDone(summary.done)}
-        {summary.issues ? ` ${t.importIssues(summary.issues)}` : ''} <Link href="/library"
-          className="text-primary underline">{t.importViewLibrary}</Link></p> : null}
-    </> : null}
-    </div>
     </details>
   </section>;
 }
