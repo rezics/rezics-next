@@ -130664,6 +130664,30 @@
           },
           {
             "in": "query",
+            "name": "requiredConcept",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "excludedConcepts",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                "type": "string"
+              },
+              "maxItems": 2,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
             "name": "savedFilter",
             "required": false,
             "schema": {
