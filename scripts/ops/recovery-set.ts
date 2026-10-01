@@ -183,7 +183,8 @@ export class RecoveryBudget {
       this.remaining();
       return result;
     } catch (error) {
-      throw new Error(`Recovery phase ${name} failed; serving remains held`, { cause: error });
+      const detail = error instanceof Error ? error.message : 'unknown failure';
+      throw new Error(`Recovery phase ${name} failed: ${detail}; serving remains held`, { cause: error });
     } finally {
       this.phases[name] = Math.round(performance.now() - at);
     }

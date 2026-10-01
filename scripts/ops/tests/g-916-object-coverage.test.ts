@@ -223,6 +223,9 @@ test('G-916: recovery failures identify their phase and retain the original caus
     expect((error as Error).cause).toBe(cause);
   }
   expect(budget.phases.coverage).toBeGreaterThanOrEqual(0);
+  await expect(budget.phase('encrypt', () => {
+    throw new Error('gpg recovery step failed');
+  })).rejects.toThrow('gpg recovery step failed');
 });
 
 test('G-916: S3 recovery reads carry the enclosing deadline through request signing', async () => {
