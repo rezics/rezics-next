@@ -413868,7 +413868,12 @@
                           "openedAt": {
                             "type": "string"
                           },
+                          "restricted": {
+                            "type": "boolean"
+                          },
                           "target": {
+                            "~elyTyp": 7,
+                            "nullable": true,
                             "properties": {
                               "component": {
                                 "type": "string"
@@ -413885,7 +413890,10 @@
                               "resource",
                               "component"
                             ],
-                            "type": "object"
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "urgent": {
                             "type": "boolean"
@@ -413895,6 +413903,7 @@
                           "caseId",
                           "kind",
                           "urgent",
+                          "restricted",
                           "generation",
                           "decisionHead",
                           "openedAt",
@@ -414215,6 +414224,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "stepCursor",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -414377,6 +414395,77 @@
                         },
                         "replayed": {
                           "type": "boolean"
+                        },
+                        "statementOfReasons": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "properties": {
+                            "appealRoute": {
+                              "const": "/v1/public-reports/{caseId}/correspondence",
+                              "type": "string"
+                            },
+                            "automation": {
+                              "type": "boolean"
+                            },
+                            "contentLanguage": {
+                              "maxLength": 255,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "duration": {
+                              "maxLength": 4000,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "facts": {
+                              "maxLength": 4000,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "rule": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "digest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "ref": {
+                                  "maxLength": 512,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "maxLength": 512,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "ref",
+                                "revision",
+                                "digest"
+                              ],
+                              "type": "object"
+                            },
+                            "scope": {
+                              "maxLength": 4000,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "facts",
+                            "scope",
+                            "duration",
+                            "automation",
+                            "appealRoute",
+                            "contentLanguage",
+                            "rule"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
@@ -414386,7 +414475,8 @@
                         "outcome",
                         "replayed",
                         "operation",
-                        "enforcement"
+                        "enforcement",
+                        "statementOfReasons"
                       ],
                       "type": [
                         "object",
@@ -414433,6 +414523,134 @@
                     },
                     "state": {
                       "type": "string"
+                    },
+                    "steps": {
+                      "items": {
+                        "properties": {
+                          "contentLanguage": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "decisionId": {
+                            "~elyTyp": 7,
+                            "format": "uuid",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "declarations": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "patternProperties": {
+                              "^.*$": {}
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "documentDigest": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "dueAt": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "occurredAt": {
+                            "type": "string"
+                          },
+                          "party": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "partySubject": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "process": {
+                            "type": "string"
+                          },
+                          "recordedAt": {
+                            "type": "string"
+                          },
+                          "reportId": {
+                            "~elyTyp": 7,
+                            "format": "uuid",
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "statement": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "process",
+                          "reportId",
+                          "decisionId",
+                          "party",
+                          "partySubject",
+                          "statement",
+                          "documentDigest",
+                          "contentLanguage",
+                          "declarations",
+                          "occurredAt",
+                          "dueAt",
+                          "recordedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 50,
+                      "type": "array"
+                    },
+                    "stepsNextCursor": {
+                      "~elyTyp": 7,
+                      "format": "uuid",
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "targets": {
                       "items": {
@@ -414555,6 +414773,8 @@
                     "state",
                     "reports",
                     "reportsNextCursor",
+                    "steps",
+                    "stepsNextCursor",
                     "decision",
                     "targets"
                   ],
