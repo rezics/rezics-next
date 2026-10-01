@@ -303,7 +303,7 @@ async function resolveTargetHeads<Session extends TargetReadSession>(session: Se
     }
   }
   const summaries = await targetSummaries(session, resources);
-  const targets = await resolveSummarizedTargets(session, summaries, capability, false);
+  const targets = await resolveSummarizedTargets(session, summaries, capability, false, redirects);
   return iris.map(resource => targets.get(canonical.get(resource)!)!);
 }
 
@@ -326,7 +326,7 @@ export async function resolveVisibleTargets(session: TargetReadSession, resource
 }
 
 async function resolveSummarizedTargets(session: TargetReadSession, summaries: SummaryBatch,
-  capability: Capability, inventory: boolean): Promise<Map<string, ResolvedTarget>> {
+  capability: Capability, inventory: boolean, redirects?: Map<string, string>): Promise<Map<string, ResolvedTarget>> {
   if (summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) {
     throw new WorkReadMoved('Graph changed during target resolution');
   }
