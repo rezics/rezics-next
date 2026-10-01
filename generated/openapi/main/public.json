@@ -32522,6 +32522,35 @@
                       "const": "work-address-v1",
                       "type": "string"
                     },
+                    "resolution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hops": {
+                          "maximum": 32,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "merged",
+                          "type": "string"
+                        },
+                        "survivor": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "source",
+                        "survivor",
+                        "hops"
+                      ],
+                      "type": "object"
+                    },
                     "revision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -32742,6 +32771,35 @@
                       "const": "work-address-retired-v1",
                       "type": "string"
                     },
+                    "resolution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hops": {
+                          "maximum": 32,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "merged",
+                          "type": "string"
+                        },
+                        "survivor": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "source",
+                        "survivor",
+                        "hops"
+                      ],
+                      "type": "object"
+                    },
                     "revision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
@@ -32908,6 +32966,35 @@
                     "redirectWork": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
+                    },
+                    "resolution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hops": {
+                          "maximum": 32,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "merged",
+                          "type": "string"
+                        },
+                        "survivor": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "source",
+                        "survivor",
+                        "hops"
+                      ],
+                      "type": "object"
                     },
                     "revision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -151963,6 +152050,35 @@
                     },
                     "predecessor": {
                       "type": "string"
+                    },
+                    "resolution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hops": {
+                          "maximum": 32,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "merged",
+                          "type": "string"
+                        },
+                        "survivor": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "source",
+                        "survivor",
+                        "hops"
+                      ],
+                      "type": "object"
                     },
                     "revision": {
                       "type": "string"
@@ -397906,6 +398022,26 @@
           },
           {
             "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "position",
             "required": false,
             "schema": {
@@ -397937,6 +398073,612 @@
                 "schema": {
                   "additionalProperties": false,
                   "properties": {
+                    "mergedFacts": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "nextCursor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "origins": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "resource": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "sections": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actions": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    },
+                                    "count": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "context": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "precision": {
+                                          "const": "exact",
+                                          "type": "string"
+                                        },
+                                        "target": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "value": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "value",
+                                        "precision",
+                                        "context",
+                                        "target"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "href": {
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "enum": [
+                                        "statements",
+                                        "relations",
+                                        "contents",
+                                        "releases",
+                                        "credits",
+                                        "ratings",
+                                        "reviews",
+                                        "discussion",
+                                        "lists",
+                                        "recipe",
+                                        "prompt",
+                                        "skill"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "href",
+                                    "actions"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 12,
+                                "type": "array"
+                              },
+                              "work": {
+                                "properties": {
+                                  "chapterCount": {
+                                    "~elyTyp": 7,
+                                    "minimum": 0,
+                                    "nullable": true,
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ]
+                                  },
+                                  "completionStatus": {
+                                    "~elyTyp": 7,
+                                    "enum": [
+                                      "ongoing",
+                                      "completed",
+                                      "hiatus"
+                                    ],
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "cover": {
+                                    "anyOf": [
+                                      {
+                                        "properties": {
+                                          "key": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "const": "fallback",
+                                            "type": "string"
+                                          },
+                                          "policy": {
+                                            "type": "string"
+                                          },
+                                          "resourceType": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "policy",
+                                          "key",
+                                          "resourceType"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "properties": {
+                                          "basis": {
+                                            "properties": {
+                                              "context": {
+                                                "type": "string"
+                                              },
+                                              "policy": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "policy",
+                                              "context"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "crop": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "height": {
+                                            "type": "integer"
+                                          },
+                                          "kind": {
+                                            "const": "image",
+                                            "type": "string"
+                                          },
+                                          "mediaType": {
+                                            "type": "string"
+                                          },
+                                          "selection": {
+                                            "type": "string"
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "width": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "selection",
+                                          "url",
+                                          "mediaType",
+                                          "width",
+                                          "height",
+                                          "crop",
+                                          "basis"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "description": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "same-script",
+                                          "other-script",
+                                          "fallback"
+                                        ]
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "disclosure": {
+                                    "enum": [
+                                      "public",
+                                      "restricted"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "fieldProvenance": {
+                                    "properties": {
+                                      "admission": {
+                                        "type": "string"
+                                      },
+                                      "basis": {
+                                        "const": "creation",
+                                        "type": "string"
+                                      },
+                                      "candidateReceipt": {
+                                        "type": "string"
+                                      },
+                                      "contributor": {
+                                        "type": "string"
+                                      },
+                                      "fields": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "revision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "basis",
+                                      "revision",
+                                      "contributor",
+                                      "admission",
+                                      "candidateReceipt",
+                                      "fields"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "id": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "lastUpdatedAt": {
+                                    "~elyTyp": 7,
+                                    "format": "date-time",
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "links": {
+                                    "properties": {
+                                      "adoptions": {
+                                        "type": "string"
+                                      },
+                                      "classifications": {
+                                        "type": "string"
+                                      },
+                                      "credits": {
+                                        "type": "string"
+                                      },
+                                      "editions": {
+                                        "type": "string"
+                                      },
+                                      "history": {
+                                        "type": "string"
+                                      },
+                                      "metadata": {
+                                        "type": "string"
+                                      },
+                                      "ratings": {
+                                        "type": "string"
+                                      },
+                                      "versions": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "versions",
+                                      "classifications",
+                                      "adoptions",
+                                      "ratings",
+                                      "history",
+                                      "credits",
+                                      "metadata",
+                                      "editions"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "mainVersion": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "mainVersionLabel": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "same-script",
+                                          "other-script",
+                                          "fallback"
+                                        ]
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "mainVersionRevision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "metadataRevision": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "originalTitle": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "maxLength": 35,
+                                        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "maxLength": 500,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "partOf": {
+                                    "properties": {
+                                      "occurrence": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "work": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "work",
+                                      "occurrence"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "profile": {
+                                    "const": "work-read-v1",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "selectedLanguage": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "sourcePosition": {
+                                    "properties": {
+                                      "dataEpoch": {
+                                        "type": "string"
+                                      },
+                                      "sequence": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "dataEpoch",
+                                      "sequence"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "tagline": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "same-script",
+                                          "other-script",
+                                          "fallback"
+                                        ]
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "title": {
+                                    "properties": {
+                                      "basis": {
+                                        "enum": [
+                                          "requested",
+                                          "same-script",
+                                          "other-script",
+                                          "fallback"
+                                        ]
+                                      },
+                                      "direction": {
+                                        "enum": [
+                                          "ltr",
+                                          "rtl"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "language": {
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "language",
+                                      "direction",
+                                      "basis"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "types": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "maxItems": 8,
+                                    "type": "array"
+                                  },
+                                  "verification": {
+                                    "enum": [
+                                      "unverified",
+                                      "verified"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "wordCount": {
+                                    "~elyTyp": 7,
+                                    "minimum": 0,
+                                    "nullable": true,
+                                    "type": [
+                                      "integer",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "profile",
+                                  "id",
+                                  "revision",
+                                  "mainVersion",
+                                  "title",
+                                  "cover",
+                                  "types",
+                                  "tagline",
+                                  "completionStatus",
+                                  "chapterCount",
+                                  "wordCount",
+                                  "lastUpdatedAt",
+                                  "disclosure",
+                                  "originalTitle",
+                                  "metadataRevision",
+                                  "description",
+                                  "mainVersionRevision",
+                                  "mainVersionLabel",
+                                  "selectedLanguage",
+                                  "sourcePosition",
+                                  "links"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "resource",
+                              "work",
+                              "sections"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 4,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "origins",
+                        "nextCursor"
+                      ],
+                      "type": "object"
+                    },
                     "profile": {
                       "const": "entity-page-v1",
                       "type": "string"
@@ -398493,6 +399235,35 @@
                             },
                             "reference": {
                               "type": "string"
+                            },
+                            "resolution": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "hops": {
+                                  "maximum": 32,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "source": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "state": {
+                                  "const": "merged",
+                                  "type": "string"
+                                },
+                                "survivor": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "source",
+                                "survivor",
+                                "hops"
+                              ],
+                              "type": "object"
                             },
                             "status": {
                               "const": "available",
@@ -401553,6 +402324,35 @@
                                     },
                                     "reference": {
                                       "type": "string"
+                                    },
+                                    "resolution": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "hops": {
+                                          "maximum": 32,
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "state": {
+                                          "const": "merged",
+                                          "type": "string"
+                                        },
+                                        "survivor": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "state",
+                                        "source",
+                                        "survivor",
+                                        "hops"
+                                      ],
+                                      "type": "object"
                                     },
                                     "status": {
                                       "const": "available",
@@ -404636,6 +405436,35 @@
                               "reference": {
                                 "type": "string"
                               },
+                              "resolution": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "hops": {
+                                    "maximum": 32,
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "source": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "state": {
+                                    "const": "merged",
+                                    "type": "string"
+                                  },
+                                  "survivor": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "state",
+                                  "source",
+                                  "survivor",
+                                  "hops"
+                                ],
+                                "type": "object"
+                              },
                               "status": {
                                 "const": "available",
                                 "type": "string"
@@ -407540,6 +408369,35 @@
                     },
                     "predecessor": {
                       "type": "string"
+                    },
+                    "resolution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hops": {
+                          "maximum": 32,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "merged",
+                          "type": "string"
+                        },
+                        "survivor": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "source",
+                        "survivor",
+                        "hops"
+                      ],
+                      "type": "object"
                     },
                     "revision": {
                       "type": "string"
@@ -484876,6 +485734,35 @@
                     "profile": {
                       "const": "work-address-reverse-v1",
                       "type": "string"
+                    },
+                    "resolution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hops": {
+                          "maximum": 32,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "source": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "merged",
+                          "type": "string"
+                        },
+                        "survivor": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "source",
+                        "survivor",
+                        "hops"
+                      ],
+                      "type": "object"
                     },
                     "work": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
