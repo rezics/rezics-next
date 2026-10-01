@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
@@ -37,18 +38,14 @@ try {
   const catalogue = await seedCatalogue(stack, { principalId, actor: actingSubject }, resolve('.temp', `g850-${process.env.REZICS_QA_RUN_ID}`));
   const series = catalogue.sao.series;
 
-  // The question everyone's ratings answer, and a reader who rated the series and reviewed it.
-  const [owner, reviewer] = await Promise.all([stack.member('hub-context'), stack.member('hub-reviewer')]);
+  // The question everyone's ratings answer, and a reader who rated the series and reviewed it. Reviews and the
+  // person Agent they need are written through their own owners, which the stack's default app leaves out.
+  const owner = await stack.member('hub-context');
   await owner.grant(GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
   const global = await created<{ context: string }>(await owner.send('POST', '/v1/global-rating-contexts',
     { profile: 'global-rating-standing-context-v1', question: 'How good is this Work overall?', actingSubject: owner.actor }));
-  await reviewer.grant(`rating:observe:${global.context}`, 'rating.observation.set');
-  await created(await reviewer.send('POST', '/v1/global-rating-observations', {
-    profile: 'global-rating-standing-observation-v1', context: global.context, work: series.work,
-    mainVersion: series.mainVersion, expectedRevisionHead: null, value: 5, actingSubject: reviewer.actor }));
-
-  // Reviews are written through their own owner, which the stack's default app leaves out.
-  const principals = new Map<string, typeof reviewer.principal>([[reviewer.token, reviewer.principal]]);
+  const account = await stack.member('hub-reviewer');
+  const principals = new Map<string, typeof account.principal>([[account.token, account.principal]]);
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
     account: { verify: async (request: Request) => {
       const principal = principals.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
@@ -56,15 +53,29 @@ try {
       const verified = { ...principal, emailVerified: true };
       return { ...verified, currentAssertion: async () => verified };
     } },
+    agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
     reviews: new ReaderReviews(stack.accessPool), libraryStatus: new ReaderLibraryStatusStore(stack.contentPool) });
+  const call = (method: string, path: string, body: unknown) => app.handle(new Request(`http://main.local${path}`, { method,
+    headers: { authorization: `Bearer ${account.token}`, 'content-type': 'application/json', 'idempotency-key': randomUUID() },
+    body: JSON.stringify(body) }));
+  const { agent } = await created<{ agent: string }>(await call('POST', '/v1/agents',
+    { profile: 'agent-provision-v1', kind: 'person', displayName: 'Hub reviewer' }));
+  const grant = async (scope: string, action: string) => {
+    await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+    await stack.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+      VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), account.principalId, agent, action]);
+    await stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), agent, scope, action]);
+  };
+  await grant(`rating:observe:${global.context}`, 'rating.observation.set');
+  await created(await call('POST', '/v1/global-rating-observations', {
+    profile: 'global-rating-standing-observation-v1', context: global.context, work: series.work,
+    mainVersion: series.mainVersion, expectedRevisionHead: null, value: 5, actingSubject: agent }));
   const text = 'Aincrad is a tower and a trap; the first volume never lets you forget which.';
-  const review = await app.handle(new Request('http://main.local/v1/reviews', { method: 'POST',
-    headers: { authorization: `Bearer ${reviewer.token}`, 'content-type': 'application/json', 'idempotency-key': randomUUID() },
-    body: JSON.stringify({ profile: 'reader-review-command-v1', actingSubject: reviewer.actor, context: global.context,
-      target: series.work, expectedRevision: null, language: 'en', text, spoiler: false }) }));
-  await created(review);
+  await created(await call('POST', '/v1/reviews', { profile: 'reader-review-command-v1', actingSubject: agent,
+    context: global.context, target: series.work, expectedRevision: null, language: 'en', text, spoiler: false }));
 
-  const hub: Hub = { ...catalogue, review: { text, reviewer: reviewer.actor } };
+  const hub: Hub = { ...catalogue, review: { text, reviewer: agent } };
   console.log(JSON.stringify(hub));
 } finally {
   await stack.stop();

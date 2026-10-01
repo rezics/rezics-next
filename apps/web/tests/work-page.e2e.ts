@@ -67,7 +67,8 @@ test('a public Work page reads by scope and tab, and names missing and invalid s
   const realm = uuid(seed.realm);
   await page.goto(`/en/w/${id}`);
   await expect(page).toHaveTitle(`${seed.title} · REZICS`);
-  await expect(page.getByRole('heading', { level: 1, name: seed.title })).toHaveAttribute('lang', 'en');
+  // Main tags a title whose record states no language `und`; the heading carries whatever tag it was given.
+  await expect(page.getByRole('heading', { level: 1, name: seed.title })).toHaveAttribute('lang', /^(en|und)$/);
   // A source author opens their REZICS page, named as Open Library lists them or by ID until then.
   await expect(page.locator('a[href="/en/authors/open-library/OL2162284A"]')).toBeVisible();
   await expect(page.getByText(/^Book · English/)).toBeVisible();
