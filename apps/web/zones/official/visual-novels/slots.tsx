@@ -78,8 +78,6 @@ export function VisualNovelDetail({ zone, regions }: WorkDetailSlotProps) {
       <h2 id="vn-about" className="sr-only">{t.about}</h2>
       {regions.about}
     </section>
-    {regions.volumes}
-    {regions.progress}
   </div>;
 }
 
