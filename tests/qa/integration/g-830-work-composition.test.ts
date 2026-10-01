@@ -6,7 +6,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import { activateTextContribution, textContributionDigest } from '../../../services/main/src/modules/contribution/draft.ts';
@@ -15,7 +15,7 @@ import { selectMainDefault, mainSelectionDigest } from '../../../services/main/s
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
 import { queryPublicMainTitleBody } from '../../../services/main/src/modules/work/search-multifield.ts';
-import { CompositionConflict } from '../../../services/main/src/modules/structure/change.ts';
+import { CompositionConflict, compositionRestoreDigest } from '../../../services/main/src/modules/structure/change.ts';
 import { structureProfileFor } from '../../../services/main/src/modules/structure/profiles.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { queryPublicMainPhrase } from '../../../services/main/src/modules/work/search-public.ts';
@@ -364,7 +364,8 @@ test('G-830: Zone restore validates the candidate generation and seals qualifier
     expect((await f.call('POST', path, body, key)).status).toBe(409);
     expect((await f.call('POST', path, body, key)).status).toBe(409);
     const receipts = await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?receipt WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:action "composition.restore" ; rv:reason rv:TopologyConflict } }`);
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:action "composition.restore" ; rv:reason rv:TopologyConflict ;
+        rv:requestDigest ${lit(compositionRestoreDigest(zone.navigation, restored.revision, mounted.revision))} } }`);
     expect(receipts.results?.bindings).toHaveLength(1);
     expect((await readCompositionHeader(f.env, zone.navigation))!.head).toBe(restored.revision);
   } finally { profile.qualifierValidations = originalValidation; await f.close(); }

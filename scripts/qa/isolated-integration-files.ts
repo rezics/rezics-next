@@ -115,6 +115,14 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-556-ranked-catalogue.test.ts',
   // Home's relay reads its complete retained outbox from sequence zero.
   'tests/qa/integration/g-542-endpoints.test.ts',
+  // Retained relation definitions must use the object directory that owns their graph revisions.
+  'tests/qa/integration/g-831-relations.test.ts',
+  'tests/qa/integration/g-832-lexicon.test.ts',
+  'tests/qa/integration/g-840-catalogue.test.ts',
+  'tests/qa/integration/g-894-progress-summary.test.ts',
+  'tests/qa/integration/g-904-derived.test.ts',
+  // Release traversal probes own their complete global publication and owner inventory.
+  'tests/qa/integration/g-851-release-query.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
