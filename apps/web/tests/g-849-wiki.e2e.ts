@@ -68,11 +68,11 @@ const locales = ['en', 'ja'] as const;
 const words = {
   en: { upTo: 'Up to:', start: 'start of the story', progress: 'your progress', characters: 'Main characters', everything: 'Show everything',
     elizabeth: 'Elizabeth Bennet', jane: 'Jane Bennet', darcy: 'Fitzwilliam Darcy', revealed: 'Revealed in this chapter',
-    notFound: 'This community isn’t here', sister: 'Sister', acquaintance: 'Acquaintance', passages: 'Passages and sources', alias: 'Lizzy',
+    notFound: 'This page isn’t here', sister: 'Sister', acquaintance: 'Acquaintance', passages: 'Passages and sources', alias: 'Lizzy',
     edition: 'text/plain edition', beyond: 'beyond your reading position' },
   ja: { upTo: 'ここまで:', start: '物語の始まり', progress: 'あなたの進行状況', characters: '主要人物', everything: 'すべて表示',
     elizabeth: 'エリザベス・ベネット', jane: 'ジェーン・ベネット', darcy: 'Fitzwilliam Darcy', revealed: 'この章で明かされること',
-    notFound: 'このコミュニティは見つかりません', sister: '姉妹', acquaintance: '知人', passages: '引用と出典', alias: 'Lizzy', edition: 'text/plain 版',
+    notFound: 'このページは見つかりません', sister: '姉妹', acquaintance: '知人', passages: '引用と出典', alias: 'Lizzy', edition: 'text/plain 版',
     beyond: '現在の読み進めた位置より先' },
 } as const;
 

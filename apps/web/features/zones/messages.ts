@@ -70,6 +70,10 @@ export const messages = {
   modChannelRelease: 'Release', modChannelBeta: 'Beta', modChannelAlpha: 'Alpha',
   modChannelUnknown: 'Channel unknown',
   modMoreVersions: 'Showing the 20 newest disclosed releases.',
+  // A page missing inside a community that is still here.
+  pageMissingTitle: 'This page isn’t here',
+  pageMissingBody: 'The address may be wrong, or the page may have moved.',
+  pageMissingBack: 'Back to this community',
 };
 
 export type ZoneMessages = typeof messages;

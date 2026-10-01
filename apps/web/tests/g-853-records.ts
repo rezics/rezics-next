@@ -187,7 +187,7 @@ export async function seedZones(stack: Stack, reader: { principalId: string; act
       configuration: { defaultRealm: string | null; official: { routeSegment: string } | null; presentation: object } };
   };
   for (const [slug, record, slots] of [['visual-novels', visual, ['footer', 'workCard']],
-    ['light-novels', light, ['footer', 'workCard', 'module:shelf']]] as const) {
+    ['light-novels', light, ['footer', 'workCard', 'module:shelf', 'index']]] as const) {
     const theme = id();
     const digest = await sourceDigest(slug);
     for (const [scope, action] of [['theme:create:root', 'theme.create'], [`theme:revise:${short(theme)}`, 'theme.revise'],

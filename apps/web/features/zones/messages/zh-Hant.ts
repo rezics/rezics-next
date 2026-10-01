@@ -61,4 +61,7 @@ export default {
   modChannelRelease: '正式版', modChannelBeta: '測試版', modChannelAlpha: 'Alpha 版',
   modChannelUnknown: '發布類型未知',
   modMoreVersions: '目前顯示最新的 20 個已公開版本。',
+  pageMissingTitle: '找不到這個頁面',
+  pageMissingBody: '網址可能有誤，或頁面已經移動。',
+  pageMissingBack: '回到這個社群',
 } satisfies Partial<ZoneMessages>;

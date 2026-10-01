@@ -7,6 +7,7 @@ const digest = Type.String({ pattern: '^[0-9a-f]{64}$' });
 const origin = Type.String({ pattern: '^https://[^\\s/?#]{1,500}$', maxLength: 512 });
 const slot = Type.Union([Type.Literal('hero'), Type.Literal('header'),
   Type.Literal('workCard'), Type.Literal('background'), Type.Literal('footer'),
+  Type.Literal('home'), Type.Literal('entity'), Type.Literal('index'), Type.Literal('memberIndex'),
   Type.String({ pattern: '^module:[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 72 })]);
 
 export const FirstPartyBundle = Type.Object({

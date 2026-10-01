@@ -58,7 +58,11 @@ export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps):
   }
   const cursor = routeCursor(path, search);
   const read = await readZoneRoute(resolved.zone.id, routePath(path), cursor);
-  if (!read.ok) return { title: read.failure === 'missing' ? t.notFoundTitle : t.unavailableTitle, ...hidden };
+  if (!read.ok) {
+    if (read.failure !== 'missing') return { title: t.unavailableTitle, ...hidden };
+    const { t: page } = await getTranslation('zones', [locale]);
+    return { title: `${page.pageMissingTitle} · ${resolved.header.name.value}`, ...hidden };
+  }
   const route = read.data;
   const zone = resolved.header.name.value;
   const address = async (title: string): Promise<Metadata> => {

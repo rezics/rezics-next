@@ -62,4 +62,7 @@ export default {
   modChannelRelease: '정식 버전', modChannelBeta: '베타', modChannelAlpha: '알파',
   modChannelUnknown: '알 수 없는 채널',
   modMoreVersions: '공개된 최신 릴리스 20개를 표시하고 있어요.',
+  pageMissingTitle: '이 페이지는 없어요',
+  pageMissingBody: '주소가 잘못되었거나 페이지가 옮겨졌을 수 있어요.',
+  pageMissingBack: '이 커뮤니티로 돌아가기',
 } satisfies Partial<ZoneMessages>;

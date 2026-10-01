@@ -65,4 +65,7 @@ export default {
   modChannelRelease: '正式版', modChannelBeta: '测试版', modChannelAlpha: '早期测试版',
   modChannelUnknown: '发布类型未知',
   modMoreVersions: '这里显示最新披露的 20 个版本。',
+  pageMissingTitle: '找不到这个页面',
+  pageMissingBody: '地址可能有误，或页面已经移动。',
+  pageMissingBack: '回到这个社区',
 } satisfies Partial<ZoneMessages>;

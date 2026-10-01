@@ -101,4 +101,7 @@ export default {
   modChannelAlpha: "Alpha",
   modChannelUnknown: "Canal inconnu",
   modMoreVersions: "Affichage des 20 versions publiées les plus récentes.",
+  pageMissingTitle: "Cette page est introuvable",
+  pageMissingBody: "L’adresse est peut-être incorrecte, ou la page a été déplacée.",
+  pageMissingBack: "Retour à cette communauté",
 } satisfies Partial<ZoneMessages>;

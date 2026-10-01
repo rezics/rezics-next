@@ -64,4 +64,7 @@ export default {
   modChannelRelease: '正式版', modChannelBeta: 'ベータ版', modChannelAlpha: 'アルファ版',
   modChannelUnknown: 'リリース区分不明',
   modMoreVersions: '公開された新しいリリースを20件表示しています。',
+  pageMissingTitle: 'このページは見つかりません',
+  pageMissingBody: 'アドレスが違うか、ページが移動した可能性があります。',
+  pageMissingBack: 'コミュニティに戻る',
 } satisfies Partial<ZoneMessages>;

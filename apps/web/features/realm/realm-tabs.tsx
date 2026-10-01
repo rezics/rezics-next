@@ -4,7 +4,7 @@ import { cn } from '@rezics/ui/utils';
 import { usePathname } from 'next/navigation';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { type RealmTab, realmHref, realmTabs, repeatsTab, tabOf } from './route.ts';
+import { type RealmTab, realmHref, realmTabs, repeatsTab, tabOf, zoneNavigationHref } from './route.ts';
 
 const link = cn('relative flex h-11 items-center whitespace-nowrap rounded-t-lg px-3 font-medium text-sm',
   'text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring');
@@ -20,7 +20,10 @@ export function RealmTabs({ locale, realmRef, labels, label, navigation }: {
   navigation: readonly { label: string; href: string }[];
 }) {
   const current = tabOf(usePathname());
-  const links = navigation.filter(item => !repeatsTab(item.href, realmRef));
+  const links = navigation.flatMap(item => {
+    const href = zoneNavigationHref(item.href, realmRef);
+    return repeatsTab(href, realmRef) ? [] : [{ label: item.label, href }];
+  });
   return <nav aria-label={label} className="sticky top-16 z-30 mt-4 border-border/70 border-b bg-(--zone-page)/92
     backdrop-blur-md">
     <div className="mx-auto flex max-w-6xl overflow-x-auto px-2 [scrollbar-width:none] sm:px-4 lg:px-8">

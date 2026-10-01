@@ -47,6 +47,21 @@ export function repeatsTab(href: string, ref: string): boolean {
   return [...realmTabs, 'works'].some(tab => path === `/r/${ref}${tab === 'home' ? '' : `/${tab}`}`);
 }
 
+const zoneRouterPath = /^\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * A presentation link the Zone router resolves (`/`, `/catalogue`) opens that page of this community.
+ * A link that is already a full address stays as written.
+ */
+export function zoneNavigationHref(href: string, ref: string): string {
+  const cut = href.search(/[?#]/);
+  const path = cut < 0 ? href : href.slice(0, cut);
+  const rest = cut < 0 ? '' : href.slice(cut);
+  if (path !== '/' && !zoneRouterPath.test(path)) return href;
+  const page = path === '/' ? '' : path;
+  return `/r/${encodeURIComponent(ref)}${page}${rest}`;
+}
+
 /** The in-page anchor of a Decision on the Decisions tab. */
 export const decisionAnchor = (decision: string) => `decision-${idOf(decision) ?? decision.slice(-36)}`;
 

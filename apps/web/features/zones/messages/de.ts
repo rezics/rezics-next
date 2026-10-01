@@ -101,4 +101,7 @@ export default {
   modChannelAlpha: "Alpha",
   modChannelUnknown: "Kanal unbekannt",
   modMoreVersions: "Es werden die 20 neuesten bekannten Versionen angezeigt.",
+  pageMissingTitle: "Diese Seite gibt es nicht",
+  pageMissingBody: "Die Adresse kann falsch sein, oder die Seite wurde verschoben.",
+  pageMissingBack: "Zurück zu dieser Community",
 } satisfies Partial<ZoneMessages>;

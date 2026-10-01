@@ -101,4 +101,7 @@ export default {
   modChannelAlpha: "Alfa",
   modChannelUnknown: "Canal desconocido",
   modMoreVersions: "Se muestran los 20 lanzamientos indicados más recientes.",
+  pageMissingTitle: "Esta página no está aquí",
+  pageMissingBody: "La dirección puede ser incorrecta, o la página se ha movido.",
+  pageMissingBack: "Volver a esta comunidad",
 } satisfies Partial<ZoneMessages>;

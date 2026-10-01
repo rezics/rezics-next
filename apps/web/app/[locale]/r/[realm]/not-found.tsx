@@ -1,6 +1,23 @@
-import { RealmNotFound } from '../../../../features/realm/states.tsx';
+import { headers } from 'next/headers';
+import { RealmNotFound, RealmUnavailable } from '../../../../features/realm/states.tsx';
+import { loadRealmView, RealmFrame } from '../../../../features/realm/realm-page.tsx';
+import { realmRefFromPageUrl, ZonePageMissing } from '../../../../features/zones/page-missing.tsx';
+import { isUiLocale } from '../../../../i18n/define.ts';
 import { getMessages, requestLocale } from '../../../../i18n/server.ts';
 
 export default async function RealmNotFoundPage() {
-  return <RealmNotFound messages={await getMessages('realm', await requestLocale())} />;
+  const locale = await requestLocale();
+  const ref = isUiLocale(locale) ? realmRefFromPageUrl((await headers()).get('x-rezics-page-url')) : null;
+  if (ref && isUiLocale(locale)) {
+    const view = await loadRealmView(ref, locale, {});
+    if (view.kind === 'view') {
+      const messages = await getMessages('zones', locale);
+      return <RealmFrame view={view} tab={null} locale={locale} search={{}}>
+        <ZonePageMissing title={messages.pageMissingTitle} body={messages.pageMissingBody}
+          back={messages.pageMissingBack} href={`/r/${encodeURIComponent(view.context.ref)}`} />
+      </RealmFrame>;
+    }
+    if (view.kind === 'unavailable') return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+  }
+  return <RealmNotFound messages={await getMessages('realm', locale)} />;
 }

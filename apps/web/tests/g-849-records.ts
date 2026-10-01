@@ -289,7 +289,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   const entry = `assets/${spec.routeSegment}/main.js`;
   const revision = await post<{ operation: string }>(`/v1/themes/${short(theme)}/revisions`, { expectedRevision: null,
     bundle: { profile: 'first-party-bundle-v1', hostZone: zone, packageDigest: digest, entry,
-      files: [{ path: entry, digest: sha(`${spec.routeSegment}:${digest}`), gzipBytes: 1000 }], slots: ['footer'],
+      files: [{ path: entry, digest: sha(`${spec.routeSegment}:${digest}`), gzipBytes: 1000 }], slots: ['home', 'entity', 'memberIndex'],
       connectOrigins: [], imageOrigins: [], fontOrigins: [] }, actingSubject: holder.actor });
   await settle(key => stack.call('POST', `/v1/themes/${short(theme)}/revisions/${short(revision.operation)}/reviews`, {
     token: reviewer.token, key, body: { decision: 'approved', reviewEvidenceDigest: sha(`reviewed ${digest}`),

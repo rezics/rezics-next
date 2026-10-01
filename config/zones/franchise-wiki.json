@@ -4,7 +4,13 @@
   "language": "en",
   "routeSegment": "franchise-wiki",
   "preset": "editorial",
-  "navigation": [],
+  "navigation": [
+    { "label": "Works", "href": "/franchise" },
+    { "label": "Characters", "href": "/characters" },
+    { "label": "Places", "href": "/places" },
+    { "label": "Events", "href": "/events" },
+    { "label": "Chapters", "href": "/chapters" }
+  ],
   "mounts": [
     { "id": "franchise", "name": "Works", "routeSegment": "franchise" },
     { "id": "characters", "name": "Characters", "routeSegment": "characters" },
