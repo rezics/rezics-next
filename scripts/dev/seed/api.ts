@@ -34,7 +34,20 @@ async function payload<T>(response: Response, operation: string): Promise<T> {
 }
 
 export class SeedApi {
-  constructor(readonly endpoints: SeedEndpoints) {}
+  constructor(readonly endpoints: SeedEndpoints,
+    private readonly mainTransport: (url: string, init?: RequestInit) => Promise<Response> = fetch) {}
+
+  /** A closed socket can lose a response after Main has committed. Repeat the
+   * exact request: stable creation keys and refreshed PUT keys retain the same
+   * intent, and the owner receipt determines whether it already completed. */
+  private async mainResponse(path: string, init: RequestInit, attempt: number, lastAttempt: number): Promise<Response | null> {
+    try { return await this.mainTransport(`${this.endpoints.main}${path}`, init); }
+    catch (cause) {
+      if (attempt >= lastAttempt) throw new Error(`Main ${path}: transport failed after retries`, { cause });
+      await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+      return null;
+    }
+  }
 
   /** Account's public origin defines its issuer and Origin checks; the native
    * service serves the same API without requiring the Accounts UI proxy. */
@@ -151,7 +164,8 @@ export class SeedApi {
 
   private async read<T>(path: string, headers?: HeadersInit): Promise<T> {
     for (let attempt = 0; attempt < 10; attempt++) {
-      const response = await fetch(`${this.endpoints.main}${path}`, { headers });
+      const response = await this.mainResponse(path, { headers }, attempt, 9);
+      if (!response) continue;
       if ([409, 503].includes(response.status) && attempt < 9) {
         const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
         if (detail?.code === 'read_basis_changed' || detail?.code === 'work_read_unavailable') {
@@ -174,9 +188,10 @@ export class SeedApi {
     assertSeedRequest(method, path, body);
     let attemptKey = key;
     for (let attempt = 0; attempt < 8; attempt++) {
-      const response = await fetch(`${this.endpoints.main}${path}`, { method,
+      const response = await this.mainResponse(path, { method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
-          'idempotency-key': attemptKey }, body: JSON.stringify(body) });
+          'idempotency-key': attemptKey }, body: JSON.stringify(body) }, attempt, 7);
+      if (!response) continue;
       if (response.status === 503 && method === 'POST' && path === '/v1/catalogue/candidates' && attempt < 7) {
         const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
         if (detail?.code === 'search_index_unavailable' || detail?.code === 'catalogue_unavailable') {

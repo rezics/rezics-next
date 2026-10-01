@@ -163,3 +163,42 @@ test('G-909: classification-resolution POSTs are reads in the seed write report'
     expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: 1 });
   });
 });
+
+test('G-909: a lost POST response retries the exact creation key and body', async () => {
+  const requests: RequestInit[] = [];
+  const api = new SeedApi({ main: 'http://main.test', writeCounts: {
+    written: 0, replayed: 0, reconciled: 0, lookups: 0 } } as SeedEndpoints, async (_url, init) => {
+    requests.push(init!);
+    if (requests.length === 1) throw new TypeError('The socket connection was closed unexpectedly');
+    return Response.json({ work: id, replayed: true });
+  });
+  await expect(api.post('/v1/works', { profile: 'metadata-only-v1', title: 'Book',
+    semanticTypes: ['https://schema.org/Book'], language: 'en', actingSubject: id, authoring: 'own-work',
+  }, 'token', 'seed-create')).resolves.toMatchObject({ work: id, replayed: true });
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(new Headers(requests[1]!.headers).get('idempotency-key')).toBe('seed-create');
+  expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 1, reconciled: 0, lookups: 0 });
+});
+
+test('G-909: a lost refresh response retries the read before changing the PUT body', async () => {
+  const methods: string[] = [];
+  const api = new SeedApi({ main: 'http://main.test' } as SeedEndpoints, async (_url, init) => {
+    methods.push(init?.method ?? 'GET');
+    if (methods.length === 1) return conflict('release_basis_changed');
+    if (methods.length === 2) throw new TypeError('The socket connection was closed unexpectedly');
+    return Response.json(view(release, revision(2)));
+  });
+  await expect(api.put(path, release, 'token', 'seed-release')).resolves.toMatchObject({ replayed: true });
+  expect(methods).toEqual(['PUT', 'GET', 'GET']);
+});
+
+test('G-909: network retries stop at the write budget and identify the failing Main path', async () => {
+  let requests = 0;
+  const api = new SeedApi({ main: 'http://main.test' } as SeedEndpoints, async () => {
+    requests++;
+    throw new TypeError('closed');
+  });
+  await expect(api.put(path, release, 'token', 'seed-release')).rejects.toThrow(`Main ${path}: transport failed after retries`);
+  expect(requests).toBe(8);
+}, 10_000);
