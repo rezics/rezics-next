@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -22,6 +23,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
   const directory = resolve('.temp', `g-650-${randomUUID()}`);
   const f = await authorCreditFixture(Bun.env as Record<string, string>, directory,
     'openid agent:create collection:edit semantic:read work:create work:edit work:read comment:create realm:adopt space:create rating:configure rating:submit');
+  await provisionFixtureAuthor(f.env, f.actor);
   const content = new ContentCore(f.pool);
   const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
@@ -87,7 +89,9 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
         VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), reviewer.agent, scope, action]);
     };
     const sao = { web: await work('Sword Art Online'), bunko: await work('Sword Art Online'),
-      unpublished: await work('SAO editorial notes') };
+      unpublished: await json<Work>(await call('POST', '/v1/works', { profile: 'metadata-only-v1',
+        authoring: 'own-work', title: 'Unpublished editorial notes', language: 'en',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201) };
     await publish(sao.web);
     await publish(sao.bunko);
     const chapter = await occurrence(sao.web);

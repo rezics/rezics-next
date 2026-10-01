@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -37,9 +38,11 @@ test('MODEL13: Annotation through the Content comment API retains OA type, targe
     };
     const fuseki = new FusekiClient(apps.FUSEKI_URL!);
     const content = new ContentCore(contentPool);
-    const app = createMainApp(fuseki, { environment: { fuseki,
+    const environment = { fuseki,
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
-      objectDirectory: resolve('.temp', `model-standard-annotation-${randomUUID()}`) },
+      objectDirectory: resolve('.temp', `model-standard-annotation-${randomUUID()}`) };
+    await provisionFixtureAuthor(environment, actor);
+    const app = createMainApp(fuseki, { environment,
       account: account.verifier, access: new AccessAdmissionRegistry(accessPool),
       content, contentAuthoring: content, comments: new ContentComments(contentPool) });
     const call = (method: 'GET' | 'POST', path: string, body?: object,
@@ -53,7 +56,7 @@ test('MODEL13: Annotation through the Content comment API retains OA type, targe
     };
     await grant('work:create:root', 'work.create');
     const workResponse = await call('POST', '/v1/works', { language: 'en',
-      profile: 'metadata-only-v1', title: `Annotation ${randomUUID()}`, actingSubject: actor });
+      profile: 'metadata-only-v1', authoring: 'own-work', title: `Annotation ${randomUUID()}`, actingSubject: actor });
     expect(workResponse.status).toBe(201);
     const work = (await workResponse.json() as { work: string }).work;
     await grant(`work:read:${work}`, 'work.read');

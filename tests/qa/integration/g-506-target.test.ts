@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
@@ -36,6 +37,7 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
   const environment = { ...f.env, fuseki: graph };
   const mediaAccess = new MediaAccessBatchReader(f.accessPool, graph);
   await f.grant('catalogue:verify:root', 'catalogue.verify');
+  await provisionFixtureAuthor(f.env, f.actor);
   const content = new ContentCore(f.pool);
   const structureObjects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
     bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
@@ -214,7 +216,9 @@ test('G-506: API-seeded SAO targets preserve exact grain, owner disclosure and b
     expect((await get(text.volume1.contribution)).status).toBe(200);
     expect((await resolveBatch([text.volume1.contribution]))[0]!.revision).toBe(text.volume1.draftRevision);
 
-    const hidden = await createWork('Private SAO editorial scope');
+    const hidden = await json<Work>(await call('POST', '/v1/works', { profile: 'metadata-only-v1',
+      authoring: 'own-work', title: 'Private editorial scope', language: 'en',
+      semanticTypes: ['https://schema.org/Book'], actingSubject: f.actor }), 201);
     const hiddenRelease = await releaseOf(hidden);
     const hiddenChapter = await composition(hidden);
     const privateTargets = [hidden.work, hiddenRelease.release, hiddenChapter.occurrences[0]!];

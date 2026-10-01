@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -53,6 +54,7 @@ async function fixture(apps: Record<string, string>) {
   await pool.query('INSERT INTO access.principal (id,account_issuer,account_subject) VALUES ($1,$2,$3)',
     [principal, account.issuer, account.a.id]);
   await pool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [actor]);
+  await provisionFixtureAuthor(environment, actor);
   const grant = async (scope: string, action: string) => {
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
     await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
@@ -73,7 +75,7 @@ async function fixture(apps: Record<string, string>) {
   await grant('work:create:root', 'work.create');
   const create = async () => {
     const written = await json<{ work: string; workRevision: string; mainVersion: string }>(await call('POST', '/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: `Validation Work ${randomUUID()}`, actingSubject: actor }), 201);
+      { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Validation Work ${randomUUID()}`, actingSubject: actor }), 201);
     await grant(`work:read:${written.work}`, 'work.read');
     await grant(`work:edit:${written.work}`, 'work.edit');
     await grant(`work:protect:${written.work}`, 'work.protection.tighten');

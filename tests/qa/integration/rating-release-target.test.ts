@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -84,6 +85,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
       Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
     const environment = { fuseki, objectDirectory: join(state, 'objects'),
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
+    await provisionFixtureAuthor(environment, actor.a);
     const content = new ContentCore(contentPool);
     const access = new AccessAdmissionRegistry(accessPool);
     const inventory = new ReleaseRatingInventoryStore(accessPool);
@@ -121,7 +123,7 @@ test('WORK06: exact fixed releases and Main Version keep separate Access-backed 
     await grant('space:create:root', 'space.create');
     expect(Date.now() - preparation).toBeLessThan(600_000);
     const work = await success<Target>(await post('/v1/works', { language: 'en',
-      profile: 'metadata-only-v1', title: `Release rating ${randomUUID()}`, actingSubject: actor.a }));
+      profile: 'metadata-only-v1', authoring: 'own-work', title: `Release rating ${randomUUID()}`, actingSubject: actor.a }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces', {
       profile: 'space-realm-v1', name: `Rating Realm ${randomUUID()}`,
       capabilities: ['realm'], actingSubject: actor.a }))).realm;

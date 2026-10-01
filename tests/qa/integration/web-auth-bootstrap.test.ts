@@ -139,14 +139,14 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     const denied = await main.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: `Bearer ${token}`,
         'content-type': 'application/json', 'idempotency-key': `web-auth-denied-${randomUUID()}` },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Denied local Work', language: 'en',
+      body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work', title: 'Denied local Work', language: 'en',
         actingSubject: `https://rezics.com/id/${randomUUID()}` }),
     }));
     expect(denied.status).toBe(403);
     const work = await main.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: `Bearer ${token}`,
         'content-type': 'application/json', 'idempotency-key': `web-auth-${randomUUID()}` },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: 'Local web auth Work', language: 'en',
+      body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work', title: 'Local web auth Work', language: 'en',
         actingSubject: result.actingSubject }),
     }));
     expect(work.status).toBe(201);

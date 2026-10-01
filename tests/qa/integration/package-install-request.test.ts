@@ -1,3 +1,4 @@
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -85,6 +86,7 @@ test('WORK07: Main Version recommendations resolve eligible npm and Cargo artifa
     } }) as FusekiClient;
     const mainEnvironment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!,
       routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! }, objectDirectory };
+    await provisionFixtureAuthor(mainEnvironment, actor);
     const account = { verify: async (request: Request) => {
       const token = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/, '');
       if (token === 'owner') return { issuer, subject: owner.subject };
@@ -107,7 +109,7 @@ test('WORK07: Main Version recommendations resolve eligible npm and Cargo artifa
     };
 
     const created = await parse<{ work: string; mainVersion: string; workRevision: string }>(
-      await call('POST', '/v1/works', { profile: 'metadata-only-v1', language: 'en', title: 'WORK07 package install',
+      await call('POST', '/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: 'WORK07 package install',
         actingSubject: actor }, `work-${randomUUID()}`), 201);
     const editScope = `work:edit:${created.work}`;
     const readScope = `work:read:${created.work}`;

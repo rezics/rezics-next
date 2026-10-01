@@ -40,6 +40,7 @@ test('G-629: SAO, VideoGame and unknown resource pages; component CAS, identity 
     'openid work:create work:edit work:read work:protect statement:write statement:decide context:read',
   );
   try {
+    await f.grant('catalogue:verify:root', 'catalogue.verify');
     const createWork = async (title: string, type = 'https://schema.org/Book') => {
       const created = await f.json<Work>(
         await f.call('POST', '/v1/works', await f.catalogueBody({

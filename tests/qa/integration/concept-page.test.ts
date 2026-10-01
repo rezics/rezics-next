@@ -124,28 +124,33 @@ test('G-409 a Concept page lists Works through its Condition bar within its seek
       expect(withMagic.items.map(item => item.id)).toEqual([w1.work]);
       // With `all`, the rarer Magic drives the seek; a Work still lists as reached by the page's Concept or Magic.
       expect(withMagic.filter).toEqual({ all: [{ facet: CONCEPT_FACET, all: [fantasy.concept, magic.concept] }] });
-      expect((await worksOf(q({ include: magic.concept, match: 'any' })))!.items.map(item => item.id))
-        .toEqual(listed(w1.work, w2.work, w3.work, w4.work));
+      const anchoredAny = (await worksOf(q({ include: [magic.concept, romance.concept], match: 'any' })))!;
+      expect(anchoredAny.items.map(item => item.id)).toEqual(listed(w1.work, w3.work));
+      expect(anchoredAny.filter).toEqual({ all: [
+        { facet: CONCEPT_FACET, all: [fantasy.concept] },
+        { facet: CONCEPT_FACET, any: [magic.concept, romance.concept] },
+      ] });
+      expect((await worksOf(q({ include: magic.concept, match: 'any' })))!.items.map(item => item.id)).toEqual([w1.work]);
       expect((await worksOf(q({ exclude: romance.concept })))!.items.map(item => item.id))
         .toEqual(listed(w1.work, w2.work));
       const combined = (await worksOf(q({ include: magic.concept, match: 'any', exclude: romance.concept })))!;
-      expect(combined.items.map(item => item.id)).toEqual(listed(w1.work, w2.work, w4.work));
+      expect(combined.items.map(item => item.id)).toEqual([w1.work]);
       expect(combined.values.map(item => [item.id, item.operator])).toEqual([[fantasy.concept, 'include'],
         [magic.concept, 'include'], [romance.concept, 'exclude']]);
       expect((await worksOf(q({ include: [magic.concept, romance.concept] })))!.items).toEqual([]);
 
       // Pages resume where the last ended, and only under the same Condition and language.
       const seen: string[] = [];
-      let page = (await worksOf(q({ limit: '1', match: 'any', include: magic.concept })))!;
+      let page = (await worksOf(q({ limit: '1', match: 'any', include: [magic.concept, romance.concept] })))!;
       for (let steps = 0; steps < 6; steps++) {
         seen.push(...page.items.map(item => item.id));
         if (!page.nextCursor) break;
         expect(page.matches.kind).toBe('lower-bound');
         expect((await worksOf(q({ limit: '1', cursor: page.nextCursor }), fantasy.concept, 400))).toBeNull();
-        page = (await worksOf(q({ limit: '1', match: 'any', include: magic.concept, cursor: page.nextCursor })))!;
+        page = (await worksOf(q({ limit: '1', match: 'any', include: [magic.concept, romance.concept], cursor: page.nextCursor })))!;
       }
-      expect(seen).toEqual(listed(w1.work, w2.work, w3.work, w4.work));
-      expect(page.matches).toEqual({ value: 4, kind: 'exact' });
+      expect(seen).toEqual(listed(w1.work, w3.work));
+      expect(page.matches).toEqual({ value: 2, kind: 'exact' });
 
       // Refused rather than empty: contradictions, unknown or hidden values, a personal scope, too many values.
       for (const query of [q({ include: magic.concept, exclude: magic.concept }), q({ exclude: fantasy.concept }),

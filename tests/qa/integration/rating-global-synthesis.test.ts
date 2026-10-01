@@ -1,4 +1,5 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -67,6 +68,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     const environment = { fuseki, objectDirectory: join(state, 'objects'),
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
     const access = new AccessAdmissionRegistry(accessPool);
+    await provisionFixtureAuthor(environment, persona.a);
     const main = createMainApp(fuseki, { environment, account: identity.verifier, access });
     const token = { a: identity.tokenA, a2: identity.tokenA, b: identity.tokenB, c: tokenC };
     const post = (path: string, body: object, who: keyof typeof persona = 'a', key = randomUUID(), bearer = token[who]) =>
@@ -92,7 +94,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
     expect(Date.now() - preparation).toBeLessThan(600_000);
 
     const work = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: `Global target ${nonce}`, actingSubject: persona.a }));
+      { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Global target ${nonce}`, actingSubject: persona.a }));
     const realm = (await success<{ realm: string }>(await post('/v1/spaces', { profile: 'space-realm-v1',
       name: `Global comparison Realm ${nonce}`, capabilities: ['realm'], actingSubject: persona.a }))).realm;
     await grant(`rating:context:${realm}`, 'rating.context.create');
@@ -210,7 +212,7 @@ test('RATE06: Realm and Global scores keep distinct populations and scales under
 
     // Unrelated Contexts, MainVersions and history do not change the work.
     const other = await success<{ work: string; mainVersion: string }>(await post('/v1/works',
-      { profile: 'metadata-only-v1', language: 'en', title: `Unrelated ${nonce}`, actingSubject: persona.a }));
+      { profile: 'metadata-only-v1', authoring: 'own-work', language: 'en', title: `Unrelated ${nonce}`, actingSubject: persona.a }));
     for (const who of ['a', 'b', 'c'] as const) {
       await success(await post('/v1/global-rating-observations', { profile: 'global-rating-standing-observation-v1',
         context: globalContext, work: other.work, mainVersion: other.mainVersion, value: 1, expectedRevisionHead: null,

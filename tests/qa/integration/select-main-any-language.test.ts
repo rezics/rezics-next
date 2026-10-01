@@ -6,7 +6,7 @@ import { iri } from '../../../services/main/src/modules/work/activate.ts';
 test('Main selection publishes a Chinese Work without an English title', async () => {
   const h = await memberFixture();
   try {
-    const created = await h.post('/v1/works', { profile: 'metadata-only-v1',
+    const created = await h.post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
       title: '中文作品', language: 'zh-CN', actingSubject: h.actor });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const work = created.body.work as string;

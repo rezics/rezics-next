@@ -1,3 +1,4 @@
+import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -43,7 +44,7 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
     s.access.configureBaseline(s.fuseki);
     const structureObjects = s.objects('semantic/structure/');
     await structureObjects.initialize();
-    const app = createMainApp(s.fuseki, { environment: s.env, account, access: s.access,
+    const app = createMainApp(s.fuseki, { environment: s.env, catalogueIntake: new CatalogueIntakeStore(s.accessPool, s.env), account, access: s.access,
       content: s.content, contentAuthoring: s.content, structureObjects,
       agentProvisioning: new AgentProvisioning(s.accessPool, s.env),
       reviews: new ReaderReviews(s.accessPool), targetRatingInventory: new TargetRatingInventoryStore(s.accessPool) });
@@ -67,8 +68,12 @@ test('G-652: SAO edition, translation, chapter and resource reviews use exact gr
       await s.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
         VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), who, scope, action]);
     };
+    const { candidateReceipt } = await json<{ candidateReceipt: string }>(await call('POST', '/v1/catalogue/candidates', {
+      profile: 'catalogue-candidates-v1', originalTitle: { value: 'sao.bunko volume 1', language: 'ja' },
+      aliases: [], romanizations: [], creators: [], dates: [], identifiers: [],
+    }, a.token));
     const bunko = await json<{ work: string; mainVersion: string }>(await call('POST', '/v1/works', {
-      profile: 'metadata-only-v1', language: 'ja', title: 'sao.bunko volume 1', semanticTypes: ['https://schema.org/Book'],
+      profile: 'metadata-only-v1', grain: 'new-creative-scope', candidateReceipt, language: 'ja', title: 'sao.bunko volume 1', semanticTypes: ['https://schema.org/Book'],
       actingSubject: actor }, a.token), 201);
     const translate = async (language: string, text: string) => {
       await grant(`contribution:create:${bunko.work}`, 'contribution.create');
