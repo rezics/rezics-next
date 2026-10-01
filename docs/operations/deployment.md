@@ -134,9 +134,10 @@ Configure `ACCOUNT_SMTP_*` and `ACCOUNT_EMAIL_FROM` from
 Development uses Mailpit; a remote sender needs verified identity (SPF, DKIM,
 DMARC), TLS, bounce/complaint handling and separately held secrets. Account mail
 serves security and recovery. Optional notification mail, such as the daily
-digest, requires consent, suppression and signed unsubscribe; none of these
-exist yet, and the production-readiness Goal builds them. Inspect uncertain delivery
-counts before retrying after a lost acknowledgement.
+digest, requires consent, suppression and signed unsubscribe. Follow the
+[email runbook](email.md) for provider event wiring, DKIM coverage of unsubscribe
+headers and the aggregate uncertain-delivery report. Inspect uncertain delivery
+counts after a lost acknowledgement; the queue never resends them automatically.
 
 ## Commercial rollout
 
