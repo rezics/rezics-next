@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { type Browser, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 import type { Hub } from './g-850-seed.ts';
@@ -13,12 +14,21 @@ let hub: Hub;
 test.use({ actionTimeout: 15_000 });
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  const result = spawnSync('bun', ['apps/web/tests/g-850-seed.ts'], { cwd: process.cwd(), env: process.env,
-    encoding: 'utf8', timeout: 240_000 });
-  if (result.status !== 0 || result.error) {
-    throw new Error(`G-850 seed failed: ${result.stderr || result.error?.message || result.status}`);
+  // A failed test restarts the worker and this hook with it; the stack is already seeded by then.
+  const saved = join('.temp', `g850-seed-${process.env.REZICS_QA_RUN_ID}.json`);
+  if (existsSync(saved)) {
+    hub = JSON.parse(readFileSync(saved, 'utf8')) as Hub;
+  } else {
+    const result = spawnSync('bun', ['apps/web/tests/g-850-seed.ts'], { cwd: process.cwd(), env: process.env,
+      encoding: 'utf8', timeout: 240_000 });
+    if (result.status !== 0 || result.error) {
+      throw new Error(`G-850 seed failed: ${result.stderr || result.error?.message || result.status}`);
+    }
+    const output = result.stdout.trim().split('\n').at(-1)!;
+    hub = JSON.parse(output) as Hub;
+    mkdirSync('.temp', { recursive: true });
+    writeFileSync(saved, output);
   }
-  hub = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Hub;
   // Main keeps processing the seed's events for a while, moving the graph under every read (409).
   const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(hub.sao.series.work)}`;
   let last = '';
