@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import type { PublicAgentProfile } from '../auth/agent-profile.ts';
+import { settingsNotificationTopics } from './settings-sections.tsx';
 import { ProfileSettings } from './profile-settings.tsx';
 import { type SettingsMessages, englishMessages } from './messages.ts';
 import zhHant from './messages/zh-Hant.ts';
@@ -36,7 +37,7 @@ export const Person: Story = {
     await expect(canvas.getByRole('heading', { name: 'Notifications' })).toBeVisible();
     await expect(canvas.getByRole('switch', { name: 'Replies · In-app' })).toBeVisible();
     const notifications = within(canvasElement.querySelector('#notifications')!);
-    await expect(notifications.getAllByRole('switch')).toHaveLength(12);
+    await expect(notifications.getAllByRole('switch')).toHaveLength(settingsNotificationTopics.length * 2);
     for (const label of [englishMessages.notificationSubmissionDecision, englishMessages.notificationModerationOutcome,
       englishMessages.notificationRealmRoleChange, englishMessages.notificationRealmMembershipChange,
       englishMessages.notificationRealmInvitation, englishMessages.notificationClaimCorrection]) {

@@ -6,7 +6,8 @@ import type { NotificationWindow, StreamItem } from './window.ts';
 // enough of the Eden client for the page's reads and commands, in memory.
 
 export const NOW = Date.parse('2026-09-28T09:00:00.000Z');
-const id = (n: number) => `${String(n).padStart(8, '0')}-5555-4a6f-8c2d-3e7b5c1a9f40`;
+export const streamId = (n: number) => `${String(n).padStart(8, '0')}-5555-4a6f-8c2d-3e7b5c1a9f40`;
+const id = streamId;
 const iri = (n: number) => `https://rezics.com/id/${id(n)}`;
 const daniel = { id: iri(802), name: 'Daniel Chen', handle: 'daniel_chen', avatar: null };
 const aria = { id: iri(803), name: 'Aria Wang 王雅', handle: 'aria_wang', avatar: null };
@@ -83,17 +84,40 @@ export function inboxWindow(items: StreamItem[], from = '0', head = '108'): Noti
   return { generation: '1', head, readThrough: '100', items: [...items].reverse(), groups, from };
 }
 
+/** One correction notice, active even though it has no social display. */
+export function governance(sequence: number, topic: string, reason: NonNullable<StreamItem['reason']>,
+  options: { saved?: boolean; done?: boolean; read?: boolean; proposal?: number; revision?: number } = {}): StreamItem {
+  const proposal = options.proposal ?? 900;
+  const saved = options.saved ?? false;
+  const done = options.done ?? false;
+  return { ...item(sequence, null, options.read ?? false, 15), purpose: 'governance', topic, state: 'active',
+    saved, done, triageRevision: saved || done ? '3' : null, reason,
+    proposal: { id: id(proposal), revision: options.revision ?? 2 } };
+}
+
 /** The Eden calls the page makes, answered from `stream`; each call is recorded. */
-export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean } = {}) {
+export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; refuseTriage?: boolean; staleTriage?: boolean } = {}) {
   const calls: string[] = [];
   const answer = <T>(data: T) => Promise.resolve(options.refuse
     ? { data: null, error: { status: 503, value: null } } : { data, error: null });
-  const notifications = Object.assign((params: { item: string }) => ({ read: { put: () => {
-    calls.push(`read:${params.item.slice(0, 8)}`);
-    return answer({ profile: 'notification-item-read-v1', id: params.item, readAt: new Date(NOW).toISOString() });
-  } } }), {
-    get: ({ query }: { query: { after: string; limit: number } }) => {
-      calls.push(`page:${query.after}:${query.limit}`);
+  const notifications = Object.assign((params: { item: string }) => ({
+    read: { put: () => {
+      calls.push(`read:${params.item.slice(0, 8)}`);
+      return answer({ profile: 'notification-item-read-v1', id: params.item, readAt: new Date(NOW).toISOString() });
+    } },
+    triage: { put: (body: { saved?: boolean; done?: boolean; expectedRevision: string | null }) => {
+      calls.push(`triage:${params.item.slice(0, 8)}:${String(body.saved)}:${String(body.done)}:${body.expectedRevision ?? ''}`);
+      if (options.refuseTriage) return Promise.resolve({ data: null, error: { status: options.staleTriage ? 409 : 503, value: null } });
+      const current = stream.find(entry => entry.id === params.item);
+      const saved = body.saved ?? current?.saved ?? false;
+      const done = body.done ?? current?.done ?? false;
+      const revision = String(BigInt(body.expectedRevision ?? '0') + 1n);
+      if (current && !options.refuse) Object.assign(current, { saved, done, triageRevision: revision });
+      return answer({ profile: 'notification-item-triage-v1', id: params.item, saved, done, revision });
+    } },
+  }), {
+    get: ({ query }: { query: { after: string; limit: number; view?: string; reason?: string } }) => {
+      calls.push(`page:${query.after}:${query.limit}${query.view ? `:${query.view}` : ''}${query.reason ? `:${query.reason}` : ''}`);
       const after = Number(query.after.split(':')[1]);
       const page = stream.filter(entry => Number(entry.sequence) > after).slice(0, query.limit);
       return answer({ profile: 'notification-stream-page-v1', generation: '1', head: '108', reset: false,

@@ -15,8 +15,47 @@ import { useOptionalShell } from '../shell/shell-provider.tsx';
 import type { SettingsMessages } from './messages.ts';
 
 type Channel = 'inbox' | 'email';
-type NotificationChoice = { purpose: 'social' | 'subscription'; topic: string;
+type NotificationChoice = { purpose: 'social' | 'subscription' | 'governance'; topic: string;
   channel: Channel; state: 'enabled' | 'disabled'; revision: string | null };
+
+/** Topics with an active producer, in the preferences API's order. A label is required for each. */
+export const settingsNotificationTopics = [
+  'reply', 'mention', 'post-vote', 'followed-chapter', 'review-helpful', 'review',
+  'review-requested', 'changes-requested', 'proposal-revised', 'proposal-decided',
+  'proposal-withdrawn', 'proposal-reverted',
+] as const;
+type SettingsNotificationTopic = (typeof settingsNotificationTopics)[number];
+export const notificationTopicLabel: Record<SettingsNotificationTopic, keyof SettingsMessages> = {
+  reply: 'notificationReply', mention: 'notificationMention', 'post-vote': 'notificationPostVote',
+  'followed-chapter': 'notificationFollowedChapter', 'review-helpful': 'notificationReviewHelpful',
+  review: 'notificationReview', 'review-requested': 'notificationReviewRequested',
+  'changes-requested': 'notificationChangesRequested', 'proposal-revised': 'notificationProposalRevised',
+  'proposal-decided': 'notificationProposalDecided', 'proposal-withdrawn': 'notificationProposalWithdrawn',
+  'proposal-reverted': 'notificationProposalReverted',
+};
+
+/** What the settings list shows: each topic the preferences response contains, once, in that order. */
+export function topicsShown(items: readonly { topic: string }[]): string[] {
+  const seen = new Set<string>();
+  const topics: string[] = [];
+  for (const item of items) {
+    if (seen.has(item.topic)) continue;
+    seen.add(item.topic);
+    topics.push(item.topic);
+  }
+  return topics;
+}
+
+const governanceTopics = new Set<string>(['review-requested', 'changes-requested', 'proposal-revised',
+  'proposal-decided', 'proposal-withdrawn', 'proposal-reverted']);
+function purposeOf(topic: string): NotificationChoice['purpose'] {
+  if (topic === 'followed-chapter') return 'subscription';
+  return governanceTopics.has(topic) ? 'governance' : 'social';
+}
+function labelFor(topic: string, t: SettingsMessages): string {
+  return (settingsNotificationTopics as readonly string[]).includes(topic)
+    ? t[notificationTopicLabel[topic as SettingsNotificationTopic]] : topic;
+}
 type Library = { visibility: 'public' | 'private' | 'followers'; version: number };
 type Reader = { profile: 'reader-settings-v1'; fontSize: 15 | 17 | 19 | 22 | 25;
   lineWidth: 'narrow' | 'medium' | 'wide'; typeface: 'serif' | 'sans'; paragraphIndent: boolean;
@@ -28,15 +67,6 @@ type PersonPreferences = { profile: 'person-preferences-v1'; profileVisibility: 
 const previewPerson: PersonPreferences = { profile: 'person-preferences-v1', profileVisibility: 'public',
   followPolicy: 'everyone', hideReadingActivity: false, contentLanguages: [],
   spoilerPolicy: 'hide-unread', adultContent: false, version: 0, blockedPeople: [] };
-
-const topics = [
-  ['social', 'reply', 'notificationReply'],
-  ['social', 'mention', 'notificationMention'],
-  ['social', 'post-vote', 'notificationPostVote'],
-  ['subscription', 'followed-chapter', 'notificationFollowedChapter'],
-  ['social', 'review-helpful', 'notificationReviewHelpful'],
-  ['social', 'review', 'notificationReview'],
-] as const;
 
 async function read<T>(path: string): Promise<T> {
   const response = await fetch(`${BFF_PREFIX}${path}`, { cache: 'no-store' });
@@ -62,9 +92,9 @@ function Section({ id, title, help, children }: { id: string; title: string; hel
 }
 
 function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: boolean }) {
-  const [choices, setChoices] = useState<NotificationChoice[] | null>(preview ? topics.flatMap(([purpose, topic]) =>
-    (['inbox', 'email'] as const).map(channel => ({ purpose, topic, channel,
-      state: 'enabled' as const, revision: null }))) : null);
+  const [choices, setChoices] = useState<NotificationChoice[] | null>(preview
+    ? settingsNotificationTopics.flatMap(topic => (['inbox', 'email'] as const).map(channel => ({
+      purpose: purposeOf(topic), topic, channel, state: 'enabled' as const, revision: null }))) : null);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState('');
   useEffect(() => {
@@ -95,17 +125,20 @@ function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: 
         sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
         <span>{t.notificationType}</span><span className="text-center">{t.notificationInbox}</span>
         <span className="text-center">{t.notificationEmail}</span></div>
-      {topics.map(([purpose, topic, label]) => <div key={topic}
-        className="grid min-h-12 grid-cols-[minmax(0,1fr)_4rem_4rem] items-center gap-2 border-b border-border/50 py-2
-          text-sm last:border-0 sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
-        <span className="min-w-0">{t[label]}</span>
-        {(['inbox', 'email'] as const).map(channel => {
-          const choice = choices.find(item => item.purpose === purpose && item.topic === topic && item.channel === channel);
-          return <span key={channel} className="flex justify-center"><Switch size="sm"
-            aria-label={`${t[label]} · ${channel === 'inbox' ? t.notificationInbox : t.notificationEmail}`}
-            checked={choice?.state === 'enabled'} disabled={!choice || !!saving || preview}
-            onCheckedChange={details => { if (choice) void save(choice, details.checked); }} /></span>;
-        })}</div>)}
+      {topicsShown(choices).map(topic => {
+        const label = labelFor(topic, t);
+        return <div key={topic}
+          className="grid min-h-12 grid-cols-[minmax(0,1fr)_4rem_4rem] items-center gap-2 border-b border-border/50 py-2
+            text-sm last:border-0 sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
+          <span className="min-w-0">{label}</span>
+          {(['inbox', 'email'] as const).map(channel => {
+            const choice = choices.find(item => item.topic === topic && item.channel === channel);
+            return <span key={channel} className="flex justify-center"><Switch size="sm"
+              aria-label={`${label} · ${channel === 'inbox' ? t.notificationInbox : t.notificationEmail}`}
+              checked={choice?.state === 'enabled'} disabled={!choice || !!saving || preview}
+              onCheckedChange={details => { if (choice) void save(choice, details.checked); }} /></span>;
+          })}</div>;
+      })}
     </div> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
     {choices && status ? <p role="status" className="text-sm">{status}</p> : null}
   </Section>;

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { inbox, inboxWindow, invitationNotice, invitations, memoryInbox, memoryInvitations, NOW, reviews,
-  roleTaken } from './fixtures.ts';
+import { governance, inbox, inboxWindow, invitationNotice, invitations, memoryInbox, memoryInvitations, NOW, reviews,
+  roleTaken, streamId } from './fixtures.ts';
 import { RealmInvitations } from './invitations.tsx';
 import { NotificationsUnavailable, NotificationsView } from './notifications-view.tsx';
 
@@ -189,3 +189,113 @@ export const Phone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+function mixedArgs(): Args {
+  const items = [...inbox.slice(0, 2),
+    governance(210, 'proposal-revised', 'reviewer', { proposal: 910, revision: 4 }),
+    governance(211, 'changes-requested', 'author', { saved: true, proposal: 911 }),
+    governance(212, 'review-requested', 'steward', { proposal: 912, revision: 1 })];
+  const { main, calls } = memoryInbox(items);
+  return { initial: inboxWindow(items, '0', '212'), now: NOW, avatarQuery: '', main, calls };
+}
+
+/** Inbox, Saved and Done, with corrections of more than one reason beside ordinary notices. */
+export const Mixed: Story = {
+  args: mixedArgs(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('link', { name: 'Review requested' }))
+      .toHaveAttribute('href', '/en/notifications?reason=steward');
+    await expect(canvas.getByRole('link', { name: 'Saved' })).toHaveAttribute('href', '/en/notifications?view=saved');
+    await expect(canvas.getByRole('link', { name: 'A correction needs your review' }))
+      .toHaveAttribute('href', `/en/proposals/${streamId(912)}?revision=1`);
+    await expect(canvas.getByText('Changes were requested on your correction')).toBeVisible();
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Save' })[0]!);
+    await expect(await canvas.findByRole('status')).toHaveTextContent('Saved.');
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Mark done' })[0]!);
+    await waitFor(() => expect(canvas.queryByRole('link', { name: 'A correction needs your review' })).toBeNull());
+    await expect(args.calls?.some(call => call.startsWith('triage:'))).toBe(true);
+  },
+};
+
+export const MixedDark: Story = { args: mixedArgs(), globals: { theme: 'dark' }, play: Mixed.play };
+
+export const MixedPhone: Story = {
+  args: mixedArgs(),
+  globals: { viewport: { value: 'phone' } },
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+function savedArgs(): Args {
+  const saved = [governance(220, 'changes-requested', 'author', { saved: true, proposal: 920 }),
+    governance(221, 'proposal-decided', 'author', { saved: true, proposal: 921 })];
+  const { main, calls } = memoryInbox(saved);
+  return { initial: inboxWindow(saved, '0', '221'), now: NOW, avatarQuery: '', main, calls,
+    selection: { view: 'saved', reason: null } };
+}
+
+/** The Saved view holds only what was saved, and unsaving takes it off this view. */
+export const SavedOnly: Story = {
+  args: savedArgs(),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Saved' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getAllByRole('button', { name: 'Unsave' })).toHaveLength(2);
+    await expect(canvas.queryByRole('button', { name: 'Save' })).toBeNull();
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Unsave' })[0]!);
+    await waitFor(() => expect(canvas.getAllByRole('button', { name: 'Unsave' })).toHaveLength(1));
+  },
+};
+
+export const SavedOnlyDark: Story = { args: savedArgs(), globals: { theme: 'dark' }, play: SavedOnly.play };
+
+function doneArgs(): Args {
+  const done = [governance(230, 'proposal-withdrawn', 'manual', { done: true, proposal: 930 })];
+  const { main, calls } = memoryInbox(done);
+  return { initial: inboxWindow(done, '0', '230'), now: NOW, avatarQuery: '', main, calls,
+    selection: { view: 'done', reason: null } };
+}
+
+/** Marking done leaves the inbox; undoing leaves Done. */
+export const DoneUndo: Story = {
+  args: doneArgs(),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Done' })).toHaveAttribute('aria-current', 'page');
+    await userEvent.click(canvas.getByRole('button', { name: 'Undo' }));
+    await expect(await canvas.findByRole('heading', { name: 'Nothing done' })).toBeVisible();
+  },
+};
+
+export const EmptySaved: Story = {
+  args: { ...args(), initial: inboxWindow([], '0', '0'), selection: { view: 'saved', reason: null } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('heading', { name: 'Nothing saved' })).toBeVisible();
+  },
+};
+
+export const EmptyDark: Story = { ...Empty, globals: { theme: 'dark' } };
+
+function triageErrorArgs(): Args {
+  const items = [governance(240, 'review-requested', 'steward')];
+  const { main, calls } = memoryInbox(items, { refuseTriage: true });
+  return { initial: inboxWindow(items, '0', '240'), now: NOW, avatarQuery: '', main, calls };
+}
+
+/** A refused triage leaves the item where it was and says so. */
+export const TriageError: Story = {
+  args: triageErrorArgs(),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Couldn’t update this notification');
+    await expect(canvas.getByRole('link', { name: 'A correction needs your review' })).toBeVisible();
+  },
+};
+
+export const TriageErrorDark: Story = { args: triageErrorArgs(), globals: { theme: 'dark' }, play: TriageError.play };
+
+export const FailedDark: Story = { ...Failed, globals: { theme: 'dark' } };

@@ -17,6 +17,7 @@ import { ActionDialog, type DialogAction } from './action-dialog.tsx';
 import { failureKey, kindLabel } from './labels.ts';
 import type { ProposalMessages } from './messages.ts';
 import { type Agents, agentName, BlockerList, blockerText, ChangeList, EvidenceList, StateBadge, Timeline } from './parts.tsx';
+import { WatchToggle } from './watch-toggle.tsx';
 import type { BaseHead, HeaderState, ProposalRead, TargetName } from './types.ts';
 import { uuidOf } from './types.ts';
 
@@ -219,6 +220,7 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
               onClick={() => open(control)}>{label(control.action, t)}</Button>)}
           </div> : <p className="text-muted-foreground text-sm">{t.actionsNone}</p>}
         </section>
+        <WatchToggle proposal={proposal.id} />
       </aside>
     </div>
 

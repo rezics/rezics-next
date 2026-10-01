@@ -4,7 +4,7 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { cn } from '@rezics/ui/utils';
-import { ArrowUpDownIcon, BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
+import { ArrowUpDownIcon, BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIcon, FilePenLineIcon, MessageSquareQuoteIcon, MessageSquareReplyIcon,
   RotateCwIcon, ShieldIcon, ThumbsUpIcon, TriangleAlertIcon, UserPlusIcon, UserRoundCogIcon, type LucideIcon }
   from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -16,10 +16,12 @@ import { relativeTime } from '../../feed/time.ts';
 import { type MainClient, settle } from '../../feed/types.ts';
 import { CommunityIcon } from '../community-icon.tsx';
 import { EmptyState } from '../empty-state.tsx';
+import LocalizedLink from '../localized-link.tsx';
 import { PageContainer, PageHeader } from '../page.tsx';
 import { useShell } from '../shell-provider.tsx';
 import { setUnread } from '../unread.ts';
-import { type NotificationWindow, readWindow, type StreamItem } from './window.ts';
+import { inboxReasons, inboxViews, type NotificationSelection, type NotificationWindow, notificationsHref,
+  readWindow, type StreamItem } from './window.ts';
 
 type T = ReturnType<typeof useShell>['t'];
 type Kind = NonNullable<StreamItem['display']>['kind'];
@@ -35,9 +37,29 @@ const uuid = (iri: string | null) => iri?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
  * What happened, in a sentence that says where: Main sends facts (kind,
  * actor, title, Realm and role names), never rendered copy.
  */
+const viewLabel = { inbox: 'viewInbox', saved: 'viewSaved', done: 'viewDone' } as const;
+const reasonLabel = { steward: 'reasonReviewRequested', author: 'reasonYourCorrections', reviewer: 'reasonParticipating',
+  manual: 'reasonWatching' } as const;
+
+/** A correction Main named with a proposal, in a sentence. Social kinds keep their own sentences below. */
+function proposalSentence(topic: string, t: T): string | null {
+  switch (topic) {
+    case 'review-requested': return t.reviewRequestedNotice;
+    case 'changes-requested': return t.changesRequestedNotice;
+    case 'proposal-revised': return t.proposalRevisedNotice;
+    case 'proposal-decided': return t.proposalDecidedNotice;
+    case 'proposal-withdrawn': return t.proposalWithdrawnNotice;
+    case 'proposal-reverted': return t.proposalRevertedNotice;
+    default: return null;
+  }
+}
+
 function sentence(item: StreamItem, t: T): string {
   const display = item.display;
-  if (!display || item.state !== 'active') return t.notificationUnavailable;
+  if (item.state !== 'active') return t.notificationUnavailable;
+  const proposal = item.proposal ? proposalSentence(item.topic, t) : null;
+  if (proposal) return proposal;
+  if (!display) return t.notificationUnavailable;
   const name = display.actor?.name ?? t.someone;
   const title = display.target.title;
   const realm = display.realmName;
@@ -79,7 +101,9 @@ function place(item: StreamItem, t: T): string | null {
 /** Where a notification leads, when its subject has a page: the Work decided on, or the Realm. */
 function destination(item: StreamItem): string | null {
   const display = item.display;
-  if (!display || item.state !== 'active') return null;
+  if (item.state !== 'active') return null;
+  if (item.proposal) return `/proposals/${item.proposal.id}?revision=${item.proposal.revision}`;
+  if (!display) return null;
   if (display.kind === 'submission_decision') {
     const work = uuid(display.target.linkTarget);
     return work ? `/w/${work}` : null;
@@ -99,8 +123,9 @@ function destination(item: StreamItem): string | null {
     || display.kind === 'reply') ? `/r/${realm}` : null;
 }
 
-function NotificationRow({ item, grouped, now, avatarQuery, onRead, actingSubject, main }: { item: StreamItem;
+function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, triageBusy, actingSubject, main }: { item: StreamItem;
   grouped: number; now: number; avatarQuery: string; onRead: (item: StreamItem) => void;
+  onTriage: (item: StreamItem, patch: { saved?: boolean; done?: boolean }) => void; triageBusy: boolean;
   actingSubject?: string; main: () => MainClient }) {
   const { t, locale } = useShell();
   const [listed, setListed] = useState(false);
@@ -109,10 +134,11 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, actingSubjec
   const [failed, setFailed] = useState(false);
   const attempt = useRef<{ action: 'accept' | 'decline'; listed: boolean; key: string } | null>(null);
   const display = item.display;
-  const Icon = display ? icons[display.kind] : BellIcon;
+  const Icon = display ? icons[display.kind] : item.proposal ? FilePenLineIcon : BellIcon;
   const href = destination(item);
   const text = sentence(item, t);
   const where = place(item, t);
+  const because = item.reason ? t[reasonLabel[item.reason]] : null;
   const excerpt = display?.kind === 'reply' || display?.kind === 'review' ? display.target.excerpt : null;
   const invitation = item.state === 'active' && display?.kind === 'realm_invitation' && actingSubject && item.subject?.ref
     && uuid(display.realm) ? { realm: uuid(display.realm)!, id: item.subject.ref } : null;
@@ -166,7 +192,16 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, actingSubjec
           </div>
           {failed ? <p role="alert" className="text-destructive-foreground text-sm">{t.invitationFailed}</p> : null}
         </div> : null}
+      <div className="relative z-10 flex flex-wrap gap-2">
+        <Button size="sm" variant={item.saved ? 'soft' : 'outline'} aria-pressed={item.saved} disabled={triageBusy}
+          onClick={() => onTriage(item, { saved: !item.saved })}>
+          {item.saved ? t.unsaveNotification : t.saveNotification}</Button>
+        <Button size="sm" variant={item.done ? 'soft' : 'outline'} aria-pressed={item.done} disabled={triageBusy}
+          onClick={() => onTriage(item, { done: !item.done })}>
+          {item.done ? t.undoDone : t.markDone}</Button>
+      </div>
       <p className="text-muted-foreground text-xs">
+        {because ? <><span>{because}</span><span aria-hidden="true"> · </span></> : null}
         {where ? <><span>{where}</span><span aria-hidden="true"> · </span></> : null}
         <time dateTime={item.createdAt} suppressHydrationWarning>{relativeTime(item.createdAt, now, locale, 'long')}</time>
       </p>
@@ -194,13 +229,17 @@ function collapse(window: Pick<NotificationWindow, 'items' | 'groups'>): { item:
 
 /**
  * The notifications page: newest first, unread marked, one press to mark all
- * read; opening one marks it read. Older windows load on request. `main` is
- * the browser client (stories pass an in-memory one).
+ * read; opening one marks it read. Saved and Done are a separate triage, kept
+ * in the URL with the reason filter so a reload shows what Main returns.
+ * Older windows load on request. `main` is the browser client (stories pass
+ * an in-memory one).
  */
-export function NotificationsView({ initial, now, avatarQuery, invitations, main, actingSubject }: {
+export function NotificationsView({ initial, now, avatarQuery, invitations, main, actingSubject,
+  selection = { view: 'inbox', reason: null } }: {
   initial: NotificationWindow; now: number; avatarQuery: string;
   /** Open invitations to join a Realm, answered here before the notifications. */
   invitations?: ReactNode; main?: MainClient; actingSubject?: string;
+  selection?: NotificationSelection;
 }) {
   const { t } = useShell();
   const client = () => main ?? browserMainApi();
@@ -208,6 +247,9 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const [readThrough, setReadThrough] = useState(initial.readThrough);
   const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
   const [state, setState] = useState<'idle' | 'loading' | 'older-failed' | 'mark-failed' | 'marked'>('idle');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [triageNote, setTriageNote] = useState<string | null>(null);
+  const [triageError, setTriageError] = useState<string | null>(null);
   const oldest = windows.at(-1)!;
   const isRead = (item: StreamItem) => item.read || readHere.has(item.id)
     || BigInt(item.sequence) <= BigInt(readThrough);
@@ -233,27 +275,71 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
 
   async function older() {
     setState('loading');
-    const next = await readWindow(client(), oldest.generation, oldest.from);
+    const next = await readWindow(client(), oldest.generation, oldest.from, selection);
     if (!next.ok) { setState('older-failed'); return; }
     setWindows(current => [...current, { ...next.data, head: initial.head }]);
     setState('idle');
   }
 
+  /** One flag at a time. Main keeps the flag we omit, and the response is what this view shows. */
+  async function triage(item: StreamItem, patch: { saved?: boolean; done?: boolean }) {
+    if (busy) return;
+    setBusy(item.id); setTriageError(null); setTriageNote(null);
+    const result = await settle(() => client().v1.me.notifications({ item: item.id }).triage.put({
+      profile: 'notification-item-triage-v1', ...patch, expectedRevision: item.triageRevision }));
+    setBusy(null);
+    if (!result.ok) { setTriageError(result.failure === 'moved' ? t.triageStale : t.triageFailed); return; }
+    const next = result.data;
+    const leaves = (selection.view === 'inbox' && next.done) || (selection.view === 'saved' && !next.saved)
+      || (selection.view === 'done' && !next.done);
+    setWindows(current => current.map(window => ({ ...window, items: window.items.flatMap(entry =>
+      entry.id !== item.id ? [entry] : leaves ? [] : [{ ...entry, saved: next.saved, done: next.done,
+        triageRevision: next.revision }]) })));
+    setTriageNote(patch.done === true ? t.triageDone : patch.done === false ? t.triageUndone
+      : patch.saved ? t.triageSaved : t.triageUnsaved);
+  }
+
   const rows = windows.flatMap(window => collapse(window));
+  const empty = selection.reason ? { title: t.noFiltered, description: t.noFilteredBody }
+    : selection.view === 'saved' ? { title: t.noSaved, description: t.noSavedBody }
+      : selection.view === 'done' ? { title: t.noDone, description: t.noDoneBody }
+        : { title: t.noNotifications, description: t.noNotificationsBody };
+  const tabClass = (current: boolean) => cn('rounded-lg px-3 py-1.5 font-medium',
+    current ? 'bg-background shadow-xs' : 'text-muted-foreground hover:text-foreground');
+  const reasonClass = (current: boolean) => cn('rounded-full border px-3 py-1 font-medium',
+    current ? 'border-transparent bg-foreground text-background' : 'border-border text-muted-foreground hover:text-foreground');
   return <PageContainer className="grid max-w-3xl gap-6">
     <PageHeader title={t.notifications} description={t.notificationsIntro}
       actions={unread ? <Button variant="outline" size="sm" onClick={() => void markAll()}>
         <CheckCheckIcon aria-hidden="true" />{t.markAllRead}</Button> : null} />
+    <div className="grid gap-3">
+      <nav aria-label={t.viewsLabel} className="flex w-fit max-w-full flex-wrap gap-1 rounded-xl bg-muted p-1 text-sm">
+        {inboxViews.map(view => <LocalizedLink key={view} href={notificationsHref({ view, reason: selection.reason })}
+          aria-current={view === selection.view ? 'page' : undefined} className={tabClass(view === selection.view)}>
+          {t[viewLabel[view]]}</LocalizedLink>)}
+      </nav>
+      <nav aria-label={t.reasonFilterLabel} className="flex flex-wrap gap-2 text-sm">
+        <LocalizedLink href={notificationsHref({ view: selection.view, reason: null })}
+          aria-current={selection.reason === null ? 'page' : undefined} className={reasonClass(selection.reason === null)}>
+          {t.reasonAll}</LocalizedLink>
+        {inboxReasons.map(reason => <LocalizedLink key={reason}
+          href={notificationsHref({ view: selection.view, reason })}
+          aria-current={selection.reason === reason ? 'page' : undefined}
+          className={reasonClass(selection.reason === reason)}>{t[reasonLabel[reason]]}</LocalizedLink>)}
+      </nav>
+    </div>
     {state === 'marked' ? <p role="status" className="sr-only">{t.markedAllRead}</p> : null}
     {state === 'mark-failed' ? <p role="alert" className="text-destructive-foreground text-sm">{t.markReadFailed}</p>
       : null}
+    {triageNote ? <p role="status" className="sr-only">{triageNote}</p> : null}
+    {triageError ? <p role="alert" className="text-destructive-foreground text-sm">{triageError}</p> : null}
     {invitations}
     {rows.length ? <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60
       bg-card shadow-(--aura-shadow-card)">
       {rows.map(({ item, grouped }) => <NotificationRow key={item.id} item={{ ...item, read: isRead(item) }}
-        grouped={grouped} now={now} avatarQuery={avatarQuery} onRead={markOne}
-        actingSubject={actingSubject} main={client} />)}
-    </ul> : <EmptyState icon={BellIcon} title={t.noNotifications} description={t.noNotificationsBody} />}
+        grouped={grouped} now={now} avatarQuery={avatarQuery} onRead={markOne} onTriage={(entry, patch) => void triage(entry, patch)}
+        triageBusy={busy === item.id} actingSubject={actingSubject} main={client} />)}
+    </ul> : <EmptyState icon={BellIcon} title={empty.title} description={empty.description} />}
     {oldest.from !== '0' ? <div className="flex flex-col items-center gap-2">
       {state === 'older-failed' ? <p role="alert" className="text-muted-foreground text-sm">{t.olderFailed}</p> : null}
       <Button variant="outline" isLoading={state === 'loading'} onClick={() => void older()}>
