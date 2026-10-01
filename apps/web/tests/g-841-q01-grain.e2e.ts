@@ -57,7 +57,9 @@ test('query 1: one Main Version per series Work in a franchise, and the grain is
   // The Index franchise reads the same way and shares no entry with SAO.
   const index = ids(data.answers.franchises['index.franchise']);
   await page.goto(at('en', 'index.original'));
-  const members = page.locator('#franchises section').first().locator('xpath=.//ol[not(ancestor::ol)]/li');
+  // A Work can sit in several franchises (the crossover Zone's collection also lists it); this is the Index's own.
+  const members = page.locator('#franchises section').filter({ has: page.getByRole('heading', { name: 'A Certain Magical Index', exact: true }) })
+    .locator('xpath=.//ol[not(ancestor::ol)]/li');
   expect(await firstLinks(members)).toEqual(index);
   expect(index.some(id => saoSeries.includes(id))).toBe(false);
 });
