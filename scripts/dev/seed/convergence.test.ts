@@ -141,3 +141,11 @@ test('G-909: catalogue lookup waits for projection readiness without changing it
     expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: 1 });
   });
 });
+
+test('G-909: classification-resolution POSTs are reads in the seed write report', async () => {
+  await serverFixture(() => Response.json({ state: 'accepted' }), async api => {
+    await api.post('/v1/classification-resolutions', { profile: 'classification-resolution-v1',
+      context: { kind: 'global' }, work: id, mainVersion: id, sense: id }, 'token', 'seed-resolution');
+    expect(api.endpoints.writeCounts).toEqual({ written: 0, replayed: 0, reconciled: 0, lookups: 1 });
+  });
+});

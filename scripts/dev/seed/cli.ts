@@ -187,12 +187,12 @@ async function run(options: Options): Promise<boolean> {
     const written = writeCounts.written - before.written;
     console.log(`${step.name}: ${written ? 'updated' : 'replayed'} (${written} writes, ${
       writeCounts.replayed - before.replayed} receipt replays, ${writeCounts.reconciled - before.reconciled} already match, ${
-      writeCounts.lookups - before.lookups} catalogue lookups).`);
+      writeCounts.lookups - before.lookups} lookups).`);
   }
   console.log(`Step timings (${((performance.now() - started) / 1000).toFixed(1)} s in all):`);
   for (const line of timings) console.log(line);
   console.log(`Seed record writes: ${writeCounts.written}; receipt replays: ${writeCounts.replayed}; already match: ${
-    writeCounts.reconciled}; catalogue lookups: ${writeCounts.lookups}.`);
+    writeCounts.reconciled}; lookups: ${writeCounts.lookups}.`);
   if ((options.themesOnly || options.zonesOnly) && findings.size) {
     console.log('Zone seed findings:');
     for (const finding of findings) console.log(`  ${finding}`);

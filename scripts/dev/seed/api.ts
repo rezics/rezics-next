@@ -245,7 +245,8 @@ export class SeedApi {
           // Like the catalogue fixture's createdWrites, count seed-record
           // commands separately from candidate searches and their evidence.
           const replayed = !!result && typeof result === 'object' && 'replayed' in result && result.replayed === true;
-          this.endpoints.writeCounts[path === '/v1/catalogue/candidates' ? 'lookups' : replayed ? 'replayed' : 'written']++;
+          this.endpoints.writeCounts[path === '/v1/catalogue/candidates' || path === '/v1/classification-resolutions'
+            ? 'lookups' : replayed ? 'replayed' : 'written']++;
         }
         return result;
       }
