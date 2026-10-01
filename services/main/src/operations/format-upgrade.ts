@@ -36,14 +36,18 @@ export async function rewritePrincipalSubjectFormat(env: FormatUpgradeEnvironmen
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '5s'");
       await client.query("SET LOCAL statement_timeout = '120s'");
-      await client.query(safetyAlertDeliveryViewSql('detached'));
+      const audit = await client.query<{ reloptions: string[] | null }>(`SELECT reloptions FROM pg_class
+        WHERE oid = to_regclass('access.safety_alert_delivery')`);
+      if (audit.rows.length !== 1) throw new Error('Safety audit view is unavailable');
+      const viewOptions = audit.rows[0]!.reloptions ?? [];
+      await client.query(safetyAlertDeliveryViewSql('detached', viewOptions));
       await client.query(`ALTER TABLE access.principal
         DROP CONSTRAINT principal_account_subject_check`);
       await client.query(`ALTER TABLE access.principal
         ALTER COLUMN account_subject TYPE bytea USING convert_to(account_subject, 'UTF8')`);
       await client.query(`ALTER TABLE access.principal
         ADD CONSTRAINT principal_account_subject_bytes_check CHECK (octet_length(account_subject) > 0)`);
-      await client.query(safetyAlertDeliveryViewSql('bytea'));
+      await client.query(safetyAlertDeliveryViewSql('bytea', viewOptions));
       const advanced = await client.query(`UPDATE access.storage_format SET version = 2 WHERE id = true
         AND version = 1 AND state = 'upgrade-pending' AND target_version = 2`);
       if (advanced.rowCount !== 1) throw new Error('Access format changed during rewrite');
