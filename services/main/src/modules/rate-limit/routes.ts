@@ -9,7 +9,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/.well-known/oauth-protected-resource', 'read'],
   ['GET', '/.well-known/oauth-protected-resource/mcp', 'read'],
   ['GET', '/v1/me/agents', 'read'],
-  ['POST', '/v1/me/library-imports', 'write'],
+  ['POST', '/v1/me/library-imports', 'upload'],
   ['GET', '/v1/me/library-imports/{id}/rows', 'write'],
   ['PUT', '/v1/me/library-imports/{id}/rows/{row}', 'write'],
   ['POST', '/v1/me/library-imports/{id}/apply', 'write'],
