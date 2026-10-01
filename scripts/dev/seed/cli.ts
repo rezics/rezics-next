@@ -149,6 +149,8 @@ async function run(options: Options): Promise<boolean> {
       + 'Agents, Spaces and Access grants together. No data was changed.');
   }
   const { endpoints, fixture } = configuration();
+  const writeCounts = { written: 0, replayed: 0, reconciled: 0, lookups: 0 };
+  endpoints.writeCounts = writeCounts;
   await waitForSeedApis(endpoints);
   const findings = new Set<string>();
   const state: SeedState = { api: new SeedApi(endpoints), endpoints, fixture, findings,
@@ -168,14 +170,21 @@ async function run(options: Options): Promise<boolean> {
     : options.zonesOnly ? [seedAccounts, seedClassics, seedWorks, seedRealms, seedOfficialThemes] : steps;
   for (const step of plan) {
     const begun = performance.now();
+    const before = { ...writeCounts };
     try {
       await refreshSeedTokens(state);
       await step(state);
     } catch (error) { throw new Error(`${step.name}: ${describe(error)}`); }
     timings.push(`  ${((performance.now() - begun) / 1000).toFixed(1).padStart(6)} s  ${step.name}`);
+    const written = writeCounts.written - before.written;
+    console.log(`${step.name}: ${written ? 'updated' : 'replayed'} (${written} writes, ${
+      writeCounts.replayed - before.replayed} receipt replays, ${writeCounts.reconciled - before.reconciled} already match, ${
+      writeCounts.lookups - before.lookups} catalogue lookups).`);
   }
   console.log(`Step timings (${((performance.now() - started) / 1000).toFixed(1)} s in all):`);
   for (const line of timings) console.log(line);
+  console.log(`Seed record writes: ${writeCounts.written}; receipt replays: ${writeCounts.replayed}; already match: ${
+    writeCounts.reconciled}; catalogue lookups: ${writeCounts.lookups}.`);
   if ((options.themesOnly || options.zonesOnly) && findings.size) {
     console.log('Zone seed findings:');
     for (const finding of findings) console.log(`  ${finding}`);

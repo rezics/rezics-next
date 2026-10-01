@@ -19,6 +19,18 @@ interface Conversion { conversion: string; projection: {
 interface Proposal { proposal: string; observation: string; conversion: string;
   candidateTitle: string }
 
+/** A conversion is immutable. Reuse its existing projection instead of invoking
+ * the projection command again (that route has no replay flag). */
+export async function ensureClassicSourceGraph(api: Pick<SeedApi, 'get' | 'post'>,
+  conversion: string, token: string, classicId: string): Promise<void> {
+  const path = `/v1/sources/conversions/${shortId(conversion)}/source-graph`;
+  try { await api.get(path, token); }
+  catch (error) {
+    if (!(error instanceof SeedApiError) || error.status !== 404) throw error;
+    await api.post(path, { profile: 'source-open-library-work-v1' }, token, seedKey('source-graph', classicId));
+  }
+}
+
 /** Explicit English for new adoptions; replay the original request on older stacks. */
 export async function adoptClassic(api: Pick<SeedApi, 'post'>, path: string, proposal: Proposal,
   classicId: string, actor: string, token: string) {
@@ -74,8 +86,7 @@ export async function seedClassics(state: SeedState): Promise<void> {
     if (!conversion.projection.authorRefs?.length) {
       throw new Error(`Source conversion for ${classic.id} has no authors`);
     }
-    await api.post(`/v1/sources/conversions/${shortId(conversion.conversion)}/source-graph`,
-      { profile: 'source-open-library-work-v1' }, token, seedKey('source-graph', classic.id));
+    await ensureClassicSourceGraph(api, conversion.conversion, token, classic.id);
     const proposal = (await api.post<{ proposal: Proposal }>(
       `/v1/sources/conversions/${shortId(conversion.conversion)}/proposals/native-work`,
       { profile: 'open-library-native-work-proposal-v1' }, token,

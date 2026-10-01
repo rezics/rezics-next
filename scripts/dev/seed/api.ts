@@ -1,6 +1,9 @@
 import { signupPolicyFixture } from '../signup-policy-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { assertSeedRequest } from './request-schema.ts';
+import { recoverSeedPut, seedPutConflict } from './put-recovery.ts';
+
+export interface SeedWriteCounts { written: number; replayed: number; reconciled: number; lookups: number }
 
 export interface SeedEndpoints {
   enrollmentToken?: string;
@@ -11,6 +14,7 @@ export interface SeedEndpoints {
   redirectUri: string;
   resource: string;
   scope: string;
+  writeCounts?: SeedWriteCounts;
 }
 
 export interface Credentials { email: string; password: string; name?: string }
@@ -160,17 +164,44 @@ export class SeedApi {
       const response = await fetch(`${this.endpoints.main}${path}`, { method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
           'idempotency-key': attemptKey }, body: JSON.stringify(body) });
-      // A read fence can move while another fixture writes. Retry only that
-      // explicit conflict; optimistic-head conflicts must remain failures.
+      // A stale seed-owned PUT can converge through its public read contract.
+      // Pending operations retain their exact body/key until they settle.
       if (response.status === 409 && attempt < 7) {
-        const detail = await response.clone().json().catch(() => null) as { code?: string } | null;
+        const detail = await response.clone().json().catch(() => null) as Record<string, unknown> | null;
         // On a long-lived stack a contract change can give a PUT a new body under
-        // its old key. A PUT is addressed by its URL, so retry once under a key bound
-        // to the body; POST keys stay stable because a new key would create a record.
-        if (detail?.code === 'idempotency_conflict' && method === 'PUT' && attemptKey === key) {
-          attemptKey = `${key}:${createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16)}`;
-          await response.body?.cancel();
-          continue;
+        // its old key. Refresh its state and basis before binding a new key;
+        // POST keys stay stable because a new key would create a record.
+        const code = typeof detail?.code === 'string' ? detail.code : '';
+        if (method === 'PUT' && seedPutConflict(path, code)) {
+          let recovery;
+          try {
+            recovery = await recoverSeedPut(path, body, (route, authenticated) => authenticated
+              ? this.get<Record<string, unknown>>(route, token) : this.getPublic<Record<string, unknown>>(route), detail!);
+          } catch (error) {
+            // A fresh target may not have a read representation yet. Only an
+            // idempotency conflict permits the original body-bound fallback.
+            if (!(error instanceof SeedApiError) || error.status !== 404 || code !== 'idempotency_conflict') {
+              await response.body?.cancel();
+              throw error;
+            }
+          }
+          if (recovery?.matches) {
+            await response.body?.cancel();
+            if (this.endpoints.writeCounts) this.endpoints.writeCounts.reconciled++;
+            return recovery.result as T;
+          }
+          if (recovery || code === 'idempotency_conflict' && attemptKey === key) {
+            body = recovery?.body ?? body;
+            assertSeedRequest(method, path, body);
+            // Hash the entire body, including the refreshed basis. Keep keys
+            // bounded even when the original key already uses all 128 bytes.
+            const nextKey = `seed-put:${createHash('sha256').update(`${path}:${key}:${JSON.stringify(body)}`).digest('hex')}`;
+            if (nextKey !== attemptKey) {
+              attemptKey = nextKey;
+              await response.body?.cancel();
+              continue;
+            }
+          }
         }
         if (detail?.code === 'read_basis_changed') {
           // This owner cancels its admission when the second root probe moves,
@@ -185,7 +216,16 @@ export class SeedApi {
           continue;
         }
       }
-      if (response.status !== 202) return payload<T>(response, `Main ${path}`);
+      if (response.status !== 202) {
+        const result = await payload<T>(response, `Main ${path}`);
+        if (this.endpoints.writeCounts) {
+          // Like the catalogue fixture's createdWrites, count seed-record
+          // commands separately from candidate searches and their evidence.
+          const replayed = !!result && typeof result === 'object' && 'replayed' in result && result.replayed === true;
+          this.endpoints.writeCounts[path === '/v1/catalogue/candidates' ? 'lookups' : replayed ? 'replayed' : 'written']++;
+        }
+        return result;
+      }
       await response.body?.cancel();
       await new Promise(resolve => setTimeout(resolve, 500));
     }
