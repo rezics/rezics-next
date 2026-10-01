@@ -18,6 +18,7 @@ import {
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import {
   cataloguePositions,
+  catalogueRequest,
   publishCatalogueFact,
 } from '../../../tests/fixtures/catalogue/acceptance.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
