@@ -146,6 +146,13 @@ the wiki+ positioning. The rules it relies on:
   read at each reader's spoiler position. Its infoboxes and lists are the same
   records that filters, lists and other Zones read, so a correction in one wiki
   improves every view of that fact.
+  Published wiki claims can appear without a Statement acceptance
+  (`acceptance: null`); `publication.kind = 'wiki-bundle'` identifies publication
+  separately from an editorial decision. Public disclosure follows the owning
+  public Work through the shared audience and reading-position boundary. A
+  private Work's wiki stays absent to anonymous and ungranted readers; readers
+  with the Work's read authority may read its claims and evidence through the
+  same boundary.
 - **Readers choose how far to see.** Anonymous readers start before the first
   revelation. Signed-in readers default to their own furthest completed
   occurrence; a Library status of `read` counts as finishing that Work. Anyone
