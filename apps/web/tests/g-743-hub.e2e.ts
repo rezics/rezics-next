@@ -14,6 +14,16 @@ test.beforeAll(async () => {
   hub = await hubRecords();
 });
 
+/** The address has stopped changing: a client-side navigation and a following `goto` must not race. */
+async function settled(page: import('@playwright/test').Page) {
+  await page.waitForLoadState('networkidle');
+  for (let same = 0, last = ''; same < 3;) {
+    await page.waitForTimeout(300);
+    same = page.url() === last ? same + 1 : 0;
+    last = page.url();
+  }
+}
+
 const at = (work: { work: string }, locale: string, hash = '') => `/${locale}/w/${uuid(work.work)}${hash}`;
 const primary = (page: import('@playwright/test').Page) => page.locator('a[data-next-action]:visible').first();
 
@@ -31,7 +41,7 @@ test('work-hub: a reader chooses an edition with the keyboard alone, under reduc
   await checkScreen(page, 'hub-series', found, info);
   await pressByKeyboard(page, action, found, 'primary action');
   await expect(page).toHaveURL(new RegExp(`/${locales.latin}/w/`));
-  await page.waitForLoadState('networkidle');
+  await settled(page);
 
   // Volume 1: pick the other of its two editions and save it, every control reached by Tab and operated by key.
   await page.goto(at(one!, locales.latin, '#availability'));
