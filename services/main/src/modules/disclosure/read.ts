@@ -127,6 +127,12 @@ const poolReaders = new WeakMap<Pool, DisclosureStore>();
 // Composition binds the pool once; additional owner stores on that same pool
 // still resolve current heads for notifications and reply counts.
 const poolEnvironments = new WeakMap<Pool, WorkActivationEnvironment>();
+// Graph-only target adapters must inherit the composed owner instead of creating
+// an unconfigured environment that silently treats every assessment as absent.
+const graphEnvironments = new WeakMap<object, WorkActivationEnvironment>();
+export function disclosureGraphEnvironment(graph: object): WorkActivationEnvironment | undefined {
+  return graphEnvironments.get(graph);
+}
 export function configureDisclosurePool(pool: Pool, reader: DisclosureStore): void {
   poolReaders.set(pool, reader);
 }
@@ -134,6 +140,7 @@ export function disclosurePoolReader(pool: Pool): DisclosureStore | undefined {
   return poolReaders.get(pool);
 }
 export function configureDisclosure(env: WorkActivationEnvironment, reader: DisclosureReader | null): void {
+  graphEnvironments.set(env.fuseki, env);
   if (reader) {
     (env as ComposedEnvironment)[owner] = reader;
     if (reader instanceof DisclosureStore) reader.environment = env;
@@ -151,34 +158,61 @@ export async function discloseInventory(env: WorkActivationEnvironment, targets:
   viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]> {
   const result: DisclosureDecision[] = [];
   if (!(env as ComposedEnvironment)[owner]) return targets.map(() => 'visible');
-  // Exact title fences apply to today's Work head, including inherited fences.
+  // Exact title fences apply to today's Work head. Derivative callers may
+  // supply only a target identity; resolve structural ownership here, never
+  // let a missing parent descriptor weaken its assessment or removal gate.
   const resources = [...new Set(targets.flatMap(target => [
     ...(target.work && target.workRevision == null ? [target.work] : []),
-    ...(target.owner === 'graph' && ['name', 'title'].includes(target.component)
-      && target.revision == null ? [target.resource] : []),
+    ...(target.owner === 'graph' && (target.work == null
+      || ['name', 'title'].includes(target.component) && target.revision == null) ? [target.resource] : []),
   ]))];
   const heads = new Map<string, string>();
+  const owners = new Map<string, { work: string; revision: string | undefined }>();
   for (let offset = 0; offset < resources.length; offset += DISCLOSURE_COST.batch) {
     const batch = resources.slice(offset, offset + DISCLOSURE_COST.batch);
     try {
-      const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?head WHERE {
+      const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        SELECT ?work ?head ?owningWork ?owningHead WHERE {
         VALUES ?work { ${batch.map(iri).join(' ')} }
-        GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head }
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
+        OPTIONAL { {
+          { GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork }
+            BIND(?work AS ?owningWork) }
+          UNION { GRAPH ${iri(GRAPHS.current)} { ?work a ?ownerType ; rv:work ?owningWork .
+            VALUES ?ownerType { rv:MainVersion rv:TextContribution rv:Realization rv:Release } } }
+          UNION { GRAPH ${iri(GRAPHS.revisions)} { ?work a rv:FixedRelease ; rv:work ?owningWork } }
+          UNION { GRAPH ${iri(GRAPHS.current)} { ?work a schema:ListItem ; rv:structure ?structure .
+            ?structure rv:structureOf ?component ; rv:selectedGeneration ?generation .
+            ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?work .
+            FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+            { ?component a rv:MainVersion ; rv:work ?owningWork }
+            UNION { ?component a schema:CreativeWork . BIND(?component AS ?owningWork) } } }
+        }
+          OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?owningWork rv:head ?owningHead } }
+        }
       } LIMIT ${batch.length + 1}`, 131_072)).results?.bindings ?? [];
-      if (rows.length > batch.length || rows.some(row => !row.work || !row.head
-        || !batch.includes(row.work.value) || heads.has(row.work.value))) {
+      if (rows.length > batch.length || new Set(rows.map(row => row.work?.value)).size !== rows.length
+        || rows.some(row => !row.work || !batch.includes(row.work.value)
+          || row.owningWork && !native.test(row.owningWork.value))) {
         throw new DisclosureUnavailable('Disclosure heads are invalid');
       }
-      for (const row of rows) heads.set(row.work!.value, row.head!.value);
+      for (const row of rows) {
+        if (row.head) heads.set(row.work!.value, row.head.value);
+        if (row.owningWork) owners.set(row.work!.value,
+          { work: row.owningWork.value, revision: row.owningHead?.value });
+      }
     } catch (cause) {
       throw new DisclosureUnavailable('Disclosure heads are unavailable', { cause });
     }
   }
-  const current = targets.map(target => ({ ...target,
-    ...(target.work && target.workRevision == null ? { workRevision: heads.get(target.work) } : {}),
-    ...(target.owner === 'graph' && ['name', 'title'].includes(target.component)
-      && target.revision == null ? { revision: heads.get(target.resource) } : {}),
-  }));
+  const current = targets.map(target => {
+    const inferred = target.owner === 'graph' && target.work == null ? owners.get(target.resource) : undefined;
+    const work = target.work ?? inferred?.work;
+    return { ...target, ...(work ? { work,
+      workRevision: target.workRevision ?? (target.work ? heads.get(work) : inferred?.revision) } : {}),
+      ...(target.owner === 'graph' && ['name', 'title'].includes(target.component)
+        && target.revision == null ? { revision: heads.get(target.resource) } : {}) };
+  });
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
     result.push(...await disclose(env, current.slice(offset, offset + DISCLOSURE_COST.batch), viewer, channel));
   }

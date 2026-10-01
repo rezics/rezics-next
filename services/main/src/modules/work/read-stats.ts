@@ -6,6 +6,7 @@ import { reviewVisibleSql } from '../review/store.ts';
 import { iri } from './activate.ts';
 import { readId, readPosition } from './read-contract.ts';
 import { publicWork, WorkReadMissing, type WorkReadSession } from './read-session.ts';
+import { admittedPublicWorks } from './public-patterns.ts';
 
 /**
  * One stats read asks the graph once (the review Context's target check, or
@@ -14,8 +15,10 @@ import { publicWork, WorkReadMissing, type WorkReadSession } from './read-sessio
  * in one Access eligibility query and probes Access's `(context, work)`
  * review index for at most 10,001 rows. Every SQL statement runs read-only
  * under a one-second timeout. Larger populations are reported as lower bounds.
+ * Two shared disclosure batches, each with one head probe and owner query,
+ * bracket those counts; their costs are additional to the target reader.
  */
-export const WORK_STATS_COST = { graphQueries: 1, readerProbe: 10_000, reviewProbe: 10_000,
+export const WORK_STATS_COST = { graphQueries: 1, disclosureBatches: 2, readerProbe: 10_000, reviewProbe: 10_000,
   sqlStatements: { readerCounts: 8, reviews: 4 }, sqlStatementMs: 1_000 } as const;
 
 export const statCount = t.Object({ value: t.Integer({ minimum: 0 }),
@@ -117,7 +120,13 @@ export async function readWorkStats(session: WorkReadSession, work: string, cont
   else if (!(await session.query(`SELECT ?main WHERE { ${publicWork(iri(work), '?main')} } LIMIT 2`, 2)).length) {
     throw new WorkReadMissing('Work is unavailable');
   }
+  if (!(await admittedPublicWorks(session.deps.environment, [work], session.viewer)).has(work)) {
+    throw new WorkReadMissing('Work is unavailable');
+  }
   const [readers, reviews] = await Promise.all([store.readerCounts(work),
     context ? store.reviews(context, work) : null]);
+  if (!(await admittedPublicWorks(session.deps.environment, [work], session.viewer)).has(work)) {
+    throw new WorkReadMissing('Work is unavailable');
+  }
   return { profile: 'work-reader-stats-v1', work, ...readers, reviews, sourcePosition: session.position };
 }

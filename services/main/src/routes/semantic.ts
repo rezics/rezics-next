@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { discloseInventory } from '../modules/disclosure/read.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { admittedSemanticChange, SEMANTIC_READ_SCOPE } from '../modules/semantic/admitted.ts';
 import { SemanticChangeRejected, SemanticTargetUnavailable, StaleSemanticHead } from '../modules/semantic/command.ts';
@@ -76,14 +78,20 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     const principal = request.headers.get('authorization')
       ? await work.account.verify(request, [SEMANTIC_READ_SCOPE]) : null;
     const actor = principal ? actingSubject! : null;
+    const viewer = disclosureViewer(principal);
+    const disclosed = async (ref: string, revision?: string) =>
+      (await discloseInventory(work.environment, [{ owner: 'graph', resource: ref,
+        component: 'record', revision }], viewer, 'read'))[0] === 'visible';
     const canRead = async (ref: string) => {
+      if (!await disclosed(ref)) return false;
       if (await work.access.canReadSemanticResource?.(principal, actor, ref, undefined, fuseki)) return true;
-      const batch = await readResourceSummaries(work.environment, undefined, {}, {
+      const batch = await readResourceSummaries(work.environment, undefined, { viewer }, {
         resources: [ref], context: DEFAULT_MEDIA_CONTEXT, language: null });
       return batch.summaries[0]?.status === 'available'
         || !!principal && await work.access.canReadWork(principal, actor!, ref);
     };
-    return { allowed: await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false, canRead, principal };
+    return { allowed: (await work.access.canReadSemanticResource?.(principal, actor, target, revision, fuseki) ?? false)
+      && await disclosed(target, revision), canRead, principal };
   };
   return new Elysia()
     .post('/v1/semantic/changes', {
@@ -138,6 +146,9 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const read = await readingPositionRead(work, request, principal, query.actingSubject,
           boundary => readSemanticCurrent(work.environment, target, canRead, records => boundary.visible(records)));
         if (!read) return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
+        if (!(await readable(request, query.actingSubject, target)).allowed) {
+          return problem(404, 'semantic_unavailable', 'Semantic resource is unavailable');
+        }
         return Response.json(readBody(read), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
@@ -155,6 +166,10 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           boundary => readSemanticRevision(work.environment, target,
             `https://rezics.com/id/${params.revision}`, canRead, records => boundary.visible(records)));
         if (!read) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        if (!(await readable(request, query.actingSubject, target,
+          `https://rezics.com/id/${params.revision}`)).allowed) {
+          return problem(404, 'revision_unavailable', 'Revision is unavailable');
+        }
         return Response.json(readBody(read), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     });

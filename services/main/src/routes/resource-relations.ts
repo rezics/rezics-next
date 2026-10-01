@@ -21,6 +21,8 @@ import { relationRenderingSchema } from './lexicon.ts';
 import { resourceSummary } from '../modules/media/summary-contract.ts';
 import { readingPositionQuery } from './reading-positions.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
+import { discloseInventory } from '../modules/disclosure/read.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -95,6 +97,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
           const canReadSemantic = (ref: string) => work.access.canReadSemanticResource?.(
             principal, actor, ref, undefined, fuseki) ?? Promise.resolve(false);
           const reader = {
+            viewer: disclosureViewer(principal),
             visibleRecords: visibility,
             canReadWork: principal && actor ? (ref: string) => work.access.canReadWork(principal, actor, ref) : undefined,
             canReadSemantic,
@@ -109,7 +112,10 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
             bytesLeft: RELATION_PAGE_COST.graphBytes }, async () => readResourceRelations(work.environment, {
             resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
             canRead: async ref => (await canReadSemantic(ref)
-              || (await summarize([ref]))[0]?.status === 'available') && (await visibility([ref])).has(ref),
+              || (await summarize([ref]))[0]?.status === 'available')
+              && (await discloseInventory(work.environment, [{ owner: 'graph', resource: ref,
+                component: 'record' }], reader.viewer, 'read'))[0] === 'visible'
+              && (await visibility([ref])).has(ref),
             canReadOccurrence: canReadSemantic,
             canReadDraftPresentations: async definition => {
               if (!principal || !actor || !work.mediaAccess) return false;

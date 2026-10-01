@@ -335,6 +335,19 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
   const unique = [...new Set(input.resources)];
   const graph = await graphRows(env, unique);
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
+  // Check the entire requested batch, including missing identities, before
+  // Access/name/avatar hydration. Rated and absent rows then have the same
+  // media generation and cost envelope as well as the same unavailable item.
+  const initialDecisions = await discloseInventory(env, unique.map(reference => {
+    const row = graph.rows.get(reference);
+    return { owner: 'graph' as const, resource: reference, component: 'name' as const,
+      revision: reference === row?.work ? row.head : null, work: row?.work,
+      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context };
+  }), reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary');
+  if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
+  for (const [index, reference] of unique.entries()) {
+    if (initialDecisions[index] !== 'visible') graph.rows.delete(reference);
+  }
   const readable = new Map<string, GraphRow>();
   const restricted = new Map<string, string>();
   const special = new Map<string, GraphRow>();

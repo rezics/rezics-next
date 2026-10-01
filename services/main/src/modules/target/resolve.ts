@@ -6,6 +6,9 @@ import { DATASET, GRAPHS, iri, type WorkActivationEnvironment } from '../work/ac
 import { READ_PREFIX, workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { capabilityBases, MAX_TARGET_TYPES, resolvedTarget, targetRef, type Base, type Capability, type ResolvedTarget } from './contract.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
+import type { Viewer } from '../suitability/policy.ts';
+import { disclosureGraphEnvironment } from '../disclosure/read.ts';
 
 /** One summary batch and one exact-head query, independent of target count.
  * Owner-specific summary probes remain in the summary's reported cost. */
@@ -32,6 +35,8 @@ export type ReportTargets<Session extends TargetReadSession = WorkReadSession> =
 /** Graph-only baseline proofs have no principal or optional hydration owners. */
 export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' | 'request'
   | 'options' | 'position' | 'displayLanguages' | 'principal'> & {
+  /** Owner-supplied evidence only; public request fields never set this value. */
+  viewer?: Viewer;
   deps: Pick<WorkReadSession['deps'], 'environment'>
     & Partial<Pick<WorkReadSession['deps'], 'account' | 'governance'
       | 'media' | 'mediaAccess' | 'contextSelections'>>
@@ -92,7 +97,8 @@ export function publicTargetRead<T>(graph: Pick<FusekiClient, 'query'>,
   operation: (session: TargetReadSession) => Promise<T>) {
   const fuseki = new FusekiClient('http://graph-only.invalid');
   fuseki.query = graph.query.bind(graph);
-  return targetRead({ fuseki, objectDirectory: '.temp/target-proofs',
+  const composed = disclosureGraphEnvironment(graph);
+  return targetRead(composed ? { ...composed, fuseki } : { fuseki, objectDirectory: '.temp/target-proofs',
     lineage: { dataEpoch: '', routingEpoch: '' } }, {}, operation);
 }
 
@@ -119,9 +125,10 @@ const requiresWork = { work: true, realization: true, release: true, occurrence:
 export function targetSummaryReader(session: TargetReadSession): SummaryReader {
   const { deps, principal, options } = session;
   const actingSubject = options.actingSubject;
-  const reader: SummaryReader = deps.governance?.store ? {
-    restrictedTitles: (heads, context) => deps.governance!.store.restrictedTitles(heads, context),
-  } : {};
+  const reader: SummaryReader = { viewer: session.viewer ?? disclosureViewer(principal),
+    ...(deps.governance?.store ? {
+      restrictedTitles: (heads, context) => deps.governance!.store.restrictedTitles(heads, context),
+    } : {}) };
   if (!principal || !actingSubject) return { ...reader,
     canReadSemantics: deps.mediaAccess ? resources => deps.mediaAccess!.canReadSemantics(
       null, null, resources, deps.environment.fuseki) : undefined };

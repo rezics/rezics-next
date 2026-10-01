@@ -4,6 +4,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { MediaStore } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { configureDisclosure, discloseInventory, DisclosureUnavailable, type DisclosureChannel } from './read.ts';
+import { currentDisclosureViewer } from './viewer.ts';
 
 export async function discloseContent(env: WorkActivationEnvironment, results: readonly ExactReadResult[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read'): Promise<ExactReadResult[]> {
@@ -22,7 +23,7 @@ export function disclosureContent<T extends Pick<ContentCore, 'readExactBatch'>>
   env: WorkActivationEnvironment): T {
   return new Proxy(content, { get(target, property) {
     if (property === 'readExactBatch') return async (...args: Parameters<ContentCore['readExactBatch']>) =>
-      discloseContent(env, await target.readExactBatch(...args));
+      discloseContent(env, await target.readExactBatch(...args), currentDisclosureViewer());
     const value: unknown = Reflect.get(target, property, target);
     return typeof value === 'function' ? value.bind(target) : value;
   } });
@@ -40,7 +41,7 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
         ...(row.use ? [{ owner: 'media' as const, resource: `https://rezics.com/id/${row.use}`,
           component: 'media_use' as const }] : []),
         { owner: 'graph', resource: row.target, component: 'name', context: row.context ?? undefined },
-      ], ANONYMOUS_VIEWER, 'media');
+      ], currentDisclosureViewer(), 'media');
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     if (property === 'itemDelivery') return async (...args: Parameters<MediaStore['itemDelivery']>) => {
@@ -53,7 +54,7 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
         { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'media_use' },
         { owner: 'media', resource: row.target, component: 'media_use' },
         { owner: 'graph', resource: row.target, component: 'name' },
-      ], ANONYMOUS_VIEWER, 'media');
+      ], currentDisclosureViewer(), 'media');
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     if (property === 'assetDelivery') return async (...args: Parameters<MediaStore['assetDelivery']>) => {
@@ -62,7 +63,7 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
       const decisions = await discloseInventory(env, [
         { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'cover' },
         { owner: 'graph', resource: args[1], component: 'name', context: args[2] },
-      ], ANONYMOUS_VIEWER, 'media');
+      ], currentDisclosureViewer(), 'media');
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
     const value: unknown = Reflect.get(target, property, target);

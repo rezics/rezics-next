@@ -4,6 +4,7 @@ import { targetSummaryReader, resolveTargets } from '../target/resolve.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { canReadStructureTarget, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
+import { admittedPublicWorks } from '../work/public-patterns.ts';
 
 /** One exact Work probe per distinct candidate, under the caller's read budget.
  * Reuse the Work header's public predicate and current Access fallback; erasure
@@ -18,8 +19,9 @@ export async function canReadCompositionWork(session: WorkReadSession, work: str
   } LIMIT 2`, 2);
   if (!rows.length) return false;
   if (rows.length !== 1 || !rows[0]?.public) throw new WorkReadUnavailable('Work disclosure is ambiguous');
-  return rows[0].public.value === 'true' || !!session.principal && !!session.options.actingSubject
+  const readable = rows[0].public.value === 'true' || !!session.principal && !!session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, work);
+  return readable && (await admittedPublicWorks(session.deps.environment, [work], session.viewer)).has(work);
 }
 
 /** Public semantic disclosure remains owned by Access, including closed gates.

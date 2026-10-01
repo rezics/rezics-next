@@ -16,6 +16,8 @@ import { GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
+import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -118,7 +120,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     if (!actingSubject) throw new MediaInvalid('actingSubject is required for an authenticated read');
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
-    return { realmReadProof: async (realm: string) =>
+    return { viewer: disclosureViewer(await workPrincipal()), realmReadProof: async (realm: string) =>
       await work.access.realmReadProof?.(await workPrincipal(), actingSubject, realm) ?? null,
     canReadWorks: work.mediaAccess
       ? async (resources: readonly string[]) => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources)
@@ -246,7 +248,12 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const basis = await work.media.store.avatarDelivery(params.selection);
+        // A public Agent avatar needs no representation selection, even when
+        // the browser also sends its bearer. Other targets keep the read proof.
+        const publicOnly = !!request.headers.get('authorization') && !query.actingSubject;
+        const reader = publicOnly ? { viewer: ANONYMOUS_VIEWER } : await readerFor(request, query.actingSubject);
+        const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
+          () => work.media!.store.avatarDelivery(params.selection));
         if (!basis || !avatarImageEligible(basis)) return unavailable();
         if (basis.context === DEFAULT_MEDIA_CONTEXT) {
           const agents = (await fuseki.query(`PREFIX rv: <${RV}>
@@ -259,9 +266,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
           }
         }
+        if (publicOnly) throw new MediaInvalid('actingSubject is required for an authenticated read');
         const target = (await readResourceSummaries(work.environment, undefined,
-          await readerFor(request, query.actingSubject),
-          { resources: [basis.target], context: basis.context!, language: null })).summaries[0]!;
+          reader, { resources: [basis.target], context: basis.context!, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();
         return await deliver(work.media, { objectNamespace: basis.objectNamespace,
           sha256: basis.sha256!, mediaType: basis.mediaType! }, target.disclosure === 'public');
@@ -275,12 +282,13 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const item = await work.media.store.itemDelivery(params.use);
+        const reader = await readerFor(request, query.actingSubject);
+        const item = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
+          () => work.media!.store.itemDelivery(params.use));
         if (!item || item.availability !== 'available' || item.disclosure !== 'public'
           || item.moderation !== 'none' || item.lifecycle !== 'active' || item.clearance !== 'cleared') return unavailable();
         const target = (await readResourceSummaries(work.environment, undefined,
-          await readerFor(request, query.actingSubject),
-          { resources: [item.target], context: 'urn:rezics:media:context:default', language: null })).summaries[0]!;
+          reader, { resources: [item.target], context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') return unavailable();
         return await deliver(work.media, item, target.disclosure === 'public');
       } catch (error) { return mediaError(error); }
@@ -300,8 +308,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read']);
-        const basis = await work.media.store.assetDelivery(params.asset, query.target,
-          query.context ?? DEFAULT_MEDIA_CONTEXT);
+        const reader = await readerFor(request, query.actingSubject);
+        const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
+          () => work.media!.store.assetDelivery(params.asset, query.target, query.context ?? DEFAULT_MEDIA_CONTEXT));
         if (!basis || basis.availability !== 'available' || (basis.disclosure !== 'private' && basis.owner !== query.actingSubject)
           || basis.moderation !== 'none' || basis.lifecycle !== 'active'
           || !(basis.clearance === 'cleared' || (basis.clearance === 'screening' && basis.owner === query.actingSubject
@@ -310,8 +319,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           || basis.byteLength > MAX_UPLOAD_BYTES) return unavailable();
         lease = await work.downloadLeases.admit(principal, query.actingSubject, query.target, params.asset);
         const target = (await readResourceSummaries(work.environment, undefined,
-          await readerFor(request, query.actingSubject), { resources: [query.target],
-            context: DEFAULT_MEDIA_CONTEXT, language: null })).summaries[0]!;
+          reader, { resources: [query.target], context: DEFAULT_MEDIA_CONTEXT,
+            language: null, channel: 'media' })).summaries[0]!;
         if (target.status !== 'available') {
           await work.downloadLeases.finish(lease.id, 'aborted');
           lease = undefined;

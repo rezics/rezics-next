@@ -17,7 +17,7 @@ import { WORK_READ_COST } from './read-contract.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { fenceAuthorNames } from '../source/author-name-read.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
-import { disclosureViewer } from '../disclosure/viewer.ts';
+import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
 import { discloseInventory, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
@@ -217,7 +217,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);
             }
           } else if (options.actingSubject) throw new AccountAssertionDenied('Authentication is required');
-          const result = await operation(session);
+          const result = await withDisclosureViewer(session.viewer, () => operation(session));
           const after = await position(deps);
           if (after.dataEpoch !== session.position.dataEpoch || after.sequence !== session.position.sequence) {
             if (options.movingGraph && after.dataEpoch === session.position.dataEpoch) {

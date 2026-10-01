@@ -1,4 +1,20 @@
-import { GRAPHS, iri } from './activate.ts';
+import { GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
+
+/** Graph publication is a candidate predicate, not audience admission. Owners
+ * returning identities/counts without summaries use this same disclosure batch
+ * before pagination or aggregation. One head probe and one owner query per 64
+ * Works; never reads the assessment history or invents reader evidence. */
+export async function admittedPublicWorks(environment: WorkActivationEnvironment | undefined,
+  works: readonly string[], viewer: Viewer = ANONYMOUS_VIEWER): Promise<ReadonlySet<string>> {
+  const unique = [...new Set(works)];
+  if (!environment) return new Set(unique); // Graph-only legacy owner fixtures.
+  const decisions = await discloseInventory(environment, unique.map(resource => ({
+    owner: 'graph' as const, resource, component: 'name' as const, work: resource,
+  })), viewer, 'read');
+  return new Set(unique.filter((_, index) => decisions[index] === 'visible'));
+}
 
 export const unerased = (work: string) => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
   ?erasedVariant rv:resource ${work} ; rv:contentPublicationHead ?erasedPublication }
