@@ -17,6 +17,12 @@ function withNulls(schema: unknown): unknown {
   if (!schema || typeof schema !== 'object') return schema;
   const { nullable, ...rest } = schema as Record<string, unknown>;
   const mapped = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, withNulls(value)]));
+  // Elysia's generated description labels numeric literal unions as strings
+  // (for example the served feed command's -1/0/1 enum). Preserve the enum's
+  // exact values while restoring their scalar type; do not coerce the request.
+  // https://json-schema.org/understanding-json-schema/reference/enum
+  if (mapped.type === 'string' && Array.isArray(mapped.enum) && mapped.enum.length
+    && mapped.enum.every(value => typeof value === 'number')) mapped.type = 'number';
   return nullable === true ? { anyOf: [mapped, { type: 'null' }] } : mapped;
 }
 

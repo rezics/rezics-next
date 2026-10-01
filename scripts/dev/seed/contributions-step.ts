@@ -11,7 +11,7 @@ export async function seedContributions(state: SeedState) {
       : sessions.find(session => session.id === excerpt.author) ?? owner;
     const author = excerpt.author === 'moonlight'
       ? state.penAgents.get('moonlight')! : writer.actingSubject;
-    const contribution = await state.optional('Text contribution', () => api.post<ContributionReceipt>(
+    const contribution = await state.optional(`Text contribution ${excerpt.id}`, () => api.post<ContributionReceipt>(
       '/v1/contributions', { profile: 'text-contribution-v1', work: target.work,
         language: excerpt.language, body: excerpt.excerpt!, actingSubject: author },
       writer.token, seedKey('contribution', excerpt.id)));

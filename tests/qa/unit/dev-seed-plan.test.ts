@@ -253,7 +253,7 @@ describe('dev seed plan', () => {
     penAgents: new Map([['moonlight', 'https://rezics.com/id/moonlight']]),
     created: new Map(works.map(work => [work.id, { work: `https://rezics.com/id/${work.id}` }])),
     publicForRealm: new Map(), optional: async (label: string, operation: () => Promise<unknown>) =>
-      label === 'Text contribution' ? operation() : null,
+      label.startsWith('Text contribution ') ? operation() : null,
     } as unknown as SeedState;
     await seedContributions(state);
     expect(calls.find(call => call.key === seedKey('contribution', 'bun')))
