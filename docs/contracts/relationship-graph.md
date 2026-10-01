@@ -16,7 +16,7 @@ Domain commands revise or retire relations under expected heads and role constra
 The deployed [direct relation query](../../services/main/src/modules/graph-query/schema.ts)
 requires an anchor, exact definition and roles, and has a bounded page and
 continuation. [Layout schema](../../services/main/src/modules/graph-layout/schema.ts)
-keeps positions outside relation truth. [Graph acceptance](../testing/relationship-graph.md)
+keeps positions outside relation truth. [Graph acceptance](../../scripts/qa/cases/relationship-graph.ts)
 records the qualified direct-read and layout scenarios.
 
 ## Further contract

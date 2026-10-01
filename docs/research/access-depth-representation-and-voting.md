@@ -6,8 +6,8 @@ The [identity/access](../contracts/identity-and-access.md),
 [Realm participation](../contracts/realm-participation.md),
 [voting](../contracts/votes-and-references.md) and
 [governance](../contracts/governance-rules.md) contracts own the semantics. The
-[identity acceptance](../testing/identity-and-access.md) and
-[governance acceptance](../testing/governance-and-delivery.md) pages own detailed
+[identity acceptance](../../scripts/qa/cases/identity-and-access.ts) and
+[governance acceptance](../../scripts/qa/cases/governance-and-delivery.ts) pages own detailed
 outcomes; the [recorded backend qualification](../plan/README.md#current-state)
 identifies their tested scope. Current API paths live under
 `services/main/src/modules/access/` and `services/main/src/modules/vote/`.

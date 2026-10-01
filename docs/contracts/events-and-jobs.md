@@ -30,7 +30,7 @@ advancing the consumer checkpoint. Its retained handoff is not an authoritative
 journal of later consumer effects. A crash after delivery repeats the batch;
 stable event IDs and consumer idempotency handle the duplicate. Missing members,
 retention gaps, changed epochs and recovery holds stop advancement. The
-[SYS04/05/12 recovery cases](../testing/backend-integration.md) exercise these
+[SYS04/05/12 recovery cases](../../scripts/qa/cases/backend-integration.ts) exercise these
 boundaries. An offline coverage head compares the acknowledged position with
 retained batch and envelope digests before restored graph writes resume.
 

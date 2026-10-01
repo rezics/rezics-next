@@ -62,8 +62,8 @@ hardware. Async jobs need bounded batches and measured catch-up capacity.
 
 ## Qualification scope and decisions
 
-The retained [OPS05](../testing/operations.md) and
-[SEARCH18](../testing/backend-integration.md) load tests cover named fixture-backed scopes,
+The retained [OPS05](../../scripts/qa/cases/operations.ts) and
+[SEARCH18](../../scripts/qa/cases/backend-integration.ts) load tests cover named fixture-backed scopes,
 not the 500-million-entity requirement. The frozen
 `fx-medium-c9f6e4fdcb52` fixture has 100,000 Works and 10,000 public
 MatchUnits. Three quiet-host runs each completed a 63-second offered mix of

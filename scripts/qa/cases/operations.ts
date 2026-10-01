@@ -23,6 +23,7 @@ export const cases = defineCases('docs/testing/operations.md', [
     scenario: 'Upgrade fails across format boundary',
     requiredResult: 'Qualified rollback/restore without mixed-format corruption.',
   },
+  // OPS05 qualifies only the measured host, fixture, workload and recovery scope.
   {
     id: 'OPS05',
     scenario: 'Vary workload dimensions and skew; run a named host workload',
@@ -50,6 +51,8 @@ export const cases = defineCases('docs/testing/operations.md', [
     requiredResult:
       'API/work budgets and storage headroom remain controlled; reconstruction uses exact Content/semantic sources before text readiness.',
   },
+  // A small fixture restore or sanitized graph copy does not prove production
+  // physical destruction; OPS10 needs a production storage/media campaign.
   {
     id: 'OPS10',
     scenario: 'Immutable graph erasure needs purge or sanitized compaction',

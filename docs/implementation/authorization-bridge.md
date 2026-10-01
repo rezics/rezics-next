@@ -27,5 +27,5 @@ the currently supported private Contribution phrase profile and its limits.
 
 The remaining general private-field and mixed-scope query profiles require
 their own pre-match disclosure, freshness, and recovery qualification. The
-[identity cases](../testing/identity-and-access.md) and
+[identity cases](../../scripts/qa/cases/identity-and-access.ts) and
 [search cases](../../scripts/qa/cases/search.ts) retain those acceptance requirements.

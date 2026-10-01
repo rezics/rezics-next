@@ -26,7 +26,7 @@ reuses its outcome. An absent receipt leaves the result pending while the
 original update might still commit. Seal stale, rejected, no-op and cancelled
 outcomes against receipt absence and the observed decision state, then reread
 the winning receipt. [Jena's command endpoint](../storage/jena.md#transactional-command-endpoint)
-and the [SYS fault cases](../testing/backend-integration.md) qualify this rule.
+and the [SYS fault cases](../../scripts/qa/cases/backend-integration.ts) qualify this rule.
 
 Receipt retention has an explicit replay horizon. Expired keys need rejection
 or an identity tombstone; a restored epoch never silently resets idempotency.

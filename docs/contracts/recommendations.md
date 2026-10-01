@@ -16,7 +16,7 @@ The ranking worker coalesces bounded signal batches and checkpoints progress;
 one synchronous global exact counter is outside this profile.
 Reads use deterministic score/IRI order, bounded positive and zero-score
 windows, current disclosure checks and generation-bound cursors. Missing
-active ranking has no fallback in this profile. [Recommendation acceptance](../testing/recommendations.md)
+active ranking has no fallback in this profile. [Recommendation acceptance](../../scripts/qa/cases/recommendations.ts)
 separates generation, disclosure and skew/load evidence.
 
 ## Further profiles

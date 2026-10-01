@@ -77,7 +77,7 @@ explains Access's placement inside Main.
 [Votes](votes-and-references.md) owns conserved entitlements;
 representation creates no voting weight. See the
 [authorization bridge](../implementation/authorization-bridge.md) and
-[identity acceptance](../testing/identity-and-access.md) for integration and evidence.
+[identity acceptance](../../scripts/qa/cases/identity-and-access.ts) for integration and evidence.
 
 ## Visible is not permitted
 

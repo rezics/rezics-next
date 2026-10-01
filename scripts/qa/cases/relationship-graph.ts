@@ -45,3 +45,17 @@ export const pendingRelatedReadSubcases = [
   { caseIds: ['GRAPH03'], scenario: 'An owner event rebuild fails after a prior active inverse projection',
     requiredResult: 'Retain the active generation and exact source revision or epoch until a complete replacement is verified.', status: 'pending' },
 ] as const satisfies readonly PendingSubcase[];
+
+// Semantic-context refinements; they do not inherit the base cases' recorded pass status.
+export const pendingSemanticGraphSubcases = [
+  { caseIds: ['GRAPH01'], scenario: 'Female-lead and red-hair traits belong to different characters, releases or canons, with repeated appearances',
+    requiredResult: 'No match across participants; successful reads keep exact supporting Statement and occurrence IDs.', status: 'pending' },
+  { caseIds: ['GRAPH02'], scenario: 'Personal and Realm interpretations of one relation are compared',
+    requiredResult: 'Speaker, exact definition, evidence and decision scope stay separate.', status: 'pending' },
+  { caseIds: ['GRAPH03', 'GRAPH05'], scenario: 'Grouped and inverse reads hydrate summaries and shared Contexts',
+    requiredResult: 'Bounded reads with distinct count grain; same-label criteria stay separate absent an admitted equivalence.', status: 'pending' },
+  { caseIds: ['GRAPH04'], scenario: 'A public frontier passes through private intermediates',
+    requiredResult: 'Private paths, names, avatars, buckets, Context/base references and personal selections stay hidden.', status: 'pending' },
+  { caseIds: ['GRAPH06'], scenario: 'An Appearance group moves or a Context preference changes',
+    requiredResult: 'Accepted Statements, semantic identity and authored edge meaning are unchanged.', status: 'pending' },
+] as const satisfies readonly PendingSubcase[];

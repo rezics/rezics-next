@@ -56,4 +56,4 @@ Current Jena qualification must independently cover guarded updates, repeated
 operation identity, concurrent creation, data fences, private disclosure and crash/
 restart. Engine-specific Fluree headers, ledger positions and history APIs are
 not target requirements. See [interaction blueprint](../implementation/interactions-and-cache.md)
-and [backend acceptance](../testing/backend-integration.md).
+and [backend acceptance](../../scripts/qa/cases/backend-integration.ts).

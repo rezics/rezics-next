@@ -3,7 +3,7 @@
 Implemented RatingContext, observation, revision, aggregation, policy and
 Realm/Global synthesis behavior lives in the [Rating owner](../../services/main/src/modules/rating/README.md),
 its model profiles and owner tests. RATE01–09 scenarios remain in the
-[acceptance source](../testing/ratings-and-event-time.md).
+[acceptance source](../../scripts/qa/cases/ratings-and-event-time.ts).
 
 ## Work not yet implemented
 

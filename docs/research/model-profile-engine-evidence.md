@@ -43,4 +43,4 @@ These experiments do not implement or qualify the production profile compiler,
 dependency-closure planner, user authorization, complete retry/recovery protocol,
 multi-graph/cross-service behavior, source round trips, rule-closure completeness,
 bulk activation or performance. Those remain explicit acceptance work in
-[model contracts](../testing/model-contracts.md) and the owning domain test plans.
+[model contracts](../../scripts/qa/cases/model-contracts.ts) and the owning domain test plans.
