@@ -144,7 +144,7 @@ test('BOOK09/VIEW07/VIEW08: media owner schema installs empty and upgrades from 
     const tables = await empty.query<{ name: string }>(`SELECT table_name AS name FROM information_schema.tables
       WHERE table_schema = 'media' ORDER BY table_name`);
     expect(tables.rows.map(row => row.name)).toEqual(['asset', 'asset_state', 'clearance_decision', 'representation', 'screen_result', 'screen_review',
-      'selection_revision', 'selection_slot', 'suppressed_digest', 'transform_job', 'upload', 'use']);
+      'selection_revision', 'selection_slot', 'suppressed_digest', 'suppression_lift', 'transform_job', 'upload', 'use']);
     // The module's typed declarations match the migration's columns, nullability and defaults.
     const columns = await empty.query<{ table: string; column: string; nullable: string; defaulted: boolean }>(`
       SELECT table_name AS table, column_name AS column, is_nullable AS nullable,

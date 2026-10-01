@@ -151,9 +151,16 @@ const clearanceDecision = media.table('clearance_decision', {
   operationId: text('operation_id').notNull(), createdAt: createdAt(),
 });
 const suppressedDigest = media.table('suppressed_digest', {
-  digest: text('digest').primaryKey(), createdAt: createdAt(),
+  digest: text('digest').notNull(), createdAt: createdAt(), id: uuid('id').primaryKey().defaultRandom(),
+  caseId: uuid('case_id'), decisionId: uuid('decision_id'),
+});
+const suppressionLift = media.table('suppression_lift', {
+  suppressionId: uuid('suppression_id').primaryKey(), caseId: uuid('case_id').notNull(),
+  decisionId: uuid('decision_id').notNull(), operationId: text('operation_id').notNull(),
+  liftedAt: timestamp('lifted_at', { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
 });
 
 /** Every media owner table, for typed queries and the schema conformance test. */
 export const mediaTables = { asset, assetState, upload, representation, transformJob, use,
-  selectionSlot, selectionRevision, screenResult, screenReview, clearanceDecision, suppressedDigest } as const;
+  selectionSlot, selectionRevision, screenResult, screenReview, clearanceDecision, suppressedDigest,
+  suppressionLift } as const;

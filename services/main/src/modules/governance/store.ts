@@ -697,6 +697,16 @@ export class GovernanceStore {
           [caseRow.id],
         )
       ).rowCount;
+      let appealUpheld = false;
+      if (ncii && releasing.has(input.outcome)) {
+        appealUpheld = input.outcome === 'reverse' && input.reversesDecisionId !== null
+          && input.answersStepId !== null && !!(await client.query(
+            "SELECT 1 FROM access.governance_process_step WHERE id = $1 AND case_id = $2 AND step = 'appeal'",
+            [input.answersStepId, caseRow.id])).rowCount;
+        if (!appealUpheld)
+          throw new GovernanceInvalid('NCII restoration must answer an upheld appeal');
+      }
+      const decisionId = randomUUID();
       const plans: import('./effects.ts').EffectPlan[] = [];
       for (const target of input.targets) {
         if (
@@ -706,7 +716,10 @@ export class GovernanceStore {
         ) {
           throw new GovernanceInvalid('participation restrictions require a future expiry');
         }
-        const plan = (await this.effects?.plan?.(target, input.outcome)) ?? {};
+        const plan = (await this.effects?.plan?.(target, input.outcome, {
+          caseId: caseRow.id, decisionId, reversesDecisionId: input.reversesDecisionId,
+          ncii, appealUpheld,
+        })) ?? {};
         if (ncii && plan.media) plan.ncii = true;
         if (['participation', 'capability'].includes(target.effect) && !plan.participant) {
           throw new GovernanceInvalid('reported target has no participation owner');
@@ -714,7 +727,6 @@ export class GovernanceStore {
         plans.push(plan);
       }
       if (reviewVisibility.size) await this.reviews!.lockRanking(client);
-      const decisionId = randomUUID();
       const sequence = (BigInt(caseRow.generation) + 1n).toString();
       await client.query(`INSERT INTO access.moderation_decision (id, kind, outcome, context, case_id, case_sequence,
           reverses_decision_id, principal_id, acting_subject, authority_kind, authority_scope_id, authority_epoch,

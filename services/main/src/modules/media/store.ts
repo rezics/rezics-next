@@ -2,6 +2,7 @@ import { withPreservationFence, type PreservationFence } from '../public-report/
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
+import { advanceContentSequence } from '../content-sequence.ts';
 
 /** Media commands in Main's Content database. Every command writes one
  * `content.receipt`, its `content.outbox` event and its media rows together. */
@@ -10,7 +11,6 @@ export class MediaConflict extends Error {}
 export class MediaStale extends Error {}
 export class MediaMissing extends Error {}
 export class MediaUnavailable extends Error {}
-export class MediaCopyRestorationUnavailable extends MediaUnavailable {}
 export class MediaFenced extends Error {}
 
 export const DEFAULT_MEDIA_CONTEXT = 'urn:rezics:media:context:default';
@@ -35,6 +35,16 @@ export interface MediaAdmission {
   actingSubject: string;
   authorityEpoch: string;
   requestDigest: string;
+}
+
+/** Saved governance basis. Only an upheld appeal supplies a lift to the owner. */
+export interface CopySuppression {
+  id: string;
+  caseId: string;
+  decisionId: string;
+}
+export interface CopySuppressionLift extends CopySuppression {
+  reversesDecisionId: string;
 }
 
 export interface ReserveUploadInput {
@@ -145,6 +155,15 @@ function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function operationUuid(operationId: string): string {
+  const value = hash(operationId);
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20, 32)}`;
+}
+
+export function copySuppressionId(decisionId: string, digest: string): string {
+  return operationUuid(`media-copy:${decisionId}:${digest}`);
+}
+
 function position(row: { data_epoch: string; sequence: string }): ContentPosition {
   return { owner: 'content', dataEpoch: row.data_epoch, sequence: String(row.sequence) };
 }
@@ -187,19 +206,7 @@ async function prior(client: PoolClient, operationId: string, digest: string, ac
 async function receipt(client: PoolClient, args: { operationId: string; digest: string;
   action: string; outcome: 'succeeded' | 'stale_head' | 'rejected'; reason?: string;
   eventType: string; payload: Record<string, unknown> }): Promise<ContentPosition> {
-  const owner = await client.query<{ data_epoch: string; sequence: string }>(
-    `UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton
-     RETURNING data_epoch, sequence::text AS sequence`);
-  if (owner.rowCount !== 1) throw new MediaUnavailable('Content owner position unavailable');
-  const at = owner.rows[0]!;
-  await client.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome,
-    reason, data_epoch, sequence) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-  [args.operationId, args.digest, args.action, args.outcome, args.reason ?? null, at.data_epoch, at.sequence]);
-  await client.query(`INSERT INTO content.outbox (id, data_epoch, sequence, operation_id, event_type,
-    recipe, payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
-  [randomUUID(), at.data_epoch, at.sequence, args.operationId, args.eventType, RECIPE,
-    JSON.stringify(args.payload)]);
-  return position(at);
+  return advanceContentSequence(client, { ...args, requestDigest: args.digest, recipe: RECIPE });
 }
 
 export function assetIri(asset: string): string { return `${ID}${asset}`; }
@@ -344,7 +351,7 @@ export class MediaStore {
           s.actor, s.authority_epoch, $2, $3, $4 FROM media.asset a
         JOIN media.asset_state s ON s.id = a.state_head
         WHERE a.id = $5 AND s.moderation <> 'suppressed'
-          AND EXISTS (SELECT 1 FROM media.suppressed_digest WHERE digest = $6)`,
+          AND media.digest_suppressed($6)`,
       [randomUUID(), operationId, at.dataEpoch, at.sequence, current.asset, verdict.sha256]);
       return { asset: current.asset, upload, representation, sha256: verdict.sha256, status: 'activated',
         reason: null, position: at, replayed: false };
@@ -642,22 +649,43 @@ export class MediaStore {
 
   /** Internal governance capability. Each call denies all exact-byte copies immediately
    * and advances at most 100 asset histories. Continue with the returned asset cursor. */
-  async suppressIdenticalCopies(originalDigest: string, after: string | null = null, limit = 100): Promise<{
+  async suppressIdenticalCopies(originalDigest: string, after: string | null = null, limit = 100,
+    basis?: CopySuppression,
+  ): Promise<{
     suppressed: number; continuation: string | null }> {
     if (!sha.test(originalDigest) || (after !== null && !uuid.test(after))
-      || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new MediaInvalid('invalid copy suppression');
-    await transaction(this.pool, async client => {
+      || !Number.isInteger(limit) || limit < 1 || limit > 100
+      || (basis && ![basis.id, basis.caseId, basis.decisionId].every(value => uuid.test(value))))
+      throw new MediaInvalid('invalid copy suppression');
+    const suppressionId = await transaction(this.pool, async client => {
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${originalDigest}`]);
-      const marker = await client.query('INSERT INTO media.suppressed_digest (digest) VALUES ($1) ON CONFLICT DO NOTHING RETURNING digest', [originalDigest]);
-      if (marker.rowCount) {
-        const operationId = `media-copy-digest:${originalDigest}`;
-        await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
-          outcome: 'succeeded', eventType: 'media.copy.suppression.started', payload: { digest: originalDigest } });
-      }
+      const existing = (await client.query<{ id: string; digest: string; case_id: string | null;
+        decision_id: string | null; lifted: boolean }>(`SELECT d.*,
+        EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id) AS lifted
+        FROM media.suppressed_digest d WHERE ($2::uuid IS NOT NULL AND d.id = $2)
+          OR ($2::uuid IS NULL AND d.digest = $1 AND NOT EXISTS (
+            SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id))
+        ORDER BY d.created_at DESC,d.id DESC LIMIT 1`, [originalDigest, basis?.id ?? null])).rows[0];
+      if (existing && (existing.digest !== originalDigest || existing.lifted
+        || (basis && (existing.case_id !== basis.caseId || existing.decision_id !== basis.decisionId))))
+        throw new MediaStale('copy suppression basis changed');
+      if (existing) return existing.id;
+      const id = basis?.id ?? randomUUID();
+      await client.query(`INSERT INTO media.suppressed_digest (id,digest,case_id,decision_id)
+        VALUES ($1,$2,$3,$4)`, [id, originalDigest, basis?.caseId ?? null, basis?.decisionId ?? null]);
+      const operationId = `media-copy-digest:${id}`;
+      await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
+        outcome: 'succeeded', eventType: 'media.copy.suppression.started',
+        payload: { digest: originalDigest, suppression: id, caseId: basis?.caseId ?? null,
+          decisionId: basis?.decisionId ?? null } });
+      return id;
     });
     return transaction(this.pool, async client => {
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${originalDigest}`]);
+      if ((await client.query('SELECT 1 FROM media.suppression_lift WHERE suppression_id = $1',
+        [suppressionId])).rowCount) throw new MediaStale('copy suppression has been lifted');
       const candidates = await client.query<{ id: string }>(`SELECT DISTINCT asset_id AS id FROM media.representation
         WHERE kind = 'original' AND byte_digest = $1 AND ($2::uuid IS NULL OR asset_id > $2)
         ORDER BY asset_id LIMIT $3`, [originalDigest, after, limit + 1]);
@@ -667,7 +695,7 @@ export class MediaStore {
         const row = (await client.query(`SELECT a.state_head, s.* FROM media.asset a
           JOIN media.asset_state s ON s.id = a.state_head WHERE a.id = $1 FOR UPDATE OF a`, [asset.id])).rows[0]!;
         if (row.moderation === 'suppressed' || row.lifecycle === 'erased') continue;
-        const operationId = `media-copy:${originalDigest}:${asset.id}`;
+        const operationId = `media-copy:${suppressionId}:${asset.id}`;
         const id = randomUUID();
         const at = await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
           outcome: 'succeeded', eventType: 'media.copy.suppressed', payload: { asset: asset.id } });
@@ -689,15 +717,26 @@ export class MediaStore {
     source: string,
     expectedState: string,
     suppressed: boolean,
+    lift?: CopySuppressionLift,
   ): Promise<string> {
-    if (!uuid.test(source) || !uuid.test(expectedState) || operationId.length > 160) {
+    if (!uuid.test(source) || !uuid.test(expectedState) || operationId.length > 160
+      || (lift && (suppressed || ![lift.id, lift.caseId, lift.decisionId,
+        lift.reversesDecisionId].every(value => uuid.test(value))))) {
       throw new MediaInvalid('invalid moderation original');
     }
-    const requestDigest = hash(JSON.stringify([operationId, source, expectedState, suppressed]));
+    const requestDigest = hash(JSON.stringify(lift
+      ? [operationId, source, expectedState, suppressed, lift]
+      : [operationId, source, expectedState, suppressed]));
     return transaction(this.pool, async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
       if (await prior(client, operationId, requestDigest, 'media.screen.review'))
         return operationId;
+      const original = (await client.query<{ byte_digest: string }>(
+        "SELECT byte_digest FROM media.representation WHERE id = $1 AND kind = 'original'",
+        [source])).rows[0];
+      if (!original) throw new MediaStale('media original is unavailable');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`media-copy:${original.byte_digest}`]);
       const row = (
         await client.query(
           `SELECT a.id,a.state_head,s.*,p.byte_digest FROM media.asset a
@@ -709,25 +748,31 @@ export class MediaStore {
       ).rows[0];
       if (!row || row.state_head !== expectedState || row.lifecycle !== 'active')
         throw new MediaStale('media state changed');
-      if (
-        !suppressed &&
-        (
-          await client.query('SELECT 1 FROM media.suppressed_digest WHERE digest = $1', [
-            row.byte_digest,
-          ])
-        ).rowCount
-      )
-        throw new MediaCopyRestorationUnavailable('identical-copy reversal owner is unavailable');
+      if (lift) {
+        const basis = (await client.query(`SELECT 1 FROM media.suppressed_digest d
+          WHERE d.id = $1 AND d.digest = $2 AND d.case_id = $3 AND d.decision_id = $4
+            AND NOT EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id)
+            AND NOT EXISTS (SELECT 1 FROM media.suppressed_digest other
+              WHERE other.digest = d.digest AND other.id <> d.id AND NOT EXISTS (
+                SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = other.id))`,
+        [lift.id, row.byte_digest, lift.caseId, lift.reversesDecisionId])).rowCount;
+        if (!basis) throw new MediaStale('appeal suppression basis changed');
+      } else if (!suppressed && (await client.query(
+        'SELECT 1 WHERE media.digest_suppressed($1)', [row.byte_digest])).rowCount) {
+        throw new MediaStale('identical-copy restoration requires an upheld appeal');
+      }
       const at = await receipt(client, {
         operationId,
         digest: requestDigest,
         action: 'media.screen.review',
         outcome: 'succeeded',
         eventType: 'media.screen.reviewed',
-        payload: { asset: row.asset_id, source, suppressed },
+        payload: { asset: row.asset_id, source, suppressed, lift: lift ?? null },
       });
-      const effect = hash(operationId);
-      const decision = `${effect.slice(0, 8)}-${effect.slice(8, 12)}-${effect.slice(12, 16)}-${effect.slice(16, 20)}-${effect.slice(20, 32)}`;
+      if (lift) await client.query(`INSERT INTO media.suppression_lift
+        (suppression_id,case_id,decision_id,operation_id) VALUES ($1,$2,$3,$4)`,
+      [lift.id, lift.caseId, lift.decisionId, operationId]);
+      const decision = operationUuid(operationId);
       await client.query(
         `INSERT INTO media.clearance_decision (id,source_id,decision_id,clearance,operation_id)
         VALUES ($1,$2,$3,$4,$5)`,
@@ -753,6 +798,59 @@ export class MediaStore {
         ],
       );
       return operationId;
+    });
+  }
+
+  /** After the appeal receipt lifted its exact suppression, restore at most 100
+   * eligible copy histories. Other staff decisions and deleted/erased assets win. */
+  async restoreIdenticalCopies(lift: CopySuppressionLift, after: string | null = null, limit = 100):
+    Promise<{ restored: number; continuation: string | null }> {
+    if (![lift.id, lift.caseId, lift.decisionId, lift.reversesDecisionId].every(value => uuid.test(value))
+      || (after !== null && !uuid.test(after)) || !Number.isInteger(limit) || limit < 1 || limit > 100)
+      throw new MediaInvalid('invalid copy restoration');
+    return transaction(this.pool, async client => {
+      await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
+      const row = (await client.query<{ digest: string }>(`SELECT d.digest
+        FROM media.suppressed_digest d JOIN media.suppression_lift l ON l.suppression_id = d.id
+        WHERE d.id = $1 AND d.decision_id = $2 AND l.case_id = $3 AND l.decision_id = $4`,
+      [lift.id, lift.reversesDecisionId, lift.caseId, lift.decisionId])).rows[0];
+      if (!row) throw new MediaStale('upheld appeal receipt is unavailable');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${row.digest}`]);
+      if ((await client.query('SELECT 1 WHERE media.digest_suppressed($1)', [row.digest])).rowCount)
+        throw new MediaStale('a later decision suppressed these copies');
+      const candidates = await client.query<{ id: string }>(`SELECT DISTINCT asset_id AS id FROM media.representation
+        WHERE kind = 'original' AND byte_digest = $1 AND ($2::uuid IS NULL OR asset_id > $2)
+        ORDER BY asset_id LIMIT $3`, [row.digest, after, limit + 1]);
+      const batch = candidates.rows.slice(0, limit);
+      let restored = 0;
+      for (const asset of batch) {
+        const current = (await client.query(`SELECT a.state_head,s.*,p.id AS source,
+          p.operation_id AS activation,p.clearance_reason,p.availability
+          FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
+          JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original' AND p.byte_digest = $2
+          WHERE a.id = $1 ORDER BY p.id LIMIT 1 FOR UPDATE OF a,p`, [asset.id, row.digest])).rows[0]!;
+        if (current.lifecycle !== 'active' || current.availability !== 'available'
+          || current.moderation !== 'suppressed'
+          || (current.operation_id !== `media-copy:${lift.id}:${asset.id}`
+            && !(current.operation_id === current.activation
+              && current.clearance_reason === 'identical-copy-suppressed'))) continue;
+        const operationId = `media-copy-restore:${lift.decisionId}:${asset.id}`;
+        const at = await receipt(client, { operationId, digest: hash(operationId), action: 'media.screen.review',
+          outcome: 'succeeded', eventType: 'media.copy.restored',
+          payload: { asset: asset.id, suppression: lift.id, caseId: lift.caseId, decisionId: lift.decisionId } });
+        if (current.clearance_reason === 'identical-copy-suppressed') {
+          await client.query(`INSERT INTO media.clearance_decision
+            (id,source_id,decision_id,clearance,operation_id) VALUES ($1,$2,$3,'cleared',$4)`,
+          [randomUUID(), current.source, operationUuid(operationId), operationId]);
+        }
+        await client.query(`INSERT INTO media.asset_state (id,asset_id,predecessor,disclosure,moderation,
+          lifecycle,erasure_epoch,actor,authority_epoch,operation_id,data_epoch,sequence)
+          VALUES ($1,$2,$3,$4,'none',$5,$6,$7,$8,$9,$10,$11)`,
+        [randomUUID(), asset.id, current.state_head, current.disclosure, current.lifecycle,
+          current.erasure_epoch, current.actor, current.authority_epoch, operationId, at.dataEpoch, at.sequence]);
+        restored++;
+      }
+      return { restored, continuation: candidates.rows.length > limit ? batch.at(-1)!.id : null };
     });
   }
 

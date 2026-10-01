@@ -1,5 +1,6 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { governanceTables } from '../../../services/main/src/modules/governance/schema.ts';
+import { mediaTables } from '../../../services/main/src/modules/media/typed-schema.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -48,6 +49,16 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       const columns = await stack.accessPool.query<{ column_name: string }>(
         `SELECT column_name
         FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+        [config.schema, config.name],
+      );
+      expect(columns.rows.map((row) => row.column_name).sort()).toEqual(
+        config.columns.map((column) => column.name).sort(),
+      );
+    }
+    for (const table of Object.values(mediaTables)) {
+      const config = getTableConfig(table);
+      const columns = await stack.contentPool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
         [config.schema, config.name],
       );
       expect(columns.rows.map((row) => row.column_name).sort()).toEqual(
@@ -636,6 +647,11 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       author.upload(bytes),
       author.upload(bytes),
     ]);
+    const copyBasis = await stack.store.publicationBasis([copies[1]!.asset], author.actor);
+    const copyUse = randomUUID();
+    await stack.store.createPublicationUses(randomUUID(), author.actor, work.work, [
+      { ...copyBasis[0]!, use: copyUse },
+    ]);
     const nciiKey = randomUUID();
     const nciiExtra = {
       contactEmail: 'safe@example.test',
@@ -777,8 +793,9 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       ).rowCount,
     ).toBe(1);
 
-    // G-571's immutable Content marker has no reversal primitive yet. An appeal
-    // must expose that failed effect rather than release the fence or claim completion.
+    expect((await call('GET', `/v1/media/uses/${copyUse}`)).status).toBe(404);
+
+    // A regular reversal cannot lift the digest. Staff must uphold a retained appeal.
     const nciiReversal = await input(
       ncii,
       [target(copies[0]!)],
@@ -786,13 +803,122 @@ test('G-565: platform queue, exclusive claims, immutable reasons, resumable owne
       'reverse',
       nciiDone.decisionId,
     );
-    await json(await decide(nciiReversal), 202);
-    const unavailableRestoration = await json<DecisionResult>(await decide(nciiReversal), 202);
-    expect(unavailableRestoration.operation.items[0]!.state).toBe('failed');
-    expect(unavailableRestoration.operation.items[0]!.error).toBe(
-      'identical-copy-restoration-unavailable',
+    expect((await decide(nciiReversal)).status).toBe(400);
+    const nciiNotices = await json<typeof notices>(
+      await call('GET', '/v1/safety-notices', undefined, author.token),
+      200,
     );
-    expect((await stack.store.readAsset(copies[0]!.asset))!.moderation).toBe('suppressed');
+    const nciiNotice = nciiNotices.items.find((item) => item.caseId === ncii.caseId)!;
+    const nciiAppeal = await json<{ stepId: string }>(
+      await call(
+        'POST',
+        `/v1/public-reports/${ncii.caseId}/correspondence`,
+        {
+          kind: 'appeal',
+          statement: 'The staff restriction is mistaken.',
+          contentLanguage: 'sw-KE',
+        },
+        undefined,
+        randomUUID(),
+        nciiNotice.credential,
+      ),
+      200,
+    );
+    nciiReversal.answersStepId = nciiAppeal.stepId;
+    await json(await decide(nciiReversal), 202);
+    loseAfterOrdinal = 1;
+    const lostLift = await json<DecisionResult>(await decide(nciiReversal), 202);
+    expect(lostLift.operation.items[0]!.state).toBe('uncertain');
+    const restoredCopies = await json<DecisionResult>(await decide(nciiReversal), 200);
+    expect(restoredCopies.operation.status).toBe('completed');
+    for (const copy of [...copies, later]) {
+      expect((await stack.store.readAsset(copy.asset))!.moderation).toBe('none');
+      expect((await original(copy.representation))!.clearance).toBe('cleared');
+    }
+    const copyDelivery = await call('GET', `/v1/media/uses/${copyUse}`);
+    expect(copyDelivery.status).toBe(200);
+    expect(sha(new Uint8Array(await copyDelivery.arrayBuffer()))).toBe(sha(bytes));
+    const lift = (
+      await stack.contentPool.query<{ suppression_id: string; operation_id: string }>(
+        'SELECT suppression_id,operation_id FROM media.suppression_lift WHERE decision_id = $1',
+        [restoredCopies.decisionId],
+      )
+    ).rows;
+    expect(lift).toHaveLength(1);
+    expect(
+      (
+        await stack.contentPool.query(
+          `SELECT 1 FROM content.receipt r JOIN content.outbox o
+      USING (operation_id,data_epoch,sequence) WHERE r.operation_id = $1`,
+          [lift[0]!.operation_id],
+        )
+      ).rowCount,
+    ).toBe(1);
+    await expect(
+      stack.contentPool.query('DELETE FROM media.suppressed_digest WHERE id = $1', [
+        lift[0]!.suppression_id,
+      ]),
+    ).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      stack.contentPool.query(
+        'UPDATE media.suppression_lift SET decision_id = $2 WHERE suppression_id = $1',
+        [lift[0]!.suppression_id, randomUUID()],
+      ),
+    ).rejects.toMatchObject({ code: '23514' });
+    await expect(
+      stack.contentPool.query(
+        `INSERT INTO media.suppression_lift
+      (suppression_id,case_id,decision_id,operation_id) VALUES ($1,$2,$3,$4)`,
+        [lift[0]!.suppression_id, ncii.caseId, restoredCopies.decisionId, lift[0]!.operation_id],
+      ),
+    ).rejects.toMatchObject({ code: '23505' });
+
+    // The hold protects retained bytes after a successful appeal too.
+    expect(
+      (
+        await call(
+          'POST',
+          `/v1/media/assets/${copies[0]!.asset}/state`,
+          {
+            profile: 'media-asset-state-v1',
+            expectedState: (await stack.store.readAsset(copies[0]!.asset))!.state,
+            disclosure: 'public',
+            lifecycle: 'erased',
+            actingSubject: author.actor,
+          },
+          author.token,
+        )
+      ).status,
+    ).toBe(403);
+    expect((await stack.store.readAsset(copies[0]!.asset))!.lifecycle).toBe('active');
+
+    const reReported = await report(copies[0]!.asset, 'ncii', nciiExtra);
+    await json(await claim(reReported), 200);
+    const renewedRestriction = await input(reReported, [target(copies[0]!)]);
+    await json(await decide(renewedRestriction), 202);
+    const reSuppressed = await json<DecisionResult>(await decide(renewedRestriction), 200);
+    expect(reSuppressed.operation.status).toBe('completed');
+    expect(
+      (
+        await stack.contentPool.query('SELECT id FROM media.suppressed_digest WHERE digest = $1', [
+          sha(bytes),
+        ])
+      ).rowCount,
+    ).toBe(2);
+    expect((await call('GET', `/v1/media/uses/${copyUse}`)).status).toBe(404);
+    const afterReReport = await author.upload(bytes);
+    expect((await original(afterReReport.representation))!.clearance).toBe('rejected');
+    // Replaying the old upheld appeal does not lift the new suppression.
+    await json(await decide(nciiReversal), 200);
+    expect((await call('GET', `/v1/media/uses/${copyUse}`)).status).toBe(404);
+    expect(
+      (
+        await stack.contentPool.query(
+          'SELECT suppression_id FROM media.suppression_lift WHERE decision_id = $1',
+          [restoredCopies.decisionId],
+        )
+      ).rowCount,
+    ).toBe(1);
 
     clock = new Date();
     const copyrightAsset = await author.upload(png(24, 24));

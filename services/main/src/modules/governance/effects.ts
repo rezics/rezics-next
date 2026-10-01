@@ -5,13 +5,16 @@ import { ContentModeration, ContentModerationConflict, ContentModerationStale }
 import type { DecisionOutcome, DecisionTargetInput } from './store.ts';
 import { GovernanceConflict, GovernanceStale, GovernanceUnavailable } from './store.ts';
 import type { Pool } from 'pg';
-import { MediaStore, MediaStale, MediaCopyRestorationUnavailable } from '../media/store.ts';
+import { MediaStore, MediaStale, copySuppressionId,
+  type CopySuppression, type CopySuppressionLift } from '../media/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 
 export interface EffectPlan {
   participant?: string;
   media?: { source: string; state: string; digest: string };
   ncii?: boolean;
+  suppression?: CopySuppression;
+  lift?: CopySuppressionLift;
   outcome?: DecisionOutcome;
 }
 export interface EffectReceipt {
@@ -37,7 +40,10 @@ export const restrictionOwners = {
 } as const;
 
 export interface ModerationEffects {
-  plan?(target: DecisionTargetInput, outcome: DecisionOutcome): Promise<EffectPlan>;
+  plan?(target: DecisionTargetInput, outcome: DecisionOutcome, context?: {
+    caseId: string; decisionId: string; reversesDecisionId: string | null;
+    ncii: boolean; appealUpheld: boolean;
+  }): Promise<EffectPlan>;
   apply(operationId: string, ordinal: number, target: DecisionTargetInput,
     plan?: EffectPlan,
     continuation?: string | null,
@@ -56,7 +62,7 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
 ): ModerationEffects {
   const store = media ? new MediaStore(media.pool, media.core) : undefined;
   return {
-    async plan(target) {
+    async plan(target, outcome, context) {
       const plan: EffectPlan = {};
       if (media && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target.resource)) {
         const original = (
@@ -86,6 +92,23 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
             state: original.state_head,
             digest: original.byte_digest,
           };
+          if (context?.ncii) {
+            if (['restore', 'reverse'].includes(outcome)) {
+              if (!context.appealUpheld || !context.reversesDecisionId)
+                throw new GovernanceStale('identical-copy restoration requires an upheld appeal');
+              const suppression = (await media.pool.query<{ id: string }>(
+                `SELECT id FROM media.suppressed_digest d WHERE digest = $1
+                  AND case_id = $2 AND decision_id = $3 AND NOT EXISTS (
+                    SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id)`,
+                [original.byte_digest, context.caseId, context.reversesDecisionId])).rows[0];
+              if (!suppression) throw new GovernanceStale('appealed copy suppression is unavailable');
+              plan.lift = { id: suppression.id, caseId: context.caseId, decisionId: context.decisionId,
+                reversesDecisionId: context.reversesDecisionId };
+            } else {
+              plan.suppression = { id: copySuppressionId(context.decisionId, original.byte_digest),
+                caseId: context.caseId, decisionId: context.decisionId };
+            }
+          }
         }
         const reply = (
           await media.pool.query<{ author: string }>(
@@ -127,19 +150,25 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         try {
           // The original state receipt precedes digest closure. Replays reconcile
           // it before advancing a bounded copy batch.
-          await store.moderateOriginal(receipt, plan.media.source, plan.media.state, restricted);
+          if (plan.ncii && !(restricted ? plan.suppression : plan.lift))
+            throw new GovernanceStale('NCII decision has no saved suppression basis');
+          await store.moderateOriginal(receipt, plan.media.source, plan.media.state, restricted, plan.lift);
           if (restricted && plan.ncii) {
             const result = await store.suppressIdenticalCopies(
               plan.media.digest,
               continuation ?? null,
+              100,
+              plan.suppression,
             );
+            return { receipt, continuation: result.continuation };
+          }
+          if (!restricted && plan.lift) {
+            const result = await store.restoreIdenticalCopies(plan.lift, continuation ?? null);
             return { receipt, continuation: result.continuation };
           }
           return { receipt };
         } catch (error) {
           if (error instanceof MediaStale) throw new GovernanceStale(error.message);
-          if (error instanceof MediaCopyRestorationUnavailable)
-            throw new KnownEffectFailure('identical-copy-restoration-unavailable');
           throw error;
         }
       }

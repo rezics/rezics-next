@@ -12,7 +12,6 @@ const legacyAdvances: Record<string, number> = {
   'services/content/src/core.ts': 1,
   'services/content/src/comments.ts': 2,
   'services/content/src/moderation.ts': 1,
-  'services/main/src/modules/media/store.ts': 1,
   'services/main/src/modules/media-screen/store.ts': 3,
   'services/main/src/modules/progress/store.ts': 1,
   'services/main/src/modules/protection/content-store.ts': 1,
