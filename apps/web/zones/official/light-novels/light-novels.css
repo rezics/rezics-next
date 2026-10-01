@@ -47,15 +47,13 @@
     }
 
     .ln-more,
-    .ln-footer a,
-    .ln-source a {
+    .ln-footer a {
       color: var(--primary);
       text-underline-offset: 3px;
     }
 
     .ln-more:hover,
-    .ln-footer a:hover,
-    .ln-source a:hover {
+    .ln-footer a:hover {
       text-decoration: underline;
     }
 

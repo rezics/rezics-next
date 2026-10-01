@@ -1,10 +1,12 @@
-import type { ZoneReleaseFilterSpec } from '@rezics/zone-sdk';
+import type { ZoneReleaseFilterSpec, ZoneText } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AdaptContext } from '../realm/adapt.ts';
 import { reader, settle } from '../work-page/read.ts';
 import type { Loaded } from '../work-page/types.ts';
-import { namesOf, readRealization, readRelease } from '../work-levels/read.ts';
-import type { Names, Realization, Release } from '../work-levels/types.ts';
+import { zoneContentText } from '../language/untagged.ts';
+import { readAgent } from '../realm/read.ts';
+import { readRealization, readRelease } from '../work-levels/read.ts';
+import type { Realization, Release } from '../work-levels/types.ts';
 import { type ReleaseHit, type ReleaseResult, releaseWork, SHOWN_MATCHES } from './adapt.ts';
 import { type ReleaseFilterState, releaseGroup } from './state.ts';
 
@@ -52,8 +54,15 @@ async function readRecords(hits: readonly ReleaseHit[]) {
     const read = await readRealization(uuid(work), uuid(realization));
     if (read.ok) realizations.set(realization, read.data);
   }));
-  const names: Names = await namesOf([...realizations.values()].flatMap(item => item.translators));
-  return { releases, realizations, names };
+  // A translator is an Agent; its public profile names it, and a profile Main will not give leaves it unnamed.
+  const translators = new Map<string, ZoneText>();
+  await Promise.all([...new Set([...realizations.values()].flatMap(item => item.translators))].map(async agent => {
+    const read = await readAgent(uuid(agent));
+    if (read.ok) translators.set(agent, read.data.displayNameInfo
+      ? { value: read.data.displayNameInfo.value, lang: read.data.displayNameInfo.language,
+        dir: read.data.displayNameInfo.direction } : zoneContentText(read.data.displayName));
+  }));
+  return { releases, realizations, translators };
 }
 
 /** One page of a Zone's release-filtered browse; a failed record read only drops that release's line. */

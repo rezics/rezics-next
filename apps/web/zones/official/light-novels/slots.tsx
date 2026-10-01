@@ -64,7 +64,7 @@ export function LightNovelFooter({ zone, Link }: ZoneSlotProps) {
       <section aria-labelledby="ln-coverage">
         <h2 id="ln-coverage" className="ln-footer-title">{t.coverageTitle}</h2>
         <p>{t.coverageBody}</p>
-        <p className="ln-source">{t.attribution}{' '}<Link href="https://vndb.org" rel="noreferrer">{t.attributionLink}</Link></p>
+        <p className="ln-source">{t.attribution}</p>
       </section>
       <section aria-labelledby="ln-sibling">
         <h2 id="ln-sibling" className="ln-footer-title">{t.siblingTitle}</h2>

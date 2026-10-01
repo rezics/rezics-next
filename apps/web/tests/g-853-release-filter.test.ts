@@ -62,8 +62,7 @@ describe('G-853 a result says only what Main matched', () => {
   const release = (id: string, overrides: Partial<Release>): Release => ({ id: iri(id), platform: 'Windows',
     status: 'official', contentLanguages: ['en'], coverage: [], ...overrides } as unknown as Release);
   const realization = (id: string, translators: string[]) => ({ id: iri(id), translators } as unknown as Realization);
-  const name = (value: string) => ({ status: 'available', reference: '', type: 'agent',
-    name: { value, language: 'en', direction: 'ltr' } });
+  const name = (value: string) => ({ value, lang: 'en', dir: 'ltr' as const });
   const records = (): ReleaseRecords => ({
     releases: new Map([
       [iri('10'), release('10', { status: 'unofficial', coverage: [coverage('ja', 'complete', iri('20')),
@@ -71,7 +70,7 @@ describe('G-853 a result says only what Main matched', () => {
       // Read, but not named by Main for this Work: it must never reach a card.
       [iri('11'), release('11', { platform: 'Switch', coverage: [coverage('en', 'complete', iri('22'))] })]]),
     realizations: new Map([[iri('22'), realization('22', [iri('30')])], [iri('21'), realization('21', [iri('31')])]]),
-    names: new Map([[iri('30'), name('Translation Club')], [iri('31'), name('Wrong Group')]]) as never });
+    translators: new Map([[iri('30'), name('Translation Club')], [iri('31'), name('Wrong Group')]]) });
   const hit = (matched: string[], more = false): ReleaseHit => ({ id: work,
     title: { value: 'A visual novel', language: 'en', direction: 'ltr', basis: 'requested' } as never,
     cover: null, matchedReleases: matched, moreMatchedReleases: more });

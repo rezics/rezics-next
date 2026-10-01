@@ -1,7 +1,7 @@
 import type { ZoneMatchedRelease, ZoneReleaseFilterSpec, ZoneReleaseMatches, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import { type AdaptContext, zoneImage, zoneText, workLink } from '../realm/adapt.ts';
 import type { MainAvatar, MainName } from '../realm/types.ts';
-import type { Names, Realization, Release } from '../work-levels/types.ts';
+import type { Realization, Release } from '../work-levels/types.ts';
 import { type ReleaseFilterState } from './state.ts';
 
 /** One result of Main's release query: a Work and the IDs of the releases that satisfied the group. */
@@ -10,11 +10,12 @@ export interface ReleaseHit {
   matchedReleases: readonly string[]; moreMatchedReleases: boolean;
 }
 
-/** The records read for the matched releases: each release, and the realizations it carries. */
+/** The records read for the matched releases: each release, the realizations it carries and the names of their translators. */
 export interface ReleaseRecords {
   releases: ReadonlyMap<string, Release>;
   realizations: ReadonlyMap<string, Realization>;
-  names: Names;
+  /** Translator Agents by IRI, named by their public profile; one Agent Main will not name is simply absent. */
+  translators: ReadonlyMap<string, ZoneText>;
 }
 
 /** How many matched releases of one Work are read and shown; Main names up to eight. */
@@ -37,8 +38,8 @@ export function matchedRelease(release: Release, work: string, state: ReleaseFil
   const entry = matchedEntry(release, work, state);
   const realization = entry?.realization ? records.realizations.get(entry.realization) : undefined;
   const translators = (realization?.translators ?? []).flatMap((agent): ZoneText[] => {
-    const summary = records.names.get(agent);
-    return summary?.status === 'available' ? [zoneText(summary.name)] : [];
+    const name = records.translators.get(agent);
+    return name ? [name] : [];
   });
   return { id: release.id, language: entry?.language ?? release.contentLanguages[0] ?? null,
     platform: release.platform, completeness: entry?.completeness ?? 'unknown',

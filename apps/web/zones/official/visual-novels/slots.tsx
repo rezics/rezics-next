@@ -51,30 +51,28 @@ export function VisualNovelCard({ zone, matches, fallback }: WorkCardSlotProps) 
   </div>;
 }
 
-function Source({ zone, Link, note }: Pick<ZoneSlotProps, 'zone' | 'Link'> & { note?: boolean }) {
+/** VNDB's name and licences, in text: a package links only into the platform. */
+function Source({ zone, note }: Pick<ZoneSlotProps, 'zone'> & { note?: boolean }) {
   const t = strings(zone.locale);
-  return <p className="vn-source">
-    {note ? <>{t.filterNote}{' '}</> : null}{t.attribution}{' '}
-    <Link href="https://vndb.org" rel="noreferrer">{t.attributionLink}</Link>
-  </p>;
+  return <p className="vn-source">{note ? <>{t.filterNote}{' '}</> : null}{t.attribution}</p>;
 }
 
 /** Above the results: the release filter, and where its data comes from. */
-export function VisualNovelBrowseHeader({ zone, filter, Link }: BrowseHeaderSlotProps) {
+export function VisualNovelBrowseHeader({ zone, filter }: BrowseHeaderSlotProps) {
   return <div className="vn-browse-head">
     {filter}
-    <Source zone={zone} Link={Link} note />
+    <Source zone={zone} note />
   </div>;
 }
 
 /** A visual novel's page leads with where it can be played, then the description. */
-export function VisualNovelDetail({ zone, regions, Link }: WorkDetailSlotProps) {
+export function VisualNovelDetail({ zone, regions }: WorkDetailSlotProps) {
   const t = strings(zone.locale);
   return <div className="vn-detail">
     <section aria-labelledby="vn-availability" className="vn-availability">
       <h2 id="vn-availability" className="sr-only">{t.availability}</h2>
       {regions.availability}
-      <Source zone={zone} Link={Link} />
+      <Source zone={zone} />
     </section>
     <section aria-labelledby="vn-about" className="vn-about">
       <h2 id="vn-about" className="sr-only">{t.about}</h2>
@@ -93,7 +91,7 @@ export function VisualNovelFooter({ zone, Link }: ZoneSlotProps) {
       <section aria-labelledby="vn-coverage">
         <h2 id="vn-coverage" className="vn-footer-title">{t.coverageTitle}</h2>
         <p>{t.coverageBody}</p>
-        <Source zone={zone} Link={Link} />
+        <Source zone={zone} />
       </section>
       <section aria-labelledby="vn-sibling">
         <h2 id="vn-sibling" className="vn-footer-title">{t.siblingTitle}</h2>

@@ -56,13 +56,11 @@
       line-height: 1.5;
     }
 
-    .vn-source a,
     .vn-footer a {
       color: var(--primary);
       text-underline-offset: 3px;
     }
 
-    .vn-source a:hover,
     .vn-footer a:hover {
       text-decoration: underline;
     }
