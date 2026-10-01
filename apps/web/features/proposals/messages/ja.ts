@@ -62,6 +62,8 @@ export default {
   blockerTerminal: insert('この修正はすでに判断されています：{{outcome}}。', { outcome: String }),
   blockerOwnerUnavailable: '作品の記録に今は接続できません。しばらくしてからもう一度お試しください。',
   blockerBudgetExhausted: 'この変更は作品で許される以上に原文を引用しています。引用を短くするか削除してから修正してください。',
+  blockerOwnerAuthority: '適用するには、変更対象の編集権限が必要です。権限を持つ人が適用してください。',
+  blockerOwnerRefused: '適用できませんでした。含まれる変更が拒否されたため、何も適用されていません。',
   blockerRevisionRequired: 'まずこの修正を改訂してください。',
   blockerApplyPending: 'REZICS がまだ適用中です。あとで確認するか、状態を確認してください。',
   staleApprovals: plural({ one: insert('修正が改訂されたため、以前の承認 {{count}} 件は無効になりました。'), other: insert('修正が改訂されたため、以前の承認 {{count}} 件は無効になりました。') }, { count: asValue(number()) }),

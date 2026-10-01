@@ -62,6 +62,8 @@ export default {
   blockerTerminal: insert('Über diese Korrektur ist bereits entschieden: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'Der Datensatz des Werks ist gerade nicht erreichbar. Versuch es gleich noch einmal.',
   blockerBudgetExhausted: 'Diese Änderung würde mehr aus der Quelle zitieren, als das Werk erlaubt. Kürze oder entferne Zitate und überarbeite sie dann.',
+  blockerOwnerAuthority: 'Zum Anwenden braucht es Bearbeitungsrechte für das, was sich ändert. Jemand mit diesen Rechten muss es anwenden.',
+  blockerOwnerRefused: 'Das ließ sich nicht anwenden: Eine enthaltene Änderung wurde abgelehnt. Es wurde nichts angewendet.',
   blockerRevisionRequired: 'Überarbeite zuerst die Korrektur.',
   blockerApplyPending: 'REZICS wendet dies noch an. Sieh später nach oder prüfe den Status.',
   staleApprovals: plural({ one: insert('{{count}} frühere Genehmigung zählt nicht mehr, weil die Korrektur überarbeitet wurde.'), other: insert('{{count}} frühere Genehmigungen zählen nicht mehr, weil die Korrektur überarbeitet wurde.') }, { count: asValue(number()) }),

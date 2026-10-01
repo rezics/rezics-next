@@ -62,6 +62,8 @@ export default {
   blockerTerminal: insert('Esta corrección ya se decidió: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'El registro de la obra no está disponible ahora. Inténtalo de nuevo en un momento.',
   blockerBudgetExhausted: 'Este cambio citaría más de la fuente de lo que la obra permite. Acorta o quita citas y luego revísalo.',
+  blockerOwnerAuthority: 'Para aplicarlo hacen falta permisos de edición sobre lo que cambia. Debe aplicarlo alguien con esos permisos.',
+  blockerOwnerRefused: 'No se pudo aplicar: se rechazó un cambio que contiene. No se aplicó nada.',
   blockerRevisionRequired: 'Primero revisa la corrección.',
   blockerApplyPending: 'REZICS todavía la está aplicando. Vuelve a mirar más tarde o comprueba el estado.',
   staleApprovals: plural({ one: insert('{{count}} aprobación anterior ya no cuenta porque la corrección se revisó.'), other: insert('{{count}} aprobaciones anteriores ya no cuentan porque la corrección se revisó.') }, { count: asValue(number()) }),

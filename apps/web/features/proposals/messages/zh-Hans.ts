@@ -62,6 +62,8 @@ export default {
   blockerTerminal: insert('这项更正已经有结果：{{outcome}}。', { outcome: String }),
   blockerOwnerUnavailable: '目前无法连接作品的记录，请稍后再试。',
   blockerBudgetExhausted: '此修改引用原文的篇幅超出作品允许的范围。请缩短或删除引文后再修订。',
+  blockerOwnerAuthority: '应用此修改需要对所改内容有编辑权限，须由有权限的人来应用。',
+  blockerOwnerRefused: '无法应用：其中一项修改被拒绝，未应用任何内容。',
   blockerRevisionRequired: '请先修订这项更正。',
   blockerApplyPending: 'REZICS 仍在应用这项更正。请稍后再查看，或执行恢复检查。',
   staleApprovals: plural({ one: insert('有 {{count}} 个此前的批准因更正已修订而失效。'), other: insert('有 {{count}} 个此前的批准因更正已修订而失效。') }, { count: asValue(number()) }),

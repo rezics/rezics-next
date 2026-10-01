@@ -68,6 +68,8 @@ export const messages = {
   blockerTerminal: insert('This correction was already decided: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: 'The Work’s record can’t be reached right now. Try again shortly.',
   blockerBudgetExhausted: 'This change would quote more of the source than the Work allows. Shorten or remove quotations, then revise.',
+  blockerOwnerAuthority: 'Applying this needs editing rights on what it changes. Someone with those rights has to apply it.',
+  blockerOwnerRefused: 'This could not be applied: a change it contains was refused. Nothing was applied.',
   blockerRevisionRequired: 'Revise the correction first.',
   blockerApplyPending: 'REZICS is still applying this. Check again, or recover it.',
   staleApprovals: plural({ one: insert('{{count}} earlier approval no longer counts because the correction was revised.'), other: insert('{{count}} earlier approvals no longer count because the correction was revised.') }, { count: asValue(number()) }),

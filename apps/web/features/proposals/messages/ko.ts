@@ -62,6 +62,8 @@ export default {
   blockerTerminal: insert('이 수정 요청은 이미 결정되었습니다: {{outcome}}.', { outcome: String }),
   blockerOwnerUnavailable: '지금은 작품 기록에 연결할 수 없습니다. 잠시 후 다시 시도하세요.',
   blockerBudgetExhausted: '이 변경은 작품에서 허용하는 것보다 원문을 더 많이 인용합니다. 인용을 줄이거나 삭제한 뒤 수정하세요.',
+  blockerOwnerAuthority: '적용하려면 변경 대상에 대한 편집 권한이 필요합니다. 권한이 있는 사람이 적용해야 합니다.',
+  blockerOwnerRefused: '적용할 수 없습니다. 포함된 변경이 거부되어 아무것도 적용되지 않았습니다.',
   blockerRevisionRequired: '먼저 이 수정 요청을 고치세요.',
   blockerApplyPending: 'REZICS이 아직 적용하는 중입니다. 잠시 후 확인하거나 상태를 확인하세요.',
   staleApprovals: plural({ one: insert('수정 요청이 고쳐져서 이전 승인 {{count}}개가 더 이상 유효하지 않습니다.'), other: insert('수정 요청이 고쳐져서 이전 승인 {{count}}개가 더 이상 유효하지 않습니다.') }, { count: asValue(number()) }),
