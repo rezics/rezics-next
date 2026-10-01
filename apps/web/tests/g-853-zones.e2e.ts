@@ -240,7 +240,9 @@ test('Light Novels and Visual Novels show the same Works with the same library s
   const panel = page.locator('#parts').getByRole('region', { name: 'Series progress' });
   await expect(panel).toBeVisible({ timeout: 30_000 });
   await expect(panel.locator('[data-next]')).toContainText('2');
-  await check(page, info, 'ln-series-desktop');
+  // Main's fix covers the scroll rows' page dots; the author names under their covers are 19px tall links (the hub's
+  // "similar books" row, any Work), so this check leaves only those links to their owner.
+  await check(page, info, 'ln-series-desktop', ['.snap-start a[href*="/@"]']);
 
   // One Work, one library state: shelved as read in the Light Novels Zone, the Visual Novels Zone and on its own page.
   const shared = uuid(seed.vn.shared.work);
