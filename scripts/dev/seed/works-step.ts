@@ -6,11 +6,11 @@ import { afterCatchUp, type SeedState, type WorkReceipt } from './state.ts';
 import { refreshMetadataBasis } from './metadata.ts';
 import { requiresSeedAdministrator } from './work-authority.ts';
 
-export async function seedWorks(state: SeedState) {
+export async function seedWorks(state: SeedState, plan: readonly DemoWork[] = works) {
   const { api, created } = state;
   const owner = state.sessions[0]!;
   const imported = new Set<string>(demoClassics.map(classic => classic.id));
-  for (const work of works) {
+  for (const work of plan) {
     if (imported.has(work.id)) continue;
     const session = work.author && work.author !== 'moonlight'
       ? state.sessions.find(candidate => candidate.id === work.author) : owner;

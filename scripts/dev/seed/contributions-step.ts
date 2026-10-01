@@ -1,11 +1,11 @@
-import { seedKey, works } from './plan.ts';
+import { seedKey, works, type DemoWork } from './plan.ts';
 import { seedReply } from './replies.ts';
 import type { ContributionReceipt, PublicationReceipt, SeedState } from './state.ts';
 
-export async function seedContributions(state: SeedState) {
+export async function seedContributions(state: SeedState, plan: readonly DemoWork[] = works) {
   const { api, created, publicForRealm, sessions } = state;
   const owner = sessions[0]!;
-  for (const excerpt of works.filter(work => work.excerpt)) {
+  for (const excerpt of plan.filter(work => work.excerpt)) {
     const target = created.get(excerpt.id)!;
     const writer = excerpt.author === 'moonlight' ? owner
       : sessions.find(session => session.id === excerpt.author) ?? owner;

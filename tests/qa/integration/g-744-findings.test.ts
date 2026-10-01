@@ -1,16 +1,16 @@
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { mandatoryMailRecovery } from './g-925-safety-recovery.ts';
 import { expect, test } from 'bun:test';
-import { safetyFixture, json, png, sha, nciiDeclaration } from './g-744-support.ts';
+import { safetyFixture, json, png, nciiDeclaration } from './g-744-support.ts';
 
 test('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the primary has not responded', async () => {
-  const f = await safetyFixture('g744-deadline');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, [
+    'access',
+    'content',
+    'relay',
+  ]);
+  const f = await safetyFixture('g744-deadline', true, databases.urls);
   try {
-    await f.notifications.registerEndpoint(f.backup.principal, {
-      channel: 'email',
-      deviceId: null,
-      address: null,
-      addressDigest: sha('account-owned-backup-address'),
-      lockScreenDisclosure: false,
-    });
     const image = await f.author.upload(png(60, 60));
     const receipt = await f.report(image, 'ncii', nciiDeclaration);
     await f.claim(receipt); // The primary becomes absent without completing a decision.
@@ -29,62 +29,25 @@ test('SAFETY03/SAFETY08: G744-H1 overdue NCII alerts the backup when the primary
     );
     await f.produce();
     // The installed producer creates a durable external delivery independently
-    // of staff polling the queue. Account/SMTP outcomes are exercised in G-917.
+    // of staff polling the queue. Restart and SMTP outcomes are exercised in SAFETY03/08.
     const alerts = await f.stack.accessPool.query(
-      `SELECT d.id FROM access.notification_delivery d
-      JOIN access.notification_item i ON i.id = d.item_id WHERE i.principal_id = $1
+      `SELECT d.id,a.reason FROM access.safety_alert a
+      JOIN access.notification_item i ON i.subject_ref = a.id::text
+      JOIN access.notification_delivery d ON d.item_id = i.id
+      WHERE i.principal_id = $1 AND a.case_id = $2 AND a.responder = 'backup'
         AND i.purpose IN ('security','governance')`,
-      [f.backup.principalId],
+      [f.backup.principalId, receipt.caseId],
     );
-    expect(
-      alerts.rowCount,
-      'G744-H1: overdue primary absence must queue the backup alert',
-    ).toBeGreaterThan(0);
+    expect(alerts.rowCount, 'G744-H1: overdue primary absence must queue the backup alert').toBe(1);
+    expect(alerts.rows[0]!.reason).toBe('overdue');
   } finally {
     await f.stop();
+    await databases.close();
   }
 }, 180_000);
 
-test('SAFETY07: G744-M1 media enforcement queues mandatory safety email with optional notifications disabled', async () => {
-  const f = await safetyFixture('g744-safety-mail');
-  try {
-    await f.notifications.registerEndpoint(f.author.principal, {
-      channel: 'email',
-      deviceId: null,
-      address: null,
-      addressDigest: sha('account-owned-uploader-address'),
-      lockScreenDisclosure: false,
-    });
-    for (const channel of ['inbox', 'email', 'push'] as const) {
-      await f.notifications.setPreference(f.author.principal, {
-        purpose: 'social',
-        topic: 'reply',
-        channel,
-        state: 'disabled',
-        expectedRevision: null,
-        idempotencyKey: crypto.randomUUID(),
-        via: 'settings',
-      });
-    }
-    const image = await f.author.upload(png(61, 61));
-    const receipt = await f.report(image);
-    const decision = await f.complete(await f.input(receipt, image));
-    const notices = await json<{ items: { caseId: string }[] }>(
-      await f.call('GET', '/v1/safety-notices', undefined, f.author.token),
-    );
-    expect(notices.items.some((item) => item.caseId === receipt.caseId)).toBe(true);
-    await f.produce();
-    const deliveries = await f.stack.accessPool.query(
-      `SELECT d.id FROM access.notification_delivery d
-      JOIN access.notification_item i ON i.id = d.item_id WHERE i.principal_id = $1
-        AND i.source_event = $2 AND i.purpose = 'governance' AND d.channel = 'email'`,
-      [f.author.principalId, `moderation:${decision.decisionId}`],
-    );
-    expect(
-      deliveries.rowCount,
-      'G744-M1: media notice owners must enter mandatory moderation email recipients',
-    ).toBeGreaterThan(0);
-  } finally {
-    await f.stop();
-  }
-}, 180_000);
+test(
+  'SAFETY07: media enforcement delivers mandatory safety email with optional notifications disabled',
+  mandatoryMailRecovery,
+  180_000,
+);

@@ -28,15 +28,16 @@ function* visibilityQuads(corpus: Corpus) {
     yield quad(unit.decision, RV + 'disclosure', RV + 'Public');
     yield quad(unit.draft, 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type', RV + 'RevisionAnchor');
     yield quad(unit.draft, RV + 'component', unit.contribution);
+    yield `<${unit.unit}> <${RV}publicTitle> ${JSON.stringify(unit.work.title)}@en <urn:rezics:search:public> .\n`;
   }
 }
-const rankedGraphOwner: FixtureOwner = { ...graphOwner, generator: 'g556-ranked-selected-publication-v2',
+const rankedGraphOwner: FixtureOwner = { ...graphOwner, generator: 'g556-ranked-selected-publication-titles-v3',
   compatibilityInputs(root) { return { ...graphOwner.compatibilityInputs(root),
     'g556-ranked-fixture': sha256(readFileSync(join(root, 'tests/qa/integration/g-556-ranked-fixture.ts'))) }; },
   summarize(corpus) {
     const base = graphOwner.summarize(corpus);
     return { digest: sha256(base.digest + [...visibilityQuads(corpus)].join('')),
-      counts: { ...base.counts, 'graph:revisions': base.counts['graph:revisions']! + 12 * corpus.publicUnits } };
+      counts: { ...base.counts, 'graph:public': base.counts['graph:public']! + corpus.publicUnits, 'graph:revisions': base.counts['graph:revisions']! + 12 * corpus.publicUnits } };
   },
   load(corpus, target) {
     return graphOwner.load(corpus, { ...target, fusekiOffline(script, input) {

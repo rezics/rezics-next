@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { alertRecovery, mandatoryMailRecovery } from '../integration/g-925-safety-recovery.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -298,13 +299,18 @@ test('SAFETY06: deleting held media retains bytes, evidence and an attributable 
   }
 }, 180_000);
 
-// Missing capabilities remain visible as blockers, never fabricated deliveries.
-test.todo('SAFETY03: G744-B2 automatic NCII deadline alert reaches the responder', () => {
-  throw new Error('G744-B2: no automatic deadline alert delivery capability');
-});
-test.todo('SAFETY07: G744-B3 actual media safety mail arrives independently of optional notifications', () => {
-  throw new Error('G744-B3: media enforcement queues no mandatory safety email');
-});
-test.todo('SAFETY08: G744-B4 configured absent-primary escalation reaches the backup', () => {
-  throw new Error('G744-B4: no primary/backup roster or absence escalation capability');
-});
+test(
+  'SAFETY03: automatic NCII deadline alert reaches the primary once after intake and dispatcher restarts',
+  () => alertRecovery('primary'),
+  180_000,
+);
+test(
+  'SAFETY07: mandatory safety mail arrives with optional notifications disabled after lost intake acknowledgement',
+  mandatoryMailRecovery,
+  180_000,
+);
+test(
+  'SAFETY08: configured absent-primary escalation reaches the backup once after restart',
+  () => alertRecovery('backup'),
+  180_000,
+);
