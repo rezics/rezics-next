@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
@@ -20,12 +20,19 @@ let seed: Seed;
 test.use({ actionTimeout: 15_000 });
 test.beforeAll(async () => {
   test.setTimeout(420_000);
-  const result = spawnSync('bun', ['apps/web/tests/g-853-seed.ts'], { cwd: process.cwd(), env: process.env,
-    encoding: 'utf8', timeout: 360_000 });
-  if (result.status !== 0 || result.error) {
-    throw new Error(`G-853 seed failed: ${result.stderr || result.error?.message || result.status}`);
+  // Playwright starts a new worker after a failed test and runs this again; the records are written once per stack.
+  const cache = `.temp/g853-seed-${process.env.REZICS_QA_RUN_ID}.json`;
+  if (existsSync(cache)) seed = JSON.parse(readFileSync(cache, 'utf8')) as Seed;
+  else {
+    const result = spawnSync('bun', ['apps/web/tests/g-853-seed.ts'], { cwd: process.cwd(), env: process.env,
+      encoding: 'utf8', timeout: 360_000 });
+    if (result.status !== 0 || result.error) {
+      throw new Error(`G-853 seed failed: ${result.stderr || result.error?.message || result.status}`);
+    }
+    seed = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Seed;
+    mkdirSync('.temp', { recursive: true });
+    writeFileSync(cache, JSON.stringify(seed));
   }
-  seed = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Seed;
   // Main keeps processing the seed's events for a while, moving the graph under every read (409).
   const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(seed.vn.shared.work)}`;
   let last = '';
@@ -117,17 +124,19 @@ test('Visual Novels: the filter works by keyboard alone', async ({ page }, info)
   await page.goto('/en/r/visual-novels/browse');
   await ready(page);
   // Native selects take letters; Tab moves on and Enter submits.
-  await page.getByLabel('Language').focus();
+  const form = page.getByRole('form', { name: 'Find a playable release' });
+  await form.getByLabel('Language').focus();
   await page.keyboard.type('English');
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('Platform')).toBeFocused();
+  await expect(form.getByLabel('Platform')).toBeFocused();
   await page.keyboard.type('Windows');
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('Completeness')).toBeFocused();
+  await expect(form.getByLabel('Completeness')).toBeFocused();
   await page.keyboard.type('Complete');
   await page.keyboard.press('Tab');
+  await expect(form.getByLabel('Translation')).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Show matching novels' })).toBeFocused();
+  await expect(form.getByRole('button', { name: 'Show matching novels' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/releaseLanguage=en&releasePlatform=Windows&releaseCompleteness=complete/);
   await expect(page.locator('[data-release-results]').getByRole('link', { name: 'Moonlit Garden' }).first()).toBeVisible();
