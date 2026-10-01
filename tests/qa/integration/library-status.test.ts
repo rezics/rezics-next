@@ -411,6 +411,76 @@ test.each(['initial context', 'retained context'])(
       status: 'want-to-read', version: 3 });
     expect((await status.batch(person.agent, [chapter.work, book.work])).map(row => row.status))
       .toEqual([null, 'want-to-read']);
+    // G924: private imported reviews share the chapter's Book library identity.
+    const privateReviewKey = randomUUID();
+    const reviewChapter = (expectedVersion = 0, key = privateReviewKey) => app.handle(new Request(
+      `http://main.local/v1/me/import-reviews/${chapter.work.slice(-36)}`, { method: 'PUT',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': key }, body: JSON.stringify({ actingSubject: person.agent,
+          text: 'A private chapter note', language: 'en', spoiler: true, expectedVersion }) }));
+    const privateChapterReview = await reviewChapter();
+    expect(privateChapterReview.status, await privateChapterReview.clone().text()).toBe(200);
+    expect(await privateChapterReview.json()).toMatchObject({ work: book.work, version: 1,
+      text: 'A private chapter note', replayed: false });
+    expect(await (await reviewChapter()).json()).toMatchObject({ work: book.work, version: 1, replayed: true });
+    expect((await reviewChapter(0, randomUUID())).status).toBe(409);
+    expect(await status.privateReviews(person.agent, [chapter.work, book.work]))
+      .toMatchObject([{ work: book.work, version: 1 }]);
+    const reviewRead = await app.handle(new Request(`http://main.local/v1/me/import-reviews`
+      + `?actingSubject=${actingSubject}&works=${encodeURIComponent(chapter.work)}`,
+    { headers: { authorization: `Bearer ${a.token}` } }));
+    expect(reviewRead.status).toBe(200);
+    expect(await reviewRead.json()).toMatchObject({ items: [{ work: book.work, version: 1 }] });
+
+    const chapterState = () => app.handle(new Request(
+      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
+      { headers: { authorization: `Bearer ${a.token}` } }));
+    const chapterStatus = (current: number) => app.handle(new Request(
+      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-status`, { method: 'PUT',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify({ actingSubject: person.agent,
+          expectedVersion: current, status: 'read', startedOn: null, finishedOn: null }) }));
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(book.work)} rv:mergedInto ${iri(publicWork.work)} } }`);
+    try {
+      const mergedStatus = await chapterStatus(1);
+      expect(mergedStatus.status, await mergedStatus.clone().text()).toBe(200);
+      expect(await mergedStatus.json()).toMatchObject({ work: publicWork.work, status: 'read', version: 2 });
+      const mergedState = await chapterState();
+      expect(mergedState.status, await mergedState.clone().text()).toBe(200);
+      expect(await mergedState.json()).toMatchObject({ work: publicWork.work,
+        status: { work: publicWork.work, status: 'read', version: 2 } });
+      const mergedReview = await reviewChapter(0, randomUUID());
+      expect(mergedReview.status).toBe(200);
+      expect(await mergedReview.json()).toMatchObject({ work: publicWork.work, version: 1 });
+    } finally {
+      await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(book.work)} rv:mergedInto ${iri(publicWork.work)} } }`);
+      await status.write({ agent: person.agent, work: publicWork.work, status: 'reading',
+        expectedVersion: 2, idempotencyKey: randomUUID() });
+    }
+
+    // Mapping a chapter does not admit a hidden Book merge destination. Both
+    // write paths discard the result and leave the stored Book state intact.
+    const deniedBook = await stack.privateWork(b.actor, 'Concealed library destination');
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(book.work)} rv:mergedInto ${iri(deniedBook.work)} } }`);
+    try {
+      for (const response of [await reviewChapter(1, randomUUID()), await chapterStatus(3)]) {
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        const body = await response.text();
+        expect(body).not.toContain(deniedBook.work);
+        expect(body).not.toContain('Concealed library destination');
+      }
+      expect((await status.batch(person.agent, [book.work, deniedBook.work])).map(row => row.status))
+        .toEqual(['want-to-read', null]);
+      expect(await status.privateReviews(person.agent, [book.work, deniedBook.work]))
+        .toMatchObject([{ work: book.work, version: 1 }]);
+      expect((await chapterState()).status).toBe(404);
+    } finally {
+      await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(book.work)} rv:mergedInto ${iri(deniedBook.work)} } }`);
+    }
     await status.write({ agent: person.agent, work: chapter.work, status: 'reading',
       startedOn: null, finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() });
     await stack.contentPool.query("UPDATE reader.library_status SET title_key = '' WHERE agent = $1 AND work = $2",

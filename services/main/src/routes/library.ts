@@ -1,4 +1,3 @@
-import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { readMyShelves, readReaderStates, readStatusShelf, READER_LIBRARY_COST }
@@ -7,7 +6,7 @@ import { readPublicShelves, readPublicStatusShelf } from '../modules/library/pub
 import { InvalidLibraryStatus, LibraryStatusConflict, StaleLibraryStatus }
   from '../modules/library/status.ts';
 import { readWorkBasis } from '../modules/work/read-header.ts';
-import { canonicalChapterWorks } from '../modules/structure/chapter-work.ts';
+import { resolveLibraryWork, resolveLibraryWorks } from '../modules/library/resolve-work.ts';
 import { workRead, WorkReadInvalid } from '../modules/work/read-session.ts';
 import { pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { shelfWork } from '../modules/profiles/read-contract.ts';
@@ -203,9 +202,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
         const workId = `https://rezics.com/id/${params.id}`;
         const basis = await workRead(work, request, { actingSubject: body.actingSubject },
           async session => {
-            const canonical = (await resolveTargets(session, [workId], 'discussion'))[0]!.resource;
-            const parent = (await canonicalChapterWorks(session, [canonical])).get(canonical) ?? canonical;
-            const book = parent === canonical ? parent : (await resolveTargets(session,[parent],'discussion'))[0]!.resource;
+            const book = await resolveLibraryWork(session, workId);
             const basis = await readWorkBasis(session, book);
             return { work: book, title: basis.card.title.value };
           });
@@ -266,8 +263,10 @@ export function libraryRoutes(work: MainWorkDependencies) {
       try {
         const works = readWorks(query.works);
         if (!await reader(request, query.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
-        return Response.json({ items: await work.libraryStatus.privateReviews(query.actingSubject, works) },
-          { headers: privateHeaders });
+        const items = await workRead(work, request, query, async session =>
+          work.libraryStatus!.privateReviews(query.actingSubject,
+            [...new Set(await resolveLibraryWorks(session, works))]));
+        return Response.json({ items }, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .put('/v1/me/import-reviews/:id', {
@@ -286,7 +285,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
         if (!await reader(request, body.actingSubject)) return problem(403, 'reader_library_denied', 'Reader library unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
         const canonical = await workRead(work, request, { actingSubject: body.actingSubject },async session => {
-          const target = (await resolveTargets(session,[workId],'discussion'))[0]!.resource;
+          const target = await resolveLibraryWork(session, workId);
           await readWorkBasis(session,target); return target;
         });
         return Response.json(await work.libraryStatus.putPrivateReview({ agent: body.actingSubject, work: canonical,

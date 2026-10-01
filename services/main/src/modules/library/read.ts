@@ -25,6 +25,11 @@ export async function readReaderStates(session: WorkReadSession, agent: string, 
   if (summaries.some(summary => summary.status !== 'available' || summary.type !== 'work')) {
     throw new WorkReadMissing('Work is unavailable');
   }
+  // Summary hydration discloses every identity hop. Read the same surviving
+  // Book that library commands address, retaining the caller's batch order.
+  works = summaries.map((summary, index) => summary.status === 'available'
+    && summary.resolution?.state === 'merged' ? summary.resolution.survivor : works[index]!);
+  if (new Set(works).size !== works.length) throw new WorkReadInvalid('Duplicate surviving Work in reader state batch');
   const states = await status.batch(agent, works);
   const shelves = new Map<string, { id: string; name: string; disclosure: 'public' | 'private' }[]>();
   const structures = new Map<string, string>();
