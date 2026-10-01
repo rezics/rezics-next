@@ -150,6 +150,7 @@ import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
 import { NotificationProducer, NotificationProducerWorker } from './modules/notification-producers/producer.ts';
 import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
+import { editorialNotificationSubjectReader } from './modules/notification-producers/editorial.ts';
 import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { NotificationDigestWorker } from './modules/notification/digest.ts';
@@ -291,6 +292,8 @@ notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, envi
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);
+const notificationEditorialReader = editorialNotificationSubjectReader(pool, environment);
+notificationStore.registerReadSubjectReader('editorial-proposal-v1', notificationEditorialReader);
 const notificationFeedReader = feedNotificationSubjectReader(pool, environment, content, new ReaderReviews(pool));
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationStore.registerReadSubjectReader(basis, notificationSourceReader);
@@ -316,6 +319,7 @@ const notificationDispatcher = notificationProvider
     currentContentSubjectReader(content, notificationStore, access)) : undefined;
 notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
+notificationDispatcher?.registerSubjectReader('editorial-proposal-v1', notificationEditorialReader);
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
 for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationFeedReader);

@@ -34,13 +34,17 @@ export class NotificationDigestWorker {
       const counts = new Map<string, number>();
       let more = false;
       if (current?.active && current.account_issuer === this.issuer) {
-        const candidates = (await this.access.query<Candidate>(`SELECT c.topic, c.purpose,
+        const candidates = (await this.access.query<Candidate>(
+            `SELECT c.topic, c.purpose,
           c.subject_owner, c.subject_ref, c.subject_revision, c.disclosure_basis, c.realm
           FROM access.notification_digest_candidate c
           JOIN access.notification_preference n ON n.principal_id = c.principal_id
             AND n.purpose = c.purpose AND n.topic = c.topic AND n.channel = 'email'
             AND n.state = 'enabled'
           WHERE c.principal_id = $1 AND c.day = $2
+            AND NOT EXISTS (SELECT 1 FROM access.proposal_subscription sub
+              WHERE sub.principal_id = c.principal_id AND sub.proposal = c.proposal
+                AND sub.level = 'ignore' AND c.disclosure_basis = 'editorial-proposal-v1')
           ORDER BY c.source_event, c.topic LIMIT $3`,
         [day.principal_id, day.day, DIGEST_COST.candidatesPerDay + 1])).rows;
         const inputs = candidates.map(candidate => ({ principalId: day.principal_id,

@@ -1,6 +1,6 @@
-import { bigint, boolean, pgSchema, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, integer, pgSchema, primaryKey, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
-// Access-owned notification tables (migrations 062-063, 440-441, 495). The delivery row is
+// Access-owned notification tables (migrations 062-063, 440-441, 495, 883-884). The delivery row is
 // the bounded delivery work item; the producer event log only captures owner
 // changes. SQL stays
 // the DDL owner and tests/governance-schema.test.ts checks these declarations.
@@ -20,7 +20,7 @@ export const attemptOutcomes = ['accepted', 'rejected_permanent', 'rejected_tran
 
 export const notificationPreference = access.table('notification_preference', {
   principalId: uuid('principal_id').notNull(),
-  purpose: text('purpose', { enum: optionalPurposes }).notNull(),
+  purpose: text('purpose', { enum: [...optionalPurposes, 'governance'] }).notNull(),
   topic: text('topic').notNull(),
   channel: text('channel', { enum: preferenceChannels }).notNull(),
   state: text('state', { enum: ['enabled', 'disabled'] }).notNull(),
@@ -32,7 +32,7 @@ export const notificationPreferenceChange = access.table('notification_preferenc
   principalId: uuid('principal_id').notNull(),
   idempotencyKey: text('idempotency_key').notNull(),
   requestDigest: text('request_digest').notNull(),
-  purpose: text('purpose', { enum: optionalPurposes }).notNull(),
+  purpose: text('purpose', { enum: [...optionalPurposes, 'governance'] }).notNull(),
   topic: text('topic').notNull(),
   channel: text('channel', { enum: preferenceChannels }).notNull(),
   state: text('state', { enum: ['enabled', 'disabled'] }).notNull(),
@@ -95,6 +95,35 @@ export const notificationItemRead = access.table('notification_item_read', {
   itemId: uuid('item_id').notNull(),
   readAt: at('read_at').notNull(),
 }, table => [primaryKey({ columns: [table.principalId, table.itemId] })]);
+
+export const notificationItemTriage = access.table(
+  'notification_item_triage',
+  {
+    principalId: uuid('principal_id').notNull(),
+    itemId: uuid('item_id').notNull(),
+    saved: boolean('saved').notNull(),
+    done: boolean('done').notNull(),
+    revision: bigint('revision', { mode: 'bigint' }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.principalId, table.itemId] })],
+);
+export const proposalSubscription = access.table(
+  'proposal_subscription',
+  {
+    principalId: uuid('principal_id').notNull(),
+    proposal: uuid('proposal').notNull(),
+    reason: text('reason', { enum: ['author', 'reviewer', 'steward', 'manual'] }).notNull(),
+    level: text('level', { enum: ['participating', 'ignore'] }).notNull(),
+    revision: bigint('revision', { mode: 'bigint' }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.principalId, table.proposal] })],
+);
+export const notificationProposalContext = access.table('notification_proposal_context', {
+  itemId: uuid('item_id').primaryKey(),
+  proposal: uuid('proposal').notNull(),
+  revision: integer('revision').notNull(),
+  reason: text('reason', { enum: ['author', 'reviewer', 'steward', 'manual'] }).notNull(),
+});
 
 export const notificationKinds = ['reply', 'submission_decision', 'moderation_outcome',
   'realm_role_change', 'follow', 'claim_correction', 'review', 'review_helpful', 'realm_invitation',

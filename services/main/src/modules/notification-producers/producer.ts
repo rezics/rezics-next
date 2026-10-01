@@ -2,8 +2,11 @@ import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import type { NotificationEvent, NotificationStore } from '../notification/store.ts';
+import { requireAccessOpen } from '../notification/store.ts';
 import { reviewNotification } from '../notification/producer-review.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
+import { editorialNotification, EDITORIAL_NOTIFICATION_COST } from './editorial.ts';
+import type { EditorialEvent } from '../editorial-review/store.ts';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -191,6 +194,11 @@ export class NotificationProducer {
   }
 
   async runAccessOnce(): Promise<number> {
+    const count = await this.runOtherAccessOnce();
+    return count + (await this.runEditorialOnce());
+  }
+
+  private async runOtherAccessOnce(): Promise<number> {
     const client = await this.access.connect();
     let count = 0;
     try {
@@ -216,6 +224,51 @@ export class NotificationProducer {
       }
       await client.query('COMMIT');
       return count;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Cursor advances only after every recipient intake commits. Partial retries
+   * deduplicate by the immutable editorial event id, just like the other sources. */
+  async runEditorialOnce(): Promise<number> {
+    const client = await this.access.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '10s'");
+      await requireAccessOpen(client);
+      const cursor = (
+        await client.query<{ position: string }>(`SELECT position::text
+        FROM access.notification_producer_cursor WHERE consumer = 'editorial-notification-v1'
+        FOR UPDATE SKIP LOCKED`)
+      ).rows[0];
+      if (!cursor) {
+        await client.query('COMMIT');
+        return 0;
+      }
+      const events = (
+        await client.query<EditorialEvent>(
+          `SELECT sequence::text,id,proposal,revision,kind,actor,
+        created_at::text AS "occurredAt" FROM access.editorial_event WHERE sequence > $1
+        ORDER BY sequence LIMIT $2`,
+          [cursor.position, EDITORIAL_NOTIFICATION_COST.eventsPerTick],
+        )
+      ).rows;
+      for (const event of events) {
+        const notice = await editorialNotification(this.access, event);
+        if (notice) await this.notifications.enqueue(notice);
+        await client.query(
+          `UPDATE access.notification_producer_cursor SET position = $1,
+          updated_at = clock_timestamp() WHERE consumer = 'editorial-notification-v1'`,
+          [event.sequence],
+        );
+      }
+      await client.query('COMMIT');
+      return events.length;
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
   }

@@ -17,6 +17,8 @@ export const openApiOperations = {
   '/v1/me/notifications': { get: { bearer: true } },
   '/v1/me/notifications/unread-count': { get: { bearer: true } },
   '/v1/me/notifications/{item}/read': { put: { bearer: true } },
+  '/v1/me/notifications/{item}/triage': { put: { bearer: true } },
+  '/v1/me/proposal-subscriptions/{proposal}': { get: { bearer: true }, put: { bearer: true } },
   '/v1/me/notifications/hint': { get: { bearer: true } },
   '/v1/me/notification-read-watermarks/inbox': { put: { bearer: true } },
   '/v1/me/notification-streams/inbox/resets': { post: { bearer: true } },
@@ -42,6 +44,18 @@ const noStore = { headers: { 'cache-control': 'no-store' } };
 
 const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.String(), topic: t.String(),
   read: t.Boolean(),
+  saved: t.Boolean(),
+  done: t.Boolean(),
+  triageRevision: t.Nullable(t.String()),
+  reason: t.Nullable(
+    t.Union([
+      t.Literal('author'),
+      t.Literal('reviewer'),
+      t.Literal('steward'),
+      t.Literal('manual'),
+    ]),
+  ),
+  proposal: t.Nullable(t.Object({ id: t.String(), revision: t.Integer({ minimum: 1 }) })),
   state: t.Union([t.Literal('active'), t.Literal('withdrawn'), t.Literal('erased')]),
   subject: t.Nullable(t.Object({ owner: t.String(), ref: t.String(), revision: t.Nullable(t.String()) })),
   display: t.Nullable(t.Object({ kind: t.Union([
@@ -72,7 +86,7 @@ const preference = t.Object({ profile: t.Literal('notification-preference-v1'), 
   topic: t.String(), channel: t.String(), state: t.String(), revision: t.String(), replayed: t.Boolean() });
 const settingsPreferences = t.Object({ profile: t.Literal('notification-settings-v1'),
   items: t.Array(t.Object({ purpose: t.String(), topic: t.String(), channel: t.String(),
-    state: t.String(), revision: t.Nullable(t.String()) }), { maxItems: 18 }) });
+    state: t.String(), revision: t.Nullable(t.String()) }), { maxItems: 24 }) });
 const endpoint = t.Object({ profile: t.Literal('notification-endpoint-v1'), id: t.String(),
   generation: t.String(), retiredDeliveries: t.Number() });
 const delivery = t.Object({ profile: t.Literal('notification-delivery-v1'), id: t.String(), itemId: t.String(),
@@ -110,6 +124,16 @@ export function notificationRoutes(work: MainWorkDependencies) {
     .use(websocket({ sendPings: false }))
     .get('/v1/me/notifications', {
       query: t.Object({ after: t.Optional(t.String({ pattern: '^[1-9][0-9]{0,18}:(0|[1-9][0-9]{0,18})$' })),
+              view: t.Optional(
+                t.Union([t.Literal('inbox'), t.Literal('saved'), t.Literal('done')]),
+              ),
+              reason: t.Optional(
+                t.Union([
+                  t.Literal('author'),
+                  t.Literal('reviewer'),
+                  t.Literal('steward'),
+                  t.Literal('manual'),
+                ])),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
       response: { 200: streamPage, ...authorizedReadProblems },
     }, async ({ request, query }) => {
@@ -119,8 +143,120 @@ export function notificationRoutes(work: MainWorkDependencies) {
         const [generationPart, sequencePart] = query.after?.split(':') ?? [];
         const page = await owner.store.readStream(principal,
           generationPart && sequencePart ? { generation: generationPart, sequence: sequencePart } : null,
-          query.limit ?? 50);
+          query.limit ?? 50,
+              { view: query.view, reason: query.reason },
+            );
         return Response.json({ profile: 'notification-stream-page-v1', ...page }, noStore);
+          } catch (error) {
+            return notificationError(error);
+          }
+        },
+      )
+      .put(
+        '/v1/me/notifications/:item/triage',
+        {
+          params: t.Object({ item: t.String({ pattern: uuid }) }),
+          body: t.Object(
+            {
+              profile: t.Literal('notification-item-triage-v1'),
+              saved: t.Optional(t.Boolean()),
+              done: t.Optional(t.Boolean()),
+              expectedRevision: t.Nullable(generation),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: t.Object({
+              profile: t.Literal('notification-item-triage-v1'),
+              id: t.String(),
+              saved: t.Boolean(),
+              done: t.Boolean(),
+              revision: t.String(),
+            }),
+            ...writeProblems,
+            ...authorizedReadProblems,
+          },
+        },
+        async ({ request, params, body }) => {
+          try {
+            const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
+            if (!owner) return unavailable();
+            return Response.json(
+              {
+                profile: 'notification-item-triage-v1',
+                ...(await owner.store.setItemTriage(principal, params.item, body)),
+              },
+              noStore,
+            );
+          } catch (error) {
+            return notificationError(error);
+          }
+        },
+      )
+      .get(
+        '/v1/me/proposal-subscriptions/:proposal',
+        {
+          params: t.Object({ proposal: t.String({ pattern: uuid }) }),
+          response: {
+            200: t.Object({
+              profile: t.Literal('proposal-subscription-read-v1'),
+              proposal: t.String(),
+              subscription: t.Nullable(
+                t.Object({ level: t.String(), reason: t.String(), revision: t.String() }),
+              ),
+            }),
+            ...authorizedReadProblems,
+          },
+        },
+        async ({ request, params }) => {
+          try {
+            const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
+            if (!owner) return unavailable();
+            return Response.json(
+              {
+                profile: 'proposal-subscription-read-v1',
+                ...(await owner.store.readProposalSubscription(principal, params.proposal)),
+              },
+              noStore,
+            );
+          } catch (error) {
+            return notificationError(error);
+          }
+        },
+      )
+      .put(
+        '/v1/me/proposal-subscriptions/:proposal',
+        {
+          params: t.Object({ proposal: t.String({ pattern: uuid }) }),
+          body: t.Object(
+            {
+              profile: t.Literal('proposal-subscription-v1'),
+              level: t.Union([t.Literal('participating'), t.Literal('ignore')]),
+              expectedRevision: t.Nullable(generation),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: t.Object({
+              profile: t.Literal('proposal-subscription-v1'),
+              proposal: t.String(),
+              level: t.String(),
+              reason: t.String(),
+              revision: t.String(),
+            }),
+            ...writeProblems,
+            ...authorizedReadProblems,
+          },
+        },
+        async ({ request, params, body }) => {
+          try {
+            const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
+            if (!owner) return unavailable();
+            return Response.json(
+              {
+                profile: 'proposal-subscription-v1',
+                ...(await owner.store.setProposalSubscription(principal, params.proposal, body)),
+              }, noStore);
       } catch (error) { return notificationError(error); }
     })
     .get('/v1/me/notifications/unread-count', {
@@ -130,7 +266,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
         if (!owner) return unavailable();
         return Response.json({ profile: 'notification-unread-count-v1',
-          ...await owner.store.unreadCount(principal) }, noStore);
+          ...(await owner.store.unreadCount(principal)) }, noStore);
       } catch (error) { return notificationError(error); }
     })
     .put('/v1/me/notifications/:item/read', {
@@ -141,7 +277,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
         if (!owner) return unavailable();
         return Response.json({ profile: 'notification-item-read-v1',
-          ...await owner.store.markItemRead(principal, params.item) }, noStore);
+          ...(await owner.store.markItemRead(principal, params.item)) }, noStore);
       } catch (error) { return notificationError(error); }
     })
     .get('/v1/me/notifications/hint', {
@@ -151,7 +287,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
       try {
         const principal = await work.account.verify(request, [NOTIFICATION_SCOPE]);
         if (!owner) return unavailable();
-        return Response.json({ profile: 'notification-stream-hint-v1', ...await owner.store.hint(principal) },
+        return Response.json({ profile: 'notification-stream-hint-v1', ...(await owner.store.hint(principal)) },
           noStore);
       } catch (error) { return notificationError(error); }
     })
@@ -234,7 +370,8 @@ export function notificationRoutes(work: MainWorkDependencies) {
     })
     .put('/v1/me/notification-preferences', {
       body: t.Object({ profile: t.Literal('notification-preference-v1'),
-        purpose: t.Union([t.Literal('social'), t.Literal('subscription')]),
+        purpose: t.Union([t.Literal('social'), t.Literal('subscription'),
+                t.Literal('governance')]),
         topic: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }),
         channel: t.Union([t.Literal('inbox'), t.Literal('email'), t.Literal('push')]),
         state: t.Union([t.Literal('enabled'), t.Literal('disabled')]),

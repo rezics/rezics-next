@@ -50,7 +50,8 @@ test('a disabled reply preference prevents the producer from adding an inbox ite
 
 test('default registered email and push endpoints both receive a social item', async () => {
   const statements: string[] = [];
-  const client = { query: async (sql: string) => {
+  let deliveryArguments: unknown[] = [];
+  const client = { query: async (sql: string, parameters: unknown[] = []) => {
     statements.push(sql);
     if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
     if (sql.includes('INSERT INTO access.notification_seen')) return { rows: [{ principal_id: principalId }], rowCount: 1 };
@@ -60,7 +61,10 @@ test('default registered email and push endpoints both receive a social item', a
     if (sql.includes('SELECT generation::text, head_sequence::text')) {
       return { rows: [{ generation: '1', head_sequence: '0' }] };
     }
-    if (sql.includes('INSERT INTO access.notification_delivery')) return { rows: [], rowCount: 2 };
+    if (sql.includes('INSERT INTO access.notification_delivery')) {
+      deliveryArguments = parameters;
+      return { rows: [], rowCount: 2 };
+    }
     return { rows: [] };
   }, release: () => {} };
   const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
@@ -71,7 +75,9 @@ test('default registered email and push endpoints both receive a social item', a
   const delivery = statements.find(sql => sql.includes('INSERT INTO access.notification_delivery'))!;
   expect(delivery).toContain("e.channel, e.generation");
   expect(delivery).toContain("p.state = 'disabled' OR (e.channel = 'email' AND p.state = 'enabled')");
-  expect(delivery).not.toContain("e.channel <> 'email'");
+  // The review-only digest branch must not suppress this ordinary social event.
+  expect(delivery).toContain('NOT $7::boolean');
+  expect(deliveryArguments[6]).toBe(false);
 });
 
 test('email digest opt-in suppresses direct email but leaves push delivery eligible', async () => {

@@ -180,14 +180,59 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     const readerGraph = { query: async (sparql: string, budget: number) => {
       await syntaxGraph.query(sparql, budget);
       if (sparql.includes(' ASK ')) return { boolean: publicRoot };
-      if (sparql.includes('SELECT ?space ?realmRevision')) return { results: { bindings: [{
+      if (sparql.includes('SELECT ?epoch ?sequence WHERE'))
+          return {
+            results: {
+              bindings: [
+                {
+                  epoch: { value: 'test' },
+                  sequence: { value: '0' },
+                },
+              ],
+            },
+          };
+        if (sparql.includes('SELECT ?epoch ?sequence ?hold ?r ?type'))
+          return {
+            results: {
+              bindings: [
+                {
+                  epoch: { value: 'test' },
+                  sequence: { value: '0' },
+                  r: { value: root },
+                  type: { value: 'work' },
+                  work: { value: root },
+                  head: { value: rootRevision },
+                  public: { value: String(publicRoot) },
+                  label: { value: 'Reply root', 'xml:lang': 'en' },
+                },
+              ],
+            },
+          };
+        if (sparql.includes('SELECT ?epoch ?sequence ?r ?revision ?type'))
+          return {
+            results: {
+              bindings: [
+                {
+                  epoch: { value: 'test' },
+                  sequence: { value: '0' },
+                  r: { value: root },
+                  revision: { value: rootRevision },
+                  type: { value: 'https://schema.org/CreativeWork' },
+                },
+              ],
+            },
+          };
+        if (sparql.includes('SELECT ?root WHERE'))
+          return { results: { bindings: publicRoot ? [{ root: { value: rootRevision } }] : [] } };
+        if (sparql.includes('SELECT ?space ?realmRevision')) return { results: { bindings: [{
         space: { value: realmSpace }, disclosure: { value: `https://rezics.com/vocab/${privateRealm ? 'Private' : 'Public'}` },
         ...(privateRealm ? { visibility: { value: 'private' } } : {}),
       }] } };
       return { results: { bindings: [{ placement: { value: placementId },
         revision: { value: `urn:rezics:content:revision:${replyRevision}` },
         review: { value: `urn:rezics:realm-review:${reviewId}` },
-        root: { value: root }, author: { value: actor }, preparation: { value: preparationId } }] } };
+        root: { value: root },
+                rootRevision: { value: rootRevision }, author: { value: actor }, preparation: { value: preparationId } }] } };
     } } as unknown as FusekiClient;
     const readerContent = { query: async (sql: string) => ({ rowCount: sql.includes('SELECT 1 FROM content.reply p')
       ? Number(reviewApproved) : 1, rows: sql.includes('SELECT origin_realm')

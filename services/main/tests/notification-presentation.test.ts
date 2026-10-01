@@ -5,6 +5,11 @@ test('G-286: repeat groups are page-local, disclosure-aware and capped at ten it
   const item = (index: number, visible = true): StreamItem => ({
     id: String(index), sequence: String(index), purpose: 'social', topic: 'reply',
     state: 'active', read: false, subject: null, createdAt: '2026-09-28T00:00:00.000Z',
+    saved: false,
+    done: false,
+    triageRevision: null,
+    reason: null,
+    proposal: null,
     display: visible ? { kind: 'reply', actor: null, realm: null, realmName: null,
       realmRouteSegment: null, roleName: null, roleChange: null, groupKey: 'chapter-1',
       target: { title: 'Chapter', excerpt: null, language: 'en', linkTarget: null, reviewId: null } } : null,

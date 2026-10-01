@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { discloseNotifications } from '../disclosure/notifications.ts';
 import type { Pool, PoolClient } from 'pg';
 import { NotificationConflict, NotificationInvalid, NotificationStore, NotificationUnavailable, normalizeNotificationError,
-  requireAccessOpen, rollback, sha256 } from './store.ts';
+  requireAccessOpen, rollback, sha256,
+  optionalNotification,
+} from './store.ts';
 
 /** Only currently disclosed fields; never a stored copy of the subject. */
 export type RenderedSubject = { fields: Readonly<Record<string, string>>; private: boolean };
@@ -145,16 +147,23 @@ export class NotificationDispatcher {
     endpoint_id: string; channel: string; endpoint_generation: string }): Promise<string | null> {
     const facts = (await client.query<{ principal_active: boolean; fenced: boolean; item_state: string;
       purpose: string; topic: string; endpoint_state: string; endpoint_generation: string; expired: boolean;
-      disabled: boolean }>(`SELECT p.active AS principal_active,
+      disabled: boolean;
+        muted: boolean;
+      }>(
+        `SELECT p.active AS principal_active,
         EXISTS (SELECT 1 FROM access.outbox o WHERE o.kind = 'account.deletion_fenced'
           AND o.principal_id = p.id) AS fenced,
         i.state AS item_state, i.purpose, i.topic, e.state AS endpoint_state,
         e.generation::text AS endpoint_generation, d.expires_at <= clock_timestamp() AS expired,
         EXISTS (SELECT 1 FROM access.notification_preference n WHERE n.principal_id = p.id
           AND n.purpose = i.purpose AND n.topic = i.topic AND n.channel = d.channel
-          AND n.state = 'disabled') AS disabled
+          AND n.state = 'disabled') AS disabled,
+        EXISTS (SELECT 1 FROM access.proposal_subscription sub WHERE sub.principal_id = p.id
+          AND sub.proposal = pc.proposal AND sub.level = 'ignore'
+          AND i.disclosure_basis = 'editorial-proposal-v1') AS muted
       FROM access.notification_delivery d
       JOIN access.notification_item i ON i.id = d.item_id
+      LEFT JOIN access.notification_proposal_context pc ON pc.item_id = i.id
       JOIN access.principal p ON p.id = d.principal_id
       JOIN access.notification_endpoint e ON e.id = d.endpoint_id
       WHERE d.id = $1`, [row.id])).rows[0];
@@ -167,7 +176,8 @@ export class NotificationDispatcher {
     if (facts.endpoint_state !== 'active' || facts.endpoint_generation !== row.endpoint_generation) {
       return 'endpoint_invalid';
     }
-    if (facts.disabled && !['security', 'account', 'governance'].includes(facts.purpose)) return 'unsubscribed';
+    if (facts.disabled && optionalNotification(facts.purpose, facts.topic)) return 'unsubscribed';
+    if (facts.muted) return 'unsubscribed';
     return null;
   }
 
