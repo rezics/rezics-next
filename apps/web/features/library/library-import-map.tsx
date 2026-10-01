@@ -66,8 +66,8 @@ export function CsvMapper({ inspection, locale, messages, busy, onSubmit, onCanc
           onValueChange={value => setUnit(value === 'page' || value === 'percentage' ? value : '')} />
       </div> : null}
     </div>
-    {values.length ? <fieldset className="grid min-w-0 gap-3">
-      <legend className="w-full max-w-full font-medium text-sm">{t.importMapStatuses}</legend>
+    {values.length ? <fieldset className="grid gap-3">
+      <legend className="font-medium text-sm">{t.importMapStatuses}</legend>
       <div className="grid gap-3 sm:grid-cols-2">
         {values.map(value => <div key={value} className="grid gap-1 text-sm">
           <span className="break-words text-muted-foreground">{t.importStatusValue({ value })}</span>

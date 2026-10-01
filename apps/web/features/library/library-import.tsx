@@ -238,8 +238,8 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
           <p className="text-muted-foreground text-xs">{t.importDiscardNote}</p>
         </section> : null}
         {active ? null : <>
-          <fieldset className="grid min-w-0 gap-2" disabled={uploading}>
-            <legend className="mb-1 w-full max-w-full font-medium text-sm">{t.importFormatLabel}</legend>
+          <fieldset className="grid gap-2" disabled={uploading}>
+            <legend className="mb-1 font-medium text-sm">{t.importFormatLabel}</legend>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {formats.map(value => <label key={value} className={cn('flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm',
                 'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', format === value ? 'border-primary bg-primary/10' : 'border-border')}>
@@ -306,8 +306,8 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
               <Button size="sm" variant="outline" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>{t.nextPage}</Button>
             </nav> : null}
             {active.loaded && !active.finished ? <div className="grid gap-3 rounded-xl bg-muted/50 p-3">
-              {!sealed && counts.matched ? <fieldset className="grid min-w-0 gap-1 text-sm">
-                <legend className="mb-1 w-full max-w-full font-medium">{t.importConflictLabel}</legend>
+              {!sealed && counts.matched ? <fieldset className="grid gap-1 text-sm">
+                <legend className="mb-1 font-medium">{t.importConflictLabel}</legend>
                 {([false, true] as const).map(value => <label key={String(value)} className="flex cursor-pointer items-center gap-2">
                   <input type="radio" name="library-import-conflict" className="accent-primary" checked={useImported === value}
                     onChange={() => setUseImported(value)} />{value ? t.importUseImported : t.importKeepMine}</label>)}

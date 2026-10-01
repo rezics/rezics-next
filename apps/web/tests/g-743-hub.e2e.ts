@@ -57,6 +57,7 @@ test('work-hub: a reader chooses an edition with the keyboard alone, under reduc
   await checkScreen(page, 'hub-volume-edition-picked', found, info);
   await pressByKeyboard(page, availability.getByRole('button', { name: 'Save choice' }), found, 'Save choice');
   await expect(availability.getByText('Saved.')).toBeVisible();
+  await settled(page);
   await page.goto(at(one!, locales.latin));
   await expect(page.locator('[data-identity-status]:visible').first()).toContainText('Your edition:');
   await checkScreen(page, 'hub-volume-saved', found, info);
