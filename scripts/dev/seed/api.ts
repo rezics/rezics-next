@@ -136,12 +136,6 @@ export class SeedApi {
     const data = await payload<{ user?: { id?: string } }>(response, `Account sign-in ${user.email}`);
     const cookie = response.headers.get('set-cookie');
     if (!cookie || !data.user?.id) throw new Error(`Account sign-in ${user.email}: missing session`);
-    // Demo accounts may predate the policy journal; record current acceptance
-    // through the authenticated API when reusing them, never by database edits.
-    await payload<unknown>(await fetch(`${account}/api/account/policies/acceptance`, {
-      method: 'POST', headers: { 'content-type': 'application/json', origin: account, cookie },
-      body: JSON.stringify({ acceptedPolicies: signupPolicyFixture.acceptedPolicies }),
-    }), `Account policy acceptance ${user.email}`);
     return { cookie, id: data.user.id };
   }
 
