@@ -6,28 +6,32 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { CatalogueIntakeStore } from '../../../services/main/src/modules/catalogue-intake/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
+import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
+import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
+import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
+import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
 import { EditionPreferenceStore } from '../../../services/main/src/modules/session/preference-store.ts';
 import { SeriesSessionReader } from '../../../services/main/src/modules/session/series-store.ts';
 import { ConsumptionSessionStore } from '../../../services/main/src/modules/session/store.ts';
+import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
+import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { relationLexiconSeedMapPath, seedRelationLexicon } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { cataloguePlan, loadCatalogue, type CatalogueResponse } from '../../fixtures/catalogue/load.ts';
+import { cataloguePositions, catalogueCollection, catalogueZone, publishCatalogueFact } from '../../fixtures/catalogue/acceptance.ts';
 import { startMediaStack } from './media-support.ts';
 
 const short = (resource: string) => resource.slice(-36);
-const LEXICON = ['rewrite', 'reboot', 'sequel', 'spin-off', 'adaptation', 'credit-illustrator', 'credit-concept-supervision'];
-const PENDING = [
-  { query: 5, owner: 'G-652', clause: 'review grain', reason: 'G-650 lists reviews, and grain is not a query field' },
-  { query: 6, owner: 'G-835', clause: 'suggested correspondence', reason: 'progress summaries have no suggested-correspondence state' },
-  { query: 7, owner: 'G-847', clause: 'continuity and spoiler boundary', reason: 'statements cannot record continuity or a spoiler boundary' },
-  { query: 12, owner: 'G-831', clause: 'event membership', reason: 'event-overlap relations are not writable' },
-  { query: 12, owner: 'G-655', clause: 'one identity across Zones', reason: 'zone reads reject a contributor identity' },
-];
+const LEXICON = ['rewrite', 'reboot', 'sequel', 'spin-off', 'adaptation', 'credit-illustrator',
+  'credit-concept-supervision', 'correspondence-equivalent'];
+const PENDING: { query: number; owner: string; clause: string; reason: string }[] = [];
 
-test('G-840: catalogue fixture queries through the public API', async () => {
+test('G-840 G-913: all twelve catalogue fixture queries through the public API', async () => {
   const plan = cataloguePlan();
   expect(plan.works).toHaveLength(84);
   expect(plan.parts.filter(part => part.series === 'index.nt').map(part => part.label)).toContain('22 Reverse');
@@ -38,12 +42,14 @@ test('G-840: catalogue fixture queries through the public API', async () => {
   const stack = await startMediaStack('g-840-catalogue');
   try {
     const reader = await stack.member('catalogue');
+    const reviewer = await stack.member('catalogue-steward');
     stack.access.configureBaseline(stack.fuseki);
     const library = new ReaderLibraryStatusStore(stack.contentPool);
     const objects = stack.objects('semantic/structure/');
     await objects.initialize();
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      libraryStatus: library, sessions: new ConsumptionSessionStore(stack.contentPool, library),
+      libraryStatus: library, libraryRatings: new ReaderLibraryRatings(stack.accessPool),
+      sessions: new ConsumptionSessionStore(stack.contentPool, library),
       editionPreferences: new EditionPreferenceStore(stack.contentPool),
       seriesSessions: new SeriesSessionReader(stack.contentPool), structureObjects: objects,
       media: stack.media, mediaAccess: stack.mediaAccess,
@@ -51,17 +57,26 @@ test('G-840: catalogue fixture queries through the public API', async () => {
       catalogueIntake: new CatalogueIntakeStore(stack.accessPool, stack.env),
       profiles: new ProfilesAccess(stack.accessPool),
       personPreferences: new PersonPreferencesStore(stack.accessPool),
+      reviews: new ReaderReviews(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
+      editorialReview: new EditorialReviewStore(stack.accessPool),
+      readingPositions: new ReadingPositionStore(stack.contentPool), wikiEvidence: new WikiEvidenceStore(stack.contentPool),
+      wikiQuotations: new WikiQuotationStore(stack.contentPool), rights: { store: new RightsStore(stack.contentPool, stack.accessPool) },
       account: { verify: async request => {
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
-        if (token !== reader.token) throw new AccountAssertionDenied('Unknown bearer');
-        const verified = { ...reader.principal, emailVerified: true as const };
+        const member = [reader, reviewer].find(member => member.token === token);
+        if (!member) throw new AccountAssertionDenied('Unknown bearer');
+        const verified = { ...member.principal, emailVerified: true as const };
         return { ...verified, currentAssertion: async () => verified };
       } } });
-    const call = (method: string, path: string, body?: object, key = randomUUID()) =>
-      app.handle(new Request(`http://main.local${path}`, { method, headers: {
-        authorization: `Bearer ${reader.token}`, 'idempotency-key': key,
+    const requestPaths = new WeakMap<Response, string>();
+    const call = async (method: string, path: string, body?: object, key: string = randomUUID(), token = reader.token) => {
+      const response = await app.handle(new Request(`http://main.local${path}`, { method, headers: {
+        authorization: `Bearer ${token}`, 'idempotency-key': key,
         ...(body ? { 'content-type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}) }));
+      requestPaths.set(response, `${method} ${path}`);
+      return response;
+    };
     const bodyOf = async (response: Response): Promise<CatalogueResponse> => {
       const text = await response.text();
       if (!text) return { status: response.status, body: null };
@@ -70,21 +85,23 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     };
     const ok = async <T>(response: Response, status = 200): Promise<T> => {
       const parsed = await bodyOf(response);
-      if (parsed.status !== status) throw new Error(`${parsed.status}: ${JSON.stringify(parsed.body).slice(0, 500)}`);
+      if (parsed.status !== status) throw new Error(`${requestPaths.get(response)} ${parsed.status}: ${JSON.stringify(parsed.body).slice(0, 500)}`);
       return parsed.body as T;
     };
     const person = (await ok<{ agent: string }>(await call('POST', '/v1/agents',
       { profile: 'agent-provision-v1', kind: 'person', displayName: 'Catalogue reader' }), 201)).agent;
-    const grant = async (scope: string, action: string) => {
+    const steward = (await ok<{ agent: string }>(await call('POST', '/v1/agents',
+      { profile: 'agent-provision-v1', kind: 'person', displayName: 'Catalogue steward' }, randomUUID(), reviewer.token), 201)).agent;
+    const grant = async (scope: string, action: string, subject = person, principalId = reader.principalId) => {
       const client = await stack.accessPool.connect();
       try {
         await client.query('BEGIN');
         await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
         await client.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-          VALUES ($1,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), reader.principalId, person, action]);
+          VALUES ($1,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), principalId, subject, action]);
         await client.query(`INSERT INTO access.permission_grant
           (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-          VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), person, scope, action]);
+          VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), subject, scope, action]);
         await client.query('COMMIT');
       } catch (error) {
         try { await client.query('ROLLBACK'); } catch { /* preserve the first error */ }
@@ -166,16 +183,20 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     };
     const parts = async (id: string) => ok<{ parts: { work?: string; displayLabel?: string; inclusion?: string }[] }>(
       await call('GET', `/v1/resources/${short(workId(id))}/parts?actingSubject=${actor}&limit=100`));
+    // 1. Franchise, volume and anime grains select independent Work identities.
     const sao = await members('sao.franchise');
     const index = await members('index.franchise');
     expect(sao).toHaveLength(8);
     expect(index).toHaveLength(6);
     const releaseIds = new Set(Object.values(first.releases).map(item => item.release));
+    const mainVersions = new Set<string>();
     for (const member of [...sao, ...index]) {
       expect(releaseIds.has(member)).toBe(false);
       const header = await ok<{ mainVersion: string }>(await call('GET', `/v1/works/${short(member)}?actingSubject=${actor}`));
       expect(header.mainVersion.startsWith('https://rezics.com/id/')).toBe(true);
+      mainVersions.add(header.mainVersion);
     }
+    expect(mainVersions.size).toBe(sao.length + index.length);
     const saoVolumes = await parts('sao.bunko');
     const indexVolumes = await parts('index.original');
     expect(saoVolumes.parts.map(part => part.displayLabel)).toEqual(['1']);
@@ -184,14 +205,27 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     expect(sao.includes(anime) || index.includes(anime)).toBe(false);
     expect(new Set([sao.join(), indexVolumes.parts.map(part => part.work).join(), anime]).size).toBe(3);
 
-    const digital = plan.releases.find(item => item.identifiers.length);
-    if (!digital) throw new Error('digital release is missing from the plan');
-    const foundRelease = await ok<{ items: { id: string; coverage: { realization: string | null; work: string; mainVersion: string }[] }[] }>(
-      await call('GET', `/v1/releases?provider=${encodeURIComponent(digital.identifiers[0]!.provider)}&identifier=${encodeURIComponent(digital.identifiers[0]!.value)}&actingSubject=${actor}`));
-    expect(foundRelease.items.map(item => item.id)).toEqual([first.releases[digital.id]!.release]);
-    expect(foundRelease.items[0]!.coverage[0]).toMatchObject({ realization: first.realizations[digital.id]!.realization,
-      work: workId('sao.bunko'), mainVersion: first.works['sao.bunko']!.mainVersion });
+    // 2. Every fixture ISBN and provider-qualified digital entry resolves all grains.
+    const identified = plan.releases.filter(item => item.isbn13 || item.identifiers.length);
+    expect(identified).toHaveLength(2);
+    for (const release of identified) {
+      const lookups = [...(release.isbn13 ? [`isbn13=${release.isbn13}`] : []),
+        ...release.identifiers.map(identifier => `provider=${encodeURIComponent(identifier.provider)}&identifier=${encodeURIComponent(identifier.value)}`)];
+      for (const lookup of lookups) {
+        const found = await ok<{ items: { id: string; coverage: { realization: string; revision: string; work: string; mainVersion: string }[] }[] }>(
+          await call('GET', `/v1/releases?${lookup}&actingSubject=${actor}`));
+        expect(found.items.map(item => item.id)).toEqual([first.releases[release.id]!.release]);
+        expect(found.items[0]!.coverage).toEqual(release.coverage.map(id => expect.objectContaining({
+          realization: first.realizations[id]!.realization, revision: first.realizations[id]!.revision,
+          work: first.realizations[id]!.work, mainVersion: first.works[plan.realizations.find(item => item.id === id)!.work]!.mainVersion })));
+      }
+    }
+    const digital = identified.find(item => item.identifiers.length)!;
+    expect((await ok<{ items: unknown[] }>(await call('GET', `/v1/releases?provider=https%3A%2F%2Fexample.com%2Fother-store&identifier=${digital.identifiers[0]!.value}&actingSubject=${actor}`))).items).toEqual([]);
+    expect((await ok<{ items: unknown[] }>(await call('GET', `/v1/releases?isbn13=9780000000026&actingSubject=${actor}`))).items).toEqual([]);
+    expect((await call('GET', `/v1/releases?identifier=${digital.identifiers[0]!.value}&actingSubject=${actor}`)).status).toBe(400);
 
+    // 3. A missing publication does not erase the evidenced web Work identity.
     const bunkoRelations = await relations(workId('sao.bunko'));
     const rewrite = bunkoRelations.find(item => item.kind === 'derivation' && item.rendering?.viewingRole === 'rewrite');
     expect(rewrite).toMatchObject({ evidence: 'https://book.asahi.com/article/14487968', sourceVersionStatus: 'exact' });
@@ -203,6 +237,7 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     expect(fan).toMatchObject({ status: 'unofficial', verification: 'unverified', evidence: null,
       source: { kind: 'unresolved', work: workId('sao.web') } });
 
+    // 4. Reboot and SpinOff remain distinct relations with independent authorship.
     const progressive = await relations(workId('sao.progressive'));
     expect(progressive.find(item => item.rendering?.viewingRole === 'reboot')?.counterparts
       .some(item => item.reference === workId('sao.bunko'))).toBe(true);
@@ -213,6 +248,8 @@ test('G-840: catalogue fixture queries through the public API', async () => {
       `/v1/works/${short(workId('sao.aggo'))}/agent-credits?actingSubject=${actor}`));
     expect(aggoCredits.items).toContainEqual(expect.objectContaining({ role: 'author', displayName: 'Keiichi Sigsawa' }));
 
+    // 6. Even an equivalent correspondence never transfers completion. The
+    // reader must explicitly record the other Work's completion.
     await ok(await call('POST', '/v1/me/sessions',
       { actingSubject: person, expectedVersion: 0, target: workId('D03.web'), state: 'finished' }), 201);
     const webSessions = await ok<{ items: { state: string; target: { resource: string } }[] }>(await call('GET',
@@ -221,14 +258,27 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     const bookSessions = await ok<{ items: { state: string; target: { resource: string } }[] }>(await call('GET',
       `/v1/me/sessions?actingSubject=${actor}&target=${encodeURIComponent(workId('D03.books'))}`));
     expect(bookSessions.items.some(item => item.state === 'finished' && item.target.resource === workId('D03.web'))).toBe(false);
-    for (const id of ['D03.web', 'D03.books']) {
-      const summary = await bodyOf(await call('GET', `/v1/me/progress-summaries/${short(workId(id))}?actingSubject=${actor}&language=ja`));
-      expect(summary.status).toBe(404);
-      // A Work with no composition is WorkReadMissing; this route reports that as work_unavailable.
-      expect(summary.body).toMatchObject({ code: 'work_unavailable' });
-    }
+    const readerState = async (id: string) => ok<{ status: { status: string | null; version: number } }>(
+      await call('GET', `/v1/works/${short(workId(id))}/reader-state?actingSubject=${actor}`));
+    const bookBefore = await readerState('D03.books');
+    expect((await readerState('D03.web')).status.status).toBe('read');
+    expect(bookBefore.status.status).toBeNull();
+    const equivalence = await ok<{ revision: string }>(await call('GET',
+      `/v1/lexicon/definitions/correspondence-equivalent?actingSubject=${actor}`));
+    await ok(await call('POST', '/v1/relations/changes', { profile: 'relation-change-v1', expectedHead: null,
+      definition: equivalence.revision, actingSubject: person, evidence: 'https://example.com/catalogue-fixture/suggested-correspondence',
+      participations: [{ role: 'source', participant: { kind: 'resource', ref: workId('D03.web') } },
+        { role: 'target', participant: { kind: 'resource', ref: workId('D03.books') } }] }), 201);
+    expect((await relations(workId('D03.books'))).some(item => item.counterparts.some(entry => entry.reference === workId('D03.web')))).toBe(true);
+    expect((await readerState('D03.books')).status).toEqual(bookBefore.status);
+    expect((await ok<{ items: unknown[] }>(await call('GET',
+      `/v1/me/sessions?actingSubject=${actor}&target=${encodeURIComponent(workId('D03.books'))}`))).items).toEqual([]);
+    await ok(await call('POST', '/v1/me/sessions', { actingSubject: person, expectedVersion: 0,
+      target: workId('D03.books'), state: 'finished' }), 201);
+    expect((await readerState('D03.books')).status.status).toBe('read');
 
-    const published = indexVolumes.parts.map(part => part.work);
+    // 8. A reading order changes order without changing any Work identifier.
+    const published = indexVolumes.parts.map(part => part.work ?? missingWork('Index published part'));
     const reading = await members('index.original.reading');
     expect(new Set(reading)).toEqual(new Set(published));
     expect(reading).not.toEqual(published);
@@ -236,8 +286,11 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     expect(indexVolumes.parts.map(part => part.displayLabel)).toEqual([
       ...Array.from({ length: 22 }, (_, index) => String(index + 1)), 'SS1', 'SS2']);
 
+    // 9. Numbering, restarted series and omnibus completion retain exact Works.
     const nt = await parts('index.nt');
     expect(new Set(nt.parts.map(part => part.displayLabel))).toEqual(new Set([...Array.from({ length: 22 }, (_, index) => String(index + 1)), '22 Reverse']));
+    expect(nt.parts.find(part => part.displayLabel === '22')!.work)
+      .not.toBe(nt.parts.find(part => part.displayLabel === '22 Reverse')!.work);
     expect((await parts('index.gt')).parts.map(part => part.displayLabel)).toEqual(['1']);
     const omnibus = await ok<{ coverage: { work: string }[] }>(await call('GET',
       `/v1/works/${short(first.releases['index.original:omnibus']!.work)}/releases/${short(first.releases['index.original:omnibus']!.release)}?actingSubject=${actor}`));
@@ -247,6 +300,7 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     expect((await ok<{ counts: { completed: number } }>(await call('GET',
       `/v1/me/progress-summaries/${short(workId('index.original'))}?actingSubject=${actor}&language=ja`))).counts.completed).toBe(24);
 
+    // 10. Script-specific realizations pin their own language and source continuity.
     const hant = await ok<{ language: string; source: { kind: string; work: string; mainVersion?: string } }>(await call('GET',
       `/v1/works/${short(workId('sao.bunko'))}/realizations/${short(first.realizations['sao.bunko:zh-Hant']!.realization)}?actingSubject=${actor}`));
     const hans = await ok<{ language: string; source: { kind: string; work: string; mainVersion?: string } }>(await call('GET',
@@ -256,6 +310,7 @@ test('G-840: catalogue fixture queries through the public API', async () => {
       mainVersion: first.works['sao.bunko.volume1']!.mainVersion } });
     expect(hant.source.work).not.toBe(hans.source.work);
 
+    // 11. Source chains are traversable in both directions, including unresolved pins.
     const manga = workId('index.railgun');
     const novel = workId('index.original');
     const animeRelations = await relations(anime);
@@ -267,6 +322,8 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     expect(mangaRelations.some(item => item.counterparts.some(entry => entry.reference === novel))).toBe(true);
     expect((await relations(novel)).some(item => item.counterparts.some(entry => entry.reference === manga))).toBe(true);
 
+    // 12. One contributor identity participates in both Zones; event and
+    // franchise membership leave every Work and Main Version intact.
     expect(sao.some(item => index.includes(item))).toBe(false);
     const kawahara = (await ok<{ items: { role: string; agent: string }[] }>(await call('GET',
       `/v1/works/${short(workId('sao.bunko'))}/agent-credits?actingSubject=${actor}`))).items.find(item => item.role === 'author')?.agent;
@@ -276,28 +333,152 @@ test('G-840: catalogue fixture queries through the public API', async () => {
     const concept = aggo.find(item => item.rendering?.meaning.definition === supervision.definition);
     expect(concept?.rendering?.bindings.some(binding =>
       binding.role === 'contributor' && binding.participant.key === kawahara)).toBe(true);
+    if (!kawahara) throw new Error('Catalogue contributor is missing');
+    const chapterCollection = await catalogueCollection(port, 'Catalogue wiki chapters', []);
+    const saoZone = await catalogueZone(port, 'SAO catalogue', {
+      franchise: first.collections['sao.franchise']!.collection, chapters: chapterCollection });
+    const crossover = await catalogueCollection(port, 'Synthetic crossover catalogue', [workId('sao.aggo'), novel]);
+    const crossoverZone = await catalogueZone(port, 'Crossover catalogue', { franchise: crossover });
+    for (const [zone, work] of [[saoZone.zone, workId('sao.bunko')], [crossoverZone.zone, workId('sao.aggo')]]) {
+      const path = `/v1/zones/${short(zone!)}/routes?actingSubject=${actor}&path=`;
+      const page = await ok<{ kind: string; items: { id: string }[] }>(await call('GET', path + '%2Ffranchise'));
+      expect(page.kind).toBe('index');
+      expect(page.items.map(item => item.id)).toContain(work!);
+      expect(await ok(await call('GET', path + encodeURIComponent(`/franchise/${short(work!)}`))))
+        .toMatchObject({ kind: 'detail', resource: { id: work } });
+      if (work === workId('sao.bunko')) {
+        expect((await ok<{ items: { agent: string }[] }>(await call('GET',
+          `/v1/works/${short(work)}/agent-credits?actingSubject=${actor}`))).items.map(item => item.agent)).toContain(kawahara);
+      } else {
+        expect((await relations(work!)).some(item => item.rendering?.bindings.some(binding =>
+          binding.role === 'contributor' && binding.participant.key === kawahara))).toBe(true);
+      }
+    }
+    await grant('semantic:create:root', 'semantic.change');
+    const semantic = async (state: object) => ok<{ component: string; revision: string }>(await call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, state, actingSubject: person }), 201);
+    const event = await semantic({ component: 'resource', types: ['https://schema.org/Event'], properties: [
+      { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: 'Synthetic crossover event', language: 'en' } }] });
+    await grant(`semantic:read:${event.component}`, 'semantic.read');
+    const membership = await semantic({ component: 'definition', kind: 'relation', workSubjectRole: 'work',
+      roles: ['work', 'event'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) });
+    await grant(`semantic:read:${membership.component}`, 'semantic.read');
+    const beforeEvent = await Promise.all([workId('sao.bunko'), novel].map(async work =>
+      ok<{ id: string; mainVersion: string; revision: string }>(await call('GET', `/v1/works/${short(work)}?actingSubject=${actor}`))));
+    for (const work of [workId('sao.bunko'), novel]) {
+      const joined = await ok<{ occurrence: string }>(await call('POST', '/v1/relations/changes', {
+        profile: 'relation-change-v1', expectedHead: null, definition: membership.revision, actingSubject: person,
+        evidence: 'https://example.com/catalogue-fixture/event', participations: [
+          { role: 'work', participant: { kind: 'resource', ref: work } },
+          { role: 'event', participant: { kind: 'resource', ref: event.component } }] }), 201);
+      expect((await relations(work)).some(item => item.counterparts.some(entry => entry.reference === event.component))).toBe(true);
+      await grant(`semantic:read:${joined.occurrence}`, 'semantic.read');
+      expect(await ok(await call('GET', `/v1/relations/${short(joined.occurrence)}?actingSubject=${actor}`)))
+        .toMatchObject({ occurrence: joined.occurrence });
+    }
+    const eventWorks = (await relations(event.component)).flatMap(item => item.counterparts.map(entry => entry.reference));
+    expect(new Set(eventWorks)).toEqual(new Set([workId('sao.bunko'), novel]));
+    for (const before of beforeEvent) {
+      expect(await ok(await call('GET', `/v1/works/${short(before.id)}?actingSubject=${actor}`)))
+        .toMatchObject({ id: before.id, mainVersion: before.mainVersion, revision: before.revision });
+    }
+    expect(await members('sao.franchise')).toEqual(sao);
+    expect(await members('index.franchise')).toEqual(index);
 
-    await expectRejected(await bodyOf(await call('GET',
-      `/v1/resources/${short(workId('sao.bunko'))}/reviews?context=${encodeURIComponent(workId('sao.bunko'))}&grain=edition&actingSubject=${actor}`)), 'query 5 grain');
-    await expectRejected(await bodyOf(await call('POST', '/v1/statements', {
-      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: workId('sao.bunko'),
-      predicate: 'https://example.com/catalogue-fixture/predicate',
-      relationDefinition: 'https://example.com/catalogue-fixture/relation',
-      value: { kind: 'literal', lexical: 'survives in the books', datatype: 'http://www.w3.org/2001/XMLSchema#string', language: 'en' },
-      applicability: ['https://example.com/catalogue-fixture/applicability'], interpretation: { kind: 'selected' },
-      evidence: ['https://example.com/catalogue-fixture/evidence'], actingSubject: person,
-      continuity: 'books', spoilerBoundary: 'books' })), 'query 7 continuity');
-    await expectRejected(await bodyOf(await call('GET',
-      `/v1/zones/${randomUUID()}?actingSubject=${actor}&contributorIdentity=1`)), 'query 12 zones');
-    console.log(JSON.stringify(PENDING));
-    expect(PENDING.map(item => item.owner).sort()).toEqual(['G-652', 'G-655', 'G-831', 'G-835', 'G-847']);
+    // 5. Grain is the exact target base, including independently related manga
+    // and anime Works. Shared questions never combine their review populations.
+    await grant(`rating:context:${saoZone.realm}`, 'rating.context.create');
+    const storyQuestion = 'How good is this story or adaptation?';
+    const storyContext = await ok<{ context: string }>(await call('POST', '/v1/rating-contexts', {
+      profile: 'realm-standing-rating-context-v1', realm: saoZone.realm, question: storyQuestion, actingSubject: person }), 201);
+    const reviewTargets = [
+      { label: 'edition', target: first.releases[digital.id]!.release, grain: 'release', score: 8, question: 'How good is this edition?' },
+      { label: 'translation', target: first.realizations[digital.id]!.realization, grain: 'realization', score: 10, question: 'How good is this translation?' },
+      { label: 'story', target: workId('sao.bunko'), grain: 'main-version', score: 9, question: storyQuestion },
+      { label: 'manga', target: manga, grain: 'main-version', score: 7, question: storyQuestion },
+      { label: 'anime', target: anime, grain: 'main-version', score: 6, question: storyQuestion },
+    ] as const;
+    const reviewIds = new Set<string>();
+    for (const target of reviewTargets) {
+      const generic = target.grain !== 'main-version';
+      const context = generic ? await ok<{ context: string }>(await call('POST', '/v1/rating-contexts', {
+        profile: 'realm-target-rating-context-v1', realm: saoZone.realm, question: target.question,
+        targetGrain: target.grain, actingSubject: person }), 201) : storyContext;
+      await grant(`rating:observe:${context.context}`, 'rating.observation.set');
+      const work = Object.values(first.works).find(item => item.work === target.target);
+      const observation = generic ? { profile: 'realm-target-rating-observation-v1', target: target.target }
+        : { profile: 'realm-standing-rating-observation-v1', work: target.target, mainVersion: work!.mainVersion };
+      await ok(await call('POST', '/v1/rating-observations', { ...observation, context: context.context,
+        value: target.score, expectedRevisionHead: null, actingSubject: person }), 201);
+      const review = await ok<{ review: string }>(await call('POST', '/v1/reviews', {
+        profile: 'reader-review-command-v1', actingSubject: person, context: context.context, target: target.target,
+        expectedRevision: null, language: 'en', text: `${target.label} review`, spoiler: false }), 201);
+      reviewIds.add(review.review);
+      const page = await ok<{ items: { id: string; work: string; context: string; rating: number; text: string }[] }>(await call('GET',
+        `/v1/resources/${short(target.target)}/reviews?context=${encodeURIComponent(context.context)}&actingSubject=${actor}`));
+      expect(page.items).toEqual([expect.objectContaining({ id: review.review, work: target.target,
+        context: context.context, rating: target.score, text: `${target.label} review` })]);
+      const aggregateScope = { question: target.question, grain: target.grain,
+        population: 'account-principal', countedTarget: generic ? target.target : work!.mainVersion };
+      expect(await ok(await call('GET', `/v1/resources/${short(target.target)}/ratings?scope=realm&realm=${encodeURIComponent(saoZone.realm)}&context=${encodeURIComponent(context.context)}&actingSubject=${actor}`)))
+        .toMatchObject({ count: 1, mean: target.score, aggregationScope: aggregateScope });
+      if (generic) expect(await ok(await call('POST', '/v1/rating-aggregates', {
+        profile: 'realm-target-latest-mean-v1', context: context.context, target: target.target, actingSubject: person })))
+        .toMatchObject({ count: 1, mean: target.score, scope: aggregateScope });
+      expect((await ok<{ items: unknown[] }>(await call('GET', `/v1/resources/${short(target.target)}/reviews?context=${encodeURIComponent(context.context)}&rating=1&actingSubject=${actor}`))).items).toEqual([]);
+    }
+    expect(reviewIds.size).toBe(5);
+    expect((await call('GET', `/v1/resources/${short(first.releases[digital.id]!.release)}/reviews?context=${encodeURIComponent(storyContext.context)}&actingSubject=${actor}`)).status).toBe(422);
+    for (const target of reviewTargets.filter(item => item.grain === 'main-version')) {
+      expect(await ok(await call('GET', `/v1/resources/${short(target.target)}/ratings?scope=realm&realm=${encodeURIComponent(saoZone.realm)}&context=${encodeURIComponent(storyContext.context)}&actingSubject=${actor}`)))
+        .toMatchObject({ count: 1, mean: target.score });
+    }
+
+    // 7. The same subject and predicate retain contradictory claims. Reviewed
+    // publications commit continuity IRIs and exact chapter revelation boundaries.
+    const character = await semantic({ component: 'resource', types: ['https://rezics.com/vocab/Character'], properties: [
+      { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: 'Catalogue fixture character', language: 'en' } }] });
+    const predicate = await semantic({ component: 'definition', kind: 'property' });
+    const stewardPort = { actingSubject: steward,
+      request: async (method: string, path: string, body?: unknown, key?: string) =>
+        bodyOf(await call(method, path, body as object | undefined, key, reviewer.token)),
+      grant: (scope: string, action: string) => grant(scope, action, steward, reviewer.principalId) };
+    await stewardPort.grant(`collection:edit:${chapterCollection}`, 'collection.edit');
+    for (const subject of [character.component, predicate.component]) {
+      await grant(`semantic:read:${subject}`, 'semantic.read');
+      await stewardPort.grant(`semantic:read:${subject}`, 'semantic.read');
+    }
+    await stewardPort.grant(`statement:speak:${steward}`, 'statement.record');
+    const facts: { statement: string; continuity: string; occurrences: string[]; text: string }[] = [];
+    for (const planned of plan.statements) {
+      const work = first.works[planned.work]!;
+      for (const action of ['work.read', 'work.edit', 'work.review']) {
+        await stewardPort.grant(`work:${action.slice(5)}:${work.work}`, action);
+      }
+      const chapters = await cataloguePositions(port, work.work, work.mainVersion);
+      const statement = await publishCatalogueFact(port, stewardPort, { work: work.work, zone: saoZone.zone,
+        subject: character.component, predicate: predicate.component, text: planned.text, occurrences: chapters.occurrences });
+      facts.push({ statement, continuity: work.work, occurrences: chapters.occurrences, text: planned.text });
+    }
+    expect(new Set(facts.map(fact => fact.statement)).size).toBe(2);
+    for (const fact of facts) {
+      const path = `/v1/statements/${short(fact.statement)}?actingSubject=${actor}&position=`;
+      expect((await call('GET', path + 'start')).status).toBe(404);
+      if (fact.occurrences.length > 1) expect((await call('GET', path + encodeURIComponent(fact.occurrences[0]!))).status).toBe(404);
+      const revealed = await ok<{ subject: string; predicate: string; value: { lexical: string }; applicability: string[] }>(
+        await call('GET', path + encodeURIComponent(fact.occurrences.at(-1)!)));
+      expect(revealed).toMatchObject({ subject: character.component, predicate: predicate.component,
+        value: { lexical: fact.text }, applicability: [fact.continuity] });
+      expect(await ok(await call('GET', path + 'all'))).toMatchObject({ subject: character.component,
+        predicate: predicate.component, value: { lexical: fact.text }, applicability: [fact.continuity] });
+      const other = facts.find(item => item.statement !== fact.statement)!;
+      expect((await call('GET', path + encodeURIComponent(other.occurrences.at(-1)!))).status).toBe(404);
+      const chooser = await ok<{ items: { occurrence: string }[] }>(await call('GET',
+        `/v1/reading-positions/${short(fact.continuity)}?actingSubject=${actor}&position=all`));
+      expect(chooser.items.map(item => item.occurrence)).toEqual(fact.occurrences);
+    }
+    expect(PENDING).toEqual([]);
   } finally { await stack.stop(); }
 }, 600_000);
 
 function missingWork(id: string): never { throw new Error(`catalogue work ${id} is missing`); }
-
-async function expectRejected(response: CatalogueResponse, label: string) {
-  const body = response.body as { code?: string; title?: string };
-  if (response.status === 400 && body.code === 'invalid_request' && body.title === 'Request does not match the Work contract') return;
-  throw new Error(`${label} accepted an extra field (${response.status} ${body.code ?? ''} ${body.title ?? ''}); write the real assertion`);
-}

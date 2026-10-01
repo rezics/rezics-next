@@ -1,7 +1,7 @@
 # Query scaffolding. These records are not bibliographic facts and do not belong
 # in franchises.yaml. The loader posts the fan translation, the digital identifier
-# and the reading-order Collection. It does not post the wiki statements: statement
-# continuity and spoiler boundaries are not writable yet.
+# and the reading-order Collection. The acceptance journey publishes the wiki
+# statements through reviewed bundles with continuity and revelation positions.
 fanTranslation:
   work: sao.web
   language: en
@@ -14,6 +14,9 @@ digitalEntry:
   provider: https://example.com/catalogue-fixture/store
   value: g840-sao-bunko-en
   platform: ebook
+isbnEntry:
+  releaseFamily: [sao.bunko.volume1, zh-Hans, Hunan Fine Arts]
+  value: 9780000000019
 readingOrder:
   id: index.original.reading
   name: Index Original reading order

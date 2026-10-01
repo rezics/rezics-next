@@ -46,7 +46,7 @@ export interface PlannedRealization {
 }
 export interface PlannedRelease {
   id: string; work: string; title: string; language: string; publisher: string | null; platform: string | null;
-  coverage: string[]; identifiers: { provider: string; value: string }[];
+  coverage: string[]; identifiers: { provider: string; value: string }[]; isbn13: string | null;
 }
 export interface PlannedCollection { id: string; name: string; members: string[] }
 export interface PlannedStatement { work: string; text: string; continuity: string }
@@ -162,6 +162,8 @@ export function cataloguePlan(): CataloguePlan {
   const families = rows(sao.release_families, 'release_families');
   const digital = block(synthetic.digitalEntry, 'digitalEntry');
   const digitalFamily = strings(digital.releaseFamily, 'digitalEntry.releaseFamily');
+  const isbn = block(synthetic.isbnEntry, 'isbnEntry');
+  const isbnFamily = strings(isbn.releaseFamily, 'isbnEntry.releaseFamily');
   for (const [work, language, publisher] of families) {
     if (!work || !language || !publisher) throw new Error('release family is incomplete');
     organization(publisher);
@@ -170,7 +172,9 @@ export function cataloguePlan(): CataloguePlan {
       evidence: KADOKAWA, source: 'main-version', translators: [publisher], publishers: [publisher] });
     const identified = digitalFamily[0] === work && digitalFamily[1] === language && digitalFamily[2] === publisher;
     releases.push({ id, work, title: titles.get(work) ?? '', language, publisher, platform: identified ? text(digital.platform, 'platform') : null,
-      coverage: [id], identifiers: identified ? [{ provider: text(digital.provider, 'provider'), value: text(digital.value, 'value') }] : [] });
+      coverage: [id], identifiers: identified ? [{ provider: text(digital.provider, 'provider'), value: text(digital.value, 'value') }] : [],
+      isbn13: isbnFamily[0] === work && isbnFamily[1] === language && isbnFamily[2] === publisher
+        ? text(isbn.value, 'isbnEntry.value') : null });
   }
   for (const part of parts.filter(item => item.series === 'index.original')) {
     const id = `${part.volume}:ja`;
@@ -181,14 +185,14 @@ export function cataloguePlan(): CataloguePlan {
   if (!omnibusWork) throw new Error('Index omnibus has no first volume');
   releases.push({ id: 'index.original:omnibus', work: omnibusWork, title: titles.get('index.original') ?? '',
     language: 'ja', publisher: null, platform: null,
-    coverage: parts.filter(item => item.series === 'index.original').map(item => `${item.volume}:ja`), identifiers: [] });
+    coverage: parts.filter(item => item.series === 'index.original').map(item => `${item.volume}:ja`), identifiers: [], isbn13: null });
 
   const books = block(facts.D08_books, 'D08_books');
   const booksWork = text(books.sourceWork, 'D08_books.sourceWork');
   realizations.push({ id: 'D08.books', work: booksWork, language: 'ja', kind: 'original', status: 'official',
     verification: 'verified', evidence: DIVERGENT.D08 ?? null, source: 'main-version', translators: [], publishers: [] });
   releases.push({ id: 'D08.books', work: booksWork, title: titles.get(booksWork) ?? '', language: 'ja',
-    publisher: null, platform: null, coverage: ['D08.books'], identifiers: [] });
+    publisher: null, platform: null, coverage: ['D08.books'], identifiers: [], isbn13: null });
 
   const fan = block(synthetic.fanTranslation, 'fanTranslation');
   const translator = text(fan.translator, 'fanTranslation.translator');
@@ -456,7 +460,7 @@ export async function loadCatalogue(port: CataloguePort): Promise<CatalogueManif
       `/v1/works/${short(target.work)}/releases/${short(id)}`, {
         profile: 'release-v2', id, expectedHead: null, actingSubject: port.actingSubject, kind: 'formal', status: 'official',
         titleLanguage: item.language, tracklistLanguage: null, title: { value: item.title, language: item.language },
-        editionStatement: null, publisher: item.publisher, publicationYear: null, isbn13: null, originalUrl: null,
+        editionStatement: null, publisher: item.publisher, publicationYear: null, isbn13: item.isbn13, originalUrl: null,
         fixedRelease: null, identifiers: item.identifiers, platform: item.platform, territory: null, coverage, evidence: null,
       }, idempotency(`release:${item.id}`));
     manifest.releases[item.id] = { release: receipt.release, revision: receipt.revision, work: target.work };
