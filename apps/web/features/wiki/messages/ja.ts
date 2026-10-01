@@ -7,7 +7,6 @@ export default {
   yourProgress: 'あなたの進行状況',
   startOfStory: '物語の始まり',
   chosen: '選んだ位置',
-  change: '位置を変更',
   showEverything: 'すべて表示',
   sheetTitle: 'どこまで読むか',
   sheetBody: '選んだ位置までに物語が明かした内容だけがページに表示されます。',

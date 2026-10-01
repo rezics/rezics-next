@@ -7,7 +7,6 @@ export default {
   yourProgress: '내 진행 상황',
   startOfStory: '이야기의 시작',
   chosen: '내가 고른 위치',
-  change: '위치 바꾸기',
   showEverything: '모두 보기',
   sheetTitle: '여기까지 읽기',
   sheetBody: '고른 위치까지 이야기가 밝혀 준 내용만 페이지에 나타납니다.',

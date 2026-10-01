@@ -13,7 +13,7 @@ import type { WikiMessages } from './messages.ts';
 export interface PositionChoiceOption { id: string; label: ZoneText; href: string; current: boolean }
 
 export interface PositionControlProps {
-  copy: Pick<WikiMessages, 'region' | 'upTo' | 'upToEverything' | 'change' | 'showEverything' | 'sheetTitle' | 'sheetBody'
+  copy: Pick<WikiMessages, 'region' | 'upTo' | 'upToEverything' | 'showEverything' | 'sheetTitle' | 'sheetBody'
     | 'progressOption' | 'progressNote' | 'progressNoneNote' | 'everythingOption' | 'everythingNote' | 'moreChapters'
     | 'close'>;
   /** What the reader is looking at now: `all`, or the position they are up to. */
@@ -46,7 +46,7 @@ export function PositionControl({ copy, at, options, progress, everything, more 
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 sm:px-6 lg:px-10">
       <Sheet open={open} onOpenChange={details => setOpen(details.open)}>
         <SheetTrigger className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-auto max-w-full min-h-9 whitespace-normal py-1.5 text-start')}
-          aria-label={copy.change}>
+>
           <BookMarkedIcon aria-hidden="true" />
           <span data-position-current="" className="min-w-0">
             {at.kind === 'all' ? copy.upToEverything : <>{copy.upTo}{' '}{at.label ? <Text text={at.label} /> : null}</>}

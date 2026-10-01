@@ -13,7 +13,7 @@ export function PositionBar({ state, here, locale }: { state: PositionState; her
   const note = state.mode === 'chosen' ? t.chosen : state.own === null ? t.startOfStory : t.yourProgress;
   const choice = (value: PositionChoice) => withPosition(here, value);
   return <PositionControl
-    copy={{ region: t.region, upTo: t.upTo, upToEverything: t.upToEverything, change: t.change,
+    copy={{ region: t.region, upTo: t.upTo, upToEverything: t.upToEverything,
       showEverything: t.showEverything, sheetTitle: t.sheetTitle, sheetBody: t.sheetBody,
       progressOption: t.progressOption, progressNote: t.progressNote, progressNoneNote: t.progressNoneNote,
       everythingOption: t.everythingOption, everythingNote: t.everythingNote, moreChapters: t.moreChapters,

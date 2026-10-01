@@ -67,11 +67,11 @@ const viewports = [{ name: 'phone', width: 390, height: 844 }, { name: 'desktop'
 const locales = ['en', 'ja'] as const;
 const words = {
   en: { upTo: 'Up to:', start: 'start of the story', progress: 'your progress', characters: 'Main characters', everything: 'Show everything',
-    elizabeth: 'Elizabeth Bennet', jane: 'Jane Bennet', darcy: 'Fitzwilliam Darcy', change: 'Change position', revealed: 'Revealed in this chapter',
+    elizabeth: 'Elizabeth Bennet', jane: 'Jane Bennet', darcy: 'Fitzwilliam Darcy', revealed: 'Revealed in this chapter',
     notFound: 'This community isn’t here', sister: 'Sister', acquaintance: 'Acquaintance', passages: 'Passages and sources', alias: 'Lizzy',
     edition: 'text/plain edition', beyond: 'beyond your reading position' },
   ja: { upTo: 'ここまで:', start: '物語の始まり', progress: 'あなたの進行状況', characters: '主要人物', everything: 'すべて表示',
-    elizabeth: 'エリザベス・ベネット', jane: 'ジェーン・ベネット', darcy: 'Fitzwilliam Darcy', change: '位置を変更', revealed: 'この章で明かされること',
+    elizabeth: 'エリザベス・ベネット', jane: 'ジェーン・ベネット', darcy: 'Fitzwilliam Darcy', revealed: 'この章で明かされること',
     notFound: '', sister: '姉妹', acquaintance: '知人', passages: '引用と出典', alias: 'Lizzy', edition: 'text/plain 版',
     beyond: '現在の読み進めた位置より先' },
 } as const;
@@ -161,7 +161,7 @@ test('the position control works by keyboard and leads to a chapter', async ({ p
   await page.setViewportSize(viewports[0]);
   await page.goto(site('en'));
   await ready(page);
-  const button = page.getByRole('button', { name: 'Change position' });
+  const button = page.getByRole('button', { name: /^Up to:/ });
   await button.focus();
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog');

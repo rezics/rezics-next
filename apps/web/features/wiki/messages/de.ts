@@ -7,7 +7,6 @@ export default {
   yourProgress: 'dein Fortschritt',
   startOfStory: 'Anfang der Geschichte',
   chosen: 'deine Wahl',
-  change: 'Position ändern',
   showEverything: 'Alles anzeigen',
   sheetTitle: 'Lesen bis',
   sheetBody: 'Seiten zeigen nur, was die Geschichte bis zur gewählten Position verraten hat.',

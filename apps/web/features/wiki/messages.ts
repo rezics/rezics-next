@@ -17,7 +17,6 @@ const en = {
   yourProgress: 'your progress',
   startOfStory: 'start of the story',
   chosen: 'your choice',
-  change: 'Change position',
   showEverything: 'Show everything',
   sheetTitle: 'Read up to',
   sheetBody: 'Pages show only what the story has revealed up to the position you choose.',

@@ -7,7 +7,6 @@ export default {
   yourProgress: '你的進度',
   startOfStory: '故事開頭',
   chosen: '你的選擇',
-  change: '變更位置',
   showEverything: '顯示全部',
   sheetTitle: '讀到哪裡',
   sheetBody: '頁面只顯示故事截至所選位置已經揭示的內容。',

@@ -20,7 +20,7 @@ const fits = async () => expect(document.documentElement.scrollWidth).toBeLessTh
 function Control({ locale, at, current }: { locale: UiLocale; at: 'all' | 'chapter3'; current: number | null }) {
   const t = copyOf(locale);
   return <PositionControl
-    copy={{ region: t.region, upTo: t.upTo, upToEverything: t.upToEverything, change: t.change, showEverything: t.showEverything,
+    copy={{ region: t.region, upTo: t.upTo, upToEverything: t.upToEverything, showEverything: t.showEverything,
       sheetTitle: t.sheetTitle, sheetBody: t.sheetBody, progressOption: t.progressOption, progressNote: t.progressNote,
       progressNoneNote: t.progressNoneNote, everythingOption: t.everythingOption, everythingNote: t.everythingNote,
       moreChapters: t.moreChapters, close: t.close }}
@@ -101,7 +101,7 @@ export const HomeFull: Story = {
   render: ({ locale }) => <Home locale={locale} sections={data.fullHome} position={data.atEverything} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    for (const heading of ['Works', 'Main characters', 'Places', 'Chapter guide', 'Timeline']) {
+    for (const heading of [/^Works/, /^Main characters/, /^Places/, /^Chapter guide/, /^Timeline/]) {
       await expect(canvas.getByRole('heading', { name: heading })).toBeVisible();
     }
     await expect(canvas.getByText('Showing everything, including records from chapters you may not have read.')).toBeVisible();
@@ -114,7 +114,7 @@ export const HomeFullDarkPhone: Story = {
   globals: { theme: 'dark', viewport: { value: 'phone' } },
   render: HomeFull.render,
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { name: 'Timeline' })).toBeVisible();
+    await expect(within(canvasElement).getByRole('heading', { name: /^Timeline/ })).toBeVisible();
     await fits();
   },
 };
@@ -236,9 +236,9 @@ export const PositionSheet: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bar = canvas.getByRole('region', { name: 'Reading position' });
-    await expect(within(bar).getByRole('button', { name: 'Change position' })).toHaveTextContent('Up to: Volume 1 · Chapter 3');
+    await expect(within(bar).getByRole('button', { name: /^Up to:|^Showing everything/ })).toHaveTextContent('Up to: Volume 1 · Chapter 3');
     await expect(within(bar).getByText('your progress')).toBeVisible();
-    await userEvent.click(within(bar).getByRole('button', { name: 'Change position' }));
+    await userEvent.click(within(bar).getByRole('button', { name: /^Up to:|^Showing everything/ }));
     const sheet = within(document.body);
     await waitFor(() => expect(sheet.getByRole('dialog')).toBeVisible());
     const options = within(sheet.getByRole('dialog')).getAllByRole('link');
@@ -248,7 +248,7 @@ export const PositionSheet: Story = {
     await expect(options[3]).toHaveAttribute('href', '/en/r/franchise-wiki?position=c3');
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(sheet.queryByRole('dialog')).toBeNull());
-    await expect(within(bar).getByRole('button', { name: 'Change position' })).toHaveFocus();
+    await expect(within(bar).getByRole('button', { name: /^Up to:|^Showing everything/ })).toHaveFocus();
   },
 };
 
@@ -259,7 +259,7 @@ export const PositionEverything: Story = {
     <WikiHome {...common(locale)} sections={data.fullHome} position={data.atEverything} /></RealmPageStory>,
   async play({ canvasElement }) {
     const bar = within(canvasElement).getByRole('region', { name: 'Reading position' });
-    await expect(within(bar).getByRole('button', { name: 'Change position' })).toHaveTextContent('Showing everything');
+    await expect(within(bar).getByRole('button', { name: /^Up to:|^Showing everything/ })).toHaveTextContent('Showing everything');
     await expect(within(bar).queryByRole('link', { name: 'Show everything' })).toBeNull();
   },
 };

@@ -44,7 +44,7 @@ export const readChooser = cache(async (work: string, position: string | undefin
   let resolved = 'start';
   let cursor: string | undefined;
   for (let page = 0; page < CHOOSER_PAGES; page++) {
-    const read = await settle(() => main.v1['reading-positions']({ work }).get({ query: {
+    const read = await settle(() => main.v1['reading-positions']({ work: work.slice(-36) }).get({ query: {
       actingSubject, position, cursor, limit: 100 } }) as Promise<{ data: ChooserPage | null; error: { status: number } | null }>,
     cursor);
     if (!read.ok) return read;
