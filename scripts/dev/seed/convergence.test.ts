@@ -202,3 +202,25 @@ test('G-909: network retries stop at the write budget and identify the failing M
   await expect(api.put(path, release, 'token', 'seed-release')).rejects.toThrow(`Main ${path}: transport failed after retries`);
   expect(requests).toBe(8);
 }, 10_000);
+
+test('G-909: legacy omitted-language Space creation replays with English and its original key', async () => {
+  const body = { profile: 'space-realm-v1', name: 'Books', capabilities: ['realm'], actingSubject: id };
+  await serverFixture((_request, call) => call.body!.language === 'en'
+    ? Response.json({ space: id, realm: id, replayed: true }) : conflict('idempotency_conflict'), async (api, calls) => {
+    await expect(api.post('/v1/spaces', body, 'token', 'seed-space')).resolves.toMatchObject({ replayed: true });
+    expect(calls).toHaveLength(2);
+    expect(calls.map(call => call.key)).toEqual(['seed-space', 'seed-space']);
+    expect(calls[1]!.body).toEqual({ ...body, language: 'en' });
+    expect(body).not.toHaveProperty('language');
+    expect(api.endpoints.writeCounts?.written).toBe(0);
+  });
+});
+
+test('G-909: explicitly declared Space languages are never replaced on a creation conflict', async () => {
+  await serverFixture(() => conflict('idempotency_conflict'), async (api, calls) => {
+    await expect(api.post('/v1/spaces', { profile: 'space-realm-v1', name: '书籍', language: 'zh-Hans',
+      capabilities: ['realm'], actingSubject: id }, 'token', 'seed-space')).rejects.toThrow('idempotency_conflict');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.body!.language).toBe('zh-Hans');
+  });
+});

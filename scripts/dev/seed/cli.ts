@@ -179,15 +179,18 @@ async function run(options: Options): Promise<boolean> {
   for (const step of plan) {
     const begun = performance.now();
     const before = { ...writeCounts };
+    const previousFindings = new Set(findings);
     try {
       await refreshSeedTokens(state);
       await step(state);
     } catch (error) { throw new Error(`${step.name}: ${describe(error)}`); }
     timings.push(`  ${((performance.now() - begun) / 1000).toFixed(1).padStart(6)} s  ${step.name}`);
     const written = writeCounts.written - before.written;
-    console.log(`${step.name}: ${written ? 'updated' : 'replayed'} (${written} writes, ${
+    const stepFindings = [...findings].filter(finding => !previousFindings.has(finding));
+    console.log(`${step.name}: ${stepFindings.length ? 'incomplete' : written ? 'updated' : 'replayed'} (${written} writes, ${
       writeCounts.replayed - before.replayed} receipt replays, ${writeCounts.reconciled - before.reconciled} already match, ${
       writeCounts.lookups - before.lookups} lookups).`);
+    for (const finding of stepFindings) console.log(`  ${finding}`);
   }
   console.log(`Step timings (${((performance.now() - started) / 1000).toFixed(1)} s in all):`);
   for (const line of timings) console.log(line);

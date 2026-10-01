@@ -210,6 +210,15 @@ export class SeedApi {
         // its old key. Refresh its state and basis before binding a new key;
         // POST keys stay stable because a new key would create a record.
         const code = typeof detail?.code === 'string' ? detail.code : '';
+        if (method === 'POST' && path === '/v1/spaces' && code === 'idempotency_conflict'
+          && body && typeof body === 'object' && !('language' in body)) {
+          // Older Space creation digests treated an omitted language as English.
+          // Replay that exact intent under its existing key, never a new key.
+          body = { ...body, language: 'en' };
+          assertSeedRequest(method, path, body);
+          await response.body?.cancel();
+          continue;
+        }
         if (method === 'PUT' && seedPutConflict(path, code)) {
           let recovery;
           try {
