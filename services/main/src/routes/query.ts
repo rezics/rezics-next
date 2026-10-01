@@ -7,8 +7,7 @@ import { zoneBrowsePage } from '../modules/zone-modules/contract.ts';
 import { conceptWorksPage } from '../modules/concept-page/contract.ts';
 import { readConceptWorks, readFilteredWorks } from '../modules/concept-page/read.ts';
 import { discoveryError } from '../modules/discovery/management.ts';
-import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
-import { workRead } from '../modules/work/read-session.ts';
+import { publicWorkRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
 import { type AdmittedQuery, compileQuery, QUERY_COST, QueryRejected, type CompiledQuery }
   from '../modules/query/compile.ts';
@@ -97,7 +96,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const compiled = compileQuery(input as AdmittedQuery);
       if (compiled.template === 'release-works') {
         try {
-          const result = await workRead(work, publicLanguageRequest(request), {
+          const result = await publicWorkRead(work, request, {
             limit: compiled.request.limit, cursor: compiled.request.cursor,
           }, session => withReleaseQueryBudget(() => readReleaseWorks(session, compiled.request)));
           return Response.json({ profile: 'query-v1', template: 'release-works-v1',
@@ -108,7 +107,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       if (compiled.template === 'concept-works') {
         try {
           if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
-          const result = await workRead(work, publicLanguageRequest(request), { ...compiled.request,
+          const result = await publicWorkRead(work, request, { ...compiled.request,
             language: undefined, retainedBasis: true }, session => 'role' in compiled.request
             ? readFilteredWorks(session, work.discovery!, compiled.request)
             : readConceptWorks(session, work.discovery!, compiled.concept, compiled.request));
@@ -119,9 +118,9 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
       if (compiled.template === 'zone-browse') {
         const url = new URL(`/v1/realms/${compiled.realm.slice(-36)}/modules/browse`, request.url);
-        const result = await workRead(work, publicLanguageRequest(request, url), {
+        const result = await publicWorkRead(work, request, {
           language: compiled.request.language, limit: compiled.request.limit, cursor: compiled.request.cursor,
-        }, session => readZoneBrowse(session, compiled.realm, compiled.request));
+        }, session => readZoneBrowse(session, compiled.realm, compiled.request), url);
         return Response.json({ profile: 'query-v1', template: 'zone-browse-v1',
           selection: selection(input as AdmittedQuery, compiled), result },
           { headers: { 'cache-control': 'no-store' } });

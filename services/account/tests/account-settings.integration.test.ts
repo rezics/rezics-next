@@ -13,11 +13,11 @@ import { parseActivity, parseConnectedApps, parseMethods, parseSession,
 
 const link = (text: string) => /https?:\/\/\S+/.exec(text)![0];
 
-test('G288 settings: all interface locales validate and stored zh-CN choices migrate to zh-Hans', async () => {
+test('G288 settings: all interface locales validate and unsupported stored choices are rejected', async () => {
   const f = await accountFixture();
   try {
     const body = { email: 'lang@example.test', name: 'Lang', password: 'a sufficiently long password', locale: 'zh-Hans' };
-    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'legacy@example.test', locale: 'zh-CN' })).status)
+    expect((await f.request('/api/auth/sign-up/email', { ...body, email: 'unsupported-locale@example.test', locale: 'zh-CN' })).status)
       .toBe(400);
     const signedUp = await f.request('/api/auth/sign-up/email', body, undefined, { 'accept-language': 'en' });
     // A chosen language changes nothing about the enumeration-safe answer.
@@ -28,7 +28,6 @@ test('G288 settings: all interface locales validate and stored zh-CN choices mig
     expect((await f.request(link(verification.text))).status).toBe(302);
     const signedIn = await f.request('/api/auth/sign-in/email', { email: body.email, password: body.password });
     const cookie = signedIn.headers.get('set-cookie')!;
-    const { user: signedInUser } = await signedIn.json() as { user: { id: string } };
     const session = async () => (await (await f.request('/api/auth/get-session', undefined, cookie)).json() as {
       user: { locale: string | null } }).user.locale;
     expect(await session()).toBe('zh-Hans');
@@ -37,9 +36,6 @@ test('G288 settings: all interface locales validate and stored zh-CN choices mig
       expect(await session()).toBe(locale);
     }
     expect((await f.request('/api/auth/update-user', { locale: 'zh-CN' }, cookie)).status).toBe(400);
-    await f.pool.query('UPDATE "user" SET locale = $2 WHERE id = $1', [signedInUser.id, 'zh-CN']);
-    await f.pool.query(await Bun.file(new URL('../migrations/050_account_locale_hans.sql', import.meta.url)).text());
-    expect(await session()).toBe('zh-Hans');
     expect((await f.request('/api/auth/update-user', { locale: 'en' }, cookie)).status).toBe(200);
     expect(await session()).toBe('en');
     // The stored choice outranks the language of whichever browser asks.

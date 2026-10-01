@@ -118,7 +118,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     const email = `g836-${randomUUID()}@example.test`, password = randomBytes(24).toString('base64url');
     const third = await json<{ user: { id: string } }>(await fetch(`${f.account.issuer}/sign-up/email`,{ method: 'POST',
       headers: { 'content-type': 'application/json',origin: f.account.issuer.replace('/api/auth','') },
-      body: JSON.stringify({ name: 'Independent reviewer',email,password,birthMonth: '1990-01',
+      body: JSON.stringify({ name: 'Independent reviewer',email,password,minimumAgeConfirmed: true,
         acceptedPolicies: POLICY_VERSIONS.map(({ policyId,versionDigest }) => ({ policyId,versionDigest })) }) }));
     await accountPool.query('UPDATE "user" SET "emailVerified"=true WHERE id=$1',[third.user.id]);
     const tokenC = await f.account.tokenFor({ email,password },scopes);

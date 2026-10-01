@@ -106,6 +106,8 @@ export class AccountAssertionVerifier {
     const aud = typeof signed.aud === 'string' ? [signed.aud]
       : Array.isArray(signed.aud) ? signed.aud.filter((value): value is string => typeof value === 'string') : [];
     return { issuer: signed.iss!, subject: signed.sub, accountExpiresAt: signed.exp,
+      ...(signed.rezics_auth_mode !== 'workload'
+        ? { contentEvidence: parseContentEvidence(current.rezics_content_evidence) } : {}),
       currentAssertion: () => this.verify(request, requiredScopes),
       ...(current.email_verified === true && signed.rezics_auth_mode !== 'workload'
         ? { emailVerified: true } : {}),
@@ -156,4 +158,20 @@ export class AccountAssertionVerifier {
 
 function audienceIncludes(audience: unknown, expected: string): boolean {
   return audience === expected || (Array.isArray(audience) && audience.includes(expected));
+}
+
+function parseContentEvidence(value: unknown): VerifiedPrincipal['contentEvidence'] {
+  if (value === undefined) return undefined;
+  const body = value as Record<string, unknown> | null;
+  const categories = body?.categories as Record<string, unknown> | null;
+  if (!body || !['unknown', 'under-15', '15-17', 'adult'].includes(String(body.age))
+    || !(body.country === null || typeof body.country === 'string' && /^[A-Z]{2}$/.test(body.country))
+    || typeof body.accountEligible !== 'boolean' || typeof body.adultAvailable !== 'boolean'
+    || !categories || ['general', 'r15', 'r18', 'r18g'].some(key => typeof categories[key] !== 'boolean'))
+    throw new AccountAssertionUnavailable('Account content evidence is invalid');
+  return { age: body.age as NonNullable<VerifiedPrincipal['contentEvidence']>['age'],
+    country: body.country as string | null, accountEligible: body.accountEligible,
+    adultAvailable: body.adultAvailable, categories: {
+      general: categories.general as boolean, r15: categories.r15 as boolean,
+      r18: categories.r18 as boolean, r18g: categories.r18g as boolean } };
 }

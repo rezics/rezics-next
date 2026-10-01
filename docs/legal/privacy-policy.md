@@ -28,7 +28,7 @@ We collect information you provide, information generated when you use the servi
 | Category | Information and source | Main uses |
 | --- | --- | --- |
 | Account information | Email, authentication and recovery records, account identifiers and account settings you provide or generate | Sign-in, recovery, security and service notices |
-| Age and region | Declared birth month and year; request country inferred from network information; country you provide when needed | Apply account-age, content and market restrictions |
+| Age and region | Complete birth date you provide when a feature needs age; age-assurance results where required; request country inferred from network information; country you provide when needed | Apply account-age, content and market restrictions |
 | Public identity | Agent names, handles, biographies, affiliations and other profile fields you choose to publish | Attribution, identity discovery and authorized representation |
 | Content and collaboration | Drafts, published works, translations, comments, reviews, wiki contributions, revisions and attached material | Store, edit, publish, moderate and export content |
 | Library information | Shelves, ownership records, reading sessions, progress, notes and imports | Provide your library and reading features |
@@ -40,6 +40,15 @@ We collect information you provide, information generated when you use the servi
 Authentication details actually stored: [REZICS TO FILL: password hashes, passkey public keys, federated-login identifiers and other enabled methods; do not list methods that are absent].
 
 We do not make birth information, account email or private reading history public simply because you create a public Agent.
+
+Your birth date is private by default. You may choose to publish the complete
+date through a shareable birthday page and turn publication off in settings.
+Anyone holding the link can read the complete date, including the year; turning
+publication off invalidates that link.
+Recording a birthday or enabling a content category does not publish it. Age
+eligibility does not depend on whether the birthday is public. We share only
+the necessary age qualification with services that enforce content restrictions,
+unless you separately choose birthday publication.
 
 Other users may mention you or submit reports about your activity. Public catalogue imports may contain creator names, credits and biographical information from VNDB, Open Library, Wikidata, Bangumi, MusicBrainz core or the previous REZICS service. Only sources actually imported are included in our current source inventory.
 

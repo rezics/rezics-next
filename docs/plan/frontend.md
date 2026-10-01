@@ -331,6 +331,36 @@ service's API on the same origin, so the Account session cookie never lives on
 a product origin. It is not indexed, so its locale comes from `?hl=`, a cookie
 and `Accept-Language` rather than a path prefix.
 
+Maintainer, 2026-10-01: sign-up uses **Display name**, email, password and
+confirmation in separate full-width rows, followed by the policy acceptance
+and submit action. Account's name is a nickname/display name, not a legal-name
+requirement or automatic public Agent name. Birth date is requested when a
+feature needs it, rather than as a required sign-up field. Keep the applicable
+registration admission and policy acceptance at the API boundary.
+
+Content settings offer four independent switches: **General**, **R15**,
+**Adult sexual content (R18)** and **Graphic/grotesque content (R18G)**.
+General starts on and never asks for age. Each restricted switch requests a
+missing birth date when enabled; cancellation preserves the previous setting.
+Return to the initiating setting or content after the request is completed.
+When any other flow records an eligible birth date, R15 defaults on only if the
+person has not explicitly set its preference. Explicitly switching it off
+survives later birthday edits and age checks. The adult switches default off
+and never enable one another. A known birthday is reused across these flows,
+although a market may require stronger evidence for a particular feature.
+
+Personal information accepts a complete calendar birth date and lets the
+person choose whether to publish it. It defaults private; recording a birthday
+or enabling a content category never publishes it. Publication is an explicit
+choice that creates a shareable birthday page, with a preview of the complete
+date and a way to invalidate the link. It does not publish Account identity. Birthday visibility and age eligibility are independent.
+The [suitability owner](../contracts/classification-judgments.md#suitability-and-disclosure)
+and [Account owner](../services/account.md#birth-date-and-content-preferences)
+record the API responsibilities. The Accounts implementation includes tested
+cancellation, independent adult choices, complete-date editing and publication
+states. Main consumes the latest Account qualification for reads and internal
+search; public indexing and previews retain the anonymous audience.
+
 ## Stack
 
 React with vinext's Next.js-compatible App Router on Vite, deployed to

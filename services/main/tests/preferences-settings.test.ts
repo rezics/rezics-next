@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { ControlDenied, ControlInvalid, ControlStale } from '../src/modules/access/topology-control.ts';
+import { ControlDenied, ControlStale } from '../src/modules/access/topology-control.ts';
 import { FollowsStore } from '../src/modules/follows/store.ts';
 import { DEFAULT_PERSON_CHOICES, PersonPreferencesStore } from '../src/modules/preferences/store.ts';
 
@@ -67,7 +67,7 @@ test('a saved privacy choice replays its receipt without a second write', async 
   const statements: string[] = [];
   let receipt: { request_digest: string; result: unknown } | null = null;
   const saved = { profile_visibility: 'private', follow_policy: 'nobody', hide_reading_activity: true,
-    content_languages: ['en'], spoiler_policy: 'show', adult_content: false, version: 1 };
+    content_languages: ['en'], spoiler_policy: 'show', version: 1 };
   const store = new PersonPreferencesStore(pool((sql, args) => {
     if (sql.includes('FROM access.person_preferences_receipt')) return { rows: receipt ? [receipt] : [] };
     if (sql.includes('INSERT INTO access.person_preferences (')) return { rows: [saved] };
@@ -115,10 +115,4 @@ test('a new pen-name person with default follow policy accepts a follower throug
   expect(disclosed).toBe(1);
   expect(statements).toContain('SELECT follow_policy FROM access.person_preferences WHERE agent_id = $1');
   expect(statements.some(sql => sql.includes('INSERT INTO access.follow ('))).toBe(true);
-});
-
-test('adult-content opt-in is denied until a source classification can enforce it', async () => {
-  const store = new PersonPreferencesStore({} as Pool);
-  await expect(store.write(principal, agent, { ...DEFAULT_PERSON_CHOICES, adultContent: true },
-    0, 'adult:1')).rejects.toBeInstanceOf(ControlInvalid);
 });

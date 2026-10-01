@@ -2,9 +2,8 @@ import { Elysia } from 'elysia';
 import { discoveryPage, discoveryQuery, popularTermsPage, popularTermsQuery } from '../modules/discovery/contract.ts';
 import { discoveryError, discoveryManagementRoutes } from '../modules/discovery/management.ts';
 import { readDiscovery, readPopularTerms } from '../modules/discovery/read.ts';
-import { workRead } from '../modules/work/read-session.ts';
+import { workRead, publicWorkRead } from '../modules/work/read-session.ts';
 import { WorkReadUnavailable } from '../modules/work/read-session.ts';
-import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadProblems } from './work-reads.ts';
 
@@ -29,8 +28,8 @@ export function discoveryRoutes(work: MainWorkDependencies) {
       // A public list never turns into a private inventory merely because a browser sent a token.
       if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
       const mine = query.scope === 'mine';
-      const readerRequest = mine ? request : publicLanguageRequest(request);
-      return Response.json(await workRead(work, readerRequest,
+      const read = mine ? workRead : publicWorkRead;
+      return Response.json(await read(work, request,
         { ...query, actingSubject: mine ? query.actingSubject : undefined, retainedBasis: true },
         session => readDiscovery(session, work.discovery!, query)),
         { headers: { 'cache-control': 'no-store' } });
@@ -40,7 +39,7 @@ export function discoveryRoutes(work: MainWorkDependencies) {
   }, async ({ request, query }) => {
     try {
       if (!work.discovery) throw new WorkReadUnavailable('Discovery owner is unavailable');
-      return Response.json(await workRead(work, publicLanguageRequest(request), query,
+      return Response.json(await publicWorkRead(work, request, query,
         session => readPopularTerms(session, work.discovery!, query)),
       { headers: { 'cache-control': 'no-store' } });
     } catch (error) { return discoveryError(error); }

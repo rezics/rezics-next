@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { disclosureViewer, currentDisclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { publicLanguageRequest } from '../modules/display-language/public-request.ts';
 import { websocket } from 'elysia/websocket';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -171,6 +172,13 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         work.governance!.store.restrictedTitles(heads, context) : undefined });
   const principals = new WeakMap<Request, VerifiedPrincipal>();
   const connections = new Map<string, PrivateSearchConnection>();
+  async function readerSnapshot<T>(request: Request, read: () => Promise<T>,
+    deadlineMs?: number, diagnostics?: SearchAttemptDiagnostic[]): Promise<T> {
+    const principal = request.headers.has('authorization')
+      ? await work.account.verify(request, ['work:read']) : null;
+    return withDisclosureViewer(disclosureViewer(principal),
+      () => withStableSearchSnapshot(fuseki, read, deadlineMs, diagnostics));
+  }
   async function presentationSelection(request: Request) {
     if (!request.headers.has('authorization')) return null;
     const principal = await work.account.verify(request, ['work:read']);
@@ -216,7 +224,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         422: problemResult(422), 503: problemResult(503) },
     }, async ({ query, request }) => {
       try {
-        const result = await withStableSearchSnapshot(fuseki, () => withSearchGraphSnapshot(work.environment, async () => {
+        const result = await readerSnapshot(request, () => withSearchGraphSnapshot(work.environment, async () => {
           const selection = await presentationSelection(request);
           const position = await assertPublicTextReady(fuseki, work.environment.lineage);
           const page = await readRankedCatalogue(work.environment, { phrase: query.q,
@@ -259,7 +267,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       try {
         const prefix = normalizedSearchText(query.prefix);
         if (!prefix || /[\u0000-\u001f\u007f]/u.test(prefix)) return problem(400, 'invalid_request', 'Search prefix is invalid');
-        const result = await withStableSearchSnapshot(fuseki, async () => {
+        const result = await readerSnapshot(request, async () => {
           const publicFields = fieldOwners();
           const position = await assertPublicTextReady(fuseki, work.environment.lineage);
           const selection = await presentationSelection(request);
@@ -271,7 +279,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           // A suggestion names what the Work is and who wrote it, as a search card does.
           const types = await phraseWorkTypes(work.environment, page.map(row => ({ work: row.work, language: '' })),
             position);
-          const items = await workRead(work, publicLanguageRequest(request), { language: query.language }, async session => {
+          const items = await workRead(work, publicLanguageRequest(request),
+            { language: query.language, publicViewer: currentDisclosureViewer() }, async session => {
             if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
               throw new SearchSnapshotMoved('Typeahead moved during hydration');
             }
@@ -446,7 +455,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         if (body.profile === 'public-content-phrase-v1' && !work.contentProjection) {
           return problem(503, 'content_projection_unavailable', 'Public Content projection is unavailable');
         }
-        const result = await withStableSearchSnapshot(fuseki, async () => {
+        const result = await readerSnapshot(request, async () => {
           const publicFields = fieldOwners();
           if (body.profile === 'public-grouped-statement-phrase-v1') {
             if (!work.judgments || !work.access.canReadSemanticResource) {
@@ -522,7 +531,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
       try {
         const unsupported = unsupportedSearchSelection(body);
         if (unsupported) return unsupported;
-        const page = await withStableSearchSnapshot(fuseki, async () => {
+        const page = await readerSnapshot(request, async () => {
           const readPage = async () => {
             const publicFields = fieldOwners();
             const read = async () => {

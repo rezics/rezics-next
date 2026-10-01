@@ -3,6 +3,8 @@ import { namedDiscoveryCredits } from '../discovery/credits.ts';
 import { DISCOVERY_COST, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { WorkReadUnavailable, workRead, type WorkReadSession } from '../work/read-session.ts';
+import { currentDisclosureViewer } from '../disclosure/viewer.ts';
+import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
@@ -139,8 +141,8 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
   const ids = [...new Set(matches.map(match => match.work))];
   if (ids.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search card page exceeds its bound');
   if (!ids.length) return page;
-  const cards = await workRead(searchCardReadDependencies(deps), new Request(request.url),
-    { language: language ?? undefined }, async session => {
+  const cards = await workRead(searchCardReadDependencies(deps), publicLanguageRequest(request),
+    { language: language ?? undefined, publicViewer: currentDisclosureViewer() }, async session => {
     if (session.position.dataEpoch !== page.sourcePosition!.dataEpoch
       || session.position.sequence !== page.sourcePosition!.sequence) {
       throw new SearchSnapshotMoved('Search card graph position changed');

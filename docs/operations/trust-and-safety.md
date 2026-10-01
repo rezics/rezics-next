@@ -19,8 +19,8 @@ exemption from law or evidence that the service is ready.
 The launch policy excludes sexually explicit images and advertising trackers.
 Minimum age is 13, 14 in South Korea and 16 in the EEA. Sexual and grotesque
 adult content are unavailable in South Korea and the UK; the UK is not a target
-market and mainland China is out of scope. Birth month and request country are
-policy inputs, not age assurance or proof of compliance. Maintain a versioned
+market and mainland China is out of scope. A declared birth date and request
+country are policy inputs, not age assurance or proof of compliance. Maintain a versioned
 market/feature matrix covering registration, adult features, privacy, transfers,
 analytics and GDPR/DSA representatives; obtain counsel's approval when affordable.
 The [legal owner](../legal/README.md) retains the review agenda and policy drafts.
@@ -82,13 +82,27 @@ content does not establish an age or supply an adult opt-in. The shared
 [suitability policy](../contracts/classification-judgments.md#suitability-and-disclosure)
 also applies to derivatives and delivery channels.
 
-The first launch collects no age or country evidence and offers no adult
-opt-in, so assessed `r15`, `r18` and `r18g` targets are withheld from every
-reader, the same as absent. This narrows scope instead of operating age
-assurance: age-assurance law, vendor cost and the data it collects outweigh
-the value for light-novel and visual-novel catalogues at launch. Staff can
-still correct or clear any rating. Revisit when a market needs gated content
-and a free, privacy-preserving evidence source exists.
+Maintainer revision, 2026-10-01: offer General, R15, R18 and R18G as separate
+content settings instead of permanently withholding every restricted category.
+General defaults on without an age check. Restricted settings ask for a missing
+complete birth date when enabled; R15 defaults on when another flow records an
+eligible birthday unless explicitly disabled, and each adult category requires
+its own opt-in. Birthdays default private, with a separate explicit publication
+choice. Registration need not collect the date; applicable account minimums and
+parental-involvement requirements still need an admission path, including when
+age becomes known later. The prior no-age-evidence launch decision is superseded.
+
+The Account settings API, Main shared disclosure policy and Accounts UI now
+apply these choices together. Adult text requires a supported market and its
+individual opt-in; KR and GB adult categories remain unavailable, mainland
+China registration is unavailable, and unknown markets cannot enable adults. Self-declaration is not automatically
+sufficient for every content type or country: record which representations and
+markets it can admit, and require stronger assurance where applicable before
+opening those features. A catalogue rating does not authorize explicit imagery;
+the existing prohibition and market restrictions remain applicable. The
+[Account owner](../services/account.md#birth-date-and-content-preferences) and
+[frontend direction](../plan/frontend.md#accounts-site) record the adopted
+flow and privacy boundary, without claiming it has shipped.
 
 ## Intake, response and recovery
 

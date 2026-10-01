@@ -1,5 +1,7 @@
 'use client';
 
+import { ContentSettings } from './content-settings.tsx';
+import type { ContentPreferences } from '../api/content-preferences.ts';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
@@ -107,8 +109,8 @@ function DisplayRows({ initial }: { initial: Read<DisplayPreferences> }) {
   </>;
 }
 
-export function PersonalInfo({ user, preferences }: { user: AvatarUser & { emailVerified: boolean;
-  locale: AccountLocale | null }; preferences: Read<DisplayPreferences> }) {
+export function PersonalInfo({ user, preferences, contentPreferences }: { user: AvatarUser & { emailVerified: boolean;
+  locale: AccountLocale | null }; contentPreferences: Read<ContentPreferences>; preferences: Read<DisplayPreferences> }) {
   const { t } = useTranslation('account');
   const { api, refresh } = useAccountClient();
   const stepUp = useStepUp();
@@ -206,6 +208,7 @@ export function PersonalInfo({ user, preferences }: { user: AvatarUser & { email
             <Note outcome={outcome?.row === 'email' ? outcome.value : undefined} />
           </SettingsRow>}
       </SettingsCard>
+      <ContentSettings key={contentPreferences.status === 'ok' ? contentPreferences.data.revision : contentPreferences.status} initial={contentPreferences} />
       <SettingsCard title={t.preferences}>
         <LanguageRow chosen={user.locale} />
         <DisplayRows initial={preferences} />

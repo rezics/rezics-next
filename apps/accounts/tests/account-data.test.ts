@@ -9,7 +9,7 @@ const at = '2026-09-27T12:00:00.000Z';
 describe('Account responses', () => {
   test('a session narrows to the fields the pages show', () => {
     expect(parseSession({ session: { id: 's1', token: 'secret' }, user: { id: 'u1', email: 'a@example.test',
-      name: 'Ada', emailVerified: true, image: 'javascript:alert(1)', createdAt: at, role: 'x', locale: 'zh-CN',
+      name: 'Ada', emailVerified: true, image: 'javascript:alert(1)', createdAt: at, role: 'x', locale: 'zh-Hans',
       twoFactorEnabled: true } })).toEqual({
       sessionId: 's1', user: { id: 'u1', email: 'a@example.test', name: 'Ada', emailVerified: true,
         image: null, createdAt: at, locale: 'zh-Hans', twoFactorEnabled: true } });
@@ -19,24 +19,32 @@ describe('Account responses', () => {
       locale: 'fr' } })?.user).toMatchObject({ locale: 'fr', twoFactorEnabled: false });
     expect(parseSession({ session: { id: 's1' }, user: { id: 'u1', email: 'a@example.test', createdAt: at,
       locale: 'it' } })?.user.locale).toBeNull();
+    expect(parseSession({ session: { id: 's1' }, user: { id: 'u1', email: 'a@example.test', createdAt: at,
+      locale: 'zh-CN' } })?.user.locale).toBeNull();
     expect(parseSession(null)).toBeNull();
     expect(parseSession({ user: { id: 'u1' }, session: { id: 's1' } })).toBeNull();
   });
 
-  test('sign-in methods keep what an older service omits as unknown', () => {
-    const passkey = { id: 'p1', name: ' ', createdAt: at, backedUp: true, deviceType: 'multiDevice' };
-    expect(parseMethods({ password: true, passkeys: [passkey], totp: null })).toEqual({ password: true,
+  test('sign-in methods preserve nullable metadata and reject missing contract fields', () => {
+    const passkey = { id: 'p1', name: ' ', createdAt: at, backedUp: true, deviceType: 'multiDevice',
+      provider: null, lastUsedAt: null };
+    expect(parseMethods({ password: true, passwordChangedAt: null, passkeys: [passkey], totp: null })).toEqual({ password: true,
       passwordChangedAt: null, totp: null,
       passkeys: [{ id: 'p1', name: null, provider: null, createdAt: at, lastUsedAt: null, backedUp: true }] });
     expect(parseMethods({ password: false, passwordChangedAt: null, totp: { id: 't', name: 'Phone', verified: true },
       passkeys: [{ ...passkey, name: 'Laptop', provider: 'iCloud Keychain', lastUsedAt: at }] })).toMatchObject({
       totp: { name: 'Phone', verified: true }, passkeys: [{ name: 'Laptop', provider: 'iCloud Keychain', lastUsedAt: at }] });
     expect(parseMethods({ password: true, passkeys: [{ id: 'p1' }], totp: null })).toBeNull();
+    expect(parseMethods({ password: true, passkeys: [passkey], totp: null })).toBeNull();
+    expect(parseMethods({ password: true, passwordChangedAt: null,
+      passkeys: [{ ...passkey, provider: undefined }], totp: null })).toBeNull();
+    expect(parseMethods({ password: true, passwordChangedAt: null,
+      passkeys: [{ ...passkey, lastUsedAt: undefined }], totp: null })).toBeNull();
   });
 
   test('devices, activity and apps are pages; one malformed item fails the page', () => {
     const device = { id: 'd1', createdAt: at, lastActiveAt: at, expiresAt: at, thisDevice: true, network: '192.0.2.0/24',
-      device: { browser: 'Unknown browser', platform: 'Linux', label: 'Unknown browser' } };
+      device: { browser: 'unknown', platform: 'Linux', label: 'Linux' } };
     expect(parseSessions({ items: [device], nextCursor: null })).toEqual({ nextCursor: null, items: [{ id: 'd1',
       createdAt: at, lastActiveAt: at, browser: null, platform: 'Linux', network: '192.0.2.0/24', thisDevice: true }] });
     expect(parseSessions({ items: [device, { id: 'd2' }], nextCursor: null })).toBeNull();
@@ -46,15 +54,17 @@ describe('Account responses', () => {
     failedAttemptsLast24Hours: { count: 2, capped: false } })).toEqual({ nextCursor: 'c',
       failedLast24Hours: { count: 2, capped: false }, items: [{ id: 'e1', action: 'sign_in', occurredAt: at,
         method: 'email', browser: 'Chrome', platform: 'macOS', network: '192.0.2.0/24', clientId: null }] });
-    const app = { clientId: 'reader', name: '', uri: 'https://reader.example', icon: 'javascript:x', trusted: true,
-      scopes: [{ scope: 'openid', description: { en: 'Identify your REZICS account', 'zh-CN': '识别你的 REZICS 账号' } }],
-      grantedAt: at, lastUsedAt: null, installationId: 'i1', installationState: 'revoked' };
     const described = { en: 'Identify your REZICS account', 'zh-Hans': '识别你的 REZICS 账号',
       'zh-Hant': '识别你的 REZICS 账号', ja: 'Identify your REZICS account', ko: 'Identify your REZICS account',
       de: 'Identify your REZICS account', fr: 'Identify your REZICS account', es: 'Identify your REZICS account' };
+    const app = { clientId: 'reader', name: '', uri: 'https://reader.example', icon: 'javascript:x', trusted: true,
+      scopes: [{ scope: 'openid', description: described }],
+      grantedAt: at, lastUsedAt: null, installationId: 'i1', installationState: 'revoked' };
     expect(parseConnectedApps({ items: [app], nextCursor: null })?.items[0]).toEqual({ clientId: 'reader',
       name: 'reader', uri: 'https://reader.example', icon: null, trusted: true, withdrawn: true, grantedAt: at,
       lastUsedAt: null, scopes: [{ scope: 'openid', description: described }] });
+    expect(parseConnectedApps({ items: [{ ...app, scopes: [{ scope: 'openid',
+      description: { en: described.en, 'zh-CN': described['zh-Hans'] } }] }], nextCursor: null })).toBeNull();
     expect(parseSessions({ items: [{ ...device, device: { browser: 'unknown', platform: null, label: 'unknown' } }],
       nextCursor: null })?.items[0]?.browser).toBeNull();
   });
@@ -66,12 +76,14 @@ describe('Account responses', () => {
         terms: 'http://app.example/tos' });
   });
 
-  test('consent identity comes from Account and older responses remain unverified', () => {
+  test('consent identity comes from Account and incomplete responses are rejected', () => {
     expect(parseConsentPreview({ scopes: [], client: { unverified: true, redirectHost: '127.0.0.1:49152' } }))
       .toEqual({ scopes: [], unverified: true, redirectHost: '127.0.0.1:49152' });
     expect(parseConsentPreview({ scopes: [], client: { unverified: false, redirectHost: 'rezics.com' } }))
       .toEqual({ scopes: [], unverified: false, redirectHost: 'rezics.com' });
-    expect(parseConsentPreview({ scopes: [] })).toEqual({ scopes: [], unverified: true, redirectHost: null });
+    expect(parseConsentPreview({ scopes: [] })).toBeNull();
+    expect(parseConsentPreview({ scopes: [], client: { redirectHost: 'rezics.com' } })).toBeNull();
+    expect(parseConsentPreview({ scopes: [], client: { unverified: false } })).toBeNull();
   });
 });
 

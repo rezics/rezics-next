@@ -53,7 +53,7 @@ function storage() {
 
 test('G-542: every channel combines the same removal and suitability batch for five owner grains', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
-  const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { sexual: true, grotesque: true } };
+  const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { general: true, r15: true, sexual: true, grotesque: true } };
   for (const channel of DISCLOSURE_CHANNELS) {
     const before = s.queries();
     expect(await reader.read(fixtures, ANONYMOUS_VIEWER, channel)).toEqual(fixtures.map(() => 'visible'));
@@ -67,7 +67,7 @@ test('G-542: every channel combines the same removal and suitability batch for f
       for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer({ issuer: 'account', subject: 'reader' })]) {
         expect((await reader.read(fixtures, viewer, channel)).every(decision => decision !== 'visible')).toBe(true);
       }
-      if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap', 'search', 'typeahead', 'count'].includes(channel)) {
+      if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap'].includes(channel)) {
         expect((await reader.read(fixtures, adult, channel)).every(decision => decision !== 'visible')).toBe(true);
       }
     }

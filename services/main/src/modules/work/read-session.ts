@@ -18,6 +18,8 @@ import { SearchSnapshotMoved } from './search-readiness.ts';
 import { fenceAuthorNames } from '../source/author-name-read.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
 import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
+import type { Viewer } from '../suitability/policy.ts';
+import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { discloseInventory, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
 export { publicWork, unerased } from './public-patterns.ts';
 
@@ -31,6 +33,8 @@ export type ReadRow = NonNullable<SparqlResult['results']>['bindings'][number];
 export interface ReadPosition { dataEpoch: string; sequence: string }
 export interface ReadOptions { language?: string; languages?: string; actingSubject?: string; cursor?: string; limit?: number;
   scope?: 'global' | 'realm' | 'mine'; realm?: string;
+  /** Trusted internal audience for public hydration; grants no Agent or private Realm authority. */
+  publicViewer?: Viewer;
   /** Internal owner promise: its continuation addresses retained immutable rows. */
   retainedBasis?: boolean;
   /** Owner reads with live disclosure fences may return a stale result as the graph advances. */
@@ -91,7 +95,8 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
-  get viewer() { return disclosureViewer(this.principal); }
+  get viewer() { return this.principal ? disclosureViewer(this.principal)
+    : this.options.publicViewer ?? disclosureViewer(null); }
   disclosure(targets: readonly DisclosureTarget[], channel: DisclosureChannel = 'read') {
     return discloseInventory(this.deps.environment, targets, this.viewer, channel);
   }
@@ -177,6 +182,16 @@ async function position(deps: MainWorkDependencies): Promise<ReadPosition> {
     throw new WorkReadUnavailable('Graph is unavailable');
   }
   return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value };
+}
+
+/** Public inventories retain live Account age/preferences without adopting bearer authority. */
+export async function publicWorkRead<T>(deps: MainWorkDependencies, request: Request,
+  options: Omit<ReadOptions, 'actingSubject' | 'publicViewer'>,
+  operation: (session: WorkReadSession) => Promise<T>, url: string | URL = request.url): Promise<T> {
+  const principal = request.headers.has('authorization')
+    ? await deps.account.verify(request, ['work:read']) : null;
+  return workRead(deps, publicLanguageRequest(request, url),
+    { ...options, publicViewer: disclosureViewer(principal) }, operation);
 }
 
 export async function workRead<T>(deps: MainWorkDependencies, request: Request, options: ReadOptions,

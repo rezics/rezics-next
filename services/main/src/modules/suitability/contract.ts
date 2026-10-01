@@ -53,13 +53,15 @@ export const reads = t.Object(
 );
 export const evidence = t.Object({
   signedIn: t.Boolean(),
-  age: t.Literal('unknown'),
-  country: t.Null(),
+  age: t.Union(['unknown', 'under-15', '15-17', 'adult'].map(age => t.Literal(age))),
+  country: t.Nullable(t.String()),
   optIns: t.Object({
-    sexual: t.Literal(false),
-    grotesque: t.Literal(false),
-    available: t.Literal(false),
-    reason: t.Literal('age_evidence_unavailable'),
+    general: t.Boolean(),
+    r15: t.Boolean(),
+    sexual: t.Boolean(),
+    grotesque: t.Boolean(),
+    available: t.Boolean(),
+    reason: t.Nullable(t.Literal('age_unknown')),
   }),
 });
 export const readsResult = t.Object({

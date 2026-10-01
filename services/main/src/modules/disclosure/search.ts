@@ -1,5 +1,5 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
+import { currentDisclosureViewer } from './viewer.ts';
 import { discloseInventory, hasDisclosure, DisclosureUnavailable, type DisclosureTarget } from './read.ts';
 
 export interface SearchDisclosureMatch {
@@ -41,6 +41,6 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
     ranges.push(selected.map((_, index) => targets.length + index));
     targets.push(...selected);
   }
-  const decisions = await discloseInventory(env, targets, ANONYMOUS_VIEWER, channel);
+  const decisions = await discloseInventory(env, targets, currentDisclosureViewer(), channel);
   return matches.filter((_, index) => ranges[index]!.every(ordinal => decisions[ordinal] === 'visible'));
 }

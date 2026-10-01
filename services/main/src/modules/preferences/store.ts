@@ -14,28 +14,27 @@ export interface PersonChoices {
   hideReadingActivity: boolean;
   contentLanguages: string[];
   spoilerPolicy: 'hide-unread' | 'show';
-  adultContent: boolean;
 }
 export interface PersonPreferences extends PersonChoices { profile: 'person-preferences-v1'; version: number;
   blockedPeople: string[]; replayed?: boolean }
 export const DEFAULT_PERSON_CHOICES: PersonChoices = { profileVisibility: 'public', followPolicy: 'everyone',
-  hideReadingActivity: false, contentLanguages: [], spoilerPolicy: 'hide-unread', adultContent: false };
+  hideReadingActivity: false, contentLanguages: [], spoilerPolicy: 'hide-unread' };
 /** One bounded settings row and at most 500 blocks; page admission checks at most 128 actors. */
 export const PERSON_PREFERENCES_COST = { blocks: 500, actors: 128, readingActors: 256, readStatements: 4,
   writeStatements: 11, readerLanguageStatements: 2, languages: READING_LANGUAGE_LIMIT } as const;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 interface Row { profile_visibility: PersonChoices['profileVisibility']; follow_policy: PersonChoices['followPolicy'];
   hide_reading_activity: boolean; content_languages: string[]; spoiler_policy: PersonChoices['spoilerPolicy'];
-  adult_content: boolean; version: number }
+  version: number }
 function choices(row?: Row): PersonChoices {
   return row ? { profileVisibility: row.profile_visibility, followPolicy: row.follow_policy,
     hideReadingActivity: row.hide_reading_activity, contentLanguages: row.content_languages,
-    spoilerPolicy: row.spoiler_policy, adultContent: row.adult_content } : DEFAULT_PERSON_CHOICES;
+    spoilerPolicy: row.spoiler_policy } : DEFAULT_PERSON_CHOICES;
 }
 function valid(value: PersonChoices): boolean {
   return !!value && ['public', 'private'].includes(value.profileVisibility)
     && ['everyone', 'nobody'].includes(value.followPolicy)
-    && typeof value.hideReadingActivity === 'boolean' && value.adultContent === false
+    && typeof value.hideReadingActivity === 'boolean'
     && ['hide-unread', 'show'].includes(value.spoilerPolicy)
     && Array.isArray(value.contentLanguages) && value.contentLanguages.length <= READING_LANGUAGE_LIMIT;
 }
@@ -94,14 +93,14 @@ export class PersonPreferencesStore {
         WHERE agent_id = $1 FOR UPDATE`, [agent])).rows[0];
       if ((current?.version ?? 0) !== expectedVersion) throw new ControlStale('Preferences changed');
       const row = (await client.query<Row>(`INSERT INTO access.person_preferences (agent_id, profile_visibility,
-        follow_policy, hide_reading_activity, content_languages, spoiler_policy, adult_content, version)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (agent_id) DO UPDATE SET
+        follow_policy, hide_reading_activity, content_languages, spoiler_policy, version)
+        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (agent_id) DO UPDATE SET
           profile_visibility = EXCLUDED.profile_visibility, follow_policy = EXCLUDED.follow_policy,
           hide_reading_activity = EXCLUDED.hide_reading_activity,
           content_languages = EXCLUDED.content_languages, spoiler_policy = EXCLUDED.spoiler_policy,
-          adult_content = EXCLUDED.adult_content, version = EXCLUDED.version,
+          version = EXCLUDED.version,
           updated_at = clock_timestamp() RETURNING *`, [agent, value.profileVisibility, value.followPolicy,
-          value.hideReadingActivity, value.contentLanguages, value.spoilerPolicy, value.adultContent,
+          value.hideReadingActivity, value.contentLanguages, value.spoilerPolicy,
           expectedVersion + 1])).rows[0]!;
       await invalidateHomePreferences(client, owner);
       const blockedPeople = (await client.query<{ target_agent: string }>(`SELECT target_agent FROM access.person_block

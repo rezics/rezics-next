@@ -10,7 +10,7 @@ import type { Acceptance } from '../statement/graph.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment }
   from '../work/activate.ts';
 import { discloseInventory } from '../disclosure/read.ts';
-import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
+import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const contextId = (value: string) => native.test(value) || value === 'urn:rezics:semantic-context:global';
@@ -222,7 +222,7 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   const fenced = fields.filter(field => native.test(field.owner));
   const decisions = await discloseInventory(env, fenced.map(field => ({ owner: 'graph' as const,
     resource: field.owner, component: field.kind === 'resource-name' ? 'name' as const : 'record' as const })),
-  ANONYMOUS_VIEWER, 'search');
+  currentDisclosureViewer(), 'search');
   const denied = new Set(fenced.filter((_, index) => decisions[index] !== 'visible').map(field => field.owner));
   const disclosed = fields.filter(field => !denied.has(field.owner));
   if (Buffer.byteLength(JSON.stringify(disclosed), 'utf8') > PUBLIC_DISCLOSURE_COST.outputBytes) {

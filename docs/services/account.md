@@ -10,6 +10,57 @@ for protected requests. Account fences the current key, installation, consent,
 recovery, account and user/client grant generations. Access separately checks
 the selected acting Agent and its current authority.
 
+## Birth date and content preferences
+
+Implemented on 2026-10-01: registration does not
+require a birth date. A feature that needs age requests it in context and returns
+to the initiating action. Account stores a complete calendar date (`YYYY-MM-DD`),
+as self-declared information, and the person's independent category preferences. Age is calculated from the date at the required threshold; a
+stored integer age cannot remain accurate. UTC birthdays and March 1 anniversaries for February 29 in non-leap years have
+owner tests. This declaration does not establish stronger age assurance.
+
+General defaults on without an age check. R15 defaults on once eligible age is
+known unless the person has explicitly disabled it. R18 and R18G default off,
+with separate opt-ins. A missing birthday is requested when a restricted
+category is enabled; cancelling changes neither the date nor the preference.
+Birthday corrections cannot erase explicit choices or grant a category for
+which the corrected age is ineligible. Registration minimums still apply when
+age becomes known, independently of the content switches.
+These categories have one Account owner; Main's Person preferences store
+profile, following, reading languages and spoiler choices rather than another
+adult-content switch.
+
+Account supplies Main only the current age band, country, account and adult
+eligibility, and category preferences through `rezics_content_evidence` on live
+introspection. Signed JWTs carry neither this changing decision nor the date. Its raw birth date is excluded from
+ordinary tokens, public account reads, application consent and analytics.
+Only Main's configured confidential introspection credential receives these
+derived preferences; another authenticated OAuth client receives no age or
+category metadata. Workload credentials receive no person's content evidence.
+The date defaults private. The person may explicitly publish the complete date
+on an opaque, shareable Account birthday page and withdraw that publication; a private change
+does not publish it, and age checks do not depend on publication. Public reads
+use `no-store`; the birthday page disallows indexing. Turning publication off
+invalidates its identifier; publishing again creates a new link. No public
+Account identity, name or email is returned with the date. Account
+takeout includes the date and preferences, and erasure removes them under the
+existing preservation and recovery boundaries.
+
+The current Account endpoints and revision handling live in
+[content preferences](../../services/account/src/content-preferences.ts) and their
+[integration tests](../../services/account/tests/content-preferences.integration.test.ts).
+Concurrent writes require the current revision; omitted fields preserve intent.
+A known age below the registration minimum atomically holds the account and
+revokes sessions through the existing security generation. Takeout and recovery
+coverage include the new records.
+
+These settings extend the common Account/API contract directly. There are no
+production accounts or production records to convert: use one current contract
+and recreate disposable development fixtures when its storage shape changes.
+Policy re-acceptance after a future material update and recovery of deleted
+subjects are ordinary lifecycle responsibilities, independent of schema
+compatibility. OAuth authorization always checks the current acceptance receipts.
+
 ## App installations
 
 An installation's scope ceiling is independent of client registration and

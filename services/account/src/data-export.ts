@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import type { Pool } from 'pg';
 import { accountFailure, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { readConnectedApps } from './connected-apps.ts';
+import { readContentPreferences } from './content-preferences.ts';
 import { readDisplayPreferences } from './display-preferences.ts';
 import { readMethods, requireStepUp } from './methods.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
@@ -28,8 +29,8 @@ export async function exportAccountData(pool: Pool, secret: string, userId: stri
       "emailVerified", image, locale, "createdAt", "updatedAt" FROM "user" WHERE id = $1`, [userId]);
   const account = profile.rows[0];
   if (!account) throw new AccountProblem('not_found', 404);
-  const [preferences, methods, devices, apps, events] = await Promise.all([
-    readDisplayPreferences(pool, userId), readMethods(pool, userId),
+  const [preferences, contentPreferences, methods, devices, apps, events] = await Promise.all([
+    readDisplayPreferences(pool, userId), readContentPreferences(pool, userId), readMethods(pool, userId),
     readSessions(pool, secret, userId, sessionId, { limit: exportCaps.devices }),
     readConnectedApps(pool, secret, userId, { limit: exportCaps.apps }),
     pool.query<{ id: string; action: string; detail: Record<string, unknown>; occurredAt: Date }>(`SELECT id, action, detail,
@@ -39,6 +40,7 @@ export async function exportAccountData(pool: Pool, secret: string, userId: stri
   return { format: 'rezics-account-export/1' as const, exportedAt: new Date().toISOString(),
     account: { ...account, createdAt: account.createdAt.toISOString(), updatedAt: account.updatedAt.toISOString() },
     displayPreferences: { displayMode: preferences.displayMode, showZoneThemes: preferences.showZoneThemes },
+    contentPreferences,
     signInMethods: methods,
     devices: { items: devices.items.map(({ groupKey: _key, ...item }) => item), truncated: !!devices.nextCursor },
     connectedApps: { items: apps.items, truncated: !!apps.nextCursor },

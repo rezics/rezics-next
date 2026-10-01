@@ -40,7 +40,7 @@ export function EmailField({ autoComplete = 'username', ...props }: TextFieldPro
 export function NameField(props: TextFieldProps & { name?: string }) {
   return <Field invalid={!!props.error} disabled={props.disabled}>
     <FieldLabel>{props.label}</FieldLabel>
-    <Input size="lg" name={props.name ?? 'name'} autoComplete="name" {...autofocus(props.autoFocus)}
+    <Input size="lg" name={props.name ?? 'name'} autoComplete="nickname" {...autofocus(props.autoFocus)}
       maxLength={120} value={props.value} onChange={event => props.onChange(event.currentTarget.value)} />
     <FieldError>{props.error}</FieldError>
   </Field>;

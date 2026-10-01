@@ -35,6 +35,10 @@ export interface VerifiedPrincipal {
   subject: string;
   /** Current Account introspection only; absent never implies verified. */
   emailVerified?: boolean;
+  /** Live Account decision; never a cached JWT or client-supplied birthday. */
+  contentEvidence?: { age: 'unknown' | 'under-15' | '15-17' | 'adult'; country: string | null;
+    accountEligible: boolean; adultAvailable: boolean;
+    categories: { general: boolean; r15: boolean; r18: boolean; r18g: boolean } };
   /** Server-only callback bound to the original token and OAuth scope ceiling. */
   currentAssertion?: () => Promise<VerifiedPrincipal>;
 }

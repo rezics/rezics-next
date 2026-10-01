@@ -10,7 +10,7 @@ export type PolicyVersion = Readonly<{
 // These identify the repository drafts, not counsel approval or launch readiness.
 // G-736 checks the digest against the text it publishes; do not embed that text.
 const terms = '7ec866bc49919daac7be37e4a3876554803c60e33bc2a3ba74596bbc4186ef2e';
-const privacy = 'b5e2f1e780965e8b90a07626b6ffb509b4355c79bb5c6206a3727a6537e770a7';
+const privacy = 'a1791cd1749c6de420d60d74470456a23d3283b2831bdbf5386ddc121f09824a';
 export const POLICY_VERSIONS = [
   {
     policyId: 'terms',

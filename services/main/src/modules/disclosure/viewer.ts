@@ -11,8 +11,13 @@ export function withDisclosureViewer<T>(viewer: Viewer, operation: () => T): T {
   return audience.run(viewer, operation);
 }
 
-/** No Account age-evidence or opt-in owner is present yet. Browser headers and
- * bearer claims cannot manufacture that evidence; unknown age fails rated reads closed. */
+/** Account's live decision supplies both preferences and eligibility. */
 export function disclosureViewer(principal: VerifiedPrincipal | null): Viewer {
-  return principal ? { ...ANONYMOUS_VIEWER, signedIn: true } : ANONYMOUS_VIEWER;
+  if (!principal) return ANONYMOUS_VIEWER;
+  const evidence = principal.contentEvidence;
+  if (!evidence || !evidence.accountEligible) return { ...ANONYMOUS_VIEWER, signedIn: true };
+  return { signedIn: true, age: evidence.age, country: evidence.country,
+    optIns: { general: evidence.categories.general, r15: evidence.categories.r15,
+      sexual: evidence.adultAvailable && evidence.categories.r18,
+      grotesque: evidence.adultAvailable && evidence.categories.r18g } };
 }

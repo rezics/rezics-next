@@ -136,31 +136,17 @@ test('new person picks a public name and handle, sets up Home, and the Account n
   }
   await expect(page.getByRole('heading', { name: 'Create your REZICS Account' })).toBeVisible();
   await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  await page.getByRole('textbox', { name: 'Name' }).fill(person.name);
+  await page.getByRole('textbox', { name: 'Display name' }).fill(person.name);
   await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
   await page.getByLabel('Password', { exact: true }).fill(person.password);
   await page.getByLabel('Confirm').fill(person.password);
+  await page.getByText('I meet the minimum age in the Terms and have read and accept:').click();
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   const verify = new URL(await verificationLink(person.email));
   if (signUpOrigin) await page.goto(`${signUpOrigin}${verify.pathname}${verify.search}`);
   else await page.goto(verify.toString());
-  // Verification signs the new person in and returns to REZICS; an older Accounts asks them to sign in again.
-  const signIn = page.getByRole('link', { name: 'Sign in to continue' });
-  await expect(signIn.or(page.getByRole('textbox', { name: 'Your handle' }))).toBeVisible({ timeout: 60_000 });
-  if (await signIn.isVisible()) {
-    await signIn.click();
-    // A shared Accounts frontend older than this worktree still preserves
-    // prompt=create after verification. Reauthorize to exercise the new person.
-    if (!signUpOrigin && await page.getByRole('heading', { name: 'Create your REZICS Account' }).isVisible()) {
-      await page.goto('/auth/start?next=%2Fen');
-    }
-    await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-    await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
-    await page.getByRole('button', { name: 'Next' }).click();
-    await page.getByLabel('Enter your password').fill(person.password);
-    await page.getByRole('button', { name: 'Next' }).click();
-  }
+  // Verification signs the new person in and resumes the current REZICS request.
   // G-431: after the handle comes Home's setup, then where the person was going.
   await expect(page).toHaveURL(`/en/onboarding?next=${encodeURIComponent('/en/welcome?next=%2Fen')}`,
     { timeout: 60_000 });

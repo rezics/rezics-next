@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import type { createAccountAuth } from './auth.ts';
 import { currentInstallationIn, installClient, InstallationConflict, InstallationInvalid,
   InstallationNotFound, readInstallation, revokeInstallation } from './installations.ts';
-import { currentIntrospection, presentedToken } from './introspection.ts';
+import { contentEvidenceAccess, currentIntrospection, presentedToken } from './introspection.ts';
 import { guardedAuthorizationCodeExchange } from './oauth-code-guard.ts';
 import { guardedRefreshTokenExchange } from './refresh-token-guard.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
@@ -19,6 +19,7 @@ import { dataExportApi } from './data-export.ts';
 import { adminApi } from './admin.ts';
 import { accountSettingsApi } from './account-settings.ts';
 import { displayPreferencesApi } from './display-preferences.ts';
+import { contentPreferencesApi } from './content-preferences.ts';
 import { emailChangeApi } from './email-change.ts';
 import { notificationDigestApi } from './notification-digest.ts';
 import { notificationSafetyApi } from './notification-safety.ts';
@@ -40,6 +41,8 @@ export interface AccountAppOptions {
   codeGuardConnections?: number;
   /** First-party web OAuth client IDs admitted to account display preferences. */
   displayPreferenceClientIds?: ReadonlySet<string>;
+  /** Main's confidential credential, already authenticated by the OAuth provider. */
+  contentEvidenceSecret?: string;
   notificationDigest?: { accountSecret: string; mainSecret: string };
   mailEventsSecret?: string;
 }
@@ -261,7 +264,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     })
     .post('/api/auth/oauth2/introspect', async ({ request }) => {
       const token = await presentedToken(request.clone());
-      return currentIntrospection(pool, token, await auth.handler(request));
+      const evidenceAccess = await contentEvidenceAccess(request.clone(), options.contentEvidenceSecret);
+      return currentIntrospection(pool, token, await auth.handler(request), evidenceAccess);
     })
     .use(options.notificationDigest ? notificationDigestApi(pool,
       options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
@@ -270,6 +274,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(options.notificationDigest ? safetyCorrespondenceApi(pool,
       options.notificationDigest.accountSecret, options.notificationDigest.mainSecret, origin) : new Elysia())
     .use(policyAcceptanceApi(auth, pool, auth.options.policyVersions))
+    .use(contentPreferencesApi(auth, pool))
     .use(mailSuppressionApi(pool, String(auth.options.secret), options.mailEventsSecret))
     .use(consentApi(auth, pool))
     .use(methodsApi(auth, pool))

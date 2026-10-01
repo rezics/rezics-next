@@ -1,6 +1,7 @@
 // Browser calls to the Account service through this origin's proxy. Each one
 // maps to a Better Auth or oauth-provider endpoint of the pinned version, or to
 // an Account route under /api/account.
+import { parseContentPreferences, type ContentPreferences, type ContentPreferenceChange } from './content-preferences.ts';
 import { classifyFailure, refusedMinimumAge, type FailureKind, type Result } from './errors.ts';
 import { parseDisplayPreferences, type AccountLocale, type DisplayPreferences } from './account-data.ts';
 import { creationOptions, credentialJson, isCancelled, passkeysSupported,
@@ -25,7 +26,7 @@ export interface AccountApi {
   Promise<Result<Continuation>>;
   /** `verify` means the account needs its email verified before signing in. */
   signUp(input: { name: string; email: string; password: string; locale: AccountLocale; oauthQuery?: string;
-    carry?: string; captchaToken?: string; birthMonth: string; acceptedPolicies: PolicyAcceptance[] }):
+    carry?: string; captchaToken?: string; minimumAgeConfirmed: boolean; acceptedPolicies: PolicyAcceptance[] }):
   Promise<Result<Continuation & { verify?: boolean }>>;
   /** Accept the current policies after a material change (the signed-in person's own receipt). */
   acceptPolicies(acceptedPolicies: PolicyAcceptance[]): Promise<Result<void>>;
@@ -41,6 +42,7 @@ export interface AccountApi {
   reauthenticateWithPasskey(): Promise<Result<void>>;
   updateName(name: string): Promise<Result<void>>;
   setLocale(locale: AccountLocale): Promise<Result<void>>;
+  setContentPreferences(value: ContentPreferenceChange): Promise<Result<ContentPreferences>>;
   setDisplayPreferences(value: DisplayPreferences): Promise<Result<DisplayPreferences>>;
   changeEmail(newEmail: string): Promise<Result<void>>;
   /** Changing the password always signs out every other device. */
@@ -156,11 +158,11 @@ export const browserAccountApi: AccountApi = {
       ...(oauthQuery ? { oauth_query: oauthQuery } : {}) });
     return result.ok ? { ok: true, data: continuation(result.data) } : result;
   },
-  async signUp({ name, email, password, locale, oauthQuery, carry, captchaToken, birthMonth, acceptedPolicies }) {
+  async signUp({ name, email, password, locale, oauthQuery, carry, captchaToken, minimumAgeConfirmed, acceptedPolicies }) {
     // The verification link returns to where this sign-up started. Account keeps
-    // the birth month only for this admission decision, never on the account.
+    // only a minimum-age declaration at signup; birthdays belong to settings.
     const result = await auth<{ token?: string | null }>('/sign-up/email', { name, email, password, locale,
-      birthMonth, acceptedPolicies,
+      minimumAgeConfirmed, acceptedPolicies,
       callbackURL: carry ? `${callbackPaths.verifyEmail}?${carry}` : callbackPaths.verifyEmail,
       ...(oauthQuery ? { oauth_query: oauthQuery } : {}) }, captchaToken);
     if (!result.ok) return result;
@@ -212,6 +214,12 @@ export const browserAccountApi: AccountApi = {
   },
   async updateName(name) { return done(await auth('/update-user', { name })); },
   async setLocale(locale) { return done(await auth('/update-user', { locale })); },
+  async setContentPreferences(value) {
+    const result = await account('/content-preferences', { ...value });
+    if (!result.ok) return result;
+    const data = parseContentPreferences(result.data);
+    return data ? { ok: true, data } : failed('unavailable');
+  },
   setDisplayPreferences: putDisplayPreferences,
   async changeEmail(newEmail) {
     return done(await auth('/change-email', { newEmail, callbackURL: callbackPaths.changeEmail }));

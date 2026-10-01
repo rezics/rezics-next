@@ -184223,9 +184223,6 @@
               "application/json": {
                 "schema": {
                   "properties": {
-                    "adultContent": {
-                      "type": "boolean"
-                    },
                     "blockedPeople": {
                       "items": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -184286,7 +184283,6 @@
                     "hideReadingActivity",
                     "contentLanguages",
                     "spoilerPolicy",
-                    "adultContent",
                     "version",
                     "blockedPeople"
                   ],
@@ -184523,9 +184519,6 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
-                  "adultContent": {
-                    "type": "boolean"
-                  },
                   "contentLanguages": {
                     "items": {
                       "minLength": 1,
@@ -184571,8 +184564,7 @@
                   "followPolicy",
                   "hideReadingActivity",
                   "contentLanguages",
-                  "spoilerPolicy",
-                  "adultContent"
+                  "spoilerPolicy"
                 ],
                 "type": "object"
               }
@@ -184585,9 +184577,6 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
-                  "adultContent": {
-                    "type": "boolean"
-                  },
                   "contentLanguages": {
                     "items": {
                       "minLength": 1,
@@ -184633,8 +184622,7 @@
                   "followPolicy",
                   "hideReadingActivity",
                   "contentLanguages",
-                  "spoilerPolicy",
-                  "adultContent"
+                  "spoilerPolicy"
                 ],
                 "type": "object"
               }
@@ -184647,9 +184635,6 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
-                  "adultContent": {
-                    "type": "boolean"
-                  },
                   "contentLanguages": {
                     "items": {
                       "minLength": 1,
@@ -184695,8 +184680,7 @@
                   "followPolicy",
                   "hideReadingActivity",
                   "contentLanguages",
-                  "spoilerPolicy",
-                  "adultContent"
+                  "spoilerPolicy"
                 ],
                 "type": "object"
               }
@@ -184710,9 +184694,6 @@
               "application/json": {
                 "schema": {
                   "properties": {
-                    "adultContent": {
-                      "type": "boolean"
-                    },
                     "blockedPeople": {
                       "items": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -184773,7 +184754,6 @@
                     "hideReadingActivity",
                     "contentLanguages",
                     "spoilerPolicy",
-                    "adultContent",
                     "version",
                     "blockedPeople"
                   ],
@@ -469778,6 +469758,8 @@
                           "reasons": {
                             "items": {
                               "enum": [
+                                "general_disabled",
+                                "r15_opt_in_required",
                                 "sign_in_required",
                                 "age_unknown",
                                 "country_unknown",
@@ -469864,32 +469846,52 @@
                     "viewer": {
                       "properties": {
                         "age": {
-                          "const": "unknown",
+                          "enum": [
+                            "unknown",
+                            "under-15",
+                            "15-17",
+                            "adult"
+                          ],
                           "type": "string"
                         },
                         "country": {
-                          "type": "null"
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "optIns": {
                           "properties": {
                             "available": {
-                              "const": false,
+                              "type": "boolean"
+                            },
+                            "general": {
                               "type": "boolean"
                             },
                             "grotesque": {
-                              "const": false,
+                              "type": "boolean"
+                            },
+                            "r15": {
                               "type": "boolean"
                             },
                             "reason": {
-                              "const": "age_evidence_unavailable",
-                              "type": "string"
+                              "~elyTyp": 7,
+                              "const": "age_unknown",
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
                             },
                             "sexual": {
-                              "const": false,
                               "type": "boolean"
                             }
                           },
                           "required": [
+                            "general",
+                            "r15",
                             "sexual",
                             "grotesque",
                             "available",

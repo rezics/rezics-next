@@ -47,13 +47,6 @@ export function regionName(country: string | null | undefined, locale: string): 
   try { return new Intl.DisplayNames([locale], { type: 'region' }).of(country) ?? null; } catch { return null; }
 }
 
-/** Birth months the form offers: the current year back to 1900, newest first. */
-export const birthYears = (now = new Date()): number[] =>
-  Array.from({ length: now.getUTCFullYear() - 1900 + 1 }, (_, i) => now.getUTCFullYear() - i);
-
-export const birthMonthValue = (year: string, month: string) =>
-  /^\d{4}$/.test(year) && /^(0[1-9]|1[0-2])$/.test(month) ? `${year}-${month}` : '';
-
 /** Where acceptance resumes: only a refused authorization request, never an arbitrary path. */
 export function acceptanceContinuation(value: string | null | undefined): string {
   const path = safeReturnPath(value);

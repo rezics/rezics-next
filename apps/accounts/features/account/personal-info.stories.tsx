@@ -7,6 +7,9 @@ import { ReadStatePanel } from '../shell/state-panel.tsx';
 
 const meta = {
   title: 'Accounts/Account centre/Personal info', component: PersonalInfo, args: { user: ada,
+    contentPreferences: { status: 'ok', data: { revision: 0, birthDate: null, country: null,
+      birthdayPublic: false, publicId: null, age: 'unknown', accountEligible: true, adultAvailable: false,
+      categories: { general: true, r15: false, r18: false, r18g: false } } },
     preferences: { status: 'ok', data: { revision: 0, displayMode: 'system', showZoneThemes: true } } },
   decorators: [Story => <AccountFrame section="personal-info"><Story /></AccountFrame>],
 } satisfies Meta<typeof PersonalInfo>;
@@ -67,11 +70,11 @@ export const EditName: Story = {
   parameters: { account: { refresh: refreshed, api: { updateName: renamed } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: 'Edit · Name' }));
-    const field = canvas.getByRole('textbox', { name: 'Name' });
+    await userEvent.click(await canvas.findByRole('button', { name: 'Edit · Display name' }));
+    const field = canvas.getByRole('textbox', { name: 'Display name' });
     await userEvent.clear(field);
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
-    await expect(canvas.getByText('Enter your name')).toBeVisible();
+    await expect(canvas.getByText('Enter a display name')).toBeVisible();
     await userEvent.type(field, 'Augusta Ada King');
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await expect(renamed).toHaveBeenCalledWith('Augusta Ada King');

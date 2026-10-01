@@ -63,10 +63,10 @@ type Reader = { profile: 'reader-settings-v1'; fontSize: 15 | 17 | 19 | 22 | 25;
   cjkPunctuation: 'standard' | 'strict'; version: number };
 type PersonPreferences = { profile: 'person-preferences-v1'; profileVisibility: 'public' | 'private';
   followPolicy: 'everyone' | 'nobody'; hideReadingActivity: boolean; contentLanguages: string[];
-  spoilerPolicy: 'hide-unread' | 'show'; adultContent: boolean; version: number; blockedPeople: string[] };
+  spoilerPolicy: 'hide-unread' | 'show'; version: number; blockedPeople: string[] };
 const previewPerson: PersonPreferences = { profile: 'person-preferences-v1', profileVisibility: 'public',
   followPolicy: 'everyone', hideReadingActivity: false, contentLanguages: [],
-  spoilerPolicy: 'hide-unread', adultContent: false, version: 0, blockedPeople: [] };
+  spoilerPolicy: 'hide-unread', version: 0, blockedPeople: [] };
 
 async function read<T>(path: string): Promise<T> {
   const response = await fetch(`${BFF_PREFIX}${path}`, { cache: 'no-store' });
@@ -398,7 +398,7 @@ export function SettingsSections({ agent, locale, accountOrigin, t, preview = fa
     <Display locale={locale} t={t} preview={preview} />
     {children}
     <Section id="account" title={t.accountTitle} help={t.accountHelp}>
-      <a href={accountOrigin} className="w-fit font-medium text-primary underline underline-offset-4">{t.accountLink}</a>
+      <a href={`${accountOrigin.replace(/\/$/, '')}/personal-info`} className="w-fit font-medium text-primary underline underline-offset-4">{t.accountLink}</a>
     </Section>
   </>;
 }

@@ -37,7 +37,7 @@ const effects = (channel: DisclosureChannel) => ['disclosure',
   ...(channel === 'media' ? ['media_delivery', 'raw_delivery'] : []),
   ...(channel === 'export' ? ['export'] : [])];
 const suitabilityChannel = (channel: DisclosureChannel) =>
-  ['search', 'typeahead', 'count', 'sitemap', 'seo'].includes(channel) ? 'index' as const
+  ['sitemap', 'seo'].includes(channel) ? 'index' as const
     : channel === 'preview' ? 'preview' as const
       : channel === 'digest' || channel === 'email' ? 'email' as const
         : channel === 'push' ? 'push' as const : 'read' as const;
@@ -60,7 +60,8 @@ export class DisclosureStore implements DisclosureReader {
         || target.work != null && !native.test(target.work)
         || (target.context?.length ?? 0) > 512 || (target.revision?.length ?? 0) > 512)
       || typeof viewer.signedIn !== 'boolean' || !['unknown', 'under-15', '15-17', 'adult'].includes(viewer.age)
-      || !viewer.optIns || typeof viewer.optIns.sexual !== 'boolean' || typeof viewer.optIns.grotesque !== 'boolean') {
+      || !viewer.optIns || typeof viewer.optIns.general !== 'boolean' || typeof viewer.optIns.r15 !== 'boolean'
+      || typeof viewer.optIns.sexual !== 'boolean' || typeof viewer.optIns.grotesque !== 'boolean') {
       throw new DisclosureUnavailable('Disclosure batch is invalid');
     }
     if (!targets.length) return [];

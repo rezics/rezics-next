@@ -9,7 +9,8 @@ export const literalUnion = <const T extends readonly string[]>(values: T): TUni
 
 export const accountErrorCodes = ['unauthenticated', 'forbidden', 'invalid_origin', 'invalid_request',
   'not_found', 'conflict', 'stale_request', 'step_up_required', 'last_sign_in_method',
-  'rate_limited', 'temporarily_unavailable', 'account_suspended', 'password_reset_required'] as const;
+  'rate_limited', 'temporarily_unavailable', 'account_suspended', 'password_reset_required',
+  'invalid_birth_date', 'birth_date_required', 'age_ineligible', 'market_unavailable', 'market_restricted'] as const;
 export type AccountErrorCode = typeof accountErrorCodes[number];
 export const accountErrorSchema = t.Object({ error: literalUnion(accountErrorCodes) });
 

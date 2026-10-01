@@ -27,6 +27,7 @@ export function fakeAccountClient(fake: FakeAccount = {}): AccountClient {
     consent: () => ok({ redirect: 'https://app.example/callback?code=c' }),
     reauthenticate: () => ok(undefined), reauthenticateWithPasskey: () => ok(undefined),
     updateName: () => ok(undefined), setLocale: () => ok(undefined),
+    setContentPreferences: () => Promise.resolve({ ok: false, kind: 'unavailable', status: 503 }),
     setDisplayPreferences: value => ok({ ...value, revision: value.revision + 1 }),
     changeEmail: () => ok(undefined),
     changePassword: () => ok(undefined), removePassword: () => ok(undefined), addPasskey: () => ok(undefined),

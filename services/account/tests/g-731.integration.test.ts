@@ -26,98 +26,38 @@ const signupBody = {
   password: 'a sufficiently long password',
   acceptedPolicies,
 };
-const month = (date: Date) => date.toISOString().slice(0, 7);
-
-test('G-731 API: country minimum boundaries, missing birth, unavailable market and forged ingress', async () => {
+test('G-731 API: birthday-free registration, required declaration and trusted market boundary', async () => {
   const f = await accountFixture();
-  const proxy = createAccountApp(f.auth, f.pool, {
-    trustedProxyPeers: new Set(['127.0.0.1']),
-  }).listen({ hostname: '127.0.0.1', port: await freePort() });
+  const proxy = createAccountApp(f.auth, f.pool, { trustedProxyPeers: new Set(['127.0.0.1']) })
+    .listen({ hostname: '127.0.0.1', port: await freePort() });
   let sequence = 0;
-  const signup = (
-    country?: string,
-    birthMonth?: string,
-    port = proxy.server!.port!,
-    headers = {},
-  ) =>
-    fetch(`http://127.0.0.1:${port}/api/auth/sign-up/email`, {
-      method: 'POST',
-      headers: {
-        origin: f.baseURL,
-        'content-type': 'application/json',
-        ...(country ? { 'cf-ipcountry': country } : {}),
-        ...headers,
-      },
-      body: JSON.stringify({ ...signupBody, email: `age-${sequence++}@example.test`, birthMonth }),
-    });
+  const signup = (country?: string, minimumAgeConfirmed?: boolean, port = proxy.server!.port!) =>
+    fetch(`http://127.0.0.1:${port}/api/auth/sign-up/email`, { method: 'POST',
+      headers: { origin: f.baseURL, 'content-type': 'application/json',
+        ...(country ? { 'cf-ipcountry': country } : {}) },
+      body: JSON.stringify({ ...signupBody, email: `age-${sequence++}@example.test`, minimumAgeConfirmed }) });
   try {
-    const now = new Date();
-    for (const [country, minimumAge] of [
-      ['KR', 14],
-      ['DE', 16],
-      ['US', 13],
-    ] as const) {
-      for (const offset of [-1, 0, 1]) {
-        const birthMonth = month(
-          new Date(Date.UTC(now.getUTCFullYear() - minimumAge, now.getUTCMonth() + offset, 1)),
-        );
-        const response = await signup(country, birthMonth);
-        expect(response.status, await response.clone().text()).toBe(offset === -1 ? 200 : 400);
-        if (offset !== -1)
-          expect(await response.json()).toMatchObject({ reason: 'market_minimum_age', minimumAge });
-      }
+    for (const country of ['KR', 'DE', 'US']) {
+      expect((await signup(country, true)).status).toBe(200);
+      expect(await (await signup(country, false)).json())
+        .toMatchObject({ reason: 'minimum_age_confirmation_required' });
     }
-    expect(await (await signup('US')).json()).toMatchObject({ reason: 'birth_month_required' });
-    expect(await (await signup('CN', '1990-01')).json()).toMatchObject({
-      reason: 'market_unavailable',
-    });
-    const young = month(new Date(Date.UTC(now.getUTCFullYear() - 14, now.getUTCMonth() - 1, 1)));
-    expect(
-      await (
-        await signup('US', young, Number(new URL(f.baseURL).port), {
-          'x-rezics-request-country': 'US',
-        })
-      ).json(),
-    ).toMatchObject({ reason: 'market_minimum_age', minimumAge: 16 });
-    for (const country of [undefined, 'XX', 'us', 'US,KR']) {
-      expect(await (await signup(country, young)).json()).toMatchObject({
-        reason: 'market_minimum_age',
-        minimumAge: 16,
-      });
-    }
-    const noAcceptance = await f.request('/api/auth/sign-up/email', {
-      ...signupBody,
-      email: 'no-acceptance@example.test',
-      birthMonth: '1990-01',
-      acceptedPolicies: [],
-    });
+    expect(await (await signup('US')).json()).toMatchObject({ reason: 'minimum_age_confirmation_required' });
+    expect(await (await signup('CN', true)).json()).toMatchObject({ reason: 'market_unavailable' });
+    // A direct peer cannot manufacture an ingress country to change registration policy.
+    expect((await signup('CN', true, Number(new URL(f.baseURL).port))).status).toBe(200);
+    const noAcceptance = await f.request('/api/auth/sign-up/email', { ...signupBody,
+      email: 'no-acceptance@example.test', acceptedPolicies: [] });
     expect(await noAcceptance.json()).toMatchObject({ reason: 'policy_acceptance_required' });
-    const { rows } = await f.pool.query(
-      'SELECT registration_policy_version, signup_policies FROM "user"',
-    );
-    expect(rows).toHaveLength(3);
-    expect(
-      rows.every(
-        (row) =>
-          row.registration_policy_version === MARKET_POLICY_VERSION && row.signup_policies === null,
-      ),
-    ).toBe(true);
-    expect(
-      Number((await f.pool.query('SELECT count(*) FROM rezics_policy_acceptance')).rows[0].count),
-    ).toBe(6);
-    expect(
-      (
-        await f.pool.query(`SELECT 1 FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = 'user' AND column_name = 'birth_month'`)
-      ).rowCount,
-    ).toBe(0);
-  } finally {
-    await proxy.stop();
-    await f.close();
-  }
+    const { rows } = await f.pool.query('SELECT registration_policy_version, signup_policies FROM "user"');
+    expect(rows).toHaveLength(4);
+    expect(rows.every(row => row.registration_policy_version === MARKET_POLICY_VERSION && row.signup_policies === null)).toBe(true);
+    expect(Number((await f.pool.query('SELECT count(*) FROM rezics_policy_acceptance')).rows[0].count)).toBe(8);
+    expect(Number((await f.pool.query('SELECT count(*) FROM rezics_content_preferences')).rows[0].count)).toBe(0);
+  } finally { await proxy.stop(); await f.close(); }
 }, 60_000);
 
-test('G-731 API: durable receipts, material update, stale/denied acceptance, replay and private birth input', async () => {
+test('G-731 API: durable receipts, material update, stale/denied acceptance, replay and private birthday', async () => {
   const f = await accountFixture();
   const changed = POLICY_VERSIONS.map((policy) =>
     policy.policyId === 'terms'
@@ -127,7 +67,6 @@ test('G-731 API: durable receipts, material update, stale/denied acceptance, rep
   const auth = createAccountAuth({
     ...f.config,
     policyVersions: changed,
-    policyAcceptanceEnforced: true,
   });
   const app = createAccountApp(auth, f.pool).listen({
     hostname: '127.0.0.1',
@@ -143,14 +82,17 @@ test('G-731 API: durable receipts, material update, stale/denied acceptance, rep
     const user = await f.signup('policy@example.test');
     const oauth = await oauthFixture(f);
     const client = await oauth.createClient(true);
-    const legacy = await f.signup('legacy-policy@example.test');
-    await f.pool.query('DELETE FROM rezics_policy_acceptance WHERE user_id = $1', [legacy.id]);
-    expect(await policyAcceptanceRequired(f.pool, legacy.id)).toBe(true);
-    // With enforcement off by default, a pre-journal account can still finish
-    // authorization while G-736 builds the re-acceptance page.
-    expect(
-      await oauth.introspect((await oauth.issue(client.client_id, legacy.cookie)).access_token),
-    ).toMatchObject({ active: true });
+    const missingReceipt = await f.signup('missing-receipt@example.test');
+    await f.pool.query('DELETE FROM rezics_policy_acceptance WHERE user_id = $1', [missingReceipt.id]);
+    expect(await policyAcceptanceRequired(f.pool, missingReceipt.id)).toBe(true);
+    const missingAcceptance = await f.request(`/api/auth/oauth2/authorize?${new URLSearchParams({
+      response_type: 'code', client_id: client.client_id,
+      redirect_uri: 'https://notes.example.test/callback', scope: 'openid work:read',
+      state: 'missing-policy-receipt', resource: f.config.resource,
+      code_challenge: 'a'.repeat(43), code_challenge_method: 'S256',
+    })}`, undefined, missingReceipt.cookie);
+    expect(missingAcceptance.status).toBe(403);
+    expect(await missingAcceptance.json()).toMatchObject({ code: 'policy_acceptance_required' });
     const tokens = await oauth.issue(client.client_id, user.cookie);
     const introspection = (await oauth.introspect(tokens.access_token)) as Record<string, unknown>;
     expect(introspection.active).toBe(true);
@@ -178,7 +120,7 @@ test('G-731 API: durable receipts, material update, stale/denied acceptance, rep
     const session = (await (
       await f.request('/api/auth/get-session', undefined, user.cookie)
     ).json()) as { user: Record<string, unknown> };
-    expect(session.user.birthMonth).toBeUndefined();
+    expect(session.user.birthDate).toBeUndefined();
     expect(session.user.registrationPolicyVersion).toBeUndefined();
     expect(session.user.signupPolicies).toBeUndefined();
     expect(session.user.ageBand).toBeUndefined();

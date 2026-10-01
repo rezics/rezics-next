@@ -42,7 +42,7 @@ export async function oauthFixture(f: Awaited<ReturnType<typeof accountFixture>>
       body: new URLSearchParams({ token: accessToken, client_id: verifier.client_id,
         client_secret: verifier.client_secret! }) });
     if (!response.ok) throw new Error(`Introspect: ${response.status}`);
-    return response.json() as Promise<{ active: boolean }>;
+    return response.json() as Promise<{ active: boolean; rezics_content_evidence?: unknown }>;
   };
   return { owner, verifier, createClient, code, issue, token, introspect };
 }

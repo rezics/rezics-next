@@ -31,17 +31,28 @@ The EU remains reachable under the current operating direction. Accessibility is
 
 | Label | Meaning | Basic access rule |
 | --- | --- | --- |
-| `general` | Assessed as eligible for the general presentation | Available to signed-out viewers and eligible users |
-| `r15` | Mature themes unsuitable for younger viewers | Signed in and at least 15 |
+| `general` | Assessed as eligible for the general presentation | Enabled by default; may be switched off without an age check |
+| `r15` | Mature themes unsuitable for younger viewers | Signed in, at least 15 and R15 enabled |
 | `r18` | Permitted adult sexual themes or writing | Signed in, at least 18, permitted market and sexual-content opt-in |
 | `r18g` | Permitted adult grotesque or graphic content | Signed in, at least 18, permitted market and grotesque-content opt-in |
-| `unassessed` | Suitability has not been established | Not treated as `general` or exposed without an eligible assessed representation |
+| `unassessed` | Suitability has not been established | Available under the unassessed-content policy; labelled Not assessed, never treated as `general` |
 
 These are REZICS labels. They are not government certification or a substitute for a legally required classification.
 
 Sexual and grotesque eligibility are independent. Material containing both requires both opt-ins. Opting into one does not enable the other.
 
-Signed-out viewers and users under 15 receive only general-eligible representations. An age-restricted account market still controls registration: for example, the `r15` category does not permit a 15-year-old to register in the EEA.
+General, R15, R18 and R18G have independent settings. General starts enabled
+and does not require an age check. Enabling a restricted category asks for a
+missing birth date. When another feature records an eligible birthday, R15
+defaults enabled unless you have explicitly disabled it. Both adult categories
+start disabled and require separate opt-ins. Cancelling a birthday request
+keeps the previous setting; later age checks do not overwrite an explicit off
+choice.
+
+Signed-out viewers and users under 15 receive only general and unassessed
+representations under the applicable presentation policy. An age-restricted
+account market still controls registration: for example, the `r15` category
+does not permit a 15-year-old to register in the EEA.
 
 **3. Ratings never authorize prohibited material**
 
@@ -55,7 +66,9 @@ A rating does not establish copyright permission, consent or a right to distribu
 
 The same eligibility rules apply to originals, translations, attachments, revisions, thumbnails, previews, search, feeds, caches, exports, offline delivery and AI context.
 
-External search indexing and share previews use only the general-eligible anonymous representation. Internal search follows the viewer’s eligibility.
+External search indexing and share previews use only the anonymous
+representation, which may include general and unassessed material. Internal
+search follows the viewer's eligibility and saved category preferences.
 
 Adult material is not included in email or push notifications. Necessary safety notices use neutral wording and safe links.
 
@@ -78,13 +91,26 @@ These mappings are starting signals, not proof that a particular representation 
 
 **6. Age and location information**
 
-We use declared birth month and year and request-country information to apply policy. These inputs are not reliable proof of age, residence or legal compliance.
+We request a complete birth date when a feature needs age, rather than requiring
+it on the registration form. We use that date and request-country information
+to apply policy. Self-declaration is not reliable proof of age, residence or
+legal compliance; a feature may require additional assurance in a particular
+market.
 
 Do not falsify information or bypass restrictions. Where age or location is uncertain, we may limit access while we resolve it.
 
-[REZICS TO FILL: actual age-assurance methods, birthday-boundary calculation, country-resolution rules, correction process and any market-specific checks. Month-and-year processing must not unlock a feature before the required birthday.]
+Current date inputs are self-declared. Age thresholds use the complete date at
+00:00 UTC; February 29 birthdays reach a threshold on March 1 in non-leap years.
+A country detected by our trusted ingress takes priority over a country you
+select. Where the region is unknown, the strictest account minimum applies and
+adult categories remain unavailable.
 
-Birth information is private. We provide an appropriate correction route without publishing it.
+[REZICS TO FILL: any required stronger age-assurance methods, underage-account correction and appeal procedure, and market-specific checks.]
+
+Birth information is private by default. You may correct it in personal
+information and separately choose whether the complete birthday is published on
+a shareable birthday page. Enabling content never publishes a birthday, and
+turning publication off does not remove age eligibility.
 
 **7. Availability and review**
 

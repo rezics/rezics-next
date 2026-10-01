@@ -47,10 +47,16 @@ const cappedList = <S extends ReturnType<typeof t.Object>>(item: S) =>
   t.Object({ items: t.Array(item), truncated: t.Boolean() });
 /** "Download your data": what Account keeps about the person, without
  * credential material (password hashes, passkey keys, TOTP secrets, tokens). */
+export const contentPreferencesView = t.Object({ revision: t.Integer(), birthDate: t.Nullable(t.String()), country: t.Nullable(t.String()),
+  birthdayPublic: t.Boolean(), publicId: t.Nullable(t.String()), age: t.Union([
+    t.Literal('unknown'), t.Literal('under-15'), t.Literal('15-17'), t.Literal('adult')]),
+  accountEligible: t.Boolean(), adultAvailable: t.Boolean(),
+  categories: t.Object({ general: t.Boolean(), r15: t.Boolean(), r18: t.Boolean(), r18g: t.Boolean() }) });
 export const accountExportView = t.Object({ format: t.Literal('rezics-account-export/1'), exportedAt: t.String(),
   account: t.Object({ id: t.String(), name: t.String(), email: t.String(), emailVerified: t.Boolean(),
     image: t.Nullable(t.String()), locale: t.Nullable(t.String()), createdAt: t.String(), updatedAt: t.String() }),
   displayPreferences: t.Object({ displayMode: t.String(), showZoneThemes: t.Boolean() }),
+  contentPreferences: contentPreferencesView,
   signInMethods: methodsView,
   devices: cappedList(sessionView),
   connectedApps: cappedList(connectedAppView),

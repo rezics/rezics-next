@@ -1,6 +1,5 @@
 // Account service responses cross a trust boundary; each is narrowed to the
-// fields the pages show. Fields added to the service later are optional here,
-// so a page keeps working against an Account service one release behind.
+// fields the pages show using the current Account contract.
 
 import type { UiLocale } from '../../i18n/locale.ts';
 
@@ -36,8 +35,8 @@ export const record = (value: unknown): Json | null =>
 const text = (value: unknown): string | null => typeof value === 'string' ? value : null;
 const date = (value: unknown): string | null =>
   typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : null;
-const locale = (value: unknown): AccountLocale | null => value === 'zh-CN' ? 'zh-Hans'
-  : ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'].includes(String(value))
+const locale = (value: unknown): AccountLocale | null =>
+  ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'].includes(String(value))
     ? value as AccountLocale : null;
 export function list<T>(value: unknown, item: (entry: unknown) => T | null): T[] | null {
   if (!Array.isArray(value)) return null;
@@ -84,6 +83,8 @@ function parsePasskey(value: unknown): Passkey | null {
   const item = record(value);
   const id = text(item?.id);
   const createdAt = date(item?.createdAt);
+  if (!item || !(item.provider === null || typeof item.provider === 'string')
+    || !(item.lastUsedAt === null || date(item.lastUsedAt))) return null;
   return id && createdAt ? { id, createdAt, name: text(item?.name)?.trim() || null, provider: text(item?.provider),
     lastUsedAt: date(item?.lastUsedAt), backedUp: item?.backedUp === true } : null;
 }
@@ -92,7 +93,8 @@ export function parseMethods(value: unknown): SignInMethods | null {
   const body = record(value);
   const passkeys = list(body?.passkeys, parsePasskey);
   const totp = record(body?.totp);
-  if (typeof body?.password !== 'boolean' || !passkeys) return null;
+  if (typeof body?.password !== 'boolean' || !passkeys
+    || !(body.passwordChangedAt === null || date(body.passwordChangedAt))) return null;
   return { password: body.password, passwordChangedAt: date(body.passwordChangedAt), passkeys,
     totp: totp ? { name: text(totp.name) ?? '', verified: totp.verified === true } : null };
 }
@@ -134,23 +136,19 @@ export function parseActivity(value: unknown): SecurityActivity | null {
     capped: failed?.capped === true } };
 }
 
-/** A browser the service could not name. `unknown` is the code; the older
- * English label is still accepted from a service one release behind. */
+/** A browser the service could not name. */
 function unnamedBrowser(value: string | null): string | null {
-  return value === 'unknown' || value === 'Unknown browser' ? null : value;
+  return value === 'unknown' ? null : value;
 }
 
 function parseScope(value: unknown): ScopeDescription | null {
   const item = record(value);
   const description = record(item?.description);
   const scope = text(item?.scope);
-  const en = text(description?.en);
-  if (!scope || !en) return null;
-  const hans = text(description?.['zh-Hans']) ?? text(description?.['zh-CN']) ?? en;
-  const hant = text(description?.['zh-Hant']) ?? hans;
-  const filled = Object.fromEntries(descriptionLocales.map(code => [code,
-    code === 'zh-Hans' ? hans : code === 'zh-Hant' ? hant : text(description?.[code]) ?? en])) as Record<AccountLocale, string>;
-  return { scope, description: filled };
+  if (!scope || !description
+    || descriptionLocales.some(code => typeof description[code] !== 'string')) return null;
+  return { scope, description: Object.fromEntries(descriptionLocales.map(code =>
+    [code, description[code]])) as Record<AccountLocale, string> };
 }
 
 function parseConnectedApp(value: unknown): ConnectedApp | null {
@@ -173,8 +171,8 @@ export function parseConsentPreview(value: unknown): { scopes: ScopeDescription[
   const item = record(value);
   const scopes = list(item?.scopes, parseScope);
   const client = record(item?.client);
-  // An older service cannot establish an app's identity.
-  return scopes ? { scopes, unverified: client?.unverified !== false, redirectHost: text(client?.redirectHost) } : null;
+  if (!scopes || typeof client?.unverified !== 'boolean' || !text(client.redirectHost)) return null;
+  return { scopes, unverified: client.unverified, redirectHost: text(client.redirectHost) };
 }
 
 export function parsePublicClient(value: unknown): PublicClient | null {

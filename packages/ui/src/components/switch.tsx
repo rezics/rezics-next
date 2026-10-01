@@ -7,6 +7,15 @@ import { cn } from '../utils.ts';
 
 export const useSwitch = useSwitchContext;
 
+/** Keep the native checkbox aligned when a controlled consumer declines a
+ * change (e.g. a cancelled age prompt or a rejected save). Zag's defaultChecked
+ * alone leaves the DOM checked until its logical value changes. */
+function SwitchInput({ tabIndex }: { tabIndex?: number }) {
+  const state = useSwitchContext();
+  return <ArkSwitch.HiddenInput role="switch" tabIndex={tabIndex} defaultChecked={undefined}
+    checked={state.checked} onChange={() => { /* Ark dispatches the change through its click handler. */ }} />;
+}
+
 // Aura's sizes: sm 20x36, md 28x48, lg 32x56, each with a 2px transparent border
 // around the thumb.
 const switchVariants = tv({
@@ -71,7 +80,7 @@ export const Switch = (props: SwitchProps) => {
       </ArkSwitch.Control>
 
       {/* Ark renders a plain checkbox; the switch role makes screen readers announce on/off. */}
-      <ArkSwitch.HiddenInput role="switch" tabIndex={tabIndex} />
+      <SwitchInput tabIndex={tabIndex} />
     </ArkSwitch.Root>
   );
 };

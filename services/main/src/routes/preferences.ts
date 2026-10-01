@@ -14,7 +14,7 @@ const visibility = t.Union([t.Literal('public'), t.Literal('private')]);
 const followPolicy = t.Union([t.Literal('everyone'), t.Literal('nobody')]);
 const spoilerPolicy = t.Union([t.Literal('hide-unread'), t.Literal('show')]);
 const settings = t.Object({ profileVisibility: visibility, followPolicy, hideReadingActivity: t.Boolean(),
-  contentLanguages: readingLanguages, spoilerPolicy, adultContent: t.Boolean() },
+  contentLanguages: readingLanguages, spoilerPolicy },
 { additionalProperties: false });
 const result = t.Object({ profile: t.Literal('person-preferences-v1'), ...settings.properties,
   version: t.Integer({ minimum: 0 }), blockedPeople: t.Array(readId, { maxItems: 500 }),

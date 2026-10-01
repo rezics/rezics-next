@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS public.rezics_account_operator_job (
   reason text NOT NULL,
   user_message text,
   expires_at timestamptz,
-  locale text NOT NULL CHECK (locale IN ('en', 'zh-CN')),
+  locale text NOT NULL CHECK (locale IN ('en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es')),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   finished_at timestamptz,
   UNIQUE (actor_id, command_id)

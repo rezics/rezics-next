@@ -88,14 +88,11 @@ async function emailLink(to: string, subject: RegExp): Promise<string> {
 }
 
 async function fillSignUp(page: Page, person: Person) {
-  await page.getByRole('textbox', { name: 'Name' }).fill(person.name);
+  await page.getByRole('textbox', { name: 'Display name' }).fill(person.name);
   await page.getByRole('textbox', { name: 'Email' }).fill(person.email);
   await page.getByLabel('Password', { exact: true }).fill(person.password);
   await page.getByLabel('Confirm').fill(person.password);
-  // The sign-up declaration: a birth month well above any market's minimum age, and the policies shown.
-  await page.getByRole('combobox', { name: 'Month' }).selectOption('05');
-  await page.getByRole('combobox', { name: 'Year' }).selectOption('1990');
-  await page.getByText('I have read and accept:').click();
+  await page.getByText('I meet the minimum age in the Terms and have read and accept:').click();
   await page.getByRole('button', { name: 'Next' }).click();
 }
 
@@ -166,8 +163,8 @@ test('sign up with email verification, the account centre and sign out', async (
   await expect(page.getByText('Signed in', { exact: true })).toBeVisible();
 
   await open(page, '/personal-info');
-  await page.getByRole('button', { name: 'Edit · Name' }).click();
-  await page.getByRole('textbox', { name: 'Name' }).fill(`${person.name} Byron`);
+  await page.getByRole('button', { name: 'Edit · Display name' }).click();
+  await page.getByRole('textbox', { name: 'Display name' }).fill(`${person.name} Byron`);
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText(`${person.name} Byron`)).toBeVisible();
   // The language is stored on the account and follows it to a new browser.

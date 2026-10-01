@@ -133,7 +133,7 @@ export const legalFacts: LegalFacts = {
     'version and public availability page': '',
     'supported countries and minimum ages': '',
     'restrictions; otherwise disabled': '',
-    'actual age-assurance methods, birthday-boundary calculation, country-resolution rules, correction process and any market-specific checks. Month-and-year processing must not unlock a feature before the required birthday.':
+    'any required stronger age-assurance methods, underage-account correction and appeal procedure, and market-specific checks.':
       '',
     'actual enabled rating categories by market, effective dates and feature restrictions. Eligibility in this policy must not be presented as current feature availability.':
       '',

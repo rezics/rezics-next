@@ -7,7 +7,6 @@ CREATE TABLE access.person_preferences (
   hide_reading_activity boolean NOT NULL DEFAULT false,
   content_languages text[] NOT NULL DEFAULT '{}',
   spoiler_policy text NOT NULL DEFAULT 'hide-unread' CHECK (spoiler_policy IN ('hide-unread', 'show')),
-  adult_content boolean NOT NULL DEFAULT false,
   version integer NOT NULL CHECK (version > 0),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK (cardinality(content_languages) <= 8)

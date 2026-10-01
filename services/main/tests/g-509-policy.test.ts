@@ -38,7 +38,7 @@ const countries = [
   'gb',
 ];
 const optIns = [false, true].flatMap((sexual) =>
-  [false, true].map((grotesque) => ({ sexual, grotesque })),
+  [false, true].map((grotesque) => ({ general: true, r15: true, sexual, grotesque })),
 );
 const ceilings: RealmCeiling[] = ['general', 'r15', 'adult'].flatMap((maxAge) =>
   optIns.map((options) => ({ maxAge: maxAge as RealmCeiling['maxAge'], ...options })),
@@ -60,8 +60,6 @@ function expected(
 ): boolean {
   if (!labels.length) return true;
   if (channel === 'index' || channel === 'preview' || !viewer.signedIn) return false;
-  if (!['US', 'JP', 'TW', 'SG', 'FR', 'KR', 'GB', 'gb'].includes(viewer.country ?? ''))
-    return false;
   if (labels[0] === 'r15')
     return ['15-17', 'adult'].includes(viewer.age) && ceiling?.maxAge !== 'general';
   const allowedCountries = ['US', 'JP', 'TW', 'SG', 'FR'];
@@ -137,7 +135,7 @@ test('G-509: independent adult opt-ins and machine-readable denial reasons', () 
     signedIn: true,
     age: 'adult',
     country: 'US',
-    optIns: { sexual: true, grotesque: false },
+    optIns: { general: true, r15: true, sexual: true, grotesque: false },
   };
   const assessment: Assessment = { status: 'assessed', labels: ['r18', 'r18g'] };
   expect(eligible({ assessment, viewer, channel: 'read' })).toEqual({
@@ -147,7 +145,7 @@ test('G-509: independent adult opt-ins and machine-readable denial reasons', () 
   expect(
     eligible({
       assessment,
-      viewer: { ...viewer, optIns: { sexual: false, grotesque: true } },
+      viewer: { ...viewer, optIns: { general: true, r15: true, sexual: false, grotesque: true } },
       channel: 'read',
     }),
   ).toEqual({ eligible: false, reasons: ['sexual_opt_in_required'] });
@@ -161,14 +159,14 @@ test('G-509: independent adult opt-ins and machine-readable denial reasons', () 
   expect(
     eligible({
       assessment,
-      viewer: { ...viewer, country: 'KR', optIns: { sexual: true, grotesque: true } },
+      viewer: { ...viewer, country: 'KR', optIns: { general: true, r15: true, sexual: true, grotesque: true } },
       channel: 'read',
     }),
   ).toEqual({ eligible: false, reasons: ['market_restricted'] });
   expect(
     eligible({
       assessment,
-      viewer: { ...viewer, optIns: { sexual: true, grotesque: true } },
+      viewer: { ...viewer, optIns: { general: true, r15: true, sexual: true, grotesque: true } },
       channel: 'push',
     }),
   ).toEqual({ eligible: false, reasons: ['channel_restricted'] });

@@ -3,8 +3,7 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
-import { Field, FieldContent, FieldDescription, FieldError, FieldLabel, FieldSet, FieldLegend } from '@rezics/ui/field';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/native-select';
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/field';
 import { type FormEvent, useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { FailureKind } from '../api/errors.ts';
@@ -15,15 +14,15 @@ import type { AccountLocale } from '../api/account-data.ts';
 import { useLocale, useTranslation } from '../../i18n/client.ts';
 import { Turnstile } from './turnstile.tsx';
 import { PolicyLinks } from './policy-links.tsx';
-import { acceptances, birthMonthValue, birthYears, regionName, type PolicyVersion } from './policies.ts';
+import { acceptances, regionName, type PolicyVersion } from './policies.ts';
 
-const refusals = new Set<FailureKind>(['birth-month-required', 'invalid-birth-month', 'market-unavailable',
-  'market-minimum-age', 'policy-acceptance-required']);
+const refusals = new Set<FailureKind>(['minimum-age-confirmation-required', 'market-unavailable',
+  'policy-acceptance-required']);
 
-type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm' | 'birth' | 'accept', string>>;
+type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm' | 'accept', string>>;
 
 /** `policies`: the current versions Account will record an acceptance of; without them sign-up is paused.
- * `country`: the region the edge detected, shown so the minimum age that applies is no surprise. */
+ * `country`: the region the edge detected, named when registration is unavailable. */
 export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSiteKey, policies, aboutOrigin = '',
   country }: { next: string; oauthQuery?: string; carry?: string; appName?: string | null;
   turnstileSiteKey?: string; policies?: PolicyVersion[]; aboutOrigin?: string; country?: string | null }) {
@@ -32,13 +31,9 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
   const locale = useLocale().current as AccountLocale;
   const { api, navigate } = useAccountClient();
   const [values, setValues] = useState({ name: '', email: '', password: '', confirm: '' });
-  const [birth, setBirth] = useState({ month: '', year: '' });
   const [accepted, setAccepted] = useState(false);
-  const [refusal, setRefusal] = useState<{ kind: FailureKind; minimumAge?: number }>();
+  const [refusal, setRefusal] = useState<FailureKind>();
   const region = regionName(country, locale);
-  const years = birthYears();
-  const monthNames = Array.from({ length: 12 }, (_, index) =>
-    new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2000, index, 1))));
   const [errors, setErrors] = useState<Errors>({});
   const [failure, setFailure] = useState<FailureKind>();
   const [busy, setBusy] = useState(false);
@@ -62,7 +57,6 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
       email: !email ? t.emailRequired : emailPattern.test(email) ? undefined : t.emailInvalid,
       password: values.password.length < passwordLength.min ? t.passwordTooShort : undefined,
       confirm: values.password && values.confirm !== values.password ? t.passwordMismatch : undefined,
-      birth: birthMonthValue(birth.year, birth.month) ? undefined : t.birthMonthRequired,
       accept: accepted ? undefined : t.acceptRequired,
     };
     setErrors(found);
@@ -72,7 +66,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
     if (!captchaToken || !policies) return setFailure('unavailable');
     setBusy(true);
     const result = await api.signUp({ name: values.name.trim(), email, password: values.password, locale, oauthQuery,
-      carry, captchaToken, birthMonth: birthMonthValue(birth.year, birth.month),
+      carry, captchaToken, minimumAgeConfirmed: accepted,
       acceptedPolicies: acceptances(policies) });
     setCaptchaToken(undefined);
     setAttempt(current => current + 1);
@@ -83,7 +77,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
     setBusy(false);
     if (result.kind === 'password-too-short') setErrors({ password: t.passwordTooShort });
     else if (result.kind === 'password-too-long') setErrors({ password: t.passwordTooLong });
-    else if (refusals.has(result.kind)) setRefusal({ kind: result.kind, minimumAge: result.minimumAge });
+    else if (refusals.has(result.kind)) setRefusal(result.kind);
     else setFailure(result.kind);
   }
 
@@ -93,11 +87,9 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
         {t.backToSignIn}</a></Button>} />;
   }
   const refusalMessage = !refusal ? undefined
-    : refusal.kind === 'market-minimum-age' && refusal.minimumAge
-      ? t.refusedAge({ region: region ?? t.yourRegion, age: String(refusal.minimumAge) })
-      : refusal.kind === 'market-unavailable' ? t.refusedMarket({ region: region ?? t.yourRegion })
-        : refusal.kind === 'invalid-birth-month' || refusal.kind === 'birth-month-required' ? t.birthMonthInvalid
-          : refusal.kind === 'policy-acceptance-required' ? t.policiesChanged : t.signUpFailed;
+    : refusal === 'market-unavailable' ? t.refusedMarket({ region: region ?? t.yourRegion })
+      : refusal === 'minimum-age-confirmation-required' ? t.acceptRequired
+        : refusal === 'policy-acceptance-required' ? t.policiesChanged : t.signUpFailed;
   const failureMessage = captchaFailed ? t.challengeUnavailable : failure === 'rate-limited' ? t.tooManyAttempts
     : failure === 'expired-request' ? t.requestExpired
       : failure === 'unavailable' || failure === 'not-enabled' ? t.unavailable : t.signUpFailed;
@@ -113,7 +105,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
         onChange={change('name')} />
       <EmailField label={t.emailLabel} value={values.email} error={errors.email} autoComplete="email"
         disabled={busy} onChange={change('email')} />
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="flex flex-col gap-5">
         <PasswordField label={t.newPasswordLabel} value={values.password} error={errors.password}
           autoComplete="new-password" visibilityLabel={t.showPassword} disabled={busy}
           onChange={change('password')} />
@@ -122,32 +114,6 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
           disabled={busy} onChange={change('confirm')} />
       </div>
       <p className="-mt-2 text-sm text-muted-foreground">{t.passwordHint}</p>
-      <FieldSet disabled={busy}>
-        <FieldLegend variant="label">{t.birthMonthLegend}</FieldLegend>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field invalid={!!errors.birth}>
-            <NativeSelect size="lg" name="birth-month" aria-label={t.birthMonthLabel} className="w-full" value={birth.month}
-              onChange={event => { const { value } = event.currentTarget; setBirth(current => ({ ...current, month: value }));
-                setErrors(current => ({ ...current, birth: undefined })); }}>
-              <NativeSelectOption value="">{t.birthMonthLabel}</NativeSelectOption>
-              {monthNames.map((name, index) => <NativeSelectOption key={name} value={String(index + 1).padStart(2, '0')}>
-                {name}</NativeSelectOption>)}
-            </NativeSelect>
-          </Field>
-          <Field invalid={!!errors.birth}>
-            <NativeSelect size="lg" name="birth-year" aria-label={t.birthYearLabel} className="w-full" value={birth.year}
-              onChange={event => { const { value } = event.currentTarget; setBirth(current => ({ ...current, year: value }));
-                setErrors(current => ({ ...current, birth: undefined })); }}>
-              <NativeSelectOption value="">{t.birthYearLabel}</NativeSelectOption>
-              {years.map(year => <NativeSelectOption key={year} value={String(year)}>{year}</NativeSelectOption>)}
-            </NativeSelect>
-          </Field>
-        </div>
-        {errors.birth ? <p role="alert" className="mt-2 text-sm text-destructive-foreground">{errors.birth}</p> : null}
-        <p className="mt-2 text-sm text-muted-foreground">{t.birthMonthHint}</p>
-        <p className="mt-1 text-sm font-medium" data-region={country ?? 'unknown'}>
-          {region ? t.regionDetected({ region }) : t.regionUnknown}</p>
-      </FieldSet>
       {policies ? <Field orientation="horizontal" invalid={!!errors.accept} disabled={busy}>
         <Checkbox name="accept-policies" checked={accepted}
           onCheckedChange={({ checked }) => { setAccepted(checked === true);

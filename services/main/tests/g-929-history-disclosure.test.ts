@@ -38,7 +38,7 @@ function fixture() {
     read: async (targets, viewer) => {
       expect(viewer.signedIn).toBe(true);
       expect(viewer.age).toBe('unknown');
-      expect(viewer.optIns).toEqual({ sexual: false, grotesque: false });
+      expect(viewer.optIns).toEqual({ general: true, r15: false, sexual: false, grotesque: false });
       if (outage) throw new DisclosureUnavailable('Assessment unavailable');
       return targets.map(() => decision);
     },

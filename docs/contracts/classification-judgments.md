@@ -35,14 +35,34 @@ until their schemas and behavioral tests carry them.
 
 Decision 1, product manager under maintainer delegation, 2026-09-29.
 Keep recognizable `general`, `r15`, `r18` (sexual) and `r18g` (grotesque) labels,
-with independent sexual and grotesque gates: material with both requires both
-opt-ins. Missing assessment is `unassessed`, never `general`. The manager's
+with independent category preferences: material with both adult labels requires
+both opt-ins. Missing assessment is `unassessed`, never `general`. The manager's
 2026-10-01 review admits unassessed content on reads, indexing, share previews,
 email and push; show **Not assessed** wherever the assessment is shown and never
 count it as general. Signed-out viewers and people under 15 can receive general
-and unassessed representations; `r15` starts at 15, and separate adult opt-ins at
+and unassessed representations; `r15` starts at 15, and adult categories at
 18, subject to
 [market restrictions](../operations/trust-and-safety.md#safety-and-legal-readiness).
+
+Maintainer revision, 2026-10-01: General, R15, R18 and R18G each have an
+independent saved preference. General defaults on and requires no age check.
+Restricted categories request a missing birth date when enabled. Unknown age
+cannot grant restricted eligibility. With an eligible birthday supplied through
+another flow, the unspecified R15 preference defaults on; an explicit off
+choice remains off. R18 and R18G default off and require separate opt-ins.
+Eligibility includes both the person's category choice and the applicable age,
+market, representation and Realm restrictions. A category opt-in cannot grant
+Access authority. Unassessed content keeps its distinct state and the existing
+channel admission above; disabling General does not relabel or silently exclude
+unassessed material.
+
+Account owns the complete private, self-declared birth date. Main
+receives current age eligibility and content preferences, rather than deriving
+age from public profile fields. An explicit birthday-publication choice is
+independent of these gates. Main now consumes live Account introspection for
+shared disclosure, including internal search, while public indexing and share
+previews retain anonymous eligibility. Unknown age remains unable to receive
+restricted categories.
 
 Imports retain source meaning: VNDB age 18 maps to `r18`, image sexual level 2
 is not stored, image violence level 2 maps to `r18g`, and Bangumi `nsfw` maps to

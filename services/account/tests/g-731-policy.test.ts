@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
-  admitBirthMonth,
+  admitRegistration,
   EEA_COUNTRIES,
   MARKET_POLICY,
   marketRule,
@@ -11,7 +11,7 @@ import {
 import { POLICY_VERSIONS } from '../src/policy-versions.ts';
 import { validatePolicyAcceptance } from '../src/policy-acceptance.ts';
 
-test('G-731 market class guard: every EEA country, minimum and closed adult market', () => {
+test('G-731 market class guard: every EEA country, minimum and supported adult markets', () => {
   const expected =
     'AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO'.split(
       ' ',
@@ -23,33 +23,20 @@ test('G-731 market class guard: every EEA country, minimum and closed adult mark
     expect(rule.minimumAge).toBeGreaterThanOrEqual(
       country === 'KR' ? 14 : expected.includes(country) ? 16 : 13,
     );
-    expect(rule.adultAvailable).toBe(false);
+    expect(rule.adultAvailable).toBe(!['KR', 'GB', 'CN'].includes(country));
   }
   for (const country of [null, undefined, '', 'XX', 'T1'])
     expect(marketRule(country).minimumAge).toBe(16);
   expect(marketRule('CN').registration).toBe(false);
 });
 
-test('G-731 month-only boundary never admits before the last possible birthday, including UTC year rollover', () => {
-  for (const [country, age] of [
-    ['US', 13],
-    ['KR', 14],
-    ['DE', 16],
-  ] as const) {
-    for (const month of [1, 2, 6, 12]) {
-      const birth = `${2026 - age}-${String(month).padStart(2, '0')}`;
-      const during = new Date(Date.UTC(2026, month - 1, 28, 23, 59, 59));
-      expect(() => admitBirthMonth(birth, country, during)).toThrow('market_minimum_age');
-      expect(admitBirthMonth(birth, country, new Date(Date.UTC(2026, month, 1)))).toBe(birth);
-    }
+test('G-731 registration requires a minimum-age declaration without collecting a birthday', () => {
+  for (const country of ['US', 'KR', 'DE', undefined]) {
+    expect(() => admitRegistration(true, country)).not.toThrow();
+    for (const value of [undefined, null, false, 'true', '1990-01'])
+      expect(() => admitRegistration(value, country)).toThrow('minimum_age_confirmation_required');
   }
-  for (const birth of ['2027-01', '2000-00', '2000-13', '2000-1', '1899-12', 2000]) {
-    expect(() => admitBirthMonth(birth, 'US', new Date('2026-01-01'))).toThrow(
-      'invalid_birth_month',
-    );
-  }
-  expect(() => admitBirthMonth(undefined)).toThrow('birth_month_required');
-  expect(() => admitBirthMonth('1990-01', 'CN')).toThrow('market_unavailable');
+  expect(() => admitRegistration(true, 'CN')).toThrow('market_unavailable');
 });
 
 test('G-731 policy source digests and exact complete acknowledgement', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { classifyFailure, refusedMinimumAge } from '../features/api/errors.ts';
-import { acceptanceContinuation, acceptances, birthMonthValue, birthYears, parsePolicyStatus, policyHref,
+import { acceptanceContinuation, acceptances, parsePolicyStatus, policyHref,
   regionName } from '../features/auth/policies.ts';
 import { policyFixture } from '../features/auth/policies.fixture.ts';
 import { accountsConfig } from '../features/config/env.ts';
@@ -8,12 +8,11 @@ import { POLICY_VERSIONS } from '../../../services/account/src/policy-versions.t
 
 describe('G-736 sign-up refusals', () => {
   test('Account’s admission reasons become typed outcomes with the minimum age', () => {
-    const body = { code: 'market_minimum_age', reason: 'market_minimum_age', minimumAge: 14 };
-    expect(classifyFailure(400, body)).toBe('market-minimum-age');
+    const body = { reason: 'minimum_age_confirmation_required', minimumAge: 14 };
+    expect(classifyFailure(400, body)).toBe('minimum-age-confirmation-required');
     expect(refusedMinimumAge(body)).toBe(14);
     expect(refusedMinimumAge({ minimumAge: '14' })).toBeUndefined();
-    for (const [reason, kind] of [['birth_month_required', 'birth-month-required'],
-      ['invalid_birth_month', 'invalid-birth-month'], ['market_unavailable', 'market-unavailable'],
+    for (const [reason, kind] of [['minimum_age_confirmation_required', 'minimum-age-confirmation-required'], ['market_unavailable', 'market-unavailable'],
       ['policy_acceptance_required', 'policy-acceptance-required']] as const) {
       expect(classifyFailure(400, { reason })).toBe(kind);
     }
@@ -57,20 +56,7 @@ describe('G-736 policy status', () => {
   });
 });
 
-describe('G-736 birth month and region', () => {
-  test('a birth month is a year and month together, in the form Account admits', () => {
-    expect(birthMonthValue('1990', '05')).toBe('1990-05');
-    expect(birthMonthValue('', '05')).toBe('');
-    expect(birthMonthValue('1990', '13')).toBe('');
-    expect(birthMonthValue('90', '05')).toBe('');
-  });
-
-  test('the years offered run from now back to 1900', () => {
-    const years = birthYears(new Date(Date.UTC(2026, 9, 1)));
-    expect(years[0]).toBe(2026);
-    expect(years.at(-1)).toBe(1900);
-  });
-
+describe('G-736 region', () => {
   test('the region is named in the person’s language, or not at all when unknown', () => {
     expect(regionName('KR', 'en')).toBe('South Korea');
     expect(regionName('DE', 'de')).toBe('Deutschland');

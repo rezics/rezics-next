@@ -7,7 +7,7 @@ import {
   ControlUnavailable,
 } from '../modules/access/topology-control.ts';
 import { command, commandResult, reads, readsResult } from '../modules/suitability/contract.ts';
-import { eligible, type Viewer } from '../modules/suitability/policy.ts';
+import { eligible } from '../modules/suitability/policy.ts';
 import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { resolveTargets, TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts';
@@ -95,21 +95,14 @@ export function suitabilityRoutes(work: MainWorkDependencies) {
                 }
               }
               const assessments = await work.suitability!.read(targets, moderator);
-              // Account has no age evidence; no trusted request-country input exists.
-              // Do not accept client headers/body as evidence or store adult opt-ins.
-              const viewer: Viewer = {
-                signedIn: session.principal !== null,
-                age: 'unknown',
-                country: null,
-                optIns: { sexual: false, grotesque: false },
-              };
+              const viewer = session.viewer;
               return {
                 viewer: {
                   ...viewer,
                   optIns: {
                     ...viewer.optIns,
-                    available: false,
-                    reason: 'age_evidence_unavailable',
+                    available: viewer.age !== 'unknown',
+                    reason: viewer.age === 'unknown' ? 'age_unknown' : null,
                   },
                 },
                 items: targets.map((target, index) => {

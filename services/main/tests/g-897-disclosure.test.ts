@@ -20,7 +20,7 @@ import type { ContentCore } from '../../content/src/core.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const term = (value: string) => ({ type: 'literal', value });
-const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { sexual: true, grotesque: true } };
+const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { general: true, r15: true, sexual: true, grotesque: true } };
 
 function fixture() {
   const labels = new Map<string, Labels>();
@@ -89,7 +89,7 @@ test('G-897: admitted owner evidence reaches the target reader while preview and
     options: {}, displayLanguages: ['en'], viewer: adult } as unknown as TargetReadSession;
   expect((await targetSummaries(session, [id(2)])).summaries[0]?.status).toBe('available');
   for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer({ issuer: 'account', subject: 'reader' }),
-    { ...adult, country: 'GB' }, { ...adult, optIns: { sexual: true, grotesque: false } }]) {
+    { ...adult, country: 'GB' }, { ...adult, optIns: { general: true, r15: true, sexual: true, grotesque: false } }]) {
     expect((await targetSummaries({ ...session, viewer }, [id(2)])).summaries[0]?.status).toBe('unavailable');
   }
   for (const channel of ['preview', 'sitemap', 'seo'] as const) {

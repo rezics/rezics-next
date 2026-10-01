@@ -36,7 +36,6 @@ const deliveryTimer = setInterval(() => {
     .finally(() => { delivering = false; });
 }, 1_000);
 createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
-  policyAcceptanceEnforced: config.ACCOUNT_POLICY_ACCEPTANCE_ENFORCED,
   turnstileSecretKey: config.ACCOUNT_TURNSTILE_SECRET_KEY,
   turnstileMode: config.ACCOUNT_TURNSTILE_MODE as 'local' | 'cloudflare',
   accessDeletionFence: access ? async subject => {
@@ -50,6 +49,7 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
 }), pool, { operatorUserIds, displayPreferenceClientIds: new Set([config.WEB_OAUTH_CLIENT_ID].filter(Boolean)),
   trustedProxyPeers: new Set(config.ACCOUNT_TRUSTED_PROXY_PEERS.split(',').map(value => value.trim()).filter(Boolean)),
   mailEventsSecret: config.ACCOUNT_MAIL_EVENTS_SECRET,
+  contentEvidenceSecret: config.ACCOUNT_MAIN_CLIENT_SECRET,
   notificationDigest: { accountSecret: secret, mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } })
   .cleanup(() => { clearInterval(deliveryTimer); })
   .listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });

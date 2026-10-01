@@ -4,7 +4,7 @@ import { POLICY_VERSIONS } from '../../services/account/src/policy-versions.ts';
  * Callers submit this through Account's sign-up API so fixtures exercise the
  * same admission and acceptance path as public enrollment. */
 export const signupPolicyFixture = {
-  birthMonth: '1990-01',
+  minimumAgeConfirmed: true,
   acceptedPolicies: POLICY_VERSIONS.map(({ policyId, versionDigest }) => ({
     policyId,
     versionDigest,

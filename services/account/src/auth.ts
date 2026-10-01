@@ -44,8 +44,6 @@ export interface AccountConfig {
   accessDeletionFence?: (accountSubject: string) => Promise<void>;
   /** Embedded fixtures can exercise a material policy update. */
   policyVersions?: readonly PolicyVersion[];
-  /** Enable only after the Accounts re-acceptance page is available. */
-  policyAcceptanceEnforced?: boolean;
 }
 
 type EmailUser = { id: string; email: string; locale?: unknown };
@@ -96,7 +94,7 @@ export function accountAuthOptions(config: AccountConfig) {
             minimumAge: error.minimumAge, message: error.reason });
         }
       }
-      if (config.policyAcceptanceEnforced && ctx.path === '/oauth2/authorize') {
+      if (ctx.path === '/oauth2/authorize') {
         const session = await getSessionFromCtx(ctx);
         if (session && await policyAcceptanceRequired(config.pool, session.user.id, config.policyVersions)) {
           throw new APIError('FORBIDDEN', { code: 'policy_acceptance_required', message: 'Accept the current policies' });

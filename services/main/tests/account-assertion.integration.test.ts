@@ -3,6 +3,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   AccountAssertionDenied, AccountAssertionUnavailable, AccountAssertionVerifier,
 } from '../src/modules/account/verify-assertion.ts';
+import { disclosureViewer } from '../src/modules/disclosure/viewer.ts';
 
 test('IAM02/IAM10 partial: signed Account token needs current enforcement', async () => {
   const issuer = 'https://account.rezics.test';
@@ -14,6 +15,7 @@ test('IAM02/IAM10 partial: signed Account token needs current enforcement', asyn
   let subject = 'private-account-1';
   let scope = 'work:create';
   let calls = 0;
+  let contentEvidence: unknown;
   const server = Bun.serve({
     hostname: '127.0.0.1', port: 0,
     async fetch(request) {
@@ -27,7 +29,8 @@ test('IAM02/IAM10 partial: signed Account token needs current enforcement', asyn
           || !body.get('token')) return new Response('unauthorized', { status: 401 });
         if (introspectionStatus !== 200) return new Response('unavailable', { status: introspectionStatus });
         return Response.json({ active, iss: issuer, sub: subject, aud: audience, scope,
-          exp: Math.floor(Date.now() / 1000) + 300 });
+          exp: Math.floor(Date.now() / 1000) + 300,
+          ...(contentEvidence === undefined ? {} : { rezics_content_evidence: contentEvidence }) });
       }
       return new Response('missing', { status: 404 });
     },
@@ -49,6 +52,17 @@ test('IAM02/IAM10 partial: signed Account token needs current enforcement', asyn
       .toMatchObject({ issuer, subject: 'private-account-1',
         accountAudiences: [audience], accountScopes: ['work:create'] });
     expect(calls).toBe(1);
+    const forgedAge = await token({ birthDate: '1990-01-01', age: 'adult' });
+    expect(disclosureViewer(await verifier.verify(request(`Bearer ${forgedAge}`), ['work:create'])).age).toBe('unknown');
+    contentEvidence = { age: 'adult', country: 'US', accountEligible: true, adultAvailable: true,
+      categories: { general: false, r15: true, r18: false, r18g: true } };
+    expect(disclosureViewer(await verifier.verify(request(`Bearer ${signed}`), ['work:create'])))
+      .toMatchObject({ age: 'adult', optIns: { general: false, r15: true, sexual: false, grotesque: true } });
+    contentEvidence = { ...contentEvidence as object, categories: { general: true, r15: false, r18: false, r18g: false } };
+    expect(disclosureViewer(await verifier.verify(request(`Bearer ${signed}`), ['work:create'])).optIns.r15).toBe(false);
+    contentEvidence = { age: 'adult', categories: 'untrusted-shape' };
+    await expect(verifier.verify(request(`Bearer ${signed}`), ['work:create'])).rejects.toBeInstanceOf(AccountAssertionUnavailable);
+    contentEvidence = undefined;
     await expect(verifier.verify(request('Bearer malformed'), ['work:create']))
       .rejects.toBeInstanceOf(AccountAssertionDenied);
     await expect(verifier.verify(request(`DPoP ${signed}`), ['work:create']))

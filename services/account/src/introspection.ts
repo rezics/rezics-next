@@ -1,4 +1,6 @@
+import { readContentPreferences } from './content-preferences.ts';
 import { decodeProtectedHeader } from 'jose';
+import { timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
 import { AUTH_MODE_CLAIM, consentBasisActive, tokenScopes } from './consent-fence.ts';
 import { installationBasisActive } from './installations.ts';
@@ -6,9 +8,8 @@ import { recoveryBasisActive } from './recovery-claim.ts';
 import { accountBasisActive } from './account-fence.ts';
 import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } from './signing-keys.ts';
 
-// Launch introspection deliberately has no age-band or adult-eligibility claim.
-// A declared birth month gates registration only; Main withholds all assessed
-// r15/r18/r18g targets from every reader without age assurance.
+// Only current introspection supplies derived content evidence. Private birthdays
+// and public-birthday identifiers never travel in tokens or introspection.
 
 /** The provider authenticates the introspection caller and verifies the token
  * against its JWKS cache first; that cache can hold a retired key for minutes.
@@ -22,11 +23,12 @@ import { ACCESS_TOKEN_SECONDS, SIGNING_ALLOWANCE_SECONDS, signingKeyAccepts } fr
  * installation, consent and token history. Verified membership adds one current
  * user lookup by primary key; workload tokens never receive that assertion. */
 export async function currentIntrospection(pool: Pool, presented: string | null,
-  provider: Response): Promise<Response> {
+  provider: Response, includeContentEvidence = false): Promise<Response> {
   if (!provider.ok) return provider;
   let payload: Record<string, unknown>;
   try { payload = await provider.clone().json() as Record<string, unknown>; }
   catch { return unavailable(); }
+  delete payload.rezics_content_evidence;
   if (payload.active !== true) return provider;
   const clientId = payload.client_id;
   if (typeof clientId !== 'string' || !presented) return inactive();
@@ -61,9 +63,15 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
           'SELECT "emailVerified" FROM "user" WHERE id = $1', [payload.sub])).rows[0]
         : undefined;
       const verified = accountProfile?.emailVerified === true;
+      const preferences = accountProfile && typeof payload.sub === 'string'
+        ? await readContentPreferences(client, payload.sub) : undefined;
+      const contentEvidence = preferences ? { age: preferences.age, country: preferences.country,
+        accountEligible: preferences.accountEligible, adultAvailable: preferences.adultAvailable,
+        categories: preferences.categories } : undefined;
       await client.query('COMMIT');
       committed = true;
-      return active ? Response.json({ ...payload, email_verified: verified },
+      return active && contentEvidence?.accountEligible !== false ? Response.json({ ...payload, email_verified: verified,
+        ...(includeContentEvidence && contentEvidence ? { rezics_content_evidence: contentEvidence } : {}) },
         { headers: { 'cache-control': 'no-store' } }) : inactive();
     } finally {
       try { if (!committed) await client.query('ROLLBACK'); } finally { client.release(); }
@@ -71,6 +79,30 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
   } catch {
     return unavailable();
   }
+}
+
+/** Only Main's configured confidential credential receives private derived
+ * preferences. The provider must still authenticate it before any active result. */
+export async function contentEvidenceAccess(request: Request, mainSecret: string | undefined): Promise<boolean> {
+  if (!mainSecret) return false;
+  let supplied: unknown;
+  const authorization = request.headers.get('authorization');
+  if (authorization?.startsWith('Basic ')) {
+    const decoded = Buffer.from(authorization.slice(6), 'base64').toString();
+    supplied = decoded.slice(decoded.indexOf(':') + 1);
+  } else {
+    try {
+      if (request.headers.get('content-type')?.startsWith('application/json'))
+        supplied = (await request.json() as { client_secret?: unknown }).client_secret;
+      else {
+        const secrets = new URLSearchParams(await request.text()).getAll('client_secret');
+        if (secrets.length === 1) supplied = secrets[0];
+      }
+    } catch { return false; }
+  }
+  if (typeof supplied !== 'string') return false;
+  const received = Buffer.from(supplied), expected = Buffer.from(mainSecret);
+  return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
 /** RFC 7662 sends the token as a form parameter; the provider also accepts JSON. */

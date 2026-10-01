@@ -15,7 +15,7 @@ export interface Viewer {
   signedIn: boolean;
   age: Age;
   country: string | null;
-  optIns: { sexual: boolean; grotesque: boolean };
+  optIns: { general: boolean; r15: boolean; sexual: boolean; grotesque: boolean };
 }
 export interface RealmCeiling {
   maxAge: 'general' | 'r15' | 'adult';
@@ -23,6 +23,8 @@ export interface RealmCeiling {
   grotesque: boolean;
 }
 export const REASONS = [
+  'general_disabled',
+  'r15_opt_in_required',
   'sign_in_required',
   'age_unknown',
   'country_unknown',
@@ -39,7 +41,7 @@ export const ANONYMOUS_VIEWER: Viewer = Object.freeze({
   signedIn: false,
   age: 'unknown',
   country: null,
-  optIns: Object.freeze({ sexual: false, grotesque: false }),
+  optIns: Object.freeze({ general: true, r15: false, sexual: false, grotesque: false }),
 });
 
 export function validLabels(labels: readonly string[]): labels is Labels {
@@ -74,20 +76,22 @@ export function eligible(input: {
     return { eligible: true, reasons: [] };
   }
   const labels: readonly Label[] = assessment.labels;
-  if (!labels.length) return { eligible: true, reasons: [] };
+  if (!labels.length) return viewer.optIns.general ? { eligible: true, reasons: [] }
+    : { eligible: false, reasons: ['general_disabled'] };
   const reasons: Reason[] = [];
   const adult = labels.includes('r18') || labels.includes('r18g');
   if (!viewer.signedIn) reasons.push('sign_in_required');
   if (viewer.age === 'unknown') reasons.push('age_unknown');
   const country = knownCountry(viewer.country);
-  if (!country) reasons.push('country_unknown');
+  if (adult && !country) reasons.push('country_unknown');
   if (viewer.age === 'under-15') reasons.push('age_below_15');
+  if (labels.includes('r15') && !viewer.optIns.r15) reasons.push('r15_opt_in_required');
   if (adult) {
     if (viewer.age !== 'adult') reasons.push('adult_required');
     if (labels.includes('r18') && !viewer.optIns.sexual) reasons.push('sexual_opt_in_required');
     if (labels.includes('r18g') && !viewer.optIns.grotesque)
       reasons.push('grotesque_opt_in_required');
-    if (country === 'KR' || country === 'GB') reasons.push('market_restricted');
+    if (country === 'KR' || country === 'GB' || country === 'CN') reasons.push('market_restricted');
     if (channel === 'email' || channel === 'push') reasons.push('channel_restricted');
   }
   if (

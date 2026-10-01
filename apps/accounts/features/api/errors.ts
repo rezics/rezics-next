@@ -11,8 +11,8 @@ export type FailureKind = 'invalid-credentials' | 'email-not-verified' | 'rate-l
   | 'invalid-code'
   // The browser's passkey prompt was dismissed, timed out or is unsupported.
   | 'cancelled'
-  // Sign-up declarations the market's rules refuse; `minimumAge` accompanies the age one.
-  | 'birth-month-required' | 'invalid-birth-month' | 'market-unavailable' | 'market-minimum-age'
+  // Registration declarations and content qualification.
+  | 'minimum-age-confirmation-required' | 'invalid-birth-date' | 'birth-date-required' | 'age-ineligible' | 'market-restricted' | 'market-unavailable'
   | 'policy-acceptance-required';
 
 interface Failure { ok: false; kind: FailureKind; status: number; minimumAge?: number }
@@ -58,14 +58,16 @@ const byError: Record<string, FailureKind> = {
 
 // Account's sign-up admission answers `{ reason, minimumAge }` (market-policy.ts).
 const byReason: Record<string, FailureKind> = {
-  birth_month_required: 'birth-month-required',
-  invalid_birth_month: 'invalid-birth-month',
+  minimum_age_confirmation_required: 'minimum-age-confirmation-required',
+  invalid_birth_date: 'invalid-birth-date',
+  birth_date_required: 'birth-date-required',
+  age_ineligible: 'age-ineligible',
+  market_restricted: 'market-restricted',
   market_unavailable: 'market-unavailable',
-  market_minimum_age: 'market-minimum-age',
   policy_acceptance_required: 'policy-acceptance-required',
 };
 
-/** The minimum age a market-minimum-age refusal reports, when it is a number. */
+/** The minimum age accompanying Account's registration declaration requirement. */
 export function refusedMinimumAge(body: unknown): number | undefined {
   const age = typeof body === 'object' && body !== null ? (body as Record<string, unknown>).minimumAge : undefined;
   return typeof age === 'number' && Number.isInteger(age) ? age : undefined;

@@ -1,4 +1,5 @@
 // Server Component reads from the Account service with the visitor's cookies.
+import { parseContentPreferences } from './content-preferences.ts';
 import { headers } from 'next/headers';
 import { cache } from 'react';
 import { parseActivity, parseConnectedApps, parseConsentPreview, parseDisplayPreferences, parseMethods, parsePublicClient, parseSession,
@@ -47,6 +48,9 @@ async function read<T>(path: string, parse: (value: unknown) => T | null,
 /** One session read per request, shared by the page and its sections. */
 export const readSession = cache(() => read('/api/auth/get-session', parseSession));
 export const readMethods = cache(() => read('/api/account/methods', parseMethods));
+export const readContentPreferences = cache(() => read('/api/account/content-preferences', parseContentPreferences));
+export const readPublicBirthday = cache((id: string) => read(`/api/account/birthday/${encodeURIComponent(id)}`,
+  value => typeof record(value)?.birthDate === 'string' ? record(value)!.birthDate as string : null, { anonymous: true }));
 export const readDisplayPreferences = cache(() => read('/api/account/display-preferences', parseDisplayPreferences));
 export const readSessions = cache((cursor?: string) => read(`/api/account/sessions?limit=100${
   cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, parseSessions));

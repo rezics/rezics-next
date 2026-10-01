@@ -5,7 +5,7 @@ import { followPrincipal } from '../follows/authority.ts';
 import { RealmReplyInvalid } from './content-store.ts';
 import { REALM_THREAD_COST } from './thread-contract.ts';
 import { disclosurePoolReader, discloseInventory, DISCLOSURE_COST } from '../disclosure/read.ts';
-import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
+import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -154,8 +154,8 @@ export class RealmReplyThreadStore {
       const targets = page.map(row => ({ owner: 'content' as const, resource: row.id,
         component: 'body' as const, work: row.root_target, context: realm }));
       const decisions = !reader ? page.map(() => 'visible') : reader.environment
-        ? await discloseInventory(reader.environment, targets, ANONYMOUS_VIEWER, 'count')
-        : await reader.read(targets, ANONYMOUS_VIEWER, 'count');
+        ? await discloseInventory(reader.environment, targets, currentDisclosureViewer(), 'count')
+        : await reader.read(targets, currentDisclosureViewer(), 'count');
       page.forEach((row, index) => {
         if (decisions[index] === 'visible') counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
       });
