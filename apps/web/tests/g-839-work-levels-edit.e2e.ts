@@ -19,18 +19,19 @@ test.beforeAll(async ({}, info) => {
     throw new Error(`G-839 seed failed: ${result.stderr || result.error?.message || result.status}`);
   }
   catalogue = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as EditCatalogue;
-  // Main keeps processing the seed's events for a while, moving the graph under every read (409).
-  const main = `http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${uuid(catalogue.index.newTestament.work)}`;
+  // Main keeps processing the seed's events for a while: every Work must read publicly and the graph position hold still.
+  const works = [...Object.values(catalogue.index), ...catalogue.sao.volumes, catalogue.readOnly].map(work => uuid(work.work));
   let last = '';
   let still = 0;
-  for (const deadline = Date.now() + 90_000; Date.now() < deadline && still < 4;) {
-    const response = await fetch(main).catch(() => null);
-    const position = response?.ok ? JSON.stringify((await response.json() as { sourcePosition: unknown }).sourcePosition) : '';
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline && still < 6;) {
+    const answers = await Promise.all(works.map(id => fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/works/${id}`).catch(() => null)));
+    const positions = await Promise.all(answers.map(async answer => (answer?.ok ? JSON.stringify((await answer.json() as { sourcePosition: unknown }).sourcePosition) : '')));
+    const position = positions.every(Boolean) && new Set(positions).size === 1 ? positions[0]! : '';
     still = position && position === last ? still + 1 : 0;
     last = position;
     await new Promise(done => setTimeout(done, 500));
   }
-  if (still < 4) throw new Error('Main’s graph kept moving for 90 seconds after the seed');
+  if (still < 6) throw new Error('Main’s graph kept moving for 120 seconds after the seed');
   mark(info, 'seeded');
 });
 
