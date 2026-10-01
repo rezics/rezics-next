@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 
-// The resources are written once into this isolated QA stack through Main's routes (`g-644-seed.ts`): a web serial with
+// The resources are written once into this isolated QA stack (`g-644-seed.ts`: owner commands and Main's routes, and the community's review mode through its policy delivery and Access rows): a web serial with
 // a chapter occurrence and a release, a character, a resource of a type nobody registered (named in Arabic) and a
 // community. The browser reads them on the generic page, on desktop and on a phone, in English, Traditional Chinese
 // and a right-to-left content language, and starts a discussion from the chapter.
@@ -74,7 +74,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   info.annotations.push({ type: 'signed-out chapter', description: String(first?.status()) });
   if (first?.status() === 200) {
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Sword Art Online');
-    await expect(page.getByText('Sign in to see what this is related to.')).toBeVisible();
+    // Relations are public: signed out, the section asks for no sign-in.
+    await expect(page.getByText(/Sign in to see/)).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Relations' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Discuss this list item' }).first()).toHaveAttribute('href', /\/auth\/start\?next=/);
   } else {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Nothing here');
@@ -106,8 +108,6 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByRole('heading', { name: 'Discussion' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Discussion' })).toBeVisible();
-  // Signed in, relations are Main's to answer and the section no longer asks for sign-in.
-  await expect(page.getByText('Sign in to see what this is related to.')).toHaveCount(0);
   lap('discussion reloaded');
   // A release, a character and a resource of an unregistered type: each a page with no book controls.
   await page.goto(at(seeded.release));

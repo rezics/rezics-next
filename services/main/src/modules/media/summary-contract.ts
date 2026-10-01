@@ -4,9 +4,11 @@ import { AVATAR_POLICY } from './store.ts';
 import { FALLBACK_POLICY, MAX_SUMMARY_BATCH } from './summary.ts';
 import { targetBase, targetRef } from '../target/contract.ts';
 
-const resourceType = t.Union(['work', 'main-version', 'space', 'realm', 'concept', 'character',
-  'context', 'role', 'relation-definition', 'release', 'occurrence', 'realization', 'resource', 'collection']
-  .map(value => t.Literal(value)));
+// Written as literals, not mapped from an array, so the contract's static type is the union and not `never`.
+const resourceType = t.Union([t.Literal('work'), t.Literal('main-version'), t.Literal('space'), t.Literal('realm'),
+  t.Literal('concept'), t.Literal('character'), t.Literal('context'), t.Literal('role'),
+  t.Literal('relation-definition'), t.Literal('release'), t.Literal('occurrence'), t.Literal('realization'),
+  t.Literal('resource'), t.Literal('collection')]);
 const name = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
   basis: displayLanguageBasis,

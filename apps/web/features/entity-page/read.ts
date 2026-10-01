@@ -25,13 +25,11 @@ export async function readStatements(section: EntitySection, cursor: string | un
 }
 
 /**
- * A page of relation occurrences where the resource takes any role. Main's
- * relation read needs an acting Agent, so an anonymous reader has none to ask:
- * `sign-in`, which the section says, rather than a request Main would refuse.
+ * A page of relation occurrences where the resource takes any role. Relations are public data: an anonymous
+ * reader, or one signed in without an acting Agent, reads them as anyone does.
  */
 export async function readRelations(section: EntitySection, cursor: string | undefined): Promise<Loaded<RelationsPage>> {
-  const { main, actingSubject, signedIn } = await reader();
-  if (!actingSubject) return { ok: false, failure: signedIn ? 'identity' : 'sign-in' };
+  const { main, actingSubject } = await reader();
   return settle(followHref<RelationsPage>(main, section.href, { actingSubject, after: cursor, limit: 20 }), cursor);
 }
 

@@ -100,12 +100,10 @@ export const Relations: Story = {
   },
 };
 
-export const RelationsAnonymous: Story = {
-  render: () => <Page><RelationsView page={{ ok: false, failure: 'sign-in' }} cursor={undefined} {...common('en')} /></Page>,
+export const RelationsFailed: Story = {
+  render: () => <Page><RelationsView page={{ ok: false, failure: 'unavailable' }} cursor={undefined} {...common('en')} /></Page>,
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expect(canvas.getByText('Sign in to see what this is related to.')).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', expect.stringContaining('/auth/start'));
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Relations could not be loaded.');
   },
 };
 

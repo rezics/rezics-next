@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { seedServedTypes, servedTypes } from '../features/catalogue/type-fixtures.ts';
 import { showsBookControls, workExperience } from '../features/entity-page/experience.ts';
 import { baseSections, projectionFor } from '../features/entity-page/fixtures.ts';
+import { baseSections as mainBaseSections } from '../../../services/main/src/modules/entity-page/read.ts';
+import { summaryHref } from '../features/entity-page/views.tsx';
 import { followHref } from '../features/entity-page/href.ts';
 import { continueHref, entityHref, parseEntityCursors, parseEntityRef, standaloneHrefFor }
   from '../features/entity-page/route.ts';
@@ -58,10 +60,31 @@ describe('G-644 /e addresses', () => {
   test('a Work links to its /w host and everything else to /e; a Zone can map both', () => {
     const hrefFor = standaloneHrefFor({}, `/e/${id}`);
     expect(hrefFor({ kind: 'resource', iri: iri(id), base: 'work', type: 'work' })).toBe(`/w/${id}`);
-    for (const base of ['release', 'occurrence', 'realization', 'resource', null] as const) {
+    for (const base of ['release', 'occurrence', 'realization', 'resource'] as const) {
       expect(hrefFor({ kind: 'resource', iri: iri(id), base, type: 'resource' })).toBe(`/e/${id}`);
     }
     expect(hrefFor({ kind: 'continue', section: 'discussion', cursor: 'c2' })).toBe(`/e/${id}?discussion=c2#discussion`);
+  });
+});
+
+describe('G-644 links', () => {
+  test('a reference that is no page target (a Realm, a context, a concept) is named without a link', () => {
+    const hrefFor = standaloneHrefFor({}, `/e/${id}`);
+    const link = summaryHref(hrefFor);
+    const summary = (base: string | null, type: string) => ({ reference: iri(id), status: 'available', type, base,
+      work: null, disclosure: 'public', name: { value: 'x', language: 'en', direction: 'ltr', basis: 'requested' },
+      avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'k', resourceType: type } }) as never;
+    for (const type of ['realm', 'space', 'context', 'concept', 'main-version']) {
+      expect(link(summary(null, type)), type).toBeNull();
+    }
+    expect(link(summary('release', 'release'))).toBe(`/e/${id}`);
+    expect(link(summary('work', 'work'))).toBe(`/w/${id}`);
+  });
+});
+
+describe('G-644 fixtures follow Main', () => {
+  test('the fixtures’ section table equals the one Main builds pages from', () => {
+    expect(baseSections).toEqual(mainBaseSections as unknown as typeof baseSections);
   });
 });
 

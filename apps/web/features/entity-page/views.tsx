@@ -40,7 +40,8 @@ function Quiet({ title, body, children }: { title: string; body?: string; childr
 
 /** A summary's page under the caller's address map. */
 export const summaryHref = (hrefFor: HrefFor): SummaryHref => summary =>
-  hrefFor({ kind: 'resource', iri: summary.reference, base: summary.base, type: summary.type });
+  // Realms, contexts, concepts and Main Versions name no page target: they are shown, never linked.
+  summary.base === null ? null : hrefFor({ kind: 'resource', iri: summary.reference, base: summary.base, type: summary.type });
 
 /** The last word of a predicate's IRI: what Main recorded, since the relation lexicon's labels are another owner's. */
 const localName = (iri: string) => iri.split(/[#/]/).filter(Boolean).at(-1) ?? iri;
@@ -111,21 +112,16 @@ export function StatementsView({ page, names, cursor, hrefFor, t, messages }: {
 /**
  * Relation occurrences where the resource takes any role. The rows are Main's
  * own rendering (labels in the reader's language, counterparts named by Main);
- * an anonymous reader has no acting Agent to ask as and is told so.
+ * counterparts that are not page targets are named without a link.
  */
 export function RelationsView({ page, cursor, hrefFor, locale, t, messages }: {
   page: Loaded<RelationsPage>; cursor: string | undefined; hrefFor: HrefFor; locale: UiLocale; t: Copy;
   messages: WorkPageMessages;
 }) {
   if (!page.ok) {
-    const needs = page.failure === 'sign-in' || page.failure === 'identity';
     return <Region id="relations" title={t.relations}>
-      {needs ? <Quiet title={page.failure === 'sign-in' ? t.relationsSignIn : t.relationsIdentity}>
-        {page.failure === 'sign-in' ? <Link href={signInPath(localizedPath(hrefFor({ kind: 'continue',
-          section: 'relations', cursor: cursor ?? null }), locale))} className={buttonVariants({ size: 'sm' })}>
-          {messages.signIn}</Link> : null}</Quiet>
-        : <RegionFailure title={t.relationsUnavailable} failure={page.failure} messages={messages}
-          restartHref={hrefFor({ kind: 'continue', section: 'relations', cursor: null })} />}
+      <RegionFailure title={t.relationsUnavailable} failure={page.failure} messages={messages}
+        restartHref={hrefFor({ kind: 'continue', section: 'relations', cursor: null })} />
     </Region>;
   }
   const rows = relationRows(page.data.items);
