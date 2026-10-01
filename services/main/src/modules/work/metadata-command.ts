@@ -2,6 +2,8 @@ import { CommandRejected, fusekiReadBudget } from '../../infrastructure/fuseki.t
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
+import { catalogueNameProjection } from '../search/names.ts';
+import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
 import { resolveClassification } from '../classification/resolve.ts';
@@ -111,9 +113,12 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingAdmittedWork(admission.id, 'work-edit');
   const batch = `urn:rezics:outbox:${hash(receipt)}`, event = `urn:rezics:event:${hash(receipt)}`;
   const old = expectedHead ? iri(expectedHead) : '?absentHead';
+  const names = state.kind === 'header'
+    ? (await catalogueNameProjection(env, [work], { work, header: state })).get(work)! : null;
   const update = `PREFIX rv: <${RV}>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      ${names ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?nameUnit rv:publicTitle ?oldName }` : ''}
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} rv:metadataHead ${old} ;
         rv:editionState ?oldStatus ; rv:editionLanguage ?oldLanguage .
         ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${old} ;
@@ -121,6 +126,8 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      ${names ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ${[...names].map(name => `?nameUnit rv:publicTitle ${name} .`).join('\n')} }` : ''}
       GRAPH ${iri(GRAPHS.current)} { ${iri(component)} a rv:WorkMetadataComponent ;
         rv:work ${iri(work)} ; rv:metadataKind ${lit(state.kind)} ; rv:metadataHead ${iri(revision)} .
         ${state.kind === 'header' ? `${iri(work)} rv:descriptiveMetadataHead ${iri(revision)} .
@@ -161,6 +168,9 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
           : `FILTER NOT EXISTS { ${iri(component)} ?occupiedProperty ?occupiedValue }`}
       }
       ${unerased(iri(work))}
+      ${names ? `OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+        ?nameUnit a rv:MatchUnit ; rv:work ${iri(work)} ; rv:disclosure rv:Public .
+        OPTIONAL { ?nameUnit rv:publicTitle ?oldName } } }` : ''}
       ${expectedHead === null ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(component)} ?identityPredicate ?identityValue } }` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }

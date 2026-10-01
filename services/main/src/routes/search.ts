@@ -30,6 +30,7 @@ import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { enrichSearchCardPage, searchPageAuthors } from '../modules/search/result-cards.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
 import { readRankedCatalogue, RANKED_CATALOGUE_COST } from '../modules/search/ranked.ts';
+import { discloseCatalogueMatches } from '../modules/search/catalogue-disclosure.ts';
 import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
@@ -221,7 +222,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           const page = await readRankedCatalogue(work.environment, { phrase: query.q,
             language: query.language ?? null, author: query.author, realm: query.realm,
             pageSize: query.limit ?? 20, continuation: query.cursor }, async rows => (await present(selection, {
-              results: rows, total: rows.length, sourcePosition: position,
+              results: await discloseCatalogueMatches(work.environment, rows,
+                fieldOwners().restrictedTitles, query.realm), total: rows.length, sourcePosition: position,
               context: query.realm ? { kind: 'realm-local' as const, id: query.realm } : 'main-version-default' as const,
             })).results, selection?.generation);
           const types = await phraseWorkTypes(work.environment, page.results, position);

@@ -5,7 +5,7 @@ import { lit, RV } from '../work/activate.ts';
  * field is indexed separately, while the shared unit supplies the join key. */
 export function publicTitleProjection(title: string, language = 'und'): string {
   const canonical = canonicalLanguage(language);
-  if (title.length < 1 || title.length > 200
+  if (title.length < 1 || title.length > 500
     || /[\u0000-\u001f\u007f]/u.test(title)
     || !canonical) {
     throw new Error('invalid public Work title projection');

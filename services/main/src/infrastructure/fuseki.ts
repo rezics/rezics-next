@@ -114,6 +114,7 @@ const MAINTENANCE_RECEIPTS = [
   'urn:rezics:receipt:bootstrap:', 'urn:rezics:receipt:restore-cutover:',
   'urn:rezics:receipt:restore-release:', 'urn:rezics:receipt:retained-zero:',
   'urn:rezics:receipt:content-rebuild:', 'urn:rezics:receipt:chapter-search-index:',
+  'urn:rezics:receipt:catalogue-search-index:',
 ] as const;
 
 function safeIri(value: string): string {

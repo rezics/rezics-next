@@ -22,7 +22,8 @@ final class CommandPolicy {
     private static final List<String> MAINTENANCE_RECEIPTS = List.of(
         "urn:rezics:receipt:bootstrap:", "urn:rezics:receipt:restore-cutover:",
         "urn:rezics:receipt:restore-release:", "urn:rezics:receipt:retained-zero:",
-        "urn:rezics:receipt:content-rebuild:", "urn:rezics:receipt:chapter-search-index:");
+        "urn:rezics:receipt:content-rebuild:", "urn:rezics:receipt:chapter-search-index:",
+        "urn:rezics:receipt:catalogue-search-index:");
     static final String CONTROL = "urn:rezics:graph:control";
     static final String CURRENT = "urn:rezics:graph:current";
     static final String REVISIONS = "urn:rezics:graph:revisions";
@@ -103,6 +104,7 @@ final class CommandPolicy {
         boolean rebuild = receipt.startsWith("urn:rezics:receipt:content-rebuild:");
         boolean analyzerProfile = receipt.matches("urn:rezics:receipt:content-rebuild:profile:[0-9a-f]{64}");
         boolean chapterBackfill = receipt.matches("urn:rezics:receipt:chapter-search-index:[0-9a-f]{64}");
+        boolean catalogueBackfill = receipt.matches("urn:rezics:receipt:catalogue-search-index:[0-9a-f]{64}");
         boolean sourceProjection = receipt.matches("urn:rezics:receipt:source-projection:[0-9a-f]{64}");
         if (graphs.contains(SOURCE) != sourceProjection) {
             throw new IllegalArgumentException("source graph requires its fixed receipt family");
@@ -115,9 +117,22 @@ final class CommandPolicy {
         if (dataInsert && !bootstrap) throw new IllegalArgumentException("unguarded INSERT DATA not admitted");
         if (graphs.contains(PROBE_SEARCH) && !bootstrap && !analyzerProfile)
             throw new IllegalArgumentException("search probe graph requires bootstrap or analyzer profile rebuild");
-        if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && !chapterBackfill
+        if (graphs.contains(PUBLIC_SEARCH) && !bootstrap && !rebuild && !chapterBackfill && !catalogueBackfill
             && current.isEmpty() && revisions.isEmpty())
             throw new IllegalArgumentException("search projection requires a product change");
+        if (catalogueBackfill) {
+            if (!graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH))
+                || !current.isEmpty() || !revisions.isEmpty()
+                || java.util.stream.Stream.concat(insert.stream(), delete.stream())
+                    .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI()))
+                    .anyMatch(quad -> !quad.getPredicate().isURI()
+                        || !quad.getPredicate().getURI().equals("https://rezics.com/vocab/publicTitle"))
+                || java.util.stream.Stream.concat(insert.stream(), delete.stream())
+                    .filter(quad -> CONTROL.equals(quad.getGraph().getURI()))
+                    .anyMatch(quad -> !isControlSequence(quad))) {
+                throw new IllegalArgumentException("catalogue name backfill footprint differs");
+            }
+        }
         if (chapterBackfill) {
             List<Quad> publicInserts = insert.stream()
                 .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI())).toList();

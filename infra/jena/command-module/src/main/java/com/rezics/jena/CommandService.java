@@ -320,9 +320,14 @@ final class CommandService extends ActionService {
             if (delta != null) {
                 if (touchesPublicIndex && !plan.bootstrap() && !plan.rebuild()
                     && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {
-                    String claimed = receiptValue(dataset, receipt, "matchUnit");
-                    if (!SearchDeltaJournal.matchesClaim(delta.changes(), claimed))
-                        return invalid("public MatchUnit differs from receipt claim");
+                    if (CatalogueNamePolicy.namesOnly(plan)) {
+                        String namesInvariant = CatalogueNamePolicy.check(dataset, receipt, delta.changes());
+                        if (namesInvariant != null) return invalid(namesInvariant);
+                    } else {
+                        String claimed = receiptValue(dataset, receipt, "matchUnit");
+                        if (!SearchDeltaJournal.matchesClaim(delta.changes(), claimed))
+                            return invalid("public MatchUnit differs from receipt claim");
+                    }
                 }
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
                 else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
@@ -361,7 +366,8 @@ final class CommandService extends ActionService {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
-        if (plan.rebuild() || receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {
+        if (plan.rebuild() || receipt.startsWith("urn:rezics:receipt:chapter-search-index:")
+            || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) {
             if (!validations.isEmpty()) return invalid("rebuild does not admit product profile validation");
             return null;
         }

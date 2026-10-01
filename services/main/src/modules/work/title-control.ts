@@ -12,6 +12,7 @@ import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
 import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.ts';
 import { validEditorialControlBasis, type EditorialControlBasis } from '../protection/field-control.ts';
 import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
+import { catalogueNameProjection } from '../search/names.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 
@@ -233,6 +234,10 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     ...(prior.scalarValue === undefined ? {} : { scalarValue: prior.scalarValue }) }, PROFILE);
   const expected = intent.basis.head ? iri(intent.basis.head) : 'rv:Absent';
   const expectedProtection = intent.basis.protection ? iri(intent.basis.protection) : 'rv:Absent';
+  const projectedNames = workManifest ? (await catalogueNameProjection(env, [intent.work], {
+    work: intent.work, title: { value: prior.title, language: prior.language },
+  })).get(intent.work)! : null;
+  projectedNames?.add(publicTitleProjection(intent.title, language));
   let update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ?oldControl .
@@ -241,7 +246,7 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
     INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ${iri(control)} .
         ${workManifest ? `${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(intent.title)}@${language} .` : ''} }
-      ${workManifest ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ${publicTitleProjection(intent.title, language)} . }` : ''}
+      ${projectedNames ? `GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?titleUnit rv:publicTitle ${[...projectedNames].join(', ')} . }` : ''}
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(control)} a rv:RevisionAnchor, rv:EditorialControlRevision ;
         rv:component ${iri(intent.work)} ; rv:controlField ${controlProfile === TITLE_PROFILE_V1 ? '"title:en"' : `"title" ; rv:controlLanguage ${lit(language)}`} ; rv:controlMode rv:${intent.action === 'work.edit' ? 'HumanControlled' : 'SourceManaged'} ;
         rv:controlEpoch ${BigInt(intent.basis.epoch) + 1n} ; rv:workRevision ${iri(revision)} ; rv:operation ${iri(operation)} ;
@@ -269,7 +274,7 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
         OPTIONAL { ${iri(intent.work)} rv:protectionHead ?oldProtection } }
       ${workManifest ? `OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ?titleUnit a rv:MatchUnit ; rv:work ${iri(intent.work)} ;
-          rv:mainVersion ${iri(main)} ; rv:context ${iri(main)} ; rv:disclosure rv:Public .
+          rv:mainVersion ${iri(main)} ; rv:disclosure rv:Public .
         OPTIONAL { ?titleUnit rv:publicTitle ?oldPublicTitle }
       } }` : ''}
       FILTER(${intent.basis.head ? `?oldControl = ${iri(intent.basis.head)}` : '!BOUND(?oldControl)'})

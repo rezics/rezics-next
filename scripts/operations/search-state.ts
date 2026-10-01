@@ -9,6 +9,7 @@ import { activateRebuiltPublicContentSearch, clearQuarantinedContentUnits,
   from '../../services/main/src/modules/content-publication/rebuild.ts';
 import type { WorkActivationEnvironment } from '../../services/main/src/modules/work/activate.ts';
 import { backfillChapterSearchIndex } from '../../services/main/src/modules/work/search-index-backfill.ts';
+import { backfillCatalogueNames } from '../../services/main/src/modules/search/names.ts';
 import type { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
@@ -273,6 +274,7 @@ export async function rebuildPublicContentSearch(input: RebuildInput): Promise<R
   const replayed = await replayQuarantinedContentCut(input.env, input.content, input.cursor, job);
   await input.assertWritersStopped();
   await backfillChapterSearchIndex(input.env);
+  await backfillCatalogueNames(input.env);
   const replay = clock() - started;
   started = clock();
   const offlineLog = await offlineTextIndex(input.runner);

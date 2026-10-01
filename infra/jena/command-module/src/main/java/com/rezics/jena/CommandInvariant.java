@@ -184,7 +184,8 @@ final class CommandInvariant {
             return "outbox batch shape or event count is invalid";
         if ((!plan.current().isEmpty() || !plan.revisions().isEmpty() || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH)) && count.signum() == 0
-            && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:"))
+            && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:")
+            && !receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"))
             return "product change requires an outbox event";
         Set<BigInteger> ordinals = new HashSet<>();
         var events = data.find(OUTBOX, batch, rv("event"), Node.ANY);

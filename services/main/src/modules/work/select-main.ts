@@ -6,6 +6,7 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
 import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
+import { catalogueNameProjection } from '../search/names.ts';
 import { readComponentState } from './history.ts';
 import { languagePrior, readMainLanguageHeads, MAIN_LANGUAGE_LIMIT } from './selection-heads.ts';
 import { DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, prepareComponent,
@@ -264,6 +265,8 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
     if (stale) return checkedMainSelectionReceipt(stale, admission, input, digest);
     throw new PendingActivation('stale Main selection was not sealed');
   }
+  const names = (await catalogueNameProjection(env, [input.work])).get(input.work)!;
+  names.add(publicTitleProjection(row.title!.value, row.title!['xml:lang']));
   const publication = readComponentState(env.objectDirectory, row.manifest!.value,
     input.contribution, PUBLICATION_PROFILE);
   if (publication.contribution !== input.contribution || publication.work !== input.work
@@ -352,7 +355,7 @@ export async function selectMainDefault(env: WorkActivationEnvironment,
           rv:selection ${iri(selection)} ; rv:language ${lit(exact.language)} ;
           rv:field rv:Body ; rv:disclosure rv:Public ;
           rv:searchBody ${lit(exact.body)}@${exact.language} ;
-          rv:publicTitle ${publicTitleProjection(row.title!.value, row.title!['xml:lang'])} .
+          rv:publicTitle ${[...names].join(', ')} .
         ${iri(unit)} rv:searchResultWork ?parentWork ; rv:searchResultMain ?parentMain ;
           rv:searchChapterTitle ?chapterTitle .
       }

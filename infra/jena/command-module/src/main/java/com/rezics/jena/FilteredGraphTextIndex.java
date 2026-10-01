@@ -41,12 +41,17 @@ public final class FilteredGraphTextIndex implements TextIndex {
     public FilteredGraphTextIndex(TextIndexLucene lucene) { this.lucene = lucene; }
     public TextIndexLucene lucene() { return lucene; }
 
-    public record RankHit(String id, float score, String key) {
-        public RankHit(String id, float score) { this(id, score, id); }
+    public record RankHit(String id, float score, String key, Integer document) {
+        public RankHit(String id, float score) { this(id, score, id, null); }
+        public RankHit(String id, float score, String key) { this(id, score, key, null); }
     }
-    public record RankAfter(String id, float score, long commit) {}
+    public record RankAfter(String id, float score, long commit, Integer document) {
+        public RankAfter(String id, float score, long commit) { this(id, score, commit, null); }
+    }
     public record RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more) {}
-    public record RankScope(String realm, String language, String author) {}
+    public record RankScope(String realm, String language, String author, boolean catalogue) {
+        public RankScope(String realm, String language, String author) { this(realm, language, author, false); }
+    }
     static final class RankRestart extends TextIndexException {
         RankRestart() { super("ranked continuation requires restart"); }
     }
@@ -74,8 +79,28 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 throw new RankRestart();
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             // The API supplies a literal phrase, never Lucene operators.
+            Query body = parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            boolean catalogue = scope != null && scope.catalogue();
+            Query text = body;
+            if (catalogue) {
+                if (!"body".equals(field)) throw new TextIndexException("catalogue ranking requires the body field");
+                QueryParser titles = new QueryParser("publicTitle", lucene.getQueryAnalyzer());
+                titles.setDefaultOperator(QueryParser.Operator.AND);
+                // Every analyzed word must occur in one authored name. Names
+                // and bodies are distinct Jena documents, never concatenated.
+                String words = java.util.Arrays.stream(phrase.split("\\s+"))
+                    .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                    .collect(java.util.stream.Collectors.joining(" "));
+                Query title = titles.parse(words);
+                // A name tier above BM25's bounded 80-character query scores
+                // preserves body relevance while putting names first. Lucene
+                // documents/term frequencies are bounded by signed integers.
+                text = new org.apache.lucene.search.DisjunctionMaxQuery(List.of(
+                    new org.apache.lucene.search.BoostQuery(new org.apache.lucene.search.ConstantScoreQuery(title), 1_000_000f),
+                    body), 0f);
+            }
             Query query = new BooleanQuery.Builder()
-                .add(parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\""), BooleanClause.Occur.MUST)
+                .add(text, BooleanClause.Occur.MUST)
                 .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)),
                     BooleanClause.Occur.FILTER).build();
             IndexSearcher searcher = new IndexSearcher(reader);
@@ -97,6 +122,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
             }
             ScoreDoc cursor = null;
             if (after != null) {
+                if (catalogue) {
+                    // One unit can have a body and many name documents. Its
+                    // URI alone cannot identify a searchAfter position.
+                    if (after.document() == null || after.document() < 0 || after.document() >= reader.maxDoc()
+                        || !after.id().equals(searcher.storedFields().document(after.document(),
+                            java.util.Set.of(entityField)).get(entityField))) throw new RankRestart();
+                    cursor = new ScoreDoc(after.document(), after.score());
+                } else {
                 Query identity = new BooleanQuery.Builder()
                     .add(query, BooleanClause.Occur.MUST)
                     .add(new TermQuery(new Term(entityField, after.id())), BooleanClause.Occur.FILTER)
@@ -105,6 +138,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 var resolved = searcher.search(identity, 2);
                 if (resolved.scoreDocs.length != 1) throw new RankRestart();
                 cursor = new ScoreDoc(resolved.scoreDocs[0].doc, after.score());
+                }
             }
             // Lucene's default hit-count threshold is 1000. It can skip
             // noncompetitive blocks instead of exhaustively scoring/counting.
@@ -120,7 +154,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 String key = scope == null ? id : admittedMain(data, id, scope);
                 if (key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
                     id, hit.doc, entityField)) key = null;
-                ordered.add(new RankHit(id, hit.score, key));
+                ordered.add(new RankHit(id, hit.score, key, catalogue ? hit.doc : null));
             }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
@@ -209,7 +243,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 }
             } finally { org.apache.jena.atlas.iterator.Iter.close(members); }
         }
-        if (ids.size() == 1) return true;
+        if (ids.size() == 1 && !scope.catalogue()) return true;
         for (var id : ids) {
             Node unit = uri(id.utf8ToString());
             RankUnit facts = describeUnit(data, unit.getURI());
@@ -252,13 +286,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 JsonObject value = org.apache.jena.atlas.json.JSON.parse(continuation);
                 after = new RankAfter(value.get("id").getAsString().value(),
                     Float.parseFloat(value.get("score").getAsString().value()),
-                    Long.parseLong(value.get("commit").getAsString().value()));
+                    Long.parseLong(value.get("commit").getAsString().value()),
+                    value.hasKey("document") ? value.get("document").getAsNumber().value().intValue() : null);
             }
             JsonObject response = new JsonObject();
             try {
                 JsonObject scopeValue = org.apache.jena.atlas.json.JSON.parse(args.get(4).asString());
                 RankScope scope = new RankScope(optionalString(scopeValue, "realm"),
-                    optionalString(scopeValue, "language"), optionalString(scopeValue, "author"));
+                    optionalString(scopeValue, "language"), optionalString(scopeValue, "author"),
+                    scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value());
                 RankPage page = index.ranked(args.get(0).asNode(), args.get(1).asString(),
                     args.get(2).getInteger().intValueExact(), after, env.getDataset(), scope);
                 JsonArray hits = new JsonArray();
@@ -268,6 +304,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     if (hit.key() == null) row.put("key", org.apache.jena.atlas.json.JsonNull.instance);
                     else row.put("key", hit.key());
                     row.put("score", Float.toString(hit.score())); hits.add(row);
+                    if (hit.document() != null) row.put("document", hit.document());
                 }
                 response.put("hits", hits); response.put("commit", Long.toString(page.commit()));
                 response.put("more", page.more());

@@ -70,7 +70,7 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?main ;
             rv:contribution ?contribution ; rv:revision ?revision ;
             rv:selection ?selection ; rv:language ?language ;
-            rv:publicTitle ?publicTitle ; rv:searchBody ?publicBody .
+            rv:searchBody ?publicBody .
           OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
             rv:searchChapterTitle ?chapterTitle . }
         }

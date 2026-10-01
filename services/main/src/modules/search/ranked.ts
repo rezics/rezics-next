@@ -17,8 +17,8 @@ export const RANKED_CATALOGUE_COST = { pageSize: 64, candidates: MAX_PHRASE_CAND
   rankReads: 8, responseBytes: MAX_SEARCH_RESPONSE_BYTES } as const;
 export interface RankedCatalogueRequest { phrase: string; language: string | null;
   author?: string; realm?: string; pageSize: number; continuation?: string }
-interface RankAfter { id: string; score: string; commit: string }
-interface RankHit { id: string; key: string | null; score: string }
+interface RankAfter { id: string; score: string; commit: string; document?: number }
+interface RankHit { id: string; key: string | null; score: string; document?: number }
 interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean }
 export interface RankedCatalogueMatch { matchUnit: string; work: string; mainVersion: string;
   contribution: string; revision: string; selection: string; language: string; score: number; reason?: string }
@@ -57,7 +57,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     } LIMIT 2`, 8192)).results?.bindings ?? [];
     if (realm.length !== 1) throw new PublicRealmUnavailable('Realm is unavailable');
   }
-  const binding = ['ranked-catalogue-v1', phrase, input.language, input.author ?? null,
+  const binding = ['ranked-catalogue-names-v2', phrase, input.language, input.author ?? null,
     input.realm ?? null, input.pageSize];
   let prior: Cursor | undefined, expiresAt = Date.now() + SEARCH_PAGE_TTL_MS;
   try {
@@ -68,6 +68,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
       if (!prior.after || !unitId(prior.after.id)
         || typeof prior.after.score !== 'string' || !Number.isFinite(Number(prior.after.score))
         || typeof prior.after.commit !== 'string' || !decimal.test(prior.after.commit)
+        || prior.after.document !== undefined && (!Number.isSafeInteger(prior.after.document) || prior.after.document < 0)
         || !Number.isSafeInteger(prior.visible) || prior.visible < 0) throw new WorkReadInvalid('rank cursor');
       if (prior.generation !== position.generation || prior.instance !== position.serverInstanceId
         || prior.writeEpoch !== position.publicSearchWriteEpoch
@@ -77,7 +78,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     if (error instanceof WorkReadExpired) throw new SearchContinuationRestart('ranked search changed; restart at page one');
     throw new InvalidSearchContinuation('ranked search continuation is invalid', { cause: error });
   }
-  const scope = JSON.stringify({ ...input.realm ? { realm: input.realm } : {},
+  const scope = JSON.stringify({ catalogue: true, ...input.realm ? { realm: input.realm } : {},
     ...input.language ? { language: input.language } : {}, ...input.author ? { author: input.author } : {} });
   const results: RankedCatalogueMatch[] = [];
   let after = prior?.after, scanned = 0, more = false;
@@ -108,7 +109,9 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
       || page.hits.some(hit => !hit || !unitId(hit.id)
         || hit.key !== null && !native.test(hit.key)
         || typeof hit.score !== 'string' || !Number.isFinite(Number(hit.score)))
-      || new Set(page.hits.map(hit => hit.id)).size !== page.hits.length
+      || page.hits.some(hit => hit.document !== undefined && (!Number.isSafeInteger(hit.document) || hit.document < 0))
+      || new Set(page.hits.filter(hit => hit.key !== null).map(hit => hit.id)).size
+        !== page.hits.filter(hit => hit.key !== null).length
       || new Set(page.hits.filter(hit => hit.key !== null).map(hit => hit.key)).size
         !== page.hits.filter(hit => hit.key !== null).length) {
       throw new PublicQueryUnavailable('native rank envelope is invalid');
@@ -142,20 +145,20 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
       if (!row.unit || !row.work || !row.main || !row.contribution || !row.revision || !row.selection || !row.language) {
         throw new PublicQueryUnavailable('ranked result is incomplete');
       }
-      const hit = page.hits.find(hit => hit.id === row.unit!.value);
+      const hit = candidates.find(hit => hit.id === row.unit!.value);
       if (!hit || hit.key !== row.main.value) throw new PublicQueryUnavailable('ranked group identity differs');
       return [row.unit.value, { matchUnit: row.unit.value, work: row.work.value, mainVersion: row.main.value,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,
         language: row.language.value, score: Number(hit.score),
         ...input.realm ? { reason: 'realm-adoption' } : {} }];
     }));
-    const visible = await filter(page.hits.flatMap(hit => byUnit.get(hit.id) ? [byUnit.get(hit.id)!] : []));
+    const visible = await filter(candidates.flatMap(hit => byUnit.get(hit.id) ? [byUnit.get(hit.id)!] : []));
     const allowed = new Set(visible.map(row => row.matchUnit));
     if (visible.some(row => !byUnit.has(row.matchUnit)) || allowed.size !== visible.length) {
       throw new PublicQueryUnavailable('ranked result filter changed identity');
     }
     for (const [offset, hit] of page.hits.entries()) {
-      const row = byUnit.get(hit.id);
+      const row = hit.key !== null ? byUnit.get(hit.id) : undefined;
       if (row && allowed.has(hit.id)) {
         // Preserve the first visible probe. Trailing rejected candidates can
         // still be consumed after filling the page, avoiding an empty terminal
@@ -164,7 +167,8 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
         results.push(row);
       }
       scanned++;
-      after = { id: hit.id, score: hit.score, commit: page.commit };
+      after = { id: hit.id, score: hit.score, commit: page.commit,
+        ...hit.document !== undefined ? { document: hit.document } : {} };
       more = offset + 1 < page.hits.length || page.more;
     }
     if (!more) break;
