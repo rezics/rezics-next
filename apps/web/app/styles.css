@@ -11,3 +11,10 @@
 html {
   scroll-padding-top: 5rem;
 }
+
+/* On a phone the navigation bar (4rem) is fixed to the bottom edge; the md breakpoint is where it goes. */
+@media (max-width: 47.99rem) {
+  html {
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+}

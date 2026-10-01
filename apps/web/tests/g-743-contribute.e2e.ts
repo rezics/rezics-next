@@ -101,7 +101,7 @@ test('propose-review-inbox: a steward writes a review in the composer, by keyboa
   await pressByKeyboard(page, dialog.getByRole('button', { name: 'Send' }), found, 'Send');
   await expect(dialog).toBeHidden();
   await expect(page.getByText('Changes requested', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(imeText)).toBeVisible();
+  await expect(page.getByText(imeText).first()).toBeVisible();
   await checkScreen(page, 'review-sent', found, info, bundleKnown);
   await page.context().close();
   expectClean(found);

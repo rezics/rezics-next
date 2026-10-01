@@ -37,12 +37,16 @@ export async function setTheme(page: Page, theme: Theme): Promise<void> {
   }, theme);
 }
 
-const wide = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+/**
+ * How far the page is wider than the viewport that was asked for. Not `innerWidth`: a phone engine widens its layout
+ * viewport to fit overflowing content, which would hide the overflow from a measure against it.
+ */
+const wide = (page: Page) => page.evaluate(requested => document.documentElement.scrollWidth - requested, page.viewportSize()!.width);
 
 /** The elements that reach furthest past the right edge, for the finding that reports the overflow. */
-const widest = (page: Page) => page.evaluate(() => [...document.querySelectorAll('body *')]
+const widest = (page: Page) => page.evaluate(requested => [...document.querySelectorAll('body *')]
   .map(element => ({ element, right: element.getBoundingClientRect().right }))
-  .filter(item => item.right > innerWidth + 1)
+  .filter(item => item.right > requested + 1)
   // What a scroller or a clipped box holds past its edge is not what widens the page.
   .filter(({ element }) => {
     for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
@@ -54,7 +58,7 @@ const widest = (page: Page) => page.evaluate(() => [...document.querySelectorAll
   .filter(({ element, right }) => ![...element.children].some(child => child.getBoundingClientRect().right >= right - 0.5))
   .sort((a, b) => b.right - a.right).slice(0, 5)
   .map(({ element, right }) => `${element.tagName.toLowerCase()}${element.className ? `.${String(element.className).trim().split(/\s+/).slice(0, 4).join('.')}` : ''} ends at ${Math.round(right)}px: ${element.textContent?.trim().slice(0, 50)}`)
-  .join('; '));
+  .join('; '), page.viewportSize()!.width);
 
 /**
  * The screen as it stands, in both themes at both widths, then at the two zoom reflow widths. Returns the findings
@@ -135,7 +139,7 @@ export const focusStop = (page: Page): Promise<FocusStop> => page.evaluate(() =>
   const x = Math.min(Math.max(box.left + box.width / 2, 0), innerWidth - 1);
   const y = Math.min(Math.max(box.top + box.height / 2, 0), innerHeight - 1);
   const top = document.elementFromPoint(x, y);
-  const covered = !offscreen && !!top && top !== element && !element.contains(top) && !top.contains(element)
+  const covered = !offscreen && box.width > 1 && box.height > 1 && !!top && top !== element && !element.contains(top) && !top.contains(element)
     && !element.closest('label')?.contains(top);
   return { name: `${element.tagName.toLowerCase()} ${element.getAttribute('aria-label') ?? element.textContent?.trim().slice(0, 40) ?? ''}`.trim(),
     ring, covered, offscreen,
