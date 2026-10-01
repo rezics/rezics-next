@@ -148,7 +148,12 @@ export class SeedApi {
   private async write<T>(method: 'PUT' | 'POST', path: string, body: unknown,
     token: string, key: string): Promise<T> {
     assertSeedRequest(method, path, body);
-    let attemptKey = key;
+    // A PUT is addressed by its URL, so binding its key to the body digest is safe:
+    // after a contract change the seed sends a new idempotent write instead of a
+    // conflicting replay of the old key on a long-lived stack. POST keys stay
+    // stable because a changed key would create a second record.
+    let attemptKey = method === 'PUT'
+      ? `${key}:${createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16)}` : key;
     for (let attempt = 0; attempt < 8; attempt++) {
       const response = await fetch(`${this.endpoints.main}${path}`, { method,
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`,
