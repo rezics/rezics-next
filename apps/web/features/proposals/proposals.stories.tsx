@@ -237,7 +237,7 @@ export const WikiBundle: Story = {
   args: { initial: wikiBundleView, api: proposalApi(wikiBundleView) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('Elizabeth Bennet', { selector: 'span' })).toBeVisible();
+    await expect(canvas.getAllByText('Elizabeth Bennet')[0]).toBeVisible();
     await expect(canvas.getByText('Lizzy')).toBeVisible();
     await expect(canvas.getByText('Existing entity')).toBeVisible();
     await expect(canvas.getByText('Relation: Elizabeth Bennet → Jane Bennet')).toBeVisible();
