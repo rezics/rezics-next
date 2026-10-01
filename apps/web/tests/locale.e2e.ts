@@ -78,11 +78,12 @@ test('interface locale persists without changing public search language or anoth
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans');
 
+    const webOrigin = process.env.REZICS_WEB_E2E_BASE_URL ?? 'http://127.0.0.1:3003';
     const unsafeReturn = await page.request.post('/locale/select', { form: { locale: 'en' },
-      headers: { origin: 'http://127.0.0.1:3003', referer: 'http://127.0.0.1:3003//another.example' },
+      headers: { origin: webOrigin, referer: `${webOrigin}//another.example` },
       maxRedirects: 0 });
     expect(unsafeReturn.status()).toBe(303);
-    expect(new URL(unsafeReturn.headers().location).origin).toBe('http://127.0.0.1:3003');
+    expect(new URL(unsafeReturn.headers().location).origin).toBe(webOrigin);
 
     const other = await second.newPage();
     await other.goto('/search?q=river');

@@ -15,6 +15,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts } from './browser-budget.ts';
+import { allocateWebPort, webOrigin } from './e2e.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 
@@ -299,63 +300,69 @@ try {
       }
     }
     if (tier === 'e2e') {
-      const projectRunId = `${runId}-e`;
-      startedProjects.push(projectRunId);
-      const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId,
-        '--accounts-app'], 180_000);
-      if (!up.ok) {
-        errors.push('e2e stack startup failed');
-        writeFileSync(join(logs, 'e2e-stack.log'), up.output);
-        tiers.push({ name: tier, status: 'failed' });
-        writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, up.elapsedMs, up.output));
-        continue;
-      }
-      const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
-      const apps = readEnv(join(stackDir, 'apps.env'));
-      const compose = readEnv(join(stackDir, 'compose.env'));
-      const appsPath = join(stackDir, 'qa-apps.json');
-      const composePath = join(stackDir, 'qa-compose.json');
-      writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
-      writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
-      const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
-      if (!bootstrap.ok) {
-        errors.push('e2e stack bootstrap failed');
-        writeFileSync(join(logs, 'e2e-bootstrap.log'), bootstrap.output);
-        tiers.push({ name: tier, status: 'failed' });
-        writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output));
-        continue;
-      }
-      const webAuth = command(root, 'bun', ['scripts/dev/web-auth-bootstrap.ts',
-        '--run-id', projectRunId, '--redirect-uri', 'http://127.0.0.1:3003/auth/callback'], 180_000);
-      if (!webAuth.ok) {
-        errors.push('e2e web authorization bootstrap failed');
-        writeFileSync(join(logs, 'e2e-web-auth-bootstrap.log'), webAuth.output);
-        tiers.push({ name: tier, status: 'failed' });
-        writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, webAuth.elapsedMs, webAuth.output));
-        continue;
-      }
-      const args = e2eArgs(selection, chosen);
-      const counts = browserFileCounts(root, args);
-      const budgets = browserBudgets(counts.playwright, counts.storybook);
-      const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
-        budgets.setup + budgets.playwright + budgets.storybook + 30_000);
-      writeFileSync(join(logs, 'e2e.log'), result.output);
-      const browserTests = junitResults(directory, ['e2e']);
-      const ok = result.ok && browserTests.length > 0 && browserTests.every(test => !test.failed);
-      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
-      if (!ok) {
-        const stepsPath = join(directory, 'e2e-steps.json');
-        const steps = existsSync(stepsPath) ? JSON.parse(readFileSync(stepsPath, 'utf8')) as
-          { step: string; passed: boolean; error?: string }[] : [];
-        const failed = steps.filter(step => !step.passed);
-        errors.push(...(failed.length ? failed.map(step => `${step.step}: ${step.error ?? 'failed'} (see logs/e2e.log)`)
-          : ['e2e runner failed or exceeded its combined step budgets (see logs/e2e.log)']));
-        if (!existsSync(join(directory, 'e2e.xml'))) {
-          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
+      const reserved = await allocateWebPort();
+      const origin = webOrigin(reserved.port);
+      console.log(`e2e web origin: ${origin}`);
+      try {
+        const projectRunId = `${runId}-e`;
+        startedProjects.push(projectRunId);
+        const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId,
+          '--accounts-app'], 180_000);
+        if (!up.ok) {
+          errors.push('e2e stack startup failed');
+          writeFileSync(join(logs, 'e2e-stack.log'), up.output);
+          tiers.push({ name: tier, status: 'failed' });
+          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, up.elapsedMs, up.output));
+          continue;
         }
-        const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
-        writeFileSync(join(logs, 'e2e-stack.log'), stackLogs.output);
-      }
+        const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+        const apps = readEnv(join(stackDir, 'apps.env'));
+        const compose = readEnv(join(stackDir, 'compose.env'));
+        const appsPath = join(stackDir, 'qa-apps.json');
+        const composePath = join(stackDir, 'qa-compose.json');
+        writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
+        writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
+        const bootstrap = command(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+        if (!bootstrap.ok) {
+          errors.push('e2e stack bootstrap failed');
+          writeFileSync(join(logs, 'e2e-bootstrap.log'), bootstrap.output);
+          tiers.push({ name: tier, status: 'failed' });
+          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output));
+          continue;
+        }
+        const webAuth = command(root, 'bun', ['scripts/dev/web-auth-bootstrap.ts',
+          '--run-id', projectRunId, '--redirect-uri', `${origin}/auth/callback`], 180_000);
+        if (!webAuth.ok) {
+          errors.push('e2e web authorization bootstrap failed');
+          writeFileSync(join(logs, 'e2e-web-auth-bootstrap.log'), webAuth.output);
+          tiers.push({ name: tier, status: 'failed' });
+          writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, webAuth.elapsedMs, webAuth.output));
+          continue;
+        }
+        const args = e2eArgs(selection, chosen);
+        const counts = browserFileCounts(root, args);
+        const budgets = browserBudgets(counts.playwright, counts.storybook);
+        const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
+          budgets.setup + budgets.playwright + budgets.storybook + 30_000,
+          { ...process.env, REZICS_WEB_E2E_BASE_URL: origin, REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) });
+        writeFileSync(join(logs, 'e2e.log'), result.output);
+        const browserTests = junitResults(directory, ['e2e']);
+        const ok = result.ok && browserTests.length > 0 && browserTests.every(test => !test.failed);
+        tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+        if (!ok) {
+          const stepsPath = join(directory, 'e2e-steps.json');
+          const steps = existsSync(stepsPath) ? JSON.parse(readFileSync(stepsPath, 'utf8')) as
+            { step: string; passed: boolean; error?: string }[] : [];
+          const failed = steps.filter(step => !step.passed);
+          errors.push(...(failed.length ? failed.map(step => `${step.step}: ${step.error ?? 'failed'} (see logs/e2e.log)`)
+            : ['e2e runner failed or exceeded its combined step budgets (see logs/e2e.log)']));
+          if (!existsSync(join(directory, 'e2e.xml'))) {
+            writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, result.elapsedMs, result.output));
+          }
+          const stackLogs = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', projectRunId], 20_000);
+          writeFileSync(join(logs, 'e2e-stack.log'), stackLogs.output);
+        }
+      } finally { reserved.release(); }
     }
     if (tier === 'integration' || tier === 'fault/recovery') await runStackTier(tier);
     if (tier === 'load') {
