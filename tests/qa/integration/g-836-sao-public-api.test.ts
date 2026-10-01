@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
+import { POLICY_VERSIONS } from '../../../services/account/src/policy-versions.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { discoverEditorialAdapters } from '../../../services/main/src/modules/editorial-review/adapters.ts';
@@ -91,7 +92,8 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     const email = `g836-${randomUUID()}@example.test`, password = randomBytes(24).toString('base64url');
     const third = await json<{ user: { id: string } }>(await fetch(`${f.account.issuer}/sign-up/email`,{ method: 'POST',
       headers: { 'content-type': 'application/json',origin: f.account.issuer.replace('/api/auth','') },
-      body: JSON.stringify({ name: 'Independent reviewer',email,password }) }));
+      body: JSON.stringify({ name: 'Independent reviewer',email,password,birthMonth: '1990-01',
+        acceptedPolicies: POLICY_VERSIONS.map(({ policyId,versionDigest }) => ({ policyId,versionDigest })) }) }));
     await accountPool.query('UPDATE "user" SET "emailVerified"=true WHERE id=$1',[third.user.id]);
     const tokenC = await f.account.tokenFor({ email,password },scopes);
     const agent = async (name: string,token: string) => (await json<{ agent: string }>(await call('POST','/v1/agents',
