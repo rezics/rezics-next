@@ -68,7 +68,7 @@ describe('G-843 search and routing', () => {
 });
 
 describe('G-843 what Main answers becomes what the wizard says', () => {
-  type Reply = { data?: unknown; error?: { status: number; value?: unknown }; headers?: Record<string, string> };
+  type Reply = { data?: unknown; error?: { status: number; value?: unknown }; headers?: Record<string, string>; response?: Response };
   const main = (replies: { candidates?: Reply; works?: Reply; header?: Reply }) => ({ v1: {
     catalogue: { candidates: { post: async () => ({ response: new Response(), ...replies.candidates }) } },
     works: Object.assign(async () => ({}), { post: async () => ({ ...replies.works,
