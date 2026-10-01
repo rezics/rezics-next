@@ -24,11 +24,16 @@ test.beforeAll(async () => {
 
 const words = (locale: 'en' | 'ja') => materializeData(locale === 'ja' ? { ...messages, ...ja } : messages, { locale });
 const header = 'Book Id,Title,Author,ISBN13,ISBN,My Rating,Exclusive Shelf,Bookshelves,Date Started,Date Read,My Review,Read Count,Private Notes';
-/** Three rows each naming one seeded Work, one naming the two that share a title, and three nothing matches. */
-function goodreads(): Buffer {
-  const rows = [...books.matched.map((title, index) => `${index + 1},${title},,,,0,${index ? 'to-read' : 'read'},,,,,0,`),
-    `4,${books.ambiguous},,,,0,to-read,,,,,0,`,
-    ...Array.from({ length: 3 }, (_, index) => `${5 + index},Nothing Here ${index + 1},Nobody Real,,,0,to-read,,,,,0,`)];
+/**
+ * Three rows each naming one seeded Work, one naming the two that share a title, and three nothing matches. Each
+ * engine project writes its own file (REZICS recognises a file it has already imported), so ids and the unmatched
+ * titles carry the project.
+ */
+function goodreads(project: string): Buffer {
+  const offset = ['desktop-chrome', 'chromium-mobile', 'webkit-mobile'].indexOf(project) * 100;
+  const rows = [...books.matched.map((title, index) => `${offset + index + 1},${title},,,,0,${index ? 'to-read' : 'read'},,,,,0,`),
+    `${offset + 4},${books.ambiguous},,,,0,to-read,,,,,0,`,
+    ...Array.from({ length: 3 }, (_, index) => `${offset + 5 + index},Nothing Here ${offset} ${index + 1},Nobody Real,,,0,to-read,,,,,0,`)];
   return Buffer.from([header, ...rows].join('\n'));
 }
 
@@ -73,7 +78,7 @@ test('library-import-progress-export: import, progress on two devices and the do
   // Import: the file is chosen, the ambiguous row is decided, one row is kept private, and the rest is applied.
   await openSection(a, t.importTitle, found);
   await checkScreen(a, 'library-import-idle', found, info);
-  await a.locator('#library-import-file').setInputFiles({ name: 'goodreads_library_export.csv', mimeType: 'text/csv', buffer: goodreads() });
+  await a.locator('#library-import-file').setInputFiles({ name: 'goodreads_library_export.csv', mimeType: 'text/csv', buffer: goodreads(info.project.name) });
   const tab = (label: string, count: number) => a.getByRole('button', { name: `${label} ${count}`, exact: true });
   // The three rows nothing matches are in the review in every run; the ambiguous row is decided only when it is still
   // open (the same stack serves every engine project, and an earlier run has already chosen it).

@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 
 // The launch-journey accessibility matrix (G-743). A journey test drives its screens as the other journey tests
@@ -158,7 +158,12 @@ async function walkTo(page: Page, there: () => Promise<boolean>, found: Findings
       const focus = await focusStop(page);
       const id = `${focus.name}`;
       if (!focus.ring && focus.name !== 'body' && !seen.has(`ring ${id}`)) { seen.add(`ring ${id}`); found.push(`${label}: no focus indicator on ${id}`); }
-      if (focus.covered && !seen.has(`cover ${id}`)) { seen.add(`cover ${id}`); found.push(`${label}: focus is hidden behind ${focus.coveredBy ?? 'another element'} on ${id}`); }
+      if (focus.covered && !seen.has(`cover ${id}`)) {
+        seen.add(`cover ${id}`);
+        found.push(`${label}: focus is hidden behind ${focus.coveredBy ?? 'another element'} on ${id}`);
+        // What the reader sees at that stop, kept with the failing test.
+        await test.info().attach(`hidden-focus-${seen.size}`, { body: await page.screenshot(), contentType: 'image/png' });
+      }
       if (await there()) return;
     }
   }
