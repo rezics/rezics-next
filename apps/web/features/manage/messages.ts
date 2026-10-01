@@ -440,7 +440,7 @@ export const messages = {
   reportEntry: insert('{{category}} · evidence {{digest}}', { category: String, digest: String }),
   reportsMore: 'More reports follow; the first page is shown.',
   correspondenceHeading: 'Appeals and counter-notices',
-  correspondenceHelp: 'The staff case read does not list a case’s correspondence yet. A case marked “Back for review” has an appeal, a counter-notice or a newer report waiting.',
+  correspondenceHelp: 'Appeals, counter-notices and messages, in the order they arrived.',
   deadlineHeading: 'Deadline',
   nciiNotice: 'Non-consensual intimate imagery: removal is due 48 hours after receipt.',
   dmcaNotice: 'Copyright notice: restoration after a counter-notice is allowed only inside the legal window.',
@@ -501,6 +501,8 @@ export const messages = {
   decisionPendingHelp: 'This decision is recorded, but not every effect is confirmed. Resume replays the same request.',
   decisionStillPending: 'Still not confirmed. Try again in a moment.',
   reasonLanguageLabel: 'Language of the statement',
+  stepsNone: 'No correspondence or steps yet.',
+  dmcaLatestAt: insert('Latest restoration: {{time}}', { time: String }),
 };
 
 export type ManageMessages = typeof messages;

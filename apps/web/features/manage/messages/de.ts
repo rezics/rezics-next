@@ -440,7 +440,7 @@ export default {
   reportEntry: insert('{{category}} · Beweis {{digest}}', { category: String, digest: String }),
   reportsMore: 'Es folgen weitere Meldungen; die erste Seite wird angezeigt.',
   correspondenceHeading: 'Einsprüche und Gegendarstellungen',
-  correspondenceHelp: 'Der Fall-Abruf für Mitarbeitende listet noch keinen Schriftverkehr auf. Ein Fall mit „Erneut zur Prüfung“ hat einen Einspruch, eine Gegendarstellung oder eine neuere Meldung in Warteposition.',
+  correspondenceHelp: 'Einsprüche, Gegendarstellungen und Nachrichten in der Reihenfolge ihres Eingangs.',
   deadlineHeading: 'Frist',
   nciiNotice: 'Intime Bilder ohne Einwilligung: Die Entfernung ist 48 Stunden nach Eingang fällig.',
   dmcaNotice: 'Urheberrechtshinweis: Die Wiederherstellung nach einer Gegendarstellung ist nur innerhalb der gesetzlichen Frist erlaubt.',
@@ -501,4 +501,6 @@ export default {
   decisionPendingHelp: 'Diese Entscheidung ist festgehalten, aber nicht jede Wirkung ist bestätigt. Fortsetzen sendet dieselbe Anfrage erneut.',
   decisionStillPending: 'Noch nicht bestätigt. Versuche es gleich noch einmal.',
   reasonLanguageLabel: 'Sprache der Begründung',
+  stepsNone: 'Noch kein Schriftverkehr und keine Schritte.',
+  dmcaLatestAt: insert('Späteste Wiederherstellung: {{time}}', { time: String }),
 } satisfies ManageMessages;

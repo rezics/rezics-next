@@ -410,7 +410,7 @@ export default {
   reportEntry: insert('{{category}} · 証拠 {{digest}}', { category: String, digest: String }),
   reportsMore: '通報はほかにもあります。最初のページを表示しています。',
   correspondenceHeading: '異議申立てと反対通知',
-  correspondenceHelp: 'スタッフ向け案件取得は、まだ案件のやり取りを一覧しません。「再審査待ち」の案件には、異議申立て、反対通知、または新しい通報が待っています。',
+  correspondenceHelp: '異議申立て、反対通知、メッセージを受け取った順に表示します。',
   deadlineHeading: '期限',
   nciiNotice: '同意のない私的な画像: 受付から48時間以内に削除する必要があります。',
   dmcaNotice: '著作権の通知: 反対通知後の復元は、法定の期間内にのみ認められます。',
@@ -471,4 +471,6 @@ export default {
   decisionPendingHelp: 'この判断は記録されましたが、すべての措置が確認されたわけではありません。再開すると同じリクエストを再送します。',
   decisionStillPending: 'まだ確認されていません。しばらくしてからもう一度お試しください。',
   reasonLanguageLabel: '理由書の言語',
+  stepsNone: 'まだやり取りや段階はありません。',
+  dmcaLatestAt: insert('最も遅い復元: {{time}}', { time: String }),
 } satisfies ManageMessages;

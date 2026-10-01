@@ -422,7 +422,7 @@ export default {
   reportEntry: insert('{{category}} · 증거 {{digest}}', { category: String, digest: String }),
   reportsMore: '신고가 더 있습니다. 첫 페이지만 표시됩니다.',
   correspondenceHeading: '이의 제기와 반박 통지',
-  correspondenceHelp: '운영진용 사안 조회는 아직 사안의 서신을 보여 주지 않습니다. “재검토 대기” 표시가 있는 사안에는 이의 제기, 반박 통지 또는 새 신고가 기다리고 있습니다.',
+  correspondenceHelp: '이의 제기, 반박 통지, 메시지를 접수된 순서대로 보여 줍니다.',
   deadlineHeading: '기한',
   nciiNotice: '동의 없는 성적 이미지: 접수 후 48시간 이내에 삭제해야 합니다.',
   dmcaNotice: '저작권 통지: 반박 통지 이후의 복원은 법정 기간 안에서만 허용됩니다.',
@@ -483,4 +483,6 @@ export default {
   decisionPendingHelp: '이 결정은 기록되었지만 일부 조치는 확인되지 않았어요. 이어서 진행하면 같은 요청을 다시 보냅니다.',
   decisionStillPending: '아직 확인되지 않았어요. 잠시 후 다시 시도하세요.',
   reasonLanguageLabel: '사유서 작성 언어',
+  stepsNone: '아직 서신이나 단계가 없어요.',
+  dmcaLatestAt: insert('가장 늦은 복원: {{time}}', { time: String }),
 } satisfies ManageMessages;

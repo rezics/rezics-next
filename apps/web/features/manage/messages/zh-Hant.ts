@@ -409,7 +409,7 @@ export default {
   reportEntry: insert('{{category}} · 證據 {{digest}}', { category: String, digest: String }),
   reportsMore: '還有更多檢舉；此處顯示第一頁。',
   correspondenceHeading: '申訴與反通知',
-  correspondenceHelp: '工作人員的案件讀取尚未列出案件的往來信函。標有「待重新審查」的案件有申訴、反通知或較新的檢舉在等待。',
+  correspondenceHelp: '申訴、反通知與訊息，依收到的順序排列。',
   deadlineHeading: '期限',
   nciiNotice: '未經同意的私密影像：須在收到後 48 小時內移除。',
   dmcaNotice: '著作權通知：收到反通知後的恢復只能在法定期限內進行。',
@@ -470,4 +470,6 @@ export default {
   decisionPendingHelp: '此裁決已記錄，但並非所有措施都已確認。按「繼續」會重新送出同一請求。',
   decisionStillPending: '仍未確認。請稍後再試。',
   reasonLanguageLabel: '說明所用語言',
+  stepsNone: '尚無往來信函或步驟。',
+  dmcaLatestAt: insert('最晚恢復時間：{{time}}', { time: String }),
 } satisfies ManageMessages;

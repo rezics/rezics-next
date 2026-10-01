@@ -13,7 +13,7 @@ import { dateTime, readableCode } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { decideLabelKey } from './safety-decision-dialog.tsx';
 import { type Blocked, type Claim, deadlineOf, isRevisit, type Offer, restricts, span } from './safety-state.ts';
-import type { ReportEvidence, SafetyCase, SafetyDecisionResult, SafetyItem, SafetyOutcome } from './safety-types.ts';
+import type { ReportEvidence, SafetyCase, SafetyItem, SafetyOutcome } from './safety-types.ts';
 import type { Loaded } from './types.ts';
 
 type T = ReturnType<typeof materializeData<ManageMessages>>;
@@ -83,12 +83,10 @@ const blockedKeys = { step: 'decideNeedsStep', window: 'decideWindowClosed', pen
  * locally; a refused read shows as restricted evidence.
  */
 export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, claiming, problem, now, locale, messages,
-  advanced, lastDecision, offers, pending, onClaim, onDecide, onResume, onRefresh, className }: {
+  advanced, offers, pending, onClaim, onDecide, onResume, onRefresh, className }: {
   item: SafetyItem; detail: Loaded<SafetyCase> | undefined; evidence: Loaded<ReportEvidence> | null | undefined;
   claim: Claim; claimedLabel: string | null; claiming: boolean; problem: CaseProblem; now: number; locale: UiLocale;
   messages: ManageMessages; advanced: boolean;
-  /** What this session just recorded, kept so its words stay readable after the dialog closes. */
-  lastDecision: { result: SafetyDecisionResult; facts: string } | null;
   /** The decisions the case's state allows; blocked ones are shown disabled with the reason. */
   offers: readonly Offer[];
   /** Set when this device holds the request of a decision whose effects are not all confirmed. */
@@ -98,7 +96,13 @@ export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, c
 }) {
   const t = materializeData(messages, { locale });
   const text = textFor(locale);
-  const restricted = detail !== undefined && !detail.ok && detail.failure === 'denied' && item.urgent;
+  const restricted = item.restricted || (detail !== undefined && !detail.ok && detail.failure === 'denied' && item.urgent);
+  const steps = detail?.ok ? detail.data.steps : [];
+  const due = (kind: string) => steps.find(step => step.kind === kind && step.dueAt !== null)?.dueAt ?? null;
+  const received = item.openedAt || steps.find(step => step.kind === 'intake')?.occurredAt || '';
+  const removalDue = item.dueAt ?? due('removal_deadline');
+  const earliest = due('restoration_not_before') ?? item.dueAt;
+  const latest = due('restoration_not_after');
   const category = categoryName(item.category, text);
   return <article aria-label={summaryOf(item, t, text)} className={cn('grid content-start gap-5 rounded-2xl border border-border/60 bg-card p-4 sm:p-5', className)}>
     <header className="grid gap-2">
@@ -124,13 +128,14 @@ export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, c
     {item.category === 'ncii' ? <Section title={t.deadlineHeading}>
       <p className="font-medium text-sm">{t.nciiNotice}</p>
       <p className="flex flex-wrap items-center gap-2 text-sm">
-        {item.openedAt ? <span>{t.caseReceived({ time: dateTime(item.openedAt, locale) })}</span> : null}
-        <DeadlineChip dueAt={item.dueAt} now={now} locale={locale} messages={messages} /></p>
+        {received ? <span>{t.caseReceived({ time: dateTime(received, locale) })}</span> : null}
+        <DeadlineChip dueAt={removalDue} now={now} locale={locale} messages={messages} /></p>
     </Section> : null}
     {item.category === 'copyright' ? <Section title={t.deadlineHeading}>
       <p className="font-medium text-sm">{t.dmcaNotice}</p>
-      {item.dueAt ? <><p className="text-sm">{t.dmcaEarliest({ time: dateTime(item.dueAt, locale) })}</p>
-        <p className="text-muted-foreground text-sm">{t.dmcaLatest}</p></> : null}
+      {earliest ? <p className="text-sm">{t.dmcaEarliest({ time: dateTime(earliest, locale) })}</p> : null}
+      {latest ? <p className="text-sm">{t.dmcaLatestAt({ time: dateTime(latest, locale) })}</p>
+        : earliest ? <p className="text-muted-foreground text-sm">{t.dmcaLatest}</p> : null}
     </Section> : null}
 
     {detail?.ok ? <>
@@ -155,6 +160,15 @@ export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, c
       </Section>
       <Section title={t.correspondenceHeading}>
         <p className="text-muted-foreground text-sm">{t.correspondenceHelp}</p>
+        {detail.data.steps.length ? <ol className="grid gap-3">{detail.data.steps.map(step => <li key={step.id}
+          className="grid gap-0.5 border-border/60 border-s-2 ps-3 text-sm">
+          <span className="font-medium">{keyed(text, 'step', step.kind, readableCode(step.kind))}</span>
+          <span className="text-muted-foreground text-xs"><time dateTime={step.occurredAt}>{dateTime(step.occurredAt, locale)}</time>
+            {step.dueAt ? <> · <time dateTime={step.dueAt}>{dateTime(step.dueAt, locale)}</time></> : null}</span>
+          {step.statement ? <span lang={step.contentLanguage ?? undefined}
+            className="whitespace-pre-line [overflow-wrap:anywhere]">{step.statement}</span> : null}
+        </li>)}</ol> : <p className="text-muted-foreground text-sm">{t.stepsNone}</p>}
+        {detail.data.stepsNextCursor ? <p className="text-muted-foreground text-xs">{t.reportsMore}</p> : null}
       </Section>
       <Section title={t.decisionHeading}>
         {detail.data.decision ? <>
@@ -167,8 +181,18 @@ export function SafetyCasePanel({ item, detail, evidence, claim, claimedLabel, c
               className="[overflow-wrap:anywhere]">{t.effectEntry({ target: effect.resource,
               state: t[effectKeys[effect.state as keyof typeof effectKeys] ?? 'effectPending'] })}</li>)}</ul> : null}
         </> : <p className="text-muted-foreground text-sm">{t.noDecision}</p>}
-        {lastDecision && lastDecision.result.caseId === item.caseId
-          ? <p className="whitespace-pre-line text-sm [overflow-wrap:anywhere]">{lastDecision.facts}</p> : null}
+        {detail.data.decision?.statementOfReasons ? <div lang={detail.data.decision.statementOfReasons.contentLanguage}
+          className="grid gap-2 rounded-xl bg-muted/40 p-3 text-sm">
+          <dl className="grid gap-2">
+            {([[t.factsLabel, detail.data.decision.statementOfReasons.facts], [t.scopeLabel, detail.data.decision.statementOfReasons.scope],
+              [t.decisionDurationLabel, detail.data.decision.statementOfReasons.duration]] as const).map(([name, value]) =>
+              <div key={name} className="grid gap-0.5"><dt className="text-muted-foreground text-xs">{name}</dt>
+                <dd className="whitespace-pre-line [overflow-wrap:anywhere]">{value}</dd></div>)}
+          </dl>
+          <p>{detail.data.decision.statementOfReasons.automation ? t.previewAutomation : t.previewNoAutomation}</p>
+          <p className="[overflow-wrap:anywhere]">{t.previewRule({ ref: detail.data.decision.statementOfReasons.rule.ref,
+            revision: detail.data.decision.statementOfReasons.rule.revision })}</p>
+        </div> : null}
       </Section>
 
       <div className="grid gap-2 border-border/60 border-t pt-4">

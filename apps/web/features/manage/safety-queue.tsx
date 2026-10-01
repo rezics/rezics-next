@@ -23,7 +23,7 @@ import { SafetyDecisionDialog } from './safety-decision-dialog.tsx';
 import { type Attempt, clearAttempt, loadAttempt, refusedForGood, saveAttempt, settleDecision } from './safety-pending.ts';
 import { type Claim, claimOf, mergeCases, type Offer, offersFor, orderCases, SITE_SAFETY_PATH, stepsOf,
   type SafetyView } from './safety-state.ts';
-import type { ReportEvidence, SafetyCase, SafetyDecisionResult, SafetyItem, SafetyOutcome,
+import type { ReportEvidence, SafetyCase, SafetyItem, SafetyOutcome,
   SafetyPage } from './safety-types.ts';
 import type { Loaded } from './types.ts';
 
@@ -37,8 +37,10 @@ const typing = (target: EventTarget | null) => target instanceof HTMLElement
 /** A case read on its own, when it is not in the loaded pages: enough of an item for its panel. */
 export function itemFromCase(view: SafetyCase): SafetyItem {
   return { caseId: view.caseId, kind: view.kind, urgent: view.urgent, generation: view.generation,
-    decisionHead: view.decision?.decisionId ?? null, openedAt: '', target: { owner: '', resource: '', component: '' },
-    category: view.reports[0]?.category ?? null, contentLanguage: null, dueAt: null, claimedBy: null };
+    decisionHead: view.decision?.decisionId ?? null, restricted: false, target: null,
+    openedAt: view.steps.find(step => step.kind === 'intake')?.occurredAt ?? '',
+    category: view.reports[0]?.category ?? null, contentLanguage: null, claimedBy: null,
+    dueAt: view.steps.map(step => step.dueAt).filter((due): due is string => due !== null).sort()[0] ?? null };
 }
 
 /** The filters as a GET form: the address holds the view, so a second tab or a reload shows the same queue. */
@@ -105,7 +107,6 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
   /** The case, read, evidence and offer as they were when the dialog opened; a re-read cannot change the request under it. */
   const [dialog, setDialog] = useState<{ open: boolean; outcome: SafetyOutcome; item: SafetyItem; detail: SafetyCase;
     evidence: ReportEvidence | null; offer: Offer } | null>(null);
-  const [last, setLast] = useState<{ result: SafetyDecisionResult; facts: string } | null>(null);
   const [paging, setPaging] = useState<'idle' | 'loading' | 'failed'>('idle');
   const rows = useRef(new Map<string, HTMLElement>());
   const claimKeys = useRef(new Map<string, string>());
@@ -207,7 +208,6 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
     if (settled.kind === 'completed') {
       keep(caseId, null);
       setResumes(known => { const { [caseId]: _done, ...rest } = known; return rest; });
-      setLast({ result: settled.result, facts: target.reasons.facts });
       void refresh();
       return;
     }
@@ -227,7 +227,7 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
         const next = ordered[Math.min(ordered.length - 1, Math.max(0, at + (event.key === 'j' ? 1 : -1)))];
         if (!next) return;
         focusRow.current = true; setCurrent(next.caseId);
-      } else if (event.key === 'c' && item && claimOf(item, actingSubject) === 'free') void claim(item);
+      } else if (event.key === 'c' && item && !item.restricted && claimOf(item, actingSubject) === 'free') void claim(item);
       else {
         const offer = offers.find(candidate => !candidate.blocked && decisionKey(candidate.outcome) === event.key);
         if (!offer) return;
@@ -244,7 +244,7 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
   const panel = item ? <SafetyCasePanel item={item} detail={read} evidence={item ? evidence[item.caseId] : undefined}
     claim={claimOf(item, actingSubject)} claimedLabel={label(item.claimedBy)} claiming={claiming === item.caseId}
     problem={problems[item.caseId] ?? null} now={clock} locale={locale} messages={messages} advanced={advanced}
-    lastDecision={last} offers={offers} pending={attempt ? resumes[item.caseId] ?? { resuming: false, problem: null } : null}
+    offers={offers} pending={attempt ? resumes[item.caseId] ?? { resuming: false, problem: null } : null}
     onClaim={() => void claim(item)} onDecide={decide} onResume={() => { if (attempt) void resume(attempt); }} onRefresh={() => void refresh()}
     className={advanced ? 'lg:sticky lg:top-4' : undefined} /> : null;
   const single = !advanced && item !== null;
@@ -272,6 +272,8 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
           <span className="min-w-0 truncate">{categoryName(entry.category, text)
             ?? (entry.kind === 'rights_complaint' ? t.kindRightsComplaint : t.kindContentReport)}</span>
           {entry.urgent ? <span className="font-medium text-destructive-foreground text-xs">{t.caseUrgent}</span> : null}
+          {entry.restricted ? <span className="inline-flex items-center gap-1 font-medium text-xs">
+            <LockIcon aria-hidden="true" className="size-3.5" />{t.restrictedTitle}</span> : null}
         </span>
         <span className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
           <DeadlineChip dueAt={entry.dueAt} now={clock} locale={locale} messages={messages} />
@@ -322,8 +324,7 @@ export function SafetyQueue({ actingSubject, initial, view, now, locale, message
       messages={messages} onAttempt={next => keep(dialog.item.caseId, next)}
       onClose={() => { setDialog(known => known && { ...known, open: false }); void load(dialog.item.caseId); }}
       finalFocus={() => rows.current.get(dialog.item.caseId) ?? null}
-      onDone={(result, reasons) => {
-        setLast({ result, facts: reasons.facts });
+      onDone={() => {
         setDialog(known => known && { ...known, open: false });
         void refresh();
       }} /> : null}

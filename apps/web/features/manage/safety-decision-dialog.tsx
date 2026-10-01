@@ -56,7 +56,7 @@ export function planTargets(outcome: SafetyOutcome, item: Pick<SafetyItem, 'targ
   const retained = evidence?.evidence.filter(entry => entry.state === 'available') ?? [];
   const found = retained.length ? retained.map(entry => ({ owner: entry.owner, resource: entry.resource,
     component: entry.component, revision: entry.revision }))
-    : [{ ...item.target, revision: null }];
+    : item.target ? [{ ...item.target, revision: null }] : [];
   return found.map(entry => ({ owner: entry.owner as SafetyTarget['owner'], resource: entry.resource,
     component: entry.component as SafetyTarget['component'], locator: null,
     scopeKind: entry.revision ? 'exact_revision' : 'component', revision: entry.revision,

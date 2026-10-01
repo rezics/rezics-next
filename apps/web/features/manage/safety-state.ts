@@ -85,19 +85,13 @@ export const isRevisit = (item: Pick<SafetyItem, 'decisionHead'>) => item.decisi
 
 export interface CaseStep { stepId: string; kind: string }
 
-/**
- * The process steps a staff case read carries. The read gains `steps` with G-906; until the contract has them this
- * is empty, and every decision that must answer a step stays disabled instead of sending a missing one.
- */
-export function stepsOf(detail: unknown): CaseStep[] {
-  const steps = typeof detail === 'object' && detail !== null && 'steps' in detail ? (detail as { steps: unknown }).steps : null;
-  if (!Array.isArray(steps)) return [];
-  return steps.flatMap((entry: Record<string, unknown>) => {
-    const stepId = entry.stepId ?? entry.id;
-    const kind = entry.kind ?? entry.step;
-    return typeof stepId === 'string' && typeof kind === 'string' ? [{ stepId, kind }] : [];
-  });
-}
+/** The process steps of a staff case read (first page). A decision that must answer a step stays disabled without one. */
+export const stepsOf = (detail: Pick<SafetyCase, 'steps'>): CaseStep[] =>
+  detail.steps.map(step => ({ stepId: step.id, kind: step.kind }));
+
+/** The due time of the case's first step of a kind (a removal deadline, a restoration date), or null. */
+export const stepDue = (detail: Pick<SafetyCase, 'steps'>, kind: string): string | null =>
+  detail.steps.find(step => step.kind === kind && step.dueAt !== null)?.dueAt ?? null;
 
 /** Why a decision is shown but cannot be sent: it needs a process step the read does not carry, the legal window is not
  * open, or an earlier decision still has unconfirmed effects. */

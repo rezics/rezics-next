@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { orderCases, parseSafetyView, offersFor, queueQuery, safetyHref, span, stepsOf,
+import { orderCases, parseSafetyView, offersFor, queueQuery, safetyHref, span, stepDue, stepsOf,
   deadlineOf, claimOf, mergeCases, restricts } from '../features/manage/safety-state.ts';
 import { clearAttempt, loadAttempt, refusedForGood, saveAttempt, settleDecision } from '../features/manage/safety-pending.ts';
 import { planTargets, decideLabelKey } from '../features/manage/safety-decision-dialog.tsx';
@@ -14,7 +14,7 @@ const hours = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
 const item = (n: number, over: Partial<SafetyItem> = {}): SafetyItem => ({ caseId: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
   kind: 'content_report', urgent: false, generation: '1', decisionHead: null, openedAt: hours(-n), target: { owner: 'content',
     resource: 'https://rezics.com/id/r', component: 'body' }, category: 'harassment', contentLanguage: 'en', dueAt: null,
-  claimedBy: null, ...over });
+  claimedBy: null, restricted: false, ...over });
 
 test('G-821 the queue shows urgent first, then overdue, then by nearest deadline and age', () => {
   const routineOld = item(9);
@@ -112,10 +112,13 @@ test('G-821 copyright releases wait for the earliest restoration date; unconfirm
   }
 });
 
-test('G-821 steps come from the staff read, and are empty until it carries them', () => {
-  expect(stepsOf({ caseId: 'c' })).toEqual([]);
-  expect(stepsOf({ steps: [{ stepId: 'a', kind: 'appeal' }, { id: 'b', step: 'counter_notice' }, { nothing: true }] }))
-    .toEqual([{ stepId: 'a', kind: 'appeal' }, { stepId: 'b', kind: 'counter_notice' }]);
+test('G-821 steps come from the staff read', () => {
+  const step = (id: string, kind: string, dueAt: string | null) => ({ id, kind, dueAt }) as never;
+  const detail = { steps: [step('a', 'appeal', null), step('b', 'restoration_not_before', hours(2))] };
+  expect(stepsOf(detail)).toEqual([{ stepId: 'a', kind: 'appeal' }, { stepId: 'b', kind: 'restoration_not_before' }]);
+  expect(stepDue(detail, 'restoration_not_before')).toBe(hours(2));
+  expect(stepDue(detail, 'appeal')).toBeNull();
+  expect(stepDue({ steps: [] }, 'removal_deadline')).toBeNull();
 });
 
 const result = (status: 'completed' | 'accepted') => ({ ok: true as const, data: { operation: { status } } as never });

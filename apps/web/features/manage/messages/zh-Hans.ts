@@ -402,7 +402,7 @@ export default {
   reportEntry: insert('{{category}} · 证据 {{digest}}', { category: String, digest: String }),
   reportsMore: '还有更多举报；此处显示第一页。',
   correspondenceHeading: '申诉与反通知',
-  correspondenceHelp: '工作人员的案件读取尚未列出案件的往来信函。标有“待重新审查”的案件有申诉、反通知或更新的举报在等待。',
+  correspondenceHelp: '申诉、反通知和消息，按收到的顺序排列。',
   deadlineHeading: '期限',
   nciiNotice: '未经同意的私密影像：须在收到后 48 小时内删除。',
   dmcaNotice: '版权通知：收到反通知后的恢复只能在法定期限内进行。',
@@ -463,4 +463,6 @@ export default {
   decisionPendingHelp: '此裁决已记录，但并非所有措施都已确认。点击“继续”会重新发送同一请求。',
   decisionStillPending: '仍未确认。请稍后再试。',
   reasonLanguageLabel: '说明所用语言',
+  stepsNone: '暂无往来信函或步骤。',
+  dmcaLatestAt: insert('最晚恢复时间：{{time}}', { time: String }),
 } satisfies Partial<ManageMessages>;

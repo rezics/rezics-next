@@ -440,7 +440,7 @@ export default {
   reportEntry: insert('{{category}} · preuve {{digest}}', { category: String, digest: String }),
   reportsMore: 'D’autres signalements suivent ; la première page est affichée.',
   correspondenceHeading: 'Appels et contre-notifications',
-  correspondenceHelp: 'La lecture de cas pour le personnel ne liste pas encore la correspondance d’un cas. Un cas marqué « De nouveau à examiner » a un appel, une contre-notification ou un signalement plus récent en attente.',
+  correspondenceHelp: 'Appels, contre-notifications et messages, dans l’ordre d’arrivée.',
   deadlineHeading: 'Échéance',
   nciiNotice: 'Images intimes non consenties : le retrait est dû 48 heures après réception.',
   dmcaNotice: 'Notification de droit d’auteur : le rétablissement après une contre-notification n’est permis que dans le délai légal.',
@@ -501,4 +501,6 @@ export default {
   decisionPendingHelp: 'Cette décision est enregistrée, mais tous les effets ne sont pas confirmés. Reprendre renvoie la même requête.',
   decisionStillPending: 'Toujours pas confirmé. Réessayez dans un instant.',
   reasonLanguageLabel: 'Langue de l’exposé',
+  stepsNone: 'Aucune correspondance ni étape pour l’instant.',
+  dmcaLatestAt: insert('Rétablissement au plus tard : {{time}}', { time: String }),
 } satisfies ManageMessages;

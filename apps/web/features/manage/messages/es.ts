@@ -437,7 +437,7 @@ export default {
   reportEntry: insert('{{category}} · prueba {{digest}}', { category: String, digest: String }),
   reportsMore: 'Hay más denuncias; se muestra la primera página.',
   correspondenceHeading: 'Apelaciones y contranotificaciones',
-  correspondenceHelp: 'La lectura de casos para el personal aún no lista la correspondencia de un caso. Un caso marcado «De nuevo en revisión» tiene una apelación, una contranotificación o una denuncia más reciente en espera.',
+  correspondenceHelp: 'Apelaciones, contranotificaciones y mensajes, en el orden en que llegaron.',
   deadlineHeading: 'Plazo',
   nciiNotice: 'Imágenes íntimas sin consentimiento: la retirada vence 48 horas después de la recepción.',
   dmcaNotice: 'Aviso de derechos de autor: la restauración tras una contranotificación solo se permite dentro del plazo legal.',
@@ -498,4 +498,6 @@ export default {
   decisionPendingHelp: 'Esta decisión está registrada, pero no todos los efectos están confirmados. Reanudar reenvía la misma solicitud.',
   decisionStillPending: 'Aún sin confirmar. Inténtalo de nuevo en un momento.',
   reasonLanguageLabel: 'Idioma de la exposición',
+  stepsNone: 'Aún no hay correspondencia ni pasos.',
+  dmcaLatestAt: insert('Restauración más tardía: {{time}}', { time: String }),
 } satisfies ManageMessages;

@@ -22,15 +22,16 @@ const hours = (h: number) => new Date(now + h * 3_600_000).toISOString();
 const position = { dataEpoch: 'safety-queue-v1', sequence: '7' };
 const digest = (c: string) => c.repeat(64);
 
-const item = (n: number, over: Partial<SafetyItem>): SafetyItem => ({ caseId: id(n), kind: 'content_report', urgent: false,
-  generation: '1', decisionHead: null, openedAt: hours(-n), target: { owner: 'content', resource: iri(900 + n), component: 'body' },
-  category: 'harassment', contentLanguage: 'en', dueAt: null, claimedBy: null, ...over });
+type Listed = SafetyItem & { target: NonNullable<SafetyItem['target']> };
+const item = (n: number, over: Partial<SafetyItem> & { restricted?: boolean }): Listed => ({ caseId: id(n), kind: 'content_report', urgent: false,
+  restricted: false, generation: '1', decisionHead: null, openedAt: hours(-n), target: { owner: 'content', resource: iri(900 + n), component: 'body' },
+  category: 'harassment', contentLanguage: 'en', dueAt: null, claimedBy: null, ...over } as Listed);
 
 const urgentNcii = item(1, { urgent: true, category: 'ncii', dueAt: hours(20), openedAt: hours(-28) });
 const overdueDmca = item(2, { category: 'copyright', decisionHead: id(92), dueAt: hours(-3), openedAt: hours(-400) });
 const claimedElsewhere = item(3, { category: 'hateful_abuse', claimedBy: people.sophie, contentLanguage: 'ko' });
 const routine = item(4, { category: 'harassment' });
-const cases: SafetyItem[] = [routine, claimedElsewhere, overdueDmca, urgentNcii];
+const cases: Listed[] = [routine, claimedElsewhere, overdueDmca, urgentNcii];
 
 const page = (items: SafetyItem[], nextCursor: string | null = null): SafetyPage => ({ items, nextCursor, sourcePosition: position });
 
@@ -38,18 +39,25 @@ const operation = (status: 'completed' | 'accepted') => ({ operationId: 'op1', s
   items: [{ ordinal: 1, target: 'content:body', state: status === 'completed' ? 'confirmed' as const : 'pending' as const,
     receipt: status === 'completed' ? 'receipt' : null, continuation: null, error: null }] });
 
-interface Extra { outcome?: string; steps?: Array<{ stepId: string; kind: string }>; operation?: 'completed' | 'accepted' }
-const detailOf = (entry: SafetyItem, extra: Extra = {}): SafetyCase => ({ ...extra.steps ? { steps: extra.steps } : {}, caseId: entry.caseId, kind: entry.kind, urgent: entry.urgent,
+const stepOf = (n: number, kind: string, over: Partial<SafetyCase['steps'][number]> = {}): SafetyCase['steps'][number] => ({ id: id(n),
+  kind, process: kind === 'appeal' ? 'platform_appeal' : 'ncii', reportId: null, decisionId: null, party: null, partySubject: null,
+  statement: null, documentDigest: null, contentLanguage: null, declarations: null, occurredAt: hours(-30), dueAt: null,
+  recordedAt: hours(-30), ...over });
+interface Extra { outcome?: string; steps?: SafetyCase['steps']; operation?: 'completed' | 'accepted' }
+const detailOf = (entry: Listed, extra: Extra = {}): SafetyCase => ({ steps: extra.steps ?? [stepOf(200, 'intake')], stepsNextCursor: null, caseId: entry.caseId, kind: entry.kind, urgent: entry.urgent,
   generation: entry.generation, state: 'open', reports: [{ reportId: id(500 + Number(entry.caseId.slice(-2))),
     evidenceDigest: digest('e'), category: entry.category ?? 'harassment' }], reportsNextCursor: null,
   decision: entry.decisionHead ? { profile: 'moderation-decision-v1', decisionId: entry.decisionHead, caseId: entry.caseId,
     caseGeneration: '1', outcome: extra.outcome ?? 'restrict', replayed: false, operation: operation(extra.operation ?? 'completed'),
     enforcement: [{ owner: 'content', resource: entry.target.resource, component: 'body', revision: 'r1',
-      effect: 'disclosure', state: 'confirmed', fenceEpoch: '1' }] } : null,
+      effect: 'disclosure', state: 'confirmed', fenceEpoch: '1' }],
+    statementOfReasons: { facts: 'The post threatens a private person.', scope: 'The post only.', duration: 'Until restored.',
+      automation: false, appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en',
+      rule: { ref: 'urn:rezics:rule:harassment', revision: '3', digest: digest('a') } } } : null,
   targets: entry.decisionHead ? [{ owner: 'content', resource: entry.target.resource, component: 'body', locator: null,
     scopeKind: 'exact_revision', revision: 'r1', expectedHead: 'r1', effect: 'disclosure', expiresAt: null }] : [] });
 
-const evidenceOf = (entry: SafetyItem): ReportEvidence => ({ profile: 'governance-report-v1', reportId: id(500), caseId: entry.caseId,
+const evidenceOf = (entry: Listed): ReportEvidence => ({ profile: 'governance-report-v1', reportId: id(500), caseId: entry.caseId,
   caseGeneration: '1', evidenceDigest: digest('e'), replayed: false, evidence: [{ ordinal: 1, owner: 'content',
     resource: entry.target.resource, component: 'body', revision: 'r1', revisionDigest: digest('d'), state: 'available' }] });
 
@@ -60,7 +68,7 @@ interface Recorded { claims: Array<{ caseId: string; key: string }>; decisions: 
 const recorder = (): Recorded => ({ claims: [], decisions: [], pages: 0 });
 
 /** A stand-in for Main's safety-case routes. `denied` lists cases whose read it refuses, as for evidence staff may not see. */
-function safetyApi(recorded: Recorded, options: { items?: SafetyItem[]; denied?: string[]; status?: 'completed' | 'accepted';
+function safetyApi(recorded: Recorded, options: { items?: Listed[]; denied?: string[]; status?: 'completed' | 'accepted';
   /** With `status: 'accepted'`, the request count from which the API reports every effect confirmed. */
   completeAfter?: number; claimFails?: boolean; extra?: Record<string, Extra>; lookupFails?: boolean } = {}): SafetyApi {
   const items = options.items ?? cases;
@@ -208,6 +216,39 @@ export const ClaimRace: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Claim this case' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Someone else claimed this case first');
     await waitFor(() => expect(recorded.pages).toBeGreaterThan(0));
+  },
+};
+
+const redacted = item(6, { urgent: true, restricted: true, category: 'child_exploitation' });
+/** Main returns urgent cases to staff without the specialist role as redacted rows: they are listed and say why they are closed. */
+export const RestrictedRow: Story = {
+  args: { initial: page([redacted]), api: safetyApi(recorded, { items: [redacted], denied: [redacted.caseId] }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await expect(rows(canvas)[0]).toHaveTextContent('Restricted evidence');
+    await userEvent.click(rows(canvas)[0]!);
+    await expect(await canvas.findByText(/visible only to the safety specialist role/)).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Claim this case' })).toBeNull();
+  },
+};
+
+/** The case's steps are listed with their words; a copyright case shows both restoration dates from them. */
+export const StepsAndDates: Story = {
+  args: { initial: page([{ ...overdueDmca, claimedBy: acting.iri }]), api: safetyApi(recorded, { items: [{ ...overdueDmca, claimedBy: acting.iri }],
+    extra: { [overdueDmca.caseId]: { steps: [stepOf(310, 'counter_notice', { statement: 'This is my own work.', contentLanguage: 'en' }),
+      stepOf(311, 'restoration_not_before', { dueAt: hours(-3) }), stepOf(312, 'restoration_not_after', { dueAt: hours(120) })] } } }) },
+  async play({ canvasElement }) {
+    reset();
+    const canvas = within(canvasElement);
+    await userEvent.click(rows(canvas)[0]!);
+    await expect(await canvas.findByText('This is my own work.')).toHaveAttribute('lang', 'en');
+    await expect(canvas.getByText(/Earliest restoration:/)).toBeVisible();
+    await expect(canvas.getByText(/Latest restoration: [A-Z]/)).toBeVisible();
+    await expect(canvas.getByText('Counter-notice')).toBeVisible();
+    // The recorded statement of reasons is read back from the API.
+    await expect(canvas.getByText('The post threatens a private person.')).toBeVisible();
+    await expect(canvas.getByText('Rule urn:rezics:rule:harassment, revision 3')).toBeVisible();
   },
 };
 
@@ -386,7 +427,7 @@ export const NciiReverseNeedsAppealStep: Story = {
 /** With the appeal's step in the read, the reversal answers it and reverses the decision it releases. */
 export const NciiReverseAnswersAppeal: Story = {
   args: { initial: page([nciiRevisit]), api: safetyApi(recorded, { items: [nciiRevisit], extra: { [nciiRevisit.caseId]: {
-    steps: [{ stepId: id(300), kind: 'appeal' }] } } }) },
+    steps: [stepOf(300, 'appeal', { statement: 'The restriction is mistaken.' })] } } }) },
   async play({ canvasElement }) {
     reset();
     const canvas = within(canvasElement);
