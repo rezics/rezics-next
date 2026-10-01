@@ -5,9 +5,9 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { SerialStatisticsProjection } from '../../../services/main/src/modules/work/serial-projection.ts';
-import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
+import { zoneAdoption } from '../../../services/main/src/modules/zone-modules/adoption.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
-import { WorkReadUnavailable } from '../../../services/main/src/modules/work/read-session.ts';
+import { WorkReadUnavailable, publicWork } from '../../../services/main/src/modules/work/read-session.ts';
 import { startMediaStack } from './media-support.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -27,9 +27,9 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
     const realm = created.realm, phrase = `traversal${randomUUID().replaceAll('-', '')}`, concept = id();
     // A bounded read fixture exercises the API over a large adopted inventory.
     // Selection command validation is covered by G657; these rows carry its
-    // exact public-selection witnesses and native ranked MatchUnit identities.
+    // exact selection witnesses. Titles deliberately have no body-search documents.
     const works = Array.from({ length: 1000 }, (_, index) => ({ index, work: id(), main: id(),
-      head: id(), slot: id(), selection: id(), contribution: id(), decision: id(), draft: id(), unit: id() }));
+      head: id(), slot: id(), selection: id(), contribution: id(), decision: id(), draft: id() }));
     const hidden = new Set(works.slice(0, 300).map(work => work.work));
     for (let start = 0; start < works.length; start += 64) {
       const batch = works.slice(start, start + 64);
@@ -50,11 +50,7 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
             rv:publicationDecision ${iri(row.decision)} ; rv:selectedDraft ${iri(row.draft)} ; rv:language "en" ;
             rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence ${row.index + 1} .
           ${iri(row.decision)} rv:disclosure rv:Public .`).join('\n')} }
-        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${batch.map(row => `
-          ${iri(row.unit)} a rv:MatchUnit ; rv:disclosure rv:Public ; rv:work ${iri(row.work)} ;
-            rv:mainVersion ${iri(row.main)} ; rv:contribution ${iri(row.contribution)} ; rv:revision ${iri(row.draft)} ;
-            rv:selection ${iri(row.selection)} ; rv:language "en" ; rv:realm ${iri(realm)} ;
-            rv:context ${iri(realm)} ; rv:field rv:Body ; rv:searchBody ${lit(phrase)}@en .`).join('\n')} }
+
       }`);
     }
     const generation = randomUUID();
@@ -103,18 +99,25 @@ test('G828: HTTP traverses 1,000 adopted Works in every sort and Condition; publ
       expect(page.matches).toEqual({ value: seen.length, kind: 'exact' });
       return seen;
     };
-    // Home's adoption list must admit the same resource-slot Works as browse.
+    // Compare the complete common read witness once. HTTP pages then exercise
+    // hydration and continuation for both slot families without repeating
+    // all 700 metadata hydrations already covered by each browse sort.
+    const witnessed = (await stack.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT DISTINCT ?work WHERE { { ${zoneAdoption(realm)} } ${publicWork('?work', '?main')} }
+      LIMIT 1001`, 128 * 1024)).results!.bindings.map(row => row.work!.value);
+    expect(witnessed.sort()).toEqual(works.filter(row => !hidden.has(row.work)).map(row => row.work).sort());
     const adopted: string[] = [];
     let adoptionCursor: string | null = null;
-    do {
+    for (let pageIndex = 0; pageIndex < 2; pageIndex++) {
       const response = await app.handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions`
         + (adoptionCursor ? `?cursor=${encodeURIComponent(adoptionCursor)}` : '')));
       if (response.status !== 200) throw new Error(`New adoptions ${response.status}: ${await response.text()}`);
       const page = await response.json() as Page;
       adopted.push(...page.items.map(item => item.id));
       adoptionCursor = page.nextCursor;
-    } while (adoptionCursor);
-    expect(adopted.sort()).toEqual(works.filter(row => !hidden.has(row.work)).map(row => row.work).sort());
+      expect(adoptionCursor).not.toBeNull();
+    }
+    expect(adopted.sort()).toEqual(works.slice(-40).map(row => row.work).sort());
     // Home lists localize titles with fallback; they do not filter adoptions by text language.
     const localized = await app.handle(new Request(`http://main.local/v1/realms/${realm.slice(-36)}/modules/new-adoptions?language=ja`));
     expect(localized.status).toBe(200);
