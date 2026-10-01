@@ -29,7 +29,7 @@ try {
       authorization: `Bearer ${author.token}` }, ...(body ? { body: JSON.stringify(body) } : {}) }));
 
   // Two Books the reader shelves, one per device size, each with an English text selected as its Main Version.
-  const books = [];
+  const books: { work: string; title: string }[] = [];
   for (const index of [1, 2]) {
     const title = `The Lighthouse Keeper’s Almanac ${index} ${randomUUID().slice(0, 8)}`;
     const types = ['https://schema.org/Book'];
@@ -50,7 +50,7 @@ try {
   await author.grant('classification:define:global', 'classification.proposition.define');
   await author.grant('classification:decide:global', 'classification.decision.set');
   const run = randomUUID().slice(0, 8);
-  const works = [];
+  const works: { work: string; mainVersion: string; title: string }[] = [];
   for (const index of [1, 2, 3, 4]) {
     const work = await stack.publicWork(author.actor, ['en'], `Concept Work ${index} ${run}`);
     works.push({ work: work.work, mainVersion: work.mainVersion, title: work.title });
