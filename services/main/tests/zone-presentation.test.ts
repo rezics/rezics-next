@@ -51,7 +51,7 @@ describe('zone-presentation-v1', () => {
   test('an official marker requires a public Realm-backed Zone', () => {
     expect(() => checkZoneConfiguration(Buffer.from(JSON.stringify({
       ...JSON.parse(configuration(DEFAULT_ZONE_PRESENTATION).toString()),
-      official: { routeSegment: 'fiction' },
+      official: {},
     })))).toThrow('Official Zone needs a public default Realm');
   });
 });

@@ -4,6 +4,7 @@ import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { readCurrentProfile } from '../realm-profile/commands.ts';
 import { selectDisplayName } from '../display-language/select.ts';
+import { uuidToSid } from '@rezics/model/address/sid';
 
 const native = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/;
 
@@ -14,16 +15,16 @@ export async function notificationRealmDisplay(env: WorkActivationEnvironment, r
   const profile = await readCurrentProfile(env, realm).catch(() => null);
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?name ?segment WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm .
+    SELECT ?name ?space WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:space ?space .
         OPTIONAL { ${iri(realm)} rdfs:label ?name }
-        OPTIONAL { ?zone a rv:Zone ; rv:official true ; rv:zoneState rv:Active ;
-          rv:disclosure rv:Public ; rv:defaultRealm ${iri(realm)} ; rv:routeSegment ?segment }
       }
     } LIMIT 3`, 8_192)).results?.bindings ?? [];
   if (rows.length > 2) throw new Error('notification Realm display is ambiguous');
   const name = profile ? selectDisplayName(profile.profile.name, [])?.value : rows[0]?.name?.value;
-  const segment = rows.find(row => row.segment)?.segment?.value ?? match[1];
+  const space = rows[0]?.space?.value;
+  const segment = space ? (await env.addresses?.currents([space]).catch(() => new Map()))?.get(`space\0${space}`)?.key
+    ?? uuidToSid(space.slice(-36)) : match[1];
   return { ...(name ? { realmName: name.slice(0, 200) } : {}),
     ...(segment ? { realmRouteSegment: segment.slice(0, 100) } : {}) };
 }

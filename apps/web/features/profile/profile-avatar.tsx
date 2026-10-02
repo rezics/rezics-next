@@ -4,6 +4,7 @@ import { initials } from '@rezics/ui/avatar-initials';
 import { cn } from '@rezics/ui/utils';
 import { useState } from 'react';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 import type { AgentKind } from './types.ts';
 
 /** The letters a profile without a photo shows: the site-wide rule, so a person reads the same everywhere. */
@@ -32,9 +33,9 @@ export function ProfileAvatar({ name, kind, avatarUrl, avatarQuery = '', size = 
   const url = avatarUrl?.startsWith('/v1/media/') ? `${BFF_PREFIX}${avatarUrl}${avatarQuery}` : null;
   const src = url && url !== failed ? url : null;
   return <span className={cn('relative grid shrink-0 place-items-center overflow-hidden bg-accent',
-    'text-accent-foreground after:absolute after:inset-0 after:rounded-[inherit] after:border',
+    'text-accent-foreground after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border',
     'after:border-foreground/8', shape, sizes[size], className)}>
-    {src ? <img src={src} alt="" className="size-full object-cover" onError={() => setFailed(src)} />
+    {src ? <WebMediaImage revealable={size === 'lg'} compact src={src} alt="" className="size-full object-cover" onError={() => setFailed(src)} />
       : <span aria-hidden="true" className="font-semibold font-work-title leading-none">{initials(name)}</span>}
   </span>;
 }

@@ -68,11 +68,15 @@ Image and cover uploads are available at launch. Uploads, imports, replacements,
 
 - Cloudflare CSAM scanning checks images as they are served and blocks matches to known child sexual abuse material.
 - REZICS applies for Microsoft PhotoDNA and adds upload matching once approval and a working integration exist. PhotoDNA is not a launch prerequisite.
-- A locally run open-source classifier screens new images and holds those likely to be sexually explicit for human review before they are shown.
+- Automatic image analysis currently runs on the uploader's device and supplies NSFW presentation evidence. Its result does not by itself determine whether an image is prohibited, cleared or held for review.
 - New accounts have upload rate limits.
 - Anyone can report an image, with or without an account.
 
-During a scanner or classifier outage, new uploads are held for review rather than published unscreened. Cloudflare scanning acts when images are served; it does not screen an upload before it is stored.
+Failed or unavailable NSFW analysis remains unknown and allows a contributor to
+provide a manual label. A separate platform safety decision can hold or remove
+an image. Failures in required safety matching follow that service's admission
+policy; they are not represented as NSFW classifications. Cloudflare scanning
+acts when images are served; it does not screen an upload before it is stored.
 
 Imported covers display with attribution to their source and are removed on a valid notice. Non-consensual intimate imagery is removed within 48 hours of a valid request under the [NCII Takedown Policy](ncii-takedown-policy.md). Copyright notices, including notices about covers, go to our designated agent under the [Copyright and DMCA Policy](copyright-and-dmca-policy.md).
 

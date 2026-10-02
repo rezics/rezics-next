@@ -19,7 +19,7 @@ export interface DisclosureTarget {
   /** A missing revision cannot prove that an exact-revision fence does not apply. */
   revision?: string | null;
   context?: string;
-  /** Owner-established parent; child assessments never weaken the Work's gate. */
+  /** Owner-established parent for governance fences and noninteractive delivery. */
   work?: string | null;
   workRevision?: string | null;
 }
@@ -42,7 +42,13 @@ const suitabilityChannel = (channel: DisclosureChannel) =>
       : channel === 'digest' || channel === 'email' ? 'email' as const
         : channel === 'push' ? 'push' as const : 'read' as const;
 
-/** One indexed owner query evaluates both fences and the latest suitability heads.
+/** Interactive clients render ratings against their current user state. Only
+ * deliveries without that interaction apply an explicit channel default here. */
+const usesSuitabilityDefault = (channel: DisclosureChannel) =>
+  ['digest', 'preview', 'seo', 'sitemap', 'email', 'push'].includes(channel);
+
+/** One indexed owner query evaluates governance fences. Noninteractive delivery
+ * also reads the direct target/parent suitability heads; no descendants are traversed.
  * The recovery fence is held through evaluation; no policy result is cached.
  * Revocation fences future disclosure; independent bytes already delivered cannot be recalled. */
 export class DisclosureStore implements DisclosureReader {
@@ -65,6 +71,7 @@ export class DisclosureStore implements DisclosureReader {
       throw new DisclosureUnavailable('Disclosure batch is invalid');
     }
     if (!targets.length) return [];
+    const suitabilityDefault = usesSuitabilityDefault(channel);
     try {
       return await controlRead(this.pool, async client => {
         const rows = (await client.query<{ ordinal: number; restricted: boolean; assessments: Labels[] }>(`
@@ -89,11 +96,12 @@ export class DisclosureStore implements DisclosureReader {
                     AND (wanted.owner <> 'graph' OR wanted.work <> wanted.resource)
                     AND e.component IN ('title', 'name', 'record', 'publication')
                     AND (e.revision IS NULL OR wanted."workRevision" IS NULL OR e.revision = wanted."workRevision")))) AS restricted,
-            COALESCE((SELECT jsonb_agg(head.labels) FROM
+            ${suitabilityDefault ? `COALESCE((SELECT jsonb_agg(head.labels) FROM
               (SELECT DISTINCT ref FROM unnest(ARRAY[wanted.resource, wanted.work]) AS refs(ref)
                 WHERE ref IS NOT NULL) refs
               CROSS JOIN LATERAL (SELECT a.labels FROM access.suitability_assessment a
-                WHERE a.target = refs.ref ORDER BY a.revision_number DESC LIMIT 1) head), '[]'::jsonb) AS assessments
+                WHERE a.target = refs.ref ORDER BY a.revision_number DESC LIMIT 1) head), '[]'::jsonb)`
+              : "'[]'::jsonb"} AS assessments
           FROM requested wanted ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
           ...target, ordinal, revision: target.revision ?? null, context: target.context ?? GLOBAL_CONTEXT,
           work: target.work ?? null,
@@ -104,9 +112,9 @@ export class DisclosureStore implements DisclosureReader {
           throw new DisclosureUnavailable('Disclosure result is incomplete');
         }
         return rows.map((row): DisclosureDecision => {
-          if (!row.restricted && row.assessments.every(labels => eligible({
+          if (!row.restricted && (!suitabilityDefault || row.assessments.every(labels => eligible({
             assessment: { status: 'assessed', labels }, viewer, channel: suitabilityChannel(channel),
-          }).eligible)) return 'visible';
+          }).eligible))) return 'visible';
           return ['read', 'summary', 'thread', 'feed', 'inbox'].includes(channel) ? 'tombstone' : 'hidden';
         });
       });

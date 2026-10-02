@@ -7,6 +7,7 @@ import { ContentCore } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { NameRegistry } from '../src/modules/address/registry.ts';
 import { RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
 import { WorkMaintainers } from '../src/modules/work/maintainers.ts';
@@ -28,6 +29,7 @@ export async function memberFixture() {
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const access = new AccessAdmissionRegistry(h.accessPool);
+  Object.assign(h.env,{ addresses:new NameRegistry(h.accessPool) });
   access.configureBaseline(h.fuseki);
   const owner = new RealmReplyContentStore(contentPool);
   const replies = new RealmReplyStore(owner, content, access, h.env);

@@ -5,7 +5,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessRealmManagement, realmAdminScope } from '../../../services/main/src/modules/access/realm-management.ts';
 import { REALM_MEMBER_SEARCH_SQL } from '../../../services/main/src/modules/access/realm-management-search.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
-import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
+import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -81,14 +81,18 @@ test('Realm member search: names, live handles and CJK match within the authoriz
     expect(await found('\\')).toEqual([]);
     expect(await found(s.agents[0]!)).toEqual([s.agents[0]!]);
     expect(await found(`@agent-${s.agents[0]!.slice(-36)}`)).toEqual([s.agents[0]!]);
-    const handles = new AgentVanityHandles(s.stack.accessPool);
+    const names = new NameRegistry(s.stack.accessPool);
+    const change = async (name: string,expectedRevision: string | null) => s.stack.access.withOwnerAuthority({
+      principal: s.owner.principal,actingSubject: s.agents[0]!,scope: `agent:control:${s.agents[0]}`,action: 'agent.control' },
+      client => names.write(client,s.owner.principal,{ scope: 'agent',holder: s.agents[0]!,actingSubject: s.agents[0]!,
+        operation: expectedRevision ? 'rename' : 'claim',name,expectedRevision,idempotencyKey: randomUUID() },s.agents[0]!));
     const handle = `qa_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
-    await handles.change(s.owner.principal, s.agents[0]!, handle, null, randomUUID());
+    const claimed = await change(handle,null);
     expect(await found(`@${handle.toUpperCase()}`)).toEqual([s.agents[0]!]);
-    await s.stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
-      WHERE handle = $1`, [handle]);
+    await s.stack.accessPool.query(`UPDATE access.name_registry SET changed_at = now() - interval '31 days'
+      WHERE scope = 'agent' AND key = $1`, [handle]);
     const renamed = `new_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
-    await handles.change(s.owner.principal, s.agents[0]!, renamed, handle, randomUUID());
+    await change(renamed,claimed.revision);
     expect(await found(handle)).toEqual([]);
     expect(await found(renamed)).toEqual([s.agents[0]!]);
     const first = await s.read('王', { limit: 1 });
@@ -148,15 +152,15 @@ test('Realm member search complexity: GIN candidate probes and bounded identity 
         principal_epoch,state,graph_data_epoch,graph_sequence,representation_id)
       SELECT gen_random_uuid(),$1,subject_id,repeat('a',64),subject_id,'person',
         'Unrelated ' || subject_id,0,'active','fixture',1,id FROM representations`, [s.owner.principalId]);
-    await s.stack.accessPool.query(`INSERT INTO access.agent_handle (handle,agent_id,state)
-      SELECT 'qa_' || replace(right(agent_id,24),'-',''),agent_id,'current'
+    await s.stack.accessPool.query(`INSERT INTO access.name_registry (scope,key,display,skeleton,holder,controller,state)
+      SELECT 'agent','qa_' || replace(right(agent_id,24),'-',''),'fixture',agent_id,agent_id,agent_id,'current'
       FROM access.agent_provision WHERE graph_data_epoch = 'fixture'`);
     await s.stack.accessPool.query(`INSERT INTO access.membership
       (id,kind,owner_subject,member_subject,state,generation,policy_revision,terms_revision,consent_reference)
       SELECT gen_random_uuid(),'realm',$1,agent_id,'joined',1,1,'members-v1','fixture'
       FROM access.agent_provision WHERE graph_data_epoch = 'fixture'`, [s.realm]);
     await s.stack.accessPool.query('ANALYZE access.agent_provision');
-    await s.stack.accessPool.query('ANALYZE access.agent_handle');
+    await s.stack.accessPool.query('ANALYZE access.name_registry');
     await s.stack.accessPool.query('ANALYZE access.membership');
     const client = await s.stack.accessPool.connect();
     try {
@@ -168,11 +172,11 @@ test('Realm member search complexity: GIN candidate probes and bounded identity 
           AND access.realm_member_search_terms(access.realm_member_search_key(display_name))
             @> access.realm_member_search_terms(access.realm_member_search_key($1))`, ['小明']);
       expect(JSON.stringify(names.rows)).toContain('realm_member_name_search');
-      const handles = await client.query(`EXPLAIN (ANALYZE, FORMAT JSON) SELECT agent_id
-        FROM access.agent_handle WHERE state = 'current'
-          AND access.realm_member_search_terms(access.realm_member_search_key(handle))
+      const handles = await client.query(`EXPLAIN (ANALYZE, FORMAT JSON) SELECT holder
+        FROM access.name_registry WHERE scope = 'agent' AND state = 'current'
+          AND access.realm_member_search_terms(access.realm_member_search_key(key))
             @> access.realm_member_search_terms(access.realm_member_search_key($1))`, ['missing_handle']);
-      expect(JSON.stringify(handles.rows)).toContain('realm_member_handle_search');
+      expect(JSON.stringify(handles.rows)).toContain('realm_member_name_registry_search');
       await client.query('SET LOCAL enable_seqscan = on');
       const result = await client.query<{ member: string }>(REALM_MEMBER_SEARCH_SQL,
         [s.realm, '', '小明', 2, '小明']);
@@ -181,7 +185,7 @@ test('Realm member search complexity: GIN candidate probes and bounded identity 
         `EXPLAIN (ANALYZE, FORMAT JSON) ${REALM_MEMBER_SEARCH_SQL}`, [s.realm, '', '小明', 2, '小明']);
       const plan = actual.rows[0]!['QUERY PLAN'][0]!.Plan;
       expect(scanned(plan, 'agent_provision')).toBeLessThan(64);
-      expect(scanned(plan, 'agent_handle')).toBeLessThan(64);
+      expect(scanned(plan, 'name_registry')).toBeLessThan(64);
       expect(scanned(plan, 'membership')).toBeLessThan(64);
       await client.query('ROLLBACK');
     } finally { client.release(); }

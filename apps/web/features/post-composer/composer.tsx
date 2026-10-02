@@ -499,6 +499,8 @@ export function PostComposer({
               />
             </div>
             <BodyEditor
+              actingSubject={actingSubject}
+              mediaTarget={draft.work?.id}
               compact
               className="min-h-40"
               label={words.body[locale]}

@@ -26,18 +26,18 @@ export const REALM_MEMBER_SEARCH_SQL = `WITH query AS MATERIALIZED (
       AND strpos(access.realm_member_search_key(p.display_name), q.text) > 0
     ORDER BY p.agent_id LIMIT $4)
   UNION
-  (SELECT h.agent_id AS member
-    FROM access.agent_handle h
-    JOIN access.authority_subject s ON s.id = h.agent_id AND s.active
+  (SELECT h.holder AS member
+    FROM access.name_registry h
+    JOIN access.authority_subject s ON s.id = h.holder AND s.active
     CROSS JOIN terms q
-    WHERE h.agent_id > $2 AND (EXISTS (SELECT 1 FROM access.membership m
-      WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = h.agent_id)
+    WHERE h.holder > $2 AND (EXISTS (SELECT 1 FROM access.membership m
+      WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject = h.holder)
       OR EXISTS (SELECT 1 FROM access.realm_admin_assignment a
-        WHERE a.realm = $1 AND a.member = h.agent_id AND a.valid_until > clock_timestamp()))
-      AND h.state = 'current'
-      AND access.realm_member_search_terms(access.realm_member_search_key(h.handle)) @> q.tokens
-      AND strpos(access.realm_member_search_key(h.handle), q.text) > 0
-    ORDER BY h.agent_id LIMIT $4)
+        WHERE a.realm = $1 AND a.member = h.holder AND a.valid_until > clock_timestamp()))
+      AND h.scope = 'agent' AND h.state = 'current'
+      AND access.realm_member_search_terms(access.realm_member_search_key(h.key)) @> q.tokens
+      AND strpos(access.realm_member_search_key(h.key), q.text) > 0
+    ORDER BY h.holder LIMIT $4)
   UNION
   (SELECT m.member_subject AS member FROM access.membership m
     WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject > $2

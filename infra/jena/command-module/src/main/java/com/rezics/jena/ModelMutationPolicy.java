@@ -71,6 +71,9 @@ final class ModelMutationPolicy {
         Set<String> dependentRevisions = new HashSet<>();
         int[] inboundQuads = { 0 };
         for (var entry : before.current().entrySet()) {
+            // Old address revisions are immutable historical records, imported
+            // to Access before this maintenance-only projection decommission.
+            if (nameProjectionRetired(data, receipt, entry.getKey(), entry.getValue())) continue;
             // Structure head, generation-count and Agent profile edits preserve the
             // resource type. Inbound links constrain that type, not the scalar fields;
             // validating each one would turn a bounded edit into a whole-graph scan.
@@ -105,6 +108,8 @@ final class ModelMutationPolicy {
         if (selected == null) return null;
         Node node = NodeFactory.createURI(name);
         if (!data.contains(before.graph(), node, RDF.type.asNode(), NodeFactory.createURI(selected.type()))) {
+            if (nameProjectionRetired(data, receipt, name, before))
+                return CanonicalPolicy.validate(profiles, data, name, false);
             if (agentCompensation(data, receipt, name, before))
                 return CanonicalPolicy.validate(profiles, data, name, false);
             return CommandService.invalid("prestate canonical type removed: " + name);
@@ -121,6 +126,20 @@ final class ModelMutationPolicy {
             return null;
         }
         return CanonicalPolicy.validateSelected(profiles, data, name, selected);
+    }
+
+    /** One maintenance-only decommission after Access imports the name. The
+     * former projection retains only a typed marker, never a key or holder. */
+    private static boolean nameProjectionRetired(DatasetGraph data, String receipt, String name, Subject before) {
+        if (!receipt.matches("urn:rezics:name-migration:[0-9a-f]{64}")
+            || !CommandPolicy.maintenanceReceipt(receipt) || !before.graph().equals(CURRENT)
+            || before.selection() == null || !before.selection().type().equals(RV + "RouteBinding")) return false;
+        var triples = data.find(CURRENT, NodeFactory.createURI(name), Node.ANY, Node.ANY);
+        if (!triples.hasNext()) return false;
+        var marker = triples.next();
+        return !triples.hasNext() && !data.find(CURRENT, Node.ANY, Node.ANY, NodeFactory.createURI(name)).hasNext()
+            && marker.getPredicate().equals(RDF.type.asNode())
+            && marker.getObject().equals(NodeFactory.createURI(RV + "RetiredNameProjection"));
     }
 
     /** Only a receipted release CAS may upgrade the frozen aggregate projection to entry coverage.

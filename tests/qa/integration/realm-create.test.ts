@@ -23,7 +23,7 @@ test('Community creation reserves one handle and filters the directory by global
       topics: [topic], capabilities: ['realm'], actingSubject: creator.actor };
     expect((await creator.send('POST', '/v1/spaces', { ...command, profile: 'space-realm-v1' })).status)
       .toBe(400);
-    const created = await json<{ realm: string; realmRevision: string; owner: string }>(
+    const created = await json<{ space: string; realm: string; realmRevision: string; owner: string }>(
       await creator.send('POST', '/v1/spaces', command), 201);
     expect(created.owner).toBe(creator.actor);
     expect((await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
@@ -33,8 +33,8 @@ test('Community creation reserves one handle and filters the directory by global
         rv:modelRevision <https://rezics.com/definition/space-realm-v3> ;
         rv:shapeRevision <https://rezics.com/definition/space-realm-v3> . }
     }`, 1024)).boolean).toBe(true);
-    expect(await json(await stack.call('GET', '/v1/realms/by-handle/fantasy-readers'), 200))
-      .toEqual({ realm: created.realm, handle: command.handle });
+    expect(await json(await stack.call('GET', '/v1/addresses/resolve?scope=space&key=fantasy-readers'), 200))
+      .toMatchObject({ holder: created.space,canonical: { key: command.handle },capabilities: { realm: created.realm } });
     const selected = await json<{ topic: { id: string; label: { value: string } };
       items: Array<{ id: string; handle: string | null }> }>(
       await stack.call('GET', `/v1/realms?topic=${encodeURIComponent(topic)}&language=zh-CN`), 200);
@@ -42,8 +42,8 @@ test('Community creation reserves one handle and filters the directory by global
     expect(selected.items).toMatchObject([{ id: created.realm, handle: 'fantasy-readers' }]);
     expect((await stack.call('GET', `/v1/realms?topic=${encodeURIComponent(
       `https://rezics.com/id/${randomUUID()}`)}`)).status).toBe(400);
-    expect((await creator.send('POST', '/v1/spaces', { ...command, name: 'Impersonator' })).status).toBe(400);
-    expect((await stack.call('GET', '/v1/realms/by-handle/missing-handle')).status).toBe(404);
+    expect((await creator.send('POST', '/v1/spaces', { ...command, name: 'Impersonator' })).status).toBe(409);
+    expect((await stack.call('GET', '/v1/addresses/resolve?scope=space&key=missing-handle')).status).toBe(404);
     const oldSpace = `https://rezics.com/id/${randomUUID()}`;
     const oldRealm = `https://rezics.com/id/${randomUUID()}`;
     const oldSpaceRevision = `https://rezics.com/id/${randomUUID()}`;

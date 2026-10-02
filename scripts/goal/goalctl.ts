@@ -366,7 +366,10 @@ export function launchCommand(options: { id: string; effort: string; session: st
       ...(resume ? ['--resume', session] : [])]];
   }
   if (isCodex(engine)) {
+    // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
+    const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
+      ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
     return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];
@@ -374,6 +377,12 @@ export function launchCommand(options: { id: string; effort: string; session: st
   return ['claude', ['-p', prompt, '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json']];
+}
+
+/** The manager switches Codex between `fast` and `default` by writing this state file (fast when absent). */
+function codexServiceTier(): string {
+  const file = join(stateDir, 'codex-service-tier');
+  return existsSync(file) ? readFileSync(file, 'utf8').trim() : 'fast';
 }
 
 /** Where a task's brief lives in its worktree; shared worktrees hold one brief per task. */
@@ -670,7 +679,10 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     if (existsSync(worktree) && !reuse) throw new Error(`${worktree} already exists; remove it or use another ID`);
     mkdirSync(join(stateDir, 'runs', brief.id), { recursive: true });
     if (!reuse) {
-      git(root, ['worktree', 'add', '-q', worktree, '-b', branch, 'main']);
+      // A shared branch outlives its worktree once its last task closes; reattach to it.
+      const branchExists = git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], true) !== '';
+      git(root, branchExists && brief.worktree !== undefined ? ['worktree', 'add', '-q', worktree, branch]
+        : ['worktree', 'add', '-q', worktree, '-b', branch, 'main']);
       const install = spawnSync('corepack', ['yarn', 'install', '--immutable'], { cwd: worktree, encoding: 'utf8' });
       writeFileSync(join(stateDir, 'runs', brief.id, 'install.log'), `${install.stdout}\n${install.stderr}`);
       if (install.status !== 0) throw new Error(`yarn install failed in ${worktree}; see runs/${brief.id}/install.log`);
@@ -1008,6 +1020,29 @@ export function prepareCompositionMerge(files: readonly { file: string; source: 
   return { files: normalized, fastForward: false, state: 'conflict', error: failures.join('\n  ') };
 }
 
+/**
+ * Migrations a branch adds that sort before a migration already on main. Fixture manifests refuse a
+ * migration inserted before applied ones, so such a branch must renumber before it merges.
+ */
+export function migrationsBelowMain(added: readonly string[], listMain: (directory: string) => string[]): string[] {
+  const late: string[] = [];
+  const byDirectory = new Map<string, string[]>();
+  for (const path of added) {
+    const match = /^(.*\/migrations\/[^/]+)\/(\d+)_[^/]+\.sql$/.exec(path);
+    if (match) byDirectory.set(match[1]!, [...byDirectory.get(match[1]!) ?? [], path]);
+  }
+  for (const [directory, paths] of byDirectory) {
+    const own = new Set(paths.map(path => path.slice(directory.length + 1)));
+    const highest = Math.max(0, ...listMain(directory).filter(name => !own.has(name))
+      .map(name => Number(/^(\d+)_/.exec(name)?.[1] ?? 0)));
+    for (const path of paths) {
+      const number = Number(/\/(\d+)_[^/]+\.sql$/.exec(path)![1]);
+      if (number <= highest) late.push(`${path} (main already has ${highest})`);
+    }
+  }
+  return late;
+}
+
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
@@ -1018,6 +1053,11 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
+    const early = migrationsBelowMain(committed, (directory) => git(root, ['ls-tree', '--name-only', 'main', `${directory}/`])
+      .split('\n').filter(Boolean).map(path => path.slice(directory.length + 1)));
+    if (early.length) {
+      throw new Error(`${task.id} adds migrations numbered below ones already on main; renumber them above:\n  ${early.join('\n  ')}`);
+    }
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
       task.mergedCommit = git(root, ['rev-parse', 'HEAD']);

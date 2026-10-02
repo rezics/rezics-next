@@ -67,11 +67,15 @@ VNDB exports. Both adapters reject entity declarations and enforce file-byte,
 list-entry and XML-depth budgets before retaining source fields; they perform
 no live tool pulls.
 
-## Local image screening
+## Local image classification
 
 Main pins NSFWJS 4.4.0 (MIT), TensorFlow.js 4.22.0 (Apache-2.0), Buffer 6.0.3
-(MIT) and sharp 0.35.5 (Apache-2.0). NSFWJS's bundled MobileNetV2 weights (MIT) keep
-inference local without a hosted model or native TensorFlow build. sharp uses
+(MIT) and sharp 0.35.5 (Apache-2.0). Web reuses the same NSFWJS, TensorFlow.js and
+Buffer pins for upload-time browser classification. NSFWJS's bundled MobileNetV2 weights (MIT) keep
+inference local without a hosted model or native TensorFlow build. Browser
+classification is loaded on demand and records versioned NSFW display evidence;
+it does not determine byte-delivery permission. The retained server worker is
+available for historical review and a later producer migration. sharp uses
 its prebuilt libvips adapter for the admitted raster formats; its redistributed
 libvips is [LGPL-3.0-or-later](https://github.com/lovell/sharp-libvips/blob/main/npm/linux-x64/package.json). The smoke test
 [`g-571-screen.test.ts`](../../services/main/tests/g-571-screen.test.ts) loads
@@ -197,7 +201,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @storybook/react-vite | 11.0.0-alpha.1 | apps/accounts, apps/web |
 | @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
 | @tanstack/react-query | 5.103.2 | apps/web |
-| @tensorflow/tfjs | 4.22.0 | services/main |
+| @tensorflow/tfjs | 4.22.0 | apps/web, services/main |
 | @tiptap/core | 3.31.4 | packages/ui |
 | @tiptap/extension-bubble-menu | 3.31.4 | packages/ui |
 | @tiptap/extension-image | 3.31.4 | packages/ui |
@@ -229,7 +233,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | axe-core | 4.13.0 | apps/about, apps/web |
 | better-auth | 1.7.5 | services/account, services/main |
 | better-call | 1.4.0 | services/account |
-| buffer | 6.0.3 | services/main |
+| buffer | 6.0.3 | apps/web, services/main |
 | dependency-cruiser | 18.4.0 | . |
 | drizzle-orm | 0.45.3 | services/content |
 | elysia | 2.0.0-beta.16 | apps/web, packages/observability, services/account, services/main |
@@ -248,7 +252,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
 | next | 16.3.6 | apps/accounts, apps/web |
 | nodemailer | 10.0.10 | services/account |
-| nsfwjs | 4.4.0 | services/main |
+| nsfwjs | 4.4.0 | apps/web, services/main |
 | nuqs | 2.10.1 | apps/web |
 | openapi-types | 12.1.3 | packages/observability, services/account, services/main |
 | oxfmt | 0.70.0 | . |

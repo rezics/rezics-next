@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
-import { briefFile, claimConflicts, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
+import { briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
   parseCodexUsage, pathsOverlap, prepareCompositionMerge, rangesOverlap, SONNET_MODEL, type Task, usageLevel,
   validateBrief } from './goalctl.ts';
 
@@ -41,6 +41,19 @@ describe('goalctl briefs', () => {
 
 describe('goalctl claims', () => {
   const parsed = parseBrief(brief);
+
+  test('a branch may not add migrations numbered below main', () => {
+    const main = () => ['985_a.sql', '1004_b.sql'];
+    expect(migrationsBelowMain(['services/main/migrations/access/990_x.sql'], main))
+      .toEqual(['services/main/migrations/access/990_x.sql (main already has 1004)']);
+    expect(migrationsBelowMain(['services/main/migrations/access/1010_x.sql', 'apps/web/a.ts'], main)).toEqual([]);
+  });
+
+  test('Codex workers run on the fast service tier by default', () => {
+    const [, args] = launchCommand({ id: 'G-950', effort: 'high', session: '', prompt: 'p', engine: 'codex',
+      worktree: '/w' } as Parameters<typeof launchCommand>[0]);
+    expect(args.join(' ')).toContain('service_tier="fast"');
+  });
 
   test('a brief may name a shared worktree; its brief file is per task', () => {
     const brief = parseBrief('---\nid: G-950\ntitle: t\neffort: high\nengine: codex\nworktree: wave-9\npaths: [a/**]\n---\n');

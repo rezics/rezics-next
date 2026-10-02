@@ -8,6 +8,7 @@ import { BookOpenIcon, CookingPotIcon, DownloadIcon, MessageCircleIcon, PlusIcon
   from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { CopyTextButton } from '../catalogue/copy-button.tsx';
@@ -56,7 +57,7 @@ function PickSlide({ banner, work, locale, messages, avatarQuery }: {
   const title = workTitle(work, messages);
   return <article className="relative isolate flex h-full overflow-hidden rounded-(--zone-radius-card) bg-card
     ring-1 ring-border/50">
-    {work.cover ? <img aria-hidden="true" alt="" src={work.cover.url} className="absolute inset-0 -z-20 size-full
+    {work.cover ? <WebMediaImage revealable={false} aria-hidden="true" alt="" src={work.cover.url} className="absolute inset-0 -z-20 size-full
       scale-125 object-cover opacity-60 blur-2xl" />
       : <span aria-hidden="true" className="absolute inset-0 -z-20 bg-[radial-gradient(120%_90%_at_0%_0%,var(--zone-accent),transparent_60%)]
         opacity-25" />}
@@ -85,7 +86,7 @@ function PickSlide({ banner, work, locale, messages, avatarQuery }: {
 function BannerSlide({ banner }: { banner: ZoneBanner }) {
   return <LocalizedLink href={banner.href} className="group relative block aspect-[1.9] h-full w-full overflow-hidden
     rounded-(--zone-radius-card) bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring">
-    {banner.image ? <img src={banner.image.url} alt="" width={banner.image.width} height={banner.image.height}
+    {banner.image ? <WebMediaImage revealable={false} src={banner.image.url} alt="" width={banner.image.width} height={banner.image.height}
       className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.02]
         motion-reduce:transition-none" /> : null}
     <span className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/75 via-black/35 to-transparent px-4 pt-10
@@ -281,7 +282,7 @@ export function PeopleModule({ module, data, messages }: ModuleProps<'people'>) 
       {data.items.map(person => <li key={person.id}>
         <LocalizedLink href={person.href} className="flex items-center gap-3 rounded-lg p-1.5 outline-none
           hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
-          {person.avatar ? <img src={person.avatar.url} alt="" className="size-9 rounded-full object-cover" />
+          {person.avatar ? <WebMediaImage revealable={false} src={person.avatar.url} alt="" className="size-9 rounded-full object-cover" />
             : <span aria-hidden="true" className="grid size-9 place-items-center rounded-full bg-accent font-semibold
               text-accent-foreground">{initials(person.name.value)}</span>}
           <span className="min-w-0">

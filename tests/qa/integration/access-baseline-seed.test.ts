@@ -22,6 +22,7 @@ import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { accountEmailQueue, smtpSender } from '../../../services/account/src/email.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
@@ -125,7 +126,7 @@ test.each(['member', 'administrator'] as const)(
     });
     await objects.initialize();
     const app = createMainApp(h.fuseki, {
-      environment: h.env,
+      environment: { ...h.env,addresses: new NameRegistry(h.accessPool) },
       account,
       access,
       profiles: new ProfilesAccess(h.accessPool),

@@ -67,7 +67,7 @@ export async function currentIntrospection(pool: Pool, presented: string | null,
         ? await readContentPreferences(client, payload.sub) : undefined;
       const contentEvidence = preferences ? { age: preferences.age, country: preferences.country,
         accountEligible: preferences.accountEligible, adultAvailable: preferences.adultAvailable,
-        categories: preferences.categories } : undefined;
+        categories: preferences.categories, nsfwDisplay: preferences.nsfwDisplay } : undefined;
       await client.query('COMMIT');
       committed = true;
       return active && contentEvidence?.accountEligible !== false ? Response.json({ ...payload, email_verified: verified,

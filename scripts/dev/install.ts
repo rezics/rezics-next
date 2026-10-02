@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
+import { Client,Pool } from 'pg';
+import { NameRegistry } from '../../services/main/src/modules/address/registry.ts';
+import { migrateGraphNames } from '../../services/main/src/modules/address/migrate.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../../services/main/src/modules/work/restore-lineage.ts';
@@ -154,6 +156,11 @@ export async function installRelease(options: StackOptions,
   const initialized = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch ?epoch } }`);
   if (!initialized.boolean) await initializeFreshGraph(fuseki, lineage);
   await assertGraphAdmissionOpen(fuseki, lineage);
+  const namePool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
+  try { await migrateGraphNames({ fuseki,lineage,addresses: new NameRegistry(namePool),
+    objectDirectory: apps.MAIN_OBJECT_DIRECTORY! }); }
+  catch (error) { console.warn('Name import deferred; identity addresses remain available',error); }
+  finally { await namePool.end(); }
   for (const [key, database] of [
     ['ACCOUNT_DATABASE_URL', 'account'], ['ACCESS_DATABASE_URL', 'access'],
     ['CONTENT_DATABASE_URL', 'content'], ['ACCOUNT_RELAY_DATABASE_URL', 'relay'],

@@ -34,10 +34,10 @@ test('exact Decision applies the public relation and denies absent or ambiguous 
 test('Realm Zone resolution returns the stored presentation only for its own public Realm', async () => {
   const session = { options: {}, position: { dataEpoch: 'epoch', sequence: '8' },
     realm: async () => basis, deps: { environment: {} },
-    query: async () => [{ zone: row(zone), segment: row('fiction') }],
+    query: async () => [{ zone: row(zone), official: row('true') }],
   } as unknown as WorkReadSession;
   const publication = { zone, realm, space: basis.space, official: 'fiction', revision: decision,
-    presentation: DEFAULT_ZONE_PRESENTATION, disclosure: 'public' };
+    presentation: DEFAULT_ZONE_PRESENTATION, disclosure: 'public',storedDisclosure:'public',listing:'listed',discovery:'listed' };
   expect(await readRealmZone(session, realm, async () => publication as never)).toMatchObject({
     profile: 'realm-zone-v1', zone, realm, routeSegment: 'fiction',
     presentationUrl: '/v1/zones/00000000-0000-4000-8000-000000000002/presentation' });

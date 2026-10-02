@@ -1,7 +1,7 @@
 'use client';
 
 import { WorkCover } from '@rezics/ui/work-cover';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { coverImage, coverKindOf } from '../catalogue/work.ts';
 import type { WorkCover as MainCover } from '../discover/types.ts';
 
@@ -19,13 +19,7 @@ export function StudioCover({ id, title, cover, types, authors, actingSubject, s
 }) {
   const image = coverImage(cover, `?actingSubject=${encodeURIComponent(actingSubject)}`);
   const [failed, setFailed] = useState<string | null>(null);
-  useEffect(() => {
-    if (!image) return;
-    const probe = new Image();
-    probe.onerror = () => setFailed(image.src);
-    probe.src = image.src;
-    return () => { probe.onerror = null; };
-  }, [image?.src]);
   return <WorkCover title={title.value} lang={title.language} kind={coverKindOf(types)} id={id} authors={authors} size={size}
-    image={image && failed !== image.src ? image : null} loading={loading} className={className} />;
+    image={image && failed !== image.src ? image : null} loading={loading} className={className}
+    revealable onImageError={() => { if (image) setFailed(image.src); }} />;
 }

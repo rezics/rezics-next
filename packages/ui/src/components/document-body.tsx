@@ -3,6 +3,7 @@ import { Fragment, useId, type ComponentProps, type CSSProperties, type ReactNod
 import { cn } from '../utils.ts';
 import { safeDocumentUrl } from './document-url.tsx';
 import { DocumentSpoiler } from './document-spoiler.tsx';
+import { MediaImage } from './media-image.tsx';
 
 export interface DocumentBodyProps extends Omit<ComponentProps<'div'>, 'children'> {
   document: DocumentSnapshot;
@@ -265,8 +266,11 @@ export function DocumentBody({
         return (
           <figure {...shared}>
             {src ? (
-              <img
+              <MediaImage
                 src={src}
+                representationId={string(attrs.representationId)}
+                mediaUseId={string(attrs.mediaUseId)}
+                conceal={attrs.conceal === true}
                 alt={string(attrs.alt) ?? ''}
                 title={string(attrs.title)}
                 width={typeof attrs.width === 'number' ? attrs.width : undefined}

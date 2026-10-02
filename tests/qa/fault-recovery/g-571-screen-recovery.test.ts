@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { png, startMediaStack, type MediaStack } from '../integration/media-support.ts';
-import { benign, clearQueued, flagged, screening } from '../integration/g-571-screen-support.ts';
+import { benign, clearQueued, flagged, screening, seedHistoricalScreen } from '../integration/g-571-screen-support.ts';
 import { screenVerdict } from '../../../services/main/src/modules/media-screen/policy.ts';
 import { MediaScreenWorker } from '../../../services/main/src/modules/media-screen/worker.ts';
 
@@ -8,11 +8,12 @@ let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('g-571-screen-recovery', { autoClearUploads: false });
 afterAll(async () => { if (started) await (await started).stop(); });
 
-test('G571: a lease lost mid-screen is re-leased; stale/expired tokens settle no result or receipt', async () => {
+test('G571: a historical lease lost mid-screen is re-leased; stale/expired tokens settle no result or receipt', async () => {
   const s = await stack();
   await clearQueued(s);
   const owner = await s.member('lease-loss');
   const image = await owner.upload(png(40, 40));
+  await seedHistoricalScreen(s, image.representation);
   const { store } = screening(s);
   const old = (await store.leaseNext(1))!;
   expect(old.source).toBe(image.representation);
@@ -31,11 +32,12 @@ test('G571: a lease lost mid-screen is re-leased; stale/expired tokens settle no
     [`media-screen:${old.job}`])).rows[0].n).toBe(1);
 }, 180_000);
 
-test('G571: concurrent leasing runs one screen; deletion and erasure fence in-flight results', async () => {
+test('G571: concurrent historical leasing runs one screen; deletion and erasure fence in-flight results', async () => {
   const s = await stack();
   await clearQueued(s);
   const owner = await s.member('epoch-loss');
   const image = await owner.upload(png(41, 41));
+  await seedHistoricalScreen(s, image.representation);
   const { store } = screening(s);
   const leases = await Promise.all([store.leaseNext(), store.leaseNext()]);
   expect(leases.filter(Boolean)).toHaveLength(1);
@@ -46,14 +48,15 @@ test('G571: concurrent leasing runs one screen; deletion and erasure fence in-fl
   expect(removed.status).toBe(201);
   expect(await store.settle(lease, screenVerdict(benign))).toBe(false);
   expect((await s.contentPool.query('SELECT 1 FROM media.screen_result WHERE source_id = $1', [image.representation])).rowCount).toBe(0);
-  expect((await s.store.readUpload(image.upload))?.clearance).toBe('screening');
+  expect((await s.store.readUpload(image.upload))?.clearance).toBe('cleared');
 }, 180_000);
 
-test('G571: governance outage holds bytes, survives a lost case response, and reconciles exactly once', async () => {
+test('G571: historical case retry survives a lost response without blocking image delivery', async () => {
   const s = await stack();
   await clearQueued(s);
   const owner = await s.member('case-loss');
   const image = await owner.upload(png(42, 42));
+  await seedHistoricalScreen(s, image.representation);
   const { store, cases } = screening(s);
   let lost = true;
   const worker = new MediaScreenWorker(store, { classify: async () => flagged }, s.objects, {
@@ -64,7 +67,7 @@ test('G571: governance outage holds bytes, survives a lost case response, and re
     },
   });
   await worker.tick();
-  expect((await s.store.readUpload(image.upload))?.clearance).toBe('held');
+  expect((await s.store.readUpload(image.upload))?.clearance).toBe('cleared');
   const row = (await s.contentPool.query('SELECT j.id, q.case_id FROM media.transform_job j JOIN media.screen_review q ON q.job_id = j.id WHERE j.source_id = $1',
     [image.representation])).rows[0]!;
   expect(row.case_id).toBeNull();
@@ -75,21 +78,23 @@ test('G571: governance outage holds bytes, survives a lost case response, and re
   expect((await s.accessPool.query('SELECT count(*)::int AS n FROM access.governance_report WHERE id = $1', [row.id])).rows[0].n).toBe(1);
 
   const unavailable = await owner.upload(png(43, 43));
+  await seedHistoricalScreen(s, unavailable.representation);
   await s.accessPool.query("UPDATE access.scope_gate SET open = false WHERE id = 'governance:platform'");
   try {
     const outage = screening(s, { classify: async () => { throw new Error('classifier outage'); } });
     await outage.worker.tick();
-    expect((await s.store.readUpload(unavailable.upload))?.clearance).toBe('held');
+    expect((await s.store.readUpload(unavailable.upload))?.clearance).toBe('cleared');
     expect((await s.accessPool.query('SELECT 1 FROM access.governance_case WHERE target_resource = $1',
       [`https://rezics.com/id/${unavailable.asset}`])).rowCount).toBe(0);
   } finally { await s.accessPool.query("UPDATE access.scope_gate SET open = true WHERE id = 'governance:platform'"); }
 }, 180_000);
 
-test('G571: repeated crashes exhaust at sixteen leases and hold for review; obsolete jobs leave the ready queue', async () => {
+test('G571: historical crashes exhaust at sixteen leases with retained unknown evidence; obsolete jobs leave the ready queue', async () => {
   const s = await stack();
   await clearQueued(s);
   const owner = await s.member('exhausted');
   const image = await owner.upload(png(44, 44));
+  await seedHistoricalScreen(s, image.representation);
   const { store, worker } = screening(s);
   for (let attempt = 1; attempt <= 16; attempt++) {
     const lease = (await store.leaseNext(1))!;
@@ -98,7 +103,7 @@ test('G571: repeated crashes exhaust at sixteen leases and hold for review; obso
   }
   expect(await store.leaseNext()).toBeNull();
   await worker.tick();
-  expect((await s.store.readUpload(image.upload))).toMatchObject({ clearance: 'held', clearanceReason: 'screen-unavailable' });
+  expect((await s.store.readUpload(image.upload))).toMatchObject({ clearance: 'cleared', clearanceReason: null });
   expect((await s.contentPool.query('SELECT status FROM media.transform_job WHERE source_id = $1', [image.representation])).rows[0].status).toBe('failed');
   await store.cancelObsolete();
   const stale = await s.contentPool.query(`SELECT 1 FROM media.transform_job j JOIN media.asset a ON a.id = j.asset_id

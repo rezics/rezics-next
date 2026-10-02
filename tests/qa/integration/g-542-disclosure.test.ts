@@ -216,7 +216,7 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         const log = openSync(resolve(directory, 'web.log'), 'w', 0o600);
         try {
           web = spawn('task', ['web:dev', '--', '--hostname', '127.0.0.1', '--port', String(webPort)], { cwd: resolve('.'), detached: true,
-            env: { ...Bun.env, MAIN_ORIGIN: `http://127.0.0.1:${server.port}`,
+            env: { ...Bun.env, VINEXT_NO_DEV_LOCK: '1', MAIN_ORIGIN: `http://127.0.0.1:${server.port}`,
               ACCOUNT_ORIGIN: f.account.issuer.replace(/\/api\/auth$/, ''), NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' },
             stdio: ['ignore', log, log] });
         } finally { closeSync(log); }
@@ -271,17 +271,20 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         revision = assessment.assessment.revision;
         for (const channel of DISCLOSURE_CHANNELS) {
           for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer(principal)]) {
-            expect((await disclose(f.env, [target], viewer, channel))[0]).not.toBe('visible');
+            const decision = (await disclose(f.env, [target], viewer, channel))[0];
+            if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap'].includes(channel)) {
+              expect(decision).not.toBe('visible');
+            } else expect(decision).toBe('visible');
           }
         }
         const sendsBefore = sent.length, notice = await enqueue(target);
-        expect((await notifications.unreadCount(principal)).count).toBe(0);
-        expect((await notifications.readStream(principal, null)).items.find(item => item.id === notice.itemId)?.subject).toBeNull();
+        expect((await notifications.unreadCount(principal)).count).toBe(1);
+        expect((await notifications.readStream(principal, null)).items.find(item => item.id === notice.itemId)?.subject).not.toBeNull();
         expect((await dispatcher.runOnce()).cancelled).toBe(2);
         expect(sent.length).toBe(sendsBefore);
         await notifications.markItemRead(principal, notice.itemId);
         if (target.owner === 'graph') {
-          expect((await publicRead()).status).toBe(404);
+          expect((await publicRead()).status).toBe(200);
           expect((await preview()).status).toBe(404);
           expect((await sitemap()).entries.some(entry => entry.reference === work.work)).toBe(false);
         }

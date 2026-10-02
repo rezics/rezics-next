@@ -70,6 +70,7 @@ export function TextEditor({ agent, work, language, text, initial, locale, messa
   const [publishing, setPublishing] = useState(false);
   const [publicationHead, setPublicationHead] = useState(initial.publicationHead);
   return <ManuscriptEditor store={store} language={language} direction={directionOf(language)}
+    actingSubject={agent.iri} mediaTarget={work.id}
     back={{ href: workHref(agent, work.id, 'text'), label: t.backToWork, title: work.title }}
     context={[languageName(language, locale), `${t.writingAs} ${studioAgentName(agent, t)}`].join(' · ')}
     title={work.title} initial={initial} label={t.textLabel} locale={locale} messages={messages} delay={delay}

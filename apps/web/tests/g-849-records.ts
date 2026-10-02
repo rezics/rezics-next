@@ -176,7 +176,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
 
   // The Zone, from the starter manifest: a Collection and a mount for each of its lists.
   await holder.grant('space:create:root', 'space.create');
-  const space = await json<{ space: string; realm: string }>(await wiki('POST', '/v1/spaces', { profile: 'space-realm-v1',
+  const space = await json<{ space: string; realm: string }>(await wiki('POST', '/v1/spaces', { profile: 'space-realm-v2',handle: spec.routeSegment,
     name: spec.name, capabilities: ['realm'], actingSubject: holder.actor }), 201);
   const zone = id();
   await holder.grant(`zone:edit:${zone}`, 'zone.edit'); await holder.grant(`semantic:read:${zone}`, 'semantic.read');
@@ -298,7 +298,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
     approvalExpiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), actingSubject: holder.actor });
   const current = await json<{ revision: string }>(await wiki('GET', `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(holder.actor)}`));
   await post(`/v1/zones/${short(zone)}/configuration`, { expectedHead: current.revision, actingSubject: holder.actor,
-    name: spec.name, language: spec.language, defaultRealm: space.realm, official: { routeSegment: spec.routeSegment },
+    name: spec.name, language: spec.language, defaultRealm: space.realm, official: {},
     presentation: { profile: 'zone-presentation-v1', preset: spec.preset, tokens: ZONE_PRESETS[spec.preset],
       navigation: spec.navigation, banners: [], official: { theme },
       modules: [{ id: 'works', type: 'shelf', title: 'Works', source: { kind: 'collection', collection: collections.franchise! },

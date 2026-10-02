@@ -56,6 +56,7 @@ test('resource summary batch schema identifies available cards and unavailable r
   const response = { profile: 'resource-summary-batch-v1', complete: true,
     summaries: [{ reference: work(1), status: 'available', type: 'work', disclosure: 'public',
       base: 'work', work: work(1),
+      address: { prefix: '/w/',key: 'book',slugSource: 'Book' },
       name: { value: 'Book', language: 'en', direction: 'ltr', basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: work(1), resourceType: 'work' } },
     { reference: work(2), status: 'unavailable' }],

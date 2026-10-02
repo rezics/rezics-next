@@ -184,7 +184,7 @@ export async function seedZones(stack: Stack, reader: { principalId: string; act
     const read = await request('GET', `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(zoneActor)}`);
     if (read.status !== 200) throw new Error(`zone configuration: ${read.status} ${JSON.stringify(read.body)}`);
     return read.body as { revision: string; name: string; language: string;
-      configuration: { defaultRealm: string | null; official: { routeSegment: string } | null; presentation: object } };
+      configuration: { defaultRealm: string | null; official: Record<string,never> | null; presentation: object } };
   };
   for (const [slug, record, slots] of [['visual-novels', visual, ['footer', 'workCard']],
     ['light-novels', light, ['footer', 'workCard', 'module:shelf', 'index']]] as const) {

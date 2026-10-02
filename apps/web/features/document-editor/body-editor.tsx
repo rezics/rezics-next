@@ -7,14 +7,18 @@ import {
   parseDocument,
   parseStoredDocument,
   serializeDocument,
+  type DocumentSnapshot,
 } from '@rezics/document';
 import { Button } from '@rezics/ui/button';
 import { RichTextEditor, type RichTextEditorProps } from '@rezics/ui/rich-text-editor';
 import { DownloadIcon, UploadIcon } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localImageUpload } from './local-image.ts';
+import { storedImageLabelEditor, storedImageUpload } from './local-image.ts';
 import { messages } from './messages.ts';
+import { imageUseReconciler } from './image-uses.ts';
+import { resolveMediaMetadata } from '../api/media-metadata.ts';
+import type { ImageMetadataResolver } from '@rezics/ui/media-image';
 
 export interface BodyEditorProps extends Omit<
   RichTextEditorProps,
@@ -29,6 +33,8 @@ export interface BodyEditorProps extends Omit<
   placeholderDirection?: 'ltr' | 'rtl';
   /** Studio opens with the complete toolbar and can return to contextual controls; discussion writing uses contextual controls only. */
   allowAdvanced?: boolean;
+  actingSubject?: string;
+  mediaTarget?: string;
 }
 
 /** UI-owned drafts serialize the portable snapshot; API adapters send it as an explicit document. */
@@ -42,9 +48,15 @@ export function BodyEditor({
   disabled,
   placeholderDirection = 'ltr',
   allowAdvanced = false,
+  actingSubject,
+  mediaTarget,
   ...props
 }: BodyEditorProps) {
   const t = messages[locale];
+  const uploadImage = useMemo(() => actingSubject && mediaTarget ? storedImageUpload(actingSubject, mediaTarget) : undefined, [actingSubject, mediaTarget]);
+  const editImageLabels = useMemo(() => actingSubject ? storedImageLabelEditor(actingSubject) : undefined, [actingSubject]);
+  const resolveImages = useMemo<ImageMetadataResolver | undefined>(() => actingSubject
+    ? references => resolveMediaMetadata(references, actingSubject) : undefined, [actingSubject]);
   const document = useMemo(() => {
     const source =
       parseStoredDocument(value) ??
@@ -55,6 +67,23 @@ export function BodyEditor({
   }, [value, legacyMarkdown]);
   const upload = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const sequence = useRef(0);
+  const initialDocument = useRef(document);
+  const reconcile = useMemo(() => actingSubject && mediaTarget
+    ? imageUseReconciler(initialDocument.current, actingSubject, mediaTarget) : undefined, [actingSubject, mediaTarget]);
+  useEffect(() => { sequence.current++; }, [value, actingSubject, mediaTarget]);
+  async function publish(next: DocumentSnapshot, imported = false) {
+    const current = ++sequence.current;
+    try {
+      const bound = reconcile ? await reconcile(next, imported) : next;
+      if (sequence.current !== current) return;
+      onChange(serializeDocument(bound));
+      setError(false); setImageError(false);
+    } catch {
+      if (sequence.current === current) setImageError(true);
+    }
+  }
   // Long-form writing starts with the complete toolbar; discussion composers never show it.
   const [advanced, setAdvanced] = useState(allowAdvanced);
 
@@ -77,7 +106,7 @@ export function BodyEditor({
           : fromPlainText(text, 'blocks');
       if (props.maxLength && documentText(next).length > props.maxLength)
         throw new Error('Text too long');
-      onChange(serializeDocument(next));
+      await publish(next, true);
       setError(false);
     } catch {
       setError(true);
@@ -103,16 +132,16 @@ export function BodyEditor({
       <RichTextEditor
         {...props}
         value={document}
-        onChange={(next) => {
-          onChange(serializeDocument(next));
-          setError(false);
-        }}
+        onChange={(next) => { void publish(next); }}
         labels={t}
         compact={compact}
         readOnly={readOnly}
         disabled={disabled}
         toolbarMode={advanced ? 'full' : 'contextual'}
-        onUploadImage={localImageUpload}
+        onUploadImage={props.onUploadImage ?? uploadImage}
+        onEditImageLabels={props.onEditImageLabels ?? editImageLabels}
+        resolveImageMetadata={props.resolveImageMetadata ?? resolveImages}
+        imageMetadataScope={props.imageMetadataScope ?? actingSubject}
         onSnapshotError={() => setError(true)}
       />
       {allowAdvanced && advanced ? (
@@ -165,6 +194,7 @@ export function BodyEditor({
           {t.invalidDocument}
         </p>
       ) : null}
+      {imageError ? <p role="alert" className="text-destructive-foreground text-sm">{t.documentError}</p> : null}
     </div>
   );
 }

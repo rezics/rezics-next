@@ -43,17 +43,16 @@ export async function readRealmDirectory(session: WorkReadSession,
   const index = session.deps.access.realmDirectory;
   if (!index) throw new WorkReadUnavailable('Realm directory index is unavailable');
   const page = await index.page(session, { sort: input.sort, q: query, topic: input.topic });
-  const modes = page.rows.length ? await session.query(`SELECT ?realm ?mode ?handle WHERE {
+  const modes = page.rows.length ? await session.query(`SELECT ?realm ?mode WHERE {
     VALUES ?realm { ${page.rows.map(row => iri(row.realm)).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm .
-      OPTIONAL { ?realm rv:reviewMode ?mode }
-      OPTIONAL { ?realm rv:communityHandle ?handle } }
+      OPTIONAL { ?realm rv:reviewMode ?mode } }
   } LIMIT ${page.rows.length + 1}`, page.rows.length + 1) : [];
   if (modes.length !== page.rows.length || new Set(modes.map(row => row.realm?.value)).size !== modes.length) {
     throw new WorkReadMoved('Realm review policy changed');
   }
   const modeByRealm = new Map(modes.map(row => [row.realm!.value, row.mode?.value ?? 'mandatory']));
-  const handleByRealm = new Map(modes.map(row => [row.realm!.value, row.handle?.value ?? null]));
+  const names = await session.deps.environment.addresses?.currents(page.rows.map(row => row.space)).catch(() => new Map());
   if ([...modeByRealm.values()].some(mode => !['mandatory', 'trusted-members', 'open'].includes(mode))) {
     throw new WorkReadUnavailable('Realm review policy is invalid');
   }
@@ -74,7 +73,7 @@ export async function readRealmDirectory(session: WorkReadSession,
         ? summary.avatar : fallbackAvatar('realm', candidate.realm)
       : profile ? fallbackAvatar('realm', candidate.realm) : summary.avatar;
     return { id: candidate.realm, space: candidate.space,
-      handle: handleByRealm.get(candidate.realm) ?? null,
+      handle: names?.get(`space\0${candidate.space}`)?.key ?? null,
       reviewMode: modeByRealm.get(candidate.realm)! as Item['reviewMode'],
       name: profile ? localized(profile, session.displayLanguages, 'name') : summary.name,
       icon, description: profile ? localized(profile, session.displayLanguages, 'description') : null,

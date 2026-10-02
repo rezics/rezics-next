@@ -1,6 +1,7 @@
 import { initials } from '@rezics/ui/avatar-initials';
 import { cn } from '@rezics/ui/utils';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 
 type Icon = { kind: 'fallback'; key: string } | { kind: 'image'; url: string } | null;
 
@@ -26,7 +27,7 @@ export function CommunityIcon({ icon, name, size = 'sm', avatarQuery = '', perso
   const frame = cn('grid shrink-0 place-items-center overflow-hidden rounded-full font-semibold',
     size === 'xs' ? 'size-5 text-[10px]' : size === 'sm' ? 'size-6 text-xs' : 'size-9 text-sm', className);
   if (icon?.kind === 'image') {
-    return <img src={`${BFF_PREFIX}${icon.url}${avatarQuery}`} alt="" loading="lazy" decoding="async"
+    return <WebMediaImage revealable={false} src={`${BFF_PREFIX}${icon.url}${avatarQuery}`} alt="" loading="lazy" decoding="async"
       className={cn(frame, 'bg-muted object-cover')} />;
   }
   const initial = person ? initials(name, '·') : name.match(/[\p{L}\p{N}]/u)?.[0]?.toLocaleUpperCase() ?? '·';

@@ -5,6 +5,7 @@ import { cn } from '@rezics/ui/utils';
 import { LockIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 import { entryLabel } from '../catalogue/types.ts';
 import type { Copy } from './messages.ts';
 import type { EntityProjection } from './types.ts';
@@ -15,16 +16,16 @@ type Summary = Extract<EntityProjection['summary'], { status: 'available' }>;
  * The resource's avatar: its picture when one is selected, else the initials of
  * its name on the accent surface. Squares for everything that is not a person.
  */
-export function EntityAvatar({ summary, avatarQuery = '', className }: {
-  summary: Summary; avatarQuery?: string; className?: string;
+export function EntityAvatar({ summary, avatarQuery = '', className, revealable = false }: {
+  summary: Summary; avatarQuery?: string; className?: string; revealable?: boolean;
 }) {
   const avatar = summary.avatar;
   const src = avatar.kind === 'image' && avatar.url.startsWith('/v1/media/')
     ? `${BFF_PREFIX}${avatar.url}${avatarQuery}` : null;
   return <span className={cn('relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-[22%] bg-accent',
-    'text-accent-foreground after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-foreground/8',
+    'text-accent-foreground after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-foreground/8',
     'sm:size-20', className)}>
-    {src ? <img src={src} alt="" className="size-full object-cover" />
+    {src ? <WebMediaImage revealable={revealable} compact src={src} alt="" className="size-full object-cover" />
       : <span aria-hidden="true" className="font-semibold font-work-title text-2xl leading-none sm:text-3xl">
         {initials(summary.name.value)}</span>}
   </span>;
@@ -39,7 +40,7 @@ export function EntityHeader({ summary, registry, avatarQuery, locale, t }: {
   summary: Summary; registry: EntityProjection['registry']; avatarQuery?: string; locale: UiLocale; t: Copy;
 }) {
   return <header className="flex min-w-0 items-center gap-4 border-border/60 border-b pb-6">
-    <EntityAvatar summary={summary} avatarQuery={avatarQuery} />
+    <EntityAvatar revealable summary={summary} avatarQuery={avatarQuery} />
     <div className="grid min-w-0 gap-1.5">
       <p className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
         <span data-entity-type>{entryLabel(registry, locale)}</span>

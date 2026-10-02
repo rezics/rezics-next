@@ -51,7 +51,7 @@ function storage() {
   }, queries: () => ownerQueries };
 }
 
-test('G-542: every channel combines the same removal and suitability batch for five owner grains', async () => {
+test('G-542: governance applies to every channel; interactive reads leave ratings to the client', async () => {
   const s = storage(), reader = new DisclosureStore(s.pool);
   const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { general: true, r15: true, sexual: true, grotesque: true } };
   for (const channel of DISCLOSURE_CHANNELS) {
@@ -65,7 +65,10 @@ test('G-542: every channel combines the same removal and suitability batch for f
     for (const labels of [['r18'], ['r18g'], ['r18', 'r18g']] as Labels[]) {
       s.set({ labels: [labels] });
       for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer({ issuer: 'account', subject: 'reader' })]) {
-        expect((await reader.read(fixtures, viewer, channel)).every(decision => decision !== 'visible')).toBe(true);
+        const decisions = await reader.read(fixtures, viewer, channel);
+        if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap'].includes(channel)) {
+          expect(decisions.every(decision => decision !== 'visible')).toBe(true);
+        } else expect(decisions).toEqual(fixtures.map(() => 'visible'));
       }
       if (['email', 'push', 'digest', 'preview', 'seo', 'sitemap'].includes(channel)) {
         expect((await reader.read(fixtures, adult, channel)).every(decision => decision !== 'visible')).toBe(true);
@@ -211,12 +214,12 @@ test('G-542: asset adapters and export manifests discard all denied payload and 
   expect(omitted.residuals.some(loss => loss.memberOrdinal === 1 && loss.kind === 'private_dependency')).toBe(true);
   expect(omitted.completeness).toBe('partial');
   s.set({ restricted: false, labels: [['r18g']] });
-  expect(await avatar()).toBeNull();
-  expect(await delivery()).toBeNull();
-  expect(await item()).toBeNull();
-  expect(JSON.stringify(await discloseExportPlan(env, plan, ANONYMOUS_VIEWER))).not.toContain('Secret');
+  expect(await avatar()).toBe(asset);
+  expect(await delivery()).toBe(asset);
+  expect(await item()).toBe(asset);
+  expect(await discloseExportPlan(env, plan, ANONYMOUS_VIEWER)).toBe(plan);
   const incomplete = disclosureMedia({ itemDelivery: async () => ({ target: id(1) }) } as unknown as MediaStore, env);
-  expect(await incomplete.itemDelivery(id(12).slice(-36))).toBeNull();
+  expect(await incomplete.itemDelivery(id(12).slice(-36))).toMatchObject({ target: id(1) });
   s.set({ labels: [] });
   expect(await incomplete.itemDelivery(id(12).slice(-36))).toMatchObject({ target: id(1) });
 });

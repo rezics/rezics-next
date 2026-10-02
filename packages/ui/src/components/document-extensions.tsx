@@ -1,5 +1,5 @@
 import { Extension, Mark, mergeAttributes, Node } from '@tiptap/core';
-import Image from '@tiptap/extension-image';
+import Image, { type ImageOptions } from '@tiptap/extension-image';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TableKit } from '@tiptap/extension-table';
@@ -9,6 +9,8 @@ import UniqueID from '@tiptap/extension-unique-id';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
+import { ReactNodeViewRenderer } from '@tiptap/react';
+import { EditorImageView, type ImageLabelEditor } from './editor-image-view.tsx';
 import { safeDocumentUrl } from './document-url.tsx';
 
 const blockTypes = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem',
@@ -79,12 +81,21 @@ const Ruby = Node.create({
   },
 });
 
-const SafeImage = Image.extend({
-  renderHTML({ HTMLAttributes }) {
+const SafeImage = Image.extend<ImageOptions & { onEditImageLabels?: ImageLabelEditor }>({
+  addOptions() { return { inline: false, allowBase64: false, HTMLAttributes: {}, resize: false, ...this.parent?.(), onEditImageLabels: undefined }; },
+  addAttributes() { return { ...this.parent?.(),
+    representationId: { default: null, rendered: false, parseHTML: element => element.getAttribute('data-representation-id') },
+    mediaUseId: { default: null, rendered: false, parseHTML: element => element.getAttribute('data-media-use-id') },
+    conceal: { default: false, rendered: false, parseHTML: element => element.getAttribute('data-conceal') === 'true' },
+  }; },
+  addNodeView() { return ReactNodeViewRenderer(EditorImageView); },
+  renderHTML({ node, HTMLAttributes }) {
     const src = safeDocumentUrl(HTMLAttributes.src, true);
     if (!src) return ['span', { 'data-image-unavailable': '' }, String(HTMLAttributes.alt ?? '')];
     // An image without a description is decorative to assistive technology, not unlabelled.
-    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src, alt: HTMLAttributes.alt ?? '', referrerpolicy: 'no-referrer' })];
+    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src, alt: HTMLAttributes.alt ?? '', referrerpolicy: 'no-referrer',
+      'data-representation-id': node.attrs.representationId, 'data-media-use-id': node.attrs.mediaUseId,
+      'data-conceal': node.attrs.conceal ? 'true' : null })];
   },
 });
 
@@ -162,7 +173,7 @@ const LengthLimit = Extension.create<{ limit: number }>({
   },
 });
 
-export function documentExtensions({ placeholder = '', emptyLineHint, unknownComponentLabel, maxLength, blocks = true }: { placeholder?: string; emptyLineHint?: string; unknownComponentLabel: string; maxLength?: number; blocks?: boolean }) {
+export function documentExtensions({ placeholder = '', emptyLineHint, unknownComponentLabel, maxLength, blocks = true, onEditImageLabels }: { placeholder?: string; emptyLineHint?: string; unknownComponentLabel: string; maxLength?: number; blocks?: boolean; onEditImageLabels?: ImageLabelEditor }) {
   return [
     StarterKit.configure({
       trailingNode: false,
@@ -171,7 +182,7 @@ export function documentExtensions({ placeholder = '', emptyLineHint, unknownCom
     ContentLanguage, Language, DocumentTextStyle, TextEmphasis, Ruby, Spoiler,
     ...(blocks ? [TableKit.configure({ table: { resizable: false } })] : []),
     TaskList, TaskItem.configure({ nested: true }),
-    ...(blocks ? [SafeImage.configure({ allowBase64: false }), Media,
+    ...(blocks ? [SafeImage.configure({ allowBase64: false, onEditImageLabels }), Media,
       embeddedComponent(false, unknownComponentLabel), embeddedComponent(true, unknownComponentLabel)] : []),
     TextAlign.configure({ types: ['paragraph', 'heading'] }),
     Placeholder.configure({ placeholder: ({ editor, pos }) => editor.isEmpty ? placeholder : emptyLineHint && editor.state.doc.resolve(pos).depth === 0 ? emptyLineHint : '' }),

@@ -15,7 +15,7 @@ prevents persona multiplication, while aggregate disclosure follows policy.
 
 ## Remaining contract
 
-- Content spoiler/NSFW labels need revision and context-qualified author, Realm
+- Content spoiler labels need revision and context-qualified author, Realm
   or platform correction bases. They govern selected body/media, not every
   version of a Work. Source labels stay source-qualified until adopted.
 - Inline concealment needs explicit reveal and must never cast a spoiler vote.
@@ -39,7 +39,7 @@ with independent category preferences: material with both adult labels requires
 both opt-ins. Missing assessment is `unassessed`, never `general`. The manager's
 2026-10-01 review admits unassessed content on reads, indexing, share previews,
 email and push; show **Not assessed** wherever the assessment is shown and never
-count it as general. Signed-out viewers and people under 15 can receive general
+count it as general. Signed-out viewers and people under 15 can see general
 and unassessed representations; `r15` starts at 15, and adult categories at
 18, subject to
 [market restrictions](../operations/trust-and-safety.md#safety-and-legal-readiness).
@@ -59,10 +59,35 @@ unassessed material.
 Account owns the complete private, self-declared birth date. Main
 receives current age eligibility and content preferences, rather than deriving
 age from public profile fields. An explicit birthday-publication choice is
-independent of these gates. Main now consumes live Account introspection for
-shared disclosure, including internal search, while public indexing and share
-previews retain anonymous eligibility. Unknown age remains unable to receive
-restricted categories.
+independent of these gates. Main consumes live Account introspection for the
+viewing state; public indexing and share previews retain anonymous eligibility.
+Unknown age remains unable to render restricted categories.
+
+Maintainer revision, 2026-10-02: ordinary interactive reads return the
+Access-authorized payload and its assessments. The frontend applies the current
+viewer's category choices, age and market state at each rendered body or image.
+A rating is a presentation classification, not an Access denial. A restricted
+image therefore does not suppress unrelated general text. Reads resolve only
+the media referenced by the returned payload; they do not traverse a reference
+tree or promote a descendant's rating into its container. Actual private-access
+and platform governance restrictions remain server-enforced.
+
+NSFW, author concealment and age assessment describe different things. An NSFW
+warning says an image may be unsuitable for work or public viewing; it does not
+establish an adult rating or prohibited content. The viewer's NSFW preference
+defaults to masking and can allow immediate display. Author concealment can
+mask any image, including general material, and continues to apply when that
+preference allows NSFW images. Explicit reveal is local viewing state, not a
+label edit or spoiler vote, and does not bypass category presentation settings.
+
+Image inference is evidence tied to the exact file. Initially it is submitted
+by the uploading client, with a producer boundary that permits later server
+inference. Manual corrections take precedence over automatic evidence; failed
+or unavailable inference remains unknown. Model output alone neither clears an
+image nor creates a prohibited-content or review hold. Platform administrators
+can correct and lock NSFW, age assessment and concealment independently through
+the existing field-control mechanism; ordinary edits and automatic updates
+respect the same protection.
 
 Imports retain source meaning: VNDB age 18 maps to `r18`, image sexual level 2
 is not stored, image violence level 2 maps to `r18g`, and Bangumi `nsfw` maps to
@@ -71,9 +96,14 @@ and [Bangumi schema](https://bangumi.github.io/api/) motivate source-qualified
 mapping rather than treating absence as clearance. These are product mappings,
 not proof that provider ratings establish legal eligibility.
 
-External indexing and share previews use the anonymous representation; internal
-search follows the viewer's eligibility. Adult material never enters email or
-push. Originals, media, derivatives, history, caches and exports follow the same
-policy; Realms can strengthen it, never weaken it. Classification cannot override
-suitability. Neither sexual disclosure nor community agreement implies consent
-to grotesque content; that is why the gates are independent.
+These explicit provider mappings remain separate from image NSFW classification;
+an independent image NSFW flag does not imply `r18` or `r18g`.
+
+Noninteractive indexing and share previews use the anonymous presentation;
+email and push omit adult material. Those channels have no interactive viewing
+state and retain their explicit default policy. Interactive originals, media,
+derivatives, history, search and exports carry the applicable metadata for
+consistent rendering; caches must not reuse one viewer's rendered choice for
+another. Realms can strengthen presentation restrictions. Neither sexual
+disclosure nor community agreement implies consent to grotesque content; that
+is why the choices are independent.

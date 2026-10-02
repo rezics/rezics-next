@@ -123,7 +123,7 @@ export async function applyLnVnZones(input: ApplyInput): Promise<LnVnZonesManife
   const zones: ZoneRecord[] = [];
   for (const spec of specs) {
     const space = await call<{ space: string; realm: string }>(port, 'POST', '/v1/spaces', {
-      profile: 'space-realm-v1', name: spec.name, capabilities: ['realm'], actingSubject: port.actingSubject,
+      profile: 'space-realm-v2', name: spec.name,handle: spec.routeSegment,capabilities: ['realm'], actingSubject: port.actingSubject,
     }, seedKey('vndb-space', spec.id));
     const zone = iri(`vndb-zone:${spec.id}`);
     const collection = iri(`vndb-collection:${spec.id}`);
@@ -221,10 +221,10 @@ function presentation(spec: ZoneSpec, collection: string): ZonePresentation {
 
 async function configureZone(port: SeedPort, spec: ZoneSpec, zone: string, realm: string, collection: string) {
   const current = await read<{ revision: string; name: string; language: string; configuration: {
-    defaultRealm: string | null; official: { routeSegment: string } | null; presentation: unknown } }>(port,
+    defaultRealm: string | null; official: Record<string,never> | null; presentation: unknown } }>(port,
     `/v1/zones/${short(zone)}/configuration`);
   const desired = { name: spec.name, language: spec.language, defaultRealm: realm,
-    official: { routeSegment: spec.routeSegment }, presentation: presentation(spec, collection) };
+    official: {}, presentation: presentation(spec, collection) };
   const actual = { name: current.name, language: current.language, defaultRealm: current.configuration.defaultRealm,
     official: current.configuration.official, presentation: current.configuration.presentation };
   if (!isDeepStrictEqual(actual, desired)) {

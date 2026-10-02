@@ -28,6 +28,9 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
+import { controlTransaction,requirePrincipal,requireMandate,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { realmTransaction,realmManager } from './realm-management-authority.ts';
+import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -38,6 +41,7 @@ export interface VerifiedPrincipal {
   /** Live Account decision; never a cached JWT or client-supplied birthday. */
   contentEvidence?: { age: 'unknown' | 'under-15' | '15-17' | 'adult'; country: string | null;
     accountEligible: boolean; adultAvailable: boolean;
+    nsfwDisplay?: 'mask' | 'show';
     categories: { general: boolean; r15: boolean; r18: boolean; r18g: boolean } };
   /** Server-only callback bound to the original token and OAuth scope ceiling. */
   currentAssertion?: () => Promise<VerifiedPrincipal>;
@@ -409,6 +413,22 @@ export class AccessAdmissionRegistry {
       if (error instanceof AdmissionDenied) return false;
       throw error;
     }
+  }
+
+  /** Platform media field controls use the existing administrator proof and fences. */
+  async canProtectMedia(principal: VerifiedPrincipal, actingSubject: string, media: string,
+    action:'media.labels.protect'|'media.conceal.protect'='media.labels.protect'): Promise<boolean> {
+    if (!await this.canActAsPlatformAdministrator(principal,actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject, `media:protect:${media}`, action);
+  }
+
+  async canActAsPlatformAdministrator(principal:VerifiedPrincipal,actingSubject:string):Promise<boolean> {
+    const principalId=await this.activePrincipalId(principal);
+    return !!principalId && !!await platformAdministratorProof(this.pool,principalId,actingSubject);
+  }
+
+  async canManageMedia(principal: VerifiedPrincipal, actingSubject: string): Promise<boolean> {
+    return this.canReadScopedResource(principal, actingSubject, `media:owner:${actingSubject}`, 'media.upload');
   }
 
   /** Drafts require their own current grant, independent of Work or publication reads. */
@@ -840,6 +860,47 @@ export class AccessAdmissionRegistry {
     }
   }
 
+  /** Commit an Access-owned SQL effect under the ordinary, live admission
+   * policy. No graph admission is created. All selected authority locks stay
+   * held until the callback and its owner receipt commit in this transaction. */
+  async withOwnerAuthority<T>(request: Omit<AdmissionRequest, 'editorialPermit' | 'idempotencyKey' | 'requestDigest'>,
+    operation: (client: PoolClient) => Promise<T>): Promise<T> {
+    if (request.action === 'agent.control') {
+      if (request.scope !== `agent:control:${request.actingSubject}`) throw new AdmissionDenied('Agent control scope differs');
+      try { return await controlTransaction(this.pool,async client => {
+        const principal = await requirePrincipal(client,request.principal);
+        await requireMandate(client,principal.id,request.actingSubject,'agent.control');
+        return operation(client);
+      }); } catch (error) { if (error instanceof ControlDenied) throw new AdmissionDenied(error.message);
+        if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);throw error; }
+    }
+    if (request.action === 'realm.settings.manage' && request.scope.startsWith('governance:realm:')) {
+      const realm = request.scope.slice('governance:realm:'.length);
+      let ownerError: unknown;
+      try { return await realmTransaction(this.pool,realm,true,async client => {
+        try { await realmManager(client,request.principal,realm,request.actingSubject,'realm.settings.manage'); }
+        catch (error) { if (!(error instanceof RealmAdminDenied)) throw error;
+          await realmManager(client,request.principal,realm,request.actingSubject,'realm.owner'); }
+        try { return await operation(client); } catch (error) { ownerError = error;throw error; }
+      }); } catch (error) { if (ownerError !== undefined) throw ownerError;
+        if (error instanceof RealmAdminDenied) throw new AdmissionDenied(error.message);
+        if (error instanceof RealmAdminUnavailable) throw new AdmissionUnavailable(error.message);throw error; }
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
+      const result = await withCommandOwnerAuthority(this.pool, probe, this.baselineGraph, async () => {
+        try { await this.registerRequest(probe, client, true); }
+        catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
+        return operation(client);
+      });
+      await client.query('COMMIT');
+      return result;
+    } catch (error) { await rollback(client); throw error; }
+    finally { client.release(); }
+  }
+
   private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false): Promise<RegisteredAdmission> {
     if (request.editorialPermit) {
       const principalId = await this.activePrincipalId(request.principal);
@@ -1038,6 +1099,9 @@ export class AccessAdmissionRegistry {
       const administrator = administratorCandidate && await platformAdministratorTargetAllowed(client,
         this.baselineGraph, principalId, request.actingSubject, request.action, request.scope)
         ? administratorCandidate : null;
+      if (!existing && ['media.labels.protect','media.conceal.protect'].includes(request.action) && !administrator) {
+        throw new AdmissionDenied('media protection requires the platform administrator proof');
+      }
       const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
       if (administrator || baseline) {
         // A named grant source with its own pinned proof, recorded below in the

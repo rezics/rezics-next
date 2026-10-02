@@ -51,6 +51,7 @@ export const contentPreferencesView = t.Object({ revision: t.Integer(), birthDat
   birthdayPublic: t.Boolean(), publicId: t.Nullable(t.String()), age: t.Union([
     t.Literal('unknown'), t.Literal('under-15'), t.Literal('15-17'), t.Literal('adult')]),
   accountEligible: t.Boolean(), adultAvailable: t.Boolean(),
+  nsfwDisplay: t.Union([t.Literal('mask'), t.Literal('show')]),
   categories: t.Object({ general: t.Boolean(), r15: t.Boolean(), r18: t.Boolean(), r18g: t.Boolean() }) });
 export const accountExportView = t.Object({ format: t.Literal('rezics-account-export/1'), exportedAt: t.String(),
   account: t.Object({ id: t.String(), name: t.String(), email: t.String(), emailVerified: t.Boolean(),

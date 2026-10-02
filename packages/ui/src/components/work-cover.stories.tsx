@@ -5,10 +5,10 @@ import type { CSSProperties } from 'react';
 import { coverDesign, coverSeed, uprightTitle, WorkCover, type WorkCoverKind, workCoverRatio } from './work-cover.tsx';
 
 // A generated image stands in for a publisher's cover, so stories need no network.
-const imageCover = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600">
+const imageCover = URL.createObjectURL(new Blob([`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600">
   <rect width="400" height="600" fill="#1d3557"/><circle cx="200" cy="230" r="120" fill="#f1c453"/>
   <text x="200" y="470" fill="#f8f4e3" font-family="Georgia" font-size="44" text-anchor="middle">NORTHERN</text>
-  <text x="200" y="520" fill="#f8f4e3" font-family="Georgia" font-size="44" text-anchor="middle">LIGHTS</text></svg>`)}`;
+  <text x="200" y="520" fill="#f8f4e3" font-family="Georgia" font-size="44" text-anchor="middle">LIGHTS</text></svg>`], { type: 'image/svg+xml' }));
 
 const classics = [
   { title: 'Pride and Prejudice', authors: ['Jane Austen'] },

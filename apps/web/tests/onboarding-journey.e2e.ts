@@ -358,12 +358,9 @@ test('new person picks a public name and handle, sets up Home, and the Account n
     const db = new Client({ connectionString: databaseUrl });
     try {
       await db.connect();
-      const aged = await db.query(
-        `UPDATE access.agent_handle
-        SET claimed_at = clock_timestamp() - interval '31 days'
-        WHERE handle = $1 AND agent_id = $2 AND state = 'current'`,
-        [person.handle, oldProfile.id],
-      );
+      const aged = await db.query(`UPDATE access.name_registry
+        SET changed_at = clock_timestamp() - interval '31 days'
+        WHERE scope = 'agent' AND key = $1 AND holder = $2 AND state = 'current'`, [person.handle, oldProfile.id]);
       expect(aged.rowCount).toBe(1);
     } finally {
       await db.end();
@@ -391,19 +388,10 @@ test('new person picks a public name and handle, sets up Home, and the Account n
     const aged2 = new Client({ connectionString: databaseUrl });
     try {
       await aged2.connect();
-      expect(
-        (
-          await aged2.query(
-            `UPDATE access.agent_handle
-        SET claimed_at = clock_timestamp() - interval '31 days'
-        WHERE handle = $1 AND agent_id = $2 AND state = 'current'`,
-            [currentHandle, oldProfile.id],
-          )
-        ).rowCount,
-      ).toBe(1);
-    } finally {
-      await aged2.end();
-    }
+      expect((await aged2.query(`UPDATE access.name_registry
+        SET changed_at = clock_timestamp() - interval '31 days'
+        WHERE scope = 'agent' AND key = $1 AND holder = $2 AND state = 'current'`, [currentHandle, oldProfile.id])).rowCount).toBe(1);
+    } finally { await aged2.end(); }
     await page.reload();
     await expect(page.getByRole('textbox', { name: 'Your handle' })).toHaveAttribute(
       'data-hydrated',

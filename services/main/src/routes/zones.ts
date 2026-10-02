@@ -8,7 +8,7 @@ import { CompositionConflict, InvalidCompositionChange, StaleCompositionHead }
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader }
   from '../modules/structure/graph.ts';
 import { readVisibleCompositionPage } from '../modules/collection/visible-page.ts';
-import { resolveZoneRoute, readZonePresentation, zoneRouteViewer, ZoneRouteMissing, ZONE_ROUTE_COST }
+import { resolveZoneRoute, readZonePresentation, zoneRouteViewer, ZoneRouteMissing, ZoneRouteRetired, ZONE_ROUTE_COST }
   from '../modules/zone/route.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadLimit }
   from '../modules/work/read-session.ts';
@@ -23,7 +23,7 @@ import { changeZoneConfiguration, readZoneConfiguration,
 import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
-import { listOfficialZones, officialZoneBySegment, readZoneModuleData,
+import { listOfficialZones, readZoneModuleData,
   readZoneBannerMedia }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
@@ -43,6 +43,7 @@ import { authorizedReadProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
+import { canonicalAddress } from '../modules/address/schema.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const disclosure = t.Union([t.Literal('public'), t.Literal('private')]);
@@ -57,12 +58,12 @@ const read = t.Object({ zone: ref, navigation: ref, revision: ref,
   predecessor: t.Nullable(ref), mounts: t.Array(t.Any()), next: t.Nullable(t.String()),
   sourcePosition });
 const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemResult(403),
+  410: problemResult(410),
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500),
   503: problemResult(503) };
 
 export const openApiOperations = {
   '/v1/zones': { post: { bearer: true, idempotencyKey: true }, get: {} },
-  '/v1/zones/by-segment/{segment}': { get: {} },
   '/v1/zones/{id}/presentation': { get: {} },
   '/v1/zones/{id}/routes': { get: {} },
   '/v1/zones/{id}/mounts': { post: { bearer: true, idempotencyKey: true } },
@@ -81,6 +82,7 @@ function key(request: Request) {
 }
 
 function routeError(error: unknown): Response {
+  if (error instanceof ZoneRouteRetired) return problem(410,'zone_title_retired','Zone title is retired');
   if (error instanceof ZoneRouteMissing) return problem(404, 'route_missing', 'Zone route is unavailable');
   if (error instanceof WorkReadInvalid) return problem(400, 'invalid_zone_cursor', error.message);
   if (error instanceof WorkReadMoved) return problem(409, 'zone_route_stale', error.message);
@@ -123,8 +125,6 @@ const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
 const officialZone = t.Object({ zone: ref, realm: ref, routeSegment: t.String() });
 const officialPage = t.Object({ items: t.Array(officialZone), next: t.Nullable(t.String()),
   cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
-const officialLookup = t.Object({ ...officialZone.properties,
-  cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
 const execution = t.Union([
   t.Object({ state: t.Literal('fallback'), reason: t.Union([
     t.Literal('safe_mode'), t.Literal('viewer_opt_out'), t.Literal('none_approved'),
@@ -156,7 +156,7 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
 });
 
 const mountBinding = t.Object({ occurrence: ref, segment: t.String(), target: ref });
-const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }),name: readName });
+const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }),name: readName,address: canonicalAddress });
 const routeBasis = { profile: t.Literal('zone-route-v1'), zone: ref, path: t.String(),
   ...ZoneName.properties,
   realm: t.Nullable(ref), revision: ref, sourcePosition: readPosition,
@@ -220,7 +220,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
   return new Elysia()
     .get('/v1/zones', { query: t.Object({ official: t.Literal('true'),
-      after: t.Optional(t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })),
+      after: t.Optional(t.String({ pattern: '^v2:https://rezics\\.com/id/[0-9a-f-]{36}$', maxLength: 128 })),
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
       response: { 200: officialPage, ...errors } }, async ({ query }: { query: {
         official: 'true'; after?: string; limit?: number } }) => {
@@ -228,15 +228,6 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         { ...(query.after ? { after: query.after } : {}), limit: query.limit ?? 50 }),
       { headers: { 'cache-control': 'public, max-age=30' } }); }
       catch (error) { return routeError(error); }
-    })
-    .get('/v1/zones/by-segment/:segment', { params: t.Object({ segment: t.String({
-      pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }) }),
-      response: { 200: officialLookup, ...errors } }, async ({ params }: { params: { segment: string } }) => {
-      try {
-        const result = await officialZoneBySegment(work.environment, params.segment);
-        return result ? Response.json(result, { headers: { 'cache-control': 'public, max-age=30' } })
-          : problem(404, 'zone_unavailable', 'Official Zone is unavailable');
-      } catch (error) { return routeError(error); }
     })
     .get('/v1/zones/:id/presentation', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref),
@@ -279,7 +270,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       }
     })
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ path: t.String({ maxLength: 256 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
+      query: t.Object({ path: t.String({ maxLength: 1024 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
         actingSubject: t.Optional(ref), position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: routeRead, ...errors } }, async ({ request, params, query }) => {
       try { return Response.json(await resolveZoneRoute(work, request, {
@@ -312,6 +303,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .post('/v1/zones/:id/mounts', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, target: t.Optional(ref), collection: t.Optional(ref), routeSegment: t.String({
         pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
+        key: t.Optional(t.Union([t.Literal('name'),t.Literal('id')])),
         disclosure, presentation: t.Optional(t.String({ format: 'uri' })),
         position: t.Optional(t.Union([t.Literal('first'), t.Literal('last'),
           t.Object({ after: ref }, { additionalProperties: false })])), actingSubject: ref },
@@ -339,7 +331,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           request, { structure, expectedHead: body.expectedHead, actingSubject: body.actingSubject,
             idempotencyKey, operations: [{ op: 'insert', parent: structure,
               position: body.position ?? 'last', role: 'mount', target,
-              qualifier: { type: 'zone-mount', zone, routeSegment: body.routeSegment,
+              qualifier: { type: 'zone-mount', zone, routeSegment: body.routeSegment,key: body.key ?? 'id',
                 disclosure: body.disclosure,
                 ...(body.presentation ? { presentation: body.presentation } : {}) } }] });
         return Response.json({ zone, navigation: structure, revision: result.revision,
@@ -436,9 +428,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       body: t.Object({ expectedHead: ref, actingSubject: ref,
         name: t.Optional(t.String({ minLength: 1, maxLength: 300 })), language: t.Optional(languageTag),
         defaultRealm: t.Optional(t.Union([ref, t.Null()])),
-        official: t.Optional(t.Union([t.Object({ routeSegment: t.String({
-          pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }) },
-        { additionalProperties: false }), t.Null()])),
+        official: t.Optional(t.Union([t.Object({}, { additionalProperties: false }), t.Null()])),
         defaultContext: t.Optional(t.Union([t.Object({ context: ref, semanticRevision: ref },
           { additionalProperties: false }), t.Null()])),
         presentation: t.Optional(t.Union([ZonePresentation, t.Null()])),
@@ -458,7 +448,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               ...(body.name !== undefined ? { name: body.name } : {}),
               ...(body.language !== undefined ? { language: body.language } : {}),
               ...(body.defaultRealm !== undefined ? { defaultRealm: body.defaultRealm } : {}),
-              ...(body.official !== undefined ? { official: body.official } : {}),
+              ...(body.official !== undefined ? { official: body.official === null ? null : {} } : {}),
               ...(body.defaultContext !== undefined ? { defaultContext: body.defaultContext } : {}),
               ...(body.presentation !== undefined ? { presentation: body.presentation } : {}),
               ...(body.budget ? { budget: body.budget } : {}),

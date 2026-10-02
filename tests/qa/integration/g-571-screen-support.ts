@@ -12,6 +12,24 @@ import type { MediaStack } from './media-support.ts';
 
 export const benign: Scores = { Drawing: 0.05, Hentai: 0.01, Neutral: 0.9, Porn: 0.01, Sexy: 0.03 };
 export const flagged: Scores = { Drawing: 0.01, Hentai: 0.01, Neutral: 0.03, Porn: 0.9, Sexy: 0.05 };
+/** Reconstruct a pre-741 retained job explicitly. Production uploads never use
+ * this privileged fixture or queue the retired clearance classifier. */
+export async function seedHistoricalScreen(stack:MediaStack,representation:string):Promise<void> {
+  const client=await stack.contentPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('ALTER TABLE media.representation DISABLE TRIGGER representation_immutable');
+    await client.query("UPDATE media.representation SET clearance = 'screening',clearance_reason = NULL WHERE id = $1",[representation]);
+    await client.query('ALTER TABLE media.representation ENABLE TRIGGER representation_immutable');
+    await client.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
+      authority_epoch,erasure_epoch,operation_id)
+      SELECT $1,p.asset_id,p.id,p.byte_digest,'image-screen-v1',s.authority_epoch,s.erasure_epoch,p.operation_id
+      FROM media.representation p JOIN media.asset a ON a.id = p.asset_id
+        JOIN media.asset_state s ON s.id = a.state_head WHERE p.id = $2`,[randomUUID(),representation]);
+    await client.query('COMMIT');
+  } catch(error) {await client.query('ROLLBACK');throw error;}
+  finally {client.release();}
+}
 export function screening(stack: MediaStack, classifier: ImageClassifier = { classify: async () => benign }, timeoutMs = 30_000) {
   const store = new MediaScreenStore(stack.contentPool);
   const cases = new GovernanceStore(stack.accessPool, { capture: async () => { throw new Error('unused capture'); } },

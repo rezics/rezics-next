@@ -78,7 +78,7 @@ export const realms = [
     featured: ['serial', 'journey-west', 'red-chamber'] },
   { id: 'books', name: 'Books', seedName: 'Books · 图书', preset: 'editorial',
     featured: ['pride', 'alice', 'jane-eyre', 'little-women'] },
-  { id: 'mods', name: 'Mods', seedName: 'Mods · 模组', preset: 'vibrant',
+  { id: 'mods', handle: 'game-mods', name: 'Mods', seedName: 'Mods · 模组', preset: 'vibrant',
     featured: ['mod-guide'] },
   { id: 'ai-workshop', name: 'AI Workshop', seedName: 'AI Workshop · AI 工作坊', preset: 'clean',
     featured: ['prompt', 'skill'] },

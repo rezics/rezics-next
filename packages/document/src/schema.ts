@@ -10,6 +10,7 @@ import { documentVersion, type DocumentProfile } from './types.ts';
 const closed = { additionalProperties: false };
 const id = Type.String({ minLength: 1, maxLength: 256 });
 const optionalString = Type.Optional(Type.Union([Type.String(), Type.Null()]));
+const mediaId = Type.Optional(Type.Union([Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }), Type.Null()]));
 // CSS Color syntax remains browser-defined; delimiters cannot escape a single declaration.
 const color = Type.Optional(
   Type.Union([Type.String({ pattern: '^[^;{}\\u0000-\\u001f]*$' }), Type.Null()]),
@@ -69,6 +70,10 @@ export const nodeAttributes: Record<string, Record<string, TSchema>> = {
   image: {
     ...common,
     src: Type.String({ minLength: 1 }),
+    // Media identities survive address changes. Legacy imported links have neither.
+    representationId: mediaId,
+    mediaUseId: mediaId,
+    conceal: Type.Optional(Type.Boolean()),
     alt: optionalString,
     title: optionalString,
     width: dimension,
@@ -255,6 +260,9 @@ function createSchema(profile: DocumentProfile): Schema {
       atom: true,
       attrs: {
         src: {},
+        representationId: { default: null },
+        mediaUseId: { default: null },
+        conceal: { default: false },
         alt: { default: null },
         title: { default: null },
         width: { default: null },
@@ -268,6 +276,9 @@ function createSchema(profile: DocumentProfile): Schema {
           title: node.attrs.title,
           width: node.attrs.width,
           height: node.attrs.height,
+          'data-representation-id': node.attrs.representationId,
+          'data-media-use-id': node.attrs.mediaUseId,
+          'data-conceal': node.attrs.conceal ? 'true' : null,
         },
       ],
     });

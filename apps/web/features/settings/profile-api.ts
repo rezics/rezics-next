@@ -3,6 +3,8 @@ import type { PublicAgentProfile } from '../auth/agent-profile.ts';
 import { UNSPECIFIED, writingTag } from '../content-language/writing-language.ts';
 import { retryAfterSeconds } from '../safety/retry-after.ts';
 import { type Clearance, clearanceOf } from '../safety/upload-state.ts';
+import { SCREEN_POLICY } from '@rezics/main/image-screen-policy';
+import type { ClientImageInference } from '../document-editor/image-inference.ts';
 
 export type ProfileSaveResult = 'saved' | 'invalid' | 'conflict' | 'denied' | 'unavailable'
   | 'avatar-denied' | 'avatar-unavailable' | 'avatar-limited' | 'avatar-rejected';
@@ -32,6 +34,7 @@ interface SaveInput {
   bio: { text: string; language: string } | null;
   avatarSelection: string | null;
   avatar?: File;
+  imageInference?: ClientImageInference;
   removeAvatar: boolean;
   expectedAvatarSelection: string | null;
   key: string;
@@ -70,11 +73,12 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
     if (input.avatar) {
       mediaStage = true;
       const bytes = new Uint8Array(await input.avatar.arrayBuffer());
+      const byteDigest = await sha256Hex(bytes);
       const reserved = await send(`${origin}/v1/media/uploads`, { method: 'POST',
         headers: { ...headers, 'idempotency-key': crypto.randomUUID() }, cache: 'no-store',
         body: JSON.stringify({ profile: 'media-image-upload-v1', asset: null,
           mediaType: input.avatar.type, byteLength: bytes.length,
-          sha256: await sha256Hex(bytes), disclosure: 'public',
+          sha256: byteDigest, disclosure: 'public',
           actingSubject: input.agent }) });
       if (!reserved.ok) return problem(reserved, true);
       const upload = await reserved.json() as { asset: string; upload: string };
@@ -84,12 +88,20 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
         body: bytes, cache: 'no-store',
       });
       if (!uploaded.ok) return problem(uploaded, true);
-      const outcome = await uploaded.json() as { status: string; clearance?: string };
+      const outcome = await uploaded.json() as { status: string; clearance?: string; representation?: string };
       if (outcome.status !== 'activated') return 'invalid';
       const clearance = clearanceOf(outcome.clearance);
       if (input.report) input.report.clearance = clearance;
       // Main will not show an image it rejected, so it is not made the avatar.
       if (clearance === 'rejected') return 'avatar-rejected';
+      if (!outcome.representation) return 'avatar-unavailable';
+      const observation = input.imageInference ?? { model: SCREEN_POLICY.model, modelVersion: SCREEN_POLICY.version,
+        weightsDigest: SCREEN_POLICY.weightsDigest, policyVersion: 'image-nsfw-v1', status: 'unavailable', result: 'unknown' };
+      const observed = await send(`${origin}/v1/media/representations/${outcome.representation}/inferences`, {
+        method: 'POST', headers: { ...headers, 'idempotency-key': `${input.key}:inference` }, cache: 'no-store',
+        body: JSON.stringify({ ...observation, actingSubject: input.agent, sha256: byteDigest }),
+      });
+      if (!observed.ok) return problem(observed, true);
     }
     if (input.avatar || input.removeAvatar && input.expectedAvatarSelection) {
       mediaStage = true;
@@ -118,12 +130,12 @@ export async function saveAgentProfile(input: SaveInput, send: ProfileSender = f
  */
 export function profileSaveInput(profile: PublicAgentProfile, values: {
   token: string; agent: string; displayName: string; bioText: string; bioLanguage: string;
-  avatar?: File; removeAvatar: boolean; key: string; report?: AvatarReport;
+  avatar?: File; imageInference?: ClientImageInference; removeAvatar: boolean; key: string; report?: AvatarReport;
 }): SaveInput {
   const text = values.bioText.trim();
   return { token: values.token, agent: values.agent, expectedHead: profile.revision,
     displayName: values.displayName, bio: text ? { text,
       language: values.bioLanguage.trim() || (profile.bio?.text === text ? profile.bio.language : UNSPECIFIED) } : null,
     avatarSelection: profile.avatarSelection, expectedAvatarSelection: profile.avatarSelection,
-    avatar: values.avatar, removeAvatar: values.removeAvatar, key: values.key, report: values.report };
+    avatar: values.avatar, imageInference: values.imageInference, removeAvatar: values.removeAvatar, key: values.key, report: values.report };
 }

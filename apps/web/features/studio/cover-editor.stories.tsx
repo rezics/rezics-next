@@ -25,9 +25,15 @@ function coverServer(options: { clearance?: string; later?: string; retryAfter?:
         { status: 429, headers: { 'retry-after': String(options.retryAfter) } });
       return Response.json({ asset: 'asset-1', upload: 'upload-1' });
     }
-    if (url.endsWith('/bytes')) return Response.json({ status: 'activated', clearance: options.clearance ?? 'cleared' });
+    if (url.endsWith('/bytes')) return Response.json({ status: 'activated', representation: '11111111-1111-4111-8111-111111111111', clearance: options.clearance ?? 'cleared' });
+    if (url.endsWith('/inferences')) return Response.json({ recorded: true });
+    if (url.endsWith('/media/metadata')) return Response.json({ items: [{ status: 'available',
+      representation: '11111111-1111-4111-8111-111111111111', use: '22222222-2222-4222-8222-222222222222',
+      url: '/v1/media/avatars/33333333-3333-4333-8333-333333333333', nsfw: 'sfw', ageRating: { status: 'unassessed' }, conceal: false,
+      canEdit: true, canProtect: false, controls: { nsfw: { locked: false, valueHead: null, basis: { head: null, epoch: '0', protection: null } },
+        ageRating: { locked: false, valueHead: null, basis: { head: null, epoch: '0', protection: null } }, conceal: null } }] });
     if (url.endsWith('/media/uploads/upload-1')) return Response.json({ clearance: options.later ?? options.clearance ?? 'cleared' });
-    if (url.endsWith('/avatar')) return Response.json({ selection: 'selection-1' });
+    if (url.endsWith('/avatar')) return Response.json({ selection: '33333333-3333-4333-8333-333333333333' });
     return new Response(null, { status: 404 });
   }) as typeof fetch;
   return { send, calls, release: () => release?.() };
@@ -77,9 +83,9 @@ export const SaveCover: Story = {
     await userEvent.click(save);
     await expect(within(dialog).getByRole('button', { name: 'Uploading…' })).toBeDisabled();
     server.release();
-    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitFor(() => expect(dialog).not.toBeInTheDocument(), { timeout: 12_000 });
     await expect(canvas.getByText('Cover updated.')).toBeVisible();
-    await expect(server.calls).toHaveLength(3);
+    await expect(server.calls).toHaveLength(4);
   },
 };
 

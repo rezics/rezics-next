@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { outbox, ownerControl, receipt } from './typed-schema.ts';
 import { ContentEmbedInvalid, directContentEmbeds } from './embed.ts';
 import { retainedDocumentBody } from './document-body.ts';
+import { documentImageUses, guardDocumentImageUses, DocumentMediaInvalid } from './document-media.ts';
 import { hasDocumentContent } from '@rezics/document';
 
 export class ContentConflict extends Error {}
@@ -520,6 +521,12 @@ export class ContentCore {
     if (bytes.toString('utf8') !== command.serializedJson) throw new ContentConflict('body contains ill-formed Unicode');
     if (bytes.length < 1 || bytes.length > MAX_BODY_BYTES) throw new ContentLimitExceeded('body exceeds 1 MiB');
     const byteDigest = hash(bytes);
+    let imageUses: ReturnType<typeof documentImageUses>;
+    try { imageUses = documentImageUses(body.document as Parameters<typeof documentImageUses>[0]); }
+    catch (error) {
+      if (error instanceof DocumentMediaInvalid) throw new ContentConflict(error.message);
+      throw error;
+    }
     const digest = command.provenance.kind === 'admitted-original-contribution-v1'
       || command.provenance.kind === 'admitted-public-domain-v1'
       ? (command.provenance as unknown as AdmittedAuthorProvenance | AdmittedPublicDomainProvenance).requestDigest
@@ -571,9 +578,12 @@ export class ContentCore {
       }
       const variants = await client.query('SELECT * FROM content.variant WHERE id = $1 FOR UPDATE', [command.variant.id]);
       const variant = variants.rows[0];
+      let priorImageUses: ReturnType<typeof documentImageUses> = [];
       if (variant?.draft_head) {
         const head = (await client.query(`SELECT model, availability, body, provenance
           FROM content.revision WHERE id = $1 FOR SHARE`, [variant.draft_head])).rows[0];
+        try { priorImageUses = documentImageUses(head?.body?.document); }
+        catch (error) { if (!(error instanceof DocumentMediaInvalid)) throw error; }
         if (head?.model === 'member-reply-v1' && (command.model !== head.model
           || head.provenance.author !== command.provenance.author
           || head.availability !== 'available' || head.body.deleted === true)) {
@@ -600,6 +610,13 @@ export class ContentCore {
           position: sourcePosition, replayed: false };
       }
       const revisionId = randomUUID();
+      try {
+        await guardDocumentImageUses(client, imageUses, [command.variant.resourceId,
+          ...(command.model === 'member-reply-v1' ? [body.rootTarget as string] : [])], priorImageUses);
+      } catch (error) {
+        if (error instanceof DocumentMediaInvalid) throw new ContentConflict(error.message);
+        throw error;
+      }
       await client.query(`INSERT INTO content.revision
         (id, variant_id, predecessor, operation_id, format, model, source_revision, provenance,
           byte_digest, byte_length, serialized_bytes, body)

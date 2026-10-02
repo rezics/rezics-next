@@ -116,8 +116,9 @@ async function penNameAgents(o: Official) {
     const current = await o.read<{ revision: string; handle: string; bio: { text: string } | null }>(
       `/v1/agents/${short(agent.agent)}`);
     if (current?.handle !== pen.handle) {
-      await o.state.optional('Pen name handle', () => o.api.put(`/v1/agents/${short(agent.agent)}/handle`,
-        { profile: 'agent-handle-v1', handle: pen.handle, expectedHandle: null }, owner.token,
+      await o.state.optional('Pen name handle', () => o.api.post('/v1/addresses/claims',
+        { profile: 'name-write-v1',scope: 'agent',holder: agent.agent,operation: 'claim',
+          name: pen.handle,expectedRevision: null,actingSubject: agent.agent }, owner.token,
         seedKey('official-handle', pen.id)));
     }
     if (current && current.bio?.text !== pen.bio) {

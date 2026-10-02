@@ -20,6 +20,7 @@ import org.apache.jena.vocabulary.RDF;
 /** The public command operation admits only bounded, named-graph update templates. */
 final class CommandPolicy {
     private static final List<String> MAINTENANCE_RECEIPTS = List.of(
+        "urn:rezics:name-migration:",
         "urn:rezics:receipt:bootstrap:", "urn:rezics:receipt:restore-cutover:",
         "urn:rezics:receipt:restore-release:", "urn:rezics:receipt:retained-zero:",
         "urn:rezics:receipt:content-rebuild:", "urn:rezics:receipt:chapter-search-index:",

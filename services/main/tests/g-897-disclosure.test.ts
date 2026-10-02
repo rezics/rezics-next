@@ -25,11 +25,13 @@ const adult: Viewer = { signedIn: true, age: 'adult', country: 'US', optIns: { g
 function fixture() {
   const labels = new Map<string, Labels>();
   let failed = false, ownerQueries = 0;
+  const ownerSql: string[] = [];
   const requested: DisclosureTarget[][] = [];
   const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
     if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
     if (sql.includes('WITH requested')) {
       ownerQueries++;
+      ownerSql.push(sql);
       if (failed) throw new Error('Assessment store unavailable');
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
       requested.push(targets);
@@ -59,7 +61,7 @@ function fixture() {
   const environment = { fuseki: graph, objectDirectory: '.temp/g-897',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
-  return { environment, labels, requested, queries: () => ownerQueries, fail: () => { failed = true; } };
+  return { environment, labels, requested, ownerSql, queries: () => ownerQueries, fail: () => { failed = true; } };
 }
 
 test('G-897: target and owning-Work assessments compose before name/media hydration and preserve absent envelopes', async () => {
@@ -67,7 +69,8 @@ test('G-897: target and owning-Work assessments compose before name/media hydrat
   let hydrations = 0;
   const media = { avatarRows: async () => { hydrations++; throw new Error('Hidden media was hydrated'); } } as unknown as MediaStore;
   f.labels.set(id(1), ['r18']);
-  const input = { resources: [id(1), id(2), id(1)], context: DEFAULT_MEDIA_CONTEXT, language: null };
+  const input = { resources: [id(1), id(2), id(1)], context: DEFAULT_MEDIA_CONTEXT, language: null,
+    channel: 'preview' as const };
   const hidden = await readResourceSummaries(f.environment, media, {}, input);
   expect(hidden.summaries).toEqual(input.resources.map(reference => ({ reference, status: 'unavailable' })));
   expect(hidden.generation.media).toBeNull();
@@ -88,14 +91,16 @@ test('G-897: admitted owner evidence reaches the target reader while preview and
   const session = { deps: { environment: f.environment }, principal: null,
     options: {}, displayLanguages: ['en'], viewer: adult } as unknown as TargetReadSession;
   expect((await targetSummaries(session, [id(2)])).summaries[0]?.status).toBe('available');
+  expect(f.ownerSql.at(-1)).not.toContain('access.suitability_assessment');
   for (const viewer of [ANONYMOUS_VIEWER, disclosureViewer({ issuer: 'account', subject: 'reader' }),
     { ...adult, country: 'GB' }, { ...adult, optIns: { general: true, r15: true, sexual: true, grotesque: false } }]) {
-    expect((await targetSummaries({ ...session, viewer }, [id(2)])).summaries[0]?.status).toBe('unavailable');
+    expect((await targetSummaries({ ...session, viewer }, [id(2)])).summaries[0]?.status).toBe('available');
   }
   for (const channel of ['preview', 'sitemap', 'seo'] as const) {
     expect((await readResourceSummaries(f.environment, undefined, { viewer: adult }, {
       resources: [id(2)], context: DEFAULT_MEDIA_CONTEXT, language: null, channel,
     })).summaries[0]?.status).toBe('unavailable');
+    expect(f.ownerSql.at(-1)).toContain('access.suitability_assessment');
   }
   f.labels.clear();
   expect((await targetSummaries({ ...session, viewer: ANONYMOUS_VIEWER }, [id(2)])).summaries[0]?.status).toBe('available');
@@ -103,11 +108,11 @@ test('G-897: admitted owner evidence reaches the target reader while preview and
   expect((await targetSummaries({ ...session, viewer: { ...adult, age: '15-17' } }, [id(2)])).summaries[0]?.status).toBe('available');
 });
 
-test('G-897: identity-only derivatives infer the current owning Work in the shared batch and fail closed on outage', async () => {
+test('G-897: identity-only derivatives retain governance ownership without a rating denial', async () => {
   const f = fixture();
   f.labels.set(id(1), ['r18']);
   expect(await discloseInventory(f.environment, [{ owner: 'graph', resource: id(2), component: 'record' }],
-    ANONYMOUS_VIEWER, 'read')).toEqual(['tombstone']);
+    ANONYMOUS_VIEWER, 'read')).toEqual(['visible']);
   expect(f.requested.at(-1)?.[0]).toMatchObject({ work: id(1), workRevision: id(11) });
   expect(await admittedPublicWorks(f.environment, [id(1)], adult)).toEqual(new Set([id(1)]));
   f.fail();
@@ -122,13 +127,13 @@ test('G-897: graph-only public target resolution retains the configured assessme
   const f = fixture();
   f.labels.set(id(1), ['r18']);
   const result = await publicTargetRead(f.environment.fuseki, session => targetSummaries(session, [id(1)]));
-  expect(result.summaries[0]?.status).toBe('unavailable');
+  expect(result.summaries[0]?.status).toBe('available');
   f.fail();
   await expect(publicTargetRead(f.environment.fuseki, session => targetSummaries(session, [id(1)])))
     .rejects.toThrow('Disclosure owner is unavailable');
 });
 
-test('G-897: graph publication and explicit Access grants cannot bypass composition or reader counts', async () => {
+test('G-897: ratings leave Access-authorized composition and reader counts available', async () => {
   const f = fixture();
   f.environment.fuseki.query = async () => ({ results: { bindings: [{ work: term(id(1)), head: term(id(11)) }] } });
   const deps = { environment: f.environment, access: { canReadWork: async () => true } } as unknown as MainWorkDependencies;
@@ -140,16 +145,16 @@ test('G-897: graph publication and explicit Access grants cannot bypass composit
   const stats = { readerCounts: async () => { counted++; return { reading: { value: 8, kind: 'exact' },
     wantToRead: { value: 5, kind: 'exact' } }; } } as unknown as WorkReaderStats;
   f.labels.set(id(1), ['r18']);
-  expect(await canReadCompositionWork(session, id(1))).toBe(false);
-  await expect(readWorkStats(session, id(1), undefined, stats)).rejects.toThrow('Work is unavailable');
-  expect(counted).toBe(0);
-  f.labels.clear();
   expect(await canReadCompositionWork(session, id(1))).toBe(true);
   expect((await readWorkStats(session, id(1), undefined, stats)).reading.value).toBe(8);
   expect(counted).toBe(1);
+  f.labels.clear();
+  expect(await canReadCompositionWork(session, id(1))).toBe(true);
+  expect((await readWorkStats(session, id(1), undefined, stats)).reading.value).toBe(8);
+  expect(counted).toBe(2);
 });
 
-test('G-897: concurrent Content/media readers retain isolated evidence and exports inherit omitted parent gates', async () => {
+test('G-897: concurrent Content/media readers and exports preserve rated payload for client rendering', async () => {
   const f = fixture();
   f.labels.set(id(1), ['r18']);
   const asset = { asset: id(5).slice(-36), target: id(2), sha256: 'a'.repeat(64), mediaType: 'image/png',
@@ -166,13 +171,13 @@ test('G-897: concurrent Content/media readers retain isolated evidence and expor
   const [admitted, denied] = await Promise.all([read(adult), read(ANONYMOUS_VIEWER)]);
   expect(admitted.media).toBe(asset);
   expect(admitted.content[0]?.status).toBe('available');
-  expect(denied.media).toBeNull();
-  expect(denied.content[0]?.status).toBe('denied');
+  expect(denied.media).toBe(asset);
+  expect(denied.content[0]?.status).toBe('available');
   expect(currentDisclosureViewer()).toBe(ANONYMOUS_VIEWER);
   const plan = await planExport({ targetProfile: 'g-897-export-v1', useScope: 'full', residuals: [],
     members: [{ sourceOwner: 'graph', sourceNamespace: 'product', sourceGrain: 'external_release', exactRef: id(2),
       contentRevisionId: null, refDigest: 'a'.repeat(64), ownerDataEpoch: 'epoch', ownerSequence: '1',
       sourcePosition: null, targetGrain: 'Release', mapping: 'exact', data: { resource: id(2), title: 'Secret release' } }] }, async () => []);
-  expect(JSON.stringify(await discloseExportPlan(f.environment, plan, ANONYMOUS_VIEWER))).not.toContain('Secret');
+  expect(await discloseExportPlan(f.environment, plan, ANONYMOUS_VIEWER)).toBe(plan);
   expect(await discloseExportPlan(f.environment, plan, adult)).toBe(plan);
 });

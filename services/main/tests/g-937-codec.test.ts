@@ -6,6 +6,7 @@ import {
   sidToUuid,
   isSid,
   identityKeyUuid,
+  hasSidCaseVariant,
 } from '@rezics/model/address/sid';
 import { normalizeAddressName, nameSkeleton } from '@rezics/model/address/names';
 import { deriveAddressSlug } from '@rezics/model/address/slug';
@@ -91,6 +92,11 @@ test('G-937: names keep native script, fold canonically and reject mixed-script 
     fc.property(fc.uuid(), (uuid) => {
       for (const policy of ['ascii-handle', 'unicode-title'] as const) {
         expect(() => normalizeAddressName(uuidToSid(uuid), policy)).toThrow();
+        expect(hasSidCaseVariant(uuidToSid(uuid).toLowerCase())).toBe(true);
+        expect(() => normalizeAddressName(uuidToSid(uuid).toLowerCase(),policy)).toThrow();
+        expect(() => normalizeAddressName(uuidToSid(uuid).toUpperCase(),policy)).toThrow();
+        expect(() => normalizeAddressName(`${uuidToSid(uuid)}-`, policy)).toThrow();
+        expect(() => normalizeAddressName(`${uuidToSid(uuid)}-title`, policy)).toThrow();
         expect(() => normalizeAddressName(uuid, policy)).toThrow();
       }
     }),

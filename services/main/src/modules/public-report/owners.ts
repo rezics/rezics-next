@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { resolveWorkRoute } from '../address/resolution.ts';
+import { readMergedIdentity } from '../identity-merge/resolution.ts';
 import { ownerEvidenceCapture } from '../governance/evidence.ts';
 import { GovernanceDenied, GovernanceInvalid, GovernanceUnavailable, type EvidenceTarget } from '../governance/store.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
@@ -25,11 +25,14 @@ export async function reportAddress(deps: MainWorkDependencies, value: string): 
   }
   const id = /^\/(?:v1\/)?(?:resources|works|agents|realms|media\/assets|posts|replies)\/([0-9a-f-]{36})$/.exec(url.pathname);
   if (id) return ID + id[1];
-  const slug = /^\/(?:v1\/addresses\/work|work)\/([^/]+)$/.exec(url.pathname);
+  const slug = /^\/(?:w|work)\/([^/]+)$/.exec(url.pathname);
   if (!slug) throw new GovernanceInvalid('Unsupported REZICS target URL');
-  const address = await resolveWorkRoute(deps.environment, slug[1]!);
-  if (!address || address.state === 'retired') throw new GovernanceDenied('Target is unavailable');
-  return address.state === 'current' ? address.work : address.targetWork;
+  const address = await deps.environment.addresses?.identify('work',decodeURIComponent(slug[1]!));
+  if (!address?.holder || address.name?.state === 'retired') throw new GovernanceDenied('Target is unavailable');
+  // Reporting's reader and evidence owners admit private Works below. URL
+  // identification must not impose the public resolver's anonymous disclosure.
+  const resolution = await readMergedIdentity(deps.environment,address.holder,async () => true);
+  return resolution?.survivor ?? address.holder;
 }
 
 /** One bounded Content batch and one graph batch supplement G-506's summary

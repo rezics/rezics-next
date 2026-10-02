@@ -1,4 +1,5 @@
 import { BFF_PREFIX } from '../api/browser.ts';
+import { recordImageInference } from '../document-editor/record-inference.ts';
 import { type Clearance, clearanceOf, limitedFor } from '../safety/upload-state.ts';
 
 // A Work's cover is its avatar selection: an image the writer uploads as a
@@ -71,21 +72,24 @@ export async function uploadCover(input: { actingSubject: string; work: string; 
   if (input.image.size > COVER_MAX_BYTES) return { outcome: 'too-large' };
   try {
     const bytes = new Uint8Array(await input.image.arrayBuffer());
+    const byteDigest = await sha256(bytes);
     const reserved = await send(`${BFF_PREFIX}/v1/media/uploads`, { method: 'POST',
       headers: { 'content-type': 'application/json', 'idempotency-key': `${input.key}:reserve` },
       body: JSON.stringify({ profile: 'media-image-upload-v1', asset: null, mediaType: input.image.type,
-        byteLength: bytes.length, sha256: await sha256(bytes), disclosure: 'public', actingSubject: input.actingSubject }) });
+        byteLength: bytes.length, sha256: byteDigest, disclosure: 'public', actingSubject: input.actingSubject }) });
     if (!reserved.ok) return refusal(reserved);
     const upload = await json<{ asset: string; upload: string }>(reserved);
     if (!upload) return { outcome: 'failed' };
     const sent = await send(`${BFF_PREFIX}/v1/media/uploads/${upload.upload}/bytes`, { method: 'PUT',
       headers: { 'content-type': input.image.type }, body: bytes });
     if (!sent.ok) return refusal(sent);
-    const stored = await json<{ status?: string; clearance?: string }>(sent);
+    const stored = await json<{ status?: string; clearance?: string; representation?: string }>(sent);
     if (stored?.status !== 'activated') return { outcome: 'unsupported' };
     const clearance = clearanceOf(stored.clearance);
     // Main will not show an image it rejected, so it is not made the cover.
     if (clearance === 'rejected') return { outcome: 'rejected' };
+    if (!stored.representation) return { outcome: 'failed' };
+    await recordImageInference({ ...input, representation: stored.representation, sha256: byteDigest }, send);
     const selected = await select({ ...input, asset: upload.asset }, send);
     return selected.outcome === 'done' ? { ...selected, upload: upload.upload, clearance } : selected;
   } catch {

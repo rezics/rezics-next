@@ -1,8 +1,8 @@
-export const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+import { normalizeAddressName } from '@rezics/model/address/names';
+export const HANDLE_PATTERN = /^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$/;
 
 export function normalizedHandle(value: string): string | null {
-  const handle = value.trim().toLowerCase();
-  return HANDLE_PATTERN.test(handle) ? handle : null;
+  try { return normalizeAddressName(value.trim(),'ascii-handle').key; } catch { return null; }
 }
 
 export function currentVanityHandle(handle: string | null): string | null {

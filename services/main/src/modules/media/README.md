@@ -14,7 +14,7 @@ selection history stay out of TDB2, where
 | --- | --- | --- |
 | Asset revision anchor | `content.variant` + `content.revision` | Variant `urn:rezics:variant:<asset>` on resource `https://rezics.com/id/<asset>`, language `zxx` unless the image carries language. Model `media-asset-v1`; its manifest lists exact representations. The asset head is `content.variant.draft_head`, written by `ContentCore.saveDraft`. |
 | Image-only publication body | `content.revision`, `content.publication_preparation`, graph `content-publication-v1` | Model `media-set-v1` lists ordered exact Use IDs with their asset revision, representation and SHA-256. The existing pin, graph decision (`rv:contentModel "media-set-v1"`) and Realm selection of that exact decision apply unchanged. No text document is created. |
-| Receipts and positions | `content.receipt`, `content.owner_control` | Seven new `media.*` actions. Every media command takes one Content position. |
+| Receipts and positions | `content.receipt`, `content.owner_control` | Registered `media.*` actions. Every media command records an owner position. |
 | Outbox | `content.outbox` | One event per media receipt. Uses event types `media.*` and recipe `media-v1`. |
 | Immutable guard | `content.no_mutation()` | Used for `asset_state`, `use` and `selection_revision`. |
 | Object adapter | `S3ImmutableObjects` | Prefix `media/asset/<asset>/`. Quarantine key: `media-quarantine/<upload>`. |
@@ -41,7 +41,7 @@ selection history stay out of TDB2, where
   needs the held, unexpired token at the current epoch.
 - `use`: immutable attachment of an exact `media-asset-v1` revision and a
   representation listed in its manifest to a target, context and role
-  (`avatar`, `publication-item`). The crop is a percent `xywh` media fragment.
+  (`avatar`, `publication-item`, `document-image`). Document images bind a stable block occurrence UUID; `(target, occurrence)` cannot be rebound. The crop is a percent `xywh` media fragment.
 - `selection_slot` and `selection_revision`: the avatar head per
   `(target, context, 'avatar')` under policy `avatar-selection-v1`.
   - A NULL expected head is explicit.
@@ -76,16 +76,16 @@ The requested context's slot wins even when it records a removal.
 
 An image is returned only for a public, unsuppressed, active asset whose
 original is available, has clearance `cleared`, has no exact-byte suppression marker, and is within the `avatar-selection-v1` rendition bounds:
-2048 px and 4 MiB. It is served as-is. The local screen uses `transform_job` under profile `image-screen-v1`; no image rendition transform runs. The target resource must also be readable.
+2048 px and 4 MiB. It is served as-is. Classifier evidence does not determine clearance. The target resource must also be readable.
 
-Missing selection, removal, a pending or oversized rendition, and private,
+Missing selection, removal, an oversized rendition, and private,
 suppressed, deleted or erased media all return the same fallback. It carries no
 asset or use ID. The fallback key is derived from policy, readable resource type
 and resource. Responses carry `generation.graph` and `generation.media` and are
 served `no-cache`/`no-store`.
 
 `GET /v1/media/avatars/{selection}` and `GET /v1/media/uses/{use}` re-derive every
-check at request time. A replacement keeps the preceding cleared selection deliverable until its exact original clears. Explicit removal stops the preceding selection immediately.
+check at request time. Valid replacements become deliverable immediately; NSFW and age metadata accompany the selected image. Explicit removal stops the preceding selection immediately.
 
 ## Operation template
 
@@ -116,14 +116,10 @@ Extension, for a new PG-owned media command:
 
 ## Required wiring outside this module
 
-- **Access.** `recordGraphOutcome` knows no receipt family for `media.upload`,
-  `media.manage` or `media.avatar`, so these admissions stay `claimed` after the
-  owner outcome, and strong closure of a media scope reports them pending.
-  - Register the families `media-upload`, `media-state` and `media-avatar` in
-    `access/admission.ts`.
-  - Dispatch `sealMediaAdmission` in `work/strong-revoke.ts`.
-  - The owner side, including the fence receipt and replay, is implemented and
-    tested.
+- **Access.** Media actions declare terminal families in `receipt-family.ts`. The
+  admitted command seals its Content outcome in Access, and replay requires the
+  retained owner receipt. `sealMediaAdmission` records or replays the cancellation
+  fence for strong closure; no absent receipt is inferred to have succeeded.
 - **Content relay.** `relayContentProjectionOnce` now acknowledges `media-v1`
   events in order without invoking text projection. Its `content-body-v1`
   publication path still needs a `media-set-v1` skip before image-only
@@ -138,41 +134,62 @@ The current upload path accepts authenticated direct bytes only, with an 8 MiB
 cap, declared SHA-256, allowlisted raster MIME type and matching container header
 and dimensions. It stages and reads back exact bytes through RustFS before
 activation. The transfer path never fetches a caller URL or runs a transform.
-The separate [local screen](../media-screen/worker.ts) launches an OS child
-process to decode with pinned sharp and classify downscaled pixels with NSFWJS
-on CPU. Delivery uses the exact
-allowlisted image type and `X-Content-Type-Options: nosniff`.
+Delivery uses the exact allowlisted image type and
+`X-Content-Type-Options: nosniff`. Browser inference failures remain unknown and
+can be corrected manually; the retained server classifier is available for a
+future producer migration, but new originals do not queue it.
+
+## Presentation labels and controls
+
+`presentation.ts` binds the existing `EditorialFieldTarget` slot and exact
+`EditorialControlBasis` to owner-local `field_slot`/`field_revision` records.
+The protection transition uses the shared Open/review-required protocol in
+`protection/field-control.ts`; protection is a revision reference, not a second
+boolean lock engine. NSFW and age assessment attach to exact
+Representations, including renditions; labels never silently inherit another
+representation digest. Concealment attaches to an immutable Use occurrence, allowing
+an ordinary image to be concealed independently of its NSFW label. No semantic
+graph profile is introduced.
+
+`POST /v1/media/metadata` accepts at most 64 representation/use or current avatar
+selection references and returns ordered available/unavailable descriptors.
+One SQL batch probes exact heads; target disclosure and Access remain enforced.
+Raw classifier scores stay outside public descriptors. Readers receive NSFW,
+age assessment, concealment and each field's exact value/control/protection
+basis. The frontend combines these facts with viewer state; NSFW display defaults
+to masking and does not imply an age assessment. Unassessed remains distinct
+from General (the existing empty assessment-label set).
+
+Editors use `POST /v1/media/representations/{representation}/labels` and
+`POST /v1/media/uses/{use}/conceal` with the observed value head and control basis.
+Platform administrators can correct, lock or unlock individual fields using the
+existing pinned administrator proof and Access recovery/dispatch fences. Ordinary
+editor authority and automated adoption cannot change a protected field. All
+field writers serialize on the stable owner slot; a first concealment lock also
+locks its Use so whole-document saves cannot race an absent slot. Content's
+`guardDocumentImageUses` checks exact representation/occurrence/target bindings
+and protected concealment during the existing draft transaction. It traverses
+only this document's actual nodes and does not follow referenced content.
+
+`POST /v1/media/representations/{representation}/inferences` records immutable
+client evidence bound to the server-confirmed representation digest. The admitted
+`image-nsfw-v1` policy validates complete finite NSFWJS scores, model/version and
+weights digest and recomputes the submitted result. This records what the client
+reported; it does not claim server execution. Only an unestablished, unprotected
+NSFW field receives an automatic initial value. Manual unknown, manual labels,
+platform corrections and locked values are never overwritten. Unavailable
+inference records unknown evidence and changes no adopted label. Producer remains
+explicit (`client` or future `server`), so moving inference to the backend does
+not change the read/edit/control contract. The initial score thresholds still
+need representative REZICS calibration.
 
 ## Clearance and identical copies
 
-Originals activate with `screening`. The existing upload resource gains a status read so polling does not retransmit up to 8 MiB of bytes; only the reserving principal can poll
-`GET /v1/media/uploads/{upload}`. Transfer and polling responses expose
-`screening|cleared|held|rejected` in `clearance`, with `clearanceReason` and no scores.
-Transfer `status` remains `activated|rejected`; polling also reports `reserved|expired`.
-A rejected clearance has the generic reason `restricted`, including suppressed
-reuploads. An uploader's previously admitted preview can show screening bytes; held/rejected originals are withheld
-from all delivery. Private targets still require their ordinary Access lease.
-
-A complete finite score vector below the versioned thresholds reaches `cleared`
-under the local launch policy. An above-threshold result reaches `held` with
-`likely-explicit`; any decode, integrity, timeout or classifier failure reaches
-`held` with `screen-unavailable`. Scores, model version, exact weights digest
-and thresholds remain review evidence. Neither a score nor an automated report
-is a staff decision or a finding of legality. Animated files are held because
-screening one frame cannot clear all their bytes. These initial thresholds have
-not been calibrated against a representative REZICS corpus.
-
-Activation atomically queues one screen. A single-flight Main loop leases one
-original at a time for 60 seconds, with a 30-second deadline. SIGKILL ends a
-stalled child, and Main waits for its exit before continuing. Tokens and erasure
-epochs fence settlement. Sixteen expired attempts reach a review hold; obsolete
-jobs are cancelled. Held results queue platform case creation in a durable
-Content retry table. Governance deduplicates by screen job, discloses automation
-and records the existing `explicit_imagery` category. Likely explicit results use
-G-564's urgent case flag and specialist evidence authority. An unavailable case owner leaves the
-image held and retries later. G-565 supplies staff authority and decisions;
-`MediaScreenStore.reviewOriginal` applies its exact original CAS and records the
-staff decision. It never grants that authority.
+New originals activate as `cleared` after binary admission. The retained
+`screening|cleared|held|rejected` upload shape remains compatible, but ordinary
+read clearance ignores historical classifier holds and failures. Actual staff
+rejection and exact-byte suppression still deny delivery. Neither NSFW nor age
+assessment decides whether an ordinarily authorized API returns the image.
 
 `suppressIdenticalCopies(originalDigest, after?, limit?, decisionBasis?)` appends an immutable
 SHA-256 suppression before advancing at most 100 asset histories per call. Its asset
@@ -187,7 +204,7 @@ The append-only `suppression_lift` binds the suppression, case and upheld decisi
 to its Content receipt/outbox event in the same transaction. Replaying reconciles
 that receipt before testing the saved asset state. `restoreIdenticalCopies` then
 restores at most 100 eligible histories per call; it leaves other staff decisions,
-held clearance and deleted/erased assets alone. A later suppression has a new
+actual staff rejection and deleted/erased assets alone. A later suppression has a new
 identity, so the previous lift cannot admit newly restricted bytes. Preservation
 holds still prevent erasure. All MediaStore positions use `advanceContentSequence`.
 

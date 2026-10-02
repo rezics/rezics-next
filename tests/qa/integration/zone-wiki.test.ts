@@ -43,7 +43,7 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
         position: 'last', target: sharedWork.work, selection: { mode: 'follow-context' } }],
     }), 200);
     const secondSpace = await f.json<{ space: string; realm: string }>(await f.call('POST', '/v1/spaces', {
-      profile: 'space-realm-v1', name: 'Second wiki', capabilities: ['realm'], actingSubject: f.actor,
+      profile: 'space-realm-v2', handle: 'books', name: 'Second wiki', capabilities: ['realm'], actingSubject: f.actor,
     }), 201);
     const zoneIds = [nativeId(), nativeId()];
     const created: Array<{ zone: string; navigation: string; revision: string }> = [];
@@ -116,13 +116,13 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
       renderTokens: { accent: ZONE_PRESETS.clean.accent } });
     expect((await f.call('PUT', `/v1/zones/${shortId(publicationZone.zone)}/configuration`, {
       expectedHead: publicationWrite.revision, actingSubject: f.actor,
-      official: { routeSegment: 'books' }, defaultRealm: secondSpace.realm,
+      official: {}, defaultRealm: secondSpace.realm,
     })).status).toBe(403);
     await f.grant(`zone:official:${publicationZone.zone}`, 'zone.official');
     const marked = await f.json<{ revision: string }>(await f.call('PUT',
       `/v1/zones/${shortId(publicationZone.zone)}/configuration`, {
         expectedHead: publicationWrite.revision, actingSubject: f.actor,
-        official: { routeSegment: 'books' }, defaultRealm: secondSpace.realm,
+        official: {}, defaultRealm: secondSpace.realm,
       }), 200);
     expect(marked.revision).not.toBe(publicationWrite.revision);
     const officialPage = await (await anonymous.handle(new Request(
@@ -133,12 +133,12 @@ test('WIKI01/WIKI02/VIEW03/VIEW06/CTX01: two Zones mount one Collection without 
       realm: secondSpace.realm, routeSegment: 'books' });
     expect(officialPage.cost).toEqual({ graphReads: 1, rows: officialPage.items.length });
     expect(await (await anonymous.handle(new Request(
-      'http://main.local/v1/zones/by-segment/books'))).json()).toMatchObject({
-      zone: publicationZone.zone, realm: secondSpace.realm });
+      'http://main.local/v1/addresses/resolve?scope=space&key=books'))).json()).toMatchObject({
+      holder: secondSpace.space, capabilities: { zone: publicationZone.zone, realm: secondSpace.realm } });
     await f.grant(`zone:official:${created[0]!.zone}`, 'zone.official');
     expect((await f.call('PUT', `/v1/zones/${shortId(created[0]!.zone)}/configuration`, {
       expectedHead: (await readZoneConfiguration(f.env, created[0]!.zone)).revision,
-      actingSubject: f.actor, official: { routeSegment: 'books' }, defaultRealm: space.realm,
+      actingSubject: f.actor, official: {}, defaultRealm: secondSpace.realm,
     })).status).toBe(400);
     const mountBody = (zone: typeof created[number], presentation: string) => ({
       expectedHead: zone.revision, collection, routeSegment: 'shared', disclosure: 'public',

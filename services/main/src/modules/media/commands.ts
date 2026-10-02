@@ -9,8 +9,12 @@ import { contentDraftReceiptIri } from '../content-publication/draft.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ImageFormatRejected, verifyImage } from './image.ts';
+import { validateImageInference, validateMediaField, type ImageInferenceInput,
+  type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
+import { receiptFamilies } from './receipt-family.ts';
 import { assetIri, MediaConflict, MediaInvalid, MediaMissing,
   MediaStale, MediaFenced, type MediaStore, type AssetStateChangeInput, type AvatarSelectionInput,
+  MediaUnavailable,
   type CommandOutcome, type MediaAdmission, type ReserveUploadInput } from './store.ts';
 
 export class MediaDenied extends Error {}
@@ -74,6 +78,9 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
     throw error;
   }
   if (registered.requestDigest !== args.digest) throw new MediaConflict('media operation key binds another intent');
+  if (registered.state === 'sealed' && !await store.readOutcome(args.operation(registered.id))) {
+    throw new MediaUnavailable('sealed media owner receipt is unavailable');
+  }
   if (registered.state !== 'sealed') {
     try { await access.claim(registered.id, args.digest, principal); }
     catch (error) {
@@ -83,10 +90,30 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
       }
     }
   }
-  const result = await run({ admissionId: registered.id, principalId: registered.principalId,
+  let result:T;
+  try { result = await run({ admissionId: registered.id, principalId: registered.principalId,
     actingSubject: registered.actingSubject, authorityEpoch: registered.authorityEpoch,
-    requestDigest: args.digest });
+    requestDigest: args.digest }); }
+  catch(error) {
+    const recorded=await store.readOutcome(args.operation(registered.id));
+    const family=receiptFamilies[registered.action as keyof typeof receiptFamilies];
+    if (recorded && recorded.outcome!=='succeeded' && family) {
+      await access.recordGraphOutcome(registered.id,{outcome:'cancelled',
+        receipt:`urn:rezics:receipt:${sha256(`${registered.id}\0${family}`)}`,admissionId:registered.id,
+        requestDigest:registered.requestDigest,authorityEpoch:registered.authorityEpoch,scope:registered.scope,
+        dataEpoch:recorded.position.dataEpoch,sequence:recorded.position.sequence});
+    }
+    throw error;
+  }
   if ((result as { outcome?: string }).outcome === 'rejected') throw new MediaDenied('media admission was fenced');
+  const family=receiptFamilies[registered.action as keyof typeof receiptFamilies];
+  if (family) {
+    try { await access.recordGraphOutcome(registered.id,{outcome:(result as {outcome?:string}).outcome==='stale_head'?'cancelled':'succeeded',
+      receipt:`urn:rezics:receipt:${sha256(`${registered.id}\0${family}`)}`,admissionId:registered.id,
+      requestDigest:registered.requestDigest,authorityEpoch:registered.authorityEpoch,scope:registered.scope,
+      dataEpoch:result.position.dataEpoch,sequence:result.position.sequence}); }
+    catch {throw new MediaUnavailable('media outcome is awaiting Access reconciliation');}
+  }
   return Object.assign(result, { replayed: registered.replayed || result.replayed, admission: registered.id });
 }
 
@@ -185,11 +212,47 @@ export function selectAdmittedAvatar(env: WorkActivationEnvironment, media: Medi
   media.store, admission => media.store.selectAvatar(admission, selection));
 }
 
+export function changeAdmittedMediaField(env: WorkActivationEnvironment, media: MediaDependencies,
+  account: Account, access: Access, request: Request,
+  input: MediaFieldInput & { actingSubject: string; idempotencyKey: string }) {
+  const { actingSubject, idempotencyKey, ...change } = input;
+  validateMediaField(change);
+  const protect = change.authority === 'platform';
+  const action = `${change.field === 'conceal' ? 'media.conceal' : 'media.labels'}${protect ? '.protect' : ''}`;
+  return admitted(env,account,access,request,{ scope: protect
+    ? `media:protect:${assetIri(change.use ?? change.representation!)}` : mediaOwnerScope(actingSubject),
+    action,actingSubject,idempotencyKey,digest:sha256(stable({profile:'media-field-control-v1',...change})),
+    operation:id=>`media-field:${id}`,accountScope:protect?'governance:decide':'work:edit'},
+  media.store,admission=>media.store.presentation.changeField(admission,change));
+}
+export function recordAdmittedImageInference(env: WorkActivationEnvironment, media: MediaDependencies,
+  account: Account, access: Access, request: Request,
+  input: ImageInferenceInput & { actingSubject: string; idempotencyKey: string }) {
+  const { actingSubject,idempotencyKey,...observation } = input;
+  validateImageInference(observation);
+  return admitted(env,account,access,request,{scope:mediaOwnerScope(actingSubject),action:'media.inference',
+    actingSubject,idempotencyKey,digest:sha256(stable({profile:'image-inference-v1',...observation})),
+    operation:id=>`media-inference:${id}`,accountScope:'work:edit'},
+  media.store,admission=>media.store.presentation.recordInference(admission,observation));
+}
+export function createAdmittedDocumentImageUse(env: WorkActivationEnvironment, media: MediaDependencies,
+  account: Account, access: Access, request: Request,
+  input: DocumentImageUseInput & { actingSubject: string; idempotencyKey: string }) {
+  const {actingSubject,idempotencyKey,...binding}=input;
+  return admitted(env,account,access,request,{scope:`content:publish:${binding.target}`,action:'media.use',
+    actingSubject,idempotencyKey,digest:sha256(stable({profile:'document-image-use-v1',...binding})),
+    operation:id=>`media-document-use:${id}`,accountScope:'work:edit'},
+  media.store,admission=>media.store.presentation.createDocumentUse(admission,binding));
+}
+
 /** Access dispatch fence for an unsealed media admission (see README: Access registration). */
 export async function sealMediaAdmission(store: MediaStore, admission: RegisteredAdmission) {
   const family = admission.action === 'media.upload' ? ['media-upload', 'media.upload.reserve']
     : admission.action === 'media.manage' ? ['media-state', 'media.asset.state']
-      : admission.action === 'media.avatar' ? ['media-avatar', 'media.selection.change'] : null;
+      : admission.action === 'media.avatar' ? ['media-avatar', 'media.selection.change']
+        : admission.action === 'media.inference' ? ['media-inference','media.inference.record']
+          : admission.action === 'media.use' ? ['media-document-use','media.use.create']
+            : Object.hasOwn(receiptFamilies,admission.action) ? ['media-field','media.field.change'] : null;
   if (!family) throw new MediaInvalid('not a media admission');
   const result = await store.cancel(`${family[0]}:${admission.id}`, family[1]!, admission.requestDigest);
   return { outcome: result.outcome, receipt: `urn:rezics:receipt:${sha256(`${admission.id}\0${family[0]}`)}`,

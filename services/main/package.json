@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./image-screen-policy": "./src/modules/media-screen/policy.ts",
     "./language": "./src/modules/display-language/select.ts",
     "./app": {
       "types": "./src/app.ts"

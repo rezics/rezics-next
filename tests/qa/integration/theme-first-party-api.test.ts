@@ -138,7 +138,7 @@ test('VIEW09: first-party create, immutable review, host activation, revoke and 
     await f.json(await settle('PUT', `/v1/zones/${shortId(zone)}/configuration`, {
       expectedHead: (await readZoneConfiguration(f.env, zone)).revision,
       actingSubject: f.actor, defaultRealm: space.realm,
-      official: { routeSegment: `theme-${shortId(zone).slice(0, 8)}` }, presentation,
+      official: {}, presentation,
     }), 200);
     const publicUrl = `http://main.local/v1/zones/${shortId(zone)}/presentation`;
     const active = await app.handle(new Request(publicUrl));

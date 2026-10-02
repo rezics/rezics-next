@@ -55,8 +55,9 @@ export async function seedRealms(state: SeedState) {
     // Separate stewards retain their own member quotas on a previously seeded stack.
     const steward = state.sessions[index + 1]!;
     const receipt = await state.optional('Space / Realm creation', () => api.post<SpaceReceipt>('/v1/spaces', {
-      profile: 'space-realm-v1', name: realm.seedName, capabilities: ['realm'],
-      actingSubject: steward.actingSubject }, steward.token, seedKey('realm', realm.id)));
+      profile: 'space-realm-v2', name: realm.seedName,handle: 'handle' in realm ? realm.handle : realm.id,capabilities: ['realm'],
+      actingSubject: steward.actingSubject }, steward.token,
+      seedKey('realm', 'handle' in realm ? `${realm.id}:${realm.handle}` : realm.id)));
     if (receipt) createdRealms.push({ id: realm.id, receipt, steward });
   }
   for (const realm of realms) {
@@ -95,7 +96,7 @@ export async function seedRealms(state: SeedState) {
     await api.post('/v1/zones', { zone, space: parent.receipt.space, disclosure: 'public',
       actingSubject: parent.steward.actingSubject }, parent.steward.token, seedKey('zone', realm.id));
     const currentZone = await api.get<{ revision: string; configuration: {
-      defaultRealm: string | null; official: { routeSegment: string } | null;
+      defaultRealm: string | null; official: Record<string,never> | null;
       presentation: unknown } }>(
       `/v1/zones/${zone.slice(-36)}/configuration?actingSubject=${encodeURIComponent(parent.steward.actingSubject)}`,
       parent.steward.token);
@@ -109,7 +110,7 @@ export async function seedRealms(state: SeedState) {
     const current = { defaultRealm: currentZone.configuration.defaultRealm,
       official: currentZone.configuration.official, presentation: currentZone.configuration.presentation };
     for (const [variant, candidate] of [['', presentation], [':plain', withoutTabLabels(presentation)]] as const) {
-      const desiredZone = { defaultRealm: parent.receipt.realm, official: { routeSegment: realm.id },
+      const desiredZone = { defaultRealm: parent.receipt.realm, official: {},
         presentation: candidate };
       if (isDeepStrictEqual(current, desiredZone)) break;
       try {

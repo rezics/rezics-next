@@ -23,9 +23,6 @@ import { sealClassificationDecisionAdmission } from '../classification/decision.
 import { sealRatingContextAdmission } from '../rating/context.ts';
 import { sealRatingPolicyAdmission } from '../rating/policy.ts';
 import { sealStandingRatingAdmission } from '../rating/observation.ts';
-import { sealWorkAddressAdmission } from '../address/claim.ts';
-import { sealWorkAddressRenameAdmission } from '../address/rename.ts';
-import { sealWorkAddressDispositionAdmission } from '../address/dispose.ts';
 import { sealPackageRecommendationAdmission } from '../package/release-recommendation.ts';
 
 export interface WorkScopeRevocationProgress {
@@ -63,12 +60,6 @@ export async function strongRevokeWorkScope(
           ? await sealContentCommentAdmission(comments, admission)
         : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
-        : admission.action === 'address.claim'
-          ? await sealWorkAddressAdmission(env, admission)
-        : admission.action === 'address.rename'
-          ? await sealWorkAddressRenameAdmission(env, admission)
-        : admission.action === 'address.dispose'
-          ? await sealWorkAddressDispositionAdmission(env, admission)
         : admission.action === 'work.title.apply' || admission.action === 'work.title.return'
           ? await cancelTitleControl(env, admission)
         : admission.action === 'work.edit'
@@ -148,12 +139,6 @@ export async function strongRevokeWorkPrincipal(
           ? await sealContentCommentAdmission(comments, admission)
         : admission.action === 'work.create'
         ? await sealMetadataWorkAdmission(env, admission)
-        : admission.action === 'address.claim'
-          ? await sealWorkAddressAdmission(env, admission)
-        : admission.action === 'address.rename'
-          ? await sealWorkAddressRenameAdmission(env, admission)
-        : admission.action === 'address.dispose'
-          ? await sealWorkAddressDispositionAdmission(env, admission)
         : admission.action === 'work.title.apply' || admission.action === 'work.title.return'
           ? await cancelTitleControl(env, admission)
         : admission.action === 'work.edit'

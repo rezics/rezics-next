@@ -1,11 +1,12 @@
 import { GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readZoneConfiguration, ZoneUnavailable } from './configuration.ts';
+import { uuidToSid } from '@rezics/model/address/sid';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PUBLIC_READ_SOURCES } from './presentation-format.ts';
 import { readDynamicDefinition, executeDynamicDefinition } from '../collection/dynamic.ts';
 import { withStableSearchSnapshot, MAX_SEARCH_REQUEST_MS } from '../work/search-readiness.ts';
 import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from './query-budget.ts';
-import type { ZoneConfiguration } from './config-format.ts';
+import { InvalidZoneConfiguration,type ZoneConfiguration } from './config-format.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import type { MediaStore } from '../media/store.ts';
@@ -26,11 +27,12 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
     ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
   return { zone, realm: state.configuration.defaultRealm ?? null,
     name: state.name, language: state.language, direction: state.direction,
-    official: state.configuration.official?.routeSegment ?? null,
-    revision: state.revision, disclosure, storedDisclosure: state.disclosure,
-    space: state.space, listing: state.listing, discovery: pageDiscoveryPolicy(disclosure, state.listing), presentation,
+    official: state.configuration.official ? (await env.addresses?.currents([state.space]))?.get(`space\0${state.space}`)?.key ?? uuidToSid(state.space.slice(-36)) : null,
+    revision: state.revision,
+    disclosure,storedDisclosure: state.disclosure,space:state.space,listing: state.listing,
+    discovery: pageDiscoveryPolicy(disclosure,state.listing),presentation,
     configuration: state.configuration,
-    etag: `"${hash(JSON.stringify({ revision: state.revision, presentation, disclosure, listing: state.listing }))}"`,
+    etag: `"${hash(JSON.stringify({ revision: state.revision, presentation,disclosure,listing:state.listing }))}"`,
     cost: ZONE_PUBLICATION_COST };
 }
 
@@ -128,37 +130,20 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
 
 export async function listOfficialZones(env: WorkActivationEnvironment,
   input: { after?: string; limit: number }) {
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?realm ?segment WHERE {
+  await assertGraphAdmissionOpen(env.fuseki,env.lineage);
+  if (input.after && !/^v2:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.after)) throw new InvalidZoneConfiguration('Unsupported official Zone cursor; restart the listing');
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?realm ?space WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:official true ; rv:zoneState rv:Active ;
-      rv:disclosure rv:Public ; rv:defaultRealm ?realm ; rv:routeSegment ?segment .
-      ?zone rv:space ?space . ?space rv:disclosure rv:Public .
+      rv:disclosure rv:Public ; rv:defaultRealm ?realm ; rv:space ?space .
+      ?space rv:disclosure rv:Public .
       FILTER NOT EXISTS { ?space rv:listing "unlisted" }
-      ${input.after ? `FILTER(STR(?segment) > ${lit(input.after)})` : ''}
-    } } ORDER BY ?segment LIMIT ${input.limit + 1}`);
-  const rows = result.results?.bindings ?? [];
-  const items = rows.slice(0, input.limit).map(row => {
-    if (!row.zone?.value || !row.realm?.value || !row.segment?.value) {
-      throw new ZoneUnavailable('Official Zone directory is incomplete');
-    }
-    return { zone: row.zone.value, realm: row.realm.value, routeSegment: row.segment.value };
-  });
-  return { items, next: rows.length > input.limit ? items.at(-1)?.routeSegment ?? null : null,
-    cost: { graphReads: 1, rows: rows.length } };
-}
-
-export async function officialZoneBySegment(env: WorkActivationEnvironment, segment: string) {
-  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?realm WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:official true ; rv:zoneState rv:Active ;
-      rv:disclosure rv:Public ; rv:defaultRealm ?realm ; rv:routeSegment ${lit(segment)} . }
-      GRAPH ${iri(GRAPHS.current)} { ?zone rv:space ?space . ?space rv:disclosure rv:Public . }
-    } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) return null;
-  if (rows.length !== 1 || !rows[0]?.zone?.value || !rows[0]?.realm?.value) {
-    throw new ZoneUnavailable('Official route segment is ambiguous');
-  }
-  return { zone: rows[0].zone.value, realm: rows[0].realm.value, routeSegment: segment,
-    cost: { graphReads: 1, rows: rows.length } };
+      ${input.after ? `FILTER(STR(?zone) > ${lit(input.after.slice(3))})` : ''}
+    } } ORDER BY STR(?zone) LIMIT ${input.limit + 1}`)).results?.bindings ?? [];
+  const selected = rows.slice(0,input.limit);
+  const spaces = [...new Set(selected.map(row => row.space!.value))];
+  const names = await env.addresses?.currents(spaces).catch(() => new Map());
+  const items = selected.map(row => ({ zone: row.zone!.value,realm: row.realm!.value,
+    routeSegment: names?.get(`space\0${row.space!.value}`)?.key ?? uuidToSid(row.space!.value.slice(-36)) }));
+  return { items,next: rows.length > input.limit ? `v2:${selected.at(-1)!.zone!.value}` : null,
+    cost: { graphReads: 1,rows: rows.length } };
 }

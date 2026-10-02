@@ -14,7 +14,8 @@ import {
   TriangleAlertIcon,
 } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { WebRatedContent } from '../document-editor/rated-content.tsx';
 import Link from '../shell/localized-link.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -244,7 +245,11 @@ function ReaderPage({
 }
 
 /** The text in paragraphs, with the reader's type settings; a note when the reader can't show its format. */
-export function ReaderText({
+export function ReaderText({ ratingTarget, ...props }: ComponentProps<typeof ReaderTextBody> & { ratingTarget?: string }) {
+  return <WebRatedContent target={ratingTarget}><ReaderTextBody {...props} /></WebRatedContent>;
+}
+
+function ReaderTextBody({
   lines,
   document,
   formatNote,
@@ -439,6 +444,7 @@ export function ChapterReader({
           ) : null}
         </header>
         <ReaderText
+          ratingTarget={chapter.content.reference.resourceId}
           lines={lines}
           document={chapter.content.body.document}
           formatNote={t.chapterFormat}
@@ -512,6 +518,7 @@ export function TextReader({
           </h1>
         </header>
         <ReaderText
+          ratingTarget={work.id}
           lines={bodyAfterTitle(paragraphs(text.body), work.title.value)}
           document={text.document}
           formatNote={t.textFormat}

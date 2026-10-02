@@ -1,19 +1,41 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
   testLogEnvironment, writeSummary,
   implementedTiers, tierArtifactName,
-  xmlForCommand, type Tier } from '../../../scripts/qa/core.ts';
+  xmlForCommand, sourceIdentity, type Tier } from '../../../scripts/qa/core.ts';
 import { parseJUnit } from '../../../scripts/qa/acceptance.ts';
 import { qaStartupServices } from '../../../scripts/qa/stack-ownership.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
+
+test('QA source identity hashes a generated-contract diff larger than the default subprocess buffer',()=>{
+  const root=mkdtempSync(join(scratch,'qa-large-source-'));
+  const git=(args:string[])=>execFileSync('git',args,{cwd:root,stdio:'ignore'});
+  try {
+    git(['init','--quiet']);
+    writeFileSync(join(root,'contract.json'),'initial\n');
+    git(['add','contract.json']);
+    git(['-c','user.name=QA fixture','-c','user.email=qa@example.test','commit','--quiet','-m','initial']);
+    const clean=sourceIdentity(root);expect(clean.clean).toBe(true);
+    const large='generated schema row\n'.repeat(60_000);
+    expect(Buffer.byteLength(large)).toBeGreaterThan(1_048_576);
+    writeFileSync(join(root,'contract.json'),large);
+    const changed=sourceIdentity(root);expect(changed.clean).toBe(false);
+    expect(changed.fingerprint).not.toBe(clean.fingerprint);
+    writeFileSync(join(root,'contract.json'),`${large}last field changed\n`);
+    expect(sourceIdentity(root).fingerprint).not.toBe(changed.fingerprint);
+    writeFileSync(join(root,'contract.json'),'initial\n');
+    expect(sourceIdentity(root)).toEqual(clean);
+  } finally {rmSync(root,{recursive:true,force:true});}
+});
 
 test('QA setup: only integration omits the unused fault proxy', () => {
   expect(qaStartupServices({ profile: 'qa' }, 'integration'))

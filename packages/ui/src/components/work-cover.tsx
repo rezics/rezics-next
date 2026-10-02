@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
+import type { ComponentProps, CSSProperties } from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
+import { MediaImage, type MediaImageMetadata } from './media-image.tsx';
 
 /**
  * What the Work is, as a physical object: a bound book, a poster-like
@@ -164,6 +165,9 @@ export interface WorkCoverImage {
   src: string;
   width?: number;
   height?: number;
+  representationId?: string;
+  mediaUseId?: string;
+  metadata?: MediaImageMetadata;
 }
 
 export interface WorkCoverProps extends VariantProps<typeof workCoverVariants> {
@@ -186,6 +190,9 @@ export interface WorkCoverProps extends VariantProps<typeof workCoverVariants> {
   seed?: string;
   /** A selected cover image. The generated cover stays underneath while it loads or if it fails. */
   image?: WorkCoverImage | null;
+  /** Standalone covers can reveal a mask; covers nested in links keep their navigation action. */
+  revealable?: boolean;
+  onImageError?: ComponentProps<'img'>['onError'];
   /**
    * Names the cover for assistive technology. Leave it out where the title is
    * already beside the cover, as on cards and the Work page.
@@ -392,13 +399,13 @@ const designs = { book: BookDesign, document: DocumentDesign, recipe: RecipeDesi
  * contrast); nothing else about a cover is a Zone's to change.
  */
 export function WorkCover({ title, lang, dir, authors = [], kind = 'book', id, seed, image, alt, size,
-  loading = 'lazy', className, style }: WorkCoverProps) {
+  loading = 'lazy', className, style, revealable = false, onImageError }: WorkCoverProps) {
   const { swatch, layout } = coverDesign(kind, id ?? seed ?? title);
   const Design = designs[kind];
   const named = alt !== undefined && alt !== '';
   return <div data-slot="work-cover" data-kind={kind}
     role={named && !image ? 'img' : undefined} aria-label={named && !image ? alt : undefined}
-    aria-hidden={named ? undefined : true}
+    aria-hidden={named || image && revealable ? undefined : true}
     className={cn(workCoverVariants({ size, kind }), className)}
     style={{ aspectRatio: String(workCoverRatio[kind]), background: swatch.ground, color: swatch.ink, ...style }}>
     <div aria-hidden={named && image ? true : undefined} className="absolute inset-0">
@@ -407,7 +414,9 @@ export function WorkCover({ title, lang, dir, authors = [], kind = 'book', id, s
       <Design title={title} lang={lang} dir={dir} authors={authors} swatch={swatch} layout={layout} />
       <span data-slot="work-cover-tint" className="absolute inset-0 bg-(--work-cover-tint)" />
     </div>
-    {image ? <img src={image.src} width={image.width} height={image.height} alt={named ? alt : ''} loading={loading}
+    {image ? <MediaImage src={image.src} representationId={image.representationId} mediaUseId={image.mediaUseId}
+      metadata={image.metadata} revealable={revealable} compact onError={onImageError}
+      width={image.width} height={image.height} alt={named ? alt : ''} loading={loading}
       decoding="async" fetchPriority={loading === 'eager' ? 'high' : undefined}
       className="absolute inset-0 z-10 size-full object-cover" /> : null}
     {image && kind === 'book' ? <Spine side="start" /> : null}
