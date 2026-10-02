@@ -679,7 +679,10 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     if (existsSync(worktree) && !reuse) throw new Error(`${worktree} already exists; remove it or use another ID`);
     mkdirSync(join(stateDir, 'runs', brief.id), { recursive: true });
     if (!reuse) {
-      git(root, ['worktree', 'add', '-q', worktree, '-b', branch, 'main']);
+      // A shared branch outlives its worktree once its last task closes; reattach to it.
+      const branchExists = git(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], true) !== '';
+      git(root, branchExists && brief.worktree !== undefined ? ['worktree', 'add', '-q', worktree, branch]
+        : ['worktree', 'add', '-q', worktree, '-b', branch, 'main']);
       const install = spawnSync('corepack', ['yarn', 'install', '--immutable'], { cwd: worktree, encoding: 'utf8' });
       writeFileSync(join(stateDir, 'runs', brief.id, 'install.log'), `${install.stdout}\n${install.stderr}`);
       if (install.status !== 0) throw new Error(`yarn install failed in ${worktree}; see runs/${brief.id}/install.log`);
