@@ -1144,21 +1144,21 @@ export const backendOperationMappings: readonly OperationMapping[] = [
     ids: ['VIEW01'],
     targets: [
       { status: 'existing', method: 'POST', path: '/v1/addresses/claims' },
-      { status: 'existing', method: 'GET', path: '/v1/addresses/work/{slug}' },
+      { status: 'existing', method: 'GET', path: '/v1/addresses/resolve' },
     ],
-    context: 'E `POST /v1/addresses/claims`; E `GET /v1/addresses/work/{slug}`.',
+    context: 'E `POST /v1/addresses/claims`; E `GET /v1/addresses/resolve`.',
   },
   {
     ids: ['VIEW02'],
     targets: [
       { status: 'existing', method: 'POST', path: '/v1/addresses/renames' },
       { status: 'existing', method: 'POST', path: '/v1/addresses/dispositions' },
-      { status: 'existing', method: 'GET', path: '/v1/addresses/work/{slug}' },
-      { status: 'existing', method: 'GET', path: '/v1/works/{id}/addresses' },
-      { status: 'existing', method: 'GET', path: '/v1/addresses/work/{slug}/revisions/{revision}' },
+      { status: 'existing', method: 'GET', path: '/v1/addresses/resolve' },
+      { status: 'existing', method: 'GET', path: '/v1/resources/{resource}' },
+      { status: 'existing', method: 'GET', path: '/v1/addresses/revisions/{revision}' },
     ],
     context:
-      'E `POST /v1/addresses/renames`; E `POST /v1/addresses/dispositions`; E `GET /v1/addresses/work/{slug}`; E `GET /v1/works/{id}/addresses`; E `GET /v1/addresses/work/{slug}/revisions/{revision}`. Transitive merge-chain reads traverse at most 32 Work hops; a longer, broken or cyclic route is unavailable (503).',
+      'E `POST /v1/addresses/renames`; E `POST /v1/addresses/dispositions`; E `GET /v1/addresses/resolve`; E `GET /v1/resources/{resource}`; E `GET /v1/addresses/revisions/{revision}`. Transitive merge-chain reads traverse at most 32 Work hops; a longer, broken or cyclic route is unavailable (503).',
   },
   {
     ids: ['VIEW03'],

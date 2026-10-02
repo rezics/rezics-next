@@ -11,7 +11,7 @@ import { RealmSubmissionReads } from '../../../services/main/src/modules/realm-s
 import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-submission/store.ts';
 import { WorkMaintainers } from '../../../services/main/src/modules/work/maintainers.ts';
 import { allocateAgentHandle } from '../../../services/main/src/modules/agent/handle.ts';
-import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
+import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
@@ -113,7 +113,11 @@ test('author baseline: metadata, own libraries, handles and narrow resource admi
     expect((await contexts.discover(h.principal)).contexts.find(row => row.actingSubject === h.actor)?.handle)
       .toBe(handle);
     const vanity = `writer_${randomUUID().slice(0, 8)}`;
-    await new AgentVanityHandles(h.accessPool).change(h.principal, h.actor, vanity, null, randomUUID());
+    const names = new NameRegistry(h.accessPool);
+    await h.access.withOwnerAuthority({ principal:h.principal,actingSubject:h.actor,
+      scope:`agent:control:${h.actor}`,action:'agent.control' },client => names.write(client,h.principal,{
+      scope:'agent',holder:h.actor,actingSubject:h.actor,operation:'claim',name:vanity,expectedRevision:null,idempotencyKey:randomUUID(),
+    },h.actor));
     expect((await contexts.discover(h.principal)).contexts.find(row => row.actingSubject === h.actor)?.handle).toBe(vanity);
     expect((await contexts.checkContentDraft(h.principal, work.work, h.actor, '0')).decision).toBe('eligible-now');
     for (const [action, prefix] of [['work.edit', 'work:edit'], ['content.draft', 'content:draft'],

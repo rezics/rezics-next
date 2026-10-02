@@ -6,6 +6,7 @@ import { addressFixture } from './g-937-support.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { ZONE_PROFILE } from '../../../services/main/src/modules/zone/config-format.ts';
+import { uuidToSid,hasSidCaseVariant } from '@rezics/model/address/sid';
 
 test('G937: former graph names move once, retain holders and recover after native cleanup', async () => {
   const f = await addressFixture('migration');
@@ -47,6 +48,8 @@ test('G937: former graph names move once, retain holders and recover after nativ
     );
     const key = `migrated-${randomUUID().slice(0, 8)}`;
     const retained = `https://rezics.com/id/${randomUUID()}`;
+    const invalid = `https://rezics.com/id/${randomUUID()}`;
+    const invalidKey = uuidToSid(randomUUID()).toLowerCase();
     const before = await readZoneConfiguration(f.env, zone);
     const legacyManifest = prepareComponent(
       f.env.objectDirectory,
@@ -71,11 +74,18 @@ test('G937: former graph names move once, retain holders and recover after nativ
         ${iri(realm)} rv:communityHandle "${key}" .
         ${iri(zone)} rv:official true ; rv:routeSegment "${key}" .
         ${iri(binding)} a rv:RouteBinding ; rv:routeNamespace "work" ; rv:normalizedSlug "${key}" ; rv:targetWork ${iri(record.work)} ; rv:routeState rv:Current ; rv:routeRevision ${iri(revision)} .
+        ${iri(invalid)} a rv:RouteBinding ; rv:routeNamespace "work" ; rv:normalizedSlug "${invalidKey}" ; rv:targetWork ${iri(record.work)} ; rv:routeState rv:Current ; rv:routeRevision ${iri(retained)} .
       } GRAPH ${iri(GRAPHS.revisions)} { ${iri(retained)} a rv:RevisionAnchor ; rv:component ${iri(binding)} ;
         rv:targetWork ${iri(record.work)} ; rv:normalizedSlug "${key}" ; rv:routeState rv:Current } }`);
     await f.accessPool.query('DELETE FROM access.name_graph_import WHERE data_epoch = $1', [
       f.env.lineage.dataEpoch,
     ]);
+    await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
+    expect(await migrateGraphNames(f.env)).toEqual({ status: 'deferred' });
+    expect((await f.accessPool.query('SELECT 1 FROM access.name_graph_import WHERE data_epoch = $1',[f.env.lineage.dataEpoch])).rowCount).toBe(0);
+    await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
+      GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
     const original = f.accessPool.query.bind(f.accessPool);
     let interrupt = true;
     f.accessPool.query = (async (sql: string, ...args: unknown[]) => {
@@ -85,12 +95,15 @@ test('G937: former graph names move once, retain holders and recover after nativ
       }
       return original(sql, ...(args as []));
     }) as typeof f.accessPool.query;
-    await expect(migrateGraphNames(f.env)).rejects.toThrow('Lost completion marker');
+    expect(await migrateGraphNames(f.env)).toEqual({ status: 'deferred' });
     f.accessPool.query = original;
     await migrateGraphNames(f.env);
     await migrateGraphNames(f.env);
     expect((await f.env.addresses.lookup('space', key))?.holder).toBe(space);
     expect((await f.env.addresses.lookup('work', key))?.holder).toBe(record.work);
+    expect(await f.env.addresses.lookup('work',invalidKey)).toBeNull();
+    expect((await f.accessPool.query('SELECT reason FROM access.name_graph_import_report WHERE data_epoch = $1 AND source = $2',
+      [f.env.lineage.dataEpoch,invalid])).rows[0]?.reason).toContain('Identity keys cannot be names');
     expect((await readZoneConfiguration(f.env, zone)).configuration.official).toEqual({});
     expect(
       (
@@ -121,6 +134,8 @@ test('G937: former graph names move once, retain holders and recover after nativ
         (await f.accessPool.query('SELECT access.is_address_sid($1) AS sid', [value])).rows[0].sid,
       ).toBe(expected);
     }
+    for (const value of [invalidKey,invalidKey.toUpperCase(),'1'.repeat(21)+'l','z'.repeat(22)])
+      expect((await f.accessPool.query('SELECT access.has_address_sid_case_variant($1) AS sid',[value])).rows[0].sid).toBe(hasSidCaseVariant(value));
     expect(
       (
         await f.accessPool.query(

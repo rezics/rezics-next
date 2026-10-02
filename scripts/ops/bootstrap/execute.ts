@@ -220,7 +220,7 @@ export async function executeBootstrap(input: {
       name: spec.name,
       language: spec.language,
       defaultRealm: realm.realm,
-      official: { routeSegment: spec.routeSegment },
+      official: {},
       presentation: {
         profile: 'zone-presentation-v1',
         preset: spec.preset,
@@ -481,11 +481,11 @@ export async function verifyBootstrap(
 ): Promise<void> {
   for (const zone of result.zones) {
     const spec = zones.find((spec) => spec.id === zone.id)!;
-    const lookup = await api.read<{ zone: string }>(
-      `/v1/zones/by-segment/${spec.routeSegment}`,
+    const lookup = await api.read<{ capabilities: { zone?: string } }>(
+      `/v1/addresses/resolve?${new URLSearchParams({ scope:'space',key:spec.routeSegment })}`,
       true,
     );
-    if (lookup.zone !== zone.zone) throw new Error(`Official Zone ${zone.id} does not resolve`);
+    if (lookup.capabilities.zone !== zone.zone) throw new Error(`Official Zone ${zone.id} does not resolve`);
     await api.read(`/v1/zones/${short(zone.zone)}/presentation`, true);
   }
   for (const definition of result.definitions) {

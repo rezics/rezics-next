@@ -1,4 +1,4 @@
-import { isSid, identityKeyUuid } from './sid.ts';
+import { hasSidCaseVariant, identityKeyUuid } from './sid.ts';
 import {
   allowedRanges,
   scriptRanges,
@@ -81,7 +81,8 @@ export function normalizeAddressName(value: string, policy: NamePolicy): Normali
     throw new InvalidAddressName('Name exceeds its bound');
   const display = value.normalize('NFC');
   const key = foldAddressName(display).replace(/\s+/gu, '-');
-  if (identityKeyUuid(display) || isSid(key) || identityKeyUuid(key)) {
+  if (identityKeyUuid(display) || identityKeyUuid(key) || hasSidCaseVariant(key)
+    || key[22] === '-' && hasSidCaseVariant(key.slice(0,22))) {
     throw new InvalidAddressName('Identity keys cannot be names');
   }
   if (policy === 'ascii-handle') {

@@ -74,15 +74,6 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
       state: 'redirect',
       canonical: { key: renamed.key },
     });
-    await f.accessPool.query(
-      "UPDATE access.name_scope_policy SET canonical = 'id' WHERE scope_kind = 'agent'",
-    );
-    expect(await f.json(await f.lookup('agent', renamed.key), 200)).toMatchObject({
-      canonical: { prefix: '/a/', key: uuidToSid(f.actor.slice(-36)) },
-    });
-    await f.accessPool.query(
-      "UPDATE access.name_scope_policy SET canonical = 'name' WHERE scope_kind = 'agent'",
-    );
     const batch = await f.json<{ summaries: unknown[] }>(
       await f.publicCall('/v1/resources/summaries', {
         profile: 'resource-summary-batch-v1',
@@ -112,10 +103,10 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(f.actor)} rv:profileDisclosure rv:Private } }`);
     for (const key of [renamed.key, uuidToSid(f.actor.slice(-36)), f.actor.slice(-36)])
       expect((await f.lookup('agent', key)).status).toBe(404);
+    const currentPath = `/v1/addresses/current?${new URLSearchParams({ scope:'agent',holder:f.actor,actingSubject:f.actor })}`;
+    expect((await f.publicCall(currentPath)).status).toBe(401);
+    expect(await f.json(await f.call('GET',currentPath),200)).toMatchObject({ holder:f.actor,key:renamed.key,revision:renamed.revision });
   } finally {
-    await f.accessPool.query(
-      "UPDATE access.name_scope_policy SET canonical = 'name' WHERE scope_kind = 'agent'",
-    );
     await f.close();
   }
 }, 30_000);

@@ -132,12 +132,18 @@ class RouteRead {
     return this.summaries.get(target)!;
   }
   async zone(state: Publication) {
-    const current = await this.work.environment.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    const current = await this.work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?spaceDisclosure WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(state.zone)} a rv:Zone ; rv:zoneState rv:Active ;
-        rv:zoneHead ${iri(state.revision)} ; rv:disclosure rv:${state.disclosure === 'public' ? 'Public' : 'Private'} . }
-    }`, 1024);
-    if (current.boolean !== true) throw new ZoneRouteMissing('Zone route is unavailable');
-    if (state.disclosure !== 'public') await this.semantic(state.zone);
+        rv:zoneHead ${iri(state.revision)} ; rv:disclosure rv:${state.storedDisclosure === 'public' ? 'Public' : 'Private'} ;
+        rv:space ${iri(state.configuration.space)} .
+        ${iri(state.configuration.space)} a rv:Space ; rv:disclosure ?spaceDisclosure . }
+    } LIMIT 2`, 1024);
+    const rows = current.results?.bindings ?? [];
+    if (rows.length !== 1 || ![RV + 'Public',RV + 'Private'].includes(rows[0]?.spaceDisclosure?.value ?? '')) {
+      throw new ZoneRouteMissing('Zone route is unavailable');
+    }
+    if (rows[0]!.spaceDisclosure!.value !== RV + 'Public') await this.semantic(state.configuration.space);
+    if (state.storedDisclosure !== 'public') await this.semantic(state.zone);
   }
   async semantic(resource: string) {
     if (!await this.reader.canReadSemantic?.(resource)) {

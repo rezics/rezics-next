@@ -73,13 +73,17 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
       { ...onboarding, displayName: 'Recovered Reader' }, 'recovered-attempt', randomUUID()), 201);
     expect(recovered.state).toBe('active');
 
-    const url = `/v1/agents/${short(agent)}/handle`;
-    const change = (token: string, target: string, handle: string,
-      expectedHandle: string | null, key: string = randomUUID()) => call('PUT',
-      `/v1/agents/${short(target)}/handle`, token,
-      { profile: 'agent-handle-v1', handle, expectedHandle }, key);
+    const heads = new Map<string,string>();
+    const change = async (token: string,target: string,handle: string,expectedHandle: string | null,key = randomUUID()) => {
+      const expectedRevision = expectedHandle === null ? null : heads.get(expectedHandle)!;
+      const response = await call('POST',expectedHandle === null ? '/v1/addresses/claims' : '/v1/addresses/renames',token,
+        { profile: 'name-write-v1',scope: 'agent',holder: target,actingSubject: target,
+          operation: expectedHandle === null ? 'claim' : 'rename',name: handle,expectedRevision },key);
+      if (response.ok) heads.set(handle,(await response.clone().json() as { revision: string }).revision);
+      return response;
+    };
     expect((await change(b.token, agent, 'lin_mei', null)).status).toBe(403);
-    expect((await call('GET', '/v1/handles/admin/availability').then(r => r.json()) as {
+    expect((await call('GET', '/v1/addresses/availability?scope=agent&name=admin').then(r => r.json()) as {
       reason: string }).reason).toBe('reserved');
     const [claimed, raced] = await Promise.all([
       change(a.token, agent, 'lin_mei', null, 'first-handle'),
@@ -92,9 +96,9 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     expect((await json(await change(holderToken, holder, 'lin_mei', null, claimKey), 200)).replayed).toBe(true);
     expect((await change(holderToken, holder, 'other_name', null)).status).toBe(409);
     expect((await json(await change(holderToken, holder, 'other_name', 'lin_mei'), 409)).code)
-      .toBe('agent_handle_cooldown');
+      .toBe('name_cooldown');
     expect((await json(await change(holderToken, holder, 'other_name', null, claimKey), 409)).code)
-      .toBe('agent_handle_conflict');
+      .toBe('name_conflict');
     const labelled = await contexts.discover(principals.get(holderToken)!);
     expect(labelled.contexts.find(item => item.actingSubject === holder)?.handle).toBe('lin_mei');
     const profile = await json(await call('GET', `/v1/agents/${short(holder)}`), 200);
@@ -105,35 +109,34 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
       canonical: '/@lin_mei' });
     expect((await json(await call('GET', `/v1/handles/agent-${short(holder)}`), 200)).resolution)
       .toMatchObject({ state: 'native', redirect: true });
-    await stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
-      WHERE handle = 'lin_mei'`);
-    expect((await json(await change(holderToken, holder, 'new_name', 'lin_mei'), 201)).previousHandle)
+    await stack.accessPool.query(`UPDATE access.name_registry SET changed_at = now() - interval '31 days'
+      WHERE scope = 'agent' AND key = 'lin_mei'`);
+    expect((await json(await change(holderToken, holder, 'new_name', 'lin_mei'), 201)).previousKey)
       .toBe('lin_mei');
-    expect((await json(await call('GET', '/v1/handles/lin_mei/availability'), 200)).reason)
+    expect((await json(await call('GET', '/v1/addresses/availability?scope=agent&name=lin_mei'), 200)).reason)
       .toBe('retained');
     const retired = await json(await call('GET', '/v1/handles/lin_mei'), 200);
     expect(retired.resolution).toMatchObject({ state: 'retired', redirect: true,
       canonical: '/@new_name' });
     expect((await change(holder === agent ? b.token : a.token,
       holder === agent ? otherAgent : agent, 'lin_mei', null)).status).toBe(409);
-    expect((await stack.accessPool.query(`SELECT retired_until::text AS until FROM access.agent_handle
-      WHERE handle = 'lin_mei'`)).rows[0]?.until).toBe('infinity');
+    expect((await stack.accessPool.query("SELECT state FROM access.name_registry WHERE scope = 'agent' AND key = 'lin_mei'")).rows[0]?.state).toBe('redirect');
     // A century-old alias remains an address and cannot become another Agent's brand.
-    await stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '100 years'
-      WHERE handle = 'lin_mei'`);
+    await stack.accessPool.query(`UPDATE access.name_registry SET changed_at = now() - interval '100 years'
+      WHERE scope = 'agent' AND key = 'lin_mei'`);
     expect((await json(await call('GET', '/v1/handles/lin_mei'), 200)).id).toBe(holder);
-    expect((await json(await call('GET', '/v1/handles/lin_mei/availability'), 200)).available).toBe(false);
+    expect((await json(await call('GET', '/v1/addresses/availability?scope=agent&name=lin_mei'), 200)).available).toBe(false);
     const otherTarget = holder === agent ? otherAgent : agent;
     const otherToken = holder === agent ? b.token : a.token;
-    expect((await json(await change(otherToken, otherTarget, 'lin_mei', null), 409)).title)
-      .toBe('handle unavailable');
-    expect((await json(await change(otherToken, otherTarget, '1in_mei', null), 409)).title)
-      .toBe('handle confusable');
-    expect((await json(await call('GET', '/v1/handles/1in_mei/availability'), 200)).reason)
+    expect((await json(await change(otherToken, otherTarget, 'lin_mei', null), 409)).code)
+      .toBe('name_conflict');
+    expect((await json(await change(otherToken, otherTarget, '1in_mei', null), 409)).code)
+      .toBe('name_conflict');
+    expect((await json(await call('GET', '/v1/addresses/availability?scope=agent&name=1in_mei'), 200)).reason)
       .toBe('confusable');
-    await stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
-      WHERE handle = 'new_name'`);
-    expect((await json(await change(holderToken, holder, 'lin_mei', 'new_name', 'reclaim-old'), 201)).previousHandle)
+    await stack.accessPool.query(`UPDATE access.name_registry SET changed_at = now() - interval '31 days'
+      WHERE scope = 'agent' AND key = 'new_name'`);
+    expect((await json(await change(holderToken, holder, 'lin_mei', 'new_name', 'reclaim-old'), 201)).previousKey)
       .toBe('new_name');
     expect((await json(await call('GET', '/v1/handles/new_name'), 200)).resolution)
       .toMatchObject({ state: 'retired', canonical: '/@lin_mei' });
@@ -142,6 +145,5 @@ test('G284: first sign-in and vanity handles preserve authority, claims and reti
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     expect((await change(holderToken, holder, 'held_name', 'lin_mei')).status).toBe(503);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
-    expect(url).toContain(short(agent));
   } finally { await stack.stop(); }
 });

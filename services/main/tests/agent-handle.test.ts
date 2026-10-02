@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { normalizeVanity, RESERVED_HANDLES, suggestVanity, VanityInvalid }
+import { normalizeVanity, suggestVanity, VanityInvalid }
   from '../src/modules/agent/vanity.ts';
 import { agentForHandle, allocateAgentHandle } from '../src/modules/agent/handle.ts';
 import { AgentProvisionInvalid, agentProvisionDigest } from '../src/modules/agent/provision.ts';
@@ -9,11 +9,8 @@ import { AgentProfileInvalid, checkedAgentProfile } from '../src/modules/agent/p
 test('G284: vanity syntax, case folding, reserved routes and native namespace stay separate', () => {
   expect(normalizeVanity('Lin_Mei')).toBe('lin_mei');
   expect(normalizeVanity('Valid-Name')).toBe('valid-name');
-  for (const value of ['ab', 'a'.repeat(31), 'élo', 'foo.bar', 'admin', 'REZICS']) {
+  for (const value of ['ab', 'a'.repeat(31), 'élo', 'foo.bar']) {
     expect(() => normalizeVanity(value)).toThrow(VanityInvalid);
-  }
-  for (const word of ['admin', 'administrator', 'moderator', 'staff', 'support', 'rezics']) {
-    expect(RESERVED_HANDLES.has(word)).toBe(true);
   }
   const agent = `https://rezics.com/id/${randomUUID()}`;
   expect(agentForHandle(allocateAgentHandle(agent))).toBe(agent);

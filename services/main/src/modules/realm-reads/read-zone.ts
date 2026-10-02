@@ -9,10 +9,10 @@ import { readRealmBasis } from './read-realm.ts';
 export async function readRealmZone(session: WorkReadSession, realm: string,
   publicationRead: typeof readZonePublication = readZonePublication) {
   const basis = await readRealmBasis(session, realm);
-  const rows = await session.query(`SELECT DISTINCT ?zone ?segment WHERE {
+  const rows = await session.query(`SELECT DISTINCT ?zone ?official WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:zoneState rv:Active ;
       rv:disclosure rv:Public ; rv:defaultRealm ${iri(realm)} .
-      OPTIONAL { ?zone rv:official true ; rv:routeSegment ?segment }
+      OPTIONAL { ?zone rv:official ?official }
     }
   } LIMIT 2`, 2);
   if (!rows.length) throw new WorkReadMissing('Realm Zone is unavailable');
@@ -28,7 +28,7 @@ export async function readRealmZone(session: WorkReadSession, realm: string,
   }
   if (publication.disclosure !== 'public' && basis.visibility !== 'private' || publication.realm !== realm
     || publication.space !== basis.space
-    || publication.official !== (rows[0].segment?.value ?? null)) {
+    || (publication.official !== null) !== (rows[0].official?.value === 'true')) {
     throw new WorkReadUnavailable('Realm Zone presentation differs from its public relation');
   }
   await readRealmBasis(session, realm);

@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -91,6 +92,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const env: WorkActivationEnvironment = { fuseki, objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
   const accessPool = new Pool({ connectionString: options.ownerUrls?.access ?? Bun.env.ACCESS_DATABASE_URL });
+  env.addresses = new NameRegistry(accessPool);
   const contentPool = new Pool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL });
   const relayPool = new Pool({ connectionString: options.ownerUrls?.relay ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);

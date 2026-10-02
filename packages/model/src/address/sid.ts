@@ -39,6 +39,21 @@ export function isSid(value: string): boolean {
   }
 }
 
+/** Names are case folded. Reserve a key if any ASCII case variant is a sid.
+ * Choosing the smallest valid digit at each position finds the minimum of all
+ * variants without enumerating their exponential number of spellings. */
+export function hasSidCaseVariant(value: string): boolean {
+  if (value.length !== SID_LENGTH) return false;
+  let minimum = 0n;
+  for (const character of value) {
+    const digits = [character.toUpperCase(), character.toLowerCase()]
+      .map(c => SID_ALPHABET.indexOf(c)).filter(digit => digit >= 0);
+    if (!digits.length) return false;
+    minimum = minimum * 58n + BigInt(Math.min(...digits));
+  }
+  return minimum < MAX_UUID;
+}
+
 /** Slugs decorate an identity; the resolver never uses their text. */
 export function identityKeyUuid(key: string): string | null {
   if (UUID.test(key)) return key.toLowerCase();

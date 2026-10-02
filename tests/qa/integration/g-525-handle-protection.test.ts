@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AgentPublicProfiles } from '../../../services/main/src/modules/agent/profile.ts';
+import { nameSkeleton } from '@rezics/model/address/names';
+import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { startMediaStack } from './media-support.ts';
@@ -72,18 +74,22 @@ test('G525: SQL skeleton table, migration retention, competing lookalikes and un
     const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
     const first = `m_${suffix}`;
     const second = `rn_${suffix}`;
-    const claim = (token: string, agent: string, handle: string, expectedHandle: string | null) =>
-      call('PUT', `/v1/agents/${agent.slice(-36)}/handle`, token,
-        { profile: 'agent-handle-v1', handle, expectedHandle });
+    const names = new NameRegistry(stack.accessPool);
+    const claim = async (token: string,agent: string,handle: string,expectedHandle: string | null) => {
+      const head = expectedHandle ? await names.lookup('agent',expectedHandle) : null;
+      return call('POST',expectedHandle ? '/v1/addresses/renames' : '/v1/addresses/claims',token,
+        { profile: 'name-write-v1',scope: 'agent',holder: agent,actingSubject: agent,
+          operation: expectedHandle ? 'rename' : 'claim',name: handle,expectedRevision: head?.revision ?? null });
+    };
     const raced = await Promise.all([claim(a.token, agentA, first, null), claim(b.token, agentB, second, null)]);
     expect(raced.map(response => response.status).sort()).toEqual([201, 409]);
     const winner = raced[0]!.status === 201 ? { token: a.token, agent: agentA, name: first, alias: second }
       : { token: b.token, agent: agentB, name: second, alias: first };
     const loser = raced[0]!.status === 201 ? { token: b.token, agent: agentB } : { token: a.token, agent: agentA };
-    expect(await handles.availability(winner.alias)).toMatchObject({ available: false, reason: 'confusable' });
+    expect(await names.availability('agent',winner.alias)).toMatchObject({ available: false, reason: 'confusable' });
     expect(await handles.current(loser.agent)).toBeNull();
-    expect((await stack.accessPool.query(`SELECT count(*)::int AS count FROM access.agent_handle
-      WHERE skeleton = access.handle_skeleton($1)`, [first])).rows[0]?.count).toBe(1);
+    expect((await stack.accessPool.query(`SELECT count(*)::int AS count FROM access.name_registry
+      WHERE scope = 'agent' AND skeleton = $1`, [nameSkeleton(first)])).rows[0]?.count).toBe(1);
     const probe = await stack.accessPool.connect();
     try {
       await probe.query('BEGIN');
@@ -91,17 +97,18 @@ test('G525: SQL skeleton table, migration retention, competing lookalikes and un
       // Both inequalities seek the compound index, skipping every same-Agent
       // alias even when that Agent's retained inventory grows without a limit.
       for (const comparison of ['<', '>']) {
-        const plan = await probe.query(`EXPLAIN (FORMAT JSON) SELECT 1 FROM access.agent_handle
-          WHERE skeleton = access.handle_skeleton($1) AND agent_id ${comparison} $2 LIMIT 1`,
-        [first, winner.agent]);
-        expect(JSON.stringify(plan.rows)).toContain('agent_handle_skeleton_agent');
+        const plan = await probe.query(`EXPLAIN (FORMAT JSON) SELECT 1 FROM access.name_registry
+          WHERE scope = 'agent' AND skeleton = $1 AND controller = $2 AND holder ${comparison} $2 LIMIT 1`,
+        [nameSkeleton(first), winner.agent]);
+        expect(JSON.stringify(plan.rows)).toMatch(/name_registry_(?:handle_)?skeleton/);
+        expect(JSON.stringify(plan.rows)).toMatch(/Index Cond[^\n]*holder/);
       }
     } finally {
       await probe.query('ROLLBACK');
       probe.release();
     }
-    await stack.accessPool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
-      WHERE handle = $1`, [winner.name]);
+    await stack.accessPool.query(`UPDATE access.name_registry SET changed_at = now() - interval '31 days'
+      WHERE scope = 'agent' AND key = $1`, [winner.name]);
     // The same Agent may hold multiple spellings; its retired alias continues to resolve.
     expect((await claim(winner.token, winner.agent, winner.alias, winner.name)).status).toBe(201);
     expect(await handles.resolve(winner.name)).toMatchObject({ agent: winner.agent, state: 'retired',

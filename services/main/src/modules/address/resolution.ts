@@ -63,6 +63,34 @@ async function resolveAddressBatch(
       selected.push({ input, holder: uuid ? `https://rezics.com/id/${uuid}` : null, name: null });
     } else selected.push({ input, ...(await registry.identify(input.scope, input.key)) });
   }
+  const zoneSpaces = [
+    ...new Set(
+      inputs
+        .filter((input) => input.scope.startsWith('zone:'))
+        .map((input) => input.scope.slice(5)),
+    ),
+  ];
+  if (zoneSpaces.length) {
+    const sites =
+      (
+        await env.fuseki.query(
+          `PREFIX rv: <${RV}> SELECT DISTINCT ?space WHERE {
+      VALUES ?space { ${zoneSpaces.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:disclosure rv:Public .
+        ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:disclosure rv:Public .
+        FILTER NOT EXISTS { ?space rv:protectionHead ?p }
+        FILTER NOT EXISTS { ?zone rv:protectionHead ?p }
+      } } LIMIT ${zoneSpaces.length}`,
+          8192,
+        )
+      ).results?.bindings ?? [];
+    const readable = new Set(sites.map((row) => row.space?.value));
+    // Scope membership is confidential even when its target is independently public,
+    // and retirement must not turn a private site into a public name inventory.
+    for (const item of selected)
+      if (item.input.scope.startsWith('zone:') && !readable.has(item.input.scope.slice(5)))
+        item.holder = null;
+  }
   const aliases = selected.filter(
     (item) => (item.input.scope === 'space' || item.input.scope === 'resource') && item.holder,
   );
@@ -130,6 +158,24 @@ async function resolveAddressBatch(
     );
     for (const summary of batch.summaries) summaries.set(summary.reference, summary);
   }
+  const named = selected.filter((item) => item.name);
+  const wantedHeads = named.flatMap((item) => {
+    const summary = summaries.get(item.holder);
+    return summary?.status === 'available'
+      ? [
+          {
+            scope: item.input.scope as NameScope,
+            holder: summary.resolution?.survivor ?? item.holder!,
+          },
+        ]
+      : [];
+  });
+  const heads = wantedHeads.length
+    ? await registry.heads(
+        wantedHeads.map((item) => item.scope),
+        wantedHeads.map((item) => item.holder),
+      )
+    : new Map();
   return Promise.all(
     selected.map(async ({ input, holder, name }) => {
       const summary = holder ? summaries.get(holder) : null;
@@ -156,7 +202,12 @@ async function resolveAddressBatch(
         }
       }
       let canonical = summary.address;
-      if (kind === 'zone' && name?.state !== 'retired') {
+      const retired =
+        name?.state === 'retired' ||
+        (!!name &&
+          heads.get(`${input.scope}\0${summary.resolution?.survivor ?? holder}`)?.state ===
+            'retired');
+      if (kind === 'zone' && !retired) {
         const site = (
           await env.fuseki.query(
             `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
@@ -192,9 +243,9 @@ async function resolveAddressBatch(
         profile: 'address-resolution-v1' as const,
         scope: input.scope,
         key: input.key,
-        status: name?.state === 'retired' ? ('retired' as const) : ('resolved' as const),
+        status: retired ? ('retired' as const) : ('resolved' as const),
         holder: holder!,
-        state: name?.state ?? ('current' as const),
+        state: retired ? ('retired' as const) : (name?.state ?? ('current' as const)),
         canonical,
         ...(name ? { revision: name.revision } : {}),
         ...(summary.type === 'space' ? { capabilities: capabilities.get(holder!) ?? {} } : {}),

@@ -136,8 +136,8 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     await f.grant(`address:claim:${source.work}`,'address.claim');
     const slug = `sao-836-${randomUUID().slice(0,8)}`;
     const address = await f.json<{ revision: string }>(await f.call('POST','/v1/addresses/claims',
-      { profile: 'work-address-claim-v1',work: source.work,slug,actingSubject: f.actor }),201);
-    const oldAddress = `/v1/addresses/work/${slug}/revisions/${shortId(address.revision)}`;
+      { profile: 'name-write-v1',scope: 'work',holder: source.work,operation: 'claim',name: slug,expectedRevision: null,actingSubject: f.actor }),201);
+    const oldAddress = `/v1/addresses/revisions/${address.revision}?scope=work&key=${slug}`;
     const addressBefore = await json<Record<string,unknown>>(await call('GET',oldAddress,undefined,null));
     const status = (work: string,actor: string,value: string,token: string,expectedVersion = 0) => call('PUT',`/v1/works/${shortId(work)}/reader-status`,
       { actingSubject: actor,status: value,expectedVersion },token).then(r => json<{ version: number }>(r));
@@ -262,7 +262,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     await identityEvent(merged,'merge');
     expect(libraryCommits).toBe(2);
     expect((await f.pool.query('SELECT count(*)::int AS n FROM reader.library_status_merge_receipt WHERE task_key=$1',[merged.receipt!.operationKey])).rows[0].n).toBe(2);
-    expect(await json(await call('GET',`/v1/addresses/work/${slug}`,undefined,null))).toMatchObject({ state: 'current',work: source.work,resolution: { survivor: survivor.work } });
+    expect(await json(await call('GET',`/v1/addresses/resolve?scope=work&key=${slug}`,undefined,null))).toMatchObject({ state: 'current',holder: source.work,resolution: { survivor: survivor.work } });
     expect(await json(await call('GET',oldAddress,undefined,null))).toMatchObject({ ...addressBefore,resolution: { survivor: survivor.work } });
     expect(await json(await call('GET',`/v1/revisions/${shortId(source.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`))).toMatchObject({ resolution: { survivor: survivor.work } });
     const state = () => f.pool.query<{ agent: string; work: string; status: string | null }>('SELECT agent,work,status FROM reader.library_status WHERE agent=ANY($1::text[]) AND work=ANY($2::text[]) ORDER BY agent,work',[[actorA,actorB],[source.work,survivor.work]]);

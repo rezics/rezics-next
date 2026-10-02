@@ -2,6 +2,7 @@ import { uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { NameUnavailable, NATIVE_ADDRESS_HOLDER } from './registry.ts';
+import { NAME_POLICIES } from './policy.ts';
 
 export function identityCanonical(
   type: string,
@@ -45,8 +46,9 @@ export async function canonicalAddresses(
   if (spaceTypes.length) {
     const rows =
       (
-        await env.fuseki.query(
-          `PREFIX rv: <${RV}> SELECT ?resource ?space ?site WHERE {
+        await env.fuseki
+          .query(
+            `PREFIX rv: <${RV}> SELECT ?resource ?space ?site WHERE {
       VALUES ?resource { ${spaceTypes.map((summary) => iri(summary.reference)).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} {
         { ?resource a rv:Space . BIND(?resource AS ?space) }
@@ -54,27 +56,27 @@ export async function canonicalAddresses(
         UNION { ?resource a rv:Zone ; rv:space ?space }
         BIND(EXISTS { ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:disclosure rv:Public } AS ?site)
       } } LIMIT ${summaries.length + 1}`,
-          64 * 1024,
-        )
+            64 * 1024,
+          )
+          .catch(() => ({ results: { bindings: [] } }))
       ).results?.bindings ?? [];
-    if (rows.length !== spaceTypes.length)
-      throw new NameUnavailable('Space address identity is ambiguous');
+    const byResource = new Map<string, string[]>();
+    for (const row of rows)
+      if (row.resource && row.space) {
+        const found = byResource.get(row.resource.value) ?? [];
+        found.push(row.space.value);
+        byResource.set(row.resource.value, found);
+      }
     for (const row of rows) {
-      if (!row.resource || !row.space)
-        throw new NameUnavailable('Space address identity is incomplete');
+      if (!row.resource || !row.space || !NATIVE_ADDRESS_HOLDER.test(row.space.value)
+        || byResource.get(row.resource.value)?.length !== 1) continue;
       holders.set(row.resource.value, row.space.value);
       if (row.site?.value === 'true') siteSpaces.add(row.space.value);
     }
   }
-  const names = (await env.addresses?.currents([...new Set(holders.values())])) ?? new Map();
-  const policies = env.addresses
-    ? await Promise.all(
-        ['agent', 'space', 'work'].map(
-          async (scope) => [scope, (await env.addresses!.policy(scope)).canonical] as const,
-        ),
-      )
-    : [];
-  const policy = new Map(policies);
+  const names =
+    (await env.addresses?.currents([...new Set(holders.values())]).catch(() => new Map())) ??
+    new Map();
   const result = new Map<string, CanonicalAddress>();
   for (const summary of summaries) {
     const holder = holders.get(summary.reference)!;
@@ -87,7 +89,7 @@ export async function canonicalAddresses(
             ? 'work'
             : null;
     const name = scope ? names.get(`${scope}\0${holder}`) : null;
-    const named = name && policy.get(scope!) === 'name';
+    const named = name && NAME_POLICIES[scope!].canonical === 'name';
     const address = identityCanonical(
       summary.type,
       holder,

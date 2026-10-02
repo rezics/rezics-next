@@ -220,7 +220,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
   return new Elysia()
     .get('/v1/zones', { query: t.Object({ official: t.Literal('true'),
-      after: t.Optional(t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })),
+      after: t.Optional(t.String({ pattern: '^v2:https://rezics\\.com/id/[0-9a-f-]{36}$', maxLength: 128 })),
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
       response: { 200: officialPage, ...errors } }, async ({ query }: { query: {
         official: 'true'; after?: string; limit?: number } }) => {

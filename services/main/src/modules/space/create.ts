@@ -16,9 +16,8 @@ export const MEMBERSHIP_POLICY = 'https://rezics.com/definition/realm-closed-v1'
 export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const COMMUNITY_HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
-export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 1, handleChecks: 2,
+export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 2, handleChecks: 2,
   graphCommandCalls: 1, deadlineMs: 10_000 } as const;
-export const COMMUNITY_HANDLE_READ_COST = { resultRows: 2, queryBytes: 1024 } as const;
 
 export class InvalidSpaceInput extends Error {}
 
@@ -67,7 +66,7 @@ export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
     ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }));
 }
 
-async function validateTopics(env: WorkActivationEnvironment, topics: readonly string[]): Promise<void> {
+export async function validateTopics(env: WorkActivationEnvironment, topics: readonly string[]): Promise<void> {
   if (!topics.length) return;
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX skos: <http://www.w3.org/2004/02/skos/core#>

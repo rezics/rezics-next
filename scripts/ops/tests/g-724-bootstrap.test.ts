@@ -58,9 +58,9 @@ async function fixture() {
         } as T;
       if (path.startsWith('/v1/lexicon/definitions/'))
         return definitions.get(path.split('/').at(-1)!) as T;
-      if (path.startsWith('/v1/zones/by-segment/')) {
-        const id = path.split('/').at(-1)!;
-        return { zone: resource(plan.namespace, `zone:${id}`) } as T;
+      if (path.startsWith('/v1/addresses/resolve?')) {
+        const id = new URL(path,'https://main.test').searchParams.get('key')!;
+        return { capabilities: { zone: resource(plan.namespace, `zone:${id}`) } } as T;
       }
       if (path.startsWith('/v1/zones/')) {
         if (path.includes('/presentation')) return {} as T;

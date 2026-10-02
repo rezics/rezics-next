@@ -52,7 +52,9 @@ export const SIGNED_HOME_READS = {
  */
 export const HOME_READ_BUDGET = {
   anonymous: { graphQueries: 85, statements: 100 },
-  signed: { graphQueries: 105, statements: 200 },
+  // Four summary batches can now each read current canonical names with one
+  // plain SQL query. No new authority transaction belongs in that hot path.
+  signed: { graphQueries: 105, statements: 204 },
   continue: { graphQueries: 30, statements: 110 },
   suggestions: { graphQueries: 25, statements: 60 },
 } as const;

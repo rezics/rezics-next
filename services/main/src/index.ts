@@ -51,7 +51,6 @@ import { AgentProvisioning } from './modules/agent/provision.ts';
 import { OnboardingPersons } from './modules/onboarding/persons.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
 import { NameRegistry } from './modules/address/registry.ts';
-import { migrateGraphNames } from './modules/address/migrate.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
@@ -237,7 +236,6 @@ const environment = {
   objectDirectory: config.MAIN_OBJECT_DIRECTORY,
   ...(workObjects ? { workObjects } : {}),
 };
-await migrateGraphNames(environment);
 const serialStats = recommendationRelayPool
   ? new SerialStatisticsProjection(pool, recommendationRelayPool, contentPool, environment) : undefined;
 const zoneBrowse = recommendationRelayPool

@@ -5,6 +5,7 @@ import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/im
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { ZONE_RESERVED_SEGMENTS } from '../../../services/main/src/modules/zone/route-path.ts';
 import { addressFixture } from './g-937-support.ts';
+import { GRAPHS,iri } from '../../../services/main/src/modules/work/activate.ts';
 
 test('G937: Zone detail routes declare name or id keys and validate their namespace', async () => {
   const f = await addressFixture('zone');
@@ -124,7 +125,7 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
         key: '日本語のページ',
       },
     });
-    await f.receipt(
+    const renamed = await f.receipt(
       await f.nameWrite(
         `zone:${space.space}`,
         resource.work,
@@ -141,6 +142,22 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
       canonical: { prefix: '/z/', key: uuidToSid(space.space.slice(-36)) },
     });
     expect((await readZoneConfiguration(f.env, zone)).configuration.official).toBeUndefined();
+    const availability = `/v1/addresses/availability?${new URLSearchParams({ scope: `zone:${space.space}`,name: 'Other Page' })}`;
+    expect((await f.publicCall(availability)).status).toBe(403);
+    expect((await f.call('GET',availability + `&actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(200);
+    await f.receipt(await f.nameWrite(`zone:${space.space}`,resource.work,'release',null,renamed.revision));
+    expect((await f.lookup(`zone:${space.space}`,renamed.key)).status).toBe(410);
+    for (const hidden of [space.space,zone]) {
+      await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+        DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden)} rv:disclosure rv:Public } };
+        INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden)} rv:disclosure rv:Private } }`);
+      for (const key of [named.key,renamed.key,uuidToSid(resource.work.slice(-36))])
+        expect((await f.lookup(`zone:${space.space}`,key)).status).toBe(404);
+      if (hidden === space.space) expect((await route(`/records/${uuidToSid(resource.work.slice(-36))}`)).status).toBe(404);
+      await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+        DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden)} rv:disclosure rv:Private } };
+        INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden)} rv:disclosure rv:Public } }`);
+    }
     const missing = `zone:https://rezics.com/id/${randomUUID()}`;
     expect((await f.nameWrite(missing, resource.work, 'claim', 'Other Page', null)).status).toBe(
       400,

@@ -6,19 +6,16 @@ import { agentForHandle } from './handle.ts';
 
 export const VANITY_HANDLE_PATTERN = '^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$';
 export const HANDLE_COOLDOWN_DAYS = 30;
-export const RESERVED_HANDLES = new Set(['admin','administrator','api','auth','official','rezics','root',
-  'staff','support','system','security','moderator','help','settings','profile','discover','search']);
 export function normalizeVanity(value: string): string {
   try {
     const key = normalizeAddressName(value,'ascii-handle').key;
-    if (RESERVED_HANDLES.has(key)) throw new NameInvalid('Name is reserved');
     return key;
   } catch (error) { throw new NameInvalid(error instanceof Error ? error.message : 'Invalid handle'); }
 }
 export function suggestVanity(displayName: string): string {
   const base = displayName.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g,'_')
     .replace(/^_+|_+$/g,'').slice(0,30).replace(/_+$/g,'');
-  return base.length >= 3 && !RESERVED_HANDLES.has(base) ? base : 'reader';
+  return base.length >= 3 ? base : 'reader';
 }
 export interface HandleResolution { agent: string; handle: string; currentHandle: string;
   state: 'current' | 'retired' | 'native'; redirect: boolean }

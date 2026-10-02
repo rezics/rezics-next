@@ -28,6 +28,9 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
+import { controlTransaction,requirePrincipal,requireMandate,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { realmTransaction,realmManager } from './realm-management-authority.ts';
+import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -862,6 +865,27 @@ export class AccessAdmissionRegistry {
    * held until the callback and its owner receipt commit in this transaction. */
   async withOwnerAuthority<T>(request: Omit<AdmissionRequest, 'editorialPermit' | 'idempotencyKey' | 'requestDigest'>,
     operation: (client: PoolClient) => Promise<T>): Promise<T> {
+    if (request.action === 'agent.control') {
+      if (request.scope !== `agent:control:${request.actingSubject}`) throw new AdmissionDenied('Agent control scope differs');
+      try { return await controlTransaction(this.pool,async client => {
+        const principal = await requirePrincipal(client,request.principal);
+        await requireMandate(client,principal.id,request.actingSubject,'agent.control');
+        return operation(client);
+      }); } catch (error) { if (error instanceof ControlDenied) throw new AdmissionDenied(error.message);
+        if (error instanceof ControlUnavailable) throw new AdmissionUnavailable(error.message);throw error; }
+    }
+    if (request.action === 'realm.settings.manage' && request.scope.startsWith('governance:realm:')) {
+      const realm = request.scope.slice('governance:realm:'.length);
+      let ownerError: unknown;
+      try { return await realmTransaction(this.pool,realm,true,async client => {
+        try { await realmManager(client,request.principal,realm,request.actingSubject,'realm.settings.manage'); }
+        catch (error) { if (!(error instanceof RealmAdminDenied)) throw error;
+          await realmManager(client,request.principal,realm,request.actingSubject,'realm.owner'); }
+        try { return await operation(client); } catch (error) { ownerError = error;throw error; }
+      }); } catch (error) { if (ownerError !== undefined) throw ownerError;
+        if (error instanceof RealmAdminDenied) throw new AdmissionDenied(error.message);
+        if (error instanceof RealmAdminUnavailable) throw new AdmissionUnavailable(error.message);throw error; }
+    }
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');

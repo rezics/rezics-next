@@ -49,8 +49,8 @@ test.beforeAll(async () => {
   for (const segment of ['visual-novels', 'light-novels']) {
     let state = '';
     for (const deadline = Date.now() + 120_000; Date.now() < deadline && state !== 'package';) {
-      const zone = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/zones/by-segment/${segment}`).catch(() => null);
-      const id = zone?.ok ? (await zone.json() as { zone: string }).zone.slice(-36) : null;
+      const zone = await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/addresses/resolve?scope=space&key=${segment}`).catch(() => null);
+      const id = zone?.ok ? (await zone.json() as { capabilities: { zone?: string } }).capabilities.zone?.slice(-36) : null;
       const presentation = id ? await fetch(`http://127.0.0.1:${process.env.MAIN_PORT}/v1/zones/${id}/presentation`).catch(() => null) : null;
       state = presentation?.ok ? (await presentation.json() as { execution: { state: string } }).execution.state : '';
       if (state !== 'package') await new Promise(done => setTimeout(done, 1000));

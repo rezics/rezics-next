@@ -6,7 +6,7 @@ import { CancelledActivation, IdempotencyConflict,
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { NameInvalid, NameConflict, NameUnavailable } from '../address/registry.ts';
 import { createRealmSpace, readSpaceCreationReceipt, sealRealmSpaceAdmission,
-  spaceCreationDigest, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
+  spaceCreationDigest, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
 
 export async function createAdmittedRealmSpace(
   env: WorkActivationEnvironment,
@@ -35,13 +35,14 @@ export async function createAdmittedRealmSpace(
         await sealRealmSpaceAdmission(env, admission);
       } else {
         try {
+          await validateTopics(env,input.topics ?? []);
           if (input.handle) {
             if (!env.addresses || !access.withOwnerAuthority) throw new NameUnavailable('Space name registry is unavailable');
             await access.withOwnerAuthority({ principal,actingSubject: input.actingSubject,
               action: 'space.create',scope: 'space:create:root' },client => env.addresses!.write(client,principal,{
                 scope: 'space',holder: `https://rezics.com/id/${admission.id}`,actingSubject: input.actingSubject,
                 operation: 'claim',name: input.handle,expectedRevision: null,idempotencyKey: `space-name:${admission.id}`,
-              },input.actingSubject));
+              },input.actingSubject,admission.id));
           }
           await createRealmSpace(env, admission, input);
         }

@@ -26,17 +26,20 @@ test('G525: retired profile addresses answer 308 and retain works and shelf path
   const { agent } = await created.json() as { agent: string };
   const oldHandle = `past_${suffix}`;
   const newHandle = `present_${suffix}`;
-  const change = (handle: string, expectedHandle: string | null) =>
-    page.request.put(`/api/main/v1/agents/${agent.slice(-36)}/handle`, {
+  const change = async (handle: string, expectedHandle: string | null) => {
+    const current = expectedHandle ? await (await page.request.get(`/api/main/v1/addresses/resolve?${new URLSearchParams({ scope:'agent',key:expectedHandle })}`)).json() as { revision:string } : null;
+    return page.request.post(`/api/main/v1/addresses/${current ? 'renames' : 'claims'}`, {
       headers: { 'idempotency-key': randomUUID() },
-      data: { profile: 'agent-handle-v1', handle, expectedHandle },
+      data: { profile:'name-write-v1',scope:'agent',holder:agent,actingSubject:agent,
+        operation:current ? 'rename' : 'claim',name:handle,expectedRevision:current?.revision ?? null },
     });
+  };
   expect((await change(oldHandle, null)).status()).toBe(201);
   const pool = new Pool({ connectionString: process.env.ACCESS_DATABASE_URL });
   try {
     // Only the isolated fixture's clock is advanced; both changes use the real API.
-    await pool.query(`UPDATE access.agent_handle SET claimed_at = now() - interval '31 days'
-      WHERE handle = $1 AND agent_id = $2`, [oldHandle, agent]);
+    await pool.query(`UPDATE access.name_registry SET changed_at = now() - interval '31 days'
+      WHERE scope = 'agent' AND key = $1 AND holder = $2`, [oldHandle, agent]);
   } finally { await pool.end(); }
   expect((await change(newHandle, oldHandle)).status()).toBe(201);
   for (const path of ['', '/works', '/works?cursor=a+b', '/shelves/read',
