@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { workRead, WorkReadLimit, WorkReadMoved, type ReadOptions, type WorkReadSession } from '../modules/work/read-session.ts';
+import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import { pendingOperation } from '../api-contract.ts';
 import { pageFields, pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { agentProfile, creditedWork, creditRole, libraryContribution, libraryRating,
@@ -15,7 +15,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { resourceListing } from '../modules/realm-admin/contract.ts';
-import { pageDiscoveryHeaders, pageDiscoveryPolicy } from '../modules/space/visibility.ts';
+import { pageDiscoveryHeaders } from '../modules/space/visibility.ts';
 import { AgentListingConflict, AgentListingDenied, AgentListingUnavailable, InvalidAgentListing,
   StaleAgentListing } from '../modules/profiles/listing.ts';
 
@@ -25,10 +25,10 @@ const headers = { 'cache-control': 'private, no-store' };
 const visibility = t.Union([t.Literal('public'), t.Literal('followers'), t.Literal('private')]);
 const visibilityState = t.Object({ visibility, version: t.Integer({ minimum: 0 }),
   changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
-function response(value: unknown, status = 200, pagePolicy?: ReturnType<typeof pageDiscoveryPolicy>) {
+function response(value: unknown, status = 200) {
   const body = JSON.stringify(value);
   if (Buffer.byteLength(body) > PROFILE_READ_COST.responseBytes) throw new WorkReadLimit('Profile response exceeds budget');
-  const discovery = pagePolicy ?? (value && typeof value === 'object' && 'discovery' in value
+  const discovery = (value && typeof value === 'object' && 'discovery' in value
     ? value.discovery as Parameters<typeof pageDiscoveryHeaders>[0] : null);
   return new Response(body, { status, headers: { ...headers, 'content-type': 'application/json',
     ...(discovery ? pageDiscoveryHeaders(discovery) : {}) } });
@@ -57,17 +57,6 @@ export const openApiOperations = {
 } as const;
 
 export function profileRoutes(work: MainWorkDependencies) {
-  const agentPage = async (request: Request, query: ReadOptions, agent: string,
-    operation: (session: WorkReadSession) => Promise<unknown>) => {
-    if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
-    const result = await workRead(work, request, query, async session => {
-      const before = await work.profiles!.listing.read(agent);
-      const value = await operation(session);
-      if ((await work.profiles!.listing.read(agent)).version !== before.version) throw new WorkReadMoved('Agent listing changed');
-      return { value, listing: before.listing };
-    });
-    return response(result.value, 200, pageDiscoveryPolicy('public', result.listing));
-  };
   return new Elysia()
     .get('/v1/agents/:id/listing', { params,
       response: { 200: listingState, ...workReadProblems },
@@ -105,17 +94,17 @@ export function profileRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/agents/:id/works', { params, detail, query: t.Object({ ...pageQuery,
       context: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+      response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }), discovery: agentProfile.properties.discovery, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return await agentPage(request, query, `https://rezics.com/id/${path.id}`,
-        s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context)); }
+      try { return response(await workRead(work, request, query,
+        s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/collections', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+      response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }), discovery: agentProfile.properties.discovery, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return await agentPage(request, query, `https://rezics.com/id/${path.id}`,
-        s => readAgentCollections(s, `https://rezics.com/id/${path.id}`)); }
+      try { return response(await workRead(work, request, query,
+        s => readAgentCollections(s, `https://rezics.com/id/${path.id}`))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/library-visibility', { params,

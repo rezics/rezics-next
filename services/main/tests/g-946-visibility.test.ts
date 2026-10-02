@@ -27,6 +27,9 @@ test('G-946: all four settings are independent; only public/listed is findable a
       expect(pageDiscoveryHeaders(discovery)['x-robots-tag']).toBe(discovery.indexable ? undefined : 'noindex');
     }
   expect(Value.Check(realmSettings, { visibility: 'public',reviewRequired: true,whoMaySubmit: 'granted',rules: [] })).toBe(true);
+  for (const field of [{ listing: 'unlisted' },{ history: 'from-admission' },{ admission: 'request' }]) {
+    expect(Value.Check(realmSettings,{ visibility: 'public',reviewRequired: true,whoMaySubmit: 'granted',rules: [],...field })).toBe(false);
+  }
   expect(VISIBILITY_COST.rows).toBe(2);
 });
 
@@ -68,4 +71,17 @@ test('G-946: history-restricted counts exclude hidden parents and their descenda
   const counted = await store.counts(id, [id], async () => new Set([grandchild,current]));
   expect(counted.complete).toBe(true);
   expect(counted.counts.get(id)).toBe(1);
+});
+
+test('G-946: Zone disclosure and Space disclosure each require their own admission', async () => {
+  let space = 'Public', zone = 'Private';
+  const env = environment(async sparql => sparql.includes('SELECT DISTINCT')
+    ? { results: { bindings: [{ kind: text('space'),space: uri(id),realm: uri(id),
+      disclosure: uri(`${RV}${space}`),zoneDisclosure: uri(`${RV}${zone}`) }] } }
+    : { boolean: true,results: { bindings: [{ epoch: text('current'),routing: text('current') }] } });
+  expect(await readResourceVisibility(env,id,{ realmReadProof: async () => 'member' })).toMatchObject({ readable: false,findable: false });
+  expect(await readResourceVisibility(env,id,{ zoneReadable: async () => true })).toMatchObject({ readable: true,findable: false });
+  space = 'Private'; zone = 'Public';
+  expect(await readResourceVisibility(env,id,{ zoneReadable: async () => true })).toMatchObject({ readable: false,findable: false });
+  expect(await readResourceVisibility(env,id,{ realmReadProof: async () => 'member' })).toMatchObject({ readable: true,findable: false });
 });

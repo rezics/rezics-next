@@ -456,14 +456,14 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
       },
     ];
   });
-  await readAgent(session, agent);
-  return pageResult(
+  const profile = await readAgent(session, agent);
+  return { ...pageResult(
     session,
     items,
     selected.lookahead
       ? encodeReadCursor(binding, session.position, field(selected.last!, 'id'))
       : null,
-  );
+  ), discovery: profile.discovery };
 }
 
 export async function readAgentCollections(session: WorkReadSession, agent: string) {
@@ -517,12 +517,12 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
       structure: field(row, 'structure'),
     };
   });
-  await readAgent(session, agent);
-  return pageResult(
+  const profile = await readAgent(session, agent);
+  return { ...pageResult(
     session,
     items,
     selected.lookahead
       ? encodeReadCursor(binding, session.position, field(selected.last!, 'id'))
       : null,
-  );
+  ), discovery: profile.discovery };
 }

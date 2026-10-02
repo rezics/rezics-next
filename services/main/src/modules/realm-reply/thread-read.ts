@@ -16,7 +16,7 @@ import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
-import { realmHistoryFilter } from '../realm-admin/history.ts';
+import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -161,7 +161,7 @@ function ranked<T extends { time: Date; placement: string }>(rows: readonly T[],
 export async function readRealmThreads(session: WorkReadSession, realm: string,
   query: { sort?: Sort; window?: Window; cursor?: string; limit?: number; now?: number }) {
   await readRealmBasis(session, realm);
-  const history = await realmHistoryFilter(session, realm);
+  const history = await realmHistoryOriginFilter(session, realm, 'placement', '?slot');
   const threads = store(session);
   const sort = query.sort ?? 'best', window = query.window ?? 'week';
   const limit = query.limit ?? REALM_THREAD_COST.pageSize;
@@ -241,7 +241,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   Promise<Static<typeof realmThread>> {
   await readRealmBasis(session, realm);
   const threads = store(session);
-  const history = await realmHistoryFilter(session, realm);
+  const history = await realmHistoryOriginFilter(session, realm, 'placement', '?slot');
   const [subtree, parents] = await Promise.all([threads.subtree(focus), threads.ancestors(focus)]);
   if (!subtree.length || subtree[0]!.reply !== focus) throw new WorkReadMissing('Reply is unavailable');
   const complete = subtree.length <= REALM_THREAD_COST.replies + 1;

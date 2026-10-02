@@ -67,7 +67,6 @@ export const memberCommand = t.Object({ ...commandFields, member: readId,
 { additionalProperties: false });
 export type MemberCommand = Static<typeof memberCommand>;
 export const realmSettings = t.Object({ visibility: t.Union([t.Literal('public'), t.Literal('restricted'), t.Literal('private')]),
-  listing: t.Optional(resourceListing), history: t.Optional(realmHistory), admission: t.Optional(realmAdmission),
   reviewRequired: t.Boolean(),
   reviewMode: t.Optional(t.Union([t.Literal('mandatory'), t.Literal('trusted-members'), t.Literal('open')])),
   whoMaySubmit: t.Union([t.Literal('granted'), t.Literal('members'), t.Literal('closed')]),
@@ -89,9 +88,6 @@ export const spaceSettingsCommand = t.Object({ ...commandFields, settings: space
 export type SpaceSettingsCommand = Static<typeof spaceSettingsCommand>;
 export const spaceSettingsView = t.Object({ space: readId, realm: readId, generation, settings: spaceSettings });
 export const spaceSettingsReceipt = t.Object({ ...spaceSettingsView.properties, receiptId: readUuid, replayed: t.Boolean() });
-export const SPACE_SETTINGS_COST = { capabilityRows: 2, capabilityBytes: 4096,
-  accessTransactions: 3, graphCommands: 2, contentScans: 0,
-  statementTimeoutMs: REALM_ADMIN_COST.statementTimeoutMs } as const;
 export const memberReceipt = t.Object({ receiptId: readUuid, generation, replayed: t.Boolean(),
   member: readId, membershipGeneration: generation, bannedUntil: t.Nullable(t.String()),
   banned: t.Boolean() });

@@ -52,8 +52,8 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
     const row = (await client.query<{ data_epoch: string; sequence: string }>(`SELECT data_epoch,sequence::text
       FROM access.realm_history_admission WHERE kind = $1 AND membership_id = $2 AND generation = $3`,
     [kind === 'private' ? 'private' : 'agent',id,generation])).rows[0];
-    if (!row) throw new AdmissionUnavailable('Realm history admission cut is missing');
-    historyFloor = { dataEpoch: row.data_epoch, sequence: row.sequence };
+    // Earlier episodes and joins under everything retain their full history.
+    historyFloor = row ? { dataEpoch: row.data_epoch, sequence: row.sequence } : null;
   }
   return { visibility, reviewMode: settings?.review_mode ?? 'mandatory', member: !!approved, historyFloor,
     revision: delivery ? `urn:rezics:realm-policy:${delivery.receipt_id}` : null,

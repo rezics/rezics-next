@@ -7,7 +7,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable, type PlacementInput,
   type ReplyIdentityInput, type ReviewInput, RealmReplyContentStore } from './content-store.ts';
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
-  readPlacementHead, readRootPlacementHeads,
+  readPlacementHead, readRootPlacementHeads, replySlotIri,
   readReplyGraphReceipt } from './graph.ts';
 import { readableReplyRoot, replyRoot } from './root.ts';
 import { targetRead } from '../target/resolve.ts';
@@ -16,8 +16,8 @@ import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
-import { realmHistoryCutFilter } from '../realm-admin/history.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { realmHistoryOriginCutFilter } from '../realm-admin/history.ts';
+import { RV, iri } from '../work/activate.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -56,9 +56,8 @@ export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'o
     if (!principal || !actor || !access.realmHistoryFloor) throw new RealmReplyUnavailable('Realm history admission is unavailable');
     const floor = await access.realmHistoryFloor(principal, actor, realm);
     if (floor) {
-      const filter = await realmHistoryCutFilter(env, floor);
-      const allowed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
-        ${iri(placement.placement)} rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . } ${filter} }`, 1024);
+      const filter = await realmHistoryOriginCutFilter(env, floor, realm, 'placement', iri(replySlotIri(realm,reply)));
+      const allowed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${filter} }`, 1024);
       if (allowed.boolean !== true) return null;
     }
   }

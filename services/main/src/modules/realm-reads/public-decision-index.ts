@@ -12,7 +12,7 @@ import {
 } from '../work/read-session.ts';
 import { readRealmBasis } from './read-realm.ts';
 import { admittedPage } from '../disclosure/admitted-page.ts';
-import { realmHistoryFilter } from '../realm-admin/history.ts';
+import { realmHistoryFilter, realmHistoryOriginFilter } from '../realm-admin/history.ts';
 
 async function admittedDecisions(session: WorkReadSession, rows: ReadRow[], realm: string) {
   const decisions = await session.disclosure(
@@ -95,6 +95,7 @@ function decisionItem(row: ReadRow) {
 export async function readRealmDecisions(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
   const history = await realmHistoryFilter(session, realm);
+  const origin = await realmHistoryOriginFilter(session, realm, 'selection', '?work');
   const limit = session.options.limit ?? 20;
   const binding = ['realm-decisions-v1', realm];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
@@ -121,6 +122,7 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
     ${epochs}
     ${decisionRelation(realm)}
     ${history}
+    ${origin ? `FILTER(!BOUND(?work) || EXISTS { ${origin} })` : ''}
     ${
       after
         ? `FILTER(?epochOrder > ${after.epochOrder!.value} || (?epochOrder = ${after.epochOrder!.value}
@@ -173,11 +175,13 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
 export async function readRealmDecision(session: WorkReadSession, realm: string, decision: string) {
   await readRealmBasis(session, realm);
   const history = await realmHistoryFilter(session, realm);
+  const origin = await realmHistoryOriginFilter(session, realm, 'selection', '?work');
   const rows = await session.query(
     `SELECT DISTINCT ?id ?kind ?work ?subject ?outcome
     ?revisionEpoch ?sequence WHERE {
     ${decisionRelation(realm)}
     ${history}
+    ${origin ? `FILTER(!BOUND(?work) || EXISTS { ${origin} })` : ''}
     FILTER(?id = ${iri(decision)})
   } LIMIT 2`,
     2,

@@ -53,15 +53,9 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
 export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: RealmPolicyDelivery): Promise<void> {
   const receipt = policyHead(op.receipt_id);
   const digest = hash(JSON.stringify(op));
-  // An acknowledgement lost before migration 1000 can already have the older
-  // graph digest. Only its implicit defaults may replay that exact old intent.
-  const legacyDigest = hash(JSON.stringify({ realm: op.realm, receipt_id: op.receipt_id, generation: op.generation,
-    visibility: op.visibility, review_mode: op.review_mode }));
-  const legacyDefaults = (op.listing ?? 'listed') === 'listed' && (op.history ?? 'everything') === 'everything'
-    && (op.admission ?? 'invitation') === 'invitation';
   const committed = async () => (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ?digest ; rv:outcome rv:Succeeded .
-      FILTER(?digest = ${lit(digest)}${legacyDefaults ? ` || ?digest = ${lit(legacyDigest)}` : ''}) }
+      FILTER(?digest = ${lit(digest)}) }
   }`, 1024)).boolean === true;
   if (await committed()) return;
   const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?spaceProfile ?realmProfile WHERE {

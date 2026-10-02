@@ -10,9 +10,12 @@ import { invitationPage } from '../modules/access/realm-management-joining-contr
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
-import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPage } from '../modules/realm-admin/join-requests.ts';
+import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPage, joinRequestWithdraw,
+  joinRequestDecision, joinRequestDecisionReceipt, RealmJoinRequestMissing } from '../modules/realm-admin/join-requests.ts';
 
 export const openApiOperations = {
+  '/v1/realms/{realm}/join-requests/{request}/withdraw': { post: { bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/join-requests/{request}/decisions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/join-requests/basis': { get: { bearer: true } },
   '/v1/realms/{realm}/join-requests': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
   '/v1/spaces/{space}/settings': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
@@ -28,13 +31,14 @@ export const openApiOperations = {
 const params = t.Object({ realm: readUuid });
 const query = t.Object({ actingSubject: readId }, { additionalProperties: false });
 const headers = { 'cache-control': 'private, no-store' };
-const problems = { ...writeProblems, 422: problemResult(422) };
+const problems = { ...writeProblems, 404: problemResult(404), 422: problemResult(422) };
 const key = (request: Request): string => {
   const value = request.headers.get('idempotency-key');
   if (!value || !/^[A-Za-z0-9:_./-]{1,128}$/.test(value)) throw new RealmAdminInvalid('Idempotency-Key is required');
   return value;
 };
 function errorResponse(error: unknown) {
+  if (error instanceof RealmJoinRequestMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
   if (error instanceof RealmAdminDenied) return problem(403, 'realm_management_denied', error.message);
   if (error instanceof RealmAdminInvalid) return problem(400, 'invalid_realm_management_request', error.message);
   if (error instanceof RealmAdminStale) return problem(409, 'stale_realm_management_basis', error.message);
@@ -50,6 +54,28 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     return work.realmAdmin;
   };
   return new Elysia()
+    .post('/v1/realms/:realm/join-requests/:request/withdraw', {
+      params: t.Object({ realm: readUuid, request: readUuid }), body: joinRequestWithdraw,
+      response: { 200: joinRequestDecisionReceipt, 201: joinRequestDecisionReceipt, ...problems },
+    }, async ({ request, params: path, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
+        const result = await work.realmJoinRequests.withdraw(principal, `https://rezics.com/id/${path.realm}`, path.request, body, key(request));
+        return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
+      } catch (error) { return errorResponse(error); }
+    })
+    .post('/v1/realms/:realm/join-requests/:request/decisions', {
+      params: t.Object({ realm: readUuid, request: readUuid }), body: joinRequestDecision,
+      response: { 200: joinRequestDecisionReceipt, 201: joinRequestDecisionReceipt, ...problems },
+    }, async ({ request, params: path, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['governance:decide']);
+        if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
+        const result = await work.realmJoinRequests.decide(principal, `https://rezics.com/id/${path.realm}`, path.request, body, key(request));
+        return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
+      } catch (error) { return errorResponse(error); }
+    })
     .get('/v1/realms/:realm/join-requests/basis', { params, query,
       response: { 200: joinRequestBasis, ...authorizedReadProblems, ...problems },
     }, async ({ request, params: path, query: options }) => {

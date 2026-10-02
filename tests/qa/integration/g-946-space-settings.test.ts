@@ -9,7 +9,7 @@ import { PersonPreferencesStore } from '../../../services/main/src/modules/prefe
 import { GovernanceRules } from '../../../services/main/src/modules/governance/rules.ts';
 import { DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
 import { readResourceVisibility } from '../../../services/main/src/modules/space/visibility.ts';
-import { deliverRealmPolicy, readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
+import { readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import type { SpaceSettings } from '../../../services/main/src/modules/realm-admin/contract.ts';
 
 test('G-946: Space settings recheck authority, serialize CAS/retries, recover delivery, and disclose only a request page', async () => {
@@ -80,9 +80,9 @@ test('G-946: Space settings recheck authority, serialize CAS/retries, recover de
     const inbox = await call('GET',`${root}/join-requests`);
     expect(inbox.status,JSON.stringify(inbox.body)).toBe(200);
     expect(inbox.body.items).toHaveLength(1);
-    const accepted = await call('POST',`${root}/members`,{ actingSubject: owner.actor,member: outsider.actor,
-      expectedGeneration: '2',expectedMembershipGeneration: '0',action: 'add',consent: inbox.body.items[0].consent,
-      durationSeconds: null,reason: 'Approve request' });
+    expect((await s.accessPool.query('SELECT count(*)::int AS n FROM access.membership_consent WHERE principal_id = $1',[outsider.principalId])).rows[0].n).toBe(0);
+    const accepted = await call('POST',`${root}/join-requests/${requested.body.requestId}/decisions`,{ actingSubject: owner.actor,
+      expectedGeneration: '2',expectedRequestGeneration: '0',decision: 'accepted',reason: 'Approve request' });
     expect(accepted.status,JSON.stringify(accepted.body)).toBe(201);
     expect((await call('GET',root,undefined,outsider)).status).toBe(200);
     expect((await call('GET',`${root}/join-requests`)).body.items).toEqual([]);
@@ -143,21 +143,5 @@ test('G-946: Agent listing is controller-owned, CAS/idempotent and independent o
     expect(race.map(result => result.status).sort()).toEqual([200,409]);
     expect((await send('GET','',undefined,null)).headers.get('x-robots-tag')).toBeNull();
     expect((await profiles.listing.readBatch([owner.actor])).get(owner.actor)).toBe('listed');
-  } finally { await s.stop(); }
-},120_000);
-
-test('G-946: a policy receipt delivered with the pre-migration envelope replays explicit defaults without another graph command', async () => {
-  const s = await startMediaStack('g-946-legacy-policy');
-  try {
-    const owner = await s.member('owner');
-    await owner.grant('space:create:root','space.create');
-    const created = await owner.send('POST','/v1/spaces',{ profile: 'space-realm-v1',name: 'Legacy policy',
-      capabilities: ['realm'],actingSubject: owner.actor });
-    const { realm } = await created.json() as { realm: string };
-    const old = { realm,receipt_id: randomUUID(),generation: '1',visibility: 'private' as const,review_mode: 'mandatory' as const };
-    await deliverRealmPolicy(s.env,old);
-    s.fuseki.commandWithReceipt = async () => { throw new Error('A committed old envelope must not be dispatched again'); };
-    await deliverRealmPolicy(s.env,{ ...old,listing: 'listed',history: 'everything',admission: 'invitation' });
-    expect(await readRealmPolicy(s.env,realm)).toMatchObject({ visibility: 'private',listing: 'listed',history: 'everything',admission: 'invitation' });
   } finally { await s.stop(); }
 },120_000);

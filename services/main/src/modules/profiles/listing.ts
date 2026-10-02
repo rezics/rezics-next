@@ -12,8 +12,7 @@ export class AgentListingDenied extends Error {}
 export class StaleAgentListing extends Error {}
 export class AgentListingConflict extends Error {}
 export class AgentListingUnavailable extends Error {}
-export const AGENT_LISTING_COST = { accessTransactions: 1,
-  readStatements: 8, writeStatements: 12, statementTimeoutMs: 5_000 } as const;
+
 
 interface Row { listing: AgentListing; version: number; changed_at: Date }
 const state = (row?: Row): AgentListingState => ({ listing: row?.listing ?? 'listed',
