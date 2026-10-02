@@ -1,0 +1,216 @@
+id: web-links-use-address
+language: TypeScript
+severity: error
+message: Build entity links with apps/web/features/address instead of string paths.
+files:
+  - apps/web/**/*.ts
+ignores:
+  - apps/web/features/address/**
+  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
+  - apps/web/features/auth/account-menu-items.ts
+  - apps/web/features/discover/scope.ts
+  - apps/web/features/official-zone-stories/release-fixtures.ts
+  - apps/web/features/profile/route.ts
+  - apps/web/features/realm/route.ts
+  - apps/web/features/shell/communities-read.ts
+  - apps/web/features/zones/fixtures.ts
+  - apps/web/features/zones/official-fixtures.ts
+  - apps/web/tests/a11y-audit.ts
+  - apps/web/tests/a11y.e2e.ts
+  - apps/web/tests/auth-boundaries.test.ts
+  - apps/web/tests/catalogue-face.test.ts
+  - apps/web/tests/concept-state.test.ts
+  - apps/web/tests/credited-author-follow.e2e.ts
+  - apps/web/tests/credited-author-links.e2e.ts
+  - apps/web/tests/credited-author-page.test.ts
+  - apps/web/tests/discover-state.test.ts
+  - apps/web/tests/discussion-thread.test.ts
+  - apps/web/tests/g-525-handle-redirect.e2e.ts
+  - apps/web/tests/g-530-m4.e2e.ts
+  - apps/web/tests/g-644-entity-page.e2e.ts
+  - apps/web/tests/g-644-entity-page.test.ts
+  - apps/web/tests/g-655-zone-site.test.ts
+  - apps/web/tests/g-743-hub.e2e.ts
+  - apps/web/tests/g-743-library.e2e.ts
+  - apps/web/tests/g-743-wiki.e2e.ts
+  - apps/web/tests/g-820-reporting.test.ts
+  - apps/web/tests/g-837-work-levels.e2e.ts
+  - apps/web/tests/g-837-work-levels.test.ts
+  - apps/web/tests/g-838-tracking.e2e.ts
+  - apps/web/tests/g-839-work-levels-edit.e2e.ts
+  - apps/web/tests/g-839-work-levels-edit.test.ts
+  - apps/web/tests/g-841-q01-grain.e2e.ts
+  - apps/web/tests/g-841-q03-identity.e2e.ts
+  - apps/web/tests/g-841-q04-reboot-spinoff.e2e.ts
+  - apps/web/tests/g-841-q05-reviews.e2e.ts
+  - apps/web/tests/g-841-q06-two-devices.e2e.ts
+  - apps/web/tests/g-841-q07-wiki.e2e.ts
+  - apps/web/tests/g-841-q08-orders.e2e.ts
+  - apps/web/tests/g-841-q09-labels.e2e.ts
+  - apps/web/tests/g-841-q10-translations.e2e.ts
+  - apps/web/tests/g-841-q11-chains.e2e.ts
+  - apps/web/tests/g-841-q12-membership.e2e.ts
+  - apps/web/tests/g-843-catalogue-intake.e2e.ts
+  - apps/web/tests/g-843-intake.test.ts
+  - apps/web/tests/g-849-wiki-slots.test.ts
+  - apps/web/tests/g-849-wiki.e2e.ts
+  - apps/web/tests/g-850-hub.e2e.ts
+  - apps/web/tests/g-850-hub.test.ts
+  - apps/web/tests/g-853-release-filter.test.ts
+  - apps/web/tests/g-853-zones.e2e.ts
+  - apps/web/tests/g-921-zones.test.ts
+  - apps/web/tests/g-941-picker.test.ts
+  - apps/web/tests/g-943-address.e2e.ts
+  - apps/web/tests/g-943-address.test.ts
+  - apps/web/tests/g-950-address-links.test.ts
+  - apps/web/tests/library.e2e.ts
+  - apps/web/tests/locale.test.ts
+  - apps/web/tests/manage-context.test.ts
+  - apps/web/tests/onboarding-journey.e2e.ts
+  - apps/web/tests/perf-report.ts
+  - apps/web/tests/perf.e2e.ts
+  - apps/web/tests/profile.test.ts
+  - apps/web/tests/public-search-suggest.test.ts
+  - apps/web/tests/realm.e2e.ts
+  - apps/web/tests/realm.test.ts
+  - apps/web/tests/seo.e2e.ts
+  - apps/web/tests/seo.test.ts
+  - apps/web/tests/session-refresh.test.ts
+  - apps/web/tests/work-page-also-enjoyed.test.ts
+  - apps/web/tests/work-page.e2e.ts
+  - apps/web/tests/work-page.test.ts
+  - apps/web/tests/zone-browse.test.ts
+  - apps/web/tests/zone.test.ts
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  not:
+    any:
+      - regex: '^[\x22\x27\x60]/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/)?r/new[\x22\x27\x60]$'
+      - all:
+        # These literals select a builder's entity family; they are not links.
+        - regex: '^[''"\x60]/(?:a|w|e|concepts)/[''"\x60]$'
+        - any:
+            - inside:
+                kind: arguments
+                inside:
+                  kind: call_expression
+                  regex: '^(?:identityHref|resourceHref)\('
+            - inside:
+                kind: pair
+                has:
+                  field: key
+                  regex: '^prefix$'
+  regex: '^["''`]((?:https?://[^/]+|\$\{[^}]+\})?/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?(?:r/|z/|w/|e/|a/|concepts/)|/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?@)'
+
+---
+id: web-links-use-address-tsx
+language: Tsx
+severity: error
+message: Build entity links with apps/web/features/address instead of string paths.
+files:
+  - apps/web/**/*.tsx
+ignores:
+  - apps/web/features/address/**
+  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
+  - apps/web/app/\[locale\]/r/\[realm\]/not-found.tsx
+  - apps/web/features/auth/account-menu.stories.tsx
+  - apps/web/features/author/author-page.stories.tsx
+  - apps/web/features/catalogue-intake/intake-wizard.stories.tsx
+  - apps/web/features/catalogue/catalogue.stories.tsx
+  - apps/web/features/communities/create-form.tsx
+  - apps/web/features/communities/setup-checklist.stories.tsx
+  - apps/web/features/concept/concept-page.stories.tsx
+  - apps/web/features/discover/resource-list.tsx
+  - apps/web/features/entity-page/entity-page.stories.tsx
+  - apps/web/features/feed/card.tsx
+  - apps/web/features/feed/feed.stories.tsx
+  - apps/web/features/home/rail.tsx
+  - apps/web/features/manage/log.stories.tsx
+  - apps/web/features/official-zone-stories/light-novels.stories.tsx
+  - apps/web/features/official-zone-stories/visual-novels.stories.tsx
+  - apps/web/features/profile/profile-page.stories.tsx
+  - apps/web/features/realm/membership.stories.tsx
+  - apps/web/features/realm/realm-tabs.stories.tsx
+  - apps/web/features/release-filter/release-filter.stories.tsx
+  - apps/web/features/safety/report-action.stories.tsx
+  - apps/web/features/shell/app-shell.stories.tsx
+  - apps/web/features/shell/notifications/notifications.stories.tsx
+  - apps/web/features/tracking/tracking.stories.tsx
+  - apps/web/features/work-levels/connections.stories.tsx
+  - apps/web/features/work-levels/editions.stories.tsx
+  - apps/web/features/work-levels/parts.stories.tsx
+  - apps/web/features/work-page/also-enjoyed.stories.tsx
+  - apps/web/features/work-page/concept-chips.stories.tsx
+  - apps/web/features/work-page/hub.stories.tsx
+  - apps/web/features/work-page/reviews.stories.tsx
+  - apps/web/features/work-page/work-views.stories.tsx
+  - apps/web/features/zones/collection-home.stories.tsx
+  - apps/web/features/zones/look-menu.stories.tsx
+  - apps/web/features/zones/official-zones.stories.tsx
+  - apps/web/features/zones/page-missing.stories.tsx
+  - apps/web/features/zones/site-pages.stories.tsx
+  - apps/web/features/zones/site-route.tsx
+  - apps/web/features/zones/zone-browse.stories.tsx
+  - apps/web/features/zones/zone-modules.stories.tsx
+  - apps/web/features/zones/zone-page.stories.tsx
+  - apps/web/features/zones/zone-themes.stories.tsx
+  - apps/web/zones/official/light-novels/slots.tsx
+  - apps/web/zones/official/visual-novels/slots.tsx
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  not:
+    any:
+      - regex: '^[\x22\x27\x60]/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/)?r/new[\x22\x27\x60]$'
+      - all:
+        # These literals select a builder's entity family; they are not links.
+        - regex: '^[''"\x60]/(?:a|w|e|concepts)/[''"\x60]$'
+        - any:
+            - inside:
+                kind: arguments
+                inside:
+                  kind: call_expression
+                  regex: '^(?:identityHref|resourceHref)\('
+            - inside:
+                kind: pair
+                has:
+                  field: key
+                  regex: '^prefix$'
+  regex: '^["''`]((?:https?://[^/]+|\$\{[^}]+\})?/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?(?:r/|z/|w/|e/|a/|concepts/)|/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?@)'
+
+---
+id: web-links-use-address-js
+language: JavaScript
+severity: error
+message: Build entity links with apps/web/features/address instead of string paths.
+files:
+  - apps/web/**/*.js
+  - apps/web/**/*.jsx
+ignores:
+  - apps/web/features/address/**
+  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  not:
+    any:
+      - regex: '^[\x22\x27\x60]/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/)?r/new[\x22\x27\x60]$'
+      - all:
+        # These literals select a builder's entity family; they are not links.
+        - regex: '^[''"\x60]/(?:a|w|e|concepts)/[''"\x60]$'
+        - any:
+            - inside:
+                kind: arguments
+                inside:
+                  kind: call_expression
+                  regex: '^(?:identityHref|resourceHref)\('
+            - inside:
+                kind: pair
+                has:
+                  field: key
+                  regex: '^prefix$'
+  regex: '^["''`]((?:https?://[^/]+|\$\{[^}]+\})?/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?(?:r/|z/|w/|e/|a/|concepts/)|/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?@)'

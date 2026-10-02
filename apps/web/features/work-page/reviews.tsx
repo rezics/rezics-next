@@ -1,5 +1,6 @@
 'use client';
 
+import { authorHref } from '../author/route.ts';
 import { Checkbox } from '@rezics/ui/checkbox';
 
 import { Button, buttonVariants } from '@rezics/ui/button';
@@ -111,7 +112,7 @@ function ReviewCard({ review, reviewer, own, highlighted, viewer, api, scale, on
     <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <p id={`review-${review.id}-by`} className="font-semibold">
         {own ? t.yourReview : reviewer
-          ? <Link href={`/@${reviewer.handle}`} className="rounded-sm outline-none underline-offset-4 hover:underline
+          ? <Link href={authorHref({ kind: 'agent', handle: reviewer.handle })} className="rounded-sm outline-none underline-offset-4 hover:underline
             focus-visible:ring-2 focus-visible:ring-ring">{reviewer.name}</Link> : t.reviewerFallback}</p>
       {review.rating === null ? null : <span className="flex items-center gap-1.5 text-sm">
         <span className="sr-only">{t.ratedValue({ value: String(review.rating), max: String(scale) })}</span>

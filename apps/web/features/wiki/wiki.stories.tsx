@@ -1,3 +1,4 @@
+import { realmHref, siteHref } from '../realm/route.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { HomeSlotProps, ZoneEntity, ZonePositionState } from '@rezics/zone-sdk';
@@ -26,8 +27,8 @@ function Control({ locale, at, current }: { locale: UiLocale; at: 'all' | 'chapt
       moreChapters: t.moreChapters, close: t.close }}
     at={at === 'all' ? { kind: 'all' } : { kind: 'position', label: data.text('Volume 1 · Chapter 3'), note: t.yourProgress }}
     options={data.options.map((option, index) => ({ ...option, current: index === current }))}
-    progress={{ href: '/r/franchise-wiki', current: at !== 'all' && current === null, resolved: data.text('Volume 1 · Chapter 3') }}
-    everything={{ href: '/r/franchise-wiki?position=all', current: at === 'all' }} more={false} />;
+    progress={{ href: data.wikiSiteHref(), current: at !== 'all' && current === null, resolved: data.text('Volume 1 · Chapter 3') }}
+    everything={{ href: data.wikiSiteHref([], { position: 'all' }), current: at === 'all' }} more={false} />;
 }
 
 function Page({ locale, children, at = 'chapter3' }: { locale: UiLocale; children: React.ReactNode; at?: 'all' | 'chapter3' }) {
@@ -49,7 +50,7 @@ function Home({ locale, sections, position }: { locale: UiLocale; sections: Home
 
 function EntityPage({ locale, entity, position }: { locale: UiLocale; entity: ZoneEntity; position: ZonePositionState }) {
   return <Page locale={locale}><WikiEntity {...common(locale)} entity={entity} position={position} rest={null}
-    mount={{ segment: 'characters', name: data.text('Characters'), href: '/r/franchise-wiki/characters' }} /></Page>;
+    mount={{ segment: 'characters', name: data.text('Characters'), href: data.wikiSiteHref(['characters']) }} /></Page>;
 }
 
 function Index({ locale, segment, members }: { locale: UiLocale; segment: string; members: typeof data.chapters }) {
@@ -63,7 +64,7 @@ function Wiki(_: { locale: UiLocale }) { return null; }
 const meta = {
   title: 'Zones/Franchise wiki',
   component: Wiki,
-  parameters: { route: { pathname: '/en/r/franchise-wiki' } },
+  parameters: { route: { pathname: siteHref('en', 'franchise-wiki', []) } },
   args: { locale: 'en' },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof Wiki>;
@@ -77,7 +78,7 @@ export const HomeEmpty: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'This wiki has no pages yet' })).toBeVisible();
     await expect(canvas.getByText('It covers the Works above, but no characters, places, events or chapters have been published yet.')).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'How this wiki is run' })).toHaveAttribute('href', '/en/r/franchise-wiki/about');
+    await expect(canvas.getByRole('link', { name: 'How this wiki is run' })).toHaveAttribute('href', realmHref('en', 'franchise-wiki', 'about'));
     await expect(canvas.queryByText('Elizabeth Bennet')).toBeNull();
     await fits();
   },
@@ -200,7 +201,7 @@ export const CharacterYoung: Story = {
 /** A chapter the reader has reached: what it adds to each list, and the neighbouring chapters. */
 export const ChapterReached: Story = {
   render: ({ locale }) => <Page locale={locale}><WikiEntity {...common(locale)} entity={data.chapter2} position={data.atChapter3}
-    rest={null} mount={{ segment: 'chapters', name: data.text('Chapters'), href: '/r/franchise-wiki/chapters' }} /></Page>,
+    rest={null} mount={{ segment: 'chapters', name: data.text('Chapters'), href: data.wikiSiteHref(['chapters']) }} /></Page>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Revealed in this chapter' })).toBeVisible();
@@ -258,7 +259,7 @@ export const PositionSheet: Story = {
     await expect(options.map(option => option.textContent)).toEqual([
       'Your own progressCurrently Volume 1 · Chapter 3', 'Chapter 1', 'Chapter 2', 'Chapter 3',
       'Show everythingIncludes records revealed in chapters you have not read.']);
-    await expect(options[3]).toHaveAttribute('href', '/en/r/franchise-wiki?position=c3');
+    await expect(options[3]).toHaveAttribute('href', siteHref('en', 'franchise-wiki', [], { position: 'c3' }));
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(sheet.queryByRole('dialog')).toBeNull());
     await expect(within(bar).getByRole('button', { name: /^Up to:|^Showing everything/ })).toHaveFocus();

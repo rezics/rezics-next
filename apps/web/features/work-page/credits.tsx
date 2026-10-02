@@ -68,7 +68,7 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
       {others.map(group => <span key={group.role}>
         {group.role === 'translator' ? t.translatedBy : t.editedBy}{' '}
         {group.people.map((credit, index) => <span key={credit.id}>{index ? ', ' : ''}
-          <Link href={`/@${credit.handle}`} title={`@${credit.handle}`}
+          <Link href={authorHref({ kind: 'agent', handle: credit.handle })} title={`@${credit.handle}`}
             className={cn(authorLink, 'font-medium text-foreground')}>
             <LocalizedText text={contentText(credit.displayName)} /></Link></span>)}
       </span>)}

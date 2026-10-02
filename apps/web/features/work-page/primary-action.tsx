@@ -10,7 +10,7 @@ import { ACTION_ATTRIBUTE, hubAnchors } from './hub.ts';
 import { languageName } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { ReadStart } from './read.ts';
-import { idOf } from './route.ts';
+import { globalWorkHref, idOf } from './route.ts';
 import type { Loaded } from './types.ts';
 import { ReadButton } from './work-frame.tsx';
 import type { WorkAt } from './route.ts';
@@ -48,9 +48,9 @@ export function nextAction({ start, progress, preference, releases }: {
     const chosen = Boolean(target.edition || series.preference);
     // A part with no text in the reader's language is a choice of edition, not something to start.
     if (!chosen || series.next?.reason === 'awaiting_chosen_language') {
-      return { kind: 'choose', href: `/w/${work}#${hubAnchors.availability}`, part };
+      return { kind: 'choose', href: `${globalWorkHref(work)}#${hubAnchors.availability}`, part };
     }
-    return { kind: 'part', mode: series.furthestCompleted ? 'continue' : 'start', href: `/w/${work}`, part };
+    return { kind: 'part', mode: series.furthestCompleted ? 'continue' : 'start', href: globalWorkHref(work), part };
   }
   if (start) return { kind: 'read', start };
   const chosen = Boolean(preference?.ok && preference.data?.edition);

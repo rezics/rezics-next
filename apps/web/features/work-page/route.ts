@@ -2,7 +2,7 @@
 // the routes, the components and their tests.
 
 import { withoutLocale } from '../../i18n/locale.ts';
-import { parseAddressSegment } from '../address/path.ts';
+import { type AddressTarget, parseAddressSegment, resourceHref } from '../address/path.ts';
 
 /** The Work's views, in tab order. Each is its own URL. */
 export const workTabs = ['overview', 'contents', 'versions', 'discussion', 'history'] as const;
@@ -98,6 +98,9 @@ export interface ZoneWorkBase { ref: string; path: string; realm: string }
 /** Where a Work's pages are: its global `/w/{ref}`, or inside a Zone's site. */
 export type WorkAt = string | ZoneWorkBase;
 
+/** Main's address when available; otherwise an identity or an already resolved name. */
+export const globalWorkHref = (ref: AddressTarget) => resourceHref('/w/', ref);
+
 export const workRefOf = (at: WorkAt) => typeof at === 'string' ? at : at.ref;
 
 /** The scope a Work's pages open with: Everyone's globally, the Zone's Realm inside a Zone's site. */
@@ -120,7 +123,7 @@ export function scopeAt(at: WorkAt, params: SearchParams): WorkScope | null {
  */
 export function workHref(at: WorkAt, tab: WorkTab = 'overview', scope: WorkScope | null = null,
   query: Record<string, string | undefined> = {}): string {
-  const base = typeof at === 'string' ? `/w/${encodeURIComponent(at)}` : at.path;
+  const base = typeof at === 'string' ? globalWorkHref(at) : at.path;
   const path = `${base}${tab === 'overview' ? '' : `/${tab}`}`;
   const chosen = scope && typeof at !== 'string' && sameScope(scope, defaultScope(at)) ? {}
     : scope?.kind === 'global' && typeof at !== 'string' ? { scope: 'global' } : scope ? scopeQuery(scope) : {};
@@ -187,11 +190,11 @@ export function parseCursor(params: SearchParams): string | undefined {
 
 /** A chapter's reader address. The chapter is its table-of-contents occurrence. */
 export const chapterHref = (ref: WorkAt, chapter: string, language?: string) =>
-  withQuery(`/w/${encodeURIComponent(workRefOf(ref))}/read/${chapter}`, { language });
+  withQuery(`${globalWorkHref(workRefOf(ref))}/read/${encodeURIComponent(chapter)}`, { language });
 
 /** The reader of a Work read as one text: its Main Version's selected text, with no contents to choose from. */
 export const textHref = (ref: WorkAt, language?: string) =>
-  withQuery(`/w/${encodeURIComponent(workRefOf(ref))}/read`, { language });
+  withQuery(`${globalWorkHref(workRefOf(ref))}/read`, { language });
 
 /**
  * Where a chapter Work is read: at its place in its Book's reader, or the Book's Contents when it has no

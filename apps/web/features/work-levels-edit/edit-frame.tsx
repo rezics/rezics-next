@@ -1,3 +1,4 @@
+import { globalWorkHref } from '../work-page/route.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { LockIcon } from 'lucide-react';
@@ -16,7 +17,7 @@ export function EditFrame({ workRef, title, current, t, children }: {
   const labels = tabLabel(t);
   return <div className="grid gap-6">
     <header className="grid gap-2">
-      <Link href={`/w/${encodeURIComponent(workRef)}`} className="w-fit text-primary text-sm underline-offset-4 hover:underline">
+      <Link href={globalWorkHref(workRef)} className="w-fit text-primary text-sm underline-offset-4 hover:underline">
         {t.backToWork}</Link>
       <h1 className="font-semibold text-2xl tracking-tight">{title}</h1>
       <p className="text-muted-foreground text-sm">{t.editIntro}</p>
@@ -41,6 +42,6 @@ export function NoAuthority({ workRef, signedIn, signInHref, t }: {
   return <EmptyState icon={LockIcon} role="status" title={signedIn ? t.noAuthorityTitle : t.signInTitle}
     description={signedIn ? t.noAuthorityBody : t.signInBody}>
     {signedIn ? null : <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>{t.signInTitle}</Link>}
-    <Link href={`/w/${encodeURIComponent(workRef)}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.backToWork}</Link>
+    <Link href={globalWorkHref(workRef)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.backToWork}</Link>
   </EmptyState>;
 }

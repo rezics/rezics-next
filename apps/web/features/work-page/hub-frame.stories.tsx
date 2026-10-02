@@ -1,3 +1,4 @@
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -40,7 +41,7 @@ function Frame({ locale, action }: FrameArgs) {
 const meta = {
   title: 'Work page/Hub/Identity and next action',
   component: Frame,
-  args: { locale: 'en', action: { kind: 'part', mode: 'continue', href: `/w/${fixture.workRef}-2`, part: 'Volume 2' } },
+  args: { locale: 'en', action: { kind: 'part', mode: 'continue', href: workHref(`${fixture.workRef}-2`), part: 'Volume 2' } },
   parameters: { route: { pathname: workHref(fixture.workRef), search: '' } },
 } satisfies Meta<FrameArgs>;
 export default meta;
@@ -53,7 +54,7 @@ export const PhoneFirstScreen: Story = {
     const canvas = within(canvasElement);
     const heading = canvas.getByRole('heading', { level: 1 });
     const action = canvas.getByRole('link', { name: /^Continue/ });
-    await expect(action).toHaveAttribute('href', `/en/w/${fixture.workRef}-2`);
+    await expect(action).toHaveAttribute('href', localizedPath(workHref(`${fixture.workRef}-2`), 'en'));
     await expect(canvas.getByText('Next: Volume 2')).toBeVisible();
     // Reporting the Work is in the action column, after the shelf and the rating, and does not lead.
     const report = canvas.getByRole('link', { name: 'Report this work' });
@@ -90,7 +91,7 @@ export const OnThisPageMenu: Story = {
       'Ratings and reviews', 'Discussion and communities', 'Lists and discovery', 'Contents', 'Versions', 'Discussion',
       'History']);
     await expect(within(menu).getByRole('link', { name: 'Parts and connections' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}#parts`);
+      .toHaveAttribute('href', localizedPath(`${workHref(fixture.workRef)}#parts`, 'en'));
     // A story page has nowhere to go: follow the link's click without leaving it.
     const stay = (event: Event) => event.preventDefault();
     document.addEventListener('click', stay);
@@ -128,7 +129,7 @@ export const NoNextAction: Story = {
   async play({ canvasElement }) {
     // Without anything of Main's to lead with, the frame's own link to Contents leads and nothing is invented.
     await expect(within(canvasElement).getByRole('link', { name: 'Read' })).toHaveAttribute('href',
-      `/en/w/${fixture.workRef}/contents`);
+      localizedPath(workHref(fixture.workRef, 'contents'), 'en'));
   },
 };
 

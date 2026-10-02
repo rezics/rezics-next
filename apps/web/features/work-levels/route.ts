@@ -2,7 +2,7 @@
 // `/w/{ref}/editions`, `/releases/{id}` and `/isbn/{isbn}`. Pure functions
 // shared by the routes, the components and their tests.
 
-import { idOf } from '../work-page/route.ts';
+import { globalWorkHref, idOf } from '../work-page/route.ts';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 const single = (value: string | string[] | undefined) => (Array.isArray(value) ? undefined : value || undefined);
@@ -61,16 +61,16 @@ function withQuery(path: string, query: Record<string, string | undefined>, anch
 }
 
 export const connectionsHref = (ref: string, query: Partial<ConnectionsQuery> = {}, anchor?: string) =>
-  withQuery(`/w/${encodeURIComponent(ref)}/connections`, { ...query,
+  withQuery(`${globalWorkHref(ref)}/connections`, { ...query,
     grain: query.grain === 'parts' ? 'parts' : undefined }, anchor);
 
 export const editionsHref = (ref: string, query: EditionsQuery = {}, anchor?: string) =>
-  withQuery(`/w/${encodeURIComponent(ref)}/editions`, { ...query }, anchor);
+  withQuery(`${globalWorkHref(ref)}/editions`, { ...query }, anchor);
 
 /** A Work anywhere on the site, by the ID Main names it with. */
 export const workLinkHref = (iri: string) => {
   const id = idOf(iri);
-  return id ? `/w/${id}` : null;
+  return id ? globalWorkHref(id) : null;
 };
 
 /** A release's own page; `release` is its IRI or UUID. */

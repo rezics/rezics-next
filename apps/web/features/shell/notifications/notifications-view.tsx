@@ -1,5 +1,7 @@
 'use client';
 
+import { spaceHref } from '../../address/path.ts';
+import { globalWorkHref } from '../../work-page/route.ts';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/field';
@@ -106,21 +108,21 @@ function destination(item: StreamItem): string | null {
   if (!display) return null;
   if (display.kind === 'submission_decision') {
     const work = uuid(display.target.linkTarget);
-    return work ? `/w/${work}` : null;
+    return work ? globalWorkHref(work) : null;
   }
   if (display.kind === 'chapter' || display.kind === 'post_vote') {
     const work = uuid(display.target.linkTarget);
-    return work ? `/w/${work}` : null;
+    return work ? globalWorkHref(work) : null;
   }
   if (display.kind === 'review' || display.kind === 'review_helpful') {
     const work = uuid(display.target.linkTarget);
     const review = uuid(display.target.reviewId);
-    return work ? `/w/${work}${review ? `#review-${review}` : ''}` : null;
+    return work ? `${globalWorkHref(work)}${review ? `#review-${review}` : ''}` : null;
   }
   // The Realm by its Zone's address when it has one, as the navigation links it.
   const realm = display.realmRouteSegment ?? uuid(display.realm);
   return realm && (display.kind === 'realm_role_change' || display.kind === 'realm_invitation'
-    || display.kind === 'reply') ? `/r/${realm}` : null;
+    || display.kind === 'reply') ? spaceHref(realm, 'community') : null;
 }
 
 function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, triageBusy, actingSubject, main }: { item: StreamItem;

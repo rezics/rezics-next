@@ -1,5 +1,6 @@
 'use client';
 
+import { globalWorkHref } from '../work-page/route.ts';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
@@ -15,7 +16,6 @@ import { SeriesStates } from './series-states.tsx';
 import type { ReadFailure } from '../feed/types.ts';
 import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Relations, SeriesPart, SeriesSummary } from './types.ts';
 
-const uuid = (iri: string) => iri.slice(-36);
 
 /** A correspondence Main records as equivalent between this Work and another. */
 export interface Counterpart { work: string; title: string }
@@ -46,7 +46,7 @@ export function equivalentCounterparts(relations: Relations, definition: string)
 
 function PartLine({ part, t }: { part: SeriesPart; t: Copy }) {
   return <span className="inline-flex flex-wrap items-baseline gap-x-2">
-    <Link href={`/w/${uuid(part.work)}`} className="font-medium underline-offset-4 hover:underline">{part.displayLabel || t.unnamedPart}</Link>
+    <Link href={globalWorkHref(part.work)} className="font-medium underline-offset-4 hover:underline">{part.displayLabel || t.unnamedPart}</Link>
     {part.inclusion === 'optional' ? <span className="text-muted-foreground text-xs">{t.optionalPart}</span> : null}
     {part.inclusion === 'extra' ? <span className="text-muted-foreground text-xs">{t.extraPart}</span> : null}
   </span>;

@@ -1,3 +1,4 @@
+import { globalWorkHref } from '../work-page/route.ts';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
@@ -181,7 +182,7 @@ export function StudioWorkFrame({ agent, work, languages, tab, locale, messages,
           <p className="flex flex-wrap items-center gap-2">
             {header.disclosure === 'public' ? <Badge variant="success">{t.publicWork}</Badge>
               : <Badge variant="outline">{t.notPublished}</Badge>}
-            {header.disclosure === 'public' ? <Link href={`/w/${idOf(header.id)}`}
+            {header.disclosure === 'public' ? <Link href={globalWorkHref(header.id)}
               className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{t.viewWork}
               <ExternalLinkIcon aria-hidden="true" /></Link> : null}
           </p>
