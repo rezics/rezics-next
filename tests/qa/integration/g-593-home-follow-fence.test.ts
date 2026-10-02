@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFeed } from '../../../services/main/src/modules/feed/read.ts';
-import { WorkReadMoved, WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
+import { WorkReadMoved, WorkReadSession, workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { seedHome, startHomeStack } from './feed-read-support.ts';
 
 test('G-593: All matches followed cards once and fences their inventory; Following keeps its cursor head', async () => {
@@ -12,10 +12,9 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
     const request = new Request('http://main.local/v1/feed', {
       headers: { authorization: `Bearer ${home.reader.token}` } });
     const principal = await home.deps.account.verify(request);
-    const checkpoint = await home.deps.feed.checkpoint(home.stack.env.lineage.dataEpoch);
     // Home hydrates public cards; the separate reader binds private preferences.
-    const session = () => new WorkReadSession(home.deps, request, {},
-      { dataEpoch: checkpoint.data_epoch, sequence: checkpoint.sequence });
+    const publicRequest = new Request('http://main.local/v1/feed');
+    const liveSession = () => workRead(home.deps, publicRequest, {}, async session => session);
     const reader = { principal, agent: seeded.reader };
     const calls: number[] = [];
     let changeDuringMatch = false;
@@ -30,7 +29,8 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
     };
     for (const sort of ['best', 'top'] as const) {
       calls.length = 0;
-      const page = await readFeed(session(), { scope: 'all', sort }, reader);
+      const page = await workRead(home.deps, publicRequest, {}, session =>
+        readFeed(session, { scope: 'all', sort }, reader));
       expect(page.items.length).toBeGreaterThanOrEqual(5);
       expect(page.items.some(item => item.reason.kind === 'followed'
         && [seeded.realm.realm, seeded.works[1]!.work].includes(item.reason.target))).toBe(true);
@@ -42,7 +42,11 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
     changeDuringMatch = true;
     for (const scope of ['all', 'following'] as const) {
       calls.length = 0;
-      await expect(readFeed(session(), { scope, sort: 'best' }, reader))
+      // Capture the live graph position, independently of the retained feed
+      // checkpoint, then bypass retries so this injected follow race is observed.
+      const session = await liveSession();
+      await expect(readFeed(new WorkReadSession(home.deps, publicRequest, {}, session.position),
+        { scope, sort: 'best' }, reader))
         .rejects.toBeInstanceOf(WorkReadMoved);
       expect(calls).toHaveLength(scope === 'all' ? 2 : 3);
       expect(calls.at(-1)).toBe(0);

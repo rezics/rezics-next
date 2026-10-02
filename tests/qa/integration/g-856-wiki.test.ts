@@ -5,6 +5,7 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
+import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
 import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
 import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
@@ -66,7 +67,8 @@ test('G856: English and Finnish Pride editions extract the same character throug
             request.headers.get('authorization')?.replace('Bearer ', '') ?? '',
           );
           if (!principal) throw new Error('QA bearer missing');
-          return principal;
+          const verified = { ...principal, emailVerified: true as const };
+          return { ...verified, currentAssertion: async () => verified };
         },
       },
       structureObjects: objects,
@@ -106,13 +108,13 @@ test('G856: English and Finnish Pride editions extract the same character throug
       if (response.status !== status) throw new Error(`${response.status}: ${text}`);
       return JSON.parse(text) as T;
     };
-    const mcp = async <T>(name: string, body: object): Promise<T> => {
+    const mcp = async <T>(name: string, body: object, token = seed.holderToken): Promise<T> => {
       const envelope = await json<{ result: { structuredContent: { status: number; body: T } } }>(
         await app.handle(
           new Request('http://main.local/mcp', {
             method: 'POST',
             headers: {
-              authorization: `Bearer ${seed.holderToken}`,
+              authorization: `Bearer ${token}`,
               'content-type': 'application/json',
               accept: 'application/json, text/event-stream',
               'mcp-protocol-version': '2026-07-28',
@@ -332,15 +334,28 @@ test('G856: English and Finnish Pride editions extract the same character throug
         { ...english.claims[0]!, revealedAt: unit.id, evidence: [{ quote: exact, locator }] },
       ],
     };
-    const candidates = await mcp<{ items: { status: string; candidates: string[] }[] }>(
+    // Candidate discovery follows the reader's revelation boundary. This
+    // reader owns a provisioned Person and has read the English chapter.
+    const reader = await f.member('g856-bilingual-reader');
+    seed.tokens.set(reader.token, reader.principal);
+    const person = await json<{ agent: string }>(await reader.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Bilingual reader',
+    }), 201);
+    const lookup = () => mcp<{ items: { status: string; candidates: string[] }[] }>(
       'wiki_candidates',
       {
-        actingSubject: actor,
+        actingSubject: person.agent,
         target: seed.work,
         zone: seed.zone,
         names: [{ value: 'Mr. Bennet', language: 'en' }],
       },
+      reader.token,
     );
+    expect((await lookup()).items[0]).toMatchObject({ status: 'new', candidates: [] });
+    await new StructureProgressStore(f.contentPool).write({ principal: reader.principal,
+      structure: seed.structure, occurrence: seed.chapters[0]!, completed: true,
+      position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    const candidates = await lookup();
     expect(candidates.items[0]).toMatchObject({ status: 'matched', candidates: [character] });
     expect(await mcp('wiki_validate', { actingSubject: actor, bundle: finnish })).toMatchObject({
       status: 'acceptable',
