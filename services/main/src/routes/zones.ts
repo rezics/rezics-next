@@ -122,7 +122,7 @@ const configRead = t.Object({ zone: ref, revision: ref, configuration: t.Any(),
   cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer() }) });
 const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
   replayed: t.Boolean(), sourcePosition });
-const officialZone = t.Object({ zone: ref, realm: ref, routeSegment: t.String() });
+const officialZone = t.Object({ zone: ref, realm: ref, routeSegment: t.String(), address: canonicalAddress });
 const officialPage = t.Object({ items: t.Array(officialZone), next: t.Nullable(t.String()),
   cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
 const execution = t.Union([
@@ -136,7 +136,7 @@ const execution = t.Union([
 ]);
 const publicationRead = t.Object({ profile: t.Literal('zone-presentation-response-v1'),
   ...ZoneName.properties,
-  zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref,
+  zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref, address: canonicalAddress,
   presentation: ZonePresentation,
   bannerMedia: t.Array(t.Object({ id: t.String(), image: t.Nullable(t.Object({
     url: t.String(), width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }),
@@ -250,12 +250,13 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const execution = forced ?? (theme && state.disclosure === 'public'
             ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
             : { state: 'fallback' as const, reason: 'none_approved' as const });
-          const etag = `"${hash(JSON.stringify({ revision: state.revision, navigation, moduleData, bannerMedia, execution }))}"`;
+          const etag = `"${hash(JSON.stringify({ revision: state.revision, address: state.address, navigation, moduleData, bannerMedia, execution }))}"`;
           const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
             'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
               && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
           if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
           return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
+            address: state.address,
             name: state.name, language: state.language, direction: state.direction,
             official: state.official, revision: state.revision, presentation: state.presentation,
             navigation, moduleData, bannerMedia, renderTokens: zoneRenderTokens(execution.state === 'active'

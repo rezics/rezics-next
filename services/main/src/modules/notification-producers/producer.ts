@@ -12,6 +12,7 @@ import { relationshipRecipients, type RelationshipRecipients } from '../follows/
 import { recoverSpaceFollows } from '../follows/recovery.ts';
 import { recoverLibraryFollows } from '../library/follows.ts';
 import { resourceNotification } from './resources.ts';
+import { normalizeAddressName } from '@rezics/model/address/names';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -460,12 +461,15 @@ export class NotificationProducer {
     }
     const current = await new RealmReplyContentStore(this.content).readCurrent(reply as string);
     if (current && current.author === author && revision === `urn:rezics:content:revision:${current.revisionId}`) {
-      const handles = [...new Set([...current.body.matchAll(/(?:^|[^\p{L}\p{N}_])@([a-z0-9_]{3,30})\b/giu)]
-        .map(match => match[1]!.toLowerCase()))].slice(0, 20);
+      const handles = [...new Set([...current.body.matchAll(/(?:^|[^\p{L}\p{N}_-])@([a-z0-9_-]+)(?![\p{L}\p{N}_-])/giu)]
+        .flatMap(match => {
+          try { return [normalizeAddressName(match[1]!, 'ascii-handle').key]; }
+          catch { return []; }
+        }))].slice(0, 20);
       if (handles.length) {
-        const mentioned = (await this.access.query<{ agent_id: string }>(`SELECT agent_id
-          FROM access.agent_handle WHERE handle = ANY($1::text[]) AND state = 'current'
-          ORDER BY agent_id LIMIT 21`, [handles])).rows;
+        const mentioned = (await this.access.query<{ agent_id: string }>(`SELECT holder AS agent_id
+          FROM access.name_registry WHERE scope = 'agent' AND key = ANY($1::text[]) AND state = 'current'
+          ORDER BY holder LIMIT 21`, [handles])).rows;
         if (mentioned.length > 20) throw new Error('mention target bound exceeded');
         const recipients = new Set<string>();
         for (const agent of mentioned) {

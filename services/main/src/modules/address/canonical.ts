@@ -54,7 +54,8 @@ export async function canonicalAddresses(
         { ?resource a rv:Space . BIND(?resource AS ?space) }
         UNION { ?resource a rv:Realm ; rv:space ?space . ?space rv:realmCapability ?resource }
         UNION { ?resource a rv:Zone ; rv:space ?space }
-        BIND(EXISTS { ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:disclosure rv:Public } AS ?site)
+        BIND(EXISTS { ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:disclosure rv:Public .
+          FILTER NOT EXISTS { ?zone rv:protectionHead ?protection } } AS ?site)
       } } LIMIT ${summaries.length + 1}`,
             64 * 1024,
           )
@@ -71,7 +72,10 @@ export async function canonicalAddresses(
       if (!row.resource || !row.space || !NATIVE_ADDRESS_HOLDER.test(row.space.value)
         || byResource.get(row.resource.value)?.length !== 1) continue;
       holders.set(row.resource.value, row.space.value);
-      if (row.site?.value === 'true') siteSpaces.add(row.space.value);
+      if (row.site?.value === 'true'
+        || spaceTypes.some(summary => summary.reference === row.resource!.value && summary.type === 'zone')) {
+        siteSpaces.add(row.space.value);
+      }
     }
   }
   const names =
