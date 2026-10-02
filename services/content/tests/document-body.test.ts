@@ -4,7 +4,8 @@ import { authoredDocumentBody, retainedDocumentBody } from '../src/document-body
 import { resolveParagraphSelector } from '../src/comments.ts';
 
 test('structured bodies retain formatting and derive paragraph selectors from base text', () => {
-  const document = fromPlainText('Opening\n漢字\nClosing');
+  // Normalized snapshots are frozen; a fixture edits its own copy.
+  const document = structuredClone(fromPlainText('Opening\n漢字\nClosing'));
   document.doc.content![1]!.content = [
     {
       type: 'ruby',
@@ -28,7 +29,7 @@ test('structured bodies retain formatting and derive paragraph selectors from ba
 });
 
 test('a paragraph with a hard break retains one exact selector and Unicode context', () => {
-  const document = fromPlainText('😀'.repeat(40) + '\nTarget\nAfter');
+  const document = structuredClone(fromPlainText('😀'.repeat(40) + '\nTarget\nAfter'));
   document.doc.content![1]!.content!.push(
     { type: 'hardBreak' },
     { type: 'text', text: 'second line' },
@@ -44,7 +45,7 @@ test('a paragraph with a hard break retains one exact selector and Unicode conte
 });
 
 test('unknown components preserve external specification payload and fallback text', () => {
-  const document = fromPlainText('', 'blocks');
+  const document = structuredClone(fromPlainText('', 'blocks'));
   document.doc.content!.push({
     type: 'extensionBlock',
     attrs: {

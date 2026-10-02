@@ -349,7 +349,8 @@ describe('Studio save outcomes', () => {
 
 test('Studio text and chapter API adapters preserve formatted snapshots across exact revision reads', async () => {
   const fixture = storyMain({ delayMs: 0 });
-  const document = fromPlainText('漢字', 'blocks');
+  // Normalized snapshots are frozen; a fixture edits its own copy.
+  const document = structuredClone(fromPlainText('漢字', 'blocks'));
   document.doc.content![0]!.content = [
     {
       type: 'ruby',

@@ -74,6 +74,14 @@ adjacent-text merging. `parseDocument` preserves supplied JSON after validation.
 retain their order. This serialization is not a general RFC 8785 implementation.
 Whitespace and Unicode normalization in authored text are preserved.
 
+Normalized snapshots, including those from `fromPlainText` and `fromMarkdown`,
+are deeply frozen; copy one (for example with `structuredClone`) to change it.
+Freezing lets the package recognize a block it already checked by identity, so
+an editor that keeps unchanged blocks between edits pays only for the blocks it
+changed. The published JSON Schemas define validity; the runtime checks each
+node type's shell without resolving schema references, and the tests compare
+both on mutated documents.
+
 Language tags use [BCP 47](https://www.rfc-editor.org/rfc/rfc5646); spelling is
 preserved and structural tag syntax is checked, without a registry lookup.
 `dir` uses HTML's `ltr`, `rtl` and `auto`. Ruby is a base-text sequence plus one

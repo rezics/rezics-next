@@ -41,7 +41,7 @@ test('document publication checks visible content and rejects a false text proje
   const document = fromPlainText('A chapter');
   await expect(assertContentPublicationBody(contentBody({ body: 'wrong', document }), input))
     .rejects.toBeInstanceOf(ContentPublicationConflict);
-  const component = fromPlainText('', 'blocks');
+  const component = structuredClone(fromPlainText('', 'blocks'));
   component.doc.content!.push({ type: 'image', attrs: { id: 'image', src: 'https://example.org/image.png' } });
   await expect(assertContentPublicationBody(contentBody({ body: '\n', document: component }), input))
     .resolves.toBeUndefined();

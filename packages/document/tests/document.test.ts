@@ -278,3 +278,97 @@ test('legacy inline spoilers retain concealment and inner formatting without int
   ).toEqual(['spoiler', 'link']);
   expect(result.doc.content?.[2]?.content?.[0]?.marks).toEqual([{ type: 'code' }]);
 });
+
+test('editing work is proportional to the edit: unchanged normalized blocks are reused, not rechecked', () => {
+  const blocks = Array.from({ length: 50 }, (_, index) => paragraph(`p${index}`, `Line ${index}`));
+  const first = normalizeDocument(snapshot(blocks));
+  expect(Object.isFrozen(first)).toBe(true);
+  expect(Object.isFrozen(first.doc.content![0])).toBe(true);
+  expect(normalizeDocument(first)).toBe(first);
+  expect(() => {
+    (first.doc.content as DocumentNode[]).push(paragraph('late', 'mutation'));
+  }).toThrow();
+
+  // A keystroke changes one block; the other 49 keep their identity in the next snapshot.
+  const edited = [...first.doc.content!];
+  edited[7] = paragraph('p7', 'Line 7, edited');
+  const second = normalizeDocument(snapshot(edited));
+  expect(second.doc.content![6]).toBe(first.doc.content![6]);
+  expect(second.doc.content![7]).not.toBe(first.doc.content![7]);
+  expect(documentText(second).split('\n')[7]).toBe('Line 7, edited');
+
+  // Reused blocks still take part in the checks that span the document.
+  const duplicated = [...first.doc.content!, first.doc.content![0]!];
+  expect(checkDocument(snapshot(duplicated))).toBe(false);
+  const table = normalizeDocument(snapshot([{ type: 'table', attrs: { id: 't' }, content: [{ type: 'tableRow', attrs: { id: 'r' },
+    content: [{ type: 'tableCell', attrs: { id: 'c' }, content: [paragraph('cp', 'cell')] }] }] }]));
+  expect(checkDocument(snapshot([...table.doc.content!], 'text'))).toBe(false);
+});
+
+test('serialization is the sorted JSON of the normalized snapshot, and its text reads back without parsing', () => {
+  const sorted = (value: unknown): unknown =>
+    Array.isArray(value) ? value.map(sorted)
+      : value === null || typeof value !== 'object' ? value
+        : Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([key, item]) => [key, sorted(item)]));
+  const value = snapshot([paragraph('a', 'ä "quoted" \\ 😀'), { type: 'horizontalRule', attrs: { id: 'h' } }]);
+  const text = serializeDocument(value);
+  expect(text).toBe(JSON.stringify(sorted(normalizeDocument(value))));
+  expect(parseStoredDocument(text)).toBe(normalizeDocument(parseStoredDocument(text)!));
+  expect(parseStoredDocument(JSON.stringify(JSON.parse(text)))).toEqual(normalizeDocument(value));
+});
+
+test('the runtime node checker accepts exactly what the published schema accepts', async () => {
+  const { Value } = await import('typebox/value');
+  const { DocumentSnapshotSchema, topLevelNodeNames, wireNodeChecker } = await import('../src/schema.ts');
+  const rich: DocumentNode[] = [
+    { type: 'heading', attrs: { id: 'h', level: 2 }, content: [{ type: 'text', text: 'Title', marks: [{ type: 'bold' }] }] },
+    { type: 'paragraph', attrs: { id: 'p', lang: 'ja', dir: 'ltr' }, content: [
+      { type: 'ruby', attrs: { rt: 'かん', position: 'over' }, content: [{ type: 'text', text: '漢' }] },
+      { type: 'text', text: 'link', marks: [{ type: 'link', attrs: { href: 'https://example.test/' } }] },
+      { type: 'hardBreak' },
+    ] },
+    { type: 'bulletList', attrs: { id: 'l' }, content: [{ type: 'listItem', attrs: { id: 'li' }, content: [paragraph('lp', 'item')] }] },
+    { type: 'blockquote', attrs: { id: 'q' }, content: [paragraph('qp', 'quoted')] },
+    { type: 'codeBlock', attrs: { id: 'c' }, content: [{ type: 'text', text: 'x = 1' }] },
+    { type: 'table', attrs: { id: 't' }, content: [{ type: 'tableRow', attrs: { id: 'r' },
+      content: [{ type: 'tableCell', attrs: { id: 'tc' }, content: [paragraph('tp', 'cell')] }] }] },
+    { type: 'horizontalRule', attrs: { id: 'hr' } },
+  ];
+  const mutations: ((node: Record<string, unknown>) => void)[] = [
+    (node) => { delete node.attrs; },
+    (node) => { node.attrs = { ...(node.attrs as object), unknown: true }; },
+    (node) => { node.extra = 1; },
+    (node) => { node.type = 'unknownType'; },
+    (node) => { node.content = []; },
+    (node) => { node.content = [{ type: 'text', text: '' }]; },
+    (node) => { node.content = [{ type: 'paragraph', attrs: { id: 'n' } }]; },
+    (node) => { node.marks = [{ type: 'bold' }]; },
+    (node) => { node.marks = [{ type: 'noSuchMark' }]; },
+    (node) => { node.text = 'loose text'; },
+    (node) => { node.attrs = { ...(node.attrs as object), level: 9 }; },
+  ];
+  const walk = (node: DocumentNode, path: number[] = []): number[][] =>
+    [path, ...(node.content ?? []).flatMap((child, index) => walk(child, [...path, index]))];
+  let compared = 0;
+  for (const profile of ['text', 'blocks'] as const) {
+    const check = wireNodeChecker(profile);
+    const top = topLevelNodeNames(profile);
+    const runtime = (value: DocumentSnapshot) =>
+      (value.doc.content ?? []).length > 0 && value.doc.content!.every((block) => top.has(block.type) && check(block));
+    const doc = { type: 'doc', content: rich } as DocumentNode;
+    for (const path of walk(doc).filter((path) => path.length)) {
+      for (const mutate of mutations) {
+        const copy = structuredClone(doc);
+        let target = copy;
+        for (const index of path) target = target.content![index]!;
+        mutate(target as unknown as Record<string, unknown>);
+        const value = snapshot(copy.content!, profile);
+        expect(runtime(value)).toBe(Value.Check(DocumentSnapshotSchema, value));
+        compared++;
+      }
+    }
+    expect(runtime(snapshot(rich, profile))).toBe(Value.Check(DocumentSnapshotSchema, snapshot(rich, profile)));
+  }
+  expect(compared).toBeGreaterThan(300);
+  // The reference resolves the published schema's references for every node, which is the cost the runtime checker avoids.
+}, 180_000);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import Type, { type TSchema } from 'typebox';
+import { Value } from 'typebox/value';
 import { Schema, type NodeSpec, type MarkSpec, type DOMOutputSpec } from 'prosemirror-model';
 import { nodes as basicNodes, marks as basicMarks } from 'prosemirror-schema-basic';
 import { bulletList, orderedList, listItem } from 'prosemirror-schema-list';
@@ -368,8 +369,19 @@ export function schemaForProfile(profile: DocumentProfile): Schema {
   return profile === 'text' ? textDocumentSchema : blocksDocumentSchema;
 }
 
-function wireSchema(profile: DocumentProfile): TSchema {
-  const definition = (name: string) => `${profile}_${name}`;
+/**
+ * The wire format of a profile: which nodes exist, what each may contain, and the shell of each
+ * node (its type, attributes, text and marks, without content). The published JSON Schema and the
+ * runtime checker are both built from these rules, so they cannot drift apart.
+ */
+interface WireRules {
+  names: readonly string[];
+  content: Readonly<Record<string, { allowed: readonly string[]; minItems: number }>>;
+  shells: Readonly<Record<string, Record<string, TSchema>>>;
+  mark: TSchema;
+}
+
+function wireRules(profile: DocumentProfile): WireRules {
   const names = profile === 'text' ? textNodeNames : blocksNodeNames;
   const inlineNames = [
     'text',
@@ -391,25 +403,23 @@ function wireSchema(profile: DocumentProfile): TSchema {
         'tableHeader',
       ].includes(name),
   );
-  const refs = (allowed: readonly string[]) =>
-    Type.Union(allowed.map((name) => Type.Ref(definition(name))));
-  const array = (allowed: readonly string[], minItems = 0) =>
-    Type.Array(refs(allowed), { minItems });
-  const content: Record<string, TSchema> = {
-    paragraph: array(inlineNames),
-    heading: array(inlineNames),
-    blockquote: array(blockNames, 1),
-    bulletList: array(['listItem'], 1),
-    orderedList: array(['listItem'], 1),
-    listItem: array(blockNames, 1),
-    taskList: array(['taskItem'], 1),
-    taskItem: array(blockNames, 1),
-    codeBlock: array(['text']),
-    ruby: array(['text']),
-    table: array(['tableRow'], 1),
-    tableRow: array(['tableCell', 'tableHeader'], 1),
-    tableCell: array(blockNames, 1),
-    tableHeader: array(blockNames, 1),
+  const rule = (allowed: readonly string[], minItems = 0) => ({ allowed, minItems });
+  const content = {
+    doc: rule(blockNames, 1),
+    paragraph: rule(inlineNames),
+    heading: rule(inlineNames),
+    blockquote: rule(blockNames, 1),
+    bulletList: rule(['listItem'], 1),
+    orderedList: rule(['listItem'], 1),
+    listItem: rule(blockNames, 1),
+    taskList: rule(['taskItem'], 1),
+    taskItem: rule(blockNames, 1),
+    codeBlock: rule(['text']),
+    ruby: rule(['text']),
+    table: rule(['tableRow'], 1),
+    tableRow: rule(['tableCell', 'tableHeader'], 1),
+    tableCell: rule(blockNames, 1),
+    tableHeader: rule(blockNames, 1),
   };
   const mark = Type.Union(
     Object.entries(markAttributes).map(([name, attrs]) =>
@@ -422,8 +432,24 @@ function wireSchema(profile: DocumentProfile): TSchema {
       ),
     ),
   );
+  const shells: Record<string, Record<string, TSchema>> = {};
+  for (const name of names) {
+    const fields: Record<string, TSchema> = { type: Type.Literal(name) };
+    if (nodeAttributes[name]) fields.attrs = Type.Object(nodeAttributes[name], closed);
+    if (name === 'text') fields.text = Type.String({ minLength: 1 });
+    if (inlineNames.includes(name)) fields.marks = Type.Optional(Type.Array(mark));
+    shells[name] = fields;
+  }
+  return { names, content, shells, mark };
+}
+
+function wireSchema(profile: DocumentProfile): TSchema {
+  const rules = wireRules(profile);
+  const definition = (name: string) => `${profile}_${name}`;
+  const array = ({ allowed, minItems }: { allowed: readonly string[]; minItems: number }) =>
+    Type.Array(Type.Union(allowed.map((name) => Type.Ref(definition(name)))), { minItems });
   const defs: Record<string, TSchema> = {
-    [definition('Mark')]: mark,
+    [definition('Mark')]: rules.mark,
     [definition('Document')]: Type.Object(
       {
         version: Type.Literal(documentVersion),
@@ -433,20 +459,58 @@ function wireSchema(profile: DocumentProfile): TSchema {
       closed,
     ),
     [definition('Doc')]: Type.Object(
-      { type: Type.Literal('doc'), content: array(blockNames, 1) },
+      { type: Type.Literal('doc'), content: array(rules.content.doc!) },
       closed,
     ),
   };
-  for (const name of names) {
-    const fields: Record<string, TSchema> = { type: Type.Literal(name) };
-    if (nodeAttributes[name]) fields.attrs = Type.Object(nodeAttributes[name], closed);
-    if (content[name]) fields.content = Type.Optional(content[name]);
-    if (name === 'text') fields.text = Type.String({ minLength: 1 });
-    if (inlineNames.includes(name))
-      fields.marks = Type.Optional(Type.Array(Type.Ref(definition('Mark'))));
+  for (const name of rules.names) {
+    const shell = rules.shells[name]!;
+    const fields: Record<string, TSchema> = { type: shell.type! };
+    if (shell.attrs) fields.attrs = shell.attrs;
+    if (rules.content[name]) fields.content = Type.Optional(array(rules.content[name]));
+    if (shell.text) fields.text = shell.text;
+    if (shell.marks) fields.marks = Type.Optional(Type.Array(Type.Ref(definition('Mark'))));
     defs[definition(name)] = Type.Object(fields, closed);
   }
   return Type.Cyclic(defs, definition('Document'));
+}
+
+/**
+ * Checks one node and its descendants against a profile's wire rules. Each node type's shell is a
+ * schema without references, so the cost follows the node, not the size of the schema; resolving
+ * the published schema's references would scan the whole schema for every node. Values must
+ * already be plain JSON.
+ */
+export function wireNodeChecker(profile: DocumentProfile): (node: unknown) => boolean {
+  const rules = wireRules(profile);
+  const shells = new Map(
+    rules.names.map((name) => [name, Type.Object(rules.shells[name]!, closed)] as const),
+  );
+  const content = new Map(
+    Object.entries(rules.content).map(([name, rule]) => [name, { ...rule, allowed: new Set(rule.allowed) }]),
+  );
+  const check = (node: unknown): boolean => {
+    if (typeof node !== 'object' || node === null || Array.isArray(node)) return false;
+    const { content: children, ...shell } = node as Record<string, unknown>;
+    const schema = shells.get(String(shell.type));
+    if (!schema || !Value.Check(schema, shell)) return false;
+    if (children === undefined) return true;
+    const rule = content.get(String(shell.type));
+    if (!rule || !Array.isArray(children) || children.length < rule.minItems) return false;
+    return children.every(
+      (child) =>
+        typeof child === 'object' &&
+        child !== null &&
+        rule.allowed.has(String((child as { type?: unknown }).type)) &&
+        check(child),
+    );
+  };
+  return check;
+}
+
+/** The node types a document may hold at its top level. */
+export function topLevelNodeNames(profile: DocumentProfile): ReadonlySet<string> {
+  return new Set(wireRules(profile).content.doc!.allowed);
 }
 
 export const TextSnapshotSchema = wireSchema('text');
