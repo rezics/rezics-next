@@ -588,6 +588,8 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
       [home.reader.principalId, space.realm, reader],
     );
     await recoverSpaceFollows(stack.accessPool, stack.fuseki);
+    // A prior fixture may leave the cycling cursor past this principal.
+    await recoverSpaceFollows(stack.accessPool, stack.fuseki);
     expect(
       (
         await stack.accessPool.query(

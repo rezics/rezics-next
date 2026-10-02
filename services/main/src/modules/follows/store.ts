@@ -114,6 +114,8 @@ export class FollowsStore {
     const descriptions = new Map<string,FollowDescription | void>();
     // Graph disclosure never holds an Access transaction or scope gate.
     for (const item of targets) {
+      if (item.kind && !followTargetMatches(item.target,item.kind))
+        throw new ControlInvalid('Follow target does not name its kind');
       if (item.following !== false && (!preflight.rows.some(row => row.requested_target===item.target && row.following)
         || item.expectedRevision === null)) descriptions.set(item.target,await describe(item.target,item.kind));
     }
