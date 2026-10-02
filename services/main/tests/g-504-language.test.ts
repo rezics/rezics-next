@@ -140,6 +140,7 @@ test.each([
   expect(Value.Check(readName, selected)).toBe(true);
   expect(Value.Check(resourceSummary, { reference: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
     status: 'available', type: 'resource', base: 'resource', work: null, disclosure: 'public', name: selected,
+    address: { prefix: '/e/',key: 'resource',slugSource: selected?.value ?? '' },
     avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'test', resourceType: 'resource' } })).toBe(true);
 });
 

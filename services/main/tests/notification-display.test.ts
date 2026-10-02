@@ -12,9 +12,12 @@ test('G-329: disclosed Realm and Work display carries a current name, route segm
   const env = { fuseki: { query: async (query: string) => {
     queries.push(query);
     if (query.includes('rv:publicProfileHead')) return { results: { bindings: [{}] } };
-    if (query.includes('rv:routeSegment')) return { results: { bindings: [
-      { name: { value: 'Fiction · 小说' }, segment: { value: 'fiction' } }] } };
+    if (query.includes('SELECT ?name ?space')) return { results: { bindings: [
+      { name: { value: 'Fiction · 小说' }, space: { value: realm } }] } };
     return { results: { bindings: [{ title: { value: 'A novel' } }] } };
+  } }, addresses: { currents: async (holders: string[]) => {
+    expect(holders).toEqual([realm]);
+    return new Map([[`space\0${realm}`,{ key: 'fiction' }]]);
   } } } as unknown as WorkActivationEnvironment;
   expect(await notificationRealmDisplay(env, realm)).toEqual({ realmName: 'Fiction · 小说',
     realmRouteSegment: 'fiction' });

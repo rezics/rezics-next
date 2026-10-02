@@ -22,7 +22,8 @@ test('G630: exact route paths admit native resources and pass slug tabs to the h
   expect(parseZonePath(`/picks/${resource}/discussion`)).toEqual({ kind: 'mount', segment: 'picks',
     resource, tab: 'discussion' });
   expect(parseZonePath(`/w/${resource}/future-tab`)).toEqual({ kind: 'work', resource, tab: 'future-tab' });
-  for (const path of ['', 'picks', '//picks', '/picks/', '/picks/not-a-uuid', '/w', '/picks/../about',
+  expect(parseZonePath('/picks/日本語/discussion')).toEqual({ kind: 'mount',segment: 'picks',resource: '日本語',tab: 'discussion' });
+  for (const path of ['', 'picks', '//picks', '/picks/', '/w', '/picks/../about',
     '/picks%2fextra', `/picks/${resource}/tab/more`, `/picks/${resource}/`, '/UPPER',
     `/${'a'.repeat(65)}`, ...ZONE_RESERVED_SEGMENTS.filter(segment => segment !== 'w').map(segment => `/${segment}`)]) {
     expect(parseZonePath(path)).toBeNull();
@@ -49,6 +50,7 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
   const work = { environment: { objectDirectory: directory, lineage: { dataEpoch: 'epoch', routingEpoch: '1' },
     fuseki: { query: async (query: string) => {
       queries.push(query);
+      if (query.includes('SELECT ?spaceDisclosure')) return rows([{ spaceDisclosure: `${RV}Public` }]);
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
         const requested = [collection, resource].filter(target => query.includes(`<${target}>`));
         const result = rows(requested.map(target => {

@@ -85,16 +85,34 @@ CREATE TABLE access.name_receipt (
   PRIMARY KEY(principal_id,idempotency_key)
 );
 
+CREATE TABLE access.name_graph_import_report (
+  data_epoch text NOT NULL,
+  source text NOT NULL,
+  reason text NOT NULL,
+  reported_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY(data_epoch,source)
+);
+
+-- Evaluate the ASCII normalization policy once before dropping the old store.
+-- Access has no graph epoch here; legacy-agent identifies this SQL import cut.
+CREATE TEMP TABLE rezics_986_agent_names ON COMMIT DROP AS
+ SELECT h.*,lower(handle) AS key,
+   (handle ~ '^[A-Za-z0-9][A-Za-z0-9_-]{1,28}[A-Za-z0-9]$'
+     AND NOT access.has_address_sid_case_variant(handle)
+     AND NOT (substr(handle,23,1) = '-' AND access.has_address_sid_case_variant(substr(handle,1,22)))
+     AND NOT EXISTS (SELECT 1 FROM access.name_reserved_word WHERE word = lower(handle) AND handles)) AS conforming
+ FROM access.agent_handle h;
+
 INSERT INTO access.name_registry(scope,key,display,skeleton,holder,controller,state,claimed_at,changed_at)
- SELECT 'agent',handle,handle,skeleton,agent_id,agent_id,
+ SELECT 'agent',key,handle,skeleton,agent_id,agent_id,
    CASE WHEN state = 'current' THEN 'current' ELSE 'redirect' END,claimed_at,claimed_at
- FROM access.agent_handle
- WHERE NOT access.has_address_sid_case_variant(handle)
-   AND NOT EXISTS (SELECT 1 FROM access.name_reserved_word WHERE word = handle AND handles);
+ FROM rezics_986_agent_names WHERE conforming;
+INSERT INTO access.name_graph_import_report(data_epoch,source,reason)
+ SELECT 'legacy-agent',agent_id || '#' || handle,
+   'Skipped legacy Agent handle ' || handle || ': fails ASCII normalization or reservation; holder uses its identity address'
+ FROM rezics_986_agent_names WHERE NOT conforming;
 DO $$ DECLARE skipped record; BEGIN
- FOR skipped IN SELECT handle,agent_id FROM access.agent_handle
-   WHERE access.has_address_sid_case_variant(handle)
-     OR EXISTS (SELECT 1 FROM access.name_reserved_word WHERE word = handle AND handles)
+ FOR skipped IN SELECT handle,agent_id FROM rezics_986_agent_names WHERE NOT conforming
  LOOP RAISE WARNING 'Skipped legacy Agent name %, holder % uses its identity address',skipped.handle,skipped.agent_id; END LOOP;
 END $$;
 INSERT INTO access.name_history(revision,scope,key,holder,display,state)

@@ -7,6 +7,7 @@ import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/im
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { ZONE_PROFILE } from '../../../services/main/src/modules/zone/config-format.ts';
 import { uuidToSid,hasSidCaseVariant } from '@rezics/model/address/sid';
+import { readFileSync } from 'node:fs';
 
 test('G937: former graph names move once, retain holders and recover after native cleanup', async () => {
   const f = await addressFixture('migration');
@@ -147,3 +148,35 @@ test('G937: former graph names move once, retain holders and recover after nativ
     await f.close();
   }
 }, 30_000);
+
+test('G937: SQL Agent import reports every non-conforming legacy alias without aborting',async () => {
+  const f = await addressFixture('agent-import');
+  const schema = `g937_${randomUUID().replaceAll('-','')}`;
+  const client = await f.accessPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`CREATE SCHEMA ${schema};
+      CREATE TABLE ${schema}.principal(id uuid PRIMARY KEY);
+      CREATE TABLE ${schema}.admission(id uuid PRIMARY KEY,action text,acting_subject text,state text,graph_outcome text);
+      CREATE TABLE ${schema}.agent_handle(handle text PRIMARY KEY,agent_id text,state text,skeleton text,
+        claimed_at timestamptz DEFAULT clock_timestamp());
+      CREATE TABLE ${schema}.agent_handle_receipt(id uuid);
+      CREATE FUNCTION ${schema}.realm_member_search_key(value text) RETURNS text LANGUAGE sql IMMUTABLE AS 'SELECT value';
+      CREATE FUNCTION ${schema}.realm_member_search_terms(value text) RETURNS text[] LANGUAGE sql IMMUTABLE AS 'SELECT ARRAY[value]';`);
+    const valid = `https://rezics.com/id/${randomUUID()}`;
+    const skipped = `https://rezics.com/id/${randomUUID()}`;
+    for (const [handle,holder] of [['valid-name',valid],['_legacy',skipped],['legacy_',skipped],['admin',skipped],['1'.repeat(22),skipped]]) {
+      await client.query(`INSERT INTO ${schema}.agent_handle(handle,agent_id,state,skeleton) VALUES ($1,$2,'current',$1)`,[handle,holder]);
+    }
+    const migration = readFileSync('services/main/migrations/access/986_name_registry.sql','utf8').replaceAll('access.',`${schema}.`);
+    await client.query(migration);
+    expect((await client.query(`SELECT key,holder FROM ${schema}.name_registry`)).rows).toEqual([{ key:'valid-name',holder:valid }]);
+    const report = (await client.query(`SELECT source,reason FROM ${schema}.name_graph_import_report ORDER BY source`)).rows;
+    expect(report).toHaveLength(4);
+    for (const handle of ['_legacy','legacy_','admin','1'.repeat(22)])
+      expect(report.find(row => row.source === `${skipped}#${handle}`)?.reason).toContain(`handle ${handle}`);
+    expect((await client.query(`SELECT handle FROM ${schema}.agent_handle`)).rows).toEqual([{ handle:'valid-name' }]);
+  } finally {
+    await client.query('ROLLBACK');client.release();await f.close();
+  }
+},30_000);

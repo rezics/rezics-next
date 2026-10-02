@@ -4,6 +4,7 @@ import type { RateLimitFamily } from './budgets.ts';
 // family fails both composed-route and OpenAPI coverage tests. Parameter names
 // are immaterial; whole path segments match, never prefix lookalikes.
 const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])[] = [
+  ['GET','/v1/addresses/current','read'],
   ['GET','/v1/addresses/resolve','address'],
   ['POST','/v1/addresses/resolutions','address'],
   ['GET','/v1/addresses/availability','address'],
@@ -93,8 +94,6 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/access/role-bindings', 'read'],
   ['GET', '/v1/access/role-bindings/{bindingId}', 'read'],
   ['GET', '/v1/access/roles/{familyId}', 'read'],
-  ['GET', '/v1/addresses/work/{slug}', 'read'],
-  ['GET', '/v1/addresses/work/{slug}/revisions/{revision}', 'read'],
   ['GET', '/v1/agents/control', 'read'],
   ['GET', '/v1/agents/invitations/{invitationId}', 'read'],
   ['GET', '/v1/agents/{id}', 'read'],
@@ -250,7 +249,6 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/rating-observations/{observation}/revisions/{revision}', 'read'],
   ['GET', '/v1/reader/settings', 'read'],
   ['GET', '/v1/realms', 'read'],
-  ['GET', '/v1/realms/by-handle/{handle}', 'read'],
   ['GET', '/v1/realms/{realm}', 'read'],
   ['GET', '/v1/realms/{realm}/audit', 'read'],
   ['GET', '/v1/realms/{realm}/classification-context', 'read'],
@@ -339,7 +337,6 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/work-title-corrections/{proposalRevision}', 'read'],
   ['GET', '/v1/works', 'read'],
   ['GET', '/v1/works/{id}', 'read'],
-  ['GET', '/v1/works/{id}/addresses', 'read'],
   ['GET', '/v1/works/{id}/adoptions', 'read'],
   ['GET', '/v1/works/{id}/agent-credits', 'read'],
   ['GET', '/v1/works/{id}/also-enjoyed', 'read'],
