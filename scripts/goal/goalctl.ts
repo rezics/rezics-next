@@ -1017,6 +1017,29 @@ export function prepareCompositionMerge(files: readonly { file: string; source: 
   return { files: normalized, fastForward: false, state: 'conflict', error: failures.join('\n  ') };
 }
 
+/**
+ * Migrations a branch adds that sort before a migration already on main. Fixture manifests refuse a
+ * migration inserted before applied ones, so such a branch must renumber before it merges.
+ */
+export function migrationsBelowMain(added: readonly string[], listMain: (directory: string) => string[]): string[] {
+  const late: string[] = [];
+  const byDirectory = new Map<string, string[]>();
+  for (const path of added) {
+    const match = /^(.*\/migrations\/[^/]+)\/(\d+)_[^/]+\.sql$/.exec(path);
+    if (match) byDirectory.set(match[1]!, [...byDirectory.get(match[1]!) ?? [], path]);
+  }
+  for (const [directory, paths] of byDirectory) {
+    const own = new Set(paths.map(path => path.slice(directory.length + 1)));
+    const highest = Math.max(0, ...listMain(directory).filter(name => !own.has(name))
+      .map(name => Number(/^(\d+)_/.exec(name)?.[1] ?? 0)));
+    for (const path of paths) {
+      const number = Number(/\/(\d+)_[^/]+\.sql$/.exec(path)![1]);
+      if (number <= highest) late.push(`${path} (main already has ${highest})`);
+    }
+  }
+  return late;
+}
+
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
@@ -1027,6 +1050,11 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
+    const early = migrationsBelowMain(committed, (directory) => git(root, ['ls-tree', '--name-only', 'main', `${directory}/`])
+      .split('\n').filter(Boolean).map(path => path.slice(directory.length + 1)));
+    if (early.length) {
+      throw new Error(`${task.id} adds migrations numbered below ones already on main; renumber them above:\n  ${early.join('\n  ')}`);
+    }
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
       task.mergedCommit = git(root, ['rev-parse', 'HEAD']);
