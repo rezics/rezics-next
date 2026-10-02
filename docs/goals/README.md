@@ -55,6 +55,7 @@ paths: [apps/accounts/**, packages/ui/src/data-table/**]
 migrations: []                        # <directory>:<first>-<last>
 shared: [route:accounts-admin]
 depends: [G-099]
+worktree: wave-9                      # optional: tasks naming one worktree share its tree and branch
 ---
 ```
 
@@ -64,6 +65,17 @@ dispatches, merges and closes; case IDs, overlapping path globs, migration
 ranges and shared slots are exclusive; retries resume the same session; files
 outside the claim block a merge unless the manager passes `--allow-scope` after
 review; workers propose out-of-scope work instead of doing it.
+
+## Shared worktrees and unified checks
+
+Maintainer, 2026-10-02: one worktree per task multiplied dev servers, Storybook,
+type-checkers and QA runs until 64 GB was not enough. Related tasks now name one
+`worktree:`; their agents work concurrently in that tree on disjoint claims and
+commit only their own paths. The manager starts one web dev server, one
+Storybook and one type-check watcher there and lists them in
+`.temp/goal/shared.md`; workers start none of their own and run only unit tests
+of their files. The manager merges the shared branch once, after its tasks
+exit, and runs the integration tiers, Storybook and browser journeys once.
 
 ## Integration and QA
 

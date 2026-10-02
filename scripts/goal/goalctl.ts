@@ -12,13 +12,17 @@ export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
+  /** A shared worktree name: tasks naming the same one work concurrently in one tree and branch. */
+  worktree?: string;
 }
 export interface Attempt {
   n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
   startedAt: string; endedAt?: string;
 }
-export interface Task extends Brief {
+export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];
+  /** Set when the task works in a shared worktree. */
+  worktreeName?: string;
   mergedCommit?: string; closedAt?: string;
 }
 export interface Ledger { startedAt?: string; manager?: string; tasks: Record<string, Task> }
@@ -105,7 +109,7 @@ export function parseBrief(text: string): Brief {
     id: fields.id ?? '', title: fields.title ?? '', effort: fields.effort ?? 'medium',
     engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
     cases: list('cases'), paths: list('paths'), migrations: list('migrations'), shared: list('shared'),
-    depends: list('depends'),
+    depends: list('depends'), ...fields.worktree ? { worktree: fields.worktree } : {},
   };
 }
 
@@ -126,6 +130,9 @@ export function validateBrief(brief: Brief): string[] {
   }
   for (const range of brief.migrations) if (!parseRange(range)) errors.push(`bad migration range: ${range}`);
   for (const id of brief.depends) if (!/^G-\d{3,}$/.test(id)) errors.push(`bad dependency: ${id}`);
+  if (brief.worktree !== undefined && !/^[a-z][a-z0-9-]{1,40}$/.test(brief.worktree)) {
+    errors.push(`worktree must be a lower-case name: ${brief.worktree}`);
+  }
   return errors;
 }
 
@@ -369,6 +376,11 @@ export function launchCommand(options: { id: string; effort: string; session: st
     '--output-format', 'json']];
 }
 
+/** Where a task's brief lives in its worktree; shared worktrees hold one brief per task. */
+export function briefFile(task: Pick<Task, 'id' | 'worktree'> & { shared?: boolean }): string {
+  return task.shared ? `.temp/goal/brief-${task.id.toLowerCase()}.md` : '.temp/goal/brief.md';
+}
+
 function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(task), effort = task.effort): string {
   return [
     `You are REZICS Goal worker ${task.id} (${modelOf(engine)}/${effort}). Work only inside ${task.worktree}.`,
@@ -377,7 +389,12 @@ function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(tas
       + ` translate such paths to ${task.worktree}.`,
     'goalctl commands you run (test, owner, slot) may write their own bookkeeping under the main checkout\'s'
       + ' .temp/goal-orchestration; that is allowed. Use `bun scripts/goal/goalctl.ts test` for QA.',
-    'Read docs/goals/worker.md there, then your brief at .temp/goal/brief.md, and follow both.',
+    `Read docs/goals/worker.md there, then your brief at ${briefFile({ ...task, shared: !!task.worktreeName })}, and follow both.`,
+    ...task.worktreeName ? [`Other workers share this worktree at the same time (shared worktree "${task.worktreeName}").`
+      + ' Change only your claimed paths; commit only them with `git commit --only <paths>` (retry if index.lock is held);'
+      + ' never reset, checkout, stash or reformat files you did not change. Start no dev server, Storybook,'
+      + ' type-check watcher, browser or QA tier: use the shared ones listed in .temp/goal/shared.md, and leave'
+      + ' integration, Storybook and browser runs to the manager, who tests the shared branch once.'] : [],
     `The manager session is "${manager}". End with the handoff that the worker protocol specifies.`,
   ].join('\n');
 }
@@ -646,18 +663,24 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
       console.log(`${brief.id}: claims ok; ${live}/${limit} live; ${account ? describeAccount(account) : `Claude usage ${usage.level}`}`);
       return;
     }
-    const worktree = join(root, '.temp', 'worktrees', brief.id.toLowerCase());
-    const branch = `goal/${brief.id.toLowerCase()}`;
-    if (existsSync(worktree)) throw new Error(`${worktree} already exists; remove it or use another ID`);
-    git(root, ['worktree', 'add', '-q', worktree, '-b', branch, 'main']);
-    const install = spawnSync('corepack', ['yarn', 'install', '--immutable'], { cwd: worktree, encoding: 'utf8' });
+    const name = brief.worktree ?? brief.id.toLowerCase();
+    const worktree = join(root, '.temp', 'worktrees', name);
+    const branch = `goal/${name}`;
+    const reuse = brief.worktree !== undefined && existsSync(worktree);
+    if (existsSync(worktree) && !reuse) throw new Error(`${worktree} already exists; remove it or use another ID`);
     mkdirSync(join(stateDir, 'runs', brief.id), { recursive: true });
-    writeFileSync(join(stateDir, 'runs', brief.id, 'install.log'), `${install.stdout}\n${install.stderr}`);
-    if (install.status !== 0) throw new Error(`yarn install failed in ${worktree}; see runs/${brief.id}/install.log`);
+    if (!reuse) {
+      git(root, ['worktree', 'add', '-q', worktree, '-b', branch, 'main']);
+      const install = spawnSync('corepack', ['yarn', 'install', '--immutable'], { cwd: worktree, encoding: 'utf8' });
+      writeFileSync(join(stateDir, 'runs', brief.id, 'install.log'), `${install.stdout}\n${install.stderr}`);
+      if (install.status !== 0) throw new Error(`yarn install failed in ${worktree}; see runs/${brief.id}/install.log`);
+    }
     mkdirSync(join(worktree, '.temp', 'goal'), { recursive: true });
-    copyFileSync(absolute, join(worktree, '.temp', 'goal', 'brief.md'));
-    const task: Task = { ...brief, brief: absolute, worktree, branch, base: git(root, ['rev-parse', 'main']),
-      state: 'running', attempts: [] };
+    const { worktree: _shared, ...claims } = brief;
+    const task: Task = { ...claims, brief: absolute, worktree, branch,
+      base: reuse ? git(worktree, ['merge-base', 'HEAD', 'main']) : git(root, ['rev-parse', 'main']),
+      state: 'running', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {} };
+    copyFileSync(absolute, join(worktree, briefFile({ ...task, shared: !!task.worktreeName })));
     const manager = ledger.manager ?? process.env.GOAL_MANAGER ?? 'goal-manager';
     task.attempts.push(launch(task, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
       workerPrompt(task, manager, engine), false, manager, engine));
@@ -1090,7 +1113,7 @@ async function reclaimTask(id: string, briefPath: string): Promise<void> {
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
       migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute });
-    if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, '.temp', 'goal', 'brief.md'));
+    if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
     console.log(`${task.id} claims replaced from ${briefPath}`);
   });
 }
@@ -1105,14 +1128,17 @@ async function closeTask(id: string, outcome: string): Promise<void> {
     if (outcome === 'verified' && task.state !== 'merged' && !readOnly) {
       throw new Error(`${task.id} is ${task.state}, not merged`);
     }
-    if (existsSync(task.worktree)) {
+    // A shared worktree stays while another open task still works in it.
+    const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
+      && other.worktree === task.worktree && !['verified', 'cancelled'].includes(other.state));
+    if (existsSync(task.worktree) && !sharers.length) {
       killWorktreeProcesses(task.worktree);
       removeWorktreeStack(task.worktree);
       // Tasks may leave intentionally read-only artifacts (for example immutable release trees).
       spawnSync('chmod', ['-R', 'u+w', task.worktree]);
       git(root, ['worktree', 'remove', '--force', task.worktree]);
     }
-    if (task.state === 'merged') git(root, ['branch', '-d', task.branch], true);
+    if (task.state === 'merged' && !sharers.length) git(root, ['branch', '-d', task.branch], true);
     task.state = outcome;
     task.closedAt = new Date().toISOString();
     console.log(`${task.id} ${outcome}; claims released${outcome === 'cancelled' ? `, branch ${task.branch} kept` : ''}`);

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
-import { claimConflicts, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
+import { briefFile, claimConflicts, compositionSyntaxFailure, launchCommand, normalizeUseChains, outOfScope, parseBrief,
   parseCodexUsage, pathsOverlap, prepareCompositionMerge, rangesOverlap, SONNET_MODEL, type Task, usageLevel,
   validateBrief } from './goalctl.ts';
 
@@ -41,6 +41,15 @@ describe('goalctl briefs', () => {
 
 describe('goalctl claims', () => {
   const parsed = parseBrief(brief);
+
+  test('a brief may name a shared worktree; its brief file is per task', () => {
+    const brief = parseBrief('---\nid: G-950\ntitle: t\neffort: high\nengine: codex\nworktree: wave-9\npaths: [a/**]\n---\n');
+    expect(brief.worktree).toBe('wave-9');
+    expect(validateBrief(brief)).toEqual([]);
+    expect(validateBrief({ ...brief, worktree: '../x' })).toContain('worktree must be a lower-case name: ../x');
+    expect(briefFile({ id: 'G-950', worktree: '/w', shared: true })).toBe('.temp/goal/brief-g-950.md');
+    expect(briefFile({ id: 'G-950', worktree: '/w' })).toBe('.temp/goal/brief.md');
+  });
 
   test('Next.js dynamic folders in claims are literal directories', () => {
     expect(pathsOverlap('apps/web/app/[locale]/[handle]/**', 'apps/web/app/[locale]/following/**')).toBe(false);
