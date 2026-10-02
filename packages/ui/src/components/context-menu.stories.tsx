@@ -75,6 +75,13 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const menu = await openContextMenu(canvasElement, 'The Three-Body Problem');
     await expect(within(menu).getByRole('menuitem', { name: 'Remove from shelf' })).toBeVisible();
+    // Like the browser's menu, it opens to the right of and below the pointer.
+    const cover = within(canvasElement).getByText('The Three-Body Problem').getBoundingClientRect();
+    const opened = menu.getBoundingClientRect();
+    const pointer = { x: cover.left + cover.width / 2, y: cover.top + cover.height / 2 };
+    await expect(Math.abs(opened.left - pointer.x)).toBeLessThan(8);
+    await expect(opened.right).toBeGreaterThan(pointer.x + 100);
+    await expect(Math.abs(opened.top - pointer.y)).toBeLessThan(8);
   },
 };
 

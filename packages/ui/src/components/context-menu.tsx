@@ -21,10 +21,20 @@ export const useContextMenu = useMenuContext;
  * A menu opened by right-click or long-press on an object, such as a Work cover on a shelf, a
  * chapter in a reading list or a row in a moderation queue. It is a shortcut only: every action in
  * it must also be reachable from a visible button or overflow menu, because touch and keyboard
- * readers may never open it.
+ * readers may never open it. It opens with its top-left corner at the pointer, as the browser's own
+ * menu does, and moves to another corner only where the view runs out.
  */
-export const ContextMenu = (props: React.ComponentProps<typeof Menu>) => (
-  <Menu data-slot="context-menu" {...props} />
+export const ContextMenu = ({ positioning, ...props }: React.ComponentProps<typeof Menu>) => (
+  <Menu
+    data-slot="context-menu"
+    positioning={{
+      placement: 'bottom-start',
+      gutter: 2,
+      flip: ['top-start', 'bottom-end', 'top-end'],
+      ...positioning,
+    }}
+    {...props}
+  />
 );
 
 export const ContextMenuTrigger = (props: React.ComponentProps<typeof ArkMenu.ContextTrigger>) => {
