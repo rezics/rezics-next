@@ -125,7 +125,8 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
       return result;
     });
   };
-  return { owner, version: 'person-slot-v2', references: ['table:access.follow.target'],
+  // Optional metadata extends the existing frozen-journal protocol.
+  return { owner, version: 'person-slot-v1', references: ['table:access.follow.target'],
     cost: { page: MERGE_COST.page, callsPerItem: 128, bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) {
       const rows = await inventory(plan, null, MERGE_COST.page + 1);

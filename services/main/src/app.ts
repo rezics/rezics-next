@@ -299,6 +299,9 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
+  work?.memberships?.configureFollowGraph?.(fuseki);
+  work?.privateMemberships?.configureFollowGraph?.(fuseki);
+  work?.realmAdmin?.configureFollowGraph?.(fuseki);
   if (work) composeDisclosure(work);
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()

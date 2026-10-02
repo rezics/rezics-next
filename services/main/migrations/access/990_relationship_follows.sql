@@ -47,6 +47,9 @@ BEGIN
   INSERT INTO access.follow_inventory(principal_id,revision) VALUES(who,gen_random_uuid()) ON CONFLICT DO NOTHING;
   PERFORM 1 FROM access.follow_inventory WHERE principal_id=who FOR UPDATE;
   IF enabled THEN
+    IF EXISTS(SELECT 1 FROM access.follow WHERE principal_id=who AND source='explicit'
+      AND (target=resource OR target IN (SELECT alias FROM access.follow_space_alias WHERE space=resource)))
+      THEN RETURN true; END IF;
     -- Automatic interest spends available budget; admission is never rejected.
     IF (SELECT active_count FROM access.follow_inventory WHERE principal_id=who)>=10000
       AND NOT EXISTS(SELECT 1 FROM access.follow WHERE principal_id=who AND target=resource AND following)

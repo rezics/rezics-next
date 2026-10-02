@@ -3,7 +3,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
 import type { VerifiedPrincipal } from './admission.ts';
-import { prepareRealmFollow } from '../follows/recovery.ts';
+import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { registerFollowSpace } from '../follows/targets.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
   MembershipUnavailable, type MembershipKind } from './memberships.ts';
@@ -69,6 +70,7 @@ export interface PrivateMembershipPage {
  * transaction. A roster manager never receives an Account subject or principal ID. */
 export class AccessPrivateMemberships {
   constructor(private readonly pool: Pool) {}
+  configureFollowGraph(graph: Pick<FusekiClient,'query'>) { configureFollowGraph(this.pool,graph); }
 
   private normalize(error: unknown): Error {
     if (error && typeof error === 'object' && 'code' in error) {

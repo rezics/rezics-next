@@ -145,7 +145,8 @@ export async function resourceNotification(
             )
           ).rows[0]?.principal_id
         : null;
-    const targets = collection ? [target] : await interestTargets(graph, target, work);
+    const targets = collection ? [target] : (await interestTargets(graph, target, work))
+      .filter(id => !created || id!==work && id!==target);
     const languages = created || collection ? [] : await releaseLanguages(graph, target, work);
     const relationshipPlan: RelationshipRecipients = {
       targets,
@@ -207,7 +208,8 @@ export function resourceNotificationSubjectReader(
           const target = (await resolveTargets(session, [input.ref], 'discussion'))[0]!;
           const work = target.work ?? (target.base === 'work' ? target.resource : null);
           if (!work) return { status: 'undisclosed' };
-          const targets = await interestTargets(env.fuseki, target.resource, work);
+          const targets = (await interestTargets(env.fuseki, target.resource, work))
+            .filter(id => target.base!=='work' || id!==work && id!==target.resource);
           const languages =
             target.base === 'release'
               ? await releaseLanguages(env.fuseki, target.resource, work)

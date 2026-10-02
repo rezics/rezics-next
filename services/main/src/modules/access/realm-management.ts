@@ -7,7 +7,8 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
   realmPermissions, type EscalationCommand, type RealmPermission, type RoleCommand,
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
 import { changeRealmMember } from './realm-management-members.ts';
-import { prepareRealmFollow } from '../follows/recovery.ts';
+import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { registerFollowSpace } from '../follows/targets.ts';
 import { searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings } from './realm-management-settings.ts';
@@ -33,6 +34,7 @@ interface Receipt { receiptId: string; generation: string; replayed: boolean }
  * assignments atomically. Other direct grants remain independent. */
 export class AccessRealmManagement {
   constructor(private readonly pool: Pool) {}
+  configureFollowGraph(graph: Pick<FusekiClient,'query'>) { configureFollowGraph(this.pool,graph); }
 
   private async transaction<T>(realm: string, run: (client: PoolClient, generation: string) => Promise<T>, initialize = false) {
     if (!native.test(realm)) throw new RealmAdminInvalid('Invalid Realm');
