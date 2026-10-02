@@ -88,7 +88,7 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
         return { boolean: true };
       }
       if (query.includes('SELECT ?space ?navigation')) return rows([{ space, navigation, head,
-        manifest: `urn:rezics:sha256:${manifest}`, state: `${RV}Active`, disclosure: `${RV}Public`, realm }]);
+        manifest: `urn:rezics:sha256:${manifest}`, state: `${RV}Active`, disclosure: `${RV}Public`, spaceDisclosure: `${RV}Public`, realm }]);
       if (query.includes('SELECT ?component ?profile')) {
         const nav = query.includes(`<${navigation}>`);
         return rows([{ component: nav ? zone : collection, profile: `${RV}${nav ? 'ZoneNavigation' : 'CollectionMembership'}`,
@@ -99,6 +99,7 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
         target: input.workMount ? resource : collection, disclosure: `${RV}${input.privateMount ? 'Private' : 'Public'}` }]);
       if (query.includes('SELECT ?structure')) return rows([{ structure }]);
       if (query.includes('SELECT DISTINCT ?type')) return rows([{ type: 'https://schema.org/DigitalDocument' }]);
+      if (query.includes('SELECT DISTINCT ?resource ?type')) return rows([{ resource, type: 'https://schema.org/DigitalDocument' }]);
       throw new Error(`Unexpected Zone query: ${query}`);
     } } }, account: { verify: async (_request: Request, required: string[]) => {
       scopes.push(required);

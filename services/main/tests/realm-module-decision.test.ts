@@ -16,6 +16,7 @@ test('exact Decision applies the public relation and denies absent or ambiguous 
   const queries: string[] = [];
   const session = { options: {}, position: { dataEpoch: 'epoch', sequence: '8' },
     realm: async () => basis,
+    disclosure: async (targets: readonly unknown[]) => targets.map(() => 'visible'),
     query: async (body: string) => { queries.push(body); return [{ id: row(decision),
       kind: row('adoption'), work: row(zone), subject: row(zone), revisionEpoch: row('epoch'),
       sequence: row('7') }]; },
@@ -35,7 +36,7 @@ test('Realm Zone resolution returns the stored presentation only for its own pub
     realm: async () => basis, deps: { environment: {} },
     query: async () => [{ zone: row(zone), segment: row('fiction') }],
   } as unknown as WorkReadSession;
-  const publication = { zone, realm, official: 'fiction', revision: decision,
+  const publication = { zone, realm, space: basis.space, official: 'fiction', revision: decision,
     presentation: DEFAULT_ZONE_PRESENTATION, disclosure: 'public' };
   expect(await readRealmZone(session, realm, async () => publication as never)).toMatchObject({
     profile: 'realm-zone-v1', zone, realm, routeSegment: 'fiction',
