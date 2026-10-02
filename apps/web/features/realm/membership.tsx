@@ -113,7 +113,7 @@ export function RealmMembership({ realm, realmName, initial, signedIn, actingSub
         level: fresh.level, source: fresh.source, pinPosition: fresh.pinPosition }))} />
     {notice ? <p role="status" className="basis-full text-sm">{notice}</p> : null}
     {state.policy && adapter.kind === 'ready' ? <JoinDialog open={joining} realmName={realmName}
-      rulesHref={rulesHref} locale={locale} messages={messages} onClose={() => setJoining(false)}
+      rulesHref={rulesHref} locale={locale} messages={{ ...messages, joinDenied: copy.joinDenied }} onClose={() => setJoining(false)}
       join={async listed => {
         const pending = pendingJoin.current && pendingJoin.current.listed === listed ? pendingJoin.current
           : { policy: state.policy!, listed, key: crypto.randomUUID() };

@@ -94,7 +94,7 @@ export const Phone: Story = { globals: { viewport: { value: 'phone' } },
     await expect(await canvas.findByText('Community 29')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
     const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
-    await expect(await drawer.findByRole('region', { name: 'Pinned' })).toBeVisible();
+    await waitFor(() => expect(drawer.getByRole('region', { name: 'Pinned' })).toBeVisible());
     await expect(drawer.getByRole('link', { name: 'Manage follows' })).toHaveAttribute('href', '/en/following');
     await waitFor(() => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth));
   } };

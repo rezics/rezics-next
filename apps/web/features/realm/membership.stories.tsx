@@ -134,6 +134,6 @@ export const NoLongerOpen: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
     const dialog = within(await waitFor(() => within(document.body).getByRole('dialog')));
     await userEvent.click(dialog.getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
-    await expect(await dialog.findByRole('alert')).toHaveTextContent('isn’t taking new members');
+    await expect(await dialog.findByRole('alert')).toHaveTextContent('You can’t join this community.');
   },
 };
