@@ -201,15 +201,21 @@ table, so surfaces differ in layout and never in what they can do.
 - **Touch:** no floating panel, because the system's selection handles and menu
   occupy that place. A bar rests on the keyboard with the most used formats; a
   drawer holds block types, the remaining marks and insertion. Its buttons keep
-  the keyboard open. Discussion composers offer only the short set.
+  the keyboard open.
 - Changing a block's type keeps the block's identity, and inserting a block
   never replaces selected text.
 - A keystroke costs the edit, not the document: unchanged blocks keep their
   identity and are not converted, checked or serialized again, so a long
   chapter types like a short reply on a slow device.
 
-Discussion composers stay compact. Studio exposes the complete toolbar and
-file import/export through an explicit advanced-mode toggle without changing
-the saved document or recreating the editor. The reason is to keep writing and
+Discussion writing (forum posts and replies) follows chat apps such as Telegram:
+nothing stands in view but an image button while writing, and selecting text
+shows one row of formats (quote and spoiler, inline marks, link, clear). On a
+phone that row rests on the keyboard only while text is selected. Block type,
+block actions and the slash menu belong to long-form writing; Markdown shortcuts
+still work. Studio opens with the complete toolbar on a pointer's screen and can
+return to contextual controls, keeping file import/export beside it; a phone
+keeps the keyboard toolbar, since every control in one row would wrap into many.
+Switching never changes the saved document or recreates the editor. The reason is to keep writing and
 replying direct while leaving specialist formatting discoverable, and to stop
 the same command from being missing on one surface and present on another.
