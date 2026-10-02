@@ -366,7 +366,10 @@ export function launchCommand(options: { id: string; effort: string; session: st
       ...(resume ? ['--resume', session] : [])]];
   }
   if (isCodex(engine)) {
+    // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
+    const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? 'fast';
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
+      ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
     return ['codex', resume ? ['exec', 'resume', session, ...common, prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', prompt]];

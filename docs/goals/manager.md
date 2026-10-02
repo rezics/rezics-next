@@ -67,7 +67,9 @@ bind until the maintainer changes them.
    forbidden** (maintainer, 2026-10-02, reversing the 2026-09-30 permission):
    the official reset is close, so spend each account within its own cycle.
    Usage is otherwise not the constraint: run as much in parallel as is useful,
-   implement in parallel and verify together, but never waste runs. Token efficiency still
+   implement in parallel and verify together, but never waste runs. Codex
+   workers run on the fast service tier (maintainer, 2026-10-03;
+   `GOAL_CODEX_SERVICE_TIER` overrides). Token efficiency still
    matters: cheap models for mechanical work, small briefs and no wasted runs. The Grok CLI and Cursor are two
    separate quotas and two full lanes of feature work, frontend included.
 5. **Human-role agents.** Opus 5.5 and GPT-6.1 Sol can take the human role: they

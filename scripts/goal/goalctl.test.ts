@@ -42,6 +42,12 @@ describe('goalctl briefs', () => {
 describe('goalctl claims', () => {
   const parsed = parseBrief(brief);
 
+  test('Codex workers run on the fast service tier by default', () => {
+    const [, args] = launchCommand({ id: 'G-950', effort: 'high', session: '', prompt: 'p', engine: 'codex',
+      worktree: '/w' } as Parameters<typeof launchCommand>[0]);
+    expect(args.join(' ')).toContain('service_tier="fast"');
+  });
+
   test('a brief may name a shared worktree; its brief file is per task', () => {
     const brief = parseBrief('---\nid: G-950\ntitle: t\neffort: high\nengine: codex\nworktree: wave-9\npaths: [a/**]\n---\n');
     expect(brief.worktree).toBe('wave-9');
