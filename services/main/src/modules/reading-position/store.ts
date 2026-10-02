@@ -2,6 +2,36 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
+import type { ReadingOccurrence } from './boundary.ts';
+import { READING_POSITION_COST } from './contract.ts';
+
+/** Literal substring search across every carried label, independent of display
+ * language. NFKC also lets a full-width chapter number find its Arabic ordinal. */
+export function normalizePositionQuery(q?: string): string {
+  if (q !== undefined && q.length > READING_POSITION_COST.chooserQueryChars) {
+    throw new WorkReadInvalid('Reading position query is too long');
+  }
+  return (q ?? '').normalize('NFKC').trim().toLowerCase();
+}
+
+/** Input is the disclosed composition in reading order. Filter the full inventory
+ * before paging; a request bound must never become the searchable inventory. */
+export function pageReadingPositions(items: readonly ReadingOccurrence[], input: { limit: number; after?: string; q?: string }) {
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > READING_POSITION_COST.chooserPage) {
+    throw new WorkReadInvalid('Reading position page size must be between 1 and 100');
+  }
+  const q = normalizePositionQuery(input.q);
+  const matches = q ? items.filter(item => (item.labels ?? []).some(label => normalizePositionText(label.value).includes(q))
+    || item.displayLabel !== undefined && normalizePositionText(item.displayLabel).includes(q)
+    || item.ordinal !== undefined && String(item.ordinal) === q) : items;
+  const offset = input.after ? matches.findIndex(item => item.occurrence === input.after) + 1 : 0;
+  if (input.after && !offset) throw new WorkReadInvalid('Reading position cursor is invalid');
+  const page = matches.slice(offset, offset + input.limit);
+  const next = offset + page.length < matches.length ? page.at(-1)!.occurrence : null;
+  return { items: page, next, complete: next === null };
+}
+
+function normalizePositionText(value: string) { return value.normalize('NFKC').toLowerCase(); }
 
 export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
