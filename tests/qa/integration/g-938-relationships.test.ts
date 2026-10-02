@@ -530,7 +530,7 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
       const current = await admin.settings(ownerPrincipal,space.realm,owner,stack.env);
       return admin.changeMember(ownerPrincipal,space.realm,{ actingSubject: owner,member: reader,
         action: 'remove',expectedGeneration: current.generation,expectedMembershipGeneration: generation,
-        reason: 'Member left',consent: null,durationSeconds: null },randomUUID());
+        reason: 'Member left',consent: null,durationSeconds: null },randomUUID(),stack.env);
     };
     await leave(joined.membershipGeneration);
     expect(await home.deps.follows.state(space.space, { principal, agent: reader })).toMatchObject({

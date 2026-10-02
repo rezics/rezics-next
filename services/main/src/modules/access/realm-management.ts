@@ -176,7 +176,7 @@ export class AccessRealmManagement {
 
   async changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string, env?: WorkActivationEnvironment) {
     if (!Value.Check(memberCommand, input)) throw new RealmAdminInvalid('Invalid member change');
-    const identity = input.action==='add' ? await prepareRealmFollow(this.pool,realm) : null;
+    const identity = input.action==='add' ? await prepareRealmFollow(this.pool,realm,env?.fuseki) : null;
     return this.write(principal, realm, input, key, 'realm.members.manage',
       async (client, principalId, receiptId, generation) => {
         if (identity) await registerFollowSpace(client,identity);

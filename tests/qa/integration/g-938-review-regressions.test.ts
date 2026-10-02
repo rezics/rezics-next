@@ -14,6 +14,7 @@ import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activat
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { WatchStore } from '../../../services/main/src/modules/notification/watch.ts';
+import { RealmJoinRequests } from '../../../services/main/src/modules/realm-admin/join-requests.ts';
 
 type Page = { items: Array<{ id: string; available: boolean; name: { value: string } | null; source: string }>;
   nextCursor: string | null; complete: boolean };
@@ -124,6 +125,36 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
     await stack.publicWork(owner,['en'],'Feed activity between membership pages');
     await home.project();
     expect((await json<{ items: unknown[] }>(await call('GET',`${membershipUrl}&cursor=${encodeURIComponent(first.nextCursor)}`,undefined,home.reader.token))).items).toHaveLength(1);
+  } finally { await home.stop(); }
+},180_000);
+
+test('G-938 join-request approval maps the Space before atomically creating the Join follow', async () => {
+  const home = await startHomeStack('g-938-request-follow');
+  try {
+    const owner = await home.provision('Request Space owner',home.author.token);
+    const reader = await home.provision('Request Space reader',home.reader.token);
+    const ownerPrincipal = { ...home.author.principal,emailVerified: true };
+    const principal = { ...home.reader.principal,emailVerified: true };
+    const space = await home.json<{ space: string; realm: string }>(await home.call('POST','/v1/spaces',{
+      profile: 'space-realm-v1',name: 'Request follow Space',capabilities: ['realm'],actingSubject: owner },home.author.token),201);
+    const admin = new AccessRealmManagement(home.stack.accessPool);
+    await admin.initialize(ownerPrincipal,space.realm,owner,home.stack.env);
+    const settings = await admin.spaceSettings(ownerPrincipal,space.space,owner,home.stack.env);
+    await admin.changeSpaceSettings(ownerPrincipal,space.space,{ actingSubject: owner,expectedGeneration: settings.generation,
+      reason: 'Require requests',settings: { ...settings.settings,admission: 'request' } },randomUUID(),home.stack.env);
+    const requests = new RealmJoinRequests(home.stack.accessPool,home.stack.env);
+    const basis = await requests.basis(principal,space.realm,reader);
+    const requested = await requests.request(principal,space.realm,{ actingSubject: reader,
+      expectedMembershipGeneration: basis.membershipGeneration,expectedPolicyRevision: basis.policyRevision,
+      termsRevision: basis.termsRevision,reason: 'Join the discussion' },randomUUID());
+    expect((await home.stack.accessPool.query('SELECT 1 FROM access.follow_space_alias WHERE alias=$1',[space.realm])).rowCount).toBe(0);
+    const current = await admin.spaceSettings(ownerPrincipal,space.space,owner,home.stack.env);
+    const decision = { actingSubject: owner,expectedGeneration: current.generation,
+      expectedRequestGeneration: requested.requestGeneration,decision: 'accepted' as const,reason: 'Welcome' };
+    const key = randomUUID();
+    await requests.decide(ownerPrincipal,space.realm,requested.requestId,decision,key);
+    expect(await home.deps.follows.state(space.space,{ principal,agent: reader })).toMatchObject({ following: true,source: 'join' });
+    expect(await requests.decide(ownerPrincipal,space.realm,requested.requestId,decision,key)).toMatchObject({ state: 'accepted',replayed: true });
   } finally { await home.stop(); }
 },180_000);
 

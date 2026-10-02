@@ -153,7 +153,7 @@ export class AccessRealmJoining {
     }
     await changeRealmMember(client,realm,{ actingSubject: input.actingSubject,member: input.actingSubject,
       expectedGeneration: '0',expectedMembershipGeneration: input.expectedMembershipGeneration,
-      reason: 'Recipient accepted Realm membership',action: 'add',consent: consent.consentReference,durationSeconds: null },principalId,randomUUID());
+      reason: 'Recipient accepted Realm membership',action: 'add',consent: consent.consentReference,durationSeconds: null },principalId,randomUUID(),this.env);
     const member = (await this.member(client,realm,input.actingSubject))!;
     await client.query(`INSERT INTO access.realm_roster_listing (membership_id,membership_generation,realm,member,listed)
       VALUES ($1,$2,$3,$4,$5)`,[member.id,member.generation,realm,input.actingSubject,input.listed]);

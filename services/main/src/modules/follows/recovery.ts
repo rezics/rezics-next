@@ -10,8 +10,8 @@ const graphs = new WeakMap<Pool, Pick<FusekiClient, 'query'>>();
 export function configureFollowGraph(pool: Pool, graph: Pick<FusekiClient, 'query'>) {
   graphs.set(pool, graph);
 }
-export async function prepareRealmFollow(pool: Pool, realm: string) {
-  const graph = graphs.get(pool);
+export async function prepareRealmFollow(pool: Pool, realm: string, providedGraph?: Pick<FusekiClient,'query'>) {
+  const graph = providedGraph ?? graphs.get(pool);
   if (!graph) throw new Error('Follow graph registry is not configured');
   const { publicTargetRead } = await import('../target/resolve.ts');
   const space = await publicTargetRead(graph, (session) => followSpace(session, realm));
