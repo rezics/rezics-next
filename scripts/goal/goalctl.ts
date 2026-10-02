@@ -130,7 +130,7 @@ export function validateBrief(brief: Brief): string[] {
 }
 
 function parseRange(range: string): { dir: string; start: number; end: number } | undefined {
-  const match = /^([a-z0-9/_-]+):(\d{3})-(\d{3})$/.exec(range);
+  const match = /^([a-z0-9/_-]+):(\d{3,})-(\d{3,})$/.exec(range);
   if (!match || Number(match[2]) > Number(match[3])) return undefined;
   return { dir: match[1]!, start: Number(match[2]), end: Number(match[3]) };
 }

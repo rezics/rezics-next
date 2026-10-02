@@ -42,6 +42,11 @@ describe('goalctl briefs', () => {
 describe('goalctl claims', () => {
   const parsed = parseBrief(brief);
 
+  test('migration ranges compare numerically past 999', () => {
+    expect(rangesOverlap('services/main/migrations/access:998-1002', 'services/main/migrations/access:1000-1003')).toBe(true);
+    expect(rangesOverlap('services/main/migrations/access:990-999', 'services/main/migrations/access:1000-1003')).toBe(false);
+  });
+
   test('detects case, path, migration and shared-slot overlap with holding tasks only', () => {
     const conflicts = claimConflicts(parsed, [
       held({ cases: ['GOV12'], paths: ['tests/qa/integration/poll-tally.test.ts'],
