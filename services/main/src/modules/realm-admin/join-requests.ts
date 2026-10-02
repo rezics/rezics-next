@@ -105,6 +105,10 @@ export class RealmJoinRequests {
     return (await client.query<{ generation: string }>(`SELECT COALESCE((SELECT generation
       FROM access.realm_join_request_inbox_revision WHERE realm = $1),0)::text AS generation`,[realm])).rows[0]!.generation;
   }
+  private async ownRevision(client: PoolClient, realm: string, member: string) {
+    return (await client.query<{ generation: string }>(`SELECT COALESCE((SELECT generation
+      FROM access.realm_join_request_member_revision WHERE realm = $1 AND member = $2),0)::text AS generation`,[realm,member])).rows[0]!.generation;
+  }
   basis(principal: VerifiedPrincipal, realm: string, actingSubject: string) {
     return this.discoverableRequest(realm).then(() => realmTransaction(this.pool,realm,false,async client => {
       await realmActor(client,principal,actingSubject,'access.membership.consent');
@@ -199,7 +203,7 @@ export class RealmJoinRequests {
         WHERE q.realm = $1 AND q.member = $2 AND b.principal_id = $3 LIMIT 1`,[realm,options.actingSubject,actor.id]);
       if (!owned.rowCount) throw new RealmJoinRequestMissing('Realm is unavailable');
       const binding = requestCursorBinding(['own',realm,options.actingSubject,actor.id,actor.epoch,actor.representation,
-        actor.representationGeneration,actor.subjectGeneration,await this.inboxRevision(client,realm)]);
+        actor.representationGeneration,actor.subjectGeneration,await this.ownRevision(client,realm,options.actingSubject)]);
       const after = options.cursor ? decodeRequestCursor(options.cursor,binding) : null;
       const rows = (await client.query<ReadRow & { state: 'pending'|'accepted'|'declined'|'withdrawn'; decided_at: Date | null }>(`
         SELECT q.id,q.member,q.membership_generation::text,q.policy_revision::text,b.terms_revision,q.reason,q.created_at,

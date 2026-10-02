@@ -10,11 +10,23 @@ CREATE TABLE access.realm_join_request_inbox_revision (
 INSERT INTO access.realm_join_request_inbox_revision (realm)
 SELECT realm FROM access.realm_admin_revision;
 
+-- Requester continuation must change only for that Agent's own requests;
+-- otherwise a stale cursor would reveal activity by other private requesters.
+CREATE TABLE access.realm_join_request_member_revision (
+  realm text NOT NULL REFERENCES access.realm_admin_revision(realm),
+  member text NOT NULL REFERENCES access.authority_subject(id),
+  generation bigint NOT NULL CHECK (generation >= 0),
+  PRIMARY KEY (realm,member)
+);
+
 CREATE FUNCTION access.advance_realm_join_request_inbox() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   INSERT INTO access.realm_join_request_inbox_revision (realm,generation)
     VALUES (COALESCE(NEW.realm,OLD.realm),1)
     ON CONFLICT (realm) DO UPDATE SET generation = access.realm_join_request_inbox_revision.generation + 1;
+  INSERT INTO access.realm_join_request_member_revision (realm,member,generation)
+    VALUES (COALESCE(NEW.realm,OLD.realm),COALESCE(NEW.member,OLD.member),1)
+    ON CONFLICT (realm,member) DO UPDATE SET generation = access.realm_join_request_member_revision.generation + 1;
   RETURN NULL;
 END $$;
 CREATE TRIGGER realm_join_request_inbox_advance AFTER INSERT OR DELETE

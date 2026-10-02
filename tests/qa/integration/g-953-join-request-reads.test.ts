@@ -167,6 +167,9 @@ test('G-953: own status survives every decision and policy changes without discl
       cursor = page.body.nextCursor;
     } while (cursor);
     expect(seen).toEqual([first,second,third].sort());
+    const beforeOtherRequest = await f.call('GET',`${f.root}/mine?limit=1`,undefined,person);
+    await f.request(f.noRequest);
+    expect((await f.call('GET',`${f.root}/mine?cursor=${beforeOtherRequest.body.nextCursor}`,undefined,person)).status).toBe(200);
     const current = await f.admin.spaceSettings(f.owner.principal,f.space,f.owner.actor,f.s.env);
     await f.admin.changeSpaceSettings(f.owner.principal,f.space,{ actingSubject: f.owner.actor,
       expectedGeneration: current.generation,reason: 'Close requests',settings: { ...current.settings,admission: 'invitation' } },randomUUID(),f.s.env);

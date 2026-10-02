@@ -17,7 +17,7 @@ const row = (n: number) => ({ id: uuid(n),member: actor,membership_generation: '
 
 function fixture() {
   const queries: { sql: string; values: unknown[] }[] = [];
-  const state = { gate: true, recovery: true, actor: true, manager: true, owned: true, generation: '3',inboxGeneration: '3',
+  const state = { gate: true, recovery: true, actor: true, manager: true, owned: true, generation: '3',inboxGeneration: '3',ownGeneration: '3',
     representationGeneration: '0', rows: [row(3),row(4)],
     decisions: [{ ...row(3),state: 'pending',decided_at: null as Date | null }] };
   const client = { release() {},async query(sql: string,values: unknown[] = []) {
@@ -31,6 +31,7 @@ function fixture() {
     else if (sql.includes('FROM access.permission_grant')) rows = state.manager ? [{ id: uuid(12),generation: '0',valid_until: new Date('2030-01-01') }] : [];
     else if (sql.includes('FROM access.realm_admin_revision')) rows = [{ generation: state.generation }];
     else if (sql.includes('FROM access.realm_join_request_inbox_revision')) rows = [{ generation: state.inboxGeneration }];
+    else if (sql.includes('FROM access.realm_join_request_member_revision')) rows = [{ generation: state.ownGeneration }];
     else if (sql === JOIN_REQUEST_SEARCH_SQL) rows = state.rows.map(({ id }) => ({ id }));
     else if (sql.includes('SELECT 1 FROM access.realm_join_request q')) rows = state.owned ? [{}] : [];
     else if (sql.includes('COALESCE(d.kind')) rows = state.decisions;
@@ -104,6 +105,8 @@ test('G-953: own history includes each terminal time and uses both actor and pri
   expect((await f.owner.own(principal,realm,{ actingSubject: actor,cursor: first.nextCursor! })).complete).toBe(true);
   expect(f.queries.filter(query => query.sql.includes('COALESCE(d.kind')).at(-1)!.values[3]).toBe(uuid(4));
   f.state.inboxGeneration = '4';
+  expect((await f.owner.own(principal,realm,{ actingSubject: actor,cursor: first.nextCursor! })).complete).toBe(true);
+  f.state.ownGeneration = '4';
   await expect(f.owner.own(principal,realm,{ actingSubject: actor,cursor: first.nextCursor! })).rejects.toBeInstanceOf(RealmAdminStale);
 });
 
