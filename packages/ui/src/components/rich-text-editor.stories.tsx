@@ -20,11 +20,14 @@ const richDocument = normalizeDocument({ version: 'rezics-document-v1', profile:
   { type: 'extensionBlock', attrs: { definition: 'https://example.test/components/timeline', version: '1', payload: { format: 'EDTF', date: '2026-10-02', items: [1, 2] }, fallback: 'Timeline: 2 October 2026' } },
 ] }) });
 
-function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine', preview = true, upload }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse'; preview?: boolean; upload?: ImageUploader }) {
+/** Like the web app's stand-in: a chosen image stays in the page as a blob address until reload. */
+const pageImageUpload: ImageUploader = async file => ({ src: URL.createObjectURL(file) });
+
+function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine', preview = true, upload = pageImageUpload }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse'; preview?: boolean; upload?: ImageUploader | null }) {
   const [value, setValue] = useState(initial);
   const [changes, setChanges] = useState(0);
   return <div className="mx-auto flex max-w-4xl flex-col gap-6">
-    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode} onUploadImage={upload}
+    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode} onUploadImage={upload ?? undefined}
       onChange={next => { setValue(next); setChanges(count => count + 1); }} />
     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><output aria-label="Changes">{changes}</output> changes
       <Button variant="outline" size="sm" onClick={() => setValue(fromPlainText('Restored document.', initial.profile))}>Restore document</Button>
@@ -465,7 +468,7 @@ export const PanelPlacement: Story = {
 
 /** Without an uploader an image comes from a link; the description is optional. */
 export const ImageFromLink: Story = {
-  render: () => <Example initial={fromPlainText('', 'blocks')} contextual />,
+  render: () => <Example initial={fromPlainText('', 'blocks')} contextual upload={null} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
