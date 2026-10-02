@@ -234,12 +234,6 @@
     ]
   },
   {
-    "operation": "GET /v1/me/follows response[follows-v1]",
-    "fields": [
-      "response.complete"
-    ]
-  },
-  {
     "operation": "GET /v1/me/follows/authors response[followed-authors-v1]",
     "fields": [
       "response.complete"

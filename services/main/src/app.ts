@@ -187,7 +187,6 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(progressSummariesRoutes(work))
     .use(readingPositionsRoutes(work))
     .use(queryRoutes(fuseki, work))
-    .use(ratingPopulationRoutes(work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))
     .use(managedRealmRoutes(work))
@@ -296,7 +295,8 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workStatsRoutes(work))
     .use(facetRoutes())
     .use(typeAdministrationRoutes(work))
-    .use(typeRoutes());
+    .use(typeRoutes())
+    .use(ratingPopulationRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
