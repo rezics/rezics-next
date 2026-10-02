@@ -10,7 +10,7 @@ import {
   MANAGE_ACTION,
   MANAGE_SCOPE,
   RecommendationMissing,
-  RecommendationRestart,
+  RecommendationDenied,
 } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import {
   cloneOwners,
@@ -57,7 +57,9 @@ test('G939: public ranking pages reuse admitted scores and fence generation move
       expect((await store.finish(generation, epoch)).state).toBe('ready');
       return generation;
     };
-    await expect(store.publicCandidates(1)).rejects.toBeInstanceOf(RecommendationMissing);
+    await expect(
+      store.page({ public: true, principal: null, actingSubject: null }, basis, 1),
+    ).rejects.toBeInstanceOf(RecommendationMissing);
     await retainBatch(
       relay,
       dataEpoch,
@@ -82,19 +84,40 @@ test('G939: public ranking pages reuse admitted scores and fence generation move
     );
     const generation = await ready(),
       active = await store.activate(manager, generation, null, receipt());
-    const first = await store.publicCandidates(1);
+    const first = await store.page(
+      { public: true, principal: null, actingSubject: null },
+      basis,
+      1,
+    );
     expect(first.items).toEqual([{ candidate: high }]);
     expect(first.continuation).not.toBeNull();
-    const next = await store.publicCandidates(1, first.continuation!);
+    const next = await store.page(
+      { public: true, principal: null, actingSubject: null },
+      basis,
+      1,
+      first.continuation!,
+    );
     expect(next.items).toEqual([{ candidate: low }]);
     expect(next.continuation).toBeNull();
     await store.activate(manager, await ready(), active.headRevision, receipt());
-    await expect(store.fencePublicCandidates(generation)).rejects.toBeInstanceOf(
-      RecommendationRestart,
-    );
-    await expect(store.publicCandidates(1, first.continuation!)).rejects.toBeInstanceOf(
-      RecommendationRestart,
-    );
+    // The existing owner retains immutable superseded generations for cursors.
+    expect(
+      (
+        await store.page(
+          { public: true, principal: null, actingSubject: null },
+          basis,
+          1,
+          first.continuation!,
+        )
+      ).items,
+    ).toEqual([{ candidate: low }]);
+    await expect(
+      store.page(
+        { public: true, principal: null, actingSubject: null },
+        { ...basis, population: { kind: 'personal' } },
+        1,
+      ),
+    ).rejects.toBeInstanceOf(RecommendationDenied);
   } finally {
     await Promise.all([access.end(), relay.end()]);
     await owners.close();

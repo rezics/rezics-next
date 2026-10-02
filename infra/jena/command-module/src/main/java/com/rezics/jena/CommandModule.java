@@ -55,8 +55,6 @@ public final class CommandModule implements FusekiAutoModule {
             "https://rezics.com/vocab/publicTextInventory", FilteredGraphTextAssembler.InventoryFunction.class);
         org.apache.jena.sparql.function.FunctionRegistry.get().put(
             "https://rezics.com/vocab/rankedText", FilteredGraphTextIndex.RankedFunction.class);
-        org.apache.jena.sparql.function.FunctionRegistry.get().put(
-            "https://rezics.com/vocab/rankedLabels", FilteredGraphTextIndex.RankedLabelsFunction.class);
     }
 
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {

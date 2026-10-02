@@ -1,4 +1,4 @@
-import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { lit } from '../work/activate.ts';
 import {
   WorkReadInvalid,
   WorkReadMoved,
@@ -38,14 +38,14 @@ interface LabelHit {
   score: string;
   document: number;
 }
-/** One native searchAfter collection of at most 64 authored label documents.
- * Current-resource admission and disclosure happen after retrieval; skipped
- * aliases and private hits still advance. Counts never expose index documents. */
+/** Search only the current public name projection through the existing native
+ * ranked guard. Each alias document advances; only its best hit names a unit. */
 export async function indexedLabels(
   session: WorkReadSession,
   q: string,
   limit: number,
   after?: LabelAfter,
+  kind = 'all',
 ) {
   const position = await labelIndexReady(session);
   const phrase = q.normalize('NFC').trim().replace(/\s+/gu, ' ');
@@ -54,7 +54,7 @@ export async function indexedLabels(
   }
   const rows = await session.query(
     `SELECT ?page WHERE {
-    BIND(rv:rankedLabels(${lit(phrase)}, ${limit}, ${lit(after ? JSON.stringify(after) : '')}) AS ?page)
+    BIND(rv:rankedText(rv:publicTitle, ${lit(phrase)}, ${limit}, ${lit(after ? JSON.stringify(after) : '')}, ${lit(JSON.stringify({ names: kind }))}) AS ?page)
   } LIMIT 1`,
     1,
   );
@@ -86,7 +86,11 @@ export async function indexedLabels(
   const last = page.hits.at(-1);
   await fenceLabelIndex(session, position);
   return {
-    ids: page.hits.flatMap((hit) => (hit.key === null ? [] : [hit.key])),
+    ids: page.hits.flatMap((hit) =>
+      hit.key === null ? [] : ['https://rezics.com/id/' + hit.id.split(':').at(-1)],
+    ),
+    hits: page.hits,
+    commit: page.commit,
     more: page.more,
     after: last
       ? { id: last.id, score: last.score, document: last.document, commit: page.commit }
@@ -97,15 +101,9 @@ export async function indexedLabels(
 /** A bound-subject indexed test has no population cap. Fields remain separate
  * authored names, so words cannot match by concatenating unrelated labels. */
 export function indexedNameMatch(resource: string, q: string) {
-  const words = q
-    .trim()
-    .split(/\s+/u)
-    .map((word) => `"${word.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`)
-    .join(' AND ');
-  return `FILTER(${['rdfs:label', 'schema:name', 'skos:prefLabel', 'skos:altLabel']
-    .map(
-      (property) =>
-        `EXISTS { GRAPH ${iri(GRAPHS.current)} { ${resource} <http://jena.apache.org/text#query> (${property} ${lit(words)} 1) } }`,
-    )
-    .join(' || ')})`;
+  // The subject restriction enters the existing native collector before text
+  // retrieval. A global text:query limit could otherwise select another unit.
+  const scope = `CONCAT(${lit('{"names":"all","resources":["')}, STR(${resource}), ${lit('"]}')})`;
+  return `FILTER(REGEX(STR(rv:rankedText(rv:publicTitle, ${lit(q)}, 1, "", ${scope})),
+    ${lit('"key"\\s*:\\s*"urn:rezics:search:name:')}))`;
 }

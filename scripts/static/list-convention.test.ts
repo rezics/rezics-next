@@ -38,7 +38,7 @@ test('new collection reads cannot borrow another operation or profile’s debt',
   ).toBe(true);
 });
 
-test('arbitrary collection names and added profiles are checked', () => {
+test('detail arrays are ignored and added collection profiles are checked', () => {
   const document = api();
   document.paths['/v1/g939-records'] = {
     get: {
@@ -76,7 +76,7 @@ test('arbitrary collection names and added profiles are checked', () => {
     },
   };
   const violations = newListViolations(document, debt);
-  expect(violations.some((item) => item.operation.startsWith('GET /v1/g939-records'))).toBe(true);
+  expect(violations.some((item) => item.operation.startsWith('GET /v1/g939-records'))).toBe(false);
   expect(
     violations.some((item) => item.operation === 'POST /v1/query request[another-list-v1]'),
   ).toBe(true);

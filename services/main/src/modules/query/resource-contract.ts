@@ -45,7 +45,6 @@ export const resourceCard = t.Object({
   ]),
   name: readName,
   icon: readAvatar,
-  href: t.String(),
 });
 export type ResourceCard = Static<typeof resourceCard>;
 export const resourceListPage = t.Object({
@@ -67,8 +66,9 @@ export interface ResourceListPlan {
  * No global result-size cap and no OFFSET. Graph ordering may sort on disk;
  * the enclosing WorkReadSession enforces time, calls and bytes. */
 export const RESOURCE_LIST_COST = {
-  candidates: 65,
-  indexDocuments: 64,
+  candidates: 512,
+  indexDocuments: 512,
+  window: 64,
   types: 64,
   graphCalls: WORK_READ_COST.graphCalls,
   deadlineMs: WORK_READ_COST.deadlineMs,

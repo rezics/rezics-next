@@ -328,6 +328,17 @@ export class DiscoveryProjection {
       await client.query(`UPDATE access.derived_generation_input SET snapshot_cursor = $2,
         snapshot_complete = $3 WHERE generation_id = $1 AND source = 'main-graph'`,
       [id, result.complete ? null : result.after, result.complete]);
+      if (result.complete)
+        await client.query(
+          `WITH counts AS (
+        SELECT payload->'classification'->>'concept' AS concept, count(DISTINCT work) AS value
+        FROM access.discovery_entry WHERE generation_id=$1 AND work_type='' AND term<>''
+        GROUP BY payload->'classification'->>'concept'
+      ), leaders AS (SELECT concept,min(term) AS term FROM access.discovery_term_count WHERE generation_id=$1 GROUP BY concept)
+      UPDATE access.discovery_term_count t SET concept_count=c.value, concept_leader=t.term=l.term
+        FROM counts c JOIN leaders l USING(concept) WHERE t.generation_id=$1 AND t.concept=c.concept`,
+          [id],
+        );
       if (result.complete) await client.query(`UPDATE access.derived_generation SET state = 'ready',
         lease_expires_at = NULL, ready_at = clock_timestamp(),
         validation_digest = $2 WHERE id = $1`, [id, digest({ basis: row, last: result.after })]);
@@ -520,6 +531,81 @@ export class DiscoveryProjection {
       return (await client.query<{ work: string; term: string }>(`SELECT work, term FROM access.discovery_entry
         WHERE generation_id = $1 AND work = ANY($2::text[]) AND work_type = '' AND term = ANY($3::text[])`,
       [row.generation_id, works, terms])).rows;
+    });
+  }
+
+  /** Public query windows seek existing projected Works. No source aggregation. */
+  async resourcePage(
+    row: DiscoveryGeneration,
+    limit: number,
+    after?: { key: string; work: string },
+  ) {
+    return inAccess(this.pool, async (client) => {
+      const fence = await sourceFence(client);
+      if (fence.generation !== row.recovery_generation)
+        throw new RecommendationRestart('Discovery recovery basis expired');
+      if (!Number.isInteger(limit) || limit < 1 || limit > 64)
+        throw new RecommendationUnavailable('Resource window exceeds its bound');
+      return (
+        await client.query<DiscoveryRow>(discoverySeekSql('recent', !!after), [
+          row.generation_id,
+          '',
+          '',
+          limit + 1,
+          ...(after ? [after.key, after.work] : []),
+        ])
+      ).rows;
+    });
+  }
+
+  async resourceMembership(row: DiscoveryGeneration, works: readonly string[]) {
+    if (works.length > 64) throw new RecommendationUnavailable('Work membership exceeds its bound');
+    return inAccess(this.pool, async (client) => {
+      await requireRecoveryOpen(client);
+      return new Set(
+        (
+          await client.query<{ work: string }>(
+            `SELECT work FROM access.discovery_entry
+        WHERE generation_id=$1 AND work_type='' AND term='' AND work=ANY($2::text[])`,
+            [row.generation_id, works],
+          )
+        ).rows.map((row) => row.work),
+      );
+    });
+  }
+
+  /** Indexed Concept counts are finalized once by the build, from term counts.
+   * Zero-use Concepts are supplied separately by the public-name inventory. */
+  async conceptCounts(row: DiscoveryGeneration, concepts: readonly string[]) {
+    if (concepts.length > 64)
+      throw new RecommendationUnavailable('Concept count batch exceeds its bound');
+    return inAccess(this.pool, async (client) => {
+      await requireRecoveryOpen(client);
+      return (
+        await client.query<{ concept: string; work_count: string }>(
+          `SELECT concept, concept_count::text AS work_count
+        FROM access.discovery_term_count WHERE generation_id=$1 AND concept_leader AND concept=ANY($2::text[])`,
+          [row.generation_id, concepts],
+        )
+      ).rows;
+    });
+  }
+  async conceptPage(
+    row: DiscoveryGeneration,
+    limit: number,
+    after?: { count: string; concept: string },
+  ) {
+    return inAccess(this.pool, async (client) => {
+      await requireRecoveryOpen(client);
+      return (
+        await client.query<{ concept: string; work_count: string }>(
+          `SELECT concept, concept_count::text AS work_count
+        FROM access.discovery_term_count WHERE generation_id=$1 AND concept_leader
+          AND ($2::bigint IS NULL OR concept_count<$2::bigint OR (concept_count=$2::bigint AND concept>$3))
+        ORDER BY concept_count DESC,concept COLLATE "C" LIMIT $4`,
+          [row.generation_id, after?.count ?? null, after?.concept ?? '', limit + 1],
+        )
+      ).rows;
     });
   }
 

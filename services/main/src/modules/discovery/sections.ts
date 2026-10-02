@@ -8,16 +8,17 @@ import {
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { RV, iri } from '../work/activate.ts';
+import { RV, GRAPHS, iri, lit } from '../work/activate.ts';
 import { resourceCard } from '../query/resource-contract.ts';
 import {
   readResourceList,
   resourceCards,
   publicResources,
-  resourceConditions,
+  conceptResourceMatches,
 } from '../query/resources.ts';
 import { discoveryReader, fenceDiscoveryReader } from './reader.ts';
 import { visibleConcept } from './concepts.ts';
+import { RANKING_PROFILE } from '../recommendation/ranking.ts';
 import { indexedNameMatch, labelIndexReady, fenceLabelIndex } from '../search/labels.ts';
 
 const sectionId = t.Union([t.Literal('popular'), t.Literal('communities'), t.Literal('sites')]);
@@ -55,12 +56,13 @@ export interface DiscoverySectionsQuery extends ListRequest {
   personalization?: boolean;
 }
 /** Three ordered, inherently bounded sections; each nested page is traversable
- * with the same read and `section` selector. 64 candidates per selected section,
+ * with the same read and `section` selector. 512 candidates per selected section,
  * explicit topic inventory <=1,000, and the existing Work read envelope.
  * Ranking retains its own generation cursor. */
 export const DISCOVERY_SECTIONS_COST = {
   sections: 3,
-  candidatesPerSection: 64,
+  candidatesPerSection: 512,
+  rankingReads: 32,
   topics: 1000,
   graphCalls: WORK_READ_COST.graphCalls,
   deadlineMs: WORK_READ_COST.deadlineMs,
@@ -104,9 +106,6 @@ export async function readDiscoverySections(
   const topics = topicRows
     .filter((_, index) => disclosed[index] === 'visible')
     .map((row) => row.concept!.value);
-  const audience = topics.length
-    ? await session.deps.discoveryAudience!.classificationAudience(session.viewer)
-    : undefined;
   const languages = personalized ? reader!.signals.languages : [];
   const sections = input.section ? [input.section] : (['popular', 'communities', 'sites'] as const);
   const binding = [
@@ -131,72 +130,132 @@ export async function readDiscoverySections(
     }
   }
   const items = [];
-  let publicGeneration: string | null = null;
   for (const section of sections) {
     let cards,
       next: string | null,
       seen = prior.seen;
-    if (section === 'popular') {
-      if (!session.deps.recommendations)
-        throw new WorkReadUnavailable('Public ranking owner is unavailable');
-      const ranked = await session.deps.recommendations.publicCandidates(
-        limit,
-        prior.cursor ?? undefined,
+    cards = [];
+    next = prior.cursor;
+    let scanned = 0,
+      reads = 0;
+    while (
+      cards.length <= limit &&
+      scanned < DISCOVERY_SECTIONS_COST.candidatesPerSection &&
+      reads++ < DISCOVERY_SECTIONS_COST.rankingReads
+    ) {
+      const ask = Math.min(
+        20,
+        Math.max(1, limit - cards.length),
+        DISCOVERY_SECTIONS_COST.candidatesPerSection - scanned,
       );
-      publicGeneration = ranked.generation;
-      const ids = ranked.items.map((item) => item.candidate);
-      const rows = ids.length
-        ? await session.query(
-            `SELECT DISTINCT ?r ?kind ?summary WHERE {
-        VALUES ?r { ${ids.map(iri).join(' ')} } ${publicResources()}
-        ${topics.length ? resourceConditions([{ facet: 'concept', operator: 'any', values: topics }], undefined, audience) : ''}
-        ${q ? indexedNameMatch('?nameResource', q) : ''}
-      } LIMIT ${limit + 1}`,
-            limit,
-          )
-        : [];
-      const candidates = ids.flatMap((id) =>
-        rows
-          .filter((row) => row.r!.value === id)
-          .map((row) => ({
-            id,
-            kind: 'work' as const,
-            summary: row.summary!.value,
-            order: '',
-          })),
-      );
-      cards = await resourceCards(session, candidates);
-      next = ranked.continuation;
-    } else {
-      const type = `${RV}${section === 'communities' ? 'Realm' : 'Zone'}`;
-      const plan = {
-        input: {
-          profile: 'resource-list-v1' as const,
-          context: 'global' as const,
-          scope: { kind: 'all' as const },
-          sort: 'newest' as const,
-          limit,
-          q,
-          cursor: prior.cursor ?? undefined,
-        },
-        conditions: [
-          { facet: 'type' as const, operator: 'any' as const, values: [type] },
-          ...(section === 'communities' && languages.length
-            ? [{ facet: 'language' as const, operator: 'any' as const, values: languages }]
-            : []),
-        ],
-      };
-      const page = await readResourceList(session, plan);
-      cards = page.items;
-      next = page.nextCursor;
-    }
-    if (reader && cards.length) {
-      const flags = await session.deps.discoveryAudience!.flags(
-        reader.principal,
-        reader.actor,
-        cards.map((card) => card.id),
-      );
-      cards = cards.filter((card) => !flags.get(card.id)?.following);
+      const beforeCursor = next;
+      let batch;
+      if (section === 'popular') {
+        if (!session.deps.recommendations)
+          throw new WorkReadUnavailable('Public ranking owner is unavailable');
+        const ranked = await session.deps.recommendations.page(
+          { public: true, principal: null, actingSubject: null },
+          {
+            profile: RANKING_PROFILE,
+            population: { kind: 'public' },
+            candidateGrain: 'work',
+            semantic: null,
+          },
+          ask,
+          next ?? undefined,
+        );
+        const ids = ranked.items.map((item) => item.candidate);
+        const rows = ids.length
+          ? await session.query(
+              `SELECT DISTINCT ?r ?kind ?summary WHERE {
+          VALUES ?r { ${ids.map(iri).join(' ')} } ${publicResources()}
+          ${q ? indexedNameMatch('?r', q) : ''}
+        } LIMIT ${ids.length + 1}`,
+              ids.length,
+            )
+          : [];
+        const candidates = ids.flatMap((id) =>
+          rows
+            .filter((row) => row.r!.value === id)
+            .map((row) => ({ id, kind: 'work' as const, summary: row.summary!.value, order: '' })),
+        );
+        const matched = await conceptResourceMatches(
+          session,
+          candidates,
+          topics.length ? [{ facet: 'concept', operator: 'any', values: topics }] : [],
+        );
+        batch = await resourceCards(
+          session,
+          candidates.filter((row) => matched.has(row.id)),
+        );
+        next = ranked.continuation;
+        scanned += Math.max(ask, ids.length);
+      } else if (section === 'communities') {
+        const directory = session.deps.access.realmDirectory;
+        if (!directory) throw new WorkReadUnavailable('Realm directory is unavailable');
+        const page = await directory.page(session, {
+          sort: 'activity',
+          q: '',
+          limit: ask,
+          cursor: next ?? undefined,
+        });
+        const ids = page.rows.map((row) => row.realm);
+        const languageRows = ids.length
+          ? await session.query(
+              `SELECT DISTINCT ?r WHERE {
+          VALUES ?r { ${ids.map(iri).join(' ')} } ${publicResources()}
+          ${
+            languages.length
+              ? `GRAPH ${iri(GRAPHS.current)} { ?r rv:space ?communitySpace .
+            ?communitySpace rdfs:label ?ownName . FILTER(${languages.map((language) => `LANGMATCHES(LANG(?ownName),${lit(language)})`).join(' || ')}) }`
+              : ''
+          }
+          ${q ? indexedNameMatch('?r', q) : ''}
+        } LIMIT ${ids.length + 1}`,
+              ids.length,
+            )
+          : [];
+        const allowed = new Set(languageRows.map((row) => row.r!.value));
+        batch = await resourceCards(
+          session,
+          ids
+            .filter((id) => allowed.has(id))
+            .map((id) => ({ id, kind: 'realm' as const, summary: id, order: '' })),
+        );
+        await directory.fence(page.position);
+        next = page.next;
+        scanned += Math.max(ask, ids.length);
+      } else {
+        const page = await readResourceList(session, {
+          input: {
+            profile: 'resource-list-v1',
+            context: 'global',
+            scope: { kind: 'all' },
+            sort: 'newest',
+            limit: ask,
+            q,
+            cursor: next ?? undefined,
+          },
+          conditions: [{ facet: 'type', operator: 'any', values: [RV + 'Zone'] }],
+        });
+        batch = page.items;
+        next = page.nextCursor;
+        scanned += ask;
+      }
+      if (reader && batch.length) {
+        const flags = await session.deps.discoveryAudience!.flags(
+          reader.principal,
+          reader.actor,
+          batch.map((card) => card.id),
+        );
+        batch = batch.filter((card) => !flags.get(card.id)?.following);
+      }
+      if (cards.length === limit && batch.length) {
+        next = beforeCursor;
+        break;
+      }
+      cards.push(...batch);
+      if (!next) break;
     }
     seen += cards.length;
     const pageBinding = [
@@ -234,14 +293,6 @@ export async function readDiscoverySections(
     });
   }
   await fenceDiscoveryReader(session, reader, input.personalization !== false);
-  if (publicGeneration) await session.deps.recommendations!.fencePublicCandidates(publicGeneration);
-  if (
-    audience &&
-    JSON.stringify(await session.deps.discoveryAudience!.classificationAudience(session.viewer)) !==
-      JSON.stringify(audience)
-  ) {
-    throw new WorkReadUnavailable('Classification audience changed');
-  }
   if (index) await fenceLabelIndex(session, index);
   return {
     profile: 'discovery-sections-v1' as const,

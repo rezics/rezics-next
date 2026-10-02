@@ -31,7 +31,7 @@ export interface RankingBasis {
   candidateGrain: 'work';
   semantic: RankingSemanticBasis | null;
 }
-export interface RankingViewer { principal: VerifiedPrincipal; actingSubject: string }
+export type RankingViewer = { principal: VerifiedPrincipal; actingSubject: string } | { public: true; principal: null; actingSubject: null };
 export interface RankingPage { generation: string; items: { candidate: string }[]; continuation: string | null }
 export interface GenerationView {
   generation: string; state: string; population: RankingPopulation['kind']; leaseEpoch: string;
@@ -526,25 +526,27 @@ export class RankingGenerations {
   async page(viewer: RankingViewer, basis: RankingBasis, pageSize: number,
     continuation?: string): Promise<RankingPage> {
     validBasis(basis);
+    if (!viewer.principal && (basis.population.kind !== 'public' || basis.semantic)) throw new RecommendationDenied('Public viewer requires public ranking');
+
     if (basis.semantic && this.options.verifySemantic
       && !await this.options.verifySemantic(viewer, basis)) {
       if (continuation) throw new RecommendationRestart('ranking semantic basis changed');
       throw new RecommendationMissing('ranking semantic basis is unavailable');
     }
-    if (!nativeIri.test(viewer.actingSubject) || !Number.isInteger(pageSize)
+    if ((viewer.principal && !nativeIri.test(viewer.actingSubject)) || !Number.isInteger(pageSize)
       || pageSize < 1 || pageSize > MAX_RANKING_PAGE) {
       throw new RecommendationDenied('ranking page request is not admitted');
     }
     try {
-      const erasedViewer = await this.options.relay.query(`SELECT 1 FROM relay.erasure
+      const erasedViewer = viewer.principal ? await this.options.relay.query(`SELECT 1 FROM relay.erasure
         WHERE kind = 'account' AND account_issuer = $1 AND account_subject = $2
-          AND stage <> 'blocked' LIMIT 1`, [viewer.principal.issuer, viewer.principal.subject]);
-      if (erasedViewer.rowCount) throw new RecommendationMissing('ranking viewer is unavailable');
+          AND stage <> 'blocked' LIMIT 1`, [viewer.principal.issuer, viewer.principal.subject]) : null;
+      if (erasedViewer?.rowCount) throw new RecommendationMissing('ranking viewer is unavailable');
     } catch (error) {
       if (error instanceof RecommendationMissing) throw error;
       throw new RecommendationUnavailable('erasure journal is unavailable');
     }
-    const viewerDigest = digest({ issuer: viewer.principal.issuer, subject: viewer.principal.subject,
+    const viewerDigest = digest({ issuer: viewer.principal?.issuer ?? null, subject: viewer.principal?.subject ?? null,
       actingSubject: viewer.actingSubject });
     const basisDigest = digest(basis);
     const token = continuation === undefined ? undefined : this.open(continuation);
@@ -559,7 +561,7 @@ export class RankingGenerations {
       if (basis.population.kind === 'personal') {
         owner = (await client.query<{ id: string }>(`SELECT id FROM access.principal
           WHERE account_issuer = $1 AND account_subject = $2 AND active`,
-        [viewer.principal.issuer, viewer.principal.subject])).rows[0]?.id ?? null;
+        [viewer.principal!.issuer, viewer.principal!.subject])).rows[0]?.id ?? null;
         if (!owner) throw new RecommendationMissing('no active ranking');
       }
       const scope = scopeKey(basis, owner, this.options.dataEpoch);
@@ -634,7 +636,7 @@ export class RankingGenerations {
       if (unverified.has(row.candidate)) continue;
       let visible: boolean;
       try {
-        visible = await this.options.canReadWork(viewer.principal, viewer.actingSubject, row.candidate);
+        visible = viewer.principal ? await this.options.canReadWork(viewer.principal, viewer.actingSubject!, row.candidate) : true;
       } catch { throw new RecommendationUnavailable('candidate disclosure is unavailable'); }
       if (visible) items.push({ candidate: row.candidate });
     }
@@ -643,65 +645,6 @@ export class RankingGenerations {
       generation: window.generation, viewer: viewerDigest, basis: basisDigest,
       after: { score: examined.score, candidate: examined.candidate },
       expiresAt: Date.now() + CURSOR_TTL_MS } satisfies CursorToken) : null };
-  }
-
-  /** Public Discover consumes the existing explicit rating ranking. This
-   * adapter reveals candidates only to an owner that rechecks public disclosure;
-   * it grants no personal/Realm ranking authority and has no cold fallback. */
-  async publicCandidates(limit: number, continuation?: string): Promise<RankingPage> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 64) throw new RecommendationDenied('Invalid candidate page');
-    const basis: RankingBasis = { profile: RANKING_PROFILE, population: { kind: 'public' },
-      candidateGrain: 'work', semantic: null };
-    const viewer = 'public-discover-v1', basisDigest = digest(basis);
-    const token = continuation ? this.open(continuation) : undefined;
-    if (token && (token.v !== 1 || token.viewer !== viewer || token.basis !== basisDigest || token.expiresAt < Date.now())) {
-      throw new RecommendationRestart('Public ranking cursor changed');
-    }
-    const window = await inAccess(this.options.access, async client => {
-      await requireRecoveryOpen(client);
-      const scope = scopeKey(basis, null, this.options.dataEpoch);
-      const head = (await client.query<{ generation: string; erasure_epoch: string }>(`
-        SELECT g.id::text AS generation, g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
-        FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
-        WHERE h.family='ranking' AND h.scope_key=$1 AND g.state='ready'`, [scope])).rows[0];
-      if (!head) throw new RecommendationMissing('Public ranking has no active generation');
-      if (token && token.generation !== head.generation) throw new RecommendationRestart('Public ranking changed');
-      const rows = (await client.query<{ candidate: string; score: string }>(`SELECT candidate,score::text AS score
-        FROM access.ranking_score WHERE generation_id=$1
-          AND ($2::numeric IS NULL OR score<$2::numeric OR (score=$2::numeric AND candidate>$3))
-        ORDER BY score DESC,candidate LIMIT $4`,
-      [head.generation, token?.after.score ?? null, token?.after.candidate ?? '', limit + 1])).rows;
-      return { ...head, rows };
-    });
-    await this.assertContributorsCurrent(window.generation, window.erasure_epoch ?? '0');
-    const scanned = window.rows.slice(0, limit);
-    const ids = scanned.map(row => row.candidate);
-    const erased = await this.erased(ids);
-    const unverified = await this.options.unverifiedWorks?.(ids) ?? new Set<string>();
-    const last = scanned.at(-1);
-    return { generation: window.generation,
-      items: scanned.filter(row => !erased.has(row.candidate) && !unverified.has(row.candidate))
-        .map(row => ({ candidate: row.candidate })),
-      continuation: window.rows.length > limit && last ? this.seal({ v: 1, viewer, basis: basisDigest,
-        generation: window.generation, after: last, expiresAt: Date.now() + CURSOR_TTL_MS } satisfies CursorToken) : null };
-  }
-
-  /** Recheck after public card hydration: erased contributors or a replacement
-   * generation cannot lend their old order to the delivered section. */
-  async fencePublicCandidates(generation: string): Promise<void> {
-    const basis: RankingBasis = { profile: RANKING_PROFILE, population: { kind: 'public' },
-      candidateGrain: 'work', semantic: null };
-    const since = await inAccess(this.options.access, async client => {
-      await requireRecoveryOpen(client);
-      const row = (await client.query<{ erasure_epoch: string }>(`SELECT
-        g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
-        FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
-        WHERE h.family='ranking' AND h.scope_key=$1 AND g.id=$2 AND g.state='ready'`,
-      [scopeKey(basis, null, this.options.dataEpoch), generation])).rows[0];
-      if (!row) throw new RecommendationRestart('Public ranking changed');
-      return row.erasure_epoch ?? '0';
-    });
-    await this.assertContributorsCurrent(generation, since);
   }
 
   /** A new Account erasure makes a generation with that contributor unavailable immediately. */

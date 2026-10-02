@@ -6,6 +6,7 @@ import {
   encodeReadCursor,
   WorkReadInvalid,
   WorkReadMoved,
+  WorkReadExpired,
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
@@ -13,7 +14,10 @@ import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { readAgentCards, publicAgent } from '../profiles/read.ts';
 import { direction } from '../display-language/select.ts';
-import { readEpochOrder } from '../discovery/lineage.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
+import { resolveConcepts } from '../concept-page/read.ts';
+import { QUERY_COST } from './compile.ts';
+import { conceptCountBasis } from '../discovery/concepts.ts';
 import {
   indexedLabels,
   indexedNameMatch,
@@ -22,8 +26,6 @@ import {
   type LabelAfter,
 } from '../search/labels.ts';
 import type { ResourceCard, ResourceCondition, ResourceListPlan } from './resource-contract.ts';
-import type { ClassificationAudience } from '../discovery/audience.ts';
-import { acceptedClassification, countDisclosure } from './classification.ts';
 
 /** Ownership establishes the read path; descriptive rdf:type only filters it.
  * Public catalogue reads never use private grants, including a reader's own. */
@@ -67,13 +69,10 @@ export function publicResources() {
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure ?disclosure . FILTER(?disclosure != rv:Public) } }`;
 }
 
-export function resourceConditions(
-  conditions: readonly ResourceCondition[],
-  realm?: string,
-  audience: ClassificationAudience = { excluded: [], protection: [] },
-) {
+export function resourceConditions(conditions: readonly ResourceCondition[], realm?: string) {
   return conditions
-    .map((condition, index) => {
+    .filter((condition) => condition.facet !== 'concept')
+    .map((condition) => {
       const match = (value: string) => {
         if (condition.facet === 'type') {
           // Facet admission already checked the registry value; this term may be
@@ -87,12 +86,7 @@ export function resourceConditions(
           return `GRAPH ${iri(GRAPHS.current)} {
         ?nameResource ?nameProperty ?languageLabel . VALUES ?nameProperty { rdfs:label schema:name skos:prefLabel skos:altLabel }
         FILTER(LANGMATCHES(LANG(?languageLabel), ${lit(value)})) }`;
-        // Both communities' explicit topics and accepted resource classifications
-        // use Concepts; a Concept is never inferred from a label or rdf:type.
-        return `{ GRAPH ${iri(GRAPHS.current)} { ?r rv:topic ${iri(value)} } }
-        UNION { GRAPH ${iri(GRAPHS.current)} { ?r rv:mainVersion ?classifiedMain }
-          ${acceptedClassification('?classifiedMain', iri(value), audience, realm, `filter${index}`)}
-          ${countDisclosure('?r', audience, `filterCount${index}`)} }`;
+        return `GRAPH ${iri(GRAPHS.current)} { ?r rv:topic ${iri(value)} }`;
       };
       const tests = condition.values.map((value) => `EXISTS { ${match(value)} }`);
       return `FILTER(${condition.operator === 'none' ? '!' : ''}(${tests.join(condition.operator === 'all' ? ' && ' : ' || ')}))`;
@@ -108,12 +102,10 @@ interface Candidate {
 }
 interface PageCursor {
   after?: LabelAfter;
-  order?: string;
   seen: number;
-  pending?: Candidate[];
-  labelMore?: boolean;
+  seeks?: Record<string, { id: string; key: string }>;
+  done?: string[];
 }
-
 /** Hydrate through the shared summary/Agent owners, then recheck disclosure at delivery. */
 export async function resourceCards(session: WorkReadSession, candidates: readonly Candidate[]) {
   const agents = candidates.filter((row) => row.kind === 'agent').map((row) => row.id);
@@ -153,11 +145,9 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
       },
     );
   const summaries = refs.length ? await readSummaries() : null;
-  const fenced = refs.length ? await readSummaries() : null;
   if (
     summaries &&
-    (summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}` ||
-      fenced?.generation.graph !== summaries.generation.graph)
+    summaries.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`
   )
     throw new WorkReadMoved('Resources changed');
   const currentAgents = await visibleAgents();
@@ -170,7 +160,6 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
     'search',
   );
   const byId = new Map((summaries?.summaries ?? []).map((summary) => [summary.reference, summary]));
-  const final = new Map((fenced?.summaries ?? []).map((summary) => [summary.reference, summary]));
   const types = candidates.length
     ? await session.query(
         `SELECT DISTINCT ?r ?type WHERE {
@@ -206,20 +195,12 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
                 key: row.id,
                 resourceType: 'agent',
               },
-              href: agent.links.profile,
             },
           ]
         : [];
     }
-    const summary = byId.get(row.summary),
-      end = final.get(row.summary);
-    if (
-      summary?.status !== 'available' ||
-      summary.disclosure !== 'public' ||
-      end?.status !== 'available' ||
-      end.disclosure !== 'public'
-    )
-      return [];
+    const summary = byId.get(row.summary);
+    if (summary?.status !== 'available' || summary.disclosure !== 'public') return [];
     return [
       {
         id: row.id,
@@ -227,38 +208,76 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
         types: resourceTypes,
         name: summary.name,
         icon: summary.avatar,
-        href:
-          row.kind === 'work'
-            ? `/w/${row.id.slice(-36)}`
-            : row.kind === 'realm'
-              ? `/r/${row.id.slice(-36)}`
-              : row.kind === 'site'
-                ? `/v1/zones/${row.id.slice(-36)}/presentation`
-                : row.kind === 'concept'
-                  ? `/concepts/${row.id.slice(-36)}`
-                  : `/v1/${row.kind === 'collection' ? 'collections' : 'spaces'}/${row.id.slice(-36)}`,
       },
     ];
   });
+}
+
+/** Match accepted Concept interpretations through the existing Discovery owner. */
+export async function conceptResourceMatches(
+  session: WorkReadSession,
+  candidates: readonly Candidate[],
+  conditions: readonly ResourceCondition[],
+  realm?: string,
+) {
+  const filters = conditions.filter((condition) => condition.facet === 'concept');
+  if (!filters.length) return new Set(candidates.map((row) => row.id));
+  const resolved = await resolveConcepts(session, [
+    ...new Set(filters.flatMap((row) => row.values)),
+  ]);
+  const { basis, active } = await conceptCountBasis(session, realm);
+  const works = candidates.filter((row) => row.kind === 'work').map((row) => row.id);
+  const terms = [...new Set([...resolved.values()].flatMap((row) => row.interpretations))];
+  const membership = await session.deps.discovery!.termMembership(active, works, terms);
+  const topics = candidates.length
+    ? await session.query(
+        `SELECT ?r ?concept WHERE {
+    VALUES ?r { ${candidates.map((row) => iri(row.id)).join(' ')} }
+    VALUES ?concept { ${[...resolved.keys()].map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?r rv:topic ?concept }
+  } LIMIT ${candidates.length * Math.max(1, resolved.size) + 1}`,
+        candidates.length * Math.max(1, resolved.size),
+      )
+    : [];
+  const matched = new Set(
+    candidates
+      .filter((candidate) =>
+        filters.every((condition) => {
+          const flags = condition.values.map((concept) =>
+            candidate.kind === 'work'
+              ? membership.some(
+                  (row) =>
+                    row.work === candidate.id &&
+                    resolved.get(concept)?.interpretations.includes(row.term),
+                )
+              : topics.some(
+                  (row) => row.r!.value === candidate.id && row.concept!.value === concept,
+                ),
+          );
+          return condition.operator === 'all'
+            ? flags.every(Boolean)
+            : condition.operator === 'none'
+              ? !flags.some(Boolean)
+              : flags.some(Boolean);
+        }),
+      )
+      .map((row) => row.id),
+  );
+  if ((await session.deps.discovery!.active(basis, session.position, active.generation_id)).stale)
+    throw new WorkReadMoved('Discovery classifications changed');
+  return matched;
 }
 
 export async function readResourceList(session: WorkReadSession, plan: ResourceListPlan) {
   const { input, conditions } = plan;
   const limit = input.limit ?? 20,
     q = input.q?.trim() ?? '';
-  const index = q ? await labelIndexReady(session) : null;
   const realm = input.scope.kind === 'realm' ? input.scope.realm : undefined;
   if (realm && (await session.realm(realm)).visibility !== 'public')
     throw new WorkReadInvalid('Scope is not public');
-  const audience = conditions.some((condition) => condition.facet === 'concept')
-    ? await session.deps.discoveryAudience?.classificationAudience(session.viewer, realm)
-    : undefined;
-  if (conditions.some((condition) => condition.facet === 'concept') && !audience)
-    throw new WorkReadUnavailable('Classification audience is unavailable');
   const binding = [
-    'resource-list-v1',
+    'resource-list-v2',
     conditions,
-    audience ?? null,
     realm ?? null,
     q,
     input.sort,
@@ -267,7 +286,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
     session.viewer,
   ];
   const cursor = decodeReadCursor(input.cursor, binding, session.position);
-  let prior: PageCursor = { seen: 0 };
+  let prior: PageCursor = { seen: 0, seeks: {}, done: [] };
   if (cursor) {
     try {
       prior = JSON.parse(cursor.order);
@@ -277,104 +296,305 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
     if (!Number.isSafeInteger(prior.seen) || prior.seen < 0)
       throw new WorkReadInvalid('Resource cursor is invalid');
   }
-  const population = `${publicResources()} ${resourceConditions(conditions, realm, audience)}
+  const state = { ...prior, seeks: { ...prior.seeks }, done: [...(prior.done ?? [])] };
+  const items: ResourceCard[] = [];
+  let scanned = 0,
+    more = false;
+  const population = `${publicResources()} ${resourceConditions(conditions, realm)}
     ${
       realm
-        ? `FILTER(?r = ${iri(realm)} || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:conceptRealm ${iri(realm)} } }
-      || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?adoption a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
-        rv:work ?r ; rv:selectionHead ?selectionHead } GRAPH ${iri(GRAPHS.revisions)} {
-        ?selectionHead a rv:RevisionAnchor ; rv:component ?adoption .
-        FILTER NOT EXISTS { ?selectionHead a rv:ErasedRevision } } })`
+        ? `FILTER(?r=${iri(realm)} || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:conceptRealm ${iri(realm)} } }
+      || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ; rv:work ?r ; rv:selectionHead ?h } })`
         : ''
     }`;
-  let candidates: Candidate[], more: boolean, after: string, state: PageCursor;
-  if (q && input.sort === 'relevance') {
-    if (prior.pending?.length) {
-      candidates = prior.pending;
-      more = prior.labelMore ?? false;
-      after = prior.after?.id ?? '';
-      state = { after: prior.after, seen: prior.seen, labelMore: more };
-    } else {
-      // A Space label can yield two capabilities. For limit=1 the encrypted
-      // cursor carries the second binding, so neither capability is lost.
-      const labels = await indexedLabels(
+  let kinds: Candidate['kind'][] = [
+    'work',
+    'realm',
+    'concept',
+    'space',
+    'site',
+    'agent',
+    'collection',
+  ];
+  const ownedTypes: Record<string, Candidate['kind'][]> = {
+    'https://schema.org/CreativeWork': ['work'],
+    'http://www.w3.org/2004/02/skos/core#Concept': ['concept'],
+    'https://rezics.com/vocab/Realm': ['realm'],
+    'https://rezics.com/vocab/Zone': ['site'],
+    'https://rezics.com/vocab/Space': ['space', 'realm', 'site'],
+    'https://rezics.com/vocab/Agent': ['agent'],
+    'https://rezics.com/vocab/Collection': ['collection'],
+  };
+  for (const condition of conditions.filter(
+    (row) => row.facet === 'type' && row.operator === 'any',
+  )) {
+    if (condition.values.every((type) => ownedTypes[type]))
+      kinds = kinds.filter((kind) =>
+        condition.values.some((type) => ownedTypes[type]!.includes(kind)),
+      );
+  }
+  const { basis, active } = await conceptCountBasis(session, realm);
+  const index = q ? await labelIndexReady(session) : null;
+  let cache: (Candidate & { source: string; key: string })[] = [];
+  let fetched = 0;
+  while (items.length < limit && scanned < QUERY_COST.candidateRows) {
+    let candidates: (Candidate & { source: string; key: string })[] = [];
+    if (q && input.sort === 'relevance') {
+      const page = await indexedLabels(
         session,
         q,
-        Math.max(1, Math.floor(limit / 2)),
-        prior.after,
+        Math.min(64, QUERY_COST.candidateRows - scanned),
+        state.after,
       );
-      const rows = labels.ids.length
+      const rows = page.ids.length
         ? await session.query(
-            `SELECT DISTINCT ?r ?kind ?summary ?nameResource WHERE {
-      VALUES ?nameResource { ${labels.ids.map(iri).join(' ')} } ${population}
-    } ORDER BY STR(?r) LIMIT ${limit * 3 + 1}`,
-            limit * 3,
+            `SELECT DISTINCT ?r ?kind ?summary WHERE {
+        VALUES ?r { ${page.ids.map(iri).join(' ')} } ${population}
+      } LIMIT ${page.ids.length + 1}`,
+            page.ids.length,
           )
         : [];
-      candidates = labels.ids.flatMap((id) =>
-        rows
-          .filter((row) => row.nameResource?.value === id)
-          .map((row) => ({
-            id: row.r!.value,
-            summary: row.summary!.value,
-            kind: row.kind!.value as Candidate['kind'],
-            order: '',
-          })),
-      );
-      if (candidates.length > Math.max(2, limit))
-        throw new WorkReadUnavailable('Label bindings exceed their domain');
-      const pending = candidates.slice(limit);
-      candidates = candidates.slice(0, limit);
-      more = labels.more || pending.length > 0;
-      after = labels.after?.id ?? '';
-      state = { after: labels.after, seen: prior.seen, pending, labelMore: labels.more };
-    }
-  } else {
-    const lineage = await readEpochOrder(session);
-    const rows = await session.query(
-      `PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      SELECT ?r ?kind ?summary ?order WHERE {
-      { SELECT ?r ?kind ?summary (${input.sort === 'newest' ? 'MIN' : 'MAX'}(?fallbackRank) AS ?order) WHERE {
-        ${population} ${q ? indexedNameMatch('?nameResource', q) : ''}
-        OPTIONAL { ${lineage} GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RevisionAnchor ;
-          rv:component ?r ; rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence }
-          BIND((32 - ?epochOrder) * 1000000000000000000000000000000 + xsd:integer(?sequence) AS ?rank) }
-        BIND(COALESCE(?rank, 0) AS ?fallbackRank)
-      } GROUP BY ?r ?kind ?summary }
-      ${
-        cursor
-          ? `FILTER(?order < ${lit(prior.order ?? '0')}^^xsd:integer ||
-        (?order = ${lit(prior.order ?? '0')}^^xsd:integer && STR(?r) > ${lit(cursor.after)}))`
-          : ''
+      candidates = page.hits.map((hit) => {
+        const id = 'https://rezics.com/id/' + hit.id.split(':').at(-1);
+        const row = hit.key ? rows.find((row) => row.r!.value === id) : null;
+        return {
+          id,
+          kind: row?.kind?.value as Candidate['kind'],
+          summary: row?.summary?.value ?? '',
+          order: '',
+          source: 'rank',
+          key: JSON.stringify({
+            id: hit.id,
+            score: hit.score,
+            commit: page.commit,
+            document: hit.document,
+          }),
+        };
+      });
+      more = page.more;
+    } else if (cache.length) {
+      candidates = cache;
+      cache = [];
+      more = true;
+    } else {
+      for (const kind of kinds.filter((kind) => !state.done.includes(kind))) {
+        if (fetched >= QUERY_COST.candidateRows) break;
+        const sourceLimit = Math.min(64, QUERY_COST.candidateRows - fetched);
+        const seek = state.seeks[kind];
+        if (kind === 'work') {
+          const rows = await session.deps.discovery!.resourcePage(
+            active,
+            sourceLimit,
+            seek ? { key: seek.key, work: seek.id } : undefined,
+          );
+          const window = rows.slice(0, sourceLimit);
+          candidates.push(
+            ...window.map((row) => ({
+              id: row.work,
+              kind,
+              summary: row.work,
+              order: String(
+                (32n - BigInt(row.order_key) / (1n << 63n)) * 10n ** 30n +
+                  ((1n << 63n) - 1n - (BigInt(row.order_key) % (1n << 63n))),
+              ),
+              source: kind,
+              key: row.order_key,
+            })),
+          );
+          if (!window.length) state.done.push(kind);
+        } else if (kind === 'concept') {
+          // The Concept owner orders used definitions from immutable term
+          // counts. Its zero-use tail seeks public definition names by identity.
+          let position: { phase: 'used' | 'unused'; count?: string } = { phase: 'used' };
+          if (seek) {
+            try {
+              position = JSON.parse(seek.key);
+            } catch {
+              throw new WorkReadInvalid('Concept resource cursor is invalid');
+            }
+            if (!['used', 'unused'].includes(position.phase))
+              throw new WorkReadInvalid('Concept resource cursor is invalid');
+          }
+          const used =
+            position.phase === 'used'
+              ? await session.deps.discovery!.conceptPage(
+                  active,
+                  sourceLimit,
+                  seek ? { count: position.count ?? '0', concept: seek.id } : undefined,
+                )
+              : [];
+          if (used.length) {
+            candidates.push(
+              ...used.slice(0, sourceLimit).map((row) => ({
+                id: row.concept,
+                kind,
+                summary: row.concept,
+                order: String(32n * 10n ** 30n + BigInt(row.work_count)),
+                source: kind,
+                key: JSON.stringify({ phase: 'used', count: row.work_count }),
+              })),
+            );
+          } else {
+            const after = position.phase === 'unused' ? (seek?.id ?? '') : '';
+            const rows = await session.query(
+              `SELECT ?r WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+              ?unit a rv:PublicNameMatchUnit ; rv:resource ?r .
+              FILTER(STRSTARTS(STR(?unit), "urn:rezics:search:name:concept:")) }
+              FILTER(STR(?r)>${lit(after)}) } ORDER BY STR(?r) LIMIT ${sourceLimit}`,
+              sourceLimit,
+            );
+            candidates.push(
+              ...rows.map((row) => ({
+                id: row.r!.value,
+                kind,
+                summary: row.r!.value,
+                order: String(32n * 10n ** 30n),
+                source: kind,
+                key: JSON.stringify({ phase: 'unused' }),
+              })),
+            );
+            if (!rows.length) state.done.push(kind);
+          }
+        } else if (kind === 'realm') {
+          const directory = session.deps.access.realmDirectory;
+          if (!directory) throw new WorkReadUnavailable('Realm directory is unavailable');
+          const page = await directory.page(session, {
+            sort: input.sort === 'updated' ? 'activity' : 'newest',
+            q: '',
+            limit: sourceLimit,
+            cursor: '',
+            seek,
+          });
+          candidates.push(
+            ...page.rows.map((row) => ({
+              id: row.realm,
+              kind,
+              summary: row.realm,
+              order: String(-BigInt(row.rank)),
+              source: kind,
+              key: `${page.position}:${row.rank}`,
+            })),
+          );
+          if (!page.rows.length) state.done.push(kind);
+        } else {
+          // Bound identities before owner joins and rank hydration. No GROUP BY
+          // over revisions or whole resource population is performed per page.
+          const rows = await session.query(
+            `PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT DISTINCT ?r ?kind ?summary ?order WHERE {
+              { SELECT ?r ?order WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+                ?unit a rv:PublicNameMatchUnit ; rv:resource ?r ; rv:${input.sort === 'updated' ? 'updatedOrder' : 'createdOrder'} ?order .
+                FILTER(STRSTARTS(STR(?unit), ${lit('urn:rezics:search:name:' + kind + ':')})) }
+                ${seek ? `FILTER(?order<${seek.key} || (?order=${seek.key} && STR(?r)>${lit(seek.id)}))` : ''}
+              } ORDER BY DESC(?order) STR(?r) LIMIT ${sourceLimit} }
+              BIND("${kind}" AS ?kind) BIND(?r AS ?summary)
+            } ORDER BY DESC(?order) STR(?r) LIMIT ${sourceLimit + 1}`,
+            sourceLimit,
+          );
+          candidates.push(
+            ...rows.map((row) => ({
+              id: row.r!.value,
+              kind,
+              summary: row.summary!.value,
+              order: row.order!.value,
+              source: kind,
+              key: row.order!.value,
+            })),
+          );
+          if (!rows.length) state.done.push(kind);
+        }
+        fetched += sourceLimit;
       }
-      } ORDER BY DESC(?order) STR(?r) LIMIT ${limit + 1}`,
-      limit + 1,
+      candidates.sort((a, b) =>
+        BigInt(a.order) > BigInt(b.order)
+          ? -1
+          : BigInt(a.order) < BigInt(b.order)
+            ? 1
+            : a.id.localeCompare(b.id),
+      );
+      more = state.done.length < kinds.length;
+    }
+    if (!candidates.length) {
+      more = false;
+      break;
+    }
+    const window = candidates.slice(0, Math.min(64, QUERY_COST.candidateRows - scanned));
+    if (!(q && input.sort === 'relevance')) cache = candidates.slice(window.length);
+    const rows = window.length
+      ? await session.query(
+          `SELECT DISTINCT ?r ?kind ?summary WHERE {
+      VALUES ?r { ${window
+        .filter((row) => row.summary)
+        .map((row) => iri(row.id))
+        .join(' ')} } ${population}
+      ${q ? indexedNameMatch('?r', q) : ''}
+    } LIMIT ${window.length + 1}`,
+          window.length,
+        )
+      : [];
+    const admitted = window.flatMap((candidate) => {
+      const row = rows.find((row) => row.r!.value === candidate.id);
+      return row
+        ? [
+            {
+              ...candidate,
+              kind: row.kind!.value as Candidate['kind'],
+              summary: row.summary!.value,
+            },
+          ]
+        : [];
+    });
+    const projectedWorks = await session.deps.discovery!.resourceMembership(
+      active,
+      admitted.filter((row) => row.kind === 'work').map((row) => row.id),
     );
-    candidates = rows.slice(0, limit).map((row) => ({
-      id: row.r!.value,
-      kind: row.kind!.value as Candidate['kind'],
-      summary: row.summary!.value,
-      order: row.order?.value ?? '0',
-    }));
-    more = rows.length > limit;
-    after = candidates.at(-1)?.id ?? '';
-    state = { order: candidates.at(-1)?.order ?? '0', seen: prior.seen };
+    let projected = admitted.filter((row) => row.kind !== 'work' || projectedWorks.has(row.id));
+    const concepts = projected.filter((row) => row.kind === 'concept');
+    if (concepts.length) {
+      const counts = new Map(
+        (
+          await session.deps.discovery!.conceptCounts(
+            active,
+            concepts.map((row) => row.id),
+          )
+        ).map((row) => [row.concept, Number(row.work_count)]),
+      );
+      projected = projected.filter(
+        (row) =>
+          row.kind !== 'concept' ||
+          row.source !== 'concept' ||
+          JSON.parse(row.key).phase !== 'unused' ||
+          (counts.get(row.id) ?? 0) === 0,
+      );
+    }
+    const matched = await conceptResourceMatches(session, projected, conditions, realm);
+    const cards = new Map(
+      (
+        await resourceCards(
+          session,
+          projected.filter((row) => matched.has(row.id)),
+        )
+      ).map((card) => [card.id, card]),
+    );
+    let examined = 0;
+    for (const candidate of window) {
+      if (items.length === limit) break;
+      scanned++;
+      examined++;
+      if (candidate.source === 'rank') state.after = JSON.parse(candidate.key);
+      else state.seeks[candidate.source] = { id: candidate.id, key: candidate.key };
+      const card = cards.get(candidate.id);
+      if (card) items.push(card);
+    }
+    more ||= examined < window.length || window.length < candidates.length;
+    if (!more || (!cache.length && fetched >= QUERY_COST.candidateRows)) break;
   }
-  if (new Set(candidates.map((row) => row.id)).size !== candidates.length)
-    throw new WorkReadUnavailable('Resource population is ambiguous');
-  const items = await resourceCards(session, candidates);
-  if (
-    audience &&
-    JSON.stringify(
-      await session.deps.discoveryAudience!.classificationAudience(session.viewer, realm),
-    ) !== JSON.stringify(audience)
-  ) {
-    throw new WorkReadMoved('Classification audience changed');
-  }
+  if ((await session.deps.discovery!.active(basis, session.position, active.generation_id)).stale)
+    throw new WorkReadExpired('Discovery projection changed');
   if (index) await fenceLabelIndex(session, index);
   state.seen += items.length;
   const next = more
-    ? encodeReadCursor(binding, session.position, after, JSON.stringify(state))
+    ? encodeReadCursor(binding, session.position, items.at(-1)?.id ?? '', JSON.stringify(state))
     : null;
   return {
     profile: 'resource-list-v1' as const,

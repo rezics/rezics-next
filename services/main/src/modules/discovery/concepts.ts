@@ -5,16 +5,16 @@ import { readId, readName, readPosition, WORK_READ_COST } from '../work/read-con
 import {
   decodeReadCursor,
   encodeReadCursor,
-  publicWork,
   WorkReadInvalid,
-  WorkReadMoved,
+  WorkReadExpired,
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { indexedLabels, type LabelAfter } from '../search/labels.ts';
 import { discoveryReader, fenceDiscoveryReader } from './reader.ts';
-import { acceptedClassification, countDisclosure } from '../query/classification.ts';
-import type { ClassificationAudience } from './audience.ts';
+import type { DiscoveryReadGeneration } from './store.ts';
+import type { OwnedDiscoveryBasis } from './contract.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 
 export const conceptSearchQuery = t.Object(
   {
@@ -44,13 +44,13 @@ export interface ConceptSearchQuery extends ListRequest {
   actingSubject?: string;
   personalization?: boolean;
 }
-/** Text pages collect 64 indexed label documents at most. Empty search uses
- * following, then current accepted public Work usage, then identity. Usage
- * aggregation is performed in the graph under the enclosing read deadline;
- * there is no 256-Concept/2,048-label inventory cap. */
+/** Text reads fill from Concept-only name documents within the 512-document
+ * scan bound. Empty search seeks followed identities, then immutable Discovery
+ * term counts, then zero-use public names; no count aggregation runs per page. */
 export const CONCEPT_SEARCH_COST = {
-  candidates: 65,
-  indexDocuments: 64,
+  candidates: 512,
+  indexDocuments: 512,
+  rankReads: 8,
   broaderPerConcept: 16,
   graphCalls: WORK_READ_COST.graphCalls,
   deadlineMs: WORK_READ_COST.deadlineMs,
@@ -68,16 +68,32 @@ export function visibleConcept(concept: string, realm?: string) {
     FILTER NOT EXISTS { ${concept} rv:conceptState rv:Retired }
     FILTER NOT EXISTS { ${concept} skos:inScheme ?scheme . ?scheme rv:schemeState rv:Retired } }`;
 }
-function usage(concept: string, audience: ClassificationAudience, realm?: string) {
-  return `${publicWork('?work', '?main')}
-    ${acceptedClassification('?main', concept, audience, realm)}
-    ${countDisclosure('?work', audience)}
-    ${
-      realm
-        ? `GRAPH ${iri(GRAPHS.current)} { ?adoption a rv:RealmPublicationSlot ;
-      rv:realm ${iri(realm)} ; rv:work ?work ; rv:mainVersion ?main ; rv:selectionHead ?adoptionHead }`
-        : ''
-    }`;
+/** A pinned count projection; stale classification/count evidence is unavailable. */
+export async function conceptCountBasis(
+  session: WorkReadSession,
+  realm?: string,
+  generation?: string,
+) {
+  if (!session.deps.discovery) throw new WorkReadUnavailable('Discovery projection is unavailable');
+  const basis: OwnedDiscoveryBasis = {
+    scope: realm ? 'realm' : 'global',
+    realm: realm ?? null,
+    context: null,
+    owner: null,
+  };
+  const active = await session.deps.discovery.active(basis, session.position, generation);
+  if (active.stale) throw new WorkReadExpired('Discovery counts changed; rebuild the projection');
+  return { basis, active };
+}
+export async function conceptCounts(
+  session: WorkReadSession,
+  active: DiscoveryReadGeneration,
+  ids: string[],
+) {
+  const rows = await session.deps.discovery!.conceptCounts(active, ids);
+  return new Map(
+    ids.map((id) => [id, Number(rows.find((row) => row.concept === id)?.work_count ?? 0)]),
+  );
 }
 
 export async function readConceptSearch(
@@ -97,12 +113,6 @@ export async function readConceptSearch(
     input.personalization !== false,
     request,
   );
-  if (!session.deps.discoveryAudience)
-    throw new WorkReadUnavailable('Concept count audience is unavailable');
-  const audience = await session.deps.discoveryAudience.classificationAudience(
-    session.viewer,
-    input.realm,
-  );
   // Existing follows remain navigation when recommendations are switched off.
   const topics = reader?.signals.topics ?? [];
   const binding = [
@@ -110,7 +120,6 @@ export async function readConceptSearch(
     q,
     input.realm ?? null,
     limit,
-    audience,
     reader?.signals ?? null,
     session.displayLanguages,
     session.viewer,
@@ -128,49 +137,139 @@ export async function readConceptSearch(
     if (!Number.isSafeInteger(prior.count) || prior.count < 0)
       throw new WorkReadInvalid('Concept cursor is invalid');
   }
-  let ids: string[], more: boolean, after: string, order: typeof prior;
-  const aggregate = (ids?: string[]) => `SELECT ?concept (COUNT(DISTINCT ?work) AS ?usage) WHERE {
-    ${ids ? `VALUES ?concept { ${ids.map(iri).join(' ')} }` : ''}
-    ${visibleConcept('?concept', input.realm)} OPTIONAL { ${usage('?concept', audience, input.realm)} }
-    } GROUP BY ?concept`;
+  const { basis, active } = await conceptCountBasis(session, input.realm);
+  let ids: string[] = [],
+    more = false,
+    after = '',
+    order = { ...prior };
   let counts = new Map<string, number>();
+  // Fill a Concept page from Concept-only units. Other resource names and
+  // private labels never participate in the collector or its continuation.
   if (q) {
-    const page = await indexedLabels(session, q, limit, prior.after);
-    const rows = page.ids.length
-      ? await session.query(`${aggregate(page.ids)} LIMIT ${limit + 1}`, limit)
-      : [];
-    const available = new Map(rows.map((row) => [row.concept!.value, Number(row.usage!.value)]));
-    ids = page.ids.filter((id) => available.has(id));
-    counts = available;
-    more = page.more;
-    after = page.after?.id ?? '';
-    order = { count: prior.count, after: page.after };
-  } else {
-    const rows = await session.query(
-      `SELECT ?concept ?usage ?followed WHERE {
-      { ${aggregate()} }
-      BIND(${topics.length ? `IF(?concept IN (${topics.map(iri).join(',')}),1,0)` : '0'} AS ?followed)
-      ${
-        cursor
-          ? `FILTER(?followed < ${prior.followed ?? 0} || (?followed = ${prior.followed ?? 0}
-        && (?usage < ${lit(prior.usage ?? '0')}^^<http://www.w3.org/2001/XMLSchema#integer>
-          || (?usage = ${lit(prior.usage ?? '0')}^^<http://www.w3.org/2001/XMLSchema#integer>
-            && STR(?concept) > ${lit(cursor.after)}))))`
-          : ''
+    let scanned = 0;
+    for (let read = 0; read < CONCEPT_SEARCH_COST.rankReads && ids.length < limit; read++) {
+      const page = await indexedLabels(
+        session,
+        q,
+        Math.min(64, 512 - scanned),
+        order.after,
+        'concept',
+      );
+      const visibleRows = page.ids.length
+        ? await session.query(
+            `SELECT DISTINCT ?concept WHERE {
+        VALUES ?concept { ${page.ids.map(iri).join(' ')} } ${visibleConcept('?concept', input.realm)}
+      } LIMIT ${page.ids.length + 1}`,
+            page.ids.length,
+          )
+        : [];
+      const summaries = await session.summaries(visibleRows.map((row) => row.concept!.value));
+      const visible = new Set(
+        summaries.flatMap((row) =>
+          row.status === 'available' && row.type === 'concept' ? [row.reference] : [],
+        ),
+      );
+      for (const [offset, hit] of page.hits.entries()) {
+        const id = 'https://rezics.com/id/' + hit.id.split(':').at(-1);
+        if (hit.key && visible.has(id)) {
+          if (ids.length === limit) {
+            more = true;
+            break;
+          }
+          ids.push(id);
+        }
+        scanned++;
+        order.after = { id: hit.id, score: hit.score, document: hit.document, commit: page.commit };
+        more = offset + 1 < page.hits.length || page.more;
       }
-      } ORDER BY DESC(?followed) DESC(?usage) STR(?concept) LIMIT ${limit + 1}`,
-      limit + 1,
-    );
-    const page = rows.slice(0, limit);
-    ids = page.map((row) => row.concept!.value);
-    counts = new Map(page.map((row) => [row.concept!.value, Number(row.usage!.value)]));
-    more = rows.length > limit;
-    after = ids.at(-1) ?? '';
-    order = {
-      count: prior.count,
-      usage: page.at(-1)?.usage?.value,
-      followed: Number(page.at(-1)?.followed?.value ?? 0),
-    };
+      if (!more) break;
+    }
+    counts = await conceptCounts(session, active, ids);
+    after = order.after?.id ?? '';
+  } else {
+    // Followed identities, then the indexed most-used projection, then zero-use
+    // public names. Every seek retains at most 64 candidates, <=512 per read.
+    let phase = prior.followed ?? 2;
+    let key = cursor?.after ?? '';
+    let usage = prior.usage;
+    let scanned = 0;
+    while (ids.length < limit && scanned < 512) {
+      const ask = Math.min(64, 512 - scanned);
+      let candidates: string[],
+        candidateCounts = new Map<string, number>(),
+        tail = false;
+      if (phase === 2) {
+        candidates = topics
+          .filter((id) => id > key)
+          .sort()
+          .slice(0, ask);
+        tail = topics.filter((id) => id > key).length > ask;
+      } else if (phase === 1) {
+        const rows = await session.deps.discovery!.conceptPage(
+          active,
+          ask,
+          key ? { count: usage ?? '0', concept: key } : undefined,
+        );
+        candidates = rows.slice(0, ask).map((row) => row.concept);
+        candidateCounts = new Map(rows.map((row) => [row.concept, Number(row.work_count)]));
+        tail = rows.length > ask;
+      } else {
+        const rows = await session.query(
+          `SELECT ?concept WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ?unit a rv:PublicNameMatchUnit ; rv:resource ?concept .
+          FILTER(STRSTARTS(STR(?unit), "urn:rezics:search:name:concept:")) }
+          FILTER(STR(?concept)>${lit(key)})
+        } ORDER BY STR(?concept) LIMIT ${ask + 1}`,
+          ask + 1,
+        );
+        candidates = rows.slice(0, ask).map((row) => row.concept!.value);
+        tail = rows.length > ask;
+      }
+      if (!candidates.length) {
+        if (phase === 0) {
+          more = false;
+          break;
+        }
+        phase--;
+        key = '';
+        usage = undefined;
+        continue;
+      }
+      const rows = await session.query(
+        `SELECT DISTINCT ?concept WHERE {
+        VALUES ?concept { ${candidates.map(iri).join(' ')} } ${visibleConcept('?concept', input.realm)}
+      } LIMIT ${candidates.length + 1}`,
+        candidates.length,
+      );
+      const visible = new Set(rows.map((row) => row.concept!.value));
+      const batchCounts = await conceptCounts(session, active, candidates);
+      for (const id of candidates) {
+        if (ids.length === limit) break;
+        key = id;
+        usage = String(candidateCounts.get(id) ?? batchCounts.get(id) ?? 0);
+        scanned++;
+        if (
+          !visible.has(id) ||
+          (phase < 2 && topics.includes(id)) ||
+          (phase === 0 && batchCounts.get(id)! > 0)
+        )
+          continue;
+        ids.push(id);
+        counts.set(id, batchCounts.get(id)!);
+      }
+      more = key !== candidates.at(-1) || tail || phase > 0;
+      if (key === candidates.at(-1) && !tail && ids.length < limit) {
+        if (phase === 0) {
+          more = false;
+          break;
+        }
+        phase--;
+        key = '';
+        usage = undefined;
+      }
+    }
+    after = key;
+    order = { count: prior.count, followed: phase, usage };
   }
   if ([...counts.values()].some((count) => !Number.isSafeInteger(count) || count < 0)) {
     throw new WorkReadUnavailable('Concept usage count is invalid');
@@ -229,13 +328,8 @@ export async function readConceptSearch(
     ];
   });
   await fenceDiscoveryReader(session, reader, input.personalization !== false);
-  if (
-    JSON.stringify(
-      await session.deps.discoveryAudience.classificationAudience(session.viewer, input.realm),
-    ) !== JSON.stringify(audience)
-  ) {
-    throw new WorkReadMoved('Concept count audience changed');
-  }
+  const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
+  if (final.stale) throw new WorkReadExpired('Concept count projection changed');
   order.count += items.length;
   const next = more
     ? encodeReadCursor(binding, session.position, after, JSON.stringify(order))

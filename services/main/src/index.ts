@@ -23,7 +23,6 @@ import { AuthorReaders } from './modules/author-page/readers.ts';
 import { WorkReaderStats } from './modules/work/read-stats.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
 import { DiscoveryAudienceStore } from './modules/discovery/audience.ts';
-import { RatingPopulationsStore } from './modules/rating/populations-access.ts';
 import { AlsoEnjoyedStore } from './modules/also-enjoyed/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
 import { FeedStore } from './modules/feed/store.ts';
@@ -56,6 +55,7 @@ import { NameRegistry } from './modules/address/registry.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
+import { configureNamePreferences } from './modules/search/name-preferences.ts';
 import { configureLibraryShelves, prepareLibraryShelves } from './modules/library/backfill.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ConsumptionSessionStore } from './modules/session/store.ts';
@@ -382,6 +382,7 @@ const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrec
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
+await configureNamePreferences(environment, pool);
 configureLibraryShelves(contentPool, pool, fuseki);
 configureFollowGraph(pool, fuseki);
 configureLibraryFollows(contentPool, pool);
@@ -411,7 +412,6 @@ const app = createMainApp(fuseki, {
   homeTrending: new RankingHomeTrendingReader(readRankings),
   discovery: new DiscoveryProjection(pool),
   discoveryAudience: new DiscoveryAudienceStore(pool),
-  ratingPopulations: new RatingPopulationsStore(pool),
   alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),
   profiles: new ProfilesAccess(pool),
   studioAccess: new StudioAccess(pool, fuseki),

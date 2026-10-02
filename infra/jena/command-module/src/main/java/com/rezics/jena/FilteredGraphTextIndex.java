@@ -49,8 +49,9 @@ public final class FilteredGraphTextIndex implements TextIndex {
         public RankAfter(String id, float score, long commit) { this(id, score, commit, null); }
     }
     public record RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more) {}
-    public record RankScope(String realm, String language, String author, boolean catalogue) {
-        public RankScope(String realm, String language, String author) { this(realm, language, author, false); }
+    public record RankScope(String realm, String language, String author, boolean catalogue, String names, List<String> resources) {
+        public RankScope(String realm, String language, String author, boolean catalogue) { this(realm, language, author, catalogue, null, null); }
+        public RankScope(String realm, String language, String author) { this(realm, language, author, false, null, null); }
     }
     static final class RankRestart extends TextIndexException {
         RankRestart() { super("ranked continuation requires restart"); }
@@ -80,6 +81,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             // The API supplies a literal phrase, never Lucene operators.
             Query body = parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            boolean names = scope != null && scope.names() != null;
             boolean catalogue = scope != null && scope.catalogue();
             Query text = body;
             if (catalogue) {
@@ -120,9 +122,24 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                     .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
             }
+            if (names) query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField,
+                    PublicNameProjection.PREFIX + (scope.names().equals("all") ? "" : scope.names() + ":"))),
+                    BooleanClause.Occur.FILTER).build();
+            if (names && scope.resources() != null) {
+                if (scope.resources().size() > 64) throw new TextIndexException("name candidate bound exceeded");
+                List<org.apache.lucene.util.BytesRef> units = new ArrayList<>();
+                for (String resource : scope.resources()) {
+                    var members = data.find(PUBLIC_GRAPH, Node.ANY, uri(RV + "resource"), uri(resource));
+                    try { while (members.hasNext()) units.add(new org.apache.lucene.util.BytesRef(members.next().getSubject().getURI())); }
+                    finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                }
+                query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                    .add(new org.apache.lucene.search.TermInSetQuery(entityField, units), BooleanClause.Occur.FILTER).build();
+            }
             ScoreDoc cursor = null;
             if (after != null) {
-                if (catalogue) {
+                if (catalogue || names) {
                     // One unit can have a body and many name documents. Its
                     // URI alone cannot identify a searchAfter position.
                     if (after.document() == null || after.document() < 0 || after.document() >= reader.maxDoc()
@@ -151,10 +168,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 var hit = top.scoreDocs[n];
                 String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
                 if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("ranked document is incomplete");
-                String key = scope == null ? id : admittedMain(data, id, scope);
-                if (key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
+                String key = names ? id : scope == null ? id : admittedMain(data, id, scope);
+                if (names) {
+                    Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                        .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
+                    var best = searcher.search(entity, 1);
+                    if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc) key = null;
+                }
+                if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
                     id, hit.doc, entityField)) key = null;
-                ordered.add(new RankHit(id, hit.score, key, catalogue ? hit.doc : null));
+                ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null));
             }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
@@ -163,95 +186,6 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
 
     private static final String RV = "https://rezics.com/vocab/";
-    /** The same Jena/Lucene index and language analyzer as Works. Page the
-     * current authored labels, never a fixed top-N vocabulary sample.
-     * One entity can have many languages/aliases: only its best document is
-     * canonical, but every examined document advances the searchAfter cursor.
-     * https://jena.apache.org/documentation/query/text-query.html */
-    public RankPage rankedLabels(String phrase, int size, RankAfter after) {
-        if (size < 1 || size > 64 || phrase.length() > 80)
-            throw new TextIndexException("label page exceeds its bound");
-        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
-            long commit = reader.getIndexCommit().getGeneration();
-            if (after != null && (after.commit() != commit || after.document() == null
-                || after.document() < 0 || after.document() >= reader.maxDoc() || !Float.isFinite(after.score())))
-                throw new RankRestart();
-            List<Query> fields = new ArrayList<>();
-            for (String field : List.of("label", "name", "conceptLabel", "conceptAlias")) {
-                QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
-                parser.setDefaultOperator(QueryParser.Operator.AND);
-                String words = java.util.Arrays.stream(phrase.trim().split("\\s+"))
-                    .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-                    .collect(java.util.stream.Collectors.joining(" "));
-                fields.add(parser.parse(words));
-            }
-            Query query = new BooleanQuery.Builder()
-                .add(new org.apache.lucene.search.DisjunctionMaxQuery(fields, 0f), BooleanClause.Occur.MUST)
-                .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.CURRENT)),
-                    BooleanClause.Occur.FILTER).build();
-            IndexSearcher searcher = new IndexSearcher(reader);
-            long deadline = System.nanoTime() + 1_000_000_000L;
-            searcher.setTimeout(() -> System.nanoTime() >= deadline);
-            String entityField = lucene.getDocDef().getEntityField();
-            var stored = searcher.storedFields();
-            if (after != null && !after.id().equals(stored.document(after.document(),
-                java.util.Set.of(entityField)).get(entityField))) throw new RankRestart();
-            ScoreDoc cursor = after == null ? null : new ScoreDoc(after.document(), after.score());
-            var top = searcher.searchAfter(cursor, query, size + 1);
-            List<RankHit> ordered = new ArrayList<>();
-            for (int n = 0; n < Math.min(size, top.scoreDocs.length); n++) {
-                var hit = top.scoreDocs[n];
-                String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
-                if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("label hit is invalid");
-                Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
-                    .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
-                var best = searcher.search(entity, 1);
-                ordered.add(new RankHit(id, hit.score,
-                    best.scoreDocs.length == 1 && best.scoreDocs[0].doc == hit.doc ? id : null, hit.doc));
-            }
-            if (searcher.timedOut() || System.nanoTime() >= deadline)
-                throw new TextIndexException("label search deadline exceeded");
-            return new RankPage(List.copyOf(ordered), top.totalHits.value(),
-                top.totalHits.relation() == TotalHits.Relation.EQUAL_TO ? "exact" : "lower-bound",
-                commit, top.scoreDocs.length > size);
-        } catch (IOException | ParseException ex) { throw new TextIndexException("label search failed", ex); }
-    }
-
-    public static final class RankedLabelsFunction extends org.apache.jena.sparql.function.FunctionBase {
-        @Override public void checkBuild(String uri, org.apache.jena.sparql.expr.ExprList args) {
-            if (args.size() != 3) throw new org.apache.jena.sparql.expr.ExprEvalException("label search needs three arguments");
-        }
-        @Override public org.apache.jena.sparql.expr.NodeValue exec(List<org.apache.jena.sparql.expr.NodeValue> args) {
-            throw new org.apache.jena.sparql.expr.ExprEvalException("label search requires a dataset");
-        }
-        @Override protected org.apache.jena.sparql.expr.NodeValue exec(
-            List<org.apache.jena.sparql.expr.NodeValue> args, org.apache.jena.sparql.function.FunctionEnv env) {
-            String token = args.get(2).asString();
-            RankAfter after = null;
-            if (!token.isEmpty()) {
-                JsonObject value = org.apache.jena.atlas.json.JSON.parse(token);
-                after = new RankAfter(value.get("id").getAsString().value(),
-                    Float.parseFloat(value.get("score").getAsString().value()),
-                    Long.parseLong(value.get("commit").getAsString().value()),
-                    value.get("document").getAsNumber().value().intValue());
-            }
-            JsonObject response = new JsonObject();
-            try {
-                RankPage page = functionIndex(env).rankedLabels(args.get(0).asString(),
-                    args.get(1).getInteger().intValueExact(), after);
-                JsonArray hits = new JsonArray();
-                for (RankHit hit : page.hits()) {
-                    JsonObject row = new JsonObject(); row.put("id", hit.id());
-                    if (hit.key() == null) row.put("key", org.apache.jena.atlas.json.JsonNull.instance);
-                    else row.put("key", hit.key());
-                    row.put("score", Float.toString(hit.score())); row.put("document", hit.document()); hits.add(row);
-                }
-                response.put("hits", hits); response.put("commit", Long.toString(page.commit()));
-                response.put("more", page.more());
-            } catch (RankRestart ex) { response.put("restart", true); }
-            return org.apache.jena.sparql.expr.NodeValue.makeString(response.toString());
-        }
-    }
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static final Node PUBLIC_GRAPH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CURRENT_GRAPH = uri(CommandPolicy.CURRENT);
@@ -381,9 +315,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
             JsonObject response = new JsonObject();
             try {
                 JsonObject scopeValue = org.apache.jena.atlas.json.JSON.parse(args.get(4).asString());
+                List<String> resources = null;
+                if (scopeValue.hasKey("resources")) {
+                    resources = new ArrayList<>();
+                    for (var resource : scopeValue.get("resources").getAsArray()) resources.add(resource.getAsString().value());
+                }
                 RankScope scope = new RankScope(optionalString(scopeValue, "realm"),
                     optionalString(scopeValue, "language"), optionalString(scopeValue, "author"),
-                    scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value());
+                    scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value(),
+                    optionalString(scopeValue, "names"), resources);
                 RankPage page = index.ranked(args.get(0).asNode(), args.get(1).asString(),
                     args.get(2).getInteger().intValueExact(), after, env.getDataset(), scope);
                 JsonArray hits = new JsonArray();

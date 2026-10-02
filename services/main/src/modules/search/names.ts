@@ -57,6 +57,7 @@ export async function catalogueNameProjection(env: WorkActivationEnvironment, wo
 /** Offline refresh before the existing jena.textindexer pass. Keyset batches
  * retain O(64 * 64) names; the fixed rebuild inventory is at most 50,000 units. */
 export async function backfillCatalogueNames(env: WorkActivationEnvironment): Promise<number> {
+  await backfillPublicNames(env);
   let after = '', refreshed = 0;
   while (true) {
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?unit ?work WHERE {
@@ -104,6 +105,59 @@ export async function backfillCatalogueNames(env: WorkActivationEnvironment): Pr
     if (result.status !== 'committed') throw new PublicQueryUnavailable(`Catalogue name rebuild ${result.status}`
       + (result.status === 'invalid' ? `: ${JSON.stringify(result.report)}` : ''));
     after = batch.at(-1)!.unit!.value;
+    refreshed += batch.length;
+  }
+}
+
+/** Stopped-writer projection migration, using the existing names maintenance
+ * receipt and text wrapper. No index field or analyzer changes are required. */
+export async function backfillPublicNames(env: WorkActivationEnvironment): Promise<number> {
+  let after = '',
+    refreshed = 0;
+  while (true) {
+    const rows =
+      (
+        await env.fuseki.query(
+          `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+      SELECT DISTINCT ?resource WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ?resource a ?type . VALUES ?type { schema:CreativeWork skos:Concept rv:Space rv:Realm rv:Zone rv:Agent rv:Collection }
+      } FILTER(STR(?resource)>${lit(after)}) } ORDER BY STR(?resource) LIMIT 65`,
+          65_536,
+        )
+      ).results?.bindings ?? [];
+    if (!rows.length) return refreshed;
+    const batch = rows.slice(0, 64).map((row) => row.resource!.value);
+    if (refreshed + batch.length > 50_000)
+      throw new PublicQueryUnavailable(
+        'Public name backfill exceeds its stopped-writer inventory bound',
+      );
+    const identity = hash(JSON.stringify([env.lineage.dataEpoch, 'public-names-v1', batch]));
+    const receipt = `urn:rezics:receipt:catalogue-search-index:${identity}`,
+      digest = hash(receipt);
+    const result = await env.fuseki.commandWithReceipt({
+      receipt,
+      digest,
+      validations: [],
+      deadlineMs: 60_000,
+      update: `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
+      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+        GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+          ${batch.map((resource) => `${iri('urn:rezics:search:name:concept:' + resource.slice(-36))} rv:publicTitle "" .`).join('\n')}
+        }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:nameResource ${batch.map(iri).join(', ')} . }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri('urn:rezics:outbox:' + identity)} a rv:OutboxBatch ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
+      } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+        BIND(?n+1 AS ?next) }`,
+    });
+    if (result.status !== 'committed')
+      throw new PublicQueryUnavailable('Public name backfill ' + result.status);
+    after = batch.at(-1)!;
     refreshed += batch.length;
   }
 }

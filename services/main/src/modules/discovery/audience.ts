@@ -4,14 +4,6 @@ import { controlRead } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { PRIMARY_READING_PERSON_SQL } from '../preferences/languages.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
-import { eligible, type Labels, type Viewer } from '../suitability/policy.ts';
-import { GLOBAL_CONTEXT } from '../governance/schema.ts';
-import { summarizeJudgments } from '../judgment/policy.ts';
-
-export interface ClassificationAudience {
-  excluded: { resource: string; revision: string | null }[];
-  protection: { context: string; concepts: string[]; statements: string[]; judged: string[] }[];
-}
 
 export interface DiscoverySignals {
   owner: string;
@@ -27,91 +19,6 @@ export interface DiscoverySignals {
  * candidate membership/follow batch of at most 64 resources. */
 export class DiscoveryAudienceStore {
   constructor(private readonly pool: Pool) {}
-  /** A bounded policy snapshot for graph aggregation. The policy functions
-   * remain the same owners used by summary/count and classification reads.
-   * A policy inventory overflow refuses the read instead of dropping fences. */
-  classificationAudience(viewer: Viewer, realm?: string): Promise<ClassificationAudience> {
-    return controlRead(this.pool, async (client) => {
-      const labels: Labels[] = [[], ['r15'], ['r18'], ['r18g'], ['r18', 'r18g']];
-      const allowed = labels
-        .filter(
-          (labels) =>
-            eligible({ assessment: { status: 'assessed', labels }, viewer, channel: 'read' })
-              .eligible,
-        )
-        .map((labels) => JSON.stringify(labels));
-      const excluded = (
-        await client.query<{ resource: string; revision: string | null }>(
-          `
-        SELECT resource,revision FROM (
-          SELECT target AS resource,NULL::text AS revision FROM (
-            SELECT DISTINCT ON (target) target,labels FROM access.suitability_assessment
-            ORDER BY target,revision_number DESC) latest WHERE NOT (to_jsonb(labels)=ANY($1::jsonb[]))
-          UNION SELECT resource,revision FROM access.governance_enforcement
-            WHERE state='restricted' AND owner='graph' AND context=ANY($2::text[])
-              AND component IN ('name','title','record','publication') AND effect IN ('disclosure','search')
-        ) denied ORDER BY resource,revision NULLS FIRST LIMIT 4097`,
-          [allowed, [GLOBAL_CONTEXT, ...(realm ? [realm] : [])]],
-        )
-      ).rows;
-      if (excluded.length > 4096)
-        throw new WorkReadUnavailable('Count disclosure inventory exceeds its read budget');
-      const contexts = ['global', ...(realm ? [realm] : [])];
-      const hints = (
-        await client.query<{ concept: string; context_key: string }>(
-          `SELECT concept,context_key
-        FROM access.judgment_concept_hint WHERE context_key=ANY($1::text[]) AND hint='not-spoiler'
-        ORDER BY context_key,concept LIMIT 4097`,
-          [contexts],
-        )
-      ).rows;
-      const judgments = (
-        await client.query<{
-          statement: string;
-          context_key: string;
-          fit_negative: string;
-          fit_positive: string;
-          spoiler_none: string;
-          spoiler_minor: string;
-          spoiler_major: string;
-        }>(
-          `
-        SELECT statement,context_key,fit_negative,fit_positive,spoiler_none,spoiler_minor,spoiler_major
-        FROM access.judgment_aggregate WHERE context_key=ANY($1::text[])
-          AND (spoiler_none+spoiler_minor+spoiler_major)>0 ORDER BY context_key,statement LIMIT 4097`,
-          [contexts],
-        )
-      ).rows;
-      if (hints.length > 4096 || judgments.length > 4096) {
-        throw new WorkReadUnavailable(
-          'Classification protection inventory exceeds its read budget',
-        );
-      }
-      return {
-        excluded,
-        protection: contexts.map((context) => ({
-          context,
-          concepts: hints.filter((row) => row.context_key === context).map((row) => row.concept),
-          judged: judgments
-            .filter((row) => row.context_key === context)
-            .map((row) => row.statement),
-          statements: judgments
-            .filter(
-              (row) =>
-                row.context_key === context &&
-                summarizeJudgments({
-                  fitNegative: Number(row.fit_negative),
-                  fitPositive: Number(row.fit_positive),
-                  spoilerNone: Number(row.spoiler_none),
-                  spoilerMinor: Number(row.spoiler_minor),
-                  spoilerMajor: Number(row.spoiler_major),
-                }).spoiler.protection === 'show-all',
-            )
-            .map((row) => row.statement),
-        })),
-      };
-    });
-  }
   signals(principal: VerifiedPrincipal, actor: string): Promise<DiscoverySignals> {
     return controlRead(this.pool, async (client) => {
       const owner = await followPrincipal(client, principal, actor);

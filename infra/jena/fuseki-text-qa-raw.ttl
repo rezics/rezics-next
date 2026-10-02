@@ -6,8 +6,6 @@ PREFIX tdb2: <http://jena.apache.org/2016/tdb#>
 PREFIX text: <http://jena.apache.org/text#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rv: <https://rezics.com/vocab/>
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-PREFIX schema: <https://schema.org/>
 
 [] ja:loadClass "org.apache.jena.query.text.TextQuery" .
 <https://rezics.com/fuseki/FilteredGraphTextIndex> rdfs:subClassOf ja:Object .
@@ -42,9 +40,6 @@ PREFIX schema: <https://schema.org/>
     text:entityField "uri" ; text:defaultField "label" ;
     text:uidField "uid" ; text:graphField "graph" ; text:langField "lang" ;
     text:map ( [ text:field "label" ; text:predicate rdfs:label ]
-               [ text:field "name" ; text:predicate schema:name ]
-               [ text:field "conceptLabel" ; text:predicate skos:prefLabel ]
-               [ text:field "conceptAlias" ; text:predicate skos:altLabel ]
                [ text:field "publicTitle" ; text:predicate rv:publicTitle ]
                [ text:field "body" ; text:predicate rv:searchBody ]
                [ text:field "privateBody" ; text:predicate rv:privateSearchBody ] ) .

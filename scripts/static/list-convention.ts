@@ -31,8 +31,7 @@ const isArray = (schema: Schema) => variants(schema).some((shape) => shape.type 
 function listObjects(schema: Schema): Schema[] {
   return variants(schema).flatMap((shape) => {
     const properties = shape.properties ?? {};
-    if (shape.type === 'array' || properties.nextCursor || Object.values(properties).some(isArray))
-      return [shape];
+    if (properties.nextCursor || (properties.items && isArray(properties.items))) return [shape];
     return properties.result ? listObjects(properties.result) : [];
   });
 }
@@ -118,6 +117,9 @@ if (import.meta.main) {
   );
   const violations = listConventionViolations(document);
   if (process.argv.includes('--record-debt')) {
+    const path = resolve(import.meta.dir, 'list-convention-debt.json');
+    const debt = JSON.parse(readFileSync(path, 'utf8')) as ListViolation[];
+    if (newListViolations(document, debt).length) throw new Error('List debt may only shrink');
     writeFileSync(
       resolve(import.meta.dir, 'list-convention-debt.json'),
       JSON.stringify(violations, null, 2) + '\n',

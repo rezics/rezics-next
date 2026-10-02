@@ -14,7 +14,6 @@ import { resolveTargets } from '../target/resolve.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { indexedNameMatch, labelIndexReady, fenceLabelIndex } from '../search/labels.ts';
 import { discoveryReader, fenceDiscoveryReader } from '../discovery/reader.ts';
-import { verifiedPopulationCounts } from './populations-proof.ts';
 
 export const ratingPopulationsQuery = t.Object(
   { ...listRequestFields, target: readId, actingSubject: t.Optional(readId) },
@@ -23,7 +22,6 @@ export const ratingPopulationsQuery = t.Object(
 export const ratingPopulation = t.Object({
   id: readId,
   name: readName,
-  contexts: t.Array(readId, { minItems: 1, maxItems: 64 }),
   ratingCount: t.Integer({ minimum: 1 }),
   global: t.Boolean(),
   readerCommunity: t.Boolean(),
@@ -68,9 +66,6 @@ export async function readRatingPopulations(
     main = rows[0].main.value;
   }
   const reader = await discoveryReader(session, input.actingSubject, true, request);
-  if (main && !session.deps.ratingPopulations)
-    throw new WorkReadUnavailable('Rating population owner is unavailable');
-  const inherited = main ? await session.deps.ratingPopulations!.inherited(main) : [];
   const q = input.q?.trim() ?? '',
     limit = input.limit ?? 20;
   const index = q ? await labelIndexReady(session) : null;
@@ -78,7 +73,6 @@ export async function readRatingPopulations(
     'rating-populations-v1',
     target,
     main,
-    inherited,
     q,
     limit,
     reader?.signals ?? null,
@@ -98,21 +92,15 @@ export async function readRatingPopulations(
     }
   }
   const rows = await session.query(
-    `SELECT ?population ?count ?contexts WHERE {
-    { SELECT ?population (COUNT(DISTINCT ?availableSlot) AS ?count)
-        (GROUP_CONCAT(DISTINCT STR(?context); SEPARATOR="|") AS ?contexts) WHERE {
+    `SELECT ?population ?count WHERE {
+    { SELECT ?population (COUNT(DISTINCT ?availableSlot) AS ?count) WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ?observation rv:ratingContext ?context .
         ${
           main
             ? `{ ?observation rv:targetMainVersion ${iri(main)} .
           FILTER NOT EXISTS { ?observation rv:targetRelease ?release } }
-          ${
-            inherited.length
-              ? `UNION { VALUES (?observation ?origin) { ${inherited.map((row) => `(${iri(row.observation)} ${iri(row.origin)})`).join(' ')} }
-            ?origin rv:mergedInto+ ${iri(target)} }`
-              : ''
-          }`
+`
             : `{ ?observation rv:target ${iri(target)} }
           ${resolved!.base === 'release' ? `UNION { ?observation rv:targetRelease ${iri(target)} }` : ''}`
         }
@@ -129,12 +117,10 @@ export async function readRatingPopulations(
       ${
         q
           ? `FILTER(?population = ${iri(GLOBAL_RATING_POPULATION_OWNER)} || EXISTS {
-        BIND(?space AS ?nameResource) ${indexedNameMatch('?nameResource', q)} })`
+        ${indexedNameMatch('?population', q)} })`
           : ''
       }
-      # Keep zero-count candidates until owner verification. A partial or
-      # unsealed withdrawal must not masquerade as an empty population.
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
+      { GRAPH ${iri(GRAPHS.current)} {
           ?observation rv:observationHead ?head ; rv:ratingSlot ?availableSlot .
           ?context rv:head ?contextHead }
         GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ?observation ;
@@ -144,7 +130,7 @@ export async function readRatingPopulations(
           FILTER NOT EXISTS { ?contextHead a rv:ErasedRevision } }
         GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:observationRevision ?head ; rv:outcome rv:Succeeded .
           ?contextReceipt a rv:OperationReceipt ; rv:ratingContextRevision ?contextHead ; rv:outcome rv:Succeeded } }
-      } GROUP BY ?population }
+      } GROUP BY ?population HAVING(COUNT(DISTINCT ?availableSlot)>0) }
       ${
         cursor
           ? `FILTER(?count < ${lit(prior.count)}^^<http://www.w3.org/2001/XMLSchema#integer>
@@ -169,42 +155,25 @@ export async function readRatingPopulations(
     'search',
   );
   const visible = new Set(realms.filter((_, index) => decisions[index] === 'visible'));
-  const contexts = page
-    .filter(
-      (row) =>
-        row.population!.value === GLOBAL_RATING_POPULATION_OWNER ||
-        visible.has(row.population!.value),
-    )
-    .flatMap((row) => row.contexts!.value.split('|'));
-  const verified = await verifiedPopulationCounts(
-    session,
-    { resource: target, base: resolved!.base, main },
-    contexts,
-  );
   const items = page.flatMap((row) => {
     const id = row.population!.value,
       global = id === GLOBAL_RATING_POPULATION_OWNER;
     const summary = summaries.get(id),
       ratingCount = Number(row.count!.value);
-    const contexts = row.contexts!.value.split('|').sort();
-    if (!Number.isSafeInteger(ratingCount) || ratingCount < 0 || contexts.length > 64) {
-      throw new WorkReadUnavailable('Rating population count or Contexts exceed their domain');
+    if (!Number.isSafeInteger(ratingCount) || ratingCount < 0) {
+      throw new WorkReadUnavailable('Rating population count exceeds its domain');
     }
     if (
       !global &&
       (!visible.has(id) || summary?.status !== 'available' || summary.disclosure !== 'public')
     )
       return [];
-    if (contexts.reduce((sum, context) => sum + (verified.get(context) ?? 0), 0) !== ratingCount) {
-      throw new WorkReadUnavailable('Rating population differs from its sealed evidence');
-    }
     if (ratingCount === 0) return [];
     return [
       {
         id,
         global,
         ratingCount,
-        contexts,
         readerCommunity: flags.get(id)?.community ?? false,
         name: global
           ? {
@@ -230,13 +199,6 @@ export async function readRatingPopulations(
   }
   await fenceDiscoveryReader(session, reader);
   if (index) await fenceLabelIndex(session, index);
-  if (
-    main &&
-    JSON.stringify(await session.deps.ratingPopulations!.inherited(main)) !==
-      JSON.stringify(inherited)
-  ) {
-    throw new WorkReadMoved('Rating inheritance changed');
-  }
   const last = page.at(-1);
   const next =
     rows.length > limit && last

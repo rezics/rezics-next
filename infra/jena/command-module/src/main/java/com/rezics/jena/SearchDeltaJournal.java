@@ -321,6 +321,7 @@ final class SearchDeltaJournal {
         @Override public void finish() {}
         @Override public void reset() {}
         @Override public void change(TextQuadAction action, Node graph, Node subject, Node predicate, Node object) {
+            if (subject.isURI() && subject.getURI().startsWith(PublicNameProjection.PREFIX)) return;
             if (!PUBLIC.equals(graph) || action != TextQuadAction.ADD && action != TextQuadAction.DELETE) return;
             if (ANCHOR.equals(subject)) { reset = true; return; }
             if (!subject.isURI()) throw new IllegalArgumentException("public search subject is not an IRI");

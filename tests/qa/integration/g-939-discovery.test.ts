@@ -1,8 +1,14 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { backfillPublicNames } from '../../../services/main/src/modules/search/names.ts';
+import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
+import {
+  MANAGE_SCOPE,
+  MANAGE_ACTION,
+} from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { DiscoveryAudienceStore } from '../../../services/main/src/modules/discovery/audience.ts';
-import { RatingPopulationsStore } from '../../../services/main/src/modules/rating/populations-access.ts';
 import { SuitabilityStore } from '../../../services/main/src/modules/suitability/store.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import {
@@ -11,8 +17,12 @@ import {
   DisclosureStore,
 } from '../../../services/main/src/modules/disclosure/read.ts';
 import { defaultPreferences } from '../../../services/main/src/modules/feed/personal.ts';
-import { DEFAULT_PERSON_CHOICES } from '../../../services/main/src/modules/preferences/store.ts';
-import { GRAPHS, ID, RV, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { namePreferencesProjection } from '../../../services/main/src/modules/search/name-preferences.ts';
+import {
+  PersonPreferencesStore,
+  DEFAULT_PERSON_CHOICES,
+} from '../../../services/main/src/modules/preferences/store.ts';
+import { ID, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { deliverRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import {
   GLOBAL_CONTEXT_SCOPE,
@@ -49,8 +59,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     // new signals are manufactured by the discovery implementation.
     let rankedIds: string[] = [];
     const recommendations = {
-      fencePublicCandidates: async () => {},
-      publicCandidates: async (limit: number, cursor?: string) => {
+      page: async (_viewer: unknown, _basis: unknown, limit: number, cursor?: string) => {
         const start = cursor ? Number(cursor) : 0,
           ids = rankedIds.slice(start, start + limit);
         return {
@@ -62,10 +71,14 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     } as unknown as RankingGenerations;
     const deps = {
       ...home.deps,
+      personPreferences: new PersonPreferencesStore(
+        stack.accessPool,
+        namePreferencesProjection(stack.env),
+      ),
       mediaAccess: stack.mediaAccess,
       discoveryAudience: audience,
       recommendations,
-      ratingPopulations: new RatingPopulationsStore(stack.accessPool),
+      discovery: new DiscoveryProjection(stack.accessPool),
       targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
       suitability: new SuitabilityStore(stack.accessPool, stack.access),
     };
@@ -106,7 +119,12 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     };
     const publicWork = await stack.publicWork(author.actor, ['en'], `${token} public`);
     const privateWork = await stack.privateWork(authorAgent, `${token} private`);
-    rankedIds = [publicWork.work, privateWork.work];
+    const distractors = [];
+    for (let i = 0; i < 8; i++)
+      distractors.push(
+        (await stack.catalogueWork(authorAgent, `${token} topic distractor ${i}`)).work,
+      );
+    rankedIds = [...distractors, publicWork.work, privateWork.work];
     await author.grant('space:create:root', 'space.create');
     const community = await home.json<{ realm: string; space: string }>(
       await call(
@@ -130,6 +148,21 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
           name: `${token} private community`,
           language: 'en',
           capabilities: ['realm'],
+          actingSubject: author.actor,
+        },
+        author.token,
+      ),
+      201,
+    );
+    const hiddenZone = ID + randomUUID();
+    await author.grant(`zone:edit:${hiddenZone}`, 'zone.edit');
+    await home.json(
+      await call(
+        '/v1/zones',
+        {
+          zone: hiddenZone,
+          space: hiddenCommunity.space,
+          disclosure: 'public',
           actingSubject: author.actor,
         },
         author.token,
@@ -206,10 +239,29 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         201,
       );
     }
-    // Cardinality fixture only: native vocabulary admission and multilingual
-    // hierarchy above remain real commands. Bulk labels let this test falsify
-    // the former 256-Concept and 2,048-label inventory ceilings in one insertion.
-    const bulk = Array.from({ length: 270 }, () => ID + randomUUID());
+    // Every Concept uses the public owner command, including the large fixture.
+    const bulk: string[] = [];
+    for (let i = 0; i < 270; i++) {
+      const item = await home.json<Defined>(
+        await call(
+          '/v1/classification-vocabulary',
+          {
+            ...definition,
+            scheme: null,
+            broader: [],
+            narrower: [],
+            alternativeLabels: [],
+            labels: ['en', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'zh-Hans'].map((language) => ({
+              language,
+              value: `${token} topic ${i}`,
+            })),
+          },
+          author.token,
+        ),
+        201,
+      );
+      bulk.push(item.concept);
+    }
     const zone = ID + randomUUID();
     await author.grant(`zone:edit:${zone}`, 'zone.edit');
     await home.json(
@@ -220,20 +272,71 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       ),
       201,
     );
-    await stack.fuseki
-      .update(`PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${bulk
-          .map(
-            (
-              id,
-              i,
-            ) => `${iri(id)} a skos:Concept ; rv:conceptState rv:Active ; skos:inScheme ${iri(root.scheme)} ;
-          skos:prefLabel ${['en', 'fr', 'de', 'es', 'it', 'pt', 'ja', 'zh-Hans']
-            .map((language) => `${lit(`${token} topic ${i}`)}@${language}`)
-            .join(', ')} .`,
-          )
-          .join('\n')} } }`);
+    expect(
+      (
+        await stack.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:resource ?resource ; rv:publicTitle ?name .
+        VALUES ?resource { ${iri(hiddenCommunity.realm)} ${iri(hiddenZone)} ${iri(privateWork.work)} } }
+    }`)
+      ).boolean,
+    ).toBe(false);
+    expect(await backfillPublicNames(stack.env)).toBeGreaterThan(272);
+    expect(
+      (
+        await stack.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:resource ?resource ; rv:publicTitle ?name .
+        VALUES ?resource { ${iri(hiddenCommunity.realm)} ${iri(hiddenZone)} ${iri(privateWork.work)} } }
+    }`)
+      ).boolean,
+    ).toBe(false);
+    await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
+    const refresh = async () => {
+      let row = await home.json<{
+        generation: string;
+        checkpoint: string;
+        complete: boolean;
+        state: string;
+      }>(
+        await call(
+          '/v1/discovery/generation-builds',
+          {
+            profile: 'discovery-generation-build-v1',
+            actingSubject: author.actor,
+            basis: { scope: 'global', realm: null, context: null },
+          },
+          author.token,
+        ),
+      );
+      for (let step = 0; !row.complete && step < 30; step++)
+        row = await home.json(
+          await call(
+            `/v1/discovery/generations/${row.generation}/advance`,
+            { actingSubject: author.actor, expectedCheckpoint: row.checkpoint },
+            author.token,
+          ),
+        );
+      expect(row.complete).toBe(true);
+      const head = await home.json<{ activeHeadRevision: string | null }>(
+        await call(
+          `/v1/discovery/generations/${row.generation}?actingSubject=${encodeURIComponent(author.actor)}`,
+          undefined,
+          author.token,
+        ),
+      );
+      await home.json(
+        await call(
+          '/v1/discovery/generation-activations',
+          {
+            profile: 'discovery-generation-activation-v1',
+            actingSubject: author.actor,
+            generation: row.generation,
+            expectedHeadRevision: head.activeHeadRevision,
+          },
+          author.token,
+        ),
+      );
+    };
+    await refresh();
     expect(Date.now() - started).toBeLessThan(600_000);
     const seen: string[] = [];
     let cursor: string | undefined, final: Page | undefined;
@@ -243,7 +346,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
           `/v1/discovery/concepts?q=${token}&limit=17${cursor ? `&cursor=${cursor}` : ''}`,
         ),
       );
-      expect(final.items.length).toBeLessThanOrEqual(17);
+      expect(final.items.length).toBe(final.complete ? 272 % 17 || 17 : 17);
       seen.push(...final.items.map((item) => item.id));
       if (final.complete) break;
       expect(final.nextCursor).not.toBeNull();
@@ -289,6 +392,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     }
     expect(capabilities.sort()).toEqual([community.realm, zone].sort());
     const first = await query('http://www.w3.org/2004/02/skos/core#Concept', undefined, 3);
+    expect(first.items[0]?.id).toBe(child.concept);
     expect(first.complete).toBe(false);
     await stack.catalogueWork(authorAgent, `${token} changed`);
     expect(
@@ -336,6 +440,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       ),
     );
     const acting = `actingSubject=${encodeURIComponent(readerAgent)}`;
+    await refresh();
     const empty = await home.json<Page<{ id: string; followed: boolean }>>(
       await call(`/v1/discovery/concepts?limit=1&${acting}`, undefined, reader.token),
     );
@@ -380,6 +485,47 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         'PUT',
       ),
     );
+    const hideProfile = await home.json<{ version: number }>(
+      await call(
+        '/v1/me/person-preferences',
+        {
+          ...DEFAULT_PERSON_CHOICES,
+          profileVisibility: 'private',
+          contentLanguages: ['ja'],
+          actingSubject: readerAgent,
+          expectedVersion: preferences.version + 1,
+        },
+        reader.token,
+        'PUT',
+      ),
+    );
+    expect(
+      (
+        await stack.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
+      ?unit rv:resource ${iri(readerAgent)} ; rv:publicTitle ?name } }`)
+      ).boolean,
+    ).toBe(false);
+    await namePreferencesProjection(stack.env)(readerAgent, 'public', 0);
+    await refresh();
+    expect(await query(`${RV}Agent`, undefined, 7, `${token} reader`)).toMatchObject({
+      items: [],
+      complete: true,
+      nextCursor: null,
+    });
+    await home.json(
+      await call(
+        '/v1/me/person-preferences',
+        {
+          ...DEFAULT_PERSON_CHOICES,
+          contentLanguages: ['ja'],
+          actingSubject: readerAgent,
+          expectedVersion: hideProfile.version,
+        },
+        reader.token,
+        'PUT',
+      ),
+    );
+    await refresh();
     const languageSections = await home.json<
       Page<{ id: string; page: Page; reason: { kind: string } }>
     >(await call(`/v1/discovery/sections?${acting}`, undefined, reader.token));
@@ -396,17 +542,10 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     );
     const popularPage = popularFirst.items[0]!.page;
     expect(popularPage.items.map((item) => item.id)).toEqual([publicWork.work]);
-    expect(popularPage.complete).toBe(false);
-    const popularNext = await home.json<Page<{ id: string; page: Page }>>(
-      await call(
-        `/v1/discovery/sections?section=popular&limit=1&cursor=${popularPage.nextCursor}&${acting}`,
-        undefined,
-        reader.token,
-      ),
-    );
-    expect(popularNext.items[0]!.page).toMatchObject({
-      items: [],
+    // Refill and lookahead consume the private tail, so a full final page is complete.
+    expect(popularPage).toMatchObject({
       complete: true,
+      nextCursor: null,
       count: { kind: 'exact', value: 1 },
     });
     const principal = await deps.account.verify(
@@ -421,6 +560,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       },
       randomUUID(),
     );
+    await refresh();
     const disabled = await home.json<{ personalized: boolean }>(
       await call(`/v1/discovery/sections?${acting}`, undefined, reader.token),
     );
@@ -560,7 +700,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       await call(`/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}`),
     );
     expect(remaining.items.map((item) => item.id)).toEqual([GLOBAL_RATING_POPULATION_OWNER]);
-    let dailyRevision: string | undefined;
+    let experienceContext = '';
     for (const cadence of ['daily', 'experience'] as const) {
       const context = await home.json<{ context: string }>(
         await call(
@@ -577,7 +717,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         201,
       );
       await author.grant(`rating:observe:${context.context}`, 'rating.observation.set');
-      const cadenceRating = await home.json<{ observationRevision: string }>(
+      await home.json<{ observationRevision: string }>(
         await call(
           '/v1/rating-observations',
           {
@@ -590,13 +730,35 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         ),
         201,
       );
-      if (cadence === 'daily') dailyRevision = cadenceRating.observationRevision;
+      if (cadence === 'experience') experienceContext = context.context;
     }
     const cadencePopulations = await home.json<Page<{ id: string; ratingCount: number }>>(
       await call(`/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}`),
     );
     expect(cadencePopulations.items.map((item) => [item.id, item.ratingCount])).toEqual([
       [community.realm, 2],
+      [GLOBAL_RATING_POPULATION_OWNER, 1],
+    ]);
+    // A population read is an aggregate, not a replay of a bounded vote inventory.
+    for (let vote = 0; vote < 1001; vote++)
+      await home.json(
+        await call(
+          '/v1/rating-observations',
+          {
+            ...realmRating,
+            context: experienceContext,
+            profile: 'realm-experience-rating-observation-v1',
+            occasion: randomUUID(),
+          },
+          author.token,
+        ),
+        201,
+      );
+    const manyRatings = await home.json<Page<{ id: string; ratingCount: number }>>(
+      await call(`/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}`),
+    );
+    expect(manyRatings.items.map((item) => [item.id, item.ratingCount])).toEqual([
+      [community.realm, 1003],
       [GLOBAL_RATING_POPULATION_OWNER, 1],
     ]);
     await author.grant('semantic:create:root', 'semantic.change');
@@ -671,17 +833,6 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     expect(targetPopulations.items.map((item) => [item.id, item.ratingCount])).toEqual([
       [community.realm, 1],
     ]);
-    // Native evidence tampering must fail closed, including when it turns a
-    // whole Context's apparent count into zero before owner verification.
-    const availability = async (remove: string, add: string) =>
-      stack.fuseki.update(`PREFIX rv: <${RV}>
-      DELETE DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(dailyRevision!)} rv:ratingAvailability rv:${remove} } };
-      INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(dailyRevision!)} rv:ratingAvailability rv:${add} } }`);
-    await availability('Available', 'Withdrawn');
-    expect(
-      (await call(`/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}`)).status,
-    ).toBe(503);
-    await availability('Withdrawn', 'Available');
     // Suitability is Access state: no graph mutation or graph cursor movement
     // can be relied on to keep aggregate Concept usage from leaking it.
     await author.grant(`work:edit:${publicWork.work}`, 'work.edit');
@@ -698,6 +849,23 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         'PUT',
       ),
     );
+    expect((await call(`/v1/discovery/concepts?q=${token}%20urban`)).status).toBe(409);
+    // Isolated Access fixture: historical restrictions on unrelated identities
+    // must not become a global inventory limit on a bounded Concept page.
+    const restrictedIds = Array.from({ length: 5000 }, () => ({
+      id: randomUUID(),
+      target: ID + randomUUID(),
+    }));
+    await stack.accessPool.query(
+      `INSERT INTO access.suitability_assessment
+      (id,target,labels,basis,assessor,principal_id,revision_number,authority_proof,idempotency_key,request_digest)
+      SELECT fixture.id::uuid,fixture.target,source.labels,source.basis,source.assessor,source.principal_id,
+        1,source.authority_proof,fixture.id,source.request_digest
+      FROM jsonb_to_recordset($1::jsonb) fixture(id text,target text)
+      CROSS JOIN access.suitability_assessment source WHERE source.target=$2`,
+      [JSON.stringify(restrictedIds), publicWork.work],
+    );
+    await refresh();
     const restricted = await home.json<Page<{ id: string; usageCount: number }>>(
       await call(`/v1/discovery/concepts?q=${token}%20urban`),
     );

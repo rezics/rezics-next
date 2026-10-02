@@ -19,7 +19,7 @@ final class CatalogueNamePolicy {
     static boolean namesOnly(CommandPolicy.Plan plan) {
         if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)) return false;
         return java.util.stream.Stream.concat(modify.getInsertQuads().stream(), modify.getDeleteQuads().stream())
-            .filter(quad -> PUBLIC.equals(quad.getGraph())).allMatch(quad -> rv("publicTitle").equals(quad.getPredicate()));
+            .filter(quad -> PUBLIC.equals(quad.getGraph())).allMatch(PublicNameProjection::nameMaintenanceQuad);
     }
     private static Node one(DatasetGraph data, Node graph, Node subject, Node predicate) {
         var found = data.find(graph, subject, predicate, Node.ANY);
