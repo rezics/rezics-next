@@ -645,6 +645,65 @@ export class RankingGenerations {
       expiresAt: Date.now() + CURSOR_TTL_MS } satisfies CursorToken) : null };
   }
 
+  /** Public Discover consumes the existing explicit rating ranking. This
+   * adapter reveals candidates only to an owner that rechecks public disclosure;
+   * it grants no personal/Realm ranking authority and has no cold fallback. */
+  async publicCandidates(limit: number, continuation?: string): Promise<RankingPage> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 64) throw new RecommendationDenied('Invalid candidate page');
+    const basis: RankingBasis = { profile: RANKING_PROFILE, population: { kind: 'public' },
+      candidateGrain: 'work', semantic: null };
+    const viewer = 'public-discover-v1', basisDigest = digest(basis);
+    const token = continuation ? this.open(continuation) : undefined;
+    if (token && (token.v !== 1 || token.viewer !== viewer || token.basis !== basisDigest || token.expiresAt < Date.now())) {
+      throw new RecommendationRestart('Public ranking cursor changed');
+    }
+    const window = await inAccess(this.options.access, async client => {
+      await requireRecoveryOpen(client);
+      const scope = scopeKey(basis, null, this.options.dataEpoch);
+      const head = (await client.query<{ generation: string; erasure_epoch: string }>(`
+        SELECT g.id::text AS generation, g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
+        FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
+        WHERE h.family='ranking' AND h.scope_key=$1 AND g.state='ready'`, [scope])).rows[0];
+      if (!head) throw new RecommendationMissing('Public ranking has no active generation');
+      if (token && token.generation !== head.generation) throw new RecommendationRestart('Public ranking changed');
+      const rows = (await client.query<{ candidate: string; score: string }>(`SELECT candidate,score::text AS score
+        FROM access.ranking_score WHERE generation_id=$1
+          AND ($2::numeric IS NULL OR score<$2::numeric OR (score=$2::numeric AND candidate>$3))
+        ORDER BY score DESC,candidate LIMIT $4`,
+      [head.generation, token?.after.score ?? null, token?.after.candidate ?? '', limit + 1])).rows;
+      return { ...head, rows };
+    });
+    await this.assertContributorsCurrent(window.generation, window.erasure_epoch ?? '0');
+    const scanned = window.rows.slice(0, limit);
+    const ids = scanned.map(row => row.candidate);
+    const erased = await this.erased(ids);
+    const unverified = await this.options.unverifiedWorks?.(ids) ?? new Set<string>();
+    const last = scanned.at(-1);
+    return { generation: window.generation,
+      items: scanned.filter(row => !erased.has(row.candidate) && !unverified.has(row.candidate))
+        .map(row => ({ candidate: row.candidate })),
+      continuation: window.rows.length > limit && last ? this.seal({ v: 1, viewer, basis: basisDigest,
+        generation: window.generation, after: last, expiresAt: Date.now() + CURSOR_TTL_MS } satisfies CursorToken) : null };
+  }
+
+  /** Recheck after public card hydration: erased contributors or a replacement
+   * generation cannot lend their old order to the delivered section. */
+  async fencePublicCandidates(generation: string): Promise<void> {
+    const basis: RankingBasis = { profile: RANKING_PROFILE, population: { kind: 'public' },
+      candidateGrain: 'work', semantic: null };
+    const since = await inAccess(this.options.access, async client => {
+      await requireRecoveryOpen(client);
+      const row = (await client.query<{ erasure_epoch: string }>(`SELECT
+        g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
+        FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
+        WHERE h.family='ranking' AND h.scope_key=$1 AND g.id=$2 AND g.state='ready'`,
+      [scopeKey(basis, null, this.options.dataEpoch), generation])).rows[0];
+      if (!row) throw new RecommendationRestart('Public ranking changed');
+      return row.erasure_epoch ?? '0';
+    });
+    await this.assertContributorsCurrent(generation, since);
+  }
+
   /** A new Account erasure makes a generation with that contributor unavailable immediately. */
   private async assertContributorsCurrent(generation: string, since: string): Promise<void> {
     let erased: { account_issuer: string; account_subject: string }[];

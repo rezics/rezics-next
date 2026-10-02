@@ -109,6 +109,7 @@ import { releaseRoutes } from './routes/releases.ts';
 import { realizationRoutes } from './routes/realizations.ts';
 import { webPublicationRoutes } from './routes/web-publications.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
+import { ratingPopulationRoutes } from './routes/rating-populations.ts';
 import { followsRoutes } from './routes/follows.ts';
 import { feedRoutes } from './routes/feed.ts';
 import { reviewRoutes } from './routes/reviews.ts';
@@ -186,6 +187,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(progressSummariesRoutes(work))
     .use(readingPositionsRoutes(work))
     .use(queryRoutes(fuseki, work))
+    .use(ratingPopulationRoutes(work))
     .use(savedFilterRoutes(work))
     .use(reviewRoutes(work))
     .use(managedRealmRoutes(work))

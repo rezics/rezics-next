@@ -22,6 +22,8 @@ import { LibraryImportRetentionWorker } from './modules/library-import/retention
 import { AuthorReaders } from './modules/author-page/readers.ts';
 import { WorkReaderStats } from './modules/work/read-stats.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
+import { DiscoveryAudienceStore } from './modules/discovery/audience.ts';
+import { RatingPopulationsStore } from './modules/rating/populations-access.ts';
 import { AlsoEnjoyedStore } from './modules/also-enjoyed/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
 import { FeedStore } from './modules/feed/store.ts';
@@ -408,6 +410,8 @@ const app = createMainApp(fuseki, {
   savedFilters: new SavedFilterStore(pool),
   homeTrending: new RankingHomeTrendingReader(readRankings),
   discovery: new DiscoveryProjection(pool),
+  discoveryAudience: new DiscoveryAudienceStore(pool),
+  ratingPopulations: new RatingPopulationsStore(pool),
   alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),
   profiles: new ProfilesAccess(pool),
   studioAccess: new StudioAccess(pool, fuseki),

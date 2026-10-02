@@ -43,6 +43,7 @@ export const openApiOperations = { '/v1/realms': { get: { bearer: false } },
 
 export function realmDirectoryRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/classification-vocabulary', {
+    detail: { deprecated: true, description: 'Deprecated. Use /v1/discovery/concepts for searchable, cursor-paged topics.' },
     query: t.Object({ language: t.Optional(readLanguage),
       q: t.Optional(t.String({ minLength: 1, maxLength: 80 })) }, { additionalProperties: false }),
     response: { 200: t.Object({ profile: t.Literal('shared-vocabulary-v1'),
@@ -53,6 +54,7 @@ export function realmDirectoryRoutes(work: MainWorkDependencies) {
       session => readSharedVocabulary(session, options.q)), { headers }); }
     catch (error) { return directoryError(error); }
   }).get('/v1/realms', { query,
+    detail: { deprecated: true, description: 'Deprecated. Use the resource-list-v1 profile of /v1/query with the type Facet for communities.' },
     response: { 200: realmDirectoryPage, ...errors },
   }, async ({ request, query: options }) => {
     try {

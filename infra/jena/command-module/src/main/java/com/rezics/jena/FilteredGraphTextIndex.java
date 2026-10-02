@@ -163,6 +163,95 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
 
     private static final String RV = "https://rezics.com/vocab/";
+    /** The same Jena/Lucene index and language analyzer as Works. Page the
+     * current authored labels, never a fixed top-N vocabulary sample.
+     * One entity can have many languages/aliases: only its best document is
+     * canonical, but every examined document advances the searchAfter cursor.
+     * https://jena.apache.org/documentation/query/text-query.html */
+    public RankPage rankedLabels(String phrase, int size, RankAfter after) {
+        if (size < 1 || size > 64 || phrase.length() > 80)
+            throw new TextIndexException("label page exceeds its bound");
+        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            long commit = reader.getIndexCommit().getGeneration();
+            if (after != null && (after.commit() != commit || after.document() == null
+                || after.document() < 0 || after.document() >= reader.maxDoc() || !Float.isFinite(after.score())))
+                throw new RankRestart();
+            List<Query> fields = new ArrayList<>();
+            for (String field : List.of("label", "name", "conceptLabel", "conceptAlias")) {
+                QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
+                parser.setDefaultOperator(QueryParser.Operator.AND);
+                String words = java.util.Arrays.stream(phrase.trim().split("\\s+"))
+                    .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                    .collect(java.util.stream.Collectors.joining(" "));
+                fields.add(parser.parse(words));
+            }
+            Query query = new BooleanQuery.Builder()
+                .add(new org.apache.lucene.search.DisjunctionMaxQuery(fields, 0f), BooleanClause.Occur.MUST)
+                .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.CURRENT)),
+                    BooleanClause.Occur.FILTER).build();
+            IndexSearcher searcher = new IndexSearcher(reader);
+            long deadline = System.nanoTime() + 1_000_000_000L;
+            searcher.setTimeout(() -> System.nanoTime() >= deadline);
+            String entityField = lucene.getDocDef().getEntityField();
+            var stored = searcher.storedFields();
+            if (after != null && !after.id().equals(stored.document(after.document(),
+                java.util.Set.of(entityField)).get(entityField))) throw new RankRestart();
+            ScoreDoc cursor = after == null ? null : new ScoreDoc(after.document(), after.score());
+            var top = searcher.searchAfter(cursor, query, size + 1);
+            List<RankHit> ordered = new ArrayList<>();
+            for (int n = 0; n < Math.min(size, top.scoreDocs.length); n++) {
+                var hit = top.scoreDocs[n];
+                String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
+                if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("label hit is invalid");
+                Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                    .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
+                var best = searcher.search(entity, 1);
+                ordered.add(new RankHit(id, hit.score,
+                    best.scoreDocs.length == 1 && best.scoreDocs[0].doc == hit.doc ? id : null, hit.doc));
+            }
+            if (searcher.timedOut() || System.nanoTime() >= deadline)
+                throw new TextIndexException("label search deadline exceeded");
+            return new RankPage(List.copyOf(ordered), top.totalHits.value(),
+                top.totalHits.relation() == TotalHits.Relation.EQUAL_TO ? "exact" : "lower-bound",
+                commit, top.scoreDocs.length > size);
+        } catch (IOException | ParseException ex) { throw new TextIndexException("label search failed", ex); }
+    }
+
+    public static final class RankedLabelsFunction extends org.apache.jena.sparql.function.FunctionBase {
+        @Override public void checkBuild(String uri, org.apache.jena.sparql.expr.ExprList args) {
+            if (args.size() != 3) throw new org.apache.jena.sparql.expr.ExprEvalException("label search needs three arguments");
+        }
+        @Override public org.apache.jena.sparql.expr.NodeValue exec(List<org.apache.jena.sparql.expr.NodeValue> args) {
+            throw new org.apache.jena.sparql.expr.ExprEvalException("label search requires a dataset");
+        }
+        @Override protected org.apache.jena.sparql.expr.NodeValue exec(
+            List<org.apache.jena.sparql.expr.NodeValue> args, org.apache.jena.sparql.function.FunctionEnv env) {
+            String token = args.get(2).asString();
+            RankAfter after = null;
+            if (!token.isEmpty()) {
+                JsonObject value = org.apache.jena.atlas.json.JSON.parse(token);
+                after = new RankAfter(value.get("id").getAsString().value(),
+                    Float.parseFloat(value.get("score").getAsString().value()),
+                    Long.parseLong(value.get("commit").getAsString().value()),
+                    value.get("document").getAsNumber().value().intValue());
+            }
+            JsonObject response = new JsonObject();
+            try {
+                RankPage page = functionIndex(env).rankedLabels(args.get(0).asString(),
+                    args.get(1).getInteger().intValueExact(), after);
+                JsonArray hits = new JsonArray();
+                for (RankHit hit : page.hits()) {
+                    JsonObject row = new JsonObject(); row.put("id", hit.id());
+                    if (hit.key() == null) row.put("key", org.apache.jena.atlas.json.JsonNull.instance);
+                    else row.put("key", hit.key());
+                    row.put("score", Float.toString(hit.score())); row.put("document", hit.document()); hits.add(row);
+                }
+                response.put("hits", hits); response.put("commit", Long.toString(page.commit()));
+                response.put("more", page.more());
+            } catch (RankRestart ex) { response.put("restart", true); }
+            return org.apache.jena.sparql.expr.NodeValue.makeString(response.toString());
+        }
+    }
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static final Node PUBLIC_GRAPH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CURRENT_GRAPH = uri(CommandPolicy.CURRENT);
