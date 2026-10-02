@@ -1,5 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
@@ -63,16 +75,57 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
 
 export function sourceIdentity(root: string): { head: string; fingerprint: string; clean: boolean } {
   const head = command(root, 'git', ['rev-parse', 'HEAD'], 5_000);
-  const status = command(root, 'git', ['status', '--porcelain=v1', '--untracked-files=all'], 5_000);
-  const diff = command(root, 'git', ['diff', '--binary', 'HEAD'], 10_000,process.env,64*1024*1024);
+  const status = command(
+    root,
+    'git',
+    ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+    5_000,
+  );
   if (!head.ok || !status.ok) throw new Error('Cannot identify source tree');
-  if (!diff.ok) throw new Error('Cannot identify source tree: git diff failed or exceeded the 64 MiB output limit');
-  const hash = createHash('sha256').update(head.output).update(diff.output);
-  for (const line of status.output.split('\n').filter(Boolean)) {
-    const path = line.slice(3);
-    if (line.startsWith('??') && existsSync(join(root, path))) {
-      hash.update(path).update(readFileSync(join(root, path)));
+  const hash = createHash('sha256').update(head.output);
+  const scratch = join(root, '.temp');
+  mkdirSync(scratch, { recursive: true });
+  const directory = mkdtempSync(join(scratch, 'qa-source-'));
+  const diffFile = join(directory, 'diff');
+  const output = openSync(diffFile, 'w', 0o600);
+  try {
+    // A file descriptor bypasses spawnSync's maxBuffer. Hash the bytes in
+    // bounded chunks, including large generated/binary diffs, without truncation.
+    // https://nodejs.org/api/child_process.html#optionsstdio
+    const diff = spawnSync('git', ['diff', '--binary', '--no-ext-diff', 'HEAD'], {
+      cwd: root,
+      stdio: ['ignore', output, 'pipe'],
+      timeout: 10_000,
+    });
+    if (diff.error || diff.status !== 0)
+      throw new Error('Cannot identify source tree: git diff failed');
+    const addFile = (path: string) => {
+      const input = openSync(path, 'r');
+      const chunk = Buffer.allocUnsafe(64 * 1024);
+      try {
+        for (let bytes; (bytes = readSync(input, chunk, 0, chunk.length, null)) > 0;) {
+          hash.update(chunk.subarray(0, bytes));
+        }
+      } finally {
+        closeSync(input);
+      }
+    };
+    addFile(diffFile);
+    // -z leaves spaces, quotes and newlines in untracked names unambiguous.
+    const entries = status.output.split('\0');
+    for (let index = 0; index < entries.length; index++) {
+      const line = entries[index]!;
+      // Renames/copies carry a second pathname in porcelain -z; it has no XY
+      // prefix and must not be mistaken for an untracked status record.
+      if (/[RC]/.test(line.slice(0, 2))) { index++; continue; }
+      if (!line.startsWith('?? ')) continue;
+      const path = line.slice(3);
+      hash.update(path).update('\0');
+      addFile(join(root, path));
     }
+  } finally {
+    closeSync(output);
+    rmSync(directory, { recursive: true, force: true });
   }
   return { head: head.output.trim(), fingerprint: hash.digest('hex'), clean: !status.output.trim() };
 }
@@ -197,9 +250,18 @@ export function writeSummary(directory: string, report: {
 
 // Stack tiers run their files in parallel QA projects ("shards"). Each shard
 // owns one disposable project; results merge into the tier's single JUnit file.
-export interface ShardRecord { project: string; files: string[]; status: 'passed' | 'failed';
-  stage: 'stack' | 'bootstrap' | 'test'; elapsedMs?: number; isolation?: boolean;
-  startupMs?: number; bootstrapMs?: number; cleanupMs?: number }
+export interface ShardRecord {
+  project: string;
+  files: string[];
+  status: 'passed' | 'failed';
+  stage: 'stack' | 'bootstrap' | 'test';
+  elapsedMs?: number;
+  isolation?: boolean;
+  startupMs?: number;
+  bootstrapMs?: number;
+  cleanupMs?: number;
+  missingFiles?: string[];
+}
 export interface IsolationRecord { tier: Tier; file: string; afterProject: string; afterFiles: number;
   project?: string; shardFailures: string[];
   status: 'order-dependent' | 'infrastructure-dependent' | 'failed-alone' | 'not-run' }
@@ -304,16 +366,24 @@ function logResults(text: string): { durations: Map<string, number>; failedFiles
   return { durations, failedFiles };
 }
 
-function stackUnavailable(runPath: string, tier: Tier): boolean {
+function stackUnavailable(runPath: string, tier: Tier): boolean | Set<string> {
   if (!['integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier)) return false;
   const artifact = tierArtifactName(tier);
   const acceptance = join(runPath, 'acceptance.json');
   if (existsSync(acceptance)) {
     try {
       const report = JSON.parse(readFileSync(acceptance, 'utf8')) as {
-        tiers?: { name?: string; shards?: { stage?: string }[] }[] };
+        tiers?: { name?: string; shards?: { stage?: string; files?: string[] }[] }[];
+      };
       const record = report.tiers?.find(item => item.name === tier);
-      if (record?.shards?.some(shard => shard.stage === 'stack' || shard.stage === 'bootstrap')) return true;
+      const failed =
+        record?.shards?.filter(shard => shard.stage === 'stack' || shard.stage === 'bootstrap') ??
+        [];
+      if (failed.length) {
+        return failed.every((shard) => Array.isArray(shard.files))
+          ? new Set(failed.flatMap((shard) => shard.files!))
+          : true;
+      }
     } catch {
       // Older or interrupted reports may not have usable shard metadata; logs
       // below still identify a recorded startup or bootstrap failure.
@@ -331,8 +401,12 @@ function stackUnavailable(runPath: string, tier: Tier): boolean {
 
 // Recorded per-file time for a tier: the largest of the last three observations
 // across the given artifact roots, from merged JUnit or, for killed runs, logs.
-export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRuns = 60,
-  observations = 3): Map<string, number> {
+export function recordedFileDurations(
+  artifactRoots: string[],
+  tier: Tier,
+  maxRuns = 60,
+  observations = 3,
+): Map<string, number> {
   const artifact = tierArtifactName(tier);
   const logName = new RegExp(`^${artifact}(?:-f?r?\\d+)?\\.log$`);
   const runs = artifactRoots.filter(existsSync).flatMap(dir => readdirSync(dir, { withFileTypes: true })
@@ -345,7 +419,8 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
   for (const run of runs) {
     // Stack startup/bootstrap failures can make every case finish quickly
     // without measuring test work. Do not let any such run affect history.
-    if (stackUnavailable(run.path, tier)) continue;
+    const unavailable = stackUnavailable(run.path, tier);
+    if (unavailable === true) continue;
     const perRun = new Map<string, number>();
     const failedFiles = new Set<string>();
     const junitFileFailures = new Map<string, boolean>();
@@ -368,6 +443,22 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
           perRun.set(file, Math.max(perRun.get(file) ?? 0, ms));
         }
       }
+      for (const name of readdirSync(join(run.path, 'logs'))) {
+        if (!new RegExp(`^${artifact}-.+-durations\\.json$`).test(name)) continue;
+        try {
+          const durations = JSON.parse(
+            readFileSync(join(run.path, 'logs', name), 'utf8'),
+          ) as Record<string, unknown>;
+          for (const [file, ms] of Object.entries(durations)) {
+            if (typeof ms === 'number' && Number.isFinite(ms) && ms >= 0) {
+          perRun.set(file, Math.max(perRun.get(file) ?? 0, ms));
+        }
+          }
+        } catch {
+      // Older or interrupted reports may not have usable shard metadata; logs
+      // below still identify a recorded startup or bootstrap failure.
+    }
+      }
     }
     // The merged JUnit is authoritative when a failed shared-project case was
     // recovered by its isolated rerun. A log-only failure remains disqualifying.
@@ -378,6 +469,7 @@ export function recordedFileDurations(artifactRoots: string[], tier: Tier, maxRu
     // Logs only contain result lines for files that started; failed files are
     // discarded as a whole even if some tests in them passed first.
     for (const file of failedFiles) perRun.delete(file);
+    if (unavailable instanceof Set) for (const file of unavailable) perRun.delete(file);
     for (const [file, ms] of perRun) {
       const list = observed.get(file) ?? [];
       if (list.length < observations) observed.set(file, [...list, ms]);
@@ -524,15 +616,17 @@ function scheduledPlanDurationMs(projects: string[][], estimates: ReadonlyMap<st
 
 /** Explain when the current bounded plan is estimated to exceed its tier budget. */
 export function stackPlanBudgetWarning(estimates: ReadonlyMap<string, number>, budgetMs: number,
-  shards: number, maximum: number, tier: 'integration' | 'fault/recovery'): string | undefined {
+  shards: number, maximum: number, tier: 'integration' | 'fault/recovery',
+  planner?: (count: number) => string[][]): string | undefined {
   if (!estimates.size) return undefined;
+  const plan = (count: number) => planner?.(count) ?? planStackProjects(estimates, count, tier);
   const workers = Math.max(1, Math.min(shards, estimates.size));
-  const estimatedMs = scheduledPlanDurationMs(planStackProjects(estimates, workers, tier), estimates, workers);
+  const estimatedMs = scheduledPlanDurationMs(plan(workers), estimates, workers);
   if (estimatedMs <= budgetMs) return undefined;
 
   let fittingShards: number | undefined;
   for (let count = 1; count <= estimates.size; count++) {
-    const duration = scheduledPlanDurationMs(planStackProjects(estimates, count, tier), estimates, count);
+    const duration = scheduledPlanDurationMs(plan(count), estimates, count);
     if (duration <= budgetMs) { fittingShards = count; break; }
   }
   const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
@@ -661,10 +755,16 @@ export function goalSlotDirectory(root: string): string | undefined {
 
 // Shares the Goal's QA slots (`goalctl slot`, GOAL_QA_SLOTS): a run started under
 // a slot keeps it and takes free slots for extra shards without waiting.
-export function acquireQaSlots(directory: string | undefined, wanted: number,
-  env: NodeJS.ProcessEnv = process.env, pid = process.pid): { count: number; release: () => void } {
+export function acquireQaSlots(
+  directory: string | undefined,
+  wanted: number,
+  env: NodeJS.ProcessEnv = process.env,
+  pid = process.pid,
+): { count: number; release: () => void } {
   if (!directory) return { count: wanted, release: () => {} };
-  const total = /^[1-9]\d*$/.test(env.GOAL_QA_SLOTS ?? '') ? Number(env.GOAL_QA_SLOTS) : 8;
+  // Match goalctl's default; inventing slots 3..7 bypasses the manager's pool
+  // and can put more JVMs beside the shared stacks than the host can hold.
+  const total = /^[1-9]\d*$/.test(env.GOAL_QA_SLOTS ?? '') ? Number(env.GOAL_QA_SLOTS) : 3;
   const lineage = ancestors(pid);
   const owner = (path: string) => existsSync(join(path, 'pid')) ? Number(readFileSync(join(path, 'pid'), 'utf8')) : 0;
   const held = Array.from({ length: total }, (_, k) => join(directory, String(k)))

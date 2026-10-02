@@ -10,6 +10,10 @@ services:
       - ./postgres/00-owners.sh:/docker-entrypoint-initdb.d/00-owners.sh:ro,Z
 
   fuseki:
+    # Container memory includes tmpfs; eight QA JVMs must fit beside dev.
+    mem_limit: ${REZICS_QA_FUSEKI_MEMORY_LIMIT:-2g}
+    environment:
+      JVM_ARGS: ${REZICS_QA_FUSEKI_JVM_ARGS:--Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m}
     healthcheck:
       start_interval: 500ms
     command: ["/opt/apache-jena-fuseki-6.2.0/fuseki-server", "--port=3030", "--no-cors", "--timeout=10000", "--config=/fuseki/fuseki-text-qa.ttl"]

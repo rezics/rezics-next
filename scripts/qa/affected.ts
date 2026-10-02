@@ -9,6 +9,7 @@ import {
   isQaModelPath,
   legacyHostJenaGateFiles,
   testArgs,
+  unitHarnessFiles,
 } from './acceptance.ts';
 
 // Affected-test selection for routine batches. It narrows what an agent runs;
@@ -41,7 +42,7 @@ const testFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const stackTiers: AffectedTier[] = ['model', 'integration', 'fault/recovery'];
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
 // The registered unit tier: `tests/qa/unit` plus its gate files.
-const registeredUnit = testArgs('unit');
+const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
 const inRegisteredUnit = (path: string) =>
   registeredUnit.some((entry) => path === entry || path.startsWith(`${entry}/`));
 

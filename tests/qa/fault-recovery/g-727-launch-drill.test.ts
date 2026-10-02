@@ -47,7 +47,7 @@ function task(name: string, args: string[], timeout = 120_000): void {
   }
 }
 
-// No corpus build and no skip: routine QA restores a retained small fixture;
+// The harness prepares the retained small fixture once before starting shards;
 // the manager supplies a prepared medium copy for the exclusive launch run.
 test('G-727: fixture owner restore meets its timed budget and source read/takeout probes', async () => {
   const retainedRecipient = Bun.env.OPS_RECOVERY_RECIPIENT;
@@ -90,7 +90,14 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
         );
       // Preparation is outside the backup/restore timers. Never rebuild or write
       // to the retained fixture; only fixture:restore creates the writable copy.
-      task('fixture:restore', ['--fixture', manifest.id, '--run-id', sourceId], 600_000);
+      const preparedMs = Number(Bun.env.G727_LAUNCH_PREPARATION_MS ?? '0');
+      if (!Number.isFinite(preparedMs) || preparedMs < 0 || preparedMs >= 600_000)
+        throw new Error('Small-fixture preparation exhausted its 600-second budget');
+      task(
+        'fixture:restore',
+        ['--fixture', manifest.id, '--run-id', sourceId],
+        600_000 - preparedMs,
+      );
     }
     const preparation = JSON.parse(
       readFileSync(join(root, '.artifacts', 'fixture-restore', sourceId, 'run.json'), 'utf8'),
@@ -105,6 +112,13 @@ test('G-727: fixture owner restore meets its timed budget and source read/takeou
       (requestedProfile && preparation.profile !== requestedProfile)
     )
       throw new Error('Source lacks successful matching fixture:restore evidence');
+    if (
+      (preparation.elapsedMs ?? 600_001) + Number(Bun.env.G727_LAUNCH_PREPARATION_MS ?? '0') >
+      600_000
+    )
+      throw new Error(
+        'Fixture build and writable restore exceeded the 600-second preparation budget',
+      );
     const expectedWorks = expected ?? String(manifest.entities.works);
     expect(String(preparation.works)).toBe(expectedWorks);
     const sample = manifest.samples[0];

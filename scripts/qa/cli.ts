@@ -1,15 +1,54 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acquireFullLock, acquireQaSlots, artifactRoots, backendTiers, command, commandAsync, concurrencyGate, estimatedDurations,
-  expandTestPaths, faultRecoveryBaselineDurations, goalSlotDirectory, implementedTiers, isolatedFaultFiles,
-  isolatedIntegrationFiles, isolationCandidates,
-  junitSuites, LOAD_FIXTURE_ID, LOAD_PREPARATION_BUDGET_MS, loadFixturePlan,
-  matchedNoTests, maximumShards, mergeJUnit, newRunId, parseArgs, planStackProjects,
-  recordedFileDurations, selfManagedFaultFiles, shardCount,
-  stackPlanBudgetWarning, shardResolved, sourceIdentity, splitTestArgs,
-  tierArtifactName, uncoveredTiers, writeSummary, xmlForCommand, type IsolationRecord, type ShardRecord,
-  type Tier } from './core.ts';
-import { caseInventory, e2eArgs, failedSelection, junitResults, parseJUnit, testArgs } from './acceptance.ts';
+import {
+  acquireFullLock,
+  acquireQaSlots,
+  artifactRoots,
+  backendTiers,
+  command,
+  commandAsync,
+  concurrencyGate,
+  estimatedDurations,
+  expandTestPaths,
+  faultRecoveryBaselineDurations,
+  goalSlotDirectory,
+  implementedTiers,
+  isolationCandidates,
+  junitSuites,
+  LOAD_FIXTURE_ID,
+  LOAD_PREPARATION_BUDGET_MS,
+  loadFixturePlan,
+  matchedNoTests,
+  maximumShards,
+  mergeJUnit,
+  newRunId,
+  parseArgs,
+  planStackProjects,
+  recordedFileDurations,
+  selfManagedFaultFiles,
+  shardCount,
+  stackPlanBudgetWarning,
+  shardResolved,
+  sourceIdentity,
+  splitTestArgs,
+  tierArtifactName,
+  uncoveredTiers,
+  writeSummary,
+  xmlForCommand,
+  type IsolationRecord,
+  type ShardRecord,
+  type Tier,
+} from './core.ts';
+import {
+  caseInventory,
+  e2eArgs,
+  failedSelection,
+  junitResults,
+  parseJUnit,
+  testArgs,
+  UNEXECUTED_FILE_TEST,
+  unitHarnessFiles,
+} from './acceptance.ts';
 import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
@@ -18,6 +57,9 @@ import { browserBudgets, browserFileCounts, browserProjectCount } from './browse
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
+import { planIntegrationShards } from './integration-shards.ts';
+import { completeFileResults, lastStartedTestFile } from './file-results.ts';
+import { qaStackEnvironment } from './stack-environment.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -32,6 +74,7 @@ const errors: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
 const childStackRegistries = new Set<string>();
+const faultFixtureEnvironment: NodeJS.ProcessEnv = {};
 const inventory = caseInventory(root);
 const backendSelection = options.backend ? selectBackendCases(inventory) : undefined;
 const cases = backendSelection?.cases ?? inventory;
@@ -70,9 +113,20 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 
 // One disposable QA project: start, bootstrap, run the files, then reset it
 // unless --keep, so finished shards release their capacity early.
-async function runShard(tier: StackTier, projectRunId: string, files: string[], flags: string[],
-  budget: number, isolated = false,
-  startStack?: <T>(work: () => Promise<T>) => Promise<T>): Promise<ShardRun> {
+async function runShard(
+  tier: StackTier,
+  projectRunId: string,
+  files: string[],
+  flags: string[],
+  budget: number,
+  isolated = false,
+  startStack?: <T>(work: () => Promise<T>) => Promise<T>,
+  batches: string[][] = [files],
+): Promise<ShardRun> {
+  const environment = qaStackEnvironment({
+    ...process.env,
+    ...(tier === 'fault/recovery' ? faultFixtureEnvironment : {}),
+  });
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
   const persistent = tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
   const stackArgs = ['--profile', 'qa', '--run-id', projectRunId, ...(persistent ? ['--persistent'] : [])];
@@ -81,6 +135,14 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
     ...(isolated ? { isolation: true } : {}) };
   const finish = async (run: Omit<ShardRun, 'record'>): Promise<ShardRun> => {
+    if (record.stage !== 'test') {
+      const results = completeFileResults(run.xml ?? '', files, tier, {
+        interrupted: true,
+        reason: `Shard ${record.stage} failed before tests ran`,
+      });
+      run.xml = results.xml;
+      record.missingFiles = results.missing;
+    }
     if (!run.ok && needsStack) {
       const stackLogs = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:logs', ...stackArgs], 20_000);
       writeFileSync(join(logs, `${label}-stack.log`), stackLogs.output);
@@ -97,9 +159,11 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   let compose: Record<string, string> = {};
   if (needsStack) {
     started.push(projectRunId);
-    const upCommand = () => commandAsync(root, 'bun',
-      ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000,
-      { ...process.env, [QA_STACK_TIER]: tier });
+    const upCommand = () =>
+      commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000, {
+        ...environment,
+        [QA_STACK_TIER]: tier,
+      });
     const up = await (startStack ? startStack(upCommand) : upCommand());
     record.startupMs = up.elapsedMs;
     if (!up.ok) {
@@ -116,7 +180,13 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
     writeFileSync(appsPath, JSON.stringify(apps), { mode: 0o600 });
     writeFileSync(composePath, JSON.stringify(compose), { mode: 0o600 });
     record.stage = 'bootstrap';
-    const bootstrap = await commandAsync(root, 'bun', ['scripts/qa/bootstrap.ts', appsPath, composePath], 180_000);
+    const bootstrap = await commandAsync(
+      root,
+      'bun',
+      ['scripts/qa/bootstrap.ts', appsPath, composePath],
+      180_000,
+      environment,
+    );
     record.bootstrapMs = bootstrap.elapsedMs;
     if (!bootstrap.ok) {
       errors.push(`${tier} shared bootstrap failed: ${projectRunId} (see logs/${label}-bootstrap.log)`);
@@ -130,25 +200,106 @@ async function runShard(tier: StackTier, projectRunId: string, files: string[], 
   const registry = join(root, '.temp', 'qa-child-stacks', projectRunId);
   childStackRegistries.add(registry);
   const testStart = Date.now();
-  const result = await commandAsync(root, 'bun', ['test', ...files, ...flags, '--reporter=junit',
-    `--reporter-outfile=${outfile}`], budget,
-  { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
+  const testEnvironment = () => ({
+    ...environment,
+    ...apps,
+    REZICS_QA_RUN_ID: projectRunId,
     [QA_STACK_REGISTRY]: registry,
     REZICS_QA_ARTIFACT_DIR: directory,
     ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId } : {}),
     ...(needsStack && tier === 'fault/recovery' ? {
       TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
-      TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}) });
+      TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}),
+  });
+  const suites: string[] = [];
+  const output: string[] = [];
+  const fileDurations: Record<string, number> = {};
+  let commandOk = true,
+    timedOut = false,
+    noMatch = true;
+  for (let index = 0; index < batches.length; index++) {
+    let resetMs = 0;
+    if (Date.now() - testStart >= budget) {
+      timedOut = true;
+      commandOk = false;
+      break;
+    }
+    if (index > 0) {
+      const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
+      const reset = await commandAsync(
+        root,
+        'bun',
+        [
+          'scripts/qa/integration-reset.ts',
+          join(stackDir, 'apps.env'),
+          join(stackDir, 'compose.env'),
+        ],
+        Math.min(180_000, budget - (Date.now() - testStart)),
+        environment,
+      );
+      output.push(reset.output);
+      resetMs = reset.elapsedMs;
+      if (!reset.ok) {
+        timedOut ||= reset.timedOut;
+        commandOk = false;
+        break;
+      }
+      apps = readEnv(join(stackDir, 'apps.env'));
+    }
+    const batch = batches[index]!;
+    const batchFile =
+      batches.length === 1 ? outfile : outfile.replace(/\.xml$/, `-${index + 1}.xml`);
+    const result = await commandAsync(
+      root,
+      'bun',
+      ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
+      Math.max(1, budget - (Date.now() - testStart)),
+      testEnvironment(),
+    );
+    output.push(result.output);
+    const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
+    noMatch &&= empty;
+    timedOut ||= result.timedOut;
+    commandOk &&= result.ok || empty;
+    const results = completeFileResults(
+      existsSync(batchFile) ? readFileSync(batchFile, 'utf8') : '',
+      batch,
+      tier,
+      {
+        filtered: flags.includes('-t'),
+        interrupted: result.timedOut,
+        incompleteFiles: result.timedOut ? [lastStartedTestFile(result.output)].filter((file): file is string => Boolean(file)) : [],
+        reason: result.timedOut ? 'Shard timed out before this file completed' : undefined,
+      },
+    );
+    commandOk &&= !results.missing.length;
+    suites.push(...junitSuites(results.xml).map((suite) => suite.xml));
+    // Single-file commands include hooks, database cloning and process startup.
+    if (batch.length === 1 && result.ok && !results.missing.length) {
+      fileDurations[batch[0]!] = result.elapsedMs + resetMs;
+    }
+    if (result.timedOut) break;
+  }
   const testEnd = Date.now();
   const cleanupFailures = await resetChildStacks(registry);
   if (cleanupFailures.length) writeFileSync(join(logs, `${label}-cleanup.log`), cleanupFailures.join('\n'));
-  record.elapsedMs = result.elapsedMs;
-  const noMatch = !result.ok && !result.timedOut && matchedNoTests(result.output);
-  const ok = (result.ok || noMatch) && result.elapsedMs <= budget && !cleanupFailures.length;
-  if (!ok) writeFileSync(join(logs, `${label}.log`), result.output);
-  return finish({ ok, timedOut: result.timedOut, noMatch, testStart, testEnd,
-    xml: existsSync(outfile) ? readFileSync(outfile, 'utf8')
-      : xmlForCommand(tier, false, result.elapsedMs, result.output) });
+  record.elapsedMs = testEnd - testStart;
+  const results = completeFileResults(mergeJUnit(suites, record.elapsedMs), files, tier, {
+    filtered: flags.includes('-t'),
+    interrupted: timedOut || !commandOk,
+    reason: timedOut
+      ? 'Shard timed out; file did not complete'
+      : 'Shard stopped before this file produced results',
+  });
+  record.missingFiles = results.missing;
+  const ok =
+    commandOk && !results.missing.length && record.elapsedMs <= budget && !cleanupFailures.length;
+  // Retain successful logs too: they supply durations when a later command or
+  // another project prevents the tier's merged reporter from being written.
+  writeFileSync(join(logs, `${label}.log`), output.join('\n'));
+  writeFileSync(join(logs, `${label}-durations.json`), JSON.stringify(fileDurations));
+  writeFileSync(outfile, results.xml);
+  return finish({ ok, timedOut, noMatch, testStart, testEnd, xml: results.xml });
 }
 
 function failedTests(run: ShardRun, tier: StackTier): Map<string, string[]> {
@@ -181,18 +332,62 @@ async function runStackTier(tier: StackTier): Promise<void> {
     ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();
   const estimates = estimatedDurations(expandTestPaths(root, paths),
     tier === 'fault/recovery' ? new Map([...recorded, ...faultRecoveryBaselineDurations, ...local]) : recorded);
-  const ownProjects = tier === 'integration' ? isolatedIntegrationFiles : isolatedFaultFiles;
-  const isolated = [...estimates.keys()].filter(file => ownProjects.has(file)).length;
+  // Prepare the small retained owner cut once before any JVM shards start.
+  // The launch drill restores only its isolated writable copy; medium launch
+  // qualification continues to use its explicitly prepared source/fixture.
+  if (
+    tier === 'fault/recovery' &&
+    estimates.has('tests/qa/fault-recovery/g-727-launch-drill.test.ts') &&
+    !process.env.G727_LAUNCH_SOURCE_RUN_ID &&
+    !process.env.G727_LAUNCH_FIXTURE &&
+    (process.env.G727_LAUNCH_PROFILE ?? 'small') === 'small'
+  ) {
+    const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
+    const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
+    const prepared = await commandAsync(
+      root,
+      'bun',
+      ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
+      LOAD_PREPARATION_BUDGET_MS,
+      { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
+    );
+    writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
+    if (!prepared.ok) {
+      errors.push(
+        'fault/recovery small-fixture preparation failed or exceeded 600s (see logs/fault-recovery-fixture-preparation.log)',
+      );
+      writeFileSync(
+        join(directory, `${artifact}.xml`),
+        completeFileResults('', [...estimates.keys()], tier, {
+          reason: 'Small-fixture preparation failed before the tier ran',
+        }).xml,
+      );
+      tiers.push({ name: tier, status: 'failed', elapsedMs: prepared.elapsedMs });
+      return;
+    }
+    const report = JSON.parse(readFileSync(preparationFile, 'utf8')) as {
+      fixture: string;
+      elapsedMs: number;
+    };
+    faultFixtureEnvironment.REZICS_FIXTURE_ROOT = fixtureRoot;
+    faultFixtureEnvironment.G727_LAUNCH_FIXTURE = report.fixture;
+    faultFixtureEnvironment.G727_LAUNCH_PREPARATION_MS = String(prepared.elapsedMs);
+  }
   const maximum = maximumShards(process.env, tier);
-  const wanted = tier === 'fault/recovery' ? Math.min(maximum, estimates.size)
-    : Math.min(maximum, estimates.size, Math.max(
-      shardCount(estimates, budget, maximum) + Number(isolated > 0 && isolated < estimates.size), isolated));
+  const wanted =
+    tier === 'fault/recovery'
+      ? Math.min(maximum, estimates.size)
+      : shardCount(estimates, budget, maximum);
   const slots = acquireQaSlots(goalSlotDirectory(root), wanted);
   mkdirSync(join(directory, 'shards'), { recursive: true });
   try {
     const prefix = tier === 'integration' ? '' : 'f';
-    const projects = planStackProjects(estimates, slots.count, tier);
-    const warning = stackPlanBudgetWarning(estimates, budget, slots.count, maximum, tier);
+    const integration =
+      tier === 'integration' ? planIntegrationShards(estimates, slots.count) : undefined;
+    const projects =
+      integration?.map((shard) => shard.files) ?? planStackProjects(estimates, slots.count, tier);
+    const warning = stackPlanBudgetWarning(estimates, budget, slots.count, maximum, tier,
+      tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
     const runs = new Array<ShardRun>(projects.length);
     let project = 0;
@@ -200,13 +395,23 @@ async function runStackTier(tier: StackTier): Promise<void> {
     // Integration already holds one global slot per live project. Let those
     // slots start together; a second three-start gate serializes their turnover.
     const startInitialStack = concurrencyGate(tier === 'integration' ? slots.count : Math.min(slots.count, 3));
-    await Promise.all(Array.from({ length: Math.min(slots.count, projects.length) }, async () => {
-      while (project < projects.length) {
-        const index = project++;
-        runs[index] = await runShard(tier, `${runId}-${prefix}${index + 1}`, projects[index]!, flags,
-          budget, false, startInitialStack);
-      }
-    }));
+    await Promise.all(
+      Array.from({ length: Math.min(slots.count, projects.length) }, async () => {
+        while (project < projects.length) {
+          const index = project++;
+          runs[index] = await runShard(
+            tier,
+            `${runId}-${prefix}${index + 1}`,
+            projects[index]!,
+            flags,
+            budget,
+            false,
+            startInitialStack,
+            integration?.[index]?.batches,
+          );
+        }
+      }),
+    );
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
       && run.record.files.length > 1)
       .flatMap(run => isolationCandidates(run.xml ?? '', tier)
@@ -244,7 +449,15 @@ async function runStackTier(tier: StackTier): Promise<void> {
     for (const rerun of replaced.values()) suites.push(...junitSuites(rerun.xml ?? '').map(suite => suite.xml));
     const completed = reruns.filter((run): run is ShardRun => run !== undefined);
     const elapsedMs = testWall(runs) + testWall(completed);
-    writeFileSync(join(directory, `${artifact}.xml`), mergeJUnit(suites, elapsedMs));
+    const finalResults = completeFileResults(
+      mergeJUnit(suites, elapsedMs),
+      [...estimates.keys()],
+      tier,
+      { filtered: flags.includes('-t'), interrupted: runs.some((run) => run.timedOut), elapsedMs },
+    );
+    writeFileSync(join(directory, `${artifact}.xml`), finalResults.xml);
+    if (finalResults.missing.length)
+      errors.push(`${tier} files did not run: ${finalResults.missing.join(', ')}`);
     for (const run of [...runs, ...completed]) {
       if (run.record.stage !== 'test' || (run.record.isolation ? run.ok : resolved(run))) continue;
       const label = `${artifact}-${run.record.project.slice(runId.length + 1)}`;
@@ -256,7 +469,9 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const ok = executed && elapsedMs <= budget && runs.every(resolved) && completed.every(run => run.ok);
     tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs,
       shards: [...runs, ...completed].map(run => run.record) });
-  } finally { slots.release(); }
+  } finally {
+    slots.release();
+  }
 }
 
 try {
@@ -267,8 +482,19 @@ try {
   }
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
-    if (tier === 'unit') runTier(tier, 'bun', ['test', ...testArgs('unit', selection, chosen), '--reporter=junit',
-      `--reporter-outfile=${join(directory, 'unit.xml')}`], 180_000);
+    if (tier === 'unit')
+      runTier(
+        tier,
+        'bun',
+        [
+          'test',
+          ...testArgs('unit', selection, chosen),
+          ...(!selection && !chosen ? unitHarnessFiles : []),
+          '--reporter=junit',
+          `--reporter-outfile=${join(directory, 'unit.xml')}`,
+        ],
+        180_000,
+      );
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
       startedProjects.push(projectRunId);
@@ -458,8 +684,16 @@ try {
       || tier === 'model' || tier === 'fault/recovery' || tier === 'e2e' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {
-        if (!tests.some(actual => actual.tier === expected.tier && actual.file === expected.file
-          && actual.name === expected.name)) errors.push(`Selected test was not executed: ${expected.file}: ${expected.name}`);
+        if (
+          !tests.some(
+            (actual) =>
+              actual.tier === expected.tier && actual.file === expected.file &&
+              (expected.name === UNEXECUTED_FILE_TEST
+                ? actual.name !== UNEXECUTED_FILE_TEST && !actual.skipped
+                : actual.name === expected.name),
+          )
+        )
+          errors.push(`Selected test was not executed: ${expected.file}: ${expected.name}`);
       }
     }
     writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers, isolation,
@@ -476,7 +710,9 @@ try {
         process.exitCode = 1;
       }
     }
-  } finally { release(); }
+  } finally {
+    release();
+  }
   console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));
   console.log(`QA artifacts: ${directory}`);
   if (errors.length) process.exitCode = 1;
