@@ -122,7 +122,8 @@ function embeddedComponent(inline: boolean, label: string) {
   });
 }
 
-export function documentExtensions({ placeholder = '', unknownComponentLabel, maxLength, blocks = true }: { placeholder?: string; unknownComponentLabel: string; maxLength?: number; blocks?: boolean }) {
+/** `emptyLineHint` labels empty top-level lines after the first, where a writer may not know a block can be inserted. */
+export function documentExtensions({ placeholder = '', emptyLineHint, unknownComponentLabel, maxLength, blocks = true }: { placeholder?: string; emptyLineHint?: string; unknownComponentLabel: string; maxLength?: number; blocks?: boolean }) {
   return [
     StarterKit.configure({
       trailingNode: false,
@@ -134,7 +135,7 @@ export function documentExtensions({ placeholder = '', unknownComponentLabel, ma
     ...(blocks ? [SafeImage.configure({ allowBase64: false }), Media,
       embeddedComponent(false, unknownComponentLabel), embeddedComponent(true, unknownComponentLabel)] : []),
     TextAlign.configure({ types: ['paragraph', 'heading'] }),
-    Placeholder.configure({ placeholder }),
+    Placeholder.configure({ placeholder: ({ editor, pos }) => editor.isEmpty ? placeholder : emptyLineHint && editor.state.doc.resolve(pos).depth === 0 ? emptyLineHint : '' }),
     CharacterCount.configure({ limit: maxLength, textCounter: text => Array.from(text).length }),
     UniqueID.configure({ types: [...blockTypes, 'extensionInline'], generateID: () => crypto.randomUUID() }),
   ];

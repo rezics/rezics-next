@@ -211,6 +211,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @tiptap/pm | 3.31.4 | packages/ui |
 | @tiptap/react | 3.31.4 | packages/ui |
 | @tiptap/starter-kit | 3.31.4 | packages/ui |
+| @tiptap/suggestion | 3.31.4 | packages/ui |
 | @types/bun | 1.4.2 | apps/about, apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
 | @types/markdown-it | 14.2.0 | packages/document |
 | @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |

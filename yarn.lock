@@ -4502,6 +4502,7 @@ __metadata:
     "@tiptap/pm": "npm:3.31.4"
     "@tiptap/react": "npm:3.31.4"
     "@tiptap/starter-kit": "npm:3.31.4"
+    "@tiptap/suggestion": "npm:3.31.4"
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.7"
     lucide-react: "npm:1.47.0"
@@ -5837,6 +5838,17 @@ __metadata:
     "@tiptap/extensions": "npm:3.31.4"
     "@tiptap/pm": "npm:3.31.4"
   checksum: 10c0/6fadfedee9d6f64bf689451b1104e165c9d05fa39e2d8e0ac601e332b1422e444282fdf74fc4352d9739cc07685b29fc23188b773e8e7d65efb0b4905983cac9
+  languageName: node
+  linkType: hard
+
+"@tiptap/suggestion@npm:3.31.4":
+  version: 3.31.4
+  resolution: "@tiptap/suggestion@npm:3.31.4"
+  peerDependencies:
+    "@floating-ui/dom": ^1.0.0
+    "@tiptap/core": 3.31.4
+    "@tiptap/pm": 3.31.4
+  checksum: 10c0/9bccc2e4b4e925cb068712081d0201644d4c2c73bdfed9b5ab8e5ccacf33ea6d8638c10ac4585b549fd2d921735afb4c7d9536e8d916876b0aca46bbddf512e8
   languageName: node
   linkType: hard
 

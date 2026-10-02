@@ -597,6 +597,7 @@
 .rezics-document span.document-component { display: inline; padding: 0.12em 0.35em; }
 .rezics-document .ProseMirror-selectednode { outline: 2px solid var(--primary); outline-offset: 2px; }
 .rezics-document .document-spoiler-authored { background: var(--accent); color: var(--accent-foreground); border-radius: var(--radius-sm); }
-.rezics-document p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: inline-start; color: var(--muted-foreground); height: 0; pointer-events: none; }
+.rezics-document .tiptap .is-empty[data-placeholder]::before { content: attr(data-placeholder); float: inline-start; color: var(--muted-foreground); height: 0; pointer-events: none; }
+.rezics-document .tiptap .is-empty:not(.is-editor-empty)[data-placeholder]::before { opacity: 0.72; }
 [data-placeholder-dir='ltr'] .tiptap [data-placeholder]::before { unicode-bidi: plaintext; text-align: left; direction: ltr; }
 [data-placeholder-dir='rtl'] .tiptap [data-placeholder]::before { unicode-bidi: plaintext; text-align: right; direction: rtl; }

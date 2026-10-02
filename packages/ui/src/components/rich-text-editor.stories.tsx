@@ -1,7 +1,7 @@
 import { fromPlainText, normalizeDocument, withDocumentIds, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, fireEvent, userEvent, within } from 'storybook/test';
+import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { dismissed, settled } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { DocumentBody } from './document-body.tsx';
@@ -20,11 +20,11 @@ const richDocument = normalizeDocument({ version: 'rezics-document-v1', profile:
   { type: 'extensionBlock', attrs: { definition: 'https://example.test/components/timeline', version: '1', payload: { format: 'EDTF', date: '2026-10-02', items: [1, 2] }, fallback: 'Timeline: 2 October 2026' } },
 ] }) });
 
-function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean }) {
+function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine' }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse' }) {
   const [value, setValue] = useState(initial);
   const [changes, setChanges] = useState(0);
   return <div className="mx-auto flex max-w-4xl flex-col gap-6">
-    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'}
+    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode}
       onChange={next => { setValue(next); setChanges(count => count + 1); }} />
     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><output aria-label="Changes">{changes}</output> changes
       <Button variant="outline" size="sm" onClick={() => setValue(fromPlainText('Restored document.', initial.profile))}>Restore document</Button>
@@ -131,21 +131,212 @@ export const RightToLeft: Story = {
   render: () => <RichTextEditor label="Arabic document" value={fromPlainText('بدأ المطر عند الغروب.', 'text')} onChange={() => {}} lang="ar" dir="rtl" />,
 };
 
+/** A drag selection inside the first block, which ProseMirror reads as a text selection rather than the whole document. */
+async function selectText(editor: HTMLElement) {
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor.querySelector('p, h1, h2, h3') as Element);
+  window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+  await new Promise(resolve => setTimeout(resolve, 100));
+}
+
+function selectAll(editor: HTMLElement) {
+  return userEvent.click(editor).then(() => userEvent.keyboard('{Control>}a{/Control}'));
+}
+
 export const ContextualForum: Story = {
   render: () => <Example initial={fromPlainText('A reply with formatting.', 'blocks')} compact contextual />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const editor = await canvas.findByRole('textbox', { name: 'Document' });
     await expect(canvasElement.querySelector('[data-slot="editor-toolbar"]')).toBeNull();
-    await userEvent.click(editor);
-    await userEvent.keyboard('{Control>}a{/Control}');
-    const menu = await canvas.findByRole('group', { name: 'Text formatting' });
+    await selectAll(editor);
+    const menu = await canvas.findByRole('group', { name: 'Format text' });
     await userEvent.click(within(menu).getByRole('button', { name: 'Bold' }));
     await expect(editor.querySelector('strong')).toHaveTextContent('A reply with formatting.');
     const bounds = menu.getBoundingClientRect();
     await expect(bounds.left).toBeGreaterThanOrEqual(0);
     await expect(bounds.top).toBeGreaterThanOrEqual(0);
     await expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const SelectionPanel: Story = {
+  render: () => <Example initial={fromPlainText('Turn this line into something else.', 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    const before = editor.querySelector('p')?.getAttribute('data-id');
+    await expect(before).toBeTruthy();
+    await selectAll(editor);
+    const panel = await canvas.findByRole('group', { name: 'Format text' });
+    // Every row of the panel is visible at once, in fixed positions.
+    for (const name of ['Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code', 'Spoiler', 'Clear formatting', 'Left', 'Center'])
+      await expect(within(panel).getByRole('button', { name })).toBeVisible();
+    await expect(within(panel).getByRole('button', { name: /^Link/ })).toBeVisible();
+    await expect(within(panel).getByRole('button', { name: /^Ruby annotation/ })).toBeVisible();
+    await userEvent.click(within(panel).getByRole('button', { name: /^Turn into/ }));
+    const listEl = await canvas.findByRole('menu', { name: 'Turn into' });
+    const list = within(listEl);
+    await expect(list.getAllByRole('menuitemradio')).toHaveLength(9);
+    await expect(list.getByRole('menuitemradio', { name: 'Paragraph' })).toHaveAttribute('aria-checked', 'true');
+    const rect = (canvas.getByRole('menu', { name: 'Turn into' })).getBoundingClientRect();
+    await expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
+    await userEvent.click(list.getByRole('menuitemradio', { name: 'Heading 2' }));
+    await expect(editor.querySelector('h2')).toHaveTextContent('Turn this line into something else.');
+    // The block keeps its identity when its type changes.
+    await expect(editor.querySelector('h2')?.getAttribute('data-id')).toBe(before);
+    await userEvent.click(within(panel).getByRole('button', { name: 'Italic' }));
+    await expect(editor.querySelector('h2 em')).toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole('button', { name: /^Turn into/ }));
+    const second = await canvas.findByRole('menu', { name: 'Turn into' });
+    await userEvent.click(await within(second).findByRole('menuitemradio', { name: 'Bullet list' }));
+    await expect(editor.querySelector('ul li p')).toHaveTextContent('Turn this line into something else.');
+    await expect(editor.querySelector('h2')).toBeNull();
+  },
+};
+
+export const LinkInPanel: Story = {
+  render: () => <Example initial={fromPlainText('Read the guide today.', 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await selectAll(editor);
+    const panel = await canvas.findByRole('group', { name: 'Format text' });
+    await userEvent.click(within(panel).getByRole('button', { name: /^Link/ }));
+    const field = await canvas.findByRole('textbox', { name: 'URL' });
+    await expect(canvas.queryByRole('dialog')).toBeNull();
+    await userEvent.type(field, 'javascript:alert(1){Enter}');
+    await expect(await canvas.findByRole('alert')).toBeInTheDocument();
+    await userEvent.clear(field);
+    await userEvent.type(field, 'https://example.test/guide{Enter}');
+    await expect(editor.querySelector('a')).toHaveAttribute('href', 'https://example.test/guide');
+    await expect(editor.querySelector('a')).toHaveTextContent('Read the guide today.');
+  },
+};
+
+export const LinkPopover: Story = {
+  render: () => <Example initial={normalizeDocument({ version: 'rezics-document-v1', profile: 'blocks', doc: withDocumentIds({ type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'See ' }, { type: 'text', text: 'the guide', marks: [{ type: 'link', attrs: { href: 'https://example.test/old' } }] }, { type: 'text', text: ' now.' }] },
+  ] }) })} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await userEvent.click(editor.querySelector('a') as HTMLElement);
+    const menu = await canvas.findByRole('group', { name: 'Link' });
+    await expect(within(menu).getByText('https://example.test/old')).toBeInTheDocument();
+    await expect(within(menu).getByRole('link', { name: 'Open link' })).toHaveAttribute('rel', 'noopener noreferrer');
+    await userEvent.click(within(menu).getByRole('button', { name: 'Edit link' }));
+    const field = await canvas.findByRole('textbox', { name: 'URL' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'https://example.test/new{Enter}');
+    await expect(editor.querySelector('a')).toHaveAttribute('href', 'https://example.test/new');
+    await userEvent.click(await canvas.findByRole('button', { name: 'Remove link' }, { timeout: 2000 }).catch(() => editor));
+    await userEvent.click(editor.querySelector('a') ?? editor);
+    const again = canvas.queryByRole('button', { name: 'Remove link' });
+    if (again) await userEvent.click(again);
+    await expect(editor.querySelector('a')).toBeNull();
+    await expect(editor).toHaveTextContent('See the guide now.');
+  },
+};
+
+export const SlashMenu: Story = {
+  render: () => <Example initial={fromPlainText('', 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await userEvent.click(editor);
+    await userEvent.keyboard('/');
+    const list = await canvas.findByRole('listbox', { name: 'Insert block' });
+    await expect(within(list).getAllByRole('option').length).toBeGreaterThanOrEqual(9);
+    await expect(editor).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.keyboard('head');
+    await expect(within(list).getAllByRole('option')).toHaveLength(3);
+    await userEvent.keyboard('{ArrowDown}{Enter}');
+    await expect(editor.querySelector('h2')).toBeInTheDocument();
+    await expect(editor).toHaveTextContent('');
+    await expect(canvas.queryByRole('listbox')).toBeNull();
+    await userEvent.type(editor, 'Title{Enter}/zzz', { skipClick: true });
+    await expect(await canvas.findByText('No matching blocks')).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await expect(canvas.queryByRole('listbox')).toBeNull();
+    await expect(editor).toHaveTextContent('Title/zzz');
+    await userEvent.keyboard('{Enter}/div{Enter}');
+    await expect(editor.querySelector('hr')).toBeInTheDocument();
+  },
+};
+
+export const KeyboardLink: Story = {
+  render: () => <Example initial={fromPlainText('Shortcut text.', 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await selectAll(editor);
+    await userEvent.keyboard('{Control>}k{/Control}');
+    await userEvent.type(await canvas.findByRole('textbox', { name: 'URL' }), 'https://example.test/{Enter}');
+    await expect(editor.querySelector('a')).toHaveAttribute('href', 'https://example.test/');
+  },
+};
+
+export const TouchToolbar: Story = {
+  render: () => <Example initial={fromPlainText('Phone writing.', 'blocks')} contextual pointerMode="coarse" />,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    // A finger selects with the system's own handles: no floating panel, and no button below the text.
+    await expect(canvas.queryByRole('button', { name: 'Format text' })).toBeNull();
+    await selectText(editor);
+    await expect(canvasElement.querySelector('[data-slot="editor-selection-menu"]')).toBeNull();
+    const bar = await page.findByRole('toolbar', { name: 'Text formatting' });
+    await expect(bar.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
+    await userEvent.click(within(bar).getByRole('button', { name: 'Bold' }));
+    await expect(editor.querySelector('strong')).toHaveTextContent('Phone writing.');
+    // The keyboard stays up: the editor still has focus after a tap on the bar.
+    await expect(editor).toHaveFocus();
+    for (const button of within(bar).getAllByRole('button')) await expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(40);
+    await userEvent.click(within(bar).getByRole('button', { name: 'Format text' }));
+    const drawer = await page.findByRole('dialog');
+    await userEvent.click(within(drawer).getByRole('button', { name: 'Heading 1' }));
+    await waitFor(() => expect(editor.querySelector('h1')).toHaveTextContent('Phone writing.'));
+    await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('button', { name: 'Insert block' }));
+    const insert = await page.findByRole('dialog');
+    await userEvent.click(within(insert).getByRole('button', { name: 'Divider' }));
+    await waitFor(() => expect(editor.querySelector('hr')).toBeInTheDocument());
+    // Inserting a block keeps the text that was selected.
+    await expect(editor.querySelector('h1')).toHaveTextContent('Phone writing.');
+  },
+};
+
+export const TouchRuby: Story = {
+  render: () => <Example initial={fromPlainText('漢', 'blocks')} contextual pointerMode="coarse" />,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await selectText(editor);
+    await userEvent.click(await page.findByRole('button', { name: 'Format text' }));
+    const drawer = await page.findByRole('dialog');
+    await userEvent.click(within(drawer).getByRole('button', { name: 'Ruby annotation' }));
+    const dialog = await page.findByRole('dialog', { name: 'Ruby annotation' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Pronunciation' }), 'ㄏㄢˋ');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }));
+    await expect(editor.querySelector('ruby rt')).toHaveTextContent('ㄏㄢˋ');
+  },
+};
+
+export const CompactTouchToolbar: Story = {
+  render: () => <Example initial={fromPlainText('Reply.', 'text')} compact contextual pointerMode="coarse" />,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(await canvas.findByRole('textbox', { name: 'Document' }));
+    const bar = await page.findByRole('toolbar', { name: 'Text formatting' });
+    await expect(within(bar).queryByRole('button', { name: 'Insert block' })).toBeNull();
+    await expect(within(bar).getByRole('button', { name: 'Spoiler' })).toBeVisible();
   },
 };
 
@@ -160,7 +351,7 @@ export const ContextMenuFormatting: Story = {
     await fireEvent.contextMenu(editor, { clientX: left + width / 2, clientY: top + height / 2 });
     const page = within(canvasElement.ownerDocument.body);
     const menu = await page.findByRole('menu', { name: 'Format text' });
-    await userEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Italic' }));
+    await userEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /^Italic/ }));
     await expect(editor.querySelector('em')).toHaveTextContent('Preserve this selection.');
     await dismissed('menu');
     await userEvent.click(canvas.getByRole('button', { name: 'Format text' }));
