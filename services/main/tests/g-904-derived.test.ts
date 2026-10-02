@@ -41,6 +41,7 @@ const position = { dataEpoch: 'epoch', sequence: '1' };
 function fixture(signed = false) {
   const labels = new Map<string, Labels>(),
     parents = new Map<string, string>();
+  const restricted = new Set<string>();
   const batches: DisclosureTarget[][] = [];
   let failed = false;
   const pool = {
@@ -56,7 +57,7 @@ function fixture(signed = false) {
         return {
           rows: targets.map((target) => ({
             ordinal: target.ordinal,
-            restricted: false,
+            restricted: [target.resource, target.work].some(ref => ref && restricted.has(ref)),
             assessments: [...new Set([target.resource, target.work])].flatMap((ref) =>
               ref && labels.has(ref) ? [labels.get(ref)!] : [],
             ),
@@ -103,7 +104,7 @@ function fixture(signed = false) {
   const hydrated: string[][] = [];
   session.summaries = async (resources) => {
     hydrated.push(resources);
-    expect(resources.every((resource) => !labels.get(resource)?.length)).toBe(true);
+    expect(resources.every((resource) => !restricted.has(resource))).toBe(true);
     return resources.map(
       (resource) =>
         ({
@@ -123,6 +124,7 @@ function fixture(signed = false) {
     graph,
     session,
     labels,
+    restricted,
     parents,
     batches,
     hydrated,
@@ -179,10 +181,20 @@ test('G-904: admitted pagination fills beyond a hidden batch and never derives a
 });
 
 for (const signed of [false, true]) {
+  test(`G-904: interactive inventories retain rated content for client presentation (${signed ? 'signed' : 'anonymous'})`, async () => {
+    const f = fixture(signed);
+    f.labels.set(id(1), ['r18']);
+    f.session.query = async query => query.includes('SELECT DISTINCT ?work ?head ?main')
+      ? [row({ work: id(1), head: id(900), main: id(11), selection: id(21), contribution: id(31), language: 'en' })]
+      : query.includes('SELECT ?work ?head') ? serialHeads(query) : [];
+    expect((await readRealmWorks(f.session, id(99))).items.map(item => item.id)).toEqual([id(1)]);
+    expect(f.hydrated.every(resources => resources.includes(id(1)))).toBe(true);
+  });
+
   test(`G-904: Realm decision inventories gate before mapping and exact lookup (${signed ? 'signed' : 'anonymous'})`, async () => {
     const f = fixture(signed),
       realm = id(99);
-    f.labels.set(id(1), ['r15']);
+    f.restricted.add(id(1));
     const decisions = [
       row({
         id: id(11),
@@ -227,7 +239,7 @@ for (const signed of [false, true]) {
 
   test(`G-904: Realm Work pages select admitted identities before hydration (${signed ? 'signed' : 'anonymous'})`, async () => {
     const f = fixture(signed);
-    f.labels.set(id(1), ['r18']);
+    f.restricted.add(id(1));
     const works = [1, 2, 3].map((n) =>
       row({
         work: id(n),
@@ -262,8 +274,8 @@ for (const signed of [false, true]) {
       score: String(10 - n),
       growth: '1',
     }));
-    f.labels.set(id(1), ['r18g']);
-    f.labels.set(id(4), ['r15']);
+    f.restricted.add(id(1));
+    f.restricted.add(id(4));
     f.session.query = async (query) =>
       query.includes('SELECT DISTINCT ?work ?main ?head')
         ? candidates.map((candidate) => row({ work: candidate.work, head: id(900), main: id(800) }))
@@ -291,16 +303,17 @@ for (const signed of [false, true]) {
     expect(f.batches).toHaveLength(1);
   });
 
-  test(`G-904: profiles select admitted Works and Collections before page hydration (${signed ? 'signed' : 'anonymous'})`, async () => {
+  test(`G-904: profiles admit Works before hydration and Collections before mapping (${signed ? 'signed' : 'anonymous'})`, async () => {
     const f = fixture(signed),
       agent = id(99),
       ids = [id(1), id(2), id(3)];
-    f.labels.set(id(1), ['r18']);
+    f.restricted.add(id(1));
     Object.assign(f.session.deps, {
       personPreferences: { profileVisible: async () => true },
       profiles: {
         agentFence: async () => '1',
         visibility: { read: async () => ({ visibility: 'public', version: 1 }) },
+        listing: { read: async () => ({ listing: 'listed', version: 0, changedAt: null }) },
       },
     });
     f.session.query = async (query) => {
@@ -314,19 +327,17 @@ for (const signed of [false, true]) {
           }),
         ];
       if (query.includes('SELECT DISTINCT ?id')) return ids.map((id) => row({ id }));
-      if (query.includes('SELECT ?id ?revision WHERE'))
-        return ids.map((id) => row({ id, revision: id }));
       if (query.includes('SELECT ?id ?revision ?name')) {
-        expect(refs(query)).not.toContain(id(1));
+        // Collections now carry their fields in the ordered candidate query,
+        // then apply disclosure before mapping those position-bound rows.
+        expect(query).toContain('ORDER BY STR(?id)');
         return ids
-          .slice(1)
-          .reverse()
           .map((reference) =>
             row({
               id: reference,
               revision: reference,
               name: 'List',
-              kind: `${RV}StaticCollection`,
+              kind: reference === id(1) ? 'corrupt-hidden' : `${RV}StaticCollection`,
               structure: id(90),
             }),
           );
@@ -348,8 +359,8 @@ for (const signed of [false, true]) {
   test(`G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (${signed ? 'signed' : 'anonymous'})`, async () => {
     const f = fixture(signed),
       releases = [11, 12, 13].map((n) => row({ release: id(n), revision: id(n + 10) }));
-    f.labels.set(id(11), ['r18']);
-    f.labels.set(id(3), ['r15']);
+    f.restricted.add(id(11));
+    f.restricted.add(id(3));
     const stored = (release: string, work: string) => ({
       profile: 'release-v1',
       expectedHead: null,
@@ -379,7 +390,7 @@ for (const signed of [false, true]) {
         (reference) =>
           ({
             reference,
-            status: f.labels.get(reference)?.length ? 'unavailable' : 'available',
+            status: f.restricted.has(reference) ? 'unavailable' : 'available',
             type: 'work',
           }) as ResourceSummary,
       );
@@ -433,9 +444,9 @@ test('G-904: sitemap fills after hidden identities and ends without a hidden con
   expect(last.next).toBeNull();
 });
 
-test('G-904: an assessed relation occurrence is gated before retained payload resolution even with readable subject Works', async () => {
+test('G-904: a restricted relation occurrence is gated before retained payload resolution even with readable subject Works', async () => {
   const f = fixture();
-  f.labels.set(id(11), ['r18']);
+  f.restricted.add(id(11));
   const headQuery = f.graph.query.bind(f.graph);
   f.graph.query = async (query) => {
     if (query.includes('SELECT ?work ?head ?owningWork')) return headQuery(query);
@@ -464,7 +475,7 @@ test('G-904: an assessed relation occurrence is gated before retained payload re
   expect(page.next).toBeNull();
 });
 
-test('G-904: serial counts fence current child assessments without a relay event, including signed-in callers and recovery', async () => {
+test('G-904: serial counts fence current child restrictions without a relay event, including signed-in callers and recovery', async () => {
   const f = fixture(),
     work = id(1),
     child = id(2);
@@ -492,16 +503,16 @@ test('G-904: serial counts fence current child assessments without a relay event
     f.environment,
   );
   expect((await projection.batch([work], '1')).get(work)?.wordCount).toBe(8);
-  f.labels.set(child, ['r15']);
+  f.restricted.add(child);
   for (const signed of [false, true]) {
     const reader = fixture(signed).session.viewer;
     const batch = await withDisclosureViewer(reader, () => projection.batch([work], '1'));
     expect(batch.get(work)).toEqual({ chapterCount: null, wordCount: null, lastUpdatedAt: null });
   }
-  f.labels.clear();
-  f.labels.set(id(3), ['r18g']);
+  f.restricted.clear();
+  f.restricted.add(id(3));
   expect((await projection.batch([work], '1')).get(work)?.chapterCount).toBeNull();
-  f.labels.clear();
+  f.restricted.clear();
   expect((await projection.batch([work], '1')).get(work)?.chapterCount).toBe(1);
   expect(await projection.batch([work], '2')).toEqual(new Map());
   f.fail();
