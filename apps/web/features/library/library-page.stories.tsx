@@ -85,7 +85,7 @@ export const ReadHistory: Story = {
           await userEvent.clear(input);
           await userEvent.type(input, value);
         }
-        expect(within(datesOf()).getByLabelText(label)).toHaveValue(value);
+        await expect(within(datesOf()).getByLabelText(label)).toHaveValue(value);
       }, { timeout: 5000 });
     };
     await fillDate('Started', '2026-05-10');

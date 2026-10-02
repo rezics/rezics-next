@@ -1,5 +1,7 @@
 'use client';
 
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
+
 import { Button } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { Progress } from '@rezics/ui/progress';
@@ -240,14 +242,13 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
         {active ? null : <>
           <fieldset className="grid gap-2" disabled={uploading}>
             <legend className="mb-1 font-medium text-sm">{t.importFormatLabel}</legend>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {formats.map(value => <label key={value} className={cn('flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm',
-                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', format === value ? 'border-primary bg-primary/10' : 'border-border')}>
-                <input type="radio" name="library-import-format" value={value} checked={format === value}
-                  className="accent-primary" onChange={() => { setFormat(value); setMapping(null); setError(null); }} />
+            <RadioGroup name="library-import-format" value={format} onValueChange={({ value }) => { setFormat(value as typeof format); setMapping(null); setError(null); }} aria-label={t.importFormatLabel} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {formats.map(value => <RadioGroupItem key={value} className={cn('flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm',
+                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', format === value ? 'border-primary bg-primary/10' : 'border-border')} value={value}>
+
                 {value === 'goodreads' ? 'Goodreads' : value === 'storygraph' ? 'The StoryGraph' : value === 'mal' ? 'MyAnimeList'
-                  : value === 'vndb' ? 'VNDB' : value === 'rezics' ? 'REZICS' : t.importFormatCsv}</label>)}
-            </div>
+                  : value === 'vndb' ? 'VNDB' : value === 'rezics' ? 'REZICS' : t.importFormatCsv}</RadioGroupItem>)}
+            </RadioGroup>
           </fieldset>
           <p className="text-muted-foreground text-sm">{({ goodreads: t.importHowGoodreads, storygraph: t.importHowStorygraph,
             mal: t.importHowMal, vndb: t.importHowVndb, rezics: t.importHowRezics, 'generic-csv': t.importHowCsv })[format]}</p>
@@ -308,9 +309,10 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
             {active.loaded && !active.finished ? <div className="grid gap-3 rounded-xl bg-muted/50 p-3">
               {!sealed && counts.matched ? <fieldset className="grid gap-1 text-sm">
                 <legend className="mb-1 font-medium">{t.importConflictLabel}</legend>
-                {([false, true] as const).map(value => <label key={String(value)} className="flex cursor-pointer items-center gap-2">
-                  <input type="radio" name="library-import-conflict" className="accent-primary" checked={useImported === value}
-                    onChange={() => setUseImported(value)} />{value ? t.importUseImported : t.importKeepMine}</label>)}
+                <RadioGroup name="library-import-conflict" value={String(useImported)} onValueChange={({ value }) => setUseImported(value === 'true')} aria-label={t.importConflictLabel}>
+                  {([false, true] as const).map(value => <RadioGroupItem key={String(value)} className="flex cursor-pointer items-center gap-2" value={String(value)}>
+                    {value ? t.importUseImported : t.importKeepMine}</RadioGroupItem>)}
+                </RadioGroup>
               </fieldset> : null}
               {!sealed && counts['not-found'] ? <p className="text-muted-foreground text-xs">{t.importNotFoundPrivate(counts['not-found'])}</p> : null}
               {!sealed && unresolved.length ? <div>

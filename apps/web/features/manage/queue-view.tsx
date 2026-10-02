@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '@rezics/ui/dialog';
@@ -292,8 +294,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     return <li key={id} className={cn('group relative flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors',
       isCurrent ? 'border-primary/40 bg-primary/5' : 'border-transparent hover:bg-accent/50',
       selected.has(id) && !isCurrent && 'bg-accent/40')}>
-      {waiting ? <input type="checkbox" checked={selected.has(id)} onChange={() => dispatch({ type: 'toggle', id })}
-        aria-label={t.selectItem({ title })} className="mt-3 size-4 shrink-0 accent-primary" /> : null}
+      {waiting ? <Checkbox className="mt-3" checked={selected.has(id)} onCheckedChange={() => dispatch({ type: 'toggle', id })} aria-label={t.selectItem({ title })} /> : null}
       <button type="button" ref={node => { if (node) rows.current.set(id, node); else rows.current.delete(id); }}
         onClick={() => { dispatch({ type: 'focus', id }); setExpanded(current => !isCurrent || !current); }}
         onFocus={() => dispatch({ type: 'focus', id })}
@@ -375,10 +376,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
         <div className="grid content-start gap-2">
           {waiting ? <div aria-label={t.bulkLabel} role="group" className="sticky top-16 z-10 flex min-h-10 flex-wrap items-center
             gap-2 rounded-xl bg-background/90 px-3 py-1.5 backdrop-blur">
-            <input type="checkbox" aria-label={t.selectAll} checked={bulk.length > 0 && bulk.length === visible.length}
-              ref={node => { if (node) node.indeterminate = bulk.length > 0 && bulk.length < visible.length; }}
-              onChange={() => dispatch({ type: bulk.length === visible.length ? 'clear-selection' : 'select-all' })}
-              className="size-4 accent-primary" />
+            <Checkbox aria-label={t.selectAll} checked={bulk.length > 0 && bulk.length < visible.length ? 'indeterminate' : bulk.length > 0} onCheckedChange={() => dispatch({ type: bulk.length === visible.length ? 'clear-selection' : 'select-all' })} />
             {bulk.length ? <>
               <span className="font-medium text-sm">{t.selectedCount(bulk.length)}</span>
               {actionOrder.filter(action => bulkActions.has(action))

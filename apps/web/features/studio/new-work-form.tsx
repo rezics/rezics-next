@@ -1,5 +1,7 @@
 'use client';
 
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
+
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
@@ -61,18 +63,18 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
     </Field>
     <fieldset className="grid min-w-0 gap-2">
       <legend className="mb-2 font-medium text-sm">{t.workType}</legend>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {choices.map(entry => ({ entry, ...presentations[entry.presentation] ?? documentPresentation }))
-          .map(({ entry, icon: Icon, help }) => <label key={entry.type} className="flex cursor-pointer items-start
-          gap-3 rounded-2xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5
-          has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
-          <input type="radio" name="type" value={entry.type} defaultChecked={values.type === entry.type}
-            className="sr-only" />
-          <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
-          <span className="grid gap-0.5"><span className="font-medium text-sm">{entryLabel(entry, locale)}</span>
-            <span className="text-muted-foreground text-xs">{t[help]}</span></span>
-        </label>)}
-      </div>
+      <RadioGroup name="type" defaultValue={values.type} aria-label={t.workType}>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {choices.map(entry => ({ entry, ...presentations[entry.presentation] ?? documentPresentation }))
+            .map(({ entry, icon: Icon, help }) => <RadioGroupItem key={entry.type} className="flex cursor-pointer items-start
+            gap-3 rounded-2xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5
+            has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={entry.type}>
+            <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
+            <span className="grid gap-0.5"><span className="font-medium text-sm">{entryLabel(entry, locale)}</span>
+              <span className="text-muted-foreground text-xs">{t[help]}</span></span>
+          </RadioGroupItem>)}
+        </div>
+      </RadioGroup>
     </fieldset>
     <Field>
       <FieldLabel>{t.writingLanguage}</FieldLabel>

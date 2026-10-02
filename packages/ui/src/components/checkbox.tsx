@@ -45,11 +45,11 @@ export const checkboxVariants = tv({
 export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) => {
   // The native input owns the checkbox role. A role forwarded to Ark's label
   // creates a second checkbox and is invalid on a label.
-  const { className, tabIndex, role: _role, ...rest } = props;
+  const { className, tabIndex, children, role: _role, ...rest } = props;
 
   return (
-    <ArkCheckbox.Root className={cn(checkboxVariants(), className)} data-slot="checkbox" {...rest}>
-      <ArkCheckbox.Control data-slot="checkbox-control">
+    <ArkCheckbox.Root className={cn(children ? 'inline-flex items-center gap-2' : checkboxVariants(), className)} data-slot="checkbox" {...rest}>
+      <ArkCheckbox.Control className={children ? checkboxVariants() : undefined} data-slot="checkbox-control">
         <CheckboxIndicator>
           <CheckIcon />
         </CheckboxIndicator>
@@ -58,6 +58,8 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
           <MinusIcon />
         </CheckboxIndicator>
       </ArkCheckbox.Control>
+
+      {children ? <ArkCheckbox.Label>{children}</ArkCheckbox.Label> : null}
 
       <CheckboxHiddenInput tabIndex={tabIndex} />
     </ArkCheckbox.Root>

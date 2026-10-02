@@ -1,5 +1,7 @@
 'use client';
 
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
+
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
@@ -331,28 +333,28 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
       </div>
       <fieldset className="grid min-w-0 gap-2">
         <legend className="mb-2 font-medium text-sm">{t.kindLegend}</legend>
-        {kinds.map(item => <label key={item.kind} className="flex cursor-pointer items-start gap-3 rounded-2xl border
-          border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5
-          has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
-          <input type="radio" name="kind" value={item.kind} checked={kind === item.kind} className="mt-1"
-            onChange={() => { setKind(item.kind); setParent(''); setParentError(false); setNotice(null); }} />
-          <span className="grid gap-0.5"><span className="font-medium text-sm">{t[item.label]}</span>
-            <span className="text-muted-foreground text-xs">{t[item.help]}</span></span>
-        </label>)}
+        <RadioGroup name="kind" value={kind} onValueChange={({ value }) => { setKind(value as typeof kind); setParent(''); setParentError(false); setNotice(null); }} aria-label={t.kindLegend}>
+          {kinds.map(item => <RadioGroupItem key={item.kind} className="flex cursor-pointer items-start gap-3 rounded-2xl border
+            border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5
+            has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={item.kind}>
+            <span className="grid gap-0.5"><span className="font-medium text-sm">{t[item.label]}</span>
+              <span className="text-muted-foreground text-xs">{t[item.help]}</span></span>
+          </RadioGroupItem>)}
+        </RadioGroup>
       </fieldset>
       {needsParent ? <fieldset className="grid min-w-0 gap-2" data-testid="intake-parent"
         aria-describedby={parentError ? parentErrorId : undefined}>
         <legend id={parentLegend} className="mb-2 font-medium text-sm">{kind === 'part' ? t.parentLegendPart : t.parentLegend}</legend>
-        {found.candidates.length ? found.candidates.map(candidate => {
-          const title = attributeOf(candidate, 'title');
-          return <label key={candidate.work} className="flex cursor-pointer items-start gap-3 rounded-xl border
-            border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5">
-            <input type="radio" name="parent" value={candidate.work} checked={parent === candidate.work} className="mt-1"
-              aria-invalid={parentError || undefined} onChange={() => { setParent(candidate.work); setParentError(false); }} />
-            <span lang={title?.language ?? undefined} className="text-sm">{title?.value ?? idOf(candidate.work)}</span>
-          </label>;
-        }) : <p className="text-muted-foreground text-sm">{t.parentNone}</p>}
-        {parentError ? <p id={parentErrorId} role="alert" className="text-destructive-foreground text-sm">{t.parentRequired}</p> : null}
+        <RadioGroup name="parent" value={parent} onValueChange={({ value }) => { setParent(value ?? ''); setParentError(false); }} aria-labelledby={parentLegend} invalid={parentError}>
+          {found.candidates.length ? found.candidates.map(candidate => {
+            const title = attributeOf(candidate, 'title');
+            return <RadioGroupItem key={candidate.work} className="flex cursor-pointer items-start gap-3 rounded-xl border
+              border-border p-3 hover:bg-accent/60 has-checked:border-primary has-checked:bg-primary/5" value={candidate.work}>
+              <span lang={title?.language ?? undefined} className="text-sm">{title?.value ?? idOf(candidate.work)}</span>
+            </RadioGroupItem>;
+          }) : <p className="text-muted-foreground text-sm">{t.parentNone}</p>}
+          {parentError ? <p id={parentErrorId} role="alert" className="text-destructive-foreground text-sm">{t.parentRequired}</p> : null}
+        </RadioGroup>
       </fieldset> : null}
       {kind === 'story' || kind === 'part' ? types.length ? <Field>
         <FieldLabel>{t.typeLabel}</FieldLabel>

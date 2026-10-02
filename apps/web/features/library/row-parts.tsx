@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
@@ -235,9 +237,8 @@ export function ReviewCell({ row, locale, messages }: { row: LibraryRow; locale:
       </Field>
       <LanguageSelect value={language} onChange={chosen => setDraft({ ...draft, language: chosen })} locale={locale}
         reading={reading} className="w-fit" />
-      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
-        <input type="checkbox" checked={draft.spoiler} className="size-4 accent-primary"
-          onChange={event => setDraft({ ...draft, spoiler: event.currentTarget.checked })} />{t.spoiler}</label>
+      <Checkbox className="flex w-fit cursor-pointer items-center gap-2 text-sm" checked={draft.spoiler} onCheckedChange={event => setDraft({ ...draft, spoiler: event.checked === true })}>
+        {t.spoiler}</Checkbox>
       <div className="flex flex-wrap gap-2">
         <Button type="submit" size="sm" isLoading={saving === 'save'} disabled={unrated || !draft.text.trim()}>
           {t.saveReview}</Button>

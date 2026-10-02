@@ -53,7 +53,7 @@ export const Person: Story = {
     await expect(canvas.getByRole('combobox', { name: 'Unread chapter spoilers' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Theme' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Open Accounts' }))
-      .toHaveAttribute('href', 'https://account.rezics.test');
+      .toHaveAttribute('href', 'https://account.rezics.test/personal-info');
   },
 };
 

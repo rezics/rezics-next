@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { Textarea } from '@rezics/ui/textarea';
@@ -201,11 +203,10 @@ function ReviewEditor({ target, own, actingSubject, api, onSaved, onCancel, loca
         <LanguageSelect value={language} onChange={setChosen} locale={locale} reading={reading}
           label={t.reviewLanguage} className="w-48" />
       </div>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={spoiler} onChange={event => setSpoiler(event.target.checked)}
-          className="size-4 accent-primary" />
+      <Checkbox className="flex items-center gap-2" checked={spoiler} onCheckedChange={event => setSpoiler(event.checked === true)}>
+
         {t.containsSpoilers}
-      </label>
+      </Checkbox>
     </div>
     {!rated ? <p className="text-muted-foreground text-sm">{t.rateFirst}</p> : null}
     {note ? <p role="alert" className="flex items-center gap-2 text-destructive-foreground text-sm">

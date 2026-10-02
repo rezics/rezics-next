@@ -1,0 +1,21 @@
+id: no-native-inputs
+language: Tsx
+severity: error
+message: Web features use the styled @rezics/ui RadioGroup and Checkbox.
+files:
+  - apps/web/features/**/*.js
+  - apps/web/features/**/*.jsx
+  - apps/web/features/**/*.ts
+  - apps/web/features/**/*.tsx
+rule:
+  any:
+    - kind: jsx_opening_element
+      regex: '^<input(?:\s|/?>)'
+      has:
+        kind: jsx_attribute
+        regex: '^type\s*=\s*(?:["''](?:radio|checkbox)["'']|\{\s*["''](?:radio|checkbox)["'']\s*\})$'
+    - kind: jsx_self_closing_element
+      regex: '^<input(?:\s|/?>)'
+      has:
+        kind: jsx_attribute
+        regex: '^type\s*=\s*(?:["''](?:radio|checkbox)["'']|\{\s*["''](?:radio|checkbox)["'']\s*\})$'

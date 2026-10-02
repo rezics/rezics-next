@@ -1,5 +1,7 @@
 'use client';
 
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
+
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
@@ -91,33 +93,34 @@ export function RealmSubmit({ agent, work, texts, realms, open, locale, messages
   return <form onSubmit={event => void submit(event)} className="grid gap-5">
     {candidates.length > 1 ? <fieldset className="grid min-w-0 gap-2">
       <legend className="mb-1 font-medium text-sm">{t.chooseText}</legend>
-      <div className="flex flex-wrap gap-2">{candidates.map(candidate => <label key={candidate.contribution}
-        className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-sm
-          has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
-        <input type="radio" name="text" value={candidate.contribution} checked={text === candidate.contribution}
-          onChange={() => setText(candidate.contribution)} className="size-4 accent-primary" />
-        {languageName(candidate.language, locale)}</label>)}</div>
+      <RadioGroup name="text" value={text} onValueChange={({ value }) => setText(value ?? '')} aria-label={t.chooseText}>
+        <div className="flex flex-wrap gap-2">{candidates.map(candidate => <RadioGroupItem key={candidate.contribution}
+          className="flex cursor-pointer items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-sm
+            has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={candidate.contribution}>
+
+          {languageName(candidate.language, locale)}</RadioGroupItem>)}</div>
+      </RadioGroup>
     </fieldset> : <p className="text-muted-foreground text-sm">
       {t.submittingText({ language: languageName(candidates[0]!.language, locale) })}</p>}
     <fieldset className="grid min-w-0 gap-2">
       <legend className="mb-1 font-medium text-sm">{t.chooseRealm}</legend>
-      {realms.ok ? realms.data.length ? <div className="grid gap-2">{realms.data.map(option => {
-        const reviewing = open.includes(option.id);
-        return <label key={option.id} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60
-          px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/5 has-disabled:cursor-not-allowed
-          has-disabled:opacity-64 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
-          <input type="radio" name="realm" value={option.id} checked={realm === option.id} disabled={reviewing}
-            onChange={() => setRealm(option.id)} className="mt-1 size-4 accent-primary" />
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="flex flex-wrap items-center gap-2">
-              <span lang={option.name.language} className="min-w-0 truncate font-medium text-sm">{option.name.value}</span>
-              {reviewing ? <Badge variant="info" size="sm">{t.alreadyInReview}</Badge> : null}</span>
-            <span className="flex items-start gap-1.5 text-muted-foreground text-xs">
-              <ModeIcon mode={option.reviewMode} />{reviewModeText(option.reviewMode, t)}</span>
-          </span>
-        </label>;
-      })}</div> : <p className="text-muted-foreground text-sm">{t.noRealms}</p>
-        : <p className="text-muted-foreground text-sm">{t.realmsFailed}</p>}
+      <RadioGroup name="realm" value={realm} onValueChange={({ value }) => setRealm(value ?? '')} aria-label={t.chooseRealm}>
+        {realms.ok ? realms.data.length ? <div className="grid gap-2">{realms.data.map(option => {
+          const reviewing = open.includes(option.id);
+          return <RadioGroupItem key={option.id} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60
+            px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/5 has-disabled:cursor-not-allowed
+            has-disabled:opacity-64 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={option.id} disabled={reviewing}>
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="flex flex-wrap items-center gap-2">
+                <span lang={option.name.language} className="min-w-0 truncate font-medium text-sm">{option.name.value}</span>
+                {reviewing ? <Badge variant="info" size="sm">{t.alreadyInReview}</Badge> : null}</span>
+              <span className="flex items-start gap-1.5 text-muted-foreground text-xs">
+                <ModeIcon mode={option.reviewMode} />{reviewModeText(option.reviewMode, t)}</span>
+            </span>
+          </RadioGroupItem>;
+        })}</div> : <p className="text-muted-foreground text-sm">{t.noRealms}</p>
+          : <p className="text-muted-foreground text-sm">{t.realmsFailed}</p>}
+      </RadioGroup>
     </fieldset>
     {result ? result.ok ? <p role="status" className="flex items-center gap-2 text-sm text-success-foreground">
       <CircleCheckIcon aria-hidden="true" className="size-4 shrink-0" />{result.text}</p>

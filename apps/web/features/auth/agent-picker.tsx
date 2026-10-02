@@ -1,3 +1,5 @@
+import { Checkbox } from '@rezics/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
@@ -77,32 +79,31 @@ export function AgentPicker({ options, current, preferred, preferenceRevision, s
       {/* min-w-0: a fieldset is min-content wide by default, and a long IRI would widen the page. */}
       <fieldset className="flex min-w-0 flex-col gap-2">
         <legend className="mb-2 font-medium text-sm">{messages.agentsLegend}</legend>
-        {options.map(option => <label key={option.iri} className="flex cursor-pointer items-start gap-3
-          rounded-xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary
-          has-checked:bg-primary/5 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32">
-          <input type="radio" name="agent" value={option.iri} required defaultChecked={option.iri === checked}
-            className="mt-1 size-4 accent-primary" />
-          <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="font-medium" lang={option.label ? option.labelText?.language : undefined}
-                dir={option.label ? option.labelText?.direction : undefined}>{agentName(option, messages)}</span>
-              {option.handle ? <span className="text-muted-foreground text-sm">@{option.handle}</span> : null}
-              {option.iri === current ? <Badge variant="secondary">{messages.currentAgent}</Badge> : null}
-              {option.iri === preferred ? <Badge variant="outline">{messages.defaultAgent}</Badge> : null}
+        <RadioGroup name="agent" defaultValue={checked ?? undefined} required aria-label={messages.agentsLegend}>
+          {options.map(option => <RadioGroupItem key={option.iri} className="flex cursor-pointer items-start gap-3
+            rounded-xl border border-border p-3 hover:bg-accent/60 has-checked:border-primary
+            has-checked:bg-primary/5 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={option.iri}>
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-medium" lang={option.label ? option.labelText?.language : undefined}
+                  dir={option.label ? option.labelText?.direction : undefined}>{agentName(option, messages)}</span>
+                {option.handle ? <span className="text-muted-foreground text-sm">@{option.handle}</span> : null}
+                {option.iri === current ? <Badge variant="secondary">{messages.currentAgent}</Badge> : null}
+                {option.iri === preferred ? <Badge variant="outline">{messages.defaultAgent}</Badge> : null}
+              </span>
+              <span className="text-muted-foreground text-sm">{[
+                kindText(option.kind, messages), option.path === 'direct-principal' ? messages.directPath
+                  : option.path === 'represented-agent' ? messages.representedPath : null]
+                .filter(Boolean).join(' · ')}</span>
+              <code className="truncate font-mono text-muted-foreground text-xs">{option.iri}</code>
             </span>
-            <span className="text-muted-foreground text-sm">{[
-              kindText(option.kind, messages), option.path === 'direct-principal' ? messages.directPath
-                : option.path === 'represented-agent' ? messages.representedPath : null]
-              .filter(Boolean).join(' · ')}</span>
-            <code className="truncate font-mono text-muted-foreground text-xs">{option.iri}</code>
-          </span>
-        </label>)}
+          </RadioGroupItem>)}
+        </RadioGroup>
       </fieldset>
-      <label className="flex items-start gap-3 text-sm">
-        <input type="checkbox" name="saveDefault" className="mt-0.5 size-4 accent-primary" />
+      <Checkbox className="flex items-start gap-3 text-sm" name="saveDefault">
         <span className="flex flex-col gap-0.5"><span>{messages.saveDefault}</span>
           <span className="text-muted-foreground">{messages.saveDefaultHelp}</span></span>
-      </label>
+      </Checkbox>
       <Button type="submit" className="self-start">{messages.useAgent}</Button>
     </form> : null}
   </section>;

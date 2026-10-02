@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { bodyText } from '../document-editor/body.ts';
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
@@ -203,16 +205,10 @@ function PublishShell({
                   </dd>
                 </div>
               </dl>
-              <label className="flex items-start gap-3 text-sm">
-                <input
-                  type="checkbox"
-                  required
-                  checked={rights}
-                  onChange={(event) => setRights(event.target.checked)}
-                  className="mt-0.5 size-4 accent-primary"
-                />
+              <Checkbox className="flex items-start gap-3 text-sm" required checked={rights} onCheckedChange={(event) => setRights(event.checked === true)}>
+
                 <span>{t.publishRights}</span>
-              </label>
+              </Checkbox>
               {options}
             </form>
           )}
@@ -328,18 +324,13 @@ export function PublishDialog({
       locale={locale}
       messages={messages}
       options={
-        <label className="flex items-start gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={makeMain}
-            onChange={(event) => setMakeMain(event.target.checked)}
-            className="mt-0.5 size-4 accent-primary"
-          />
+        <Checkbox className="flex items-start gap-3 text-sm" checked={makeMain} onCheckedChange={(event) => setMakeMain(event.checked === true)}>
+
           <span className="grid gap-0.5">
             <span>{target.book ? t.makeMainBook : t.makeMain}</span>
             <span className="text-muted-foreground text-xs">{t.makeMainHelp}</span>
           </span>
-        </label>
+        </Checkbox>
       }
       plan={() => [
         { id: 'publish', label: t.stepPublish, outcome: 'running' },

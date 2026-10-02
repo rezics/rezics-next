@@ -68,7 +68,7 @@ export const RadioGroupText = (props: React.ComponentProps<typeof ArkRadioGroup.
   const { className, children, ...rest } = props;
 
   return (
-    <FieldLabel asChild className={cn('leading-5', className)}>
+    <FieldLabel asChild className={cn('min-w-0 flex-1 leading-5', className)}>
       <ArkRadioGroup.ItemText data-slot="radio-group-item-text" {...rest}>
         {children}
       </ArkRadioGroup.ItemText>

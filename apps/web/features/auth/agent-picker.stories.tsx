@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Card, CardContent } from '@rezics/ui/card';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { AgentPicker } from './agent-picker.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { messages } from './messages.ts';
@@ -43,6 +43,13 @@ export const ChooseAnAgent: Story = {
     for (const radio of radios) await expect(radio).not.toBeChecked();
     await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Use this Agent' })).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole('radio', { name: /Aster @aster/ }));
+    const form = canvasElement.querySelector('form')!;
+    await expect(new FormData(form).get('agent')).toBe(pen);
+    await userEvent.click(canvas.getByText('Make this my default'));
+    await expect(new FormData(form).get('saveDefault')).toBe('on');
+    await userEvent.keyboard(' ');
+    await expect(new FormData(form).get('saveDefault')).toBeNull();
   },
 };
 

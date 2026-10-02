@@ -1,0 +1,12 @@
+id: no-native-inputs
+valid:
+  - 'const x = <Checkbox name="spoiler" />;'
+  - 'const x = <RadioGroup name="agent"><RadioGroupItem value="a">A</RadioGroupItem></RadioGroup>;'
+  - 'const x = <input type="hidden" name="agent" />;'
+  - 'const x = <input type="text" />;'
+  - 'const x = <input-preview type="checkbox" />;'
+invalid:
+  - 'const x = <input type="radio" name="agent" />;'
+  - 'const x = <input name="spoiler" type="checkbox" />;'
+  - "const x = <input type={'checkbox'} />;"
+  - 'const x = <input type="radio"></input>;'

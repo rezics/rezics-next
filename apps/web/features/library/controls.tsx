@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTrigger } from '@rezics/ui/dialog';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
@@ -172,10 +174,9 @@ export function NewShelf({ locale, messages, className }: { locale: UiLocale; me
               onChange={event => { setName(event.currentTarget.value); setError(null); }} />
             {error ? <FieldError>{error}</FieldError> : null}
           </Field>
-          <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
-            <input type="checkbox" checked={privateShelf} className="size-4 accent-primary"
-              onChange={event => setPrivateShelf(event.currentTarget.checked)} />
-            <LockIcon aria-hidden="true" className="size-4 text-muted-foreground" />{t.shelfPrivate}</label>
+          <Checkbox className="flex w-fit cursor-pointer items-center gap-2 text-sm" checked={privateShelf} onCheckedChange={event => setPrivateShelf(event.checked === true)}>
+
+            <LockIcon aria-hidden="true" className="size-4 text-muted-foreground" />{t.shelfPrivate}</Checkbox>
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t.cancel}</Button>

@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -81,8 +83,8 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
     <AvatarFileField label={t.avatar} choose={t.chooseAvatar} none={t.noAvatarSelected}
       disabled={!profile || busy} />
     <p className="text-muted-foreground text-sm">{t.avatarHelp}</p>
-    {profile?.avatarSelection ? <label className="flex items-center gap-2 text-sm">
-      <input name="removeAvatar" type="checkbox" disabled={busy} />{t.removeAvatar}</label> : null}
+    {profile?.avatarSelection ? <Checkbox className="flex items-center gap-2 text-sm" name="removeAvatar" disabled={busy}>
+      {t.removeAvatar}</Checkbox> : null}
     <input type="hidden" name="agent" value={agent} />
     <input type="hidden" name="expectedHead" value={profile?.revision ?? ''} />
     <input type="hidden" name="key" value={operationKey} />

@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { ActionBar, ActionBarBody, ActionBarClose, ActionBarContent, ActionBarSeparator, ActionBarValue }
   from '@rezics/ui/action-bar';
 import { Button, buttonVariants } from '@rezics/ui/button';
@@ -60,9 +62,7 @@ function RowMeta({ row, now, locale, t }: { row: LibraryRow; now: number; locale
 function SelectBox({ title, checked, onChange, t, className }: {
   title: string; checked: boolean; onChange: (checked: boolean) => void; t: T; className?: string;
 }) {
-  return <input type="checkbox" checked={checked} aria-label={t.selectWork({ title })}
-    onChange={event => onChange(event.currentTarget.checked)}
-    className={cn('size-5 shrink-0 cursor-pointer accent-primary', className)} />;
+  return <Checkbox className={cn('shrink-0 cursor-pointer', className)} checked={checked} aria-label={t.selectWork({ title })} onCheckedChange={event => onChange(event.checked === true)} />;
 }
 
 /**
@@ -282,11 +282,8 @@ export function LibraryList({ rows, shelf, custom, customShelves, layout, contro
     {notice ? <p role={notice.tone === 'destructive' ? 'alert' : 'status'} className={cn('rounded-xl px-4 py-2.5 text-sm',
       notice.tone === 'destructive' ? 'bg-destructive/10 text-destructive-foreground' : 'bg-muted')}>
       {notice.text}</p> : null}
-    {selecting ? <label className="flex w-fit cursor-pointer items-center gap-3 text-sm">
-      <input type="checkbox" checked={every} className="size-5 accent-primary"
-        ref={input => { if (input) input.indeterminate = chosen.size > 0 && !every; }}
-        onChange={event => setSelected(event.currentTarget.checked ? new Set(rows.map(row => row.work.id)) : new Set())} />
-      {t.selectPage}</label> : null}
+    {selecting ? <Checkbox className="flex w-fit cursor-pointer items-center gap-3 text-sm" checked={chosen.size > 0 && !every ? 'indeterminate' : every} onCheckedChange={event => setSelected(event.checked === true ? new Set(rows.map(row => row.work.id)) : new Set())}>
+      {t.selectPage}</Checkbox> : null}
     {layout === 'grid'
       ? <ul className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 md:grid-cols-4 xl:grid-cols-5">
         {rows.map(row => <Tile key={row.work.id} row={row} slot={slot} selecting={selecting}

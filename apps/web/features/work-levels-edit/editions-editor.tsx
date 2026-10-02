@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
@@ -63,9 +65,8 @@ export function RealizationEditor({ work, mainVersion, mainRevision, existing, a
         <ChoiceSelect name="kind" label={t.realizationKind} defaultValue={values.kind ?? 'translation'} className="w-full"
           options={[{ value: 'translation', label: t.kindTranslation }, { value: 'original', label: t.kindOriginal }]} /></Field>
     </div>
-    <label className="flex items-center gap-3 text-sm">
-      <input type="checkbox" name="translatorMe" defaultChecked={values.translatorMe === 'on'} className="size-4 accent-primary" />
-      {t.translatorMe}</label>
+    <Checkbox className="flex items-center gap-3 text-sm" name="translatorMe" defaultChecked={values.translatorMe === 'on'}>
+      {t.translatorMe}</Checkbox>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field invalid={hint('translators') !== null}><FieldLabel>{t.translators}</FieldLabel>
         <Input name="translators" defaultValue={values.translators ?? ''} autoComplete="off" spellCheck={false} />
@@ -113,10 +114,8 @@ function CoveragePicker({ work, own, locale, t, load, loadWorks, chosen }: {
   }
   const group = (heading: string, items: readonly CoverableRealization[]) => <fieldset className="grid gap-2">
     <legend className="font-medium text-sm">{heading}</legend>
-    {items.map(item => <label key={item.id} className="flex items-center gap-3 text-sm">
-      <input type="checkbox" name="coverage" value={`${item.id} ${item.revision}`}
-        defaultChecked={chosen.has(`${item.id} ${item.revision}`)} className="size-4 accent-primary" />
-      <span lang={item.language}>{item.language}</span><span className="text-muted-foreground text-xs">{item.id.slice(-8)}</span></label>)}
+    {items.map(item => <Checkbox key={item.id} className="flex items-center gap-3 text-sm" name="coverage" value={`${item.id} ${item.revision}`} defaultChecked={chosen.has(`${item.id} ${item.revision}`)}>
+      <span lang={item.language}>{item.language}</span><span className="text-muted-foreground text-xs">{item.id.slice(-8)}</span></Checkbox>)}
   </fieldset>;
   return <div className="grid gap-3">
     {own.length ? group(t.coverageThisWork, own) : <p className="text-muted-foreground text-sm">{t.noRealizationsYet}</p>}

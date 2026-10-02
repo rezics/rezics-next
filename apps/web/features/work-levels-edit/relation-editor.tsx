@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
@@ -53,10 +55,9 @@ export function RelationEditor({ work, mainVersion, head, kinds, allowed, locale
     <Field invalid={hint('evidence') !== null}><FieldLabel>{t.relEvidence}</FieldLabel>
       <Input name="evidence" type="url" inputMode="url" defaultValue={values.evidence ?? ''} required maxLength={2048}
         autoComplete="off" placeholder={urlPlaceholder} /><FieldHelper>{t.relEvidenceHelp}</FieldHelper><FieldError>{hint('evidence')}</FieldError></Field>
-    {viaOf(current.key) === 'derivation' ? <label className="flex items-start gap-3 text-sm">
-      <input type="checkbox" name="unresolved" defaultChecked={values.unresolved === 'on'} className="mt-1 size-4 accent-primary" />
+    {viaOf(current.key) === 'derivation' ? <Checkbox className="flex items-start gap-3 text-sm" name="unresolved" defaultChecked={values.unresolved === 'on'}>
       <span className="grid gap-0.5"><span>{t.relUnresolved}</span>
-        <span className="text-muted-foreground text-xs">{t.relUnresolvedHelp}</span></span></label> : null}
+        <span className="text-muted-foreground text-xs">{t.relUnresolvedHelp}</span></span></Checkbox> : null}
     <Button type="submit" isLoading={pending} disabled={pending} className="w-fit">
       <LinkIcon aria-hidden="true" />{pending ? t.submitting : t.recordButton}</Button>
   </form></div>;

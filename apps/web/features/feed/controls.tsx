@@ -1,5 +1,7 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
+
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@rezics/ui/menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@rezics/ui/popover';
@@ -120,11 +122,9 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
 
 function Choice({ name, value, checked, lang, children }: { name: string; value: string; checked: boolean;
   lang?: string; children: ReactNode }) {
-  return <label className="flex min-h-9 cursor-pointer items-center gap-3 rounded-xl px-2 hover:bg-accent/60">
-    <input type="checkbox" name={name} value={value} defaultChecked={checked}
-      className="size-4 shrink-0 accent-primary" />
+  return <Checkbox className="flex min-h-9 cursor-pointer items-center gap-3 rounded-xl px-2 hover:bg-accent/60" name={name} value={value} defaultChecked={checked}>
     <span lang={lang} className="min-w-0 truncate text-sm">{children}</span>
-  </label>;
+  </Checkbox>;
 }
 
 /**

@@ -1,5 +1,9 @@
 'use client';
 
+import { Button } from '@rezics/ui/button';
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
+import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { accountMenuSections } from './account-menu-items.ts';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator,
@@ -77,6 +81,20 @@ export function AccountMenu({ session, messages, accountOrigin }: {
   const { locale, t, theme, setTheme } = useShell();
   useSessionSync(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [panel, setPanel] = useState<'language' | 'appearance' | null>(null);
+  const phoneTrigger = useRef<HTMLButtonElement>(null);
+  const panelBody = useRef<HTMLDivElement>(null);
+  const previousPanel = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const target = panel ? panelBody.current?.querySelector<HTMLButtonElement>('[data-back]')
+        : previousPanel.current ? panelBody.current?.querySelector<HTMLButtonElement>(`[data-panel="${previousPanel.current}"]`) : null;
+      target?.focus();
+      previousPanel.current = panel;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [panel, sheetOpen]);
   const [sheetMounted, setSheetMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
@@ -86,6 +104,7 @@ export function AccountMenu({ session, messages, accountOrigin }: {
   const returnField = useRef<HTMLInputElement>(null);
   const formId = useId();
   const agent = agentSummary(session.agent, messages);
+  const sections = accountMenuSections(session, messages);
   const themeLabels: Record<Theme, string> = { system: t.themeSystem, light: t.themeLight, dark: t.themeDark };
   const chooseLocale = (choice: UiLocale) => {
     if (!localeField.current || !localeForm.current) return;
@@ -119,65 +138,72 @@ export function AccountMenu({ session, messages, accountOrigin }: {
                   ? ` · ${currentVanityHandle(session.agent.agent.handle)
                     ? `@${session.agent.agent.handle}` : messages.chooseHandle}` : ''}</span></p>
             <MenuItem value="switch-agent">{messages.switchAgent}</MenuItem>
-            <MenuItem value="profile-settings" asChild><LocalizedLink
-              href={localizedPath('/settings', locale)}>{messages.profileSettings}</LocalizedLink></MenuItem>
           </MenuGroup>
-          <MenuSeparator />
-          <MenuSub>
-            <MenuSubTrigger>{t.language}</MenuSubTrigger>
-            <MenuSubContent className="w-48">
-              <MenuRadioGroup heading={t.language} value={locale}
-                onValueChange={details => chooseLocale(details.value as UiLocale)}>
-                {uiLocales.map(choice => <MenuRadioItem key={choice} value={choice} lang={choice}>
-                  {localeNames[choice]}</MenuRadioItem>)}
-              </MenuRadioGroup>
-            </MenuSubContent>
-          </MenuSub>
-          <MenuSub>
-            <MenuSubTrigger>{t.displayMode}</MenuSubTrigger>
-            <MenuSubContent className="w-48">
-              <MenuRadioGroup heading={t.displayMode} value={theme}
-                onValueChange={details => setTheme(details.value as Theme)}>
-                {themes.map(choice => <MenuRadioItem key={choice} value={choice}>
-                  {themeLabels[choice]}</MenuRadioItem>)}
-              </MenuRadioGroup>
-            </MenuSubContent>
-          </MenuSub>
+          {sections.map((section, index) => <div key={index}>
+            <MenuSeparator />
+            {section.map(entry => 'panel' in entry ? <MenuSub key={entry.id}>
+              <MenuSubTrigger>{entry.label}</MenuSubTrigger>
+              <MenuSubContent className="w-52">
+                <MenuRadioGroup heading={entry.label} value={entry.id === 'language' ? locale : theme}
+                  onValueChange={({ value }) => entry.id === 'language' ? chooseLocale(value as UiLocale) : setTheme(value as Theme)}>
+                  {entry.id === 'language' ? uiLocales.map(choice => <MenuRadioItem key={choice} value={choice} lang={choice}>
+                    {localeNames[choice]}</MenuRadioItem>) : themes.map(choice => <MenuRadioItem key={choice} value={choice}>
+                    {themeLabels[choice]}</MenuRadioItem>)}
+                </MenuRadioGroup>
+              </MenuSubContent>
+            </MenuSub> : <MenuItem key={entry.id} value={entry.id} asChild>
+              <LocalizedLink href={localizedPath(entry.href, locale)}>{entry.label}
+                {entry.arrow ? <ChevronRightIcon aria-hidden="true" className="ms-auto size-4" /> : null}
+              </LocalizedLink></MenuItem>)}
+          </div>)}
           <MenuSeparator />
           <MenuItem value="manage-account" asChild><a href={accountOrigin}>{messages.manageAccount}</a></MenuItem>
           <MenuItem value="sign-out">{messages.signOut}</MenuItem>
         </MenuContent>
       </Menu>
     </div>
-    <button type="button" aria-label={messages.accountMenu} data-hydrated={hydrated ? 'true' : undefined}
+    <Button ref={phoneTrigger} variant="ghost" type="button" aria-label={messages.accountMenu} data-hydrated={hydrated ? 'true' : undefined}
       aria-haspopup="dialog" aria-expanded={sheetOpen} onPointerEnter={warmSheet} onFocus={warmSheet}
-      onTouchStart={warmSheet} onClick={() => { setSheetMounted(true); setSheetOpen(true); }}
+      onTouchStart={warmSheet} onClick={() => { setPanel(null); previousPanel.current = null; setSheetMounted(true); setSheetOpen(true); }}
       className="inline-flex items-center rounded-full p-1 outline-none hover:bg-accent/60
         focus-visible:ring-2 focus-visible:ring-ring sm:hidden">
       <AccountIdentity session={session} messages={messages} compact />
-    </button>
+    </Button>
     {sheetMounted ? <Suspense fallback={null}>
-      <AccountSheet open={sheetOpen} onOpenChange={setSheetOpen} title={messages.accountMenu} closeLabel={t.close}>
-        <div className="grid gap-5 overflow-y-auto px-5 py-4">
-          <p className="font-medium">{agent.text}
-            {session.agent.status === 'selected'
-              ? ` · ${currentVanityHandle(session.agent.agent.handle)
-                ? `@${session.agent.agent.handle}` : messages.chooseHandle}` : ''}</p>
-          <button type="button" onClick={switchAgent} className="text-start text-sm">{messages.switchAgent}</button>
-          <LocalizedLink href={localizedPath('/settings', locale)} className="text-sm">
-            {messages.profileSettings}</LocalizedLink>
-          <fieldset className="grid gap-2"><legend className="mb-1 font-semibold text-sm">{t.language}</legend>
-            {uiLocales.map(choice => <label key={choice} className="flex min-h-10 items-center gap-3 text-sm"
-              lang={choice}><input type="radio" name="account-language" checked={locale === choice}
-                onChange={() => chooseLocale(choice)} />{localeNames[choice]}</label>)}
-          </fieldset>
-          <fieldset className="grid gap-2"><legend className="mb-1 font-semibold text-sm">{t.displayMode}</legend>
-            {themes.map(choice => <label key={choice} className="flex min-h-10 items-center gap-3 text-sm">
-              <input type="radio" name="account-theme" checked={theme === choice}
-                onChange={() => setTheme(choice)} />{themeLabels[choice]}</label>)}
-          </fieldset>
-          <a href={accountOrigin} className="text-sm">{messages.manageAccount}</a>
-          <button type="button" onClick={signOut} className="text-start text-sm">{messages.signOut}</button>
+      <AccountSheet open={sheetOpen} onOpenChange={setSheetOpen} title={panel ? messages[panel] : messages.accountMenu}
+        closeLabel={t.close} returnFocus={() => phoneTrigger.current}>
+        <div className="min-h-0 overflow-y-auto">
+          <div ref={panelBody} className="grid gap-1 px-5 py-3">
+            {panel ? <>
+              <Button data-back type="button" variant="ghost" className="justify-start" onClick={() => setPanel(null)}>
+                <ArrowLeftIcon aria-hidden="true" />{messages.back}</Button>
+              <RadioGroup name={`account-${panel}`} className="gap-1 py-3" aria-label={messages[panel]}
+                value={panel === 'language' ? locale : theme}
+                onValueChange={({ value }) => panel === 'language' ? chooseLocale(value as UiLocale) : setTheme(value as Theme)}>
+                {panel === 'language' ? uiLocales.map(choice => <RadioGroupItem key={choice} value={choice}
+                  lang={choice} className="min-h-11 items-center rounded-xl px-3">{localeNames[choice]}</RadioGroupItem>)
+                  : themes.map(choice => <RadioGroupItem key={choice} value={choice}
+                    className="min-h-11 items-center rounded-xl px-3">{themeLabels[choice]}</RadioGroupItem>)}
+              </RadioGroup>
+            </> : <>
+              <p className="px-3 py-2 text-muted-foreground text-xs">{messages.actingAs}</p>
+              <p className="truncate px-3 pb-2 font-medium">{agent.text}
+                {session.agent.status === 'selected'
+                  ? ` · ${currentVanityHandle(session.agent.agent.handle)
+                    ? `@${session.agent.agent.handle}` : messages.chooseHandle}` : ''}</p>
+              <Button type="button" variant="ghost" className="min-h-11 justify-start" onClick={switchAgent}>{messages.switchAgent}</Button>
+              {sections.map((section, index) => <div key={index} className="grid gap-1 border-border/60 border-t py-2">
+                {section.map(entry => 'panel' in entry ? <Button key={entry.id} data-panel={entry.id} type="button" variant="ghost"
+                  className="min-h-11 justify-between" onClick={() => setPanel(entry.id)}>
+                  {entry.label}<ChevronRightIcon aria-hidden="true" /></Button>
+                  : <Button key={entry.id} variant="ghost" className="min-h-11 justify-between" asChild>
+                    <LocalizedLink href={localizedPath(entry.href, locale)}>{entry.label}
+                      {entry.arrow ? <ChevronRightIcon aria-hidden="true" /> : null}</LocalizedLink></Button>)}
+              </div>)}
+              <Button variant="ghost" className="min-h-11 justify-start" asChild><a href={accountOrigin}>{messages.manageAccount}</a></Button>
+              <Button type="button" variant="ghost" className="min-h-11 justify-start" onClick={signOut}>{messages.signOut}</Button>
+            </>}
+          </div>
         </div>
       </AccountSheet>
     </Suspense> : null}
