@@ -181,16 +181,23 @@ Writing starts with contextual controls, chosen by the device's primary input
 rather than the screen width. Every control is one entry in a shared command
 table, so surfaces differ in layout and never in what they can do.
 
-- **Pointer:** a compact selection panel over the selection's first line (block
-  type, marks, link, ruby, emphasis, and alignment or table actions under More);
-  Alt+F10 moves keyboard focus into it. Right-click stays the browser's, so
+- **Pointer:** a compact selection panel over the selection's first line: block
+  type, marks, link, ruby and emphasis as icons, and More, a labelled menu of
+  what can be done to the blocks the selection touches (turn into, alignment,
+  table, duplicate, move up or down, delete, each with its key) and how much is
+  selected. More is not an overflow for icons that did not fit. Alt+F10 moves
+  keyboard focus into the panel; the touch drawer carries the same block actions. Right-click stays the browser's, so
   spelling suggestions and paste behave as everywhere else; a second formatting
   menu there would split one set of commands across two surfaces. Typing `/`
   opens a filtered block menu; the caret inside a link shows a small card to
   open, edit or remove it, and Ctrl/⌘+K edits a link in place.
 - **Images** open a small panel at the caret: upload a file where the surface
   provides storage, or embed a link; the description is optional. Dropped or
-  pasted image files upload in place.
+  pasted image files upload in place. Until a document can reference an uploaded
+  media asset and its screening state, the web app keeps uploaded images in the
+  page as blob addresses: they disappear on reload, the image itself never
+  reaches Main, and a saved or published document keeps only an address no one
+  else can open.
 - **Touch:** no floating panel, because the system's selection handles and menu
   occupy that place. A bar rests on the keyboard with the most used formats; a
   drawer holds block types, the remaining marks and insertion. Its buttons keep
