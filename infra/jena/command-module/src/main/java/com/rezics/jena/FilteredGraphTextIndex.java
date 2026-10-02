@@ -129,6 +129,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
             else query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                 // Public resource names must not consume the Work candidate budget.
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX)),
+                    BooleanClause.Occur.MUST_NOT)
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.DIRECTORY)),
                     BooleanClause.Occur.MUST_NOT).build();
             if (names && scope.resources() != null) {
                 if (scope.resources().size() > 64) throw new TextIndexException("name candidate bound exceeded");
@@ -190,6 +192,44 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
 
     private static final String RV = "https://rezics.com/vocab/";
+    /** A sorted, maintained projection in the existing entity term dictionary.
+     * Retains <=64 terms. Deleted terms advance with a null key, so even merge
+     * lag has a declared candidate bound and an advancing continuation.
+     * TermsEnum orders UTF-8 keys and seekCeil finds the next key:
+     * https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/index/TermsEnum.html */
+    RankPage directory(String kind, String order, int size, RankAfter after,
+                       org.apache.jena.sparql.core.DatasetGraph data) {
+        if (size < 1 || size > 64 || !java.util.Set.of("concept", "space", "realm", "site", "agent", "collection", "work").contains(kind)
+            || !java.util.Set.of("identity", "newest", "updated").contains(order))
+            throw new TextIndexException("directory query is not admitted");
+        boolean identity = order.equals("identity");
+        String prefix = identity ? PublicNameProjection.PREFIX + kind + ":"
+            : PublicNameProjection.DIRECTORY + kind + ":" + order + ":";
+        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            long commit = reader.getIndexCommit().getGeneration();
+            if (after != null && (after.commit() != commit || !after.id().startsWith(prefix))) throw new RankRestart();
+            var terms = org.apache.lucene.index.MultiTerms.getTerms(reader, lucene.getDocDef().getEntityField());
+            if (terms == null) return new RankPage(List.of(), 0, "exact", commit, false);
+            var iterator = terms.iterator();
+            String start = after == null ? prefix : after.id();
+            if (iterator.seekCeil(new org.apache.lucene.util.BytesRef(start)) == org.apache.lucene.index.TermsEnum.SeekStatus.END)
+                return new RankPage(List.of(), 0, "exact", commit, false);
+            var term = iterator.term();
+            if (after != null && term.utf8ToString().equals(after.id())) term = iterator.next();
+            List<RankHit> hits = new ArrayList<>();
+            while (term != null && term.utf8ToString().startsWith(prefix) && hits.size() < size) {
+                String id = term.utf8ToString();
+                var members = data.find(PUBLIC_GRAPH, uri(id), uri(RV + (identity ? "resource" : "nameDirectoryResource")), Node.ANY);
+                Node resource = null;
+                try { if (members.hasNext()) resource = members.next().getObject(); }
+                finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                hits.add(new RankHit(id, 0f, resource != null && resource.isURI() ? resource.getURI() : null));
+                term = iterator.next();
+            }
+            boolean more = term != null && term.utf8ToString().startsWith(prefix);
+            return new RankPage(List.copyOf(hits), hits.size(), more ? "lower-bound" : "exact", commit, more);
+        } catch (IOException ex) { throw new TextIndexException("directory query failed", ex); }
+    }
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static final Node PUBLIC_GRAPH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CURRENT_GRAPH = uri(CommandPolicy.CURRENT);
@@ -328,8 +368,11 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     optionalString(scopeValue, "language"), optionalString(scopeValue, "author"),
                     scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value(),
                     optionalString(scopeValue, "names"), resources);
-                RankPage page = index.ranked(args.get(0).asNode(), args.get(1).asString(),
-                    args.get(2).getInteger().intValueExact(), after, env.getDataset(), scope);
+                RankPage page = scopeValue.hasKey("directory")
+                    ? index.directory(scope.names(), optionalString(scopeValue, "directory"),
+                        args.get(2).getInteger().intValueExact(), after, env.getDataset())
+                    : index.ranked(args.get(0).asNode(), args.get(1).asString(),
+                        args.get(2).getInteger().intValueExact(), after, env.getDataset(), scope);
                 JsonArray hits = new JsonArray();
                 for (RankHit hit : page.hits()) {
                     JsonObject row = new JsonObject();
@@ -408,6 +451,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
             BooleanQuery.Builder filtered = new BooleanQuery.Builder()
                 .add(body, BooleanClause.Occur.MUST)
                 .add(new TermQuery(new Term(definition.getGraphField(), graph)), BooleanClause.Occur.FILTER);
+            if (CommandPolicy.PUBLIC_SEARCH.equals(graph)) {
+                filtered.add(new org.apache.lucene.search.PrefixQuery(new Term(definition.getEntityField(), PublicNameProjection.PREFIX)),
+                    BooleanClause.Occur.MUST_NOT);
+                filtered.add(new org.apache.lucene.search.PrefixQuery(new Term(definition.getEntityField(), PublicNameProjection.DIRECTORY)),
+                    BooleanClause.Occur.MUST_NOT);
+            }
             if (subject != null) filtered.add(new TermQuery(new Term(definition.getEntityField(), subject)),
                 BooleanClause.Occur.FILTER);
             IndexSearcher searcher = new IndexSearcher(reader);

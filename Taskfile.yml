@@ -482,6 +482,11 @@ tasks:
     cmds:
       - bun scripts/operations/rebuild-content-search.ts {{.CLI_ARGS}}
 
+  search:names:backfill:
+    desc: Resume public names, browse directories and rating counters online.
+    cmds:
+      - bun scripts/operations/backfill-public-names.ts {{.CLI_ARGS}}
+
   access:pending-search:
     desc: List unresolved private search deliveries (needs ACCESS_DATABASE_URL).
     cmds:

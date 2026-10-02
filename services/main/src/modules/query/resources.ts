@@ -6,7 +6,6 @@ import {
   encodeReadCursor,
   WorkReadInvalid,
   WorkReadMoved,
-  WorkReadExpired,
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
@@ -23,9 +22,12 @@ import {
   indexedNameMatch,
   labelIndexReady,
   fenceLabelIndex,
+  publicNamePage,
   type LabelAfter,
+  type DirectoryAfter,
 } from '../search/labels.ts';
 import type { ResourceCard, ResourceCondition, ResourceListPlan } from './resource-contract.ts';
+import { pageDiscoveryPolicy } from '../space/visibility.ts';
 
 /** Ownership establishes the read path; descriptive rdf:type only filters it.
  * Public catalogue reads never use private grants, including a reader's own. */
@@ -37,12 +39,12 @@ export function publicResources() {
       BIND("space" AS ?kind) BIND(?r AS ?summary) BIND(?r AS ?nameResource) }
     UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
       ?space a rv:Space ; rv:realmCapability ?r ; rv:disclosure rv:Public .
-      FILTER NOT EXISTS { ?r rv:visibility ?visibility . FILTER(?visibility != "public") } }
+      }
       BIND("realm" AS ?kind) BIND(?r AS ?summary) BIND(?space AS ?nameResource) }
     UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:Zone ; rv:zoneState rv:Active ; rv:zoneHead ?zoneHead ; rv:disclosure rv:Public ; rv:space ?space .
       ?space a rv:Space ; rv:zoneCapability ?r ; rv:realmCapability ?summary ; rv:disclosure rv:Public .
       ?summary a rv:Realm ; rv:realmState rv:Active .
-      FILTER NOT EXISTS { ?summary rv:visibility ?visibility . FILTER(?visibility != "public") } }
+      }
       GRAPH ${iri(GRAPHS.revisions)} { ?zoneHead a rv:ZoneRevision, rv:RevisionAnchor ; rv:component ?r .
         FILTER NOT EXISTS { ?zoneHead a rv:ErasedRevision } }
       BIND("site" AS ?kind) BIND(?space AS ?nameResource) }
@@ -57,7 +59,7 @@ export function publicResources() {
       FILTER NOT EXISTS { ?r rv:conceptRealm ?conceptRealm .
         FILTER NOT EXISTS { ?conceptRealm a rv:Realm ; rv:realmState rv:Active ; rv:space ?conceptSpace .
           ?conceptSpace rv:realmCapability ?conceptRealm ; rv:disclosure rv:Public .
-          FILTER NOT EXISTS { ?conceptRealm rv:visibility ?visibility . FILTER(?visibility != "public") } } } }
+          FILTER NOT EXISTS { ?conceptSpace rv:listing ?listing . FILTER(?listing != "listed") } } } }
       BIND("concept" AS ?kind) BIND(?r AS ?summary) BIND(?r AS ?nameResource) } }
     FILTER(STRSTARTS(STR(?r), "https://rezics.com/id/"))
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:protectionHead ?protection } }
@@ -66,7 +68,15 @@ export function publicResources() {
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?summary rv:protectionHead ?summaryProtection } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?nameResource rv:disclosure ?disclosure .
       FILTER(?disclosure != rv:Public) } }
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure ?disclosure . FILTER(?disclosure != rv:Public) } }`;
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure ?disclosure . FILTER(?disclosure != rv:Public) } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?summary rv:disclosure ?disclosure . FILTER(?disclosure != rv:Public) } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:profileDisclosure rv:Private } }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      { ?nameResource rv:listing ?listing } UNION { ?r rv:listing ?listing } UNION { ?summary rv:listing ?listing }
+      FILTER(?listing != "listed") } }
+    BIND(IRI(CONCAT("urn:rezics:search:name:visibility:", STRAFTER(STR(?r), "https://rezics.com/id/"))) AS ?nameMarker)
+    FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?nameMarker rv:nameVisibility "private" } }
+    FILTER NOT EXISTS { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?nameMarker rv:nameListing "unlisted" } }`;
 }
 
 export function resourceConditions(conditions: readonly ResourceCondition[], realm?: string) {
@@ -112,16 +122,26 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
   if (agents.length && (!session.deps.personPreferences || !session.deps.profiles)) {
     throw new WorkReadUnavailable('Agent profile owner is unavailable');
   }
-  const visibleAgents = async () =>
-    new Set(
+  const visibleAgents = async () => {
+    const listings = new Map<string, string>();
+    for (let offset = 0; offset < agents.length; offset += 50)
+      for (const [agent, listing] of await session.deps.profiles!.listing.readBatch(
+        agents.slice(offset, offset + 50),
+      ))
+        listings.set(agent, listing);
+    return new Set(
       (
         await Promise.all(
           agents.map(async (agent) =>
-            (await session.deps.personPreferences!.profileVisible(agent, null)) ? agent : null,
+            pageDiscoveryPolicy('public', listings.get(agent) === 'listed' ? 'listed' : 'unlisted')
+              .indexable && (await session.deps.personPreferences!.profileVisible(agent, null))
+              ? agent
+              : null,
           ),
         )
       ).filter((value) => value !== null),
     );
+  };
   const before = await visibleAgents();
   const cards = await readAgentCards(
     session,
@@ -263,9 +283,8 @@ export async function conceptResourceMatches(
       )
       .map((row) => row.id),
   );
-  if ((await session.deps.discovery!.active(basis, session.position, active.generation_id)).stale)
-    throw new WorkReadMoved('Discovery classifications changed');
-  return matched;
+  const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
+  return active.stale || final.stale ? new Set<string>() : matched;
 }
 
 export async function readResourceList(session: WorkReadSession, plan: ResourceListPlan) {
@@ -405,7 +424,9 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
         } else if (kind === 'concept') {
           // The Concept owner orders used definitions from immutable term
           // counts. Its zero-use tail seeks public definition names by identity.
-          let position: { phase: 'used' | 'unused'; count?: string } = { phase: 'used' };
+          let position: { phase: 'used' | 'unused'; count?: string; after?: DirectoryAfter } = {
+            phase: 'used',
+          };
           if (seek) {
             try {
               position = JSON.parse(seek.key);
@@ -435,25 +456,24 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
               })),
             );
           } else {
-            const after = position.phase === 'unused' ? (seek?.id ?? '') : '';
-            const rows = await session.query(
-              `SELECT ?r WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-              ?unit a rv:PublicNameMatchUnit ; rv:resource ?r .
-              FILTER(STRSTARTS(STR(?unit), "urn:rezics:search:name:concept:")) }
-              FILTER(STR(?r)>${lit(after)}) } ORDER BY STR(?r) LIMIT ${sourceLimit}`,
+            const page = await publicNamePage(
+              session,
+              kind,
+              'identity',
               sourceLimit,
+              position.after,
             );
             candidates.push(
-              ...rows.map((row) => ({
-                id: row.r!.value,
+              ...page.rows.map((row) => ({
+                id: row.id,
                 kind,
-                summary: row.r!.value,
+                summary: row.available ? row.id : '',
                 order: String(32n * 10n ** 30n),
                 source: kind,
-                key: JSON.stringify({ phase: 'unused' }),
+                key: JSON.stringify({ phase: 'unused', after: row.after }),
               })),
             );
-            if (!rows.length) state.done.push(kind);
+            if (!page.rows.length) state.done.push(kind);
           }
         } else if (kind === 'realm') {
           const directory = session.deps.access.realmDirectory;
@@ -477,31 +497,24 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
           );
           if (!page.rows.length) state.done.push(kind);
         } else {
-          // Bound identities before owner joins and rank hydration. No GROUP BY
-          // over revisions or whole resource population is performed per page.
-          const rows = await session.query(
-            `PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-            SELECT DISTINCT ?r ?kind ?summary ?order WHERE {
-              { SELECT ?r ?order WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-                ?unit a rv:PublicNameMatchUnit ; rv:resource ?r ; rv:${input.sort === 'updated' ? 'updatedOrder' : 'createdOrder'} ?order .
-                FILTER(STRSTARTS(STR(?unit), ${lit('urn:rezics:search:name:' + kind + ':')})) }
-                ${seek ? `FILTER(?order<${seek.key} || (?order=${seek.key} && STR(?r)>${lit(seek.id)}))` : ''}
-              } ORDER BY DESC(?order) STR(?r) LIMIT ${sourceLimit} }
-              BIND("${kind}" AS ?kind) BIND(?r AS ?summary)
-            } ORDER BY DESC(?order) STR(?r) LIMIT ${sourceLimit + 1}`,
+          const page = await publicNamePage(
+            session,
+            kind,
+            input.sort === 'updated' ? 'updated' : 'newest',
             sourceLimit,
+            seek ? (JSON.parse(seek.key) as DirectoryAfter) : undefined,
           );
           candidates.push(
-            ...rows.map((row) => ({
-              id: row.r!.value,
+            ...page.rows.map((row) => ({
+              id: row.id,
               kind,
-              summary: row.summary!.value,
-              order: row.order!.value,
+              summary: row.available ? row.id : '',
+              order: row.order,
               source: kind,
-              key: row.order!.value,
+              key: JSON.stringify(row.after),
             })),
           );
-          if (!rows.length) state.done.push(kind);
+          if (!page.rows.length) state.done.push(kind);
         }
         fetched += sourceLimit;
       }
@@ -534,7 +547,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
       : [];
     const admitted = window.flatMap((candidate) => {
       const row = rows.find((row) => row.r!.value === candidate.id);
-      return row
+      return candidate.summary && row
         ? [
             {
               ...candidate,
@@ -584,13 +597,12 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
       if (candidate.source === 'rank') state.after = JSON.parse(candidate.key);
       else state.seeks[candidate.source] = { id: candidate.id, key: candidate.key };
       const card = cards.get(candidate.id);
-      if (card) items.push(card);
+      if (card && candidate.summary) items.push(card);
     }
     more ||= examined < window.length || window.length < candidates.length;
     if (!more || (!cache.length && fetched >= QUERY_COST.candidateRows)) break;
   }
-  if ((await session.deps.discovery!.active(basis, session.position, active.generation_id)).stale)
-    throw new WorkReadExpired('Discovery projection changed');
+  const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
   if (index) await fenceLabelIndex(session, index);
   state.seen += items.length;
   const next = more
@@ -599,6 +611,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
   return {
     profile: 'resource-list-v1' as const,
     sourcePosition: session.position,
+    stale: active.stale || final.stale,
     ...listResult(items, next, prior.seen),
   };
 }

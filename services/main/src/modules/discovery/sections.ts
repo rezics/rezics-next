@@ -8,18 +8,19 @@ import {
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { RV, GRAPHS, iri, lit } from '../work/activate.ts';
+import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { resourceCard } from '../query/resource-contract.ts';
-import {
-  readResourceList,
-  resourceCards,
-  publicResources,
-  conceptResourceMatches,
-} from '../query/resources.ts';
+import { resourceCards, publicResources } from '../query/resources.ts';
 import { discoveryReader, fenceDiscoveryReader } from './reader.ts';
-import { visibleConcept } from './concepts.ts';
+import { visibleConcept, conceptCountBasis } from './concepts.ts';
 import { RANKING_PROFILE } from '../recommendation/ranking.ts';
-import { indexedNameMatch, labelIndexReady, fenceLabelIndex } from '../search/labels.ts';
+import {
+  indexedNameMatch,
+  labelIndexReady,
+  fenceLabelIndex,
+  publicNamePage,
+  type DirectoryAfter,
+} from '../search/labels.ts';
 
 const sectionId = t.Union([t.Literal('popular'), t.Literal('communities'), t.Literal('sites')]);
 export const discoverySectionsQuery = t.Object(
@@ -106,6 +107,11 @@ export async function readDiscoverySections(
   const topics = topicRows
     .filter((_, index) => disclosed[index] === 'visible')
     .map((row) => row.concept!.value);
+  const topicBasis = topics.length ? await conceptCountBasis(session) : null;
+  const topicSelection =
+    topicBasis && !topicBasis.active.stale
+      ? { generation: topicBasis.active.generation_id, concepts: topics }
+      : undefined;
   const languages = personalized ? reader!.signals.languages : [];
   const sections = input.section ? [input.section] : (['popular', 'communities', 'sites'] as const);
   const binding = [
@@ -153,6 +159,10 @@ export async function readDiscoverySections(
       if (section === 'popular') {
         if (!session.deps.recommendations)
           throw new WorkReadUnavailable('Public ranking owner is unavailable');
+        if (topics.length && !topicSelection) {
+          next = null;
+          break;
+        }
         const ranked = await session.deps.recommendations.page(
           { public: true, principal: null, actingSubject: null },
           {
@@ -163,6 +173,7 @@ export async function readDiscoverySections(
           },
           ask,
           next ?? undefined,
+          topicSelection,
         );
         const ids = ranked.items.map((item) => item.candidate);
         const rows = ids.length
@@ -179,15 +190,7 @@ export async function readDiscoverySections(
             .filter((row) => row.r!.value === id)
             .map((row) => ({ id, kind: 'work' as const, summary: row.summary!.value, order: '' })),
         );
-        const matched = await conceptResourceMatches(
-          session,
-          candidates,
-          topics.length ? [{ facet: 'concept', operator: 'any', values: topics }] : [],
-        );
-        batch = await resourceCards(
-          session,
-          candidates.filter((row) => matched.has(row.id)),
-        );
+        batch = await resourceCards(session, candidates);
         next = ranked.continuation;
         scanned += Math.max(ask, ids.length);
       } else if (section === 'communities') {
@@ -226,21 +229,32 @@ export async function readDiscoverySections(
         next = page.next;
         scanned += Math.max(ask, ids.length);
       } else {
-        const page = await readResourceList(session, {
-          input: {
-            profile: 'resource-list-v1',
-            context: 'global',
-            scope: { kind: 'all' },
-            sort: 'newest',
-            limit: ask,
-            q,
-            cursor: next ?? undefined,
-          },
-          conditions: [{ facet: 'type', operator: 'any', values: [RV + 'Zone'] }],
-        });
-        batch = page.items;
-        next = page.nextCursor;
-        scanned += ask;
+        let after: DirectoryAfter | undefined;
+        try {
+          after = next ? JSON.parse(next) : undefined;
+        } catch {
+          throw new WorkReadInvalid('Site cursor is invalid');
+        }
+        const page = await publicNamePage(session, 'site', 'newest', ask, after);
+        const ids = page.rows.filter((row) => row.available).map((row) => row.id);
+        const rows = ids.length
+          ? await session.query(
+              `SELECT DISTINCT ?r ?summary WHERE {
+          VALUES ?r { ${ids.map(iri).join(' ')} } ${publicResources()}
+          ${q ? indexedNameMatch('?r', q) : ''}
+        } LIMIT ${ids.length + 1}`,
+              ids.length,
+            )
+          : [];
+        const byId = new Map(rows.map((row) => [row.r!.value, row.summary!.value]));
+        batch = await resourceCards(
+          session,
+          ids.flatMap((id) =>
+            byId.has(id) ? [{ id, kind: 'site' as const, summary: byId.get(id)!, order: '' }] : [],
+          ),
+        );
+        next = page.more && page.rows.length ? JSON.stringify(page.rows.at(-1)!.after) : null;
+        scanned += page.rows.length;
       }
       if (reader && batch.length) {
         const flags = await session.deps.discoveryAudience!.flags(

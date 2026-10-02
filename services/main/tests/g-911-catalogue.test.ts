@@ -3,7 +3,6 @@ import { readRankedCatalogue } from '../src/modules/search/ranked.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import { catalogueNameProjection } from '../src/modules/search/names.ts';
 import { discloseCatalogueMatches } from '../src/modules/search/catalogue-disclosure.ts';
-import { PublicQueryUnavailable } from '../src/modules/work/search-budget.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { PublicTextPosition } from '../src/modules/work/search-readiness.ts';
 
@@ -54,19 +53,25 @@ test('G-911: document continuations consume rejected name/body documents without
 });
 
 test('G-911: the name recipe retains individual authored values and only the current header titles', async () => {
-  const rows = [ { work: b(id(1)), name: b('Camp Lanterns', 'en') },
+  const rows: Record<string, ReturnType<typeof b>>[] = [ { work: b(id(1)), name: b('Camp Lanterns', 'en') },
     { work: b(id(1)), name: b('魔法禁書目錄', 'zh-Hant') },
     { work: b(id(1)), state: b(JSON.stringify({ kind: 'header', originalTitle: null, localized: [
       { language: 'fr', title: 'Lumières', description: 'Private-looking description', mainVersionLabel: null, tagline: 'Tagline' },
     ] })) } ];
   const env = { fuseki: { query: async () => ({ results: { bindings: rows } }) } } as unknown as WorkActivationEnvironment;
   expect([...(await catalogueNameProjection(env, [id(1)])).get(id(1))!])
-    .toEqual(['"Camp Lanterns"@en', '"魔法禁書目錄"@zh-Hant', '"Lumières"@fr']);
+    .toEqual(['"Camp Lanterns"@en', '"Lumières"@fr', '"魔法禁書目錄"@zh-Hant']);
   expect([...(await catalogueNameProjection(env, [id(1)], { work: id(1), header: {
     kind: 'header', originalTitle: null, localized: [{ language: 'fr', title: 'Lampes', description: null, mainVersionLabel: null }],
-  } })).get(id(1))!]).toEqual(['"Camp Lanterns"@en', '"魔法禁書目錄"@zh-Hant', '"Lampes"@fr']);
+  } })).get(id(1))!]).toEqual(['"Camp Lanterns"@en', '"Lampes"@fr', '"魔法禁書目錄"@zh-Hant']);
   rows.push(...Array.from({ length: 64 }, (_, n) => ({ work: b(id(1)), name: b(`name ${n}`, 'en') })));
-  await expect(catalogueNameProjection(env, [id(1)])).rejects.toBeInstanceOf(PublicQueryUnavailable);
+  // The graph seek retains 64 names plus one header row. The authored
+  // inventory can grow beyond that request bound without failing writes.
+  env.fuseki.query = async () => ({ results: { bindings: [...rows.filter(row => 'name' in row)
+    .sort((a,b) => a.name!.value < b.name!.value ? -1 : 1).slice(0,64), ...rows.filter(row => 'state' in row)] } });
+  const names = (await catalogueNameProjection(env, [id(1)])).get(id(1))!;
+  expect(names.size).toBe(64);
+  expect(names.has('"Lumières"@fr')).toBe(true);
 });
 
 test('G-911: restricted names are removed on their exact graph heads before counting', async () => {

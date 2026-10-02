@@ -1,0 +1,6 @@
+[
+  {"visibility":"public","listing":"listed","indexable":true},
+  {"visibility":"public","listing":"unlisted","indexable":false},
+  {"visibility":"private","listing":"listed","indexable":false},
+  {"visibility":"private","listing":"unlisted","indexable":false}
+]

@@ -11,7 +11,6 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
 import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.ts';
 import { validEditorialControlBasis, type EditorialControlBasis } from '../protection/field-control.ts';
-import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
 import { catalogueNameProjection } from '../search/names.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
@@ -236,8 +235,8 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
   const expectedProtection = intent.basis.protection ? iri(intent.basis.protection) : 'rv:Absent';
   const projectedNames = workManifest ? (await catalogueNameProjection(env, [intent.work], {
     work: intent.work, title: { value: prior.title, language: prior.language },
+    replacementTitle: { value: intent.title, language },
   })).get(intent.work)! : null;
-  projectedNames?.add(publicTitleProjection(intent.title, language));
   let update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
       GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:titleControlHead ?oldControl .

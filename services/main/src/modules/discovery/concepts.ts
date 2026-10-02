@@ -1,20 +1,23 @@
 import { t } from 'elysia';
 import { listRequestFields, listResponse, listResult, type ListRequest } from '../../api-list.ts';
-import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
 import { readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
   WorkReadInvalid,
-  WorkReadExpired,
   WorkReadUnavailable,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { indexedLabels, type LabelAfter } from '../search/labels.ts';
+import {
+  indexedLabels,
+  publicNamePage,
+  type LabelAfter,
+  type DirectoryAfter,
+} from '../search/labels.ts';
 import { discoveryReader, fenceDiscoveryReader } from './reader.ts';
 import type { DiscoveryReadGeneration } from './store.ts';
 import type { OwnedDiscoveryBasis } from './contract.ts';
-import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 
 export const conceptSearchQuery = t.Object(
   {
@@ -30,13 +33,14 @@ export const conceptSearchItem = t.Object({
   id: readId,
   name: readName,
   broader: t.Array(t.Object({ id: readId, name: readName }), { maxItems: 16 }),
-  usageCount: t.Integer({ minimum: 0 }),
+  usageCount: t.Nullable(t.Integer({ minimum: 0 })),
   followed: t.Boolean(),
 });
 export const conceptSearchPage = t.Object({
   ...listResponse(conceptSearchItem).properties,
   profile: t.Literal('concept-search-v1'),
   sourcePosition: readPosition,
+  stale: t.Boolean(),
 });
 export interface ConceptSearchQuery extends ListRequest {
   scope?: 'global' | 'realm';
@@ -68,7 +72,7 @@ export function visibleConcept(concept: string, realm?: string) {
     FILTER NOT EXISTS { ${concept} rv:conceptState rv:Retired }
     FILTER NOT EXISTS { ${concept} skos:inScheme ?scheme . ?scheme rv:schemeState rv:Retired } }`;
 }
-/** A pinned count projection; stale classification/count evidence is unavailable. */
+/** Projection lag is served explicitly; it is not an expired client read. */
 export async function conceptCountBasis(
   session: WorkReadSession,
   realm?: string,
@@ -82,7 +86,6 @@ export async function conceptCountBasis(
     owner: null,
   };
   const active = await session.deps.discovery.active(basis, session.position, generation);
-  if (active.stale) throw new WorkReadExpired('Discovery counts changed; rebuild the projection');
   return { basis, active };
 }
 export async function conceptCounts(
@@ -125,7 +128,13 @@ export async function readConceptSearch(
     session.viewer,
   ];
   const cursor = decodeReadCursor(input.cursor, binding, session.position);
-  let prior: { after?: LabelAfter; count: number; followed?: number; usage?: string } = {
+  let prior: {
+    after?: LabelAfter;
+    directory?: DirectoryAfter;
+    count: number;
+    followed?: number;
+    usage?: string;
+  } = {
     count: 0,
   };
   if (cursor) {
@@ -143,6 +152,7 @@ export async function readConceptSearch(
     after = '',
     order = { ...prior };
   let counts = new Map<string, number>();
+  const names = new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>();
   // Fill a Concept page from Concept-only units. Other resource names and
   // private labels never participate in the collector or its continuation.
   if (q) {
@@ -163,7 +173,10 @@ export async function readConceptSearch(
             page.ids.length,
           )
         : [];
-      const summaries = await session.summaries(visibleRows.map((row) => row.concept!.value));
+      const refs = visibleRows.map((row) => row.concept!.value);
+      for (const summary of await session.summaries(refs.filter((id) => !names.has(id))))
+        names.set(summary.reference, summary);
+      const summaries = refs.map((id) => names.get(id)!);
       const visible = new Set(
         summaries.flatMap((row) =>
           row.status === 'available' && row.type === 'concept' ? [row.reference] : [],
@@ -198,6 +211,8 @@ export async function readConceptSearch(
       let candidates: string[],
         candidateCounts = new Map<string, number>(),
         tail = false;
+      const candidateAfters = new Map<string, DirectoryAfter>();
+      let available: Set<string> | undefined;
       if (phase === 2) {
         candidates = topics
           .filter((id) => id > key)
@@ -214,16 +229,11 @@ export async function readConceptSearch(
         candidateCounts = new Map(rows.map((row) => [row.concept, Number(row.work_count)]));
         tail = rows.length > ask;
       } else {
-        const rows = await session.query(
-          `SELECT ?concept WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          ?unit a rv:PublicNameMatchUnit ; rv:resource ?concept .
-          FILTER(STRSTARTS(STR(?unit), "urn:rezics:search:name:concept:")) }
-          FILTER(STR(?concept)>${lit(key)})
-        } ORDER BY STR(?concept) LIMIT ${ask + 1}`,
-          ask + 1,
-        );
-        candidates = rows.slice(0, ask).map((row) => row.concept!.value);
-        tail = rows.length > ask;
+        const page = await publicNamePage(session, 'concept', 'identity', ask, order.directory);
+        candidates = page.rows.map((row) => row.id);
+        tail = page.more;
+        for (const row of page.rows) candidateAfters.set(row.id, row.after);
+        available = new Set(page.rows.filter((row) => row.available).map((row) => row.id));
       }
       if (!candidates.length) {
         if (phase === 0) {
@@ -248,8 +258,10 @@ export async function readConceptSearch(
         key = id;
         usage = String(candidateCounts.get(id) ?? batchCounts.get(id) ?? 0);
         scanned++;
+        if (candidateAfters.has(id)) order.directory = candidateAfters.get(id);
         if (
           !visible.has(id) ||
+          (available && !available.has(id)) ||
           (phase < 2 && topics.includes(id)) ||
           (phase === 0 && batchCounts.get(id)! > 0)
         )
@@ -269,7 +281,7 @@ export async function readConceptSearch(
       }
     }
     after = key;
-    order = { count: prior.count, followed: phase, usage };
+    order = { count: prior.count, followed: phase, usage, directory: order.directory };
   }
   if ([...counts.values()].some((count) => !Number.isSafeInteger(count) || count < 0)) {
     throw new WorkReadUnavailable('Concept usage count is invalid');
@@ -284,12 +296,9 @@ export async function readConceptSearch(
       )
     : [];
   const resources = [...new Set([...ids, ...relations.map((row) => row.broader!.value)])];
-  const names = new Map<
-    string,
-    NonNullable<Awaited<ReturnType<WorkReadSession['summaries']>>>[number]
-  >();
-  for (let offset = 0; offset < resources.length; offset += 64) {
-    for (const summary of await session.summaries(resources.slice(offset, offset + 64)))
+  const unnamed = resources.filter((resource) => !names.has(resource));
+  for (let offset = 0; offset < unnamed.length; offset += 64) {
+    for (const summary of await session.summaries(unnamed.slice(offset, offset + 64)))
       names.set(summary.reference, summary);
   }
   const disclosed = await session.disclosure(
@@ -329,7 +338,7 @@ export async function readConceptSearch(
   });
   await fenceDiscoveryReader(session, reader, input.personalization !== false);
   const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
-  if (final.stale) throw new WorkReadExpired('Concept count projection changed');
+  const stale = active.stale || final.stale;
   order.count += items.length;
   const next = more
     ? encodeReadCursor(binding, session.position, after, JSON.stringify(order))
@@ -337,6 +346,11 @@ export async function readConceptSearch(
   return {
     profile: 'concept-search-v1' as const,
     sourcePosition: session.position,
-    ...listResult(items, next, prior.count),
+    stale,
+    ...listResult(
+      items.map((item) => ({ ...item, usageCount: stale ? null : item.usageCount })),
+      next,
+      prior.count,
+    ),
   };
 }

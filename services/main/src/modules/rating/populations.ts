@@ -31,15 +31,15 @@ export const ratingPopulationsPage = t.Object({
   profile: t.Literal('rating-populations-v1'),
   target: readId,
   sourcePosition: readPosition,
+  stale: t.Boolean(),
 });
 export interface RatingPopulationsQuery extends ListRequest {
   target: string;
   actingSubject?: string;
 }
-/** Target-leading graph joins aggregate only current available, receipt-proven
- * observation heads. Withdrawal and retries cannot add a vote. Rank/count seek
- * returns at most 64+1 populations; hydration and membership flags are batched.
- * Graph aggregation may sort; WorkReadSession bounds time, calls and bytes. */
+/** Target-leading context counters maintained by the native command module.
+ * Reads never enumerate observation heads. One counter per Context/target is
+ * summed into its population; legacy migration incompleteness is explicit. */
 export const RATING_POPULATIONS_COST = {
   candidates: 65,
   page: 64,
@@ -91,28 +91,33 @@ export async function readRatingPopulations(
       throw new WorkReadInvalid('Rating population cursor is invalid');
     }
   }
+  const projection = await session.query(
+    `SELECT ?complete WHERE {
+    GRAPH <urn:rezics:graph:rating-population-counts> {
+      <urn:rezics:rating-population-counts:v1> rv:complete ?complete }
+  } LIMIT 2`,
+    1,
+  );
+  const stale = projection[0]?.complete?.value !== 'true';
   const rows = await session.query(
     `SELECT ?population ?count WHERE {
-    { SELECT ?population (COUNT(DISTINCT ?availableSlot) AS ?count) WHERE {
+    { SELECT ?population (SUM(?availableCount) AS ?count) WHERE {
+      GRAPH <urn:rezics:graph:rating-population-counts> {
+        ?counter rv:populationTarget ${iri(main ?? target)} ; rv:populationContext ?context ;
+          rv:availableRatingCount ?availableCount . FILTER(?availableCount > 0) }
       GRAPH ${iri(GRAPHS.current)} {
-        ?observation rv:ratingContext ?context .
-        ${
-          main
-            ? `{ ?observation rv:targetMainVersion ${iri(main)} .
-          FILTER NOT EXISTS { ?observation rv:targetRelease ?release } }
-`
-            : `{ ?observation rv:target ${iri(target)} }
-          ${resolved!.base === 'release' ? `UNION { ?observation rv:targetRelease ${iri(target)} }` : ''}`
-        }
-        ?context rv:contextState rv:Active .
+        ?context rv:contextState rv:Active ; rv:head ?contextHead .
         { ?context a rv:GlobalRatingContext ; rv:ratingPopulationOwner ?population .
           FILTER(?population = ${iri(GLOBAL_RATING_POPULATION_OWNER)})
           ${q && !'global'.includes(q.toLowerCase()) ? 'FILTER(false)' : ''} }
         UNION { ?context rv:realm ?population . ?population a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
           ?space a rv:Space ; rv:realmCapability ?population ; rv:disclosure rv:Public .
-          FILTER NOT EXISTS { ?population rv:visibility ?visibility . FILTER(?visibility != "public") }
+          FILTER NOT EXISTS { ?space rv:listing ?listing . FILTER(?listing != "listed") }
+          FILTER NOT EXISTS { ?population rv:disclosure ?disclosure . FILTER(?disclosure != rv:Public) }
+          FILTER NOT EXISTS { ?population rv:listing ?listing . FILTER(?listing != "listed") }
           FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
-          FILTER NOT EXISTS { ?population rv:protectionHead ?protected } }
+          FILTER NOT EXISTS { ?population rv:protectionHead ?protected }
+          FILTER NOT EXISTS { ?space rv:protectionHead ?protectedSpace } }
       }
       ${
         q
@@ -120,17 +125,12 @@ export async function readRatingPopulations(
         ${indexedNameMatch('?population', q)} })`
           : ''
       }
-      { GRAPH ${iri(GRAPHS.current)} {
-          ?observation rv:observationHead ?head ; rv:ratingSlot ?availableSlot .
-          ?context rv:head ?contextHead }
-        GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ?observation ;
-          rv:ratingAvailability rv:Available ; rv:ratingValue ?value .
-          FILTER NOT EXISTS { ?head a rv:ErasedRevision }
+      { GRAPH ${iri(GRAPHS.revisions)} {
           ?contextHead a rv:RevisionAnchor ; rv:component ?context .
           FILTER NOT EXISTS { ?contextHead a rv:ErasedRevision } }
-        GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:observationRevision ?head ; rv:outcome rv:Succeeded .
+        GRAPH ${iri(GRAPHS.receipts)} {
           ?contextReceipt a rv:OperationReceipt ; rv:ratingContextRevision ?contextHead ; rv:outcome rv:Succeeded } }
-      } GROUP BY ?population HAVING(COUNT(DISTINCT ?availableSlot)>0) }
+      } GROUP BY ?population HAVING(SUM(?availableCount)>0) }
       ${
         cursor
           ? `FILTER(?count < ${lit(prior.count)}^^<http://www.w3.org/2001/XMLSchema#integer>
@@ -213,6 +213,7 @@ export async function readRatingPopulations(
     profile: 'rating-populations-v1' as const,
     target,
     sourcePosition: session.position,
+    stale,
     ...listResult(items, next, prior.seen),
   };
 }

@@ -12,15 +12,18 @@ import org.apache.jena.vocabulary.RDF;
  * units share the existing publicTitle field; they are not Work body units. */
 final class PublicNameProjection {
     static final String PREFIX = "urn:rezics:search:name:";
+    static final String DIRECTORY = "urn:rezics:search:directory:";
     private static final String RV = "https://rezics.com/vocab/";
     private static final Node CURRENT = uri(CommandPolicy.CURRENT);
     private static final Node PUBLIC = uri(CommandPolicy.PUBLIC_SEARCH);
+    private static final Node POLICY = uri(PREFIX + "policy-state");
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node p(String value) { return uri(RV + value); }
     static boolean nameMaintenanceQuad(Quad quad) {
         if (quad.getPredicate().equals(p("publicTitle"))) return true;
-        return quad.getSubject().isURI() && quad.getSubject().getURI().matches(PREFIX + "visibility:[0-9a-f-]{36}")
-            && Set.of(p("nameVisibility"), p("nameVersion")).contains(quad.getPredicate());
+        return (quad.getSubject().isURI() && quad.getSubject().getURI().matches(PREFIX + "visibility:[0-9a-f-]{36}")
+            || quad.getSubject().isVariable() && quad.getSubject().getName().equals("marker"))
+            && Set.of(p("nameVisibility"), p("nameVersion"), p("nameListing"), p("listingVersion")).contains(quad.getPredicate());
     }
     private static boolean has(DatasetGraph data, Node subject, String predicate, Node object) {
         return data.contains(CURRENT, subject, p(predicate), object);
@@ -33,13 +36,16 @@ final class PublicNameProjection {
     private static boolean type(DatasetGraph data, Node subject, String value) {
         return data.contains(CURRENT, subject, RDF.type.asNode(), uri(value));
     }
+    static boolean listedPublic(DatasetGraph data, Node resource, boolean requireDisclosure) {
+        Node disclosure = one(data, resource, "disclosure"), listing = one(data, resource, "listing");
+        return (disclosure == null ? !requireDisclosure : disclosure.equals(p("Public")))
+            && (listing == null || listing.equals(NodeFactory.createLiteralString("listed")));
+    }
     private static boolean publicRealm(DatasetGraph data, Node realm) {
         Node space = one(data, realm, "space");
         return has(data, realm, "realmState", p("Active")) && space != null
-            && has(data, space, "disclosure", p("Public"))
-            && !has(data, realm, "protectionHead", Node.ANY)
-            && !has(data, realm, "visibility", NodeFactory.createLiteralString("private"))
-            && !has(data, realm, "visibility", NodeFactory.createLiteralString("restricted"));
+            && listedPublic(data, space, true) && listedPublic(data, realm, false)
+            && !has(data, realm, "protectionHead", Node.ANY);
     }
     private static String kind(DatasetGraph data, Node resource) {
         for (String predicate : Set.of("head", "semanticHead", "conceptHead", "collectionHead", "zoneHead")) {
@@ -57,11 +63,23 @@ final class PublicNameProjection {
                 && (scheme == null || !has(data, scheme, "schemeState", p("Retired"))) ? "concept" : null;
         }
         if (type(data, resource, RV + "Realm")) return publicRealm(data, resource) ? "realm" : null;
-        if (type(data, resource, RV + "Agent")) return has(data, resource, "head", Node.ANY)
+        if (type(data, resource, RV + "Agent")) {
+            Node marker = uri(PREFIX + "visibility:" + resource.getURI().substring("https://rezics.com/id/".length()));
+            // An upgraded legacy dataset has unknown Access policies until its
+            // resumable policy pass. New bootstrap datasets start reconciled.
+            if ((!data.contains(PUBLIC, marker, p("nameVersion"), Node.ANY)
+                || !data.contains(PUBLIC, marker, p("listingVersion"), Node.ANY))
+                && !data.contains(PUBLIC, POLICY, p("complete"), NodeFactory.createLiteralByValue(true,
+                    org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean))) return null;
+            return has(data, resource, "head", Node.ANY)
             && !type(data, resource, RV + "AgentTombstone")
+            && listedPublic(data, resource, false)
             && !has(data, resource, "profileDisclosure", p("Private"))
             && !data.contains(PUBLIC, uri(PREFIX + "visibility:" + resource.getURI().substring("https://rezics.com/id/".length())),
+                p("nameListing"), NodeFactory.createLiteralString("unlisted"))
+            && !data.contains(PUBLIC, uri(PREFIX + "visibility:" + resource.getURI().substring("https://rezics.com/id/".length())),
                 p("nameVisibility"), NodeFactory.createLiteralString("private")) ? "agent" : null;
+        }
         if (type(data, resource, "https://schema.org/CreativeWork")) {
             Node main = one(data, resource, "mainVersion");
             boolean published = false;
@@ -74,10 +92,10 @@ final class PublicNameProjection {
             return published || has(data, resource, "catalogueVisible", NodeFactory.createLiteralByValue(true,
                 org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) ? "work" : null;
         }
-        if (!has(data, resource, "disclosure", p("Public"))) return null;
+        if (!listedPublic(data, resource, true)) return null;
         if (type(data, resource, RV + "Zone")) {
             Node space = one(data, resource, "space"), realm = space == null ? null : one(data, space, "realmCapability");
-            return has(data, resource, "zoneState", p("Active")) && realm != null && publicRealm(data, realm) ? "site" : null;
+            return has(data, resource, "zoneState", p("Active")) && realm != null && listedPublic(data, space, true) && publicRealm(data, realm) ? "site" : null;
         }
         if (type(data, resource, RV + "Collection")) return has(data, resource, "collectionState", p("Active")) ? "collection" : null;
         if (type(data, resource, RV + "Space")) return one(data, resource, "realmCapability") == null
@@ -85,9 +103,14 @@ final class PublicNameProjection {
         return null;
     }
     static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes) {
+        if (plan.bootstrap() || data.contains(uri(CommandPolicy.RECEIPTS), uri(receipt), p("namePoliciesComplete"),
+            NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)))
+            data.add(PUBLIC, POLICY, p("complete"), NodeFactory.createLiteralByValue(true,
+                org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
         Set<Node> resources = new LinkedHashSet<>();
         for (String value : plan.current()) if (value.startsWith("https://rezics.com/id/")) resources.add(uri(value));
         for (var change : changes) {
+            if (change.work() != null) resources.add(change.work());
             var units = data.find(PUBLIC, uri(change.unit()), p("work"), Node.ANY);
             try { if (units.hasNext()) resources.add(units.next().getObject()); }
             finally { org.apache.jena.atlas.iterator.Iter.close(units); }
@@ -128,9 +151,14 @@ final class PublicNameProjection {
         }
         for (Node resource : resources) refresh(data, resource);
     }
-    private static void refresh(DatasetGraph data, Node resource) {
+    static void refresh(DatasetGraph data, Node resource) {
         String suffix = resource.getURI().substring("https://rezics.com/id/".length());
         Node oldCreated = null;
+        var directories = data.find(PUBLIC, Node.ANY, p("nameDirectoryResource"), resource);
+        Set<Node> oldDirectories = new LinkedHashSet<>();
+        try { while (directories.hasNext()) oldDirectories.add(directories.next().getSubject()); }
+        finally { org.apache.jena.atlas.iterator.Iter.close(directories); }
+        for (Node directory : oldDirectories) data.deleteAny(PUBLIC, directory, Node.ANY, Node.ANY);
         for (String value : Set.of("concept", "realm", "site", "agent", "collection", "space", "work"))
         {
             Node oldUnit = uri(PREFIX + value + ":" + suffix);
@@ -144,7 +172,8 @@ final class PublicNameProjection {
         Node source = Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
         if (source == null || has(data, source, "protectionHead", Node.ANY)) return;
         Node unit = uri(PREFIX + kind + ":" + suffix);
-        Set<Node> names = new LinkedHashSet<>();
+        java.util.NavigableSet<Node> names = new java.util.TreeSet<>(java.util.Comparator.comparing(
+            org.apache.jena.riot.out.NodeFmtLib::strNT));
         for (String predicate : Set.of("http://www.w3.org/2000/01/rdf-schema#label", "https://schema.org/name",
             "https://schema.org/alternateName", RV + "localizedName", "http://www.w3.org/2004/02/skos/core#prefLabel",
             "http://www.w3.org/2004/02/skos/core#altLabel")) {
@@ -152,14 +181,17 @@ final class PublicNameProjection {
             try { while (rows.hasNext()) {
                 Node name = rows.next().getObject();
                 if (name.isLiteral()) names.add(name);
-                if (names.size() > 64) throw new IllegalArgumentException("public names exceed owner bound");
+                if (names.size() > 64) names.pollLast();
             } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         }
         if (kind.equals("work")) {
             var units = data.find(PUBLIC, Node.ANY, p("work"), resource);
             try { while (units.hasNext()) {
                 var titles = data.find(PUBLIC, units.next().getSubject(), p("publicTitle"), Node.ANY);
-                try { while (titles.hasNext()) names.add(titles.next().getObject()); }
+                try { while (titles.hasNext()) {
+                    names.add(titles.next().getObject());
+                    if (names.size() > 64) names.pollLast();
+                } }
                 finally { org.apache.jena.atlas.iterator.Iter.close(titles); }
             } } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
         }
@@ -175,7 +207,20 @@ final class PublicNameProjection {
                     .add(new java.math.BigInteger(sequence)), org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
                 data.add(new Quad(PUBLIC, unit, p("updatedOrder"), rank));
                 data.add(new Quad(PUBLIC, unit, p("createdOrder"), oldCreated == null ? rank : oldCreated));
+                directory(data, resource, kind, "newest", oldCreated == null ? rank : oldCreated);
+                directory(data, resource, kind, "updated", rank);
             } } finally { org.apache.jena.atlas.iterator.Iter.close(sequences); }
         }
+    }
+    /** Ordered projection keys use the existing indexed entity field. Lucene's
+     * term dictionary can seek by kind/order without sorting name documents. */
+    private static void directory(DatasetGraph data, Node resource, String kind, String order, Node rank) {
+        java.math.BigInteger value = new java.math.BigInteger(rank.getLiteralLexicalForm());
+        String reverse = String.format(java.util.Locale.ROOT, "%040d", java.math.BigInteger.TEN.pow(40)
+            .subtract(java.math.BigInteger.ONE).subtract(value));
+        Node unit = uri(DIRECTORY + kind + ":" + order + ":" + reverse + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
+        data.add(new Quad(PUBLIC, unit, p("nameDirectoryResource"), resource));
+        data.add(new Quad(PUBLIC, unit, p("nameDirectoryOrder"), rank));
+        data.add(new Quad(PUBLIC, unit, p("publicTitle"), NodeFactory.createLiteralString("rezicspublicdirectory")));
     }
 }

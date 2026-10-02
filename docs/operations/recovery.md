@@ -221,6 +221,25 @@ QA host; the manager's integrated exclusive run owns launch RPO/RTO qualificatio
 
 ## Offline Lucene rebuild
 
+Public-name and rating-population projection upgrades do not need this offline
+rebuild when the existing text index is healthy. Deploy Fuseki command module
+`0.5.35`, apply Access migrations `997`–`999` through
+`task ops:migrate -- <private-env-file>`, and deploy Main from the same release.
+Run `task search:names:backfill -- --batches 64` on the saved stack; repeat
+until its JSON result has `complete: true`. For an isolated persistent QA stack,
+append `--profile qa --run-id <id> --persistent`. Writers stay online. The command
+first mirrors Agent visibility/listing policies, then derives public names,
+sorted browse directories and receipt-backed rating counters. Each native command
+holds at most 64 identities; epoch-specific Access checkpoints and graph receipts
+resume after interruption without a population ceiling. Main startup attempts
+one policy batch and logs a failure without preventing startup. Legacy Agent
+names remain withheld until their Access policies are known, and rating reads
+flag an incomplete counter backfill as stale. Use `--restart` only to rescan the
+current epoch; it retains graph receipts and does not duplicate rating counts.
+Finally activate a fresh Discovery generation (`discovery-source-v3`) through
+its generation-build/advance/activation API. Until then reads flag stale usage
+counts and withhold outdated classification matches.
+
 Treat text as unavailable after uncertain index state, I/O failure, analyzer
 change, bulk RDF load or unqualified restore. Reconcile exact Content revisions,
 erasure and the RDF MatchUnit projection first. Stop Main writers and consumers;

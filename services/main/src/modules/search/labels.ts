@@ -32,6 +32,66 @@ export interface LabelAfter {
   commit: string;
   document: number;
 }
+export type DirectoryAfter = Omit<LabelAfter, 'document'>;
+
+/** Seek an ordered native projection by kind. This walks <=64 dictionary keys,
+ * never scans/sorts public titles; deleted keys retain an advancing cursor. */
+export async function publicNamePage(
+  session: WorkReadSession,
+  kind: string,
+  order: 'identity' | 'newest' | 'updated',
+  limit: number,
+  after?: DirectoryAfter,
+) {
+  const position = await labelIndexReady(session);
+  const rows = await session.query(
+    `SELECT ?page WHERE {
+    BIND(rv:rankedText(rv:publicTitle, "", ${limit}, ${lit(after ? JSON.stringify(after) : '')},
+      ${lit(JSON.stringify({ names: kind, directory: order }))}) AS ?page)
+  } LIMIT 1`,
+    1,
+  );
+  let page: {
+    hits: { id: string; key: string | null; score: string }[];
+    more: boolean;
+    commit: string;
+    restart?: boolean;
+  };
+  try {
+    page = JSON.parse(rows[0]?.page?.value ?? '');
+  } catch {
+    throw new WorkReadUnavailable('Name directory is unavailable');
+  }
+  if (page.restart) throw new WorkReadMoved('Name directory changed');
+  const prefix =
+    order === 'identity'
+      ? `urn:rezics:search:name:${kind}:`
+      : `urn:rezics:search:directory:${kind}:${order}:`;
+  if (
+    !Array.isArray(page.hits) ||
+    page.hits.length > limit ||
+    typeof page.more !== 'boolean' ||
+    !/^\d+$/.test(page.commit) ||
+    page.hits.some(
+      (hit) =>
+        typeof hit.id !== 'string' ||
+        !hit.id.startsWith(prefix) ||
+        (hit.key !== null && !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(hit.key)),
+    )
+  )
+    throw new WorkReadUnavailable('Name directory returned an invalid page');
+  await fenceLabelIndex(session, position);
+  return {
+    more: page.more,
+    rows: page.hits.map((hit) => ({
+      id: hit.key ?? 'https://rezics.com/id/' + hit.id.split(':').at(-1),
+      available: hit.key !== null,
+      order:
+        order === 'identity' ? '0' : String(10n ** 40n - 1n - BigInt(hit.id.split(':').at(-2)!)),
+      after: { id: hit.id, score: '0', commit: page.commit } satisfies DirectoryAfter,
+    })),
+  };
+}
 interface LabelHit {
   id: string;
   key: string | null;

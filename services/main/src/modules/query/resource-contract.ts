@@ -51,6 +51,7 @@ export const resourceListPage = t.Object({
   ...listResponse(resourceCard).properties,
   profile: t.Literal('resource-list-v1'),
   sourcePosition: readPosition,
+  stale: t.Boolean(),
 });
 export interface ResourceCondition {
   facet: 'type' | 'concept' | 'language';

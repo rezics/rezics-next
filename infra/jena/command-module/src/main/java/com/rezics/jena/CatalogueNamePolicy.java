@@ -56,10 +56,12 @@ final class CatalogueNamePolicy {
                     locale.get("title").getAsString().value(), locale.get("language").getAsString().value()));
             }
         }
-        if (names.size() > 64 || names.stream().anyMatch(name -> !name.isLiteral()
+        if (names.stream().anyMatch(name -> !name.isLiteral()
             || name.getLiteralLexicalForm().isEmpty() || name.getLiteralLexicalForm().length() > 500))
             throw new IllegalArgumentException("name recipe exceeds its bound");
-        return names;
+        return names.stream().sorted(java.util.Comparator.comparing(Node::getLiteralLexicalForm)
+            .thenComparing(Node::getLiteralLanguage)).limit(64)
+            .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
     static String check(DatasetGraph data, String receipt, List<SearchDeltaJournal.Change> changes) {
         Node receiptWork = one(data, RECEIPTS, uri(receipt), rv("work"));
