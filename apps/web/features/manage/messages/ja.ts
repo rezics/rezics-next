@@ -1,7 +1,9 @@
+import { accessMessages } from '../settings-messages.ts';
 import { asValue, insert, number, plural } from 'native-i18n';
 import type { ManageMessages } from '../messages.ts';
 
 export default {
+  access: accessMessages['ja'],
   title: '管理',
   description: '運営を手伝っているコミュニティの確認待ち項目、エスカレーションされた項目、運営メンバーを確認できます。',
   actingAs: '操作中のエージェント',

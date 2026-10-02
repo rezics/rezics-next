@@ -1,7 +1,9 @@
+import { accessMessages } from '../settings-messages.ts';
 import { asValue, insert, number, plural } from 'native-i18n';
 import type { ManageMessages } from '../messages.ts';
 
 export default {
+  access: accessMessages['zh-Hans'],
   title: '管理',
   description: '你参与管理的领域：待处理的事项、已上报的事项，以及协助管理的人。',
   actingAs: '当前身份',

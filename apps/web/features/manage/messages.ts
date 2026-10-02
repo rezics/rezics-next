@@ -1,6 +1,8 @@
+import { accessEnglish } from './settings-messages.ts';
 import { asValue, insert, number, plural } from 'native-i18n';
 
 export const messages = {
+  access: accessEnglish,
   // Workspace
   title: 'Manage',
   description: 'The Realms you help run: what is waiting, what was escalated and who helps.',

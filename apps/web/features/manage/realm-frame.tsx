@@ -9,6 +9,7 @@ import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Thumb } from './parts.tsx';
 import { RealmTabs } from './realm-tabs.tsx';
 import type { RealmHeader } from './types.ts';
+import { accessMessages } from './settings-messages.ts';
 
 /** The acting Agent, shown before any decision is made (Identity before action). */
 export function ActingAs({ agent, locale, messages }: { agent: AgentOption; locale: UiLocale; messages: ManageMessages }) {
@@ -46,14 +47,15 @@ export function RealmFrame({ realm, address = realm, header, agent, locale, mess
         </div>
         <div className="flex min-w-0 items-center gap-3">
           <Thumb image={header?.icon ?? null} label={header?.name.value ?? fallback} fallbackKey={realm} />
-          <h1 className="min-w-0 truncate font-semibold text-2xl tracking-tight sm:text-3xl">
+          <h1 className="min-w-0 break-words font-semibold text-2xl tracking-tight sm:text-3xl">
             {header ? <Named name={header.name} /> : fallback}</h1>
         </div>
         <RealmTabs realm={address} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
           roles: t.tabRoles, settings: t.tabSettings }} />
+        <LocalizedLink href={`/manage/r/${address}/requests`} className="w-fit rounded-md pb-3 text-primary text-sm underline-offset-4 hover:underline">
+          {accessMessages[locale].requests}</LocalizedLink>
       </div>
     </div>
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-10">{children}</div>
   </div>;
 }
-

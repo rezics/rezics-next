@@ -1,7 +1,9 @@
+import { accessMessages } from '../settings-messages.ts';
 import { asValue, insert, number, plural } from 'native-i18n';
 import type { ManageMessages } from '../messages.ts';
 
 export default {
+  access: accessMessages['de'],
   // Workspace
   title: 'Verwaltung',
   description: 'Die Communities, die du mitbetreust: Was wartet, was weitergeleitet wurde und wer mithilft.',
