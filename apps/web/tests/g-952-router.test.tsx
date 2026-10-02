@@ -161,23 +161,14 @@ describe('G-952 private Space landing admission', () => {
     },
   );
 
-  test('a legacy handle can reach its request page only after Main admits the limited read', async () => {
-    const calls = serve((url) =>
-      url.pathname === '/v1/realms/by-handle/private-books'
-        ? Response.json({ realm: iri(realm), handle: 'private-books' })
-        : url.pathname.endsWith('/join-page')
-          ? Response.json(joinPageFixture)
-          : absent(),
-    );
-    expect(await readSpacePage('private-books', 'ja')).toEqual({
-      kind: 'join',
-      page: joinPageFixture,
+  test('a denied name stays missing until the shared resolver supplies its Realm capability', async () => {
+    const calls = serve(() => {
+      throw new Error('The merged API has no per-Realm handle lookup');
     });
-    expect(calls).toEqual([
-      '/v1/realms/by-handle/private-books',
-      `/v1/realms/${realm}`,
-      `/v1/realms/${realm}/join-page`,
-    ]);
+    for (const credentials of [{}, { token: 'member', actingSubject: iri(work) }]) {
+      expect(await readSpacePage('private-books', 'ja', credentials)).toEqual({ kind: 'missing' });
+    }
+    expect(calls).toEqual([]);
   });
 
   test.each(['r', 'z'])(

@@ -109,7 +109,13 @@ function OpeningPost({
   const title = post.blocked ? t.blockedUser : (post.title ?? ''),
     body = post.body;
   const href = threadPath(realm.path, post.reply);
-  const words = body ? <ReplyBody reply={{ ...post, body }} ratingTarget={read.work.id} className="text-base/relaxed" /> : null;
+  const words = body ? (
+    <ReplyBody
+      reply={{ ...post, body }}
+      ratingTarget={read.work.id}
+      className="text-base/relaxed"
+    />
+  ) : null;
   return (
     <article aria-labelledby="thread-title" className="grid gap-3">
       <div className="flex items-center gap-2">
@@ -207,7 +213,11 @@ function ReplyContext({ read, realm }: { read: ThreadRead; realm: ThreadViewProp
         <figure className="grid gap-1 border-border border-s-2 ps-3">
           <figcaption className="text-muted-foreground text-xs">{t.inReplyTo}</figcaption>
           <ReplyByline reply={parent} opener={opening?.author?.id ?? null} />
-          <ReplyBody reply={parent} ratingTarget={read.work.id} className="line-clamp-4 text-muted-foreground text-sm" />
+          <ReplyBody
+            reply={parent}
+            ratingTarget={read.work.id}
+            className="line-clamp-4 text-muted-foreground text-sm"
+          />
         </figure>
       ) : null}
     </div>

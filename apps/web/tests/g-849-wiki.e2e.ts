@@ -62,11 +62,19 @@ test.beforeAll(async () => {
   // The Zone is read through its route segment, and its package runs only once Main reports it approved.
   let state = '';
   for (const deadline = Date.now() + 120_000; Date.now() < deadline && state !== 'package';) {
-    const zone = await fetch(main('/v1/addresses/resolve?scope=space&key=franchise-wiki')).catch(() => null);
-    const id = zone?.ok ? (await zone.json() as { capabilities: { zone?: string } }).capabilities.zone?.slice(-36) : null;
-    const presentation = id ? await fetch(main(`/v1/zones/${id}/presentation`)).catch(() => null) : null;
-    state = presentation?.ok ? (await presentation.json() as { execution: { state: string } }).execution.state : '';
-    if (state !== 'package') await new Promise(done => setTimeout(done, 1000));
+    const zone = await fetch(main('/v1/addresses/resolve?scope=space&key=franchise-wiki')).catch(
+      () => null,
+    );
+    const id = zone?.ok
+      ? ((await zone.json()) as { capabilities: { zone?: string } }).capabilities.zone?.slice(-36)
+      : null;
+    const presentation = id
+      ? await fetch(main(`/v1/zones/${id}/presentation`)).catch(() => null)
+      : null;
+    state = presentation?.ok
+      ? ((await presentation.json()) as { execution: { state: string } }).execution.state
+      : '';
+    if (state !== 'package') await new Promise((done) => setTimeout(done, 1000));
   }
   if (state !== 'package')
     throw new Error('The franchise wiki Zone never reported its package approved');

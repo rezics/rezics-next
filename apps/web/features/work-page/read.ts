@@ -2,6 +2,8 @@ import { cookies } from 'next/headers';
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { cache } from 'react';
 import { resolveAddress } from '../address/server.ts';
+import type { ResolvedAddress } from '../address/client.ts';
+import { addressKey } from '../address/path.ts';
 import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
@@ -97,12 +99,22 @@ export type ResolvedRef =
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
+/** Retained names and merged identities use Main's current canonical key. */
+export function workRefFromAddress(address: ResolvedAddress): ResolvedRef {
+  // Main's summary-derived canonical address already selects a merged Work's
+  // survivor and current name. Keep it intact instead of taking another UUID hop.
+  return mergedSurvivor(address) || address.state === 'redirect'
+    ? { kind: 'moved', slug: addressKey(address.canonical) }
+    : { kind: 'work', id: address.holder.slice(-36) };
+}
+
 /** A `/w/{ref}` segment to a Work UUID. Slugs never become alternate Work identities. */
 export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> => {
   if (ref.kind === 'id') return { kind: 'work', id: ref.id };
   const resolved = await resolveAddress('work', ref.slug, await requestLocale());
-  return resolved.kind === 'resolved' ? { kind: 'work', id: resolved.data.holder.slice(-36) }
-    : { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+  if (resolved.kind !== 'resolved')
+    return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+  return workRefFromAddress(resolved.data);
 });
 
 export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promise<Loaded<WorkHeader>> => {

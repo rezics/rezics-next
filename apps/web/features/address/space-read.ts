@@ -10,8 +10,8 @@ export type SpacePage =
   | { kind: 'missing' | 'unavailable' };
 
 /** Main's limited landing read is the only exception to a denied header.
- * Legacy Realm identities/handles remain usable until the address resolver
- * admits private Space identities and returns their capability mapping. */
+ * Legacy Realm identities remain usable until the address resolver admits
+ * private Space identities and returns their capability mapping. */
 export async function readSpacePage(
   key: string,
   languages: string,
@@ -39,17 +39,10 @@ export async function readSpacePage(
     if (options.address && !realm) return { kind: 'missing' };
     if (!realm) {
       const parsed = parseAddressSegment(key);
-      if (!parsed) return { kind: 'missing' };
-      if (parsed.kind !== 'name') realm = parsed.id;
-      else {
-        const named = await read(`/v1/realms/by-handle/${encodeURIComponent(parsed.key)}`);
-        if ([400, 404, 422].includes(named.status)) return { kind: 'missing' };
-        if (!named.ok) return { kind: 'unavailable' };
-        const data = (await named.json()) as { realm: string };
-        const identity = parseAddressSegment(data.realm?.slice(-36));
-        if (!identity || identity.kind === 'name') return { kind: 'unavailable' };
-        realm = identity.id;
-      }
+      // The merged API has one name resolver and no per-Realm handle lookup.
+      // A denied name cannot be mapped to a Realm through a second resolver.
+      if (!parsed || parsed.kind === 'name') return { kind: 'missing' };
+      realm = parsed.id;
     }
     const query =
       options.token && options.actingSubject

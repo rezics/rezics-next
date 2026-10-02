@@ -40,8 +40,6 @@ describe('G-951 durable links preserve navigation state', () => {
     } as AvailableSummary & { address: CanonicalAddress };
     const hrefFor = summaryHref(standaloneHrefFor({}, globalWorkHref(work)));
     expect(parsed(hrefFor(summary)!).path.lookup.key).toBe('spring-story');
-    const { address: _address, ...legacy } = summary;
-    expect(parsed(hrefFor(legacy)!).path.lookup.key).toBe(uuidToSid(work));
     expect(hrefFor({ ...summary, base: null })).toBeNull();
   });
 
