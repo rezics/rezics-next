@@ -13,6 +13,7 @@ import { RichTextEditor, type RichTextEditorProps } from '@rezics/ui/rich-text-e
 import { DownloadIcon, UploadIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localImageUpload } from './local-image.ts';
 import { messages } from './messages.ts';
 
 export interface BodyEditorProps extends Omit<
@@ -110,6 +111,7 @@ export function BodyEditor({
         readOnly={readOnly}
         disabled={disabled}
         toolbarMode={advanced ? 'full' : 'contextual'}
+        onUploadImage={localImageUpload}
         onSnapshotError={() => setError(true)}
       />
       {allowAdvanced && advanced ? (
