@@ -16,7 +16,7 @@ export function parseZonePath(path: string): ZonePath | null {
   if (first.length > 64 || !segment.test(first) || parts.length > 3) return null;
   const resource = parts[1];
   const tab = parts[2];
-  if (resource !== undefined && (!resource.length || resource.length > 512 || /[\u0000-\u001f]/u.test(resource))
+  if (resource !== undefined && (!resource.length || resource.length > 512 || ['.','..'].includes(resource) || /[\u0000-\u001f]/u.test(resource))
     || tab !== undefined && (tab.length > 64 || !segment.test(tab))) return null;
   if (first === 'w') return resource && identityKeyUuid(resource) ? { kind: 'work', resource: identityKeyUuid(resource)!, tab: tab ?? null } : null;
   if ((ZONE_RESERVED_SEGMENTS as readonly string[]).includes(first)) return null;

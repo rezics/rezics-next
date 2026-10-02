@@ -103,7 +103,7 @@ test('G937: legacy pending address admissions are terminal before strong revocat
     });
     await f.accessPool.query(
       readFileSync(
-        'services/main/migrations/access/989_terminal_legacy_address_admissions.sql',
+        'services/main/migrations/access/1013_terminal_legacy_address_admissions.sql',
         'utf8',
       ),
     );

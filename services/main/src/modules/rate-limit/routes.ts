@@ -5,6 +5,16 @@ import type { RateLimitFamily } from './budgets.ts';
 // are immaterial; whole path segments match, never prefix lookalikes.
 const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])[] = [
   ['GET','/v1/addresses/current','read'],
+  ['GET','/v1/spaces/{space}/settings','read'],
+  ['PUT','/v1/spaces/{space}/settings','write'],
+  ['GET','/v1/agents/{id}/listing','read'],
+  ['PUT','/v1/agents/{id}/listing','write'],
+  ['GET','/v1/realms/{realm}/join-page','read'],
+  ['GET','/v1/realms/{realm}/join-requests/basis','read'],
+  ['GET','/v1/realms/{realm}/join-requests','read'],
+  ['POST','/v1/realms/{realm}/join-requests','write'],
+  ['POST','/v1/realms/{realm}/join-requests/{request}/withdraw','write'],
+  ['POST','/v1/realms/{realm}/join-requests/{request}/decisions','write'],
   ['GET','/v1/addresses/resolve','address'],
   ['POST','/v1/addresses/resolutions','address'],
   ['GET','/v1/addresses/availability','address'],

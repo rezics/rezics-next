@@ -168,7 +168,7 @@ test('G937: SQL Agent import reports every non-conforming legacy alias without a
     for (const [handle,holder] of [['valid-name',valid],['_legacy',skipped],['legacy_',skipped],['admin',skipped],['1'.repeat(22),skipped]]) {
       await client.query(`INSERT INTO ${schema}.agent_handle(handle,agent_id,state,skeleton) VALUES ($1,$2,'current',$1)`,[handle,holder]);
     }
-    const migration = readFileSync('services/main/migrations/access/986_name_registry.sql','utf8').replaceAll('access.',`${schema}.`);
+    const migration = readFileSync('services/main/migrations/access/1010_name_registry.sql','utf8').replaceAll('access.',`${schema}.`);
     await client.query(migration);
     expect((await client.query(`SELECT key,holder FROM ${schema}.name_registry`)).rows).toEqual([{ key:'valid-name',holder:valid }]);
     const report = (await client.query(`SELECT source,reason FROM ${schema}.name_graph_import_report ORDER BY source`)).rows;

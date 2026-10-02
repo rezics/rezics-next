@@ -37,7 +37,7 @@ test('Realm Zone resolution returns the stored presentation only for its own pub
     query: async () => [{ zone: row(zone), official: row('true') }],
   } as unknown as WorkReadSession;
   const publication = { zone, realm, space: basis.space, official: 'fiction', revision: decision,
-    presentation: DEFAULT_ZONE_PRESENTATION, disclosure: 'public' };
+    presentation: DEFAULT_ZONE_PRESENTATION, disclosure: 'public',storedDisclosure:'public',listing:'listed',discovery:'listed' };
   expect(await readRealmZone(session, realm, async () => publication as never)).toMatchObject({
     profile: 'realm-zone-v1', zone, realm, routeSegment: 'fiction',
     presentationUrl: '/v1/zones/00000000-0000-4000-8000-000000000002/presentation' });

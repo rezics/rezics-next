@@ -128,7 +128,8 @@ test('G630 class guard: paths × membership × disclosure; a readable non-member
         else await expect(result).rejects.toBeInstanceOf(ZoneRouteMissing);
       }
       expect(f.queries.filter(query => query.includes('ASK') && query.includes('rv:MemberRole'))).toHaveLength(3);
-      expect(f.queries.length).toBeLessThan(50);
+      // The three tab reads include one canonical Space address batch each.
+      expect(f.queries.length).toBeLessThanOrEqual(51);
     } finally { f.close(); }
   }
 });

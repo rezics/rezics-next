@@ -43,4 +43,7 @@ test('G937: verified callers consume address budgets instead of the signed-in se
   expect(seen).toEqual([{ family: 'address', maximum: 120 }]);
   expect(rateLimitFamily('POST', '/v1/addresses/resolutions')).toBe('address');
   expect(rateLimitFamily('GET', '/v1/addresses/revisions/revision')).toBe('address');
+  expect(rateLimitFamily('GET', '/v1/addresses/current')).toBeNull();
+  expect(rateLimitFamily('GET', '/v1/realms/by-handle/old')).toBeUndefined();
+  expect(rateLimitFamily('GET', '/v1/addresses/work/old')).toBeUndefined();
 });

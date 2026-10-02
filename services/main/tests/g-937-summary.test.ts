@@ -7,7 +7,7 @@ import { uuidToSid } from '@rezics/model/address/sid';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 test('G937: SQL owns every reserved web route and former authority word', () => {
-  const migration = readFileSync('services/main/migrations/access/986_name_registry.sql', 'utf8');
+  const migration = readFileSync('services/main/migrations/access/1010_name_registry.sql', 'utf8');
   const words = new Set(
     [...migration.slice(0, migration.indexOf('-- Same frozen')).matchAll(/'([^']+)'/g)].map(
       (match) => match[1],
