@@ -46,7 +46,7 @@ export class NotificationDigestWorker {
           WHERE c.principal_id = $1 AND c.day = $2
             AND NOT EXISTS (SELECT 1 FROM access.watch sub
               WHERE sub.principal_id = c.principal_id AND sub.proposal = c.proposal
-                AND sub.level = 'ignore' AND c.proposal_reason = 'manual' AND c.disclosure_basis = 'editorial-proposal-v1')
+                AND sub.level = 'ignore' AND c.proposal_reason IN ('manual','steward') AND c.disclosure_basis = 'editorial-proposal-v1')
           ORDER BY c.source_event, c.topic LIMIT $3`,
         [day.principal_id, day.day, DIGEST_COST.candidatesPerDay + 1])).rows;
         const inputs = candidates.map(candidate => ({ principalId: day.principal_id,

@@ -17,7 +17,7 @@ export interface JoinedSpace {
   order_key: string;
 }
 /** One current person inventory, a SQL membership-generation fence (O(N)),
- * and P+1 output rows. No roster identities or private Realm names are stored. */
+ * and P+1 output rows. Only this person’s current membership episodes are read. */
 export async function joinedSpaces(
   pool: Pool,
   principal: VerifiedPrincipal,
@@ -25,6 +25,7 @@ export async function joinedSpaces(
   after: string | null,
   order: 'recent' | 'pinned',
   limit: number,
+  q?: string,
 ) {
   let seek: { key: string; realm: string } | null = null;
   if (after) {
@@ -48,8 +49,7 @@ export async function joinedSpaces(
       await client.query<{ revision: string }>(
         `${inventory} SELECT md5(COALESCE(string_agg(
       membership_id::text || ':' || generation::text,',' ORDER BY realm),'')) || ':' || COALESCE(
-        (SELECT revision::text FROM access.follow_inventory WHERE principal_id=$1),'none') || ':' ||
-        (SELECT revision::text FROM access.follow_activity_head WHERE id) AS revision FROM joined`,
+        (SELECT revision::text FROM access.follow_inventory WHERE principal_id=$1),'none') AS revision FROM joined`,
         [owner, agent],
       )
     ).rows[0]!.revision;
@@ -65,9 +65,10 @@ export async function joinedSpaces(
       LEFT JOIN access.follow f ON f.principal_id=$1 AND f.target=s.space
       LEFT JOIN LATERAL (SELECT max(activity_at) AS activity_at FROM access.follow_activity
         WHERE target=s.space OR target IN (SELECT alias FROM access.follow_space_alias WHERE space=s.space)) activity ON true
-      WHERE ($3::numeric IS NULL OR (${expression},m.realm)>($3::numeric,$4::text))
+      WHERE ($6::text IS NULL OR strpos(COALESCE(s.name_key,''),$6)>0)
+      AND ($3::numeric IS NULL OR (${expression},m.realm)>($3::numeric,$4::text))
       ORDER BY ${expression},m.realm LIMIT $5`,
-        [owner, agent, seek?.key ?? null, seek?.realm ?? null, limit + 1],
+        [owner, agent, seek?.key ?? null, seek?.realm ?? null, limit + 1,q?.normalize('NFKC').toLowerCase() || null],
       )
     ).rows;
     return { owner, revision, rows };

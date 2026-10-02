@@ -4,6 +4,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
 import type { VerifiedPrincipal } from './admission.ts';
 import { prepareRealmFollow } from '../follows/recovery.ts';
+import { registerFollowSpace } from '../follows/targets.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
   MembershipUnavailable, type MembershipKind } from './memberships.ts';
 
@@ -252,6 +253,8 @@ export class AccessPrivateMemberships {
       || input.action === 'leave' && (!input.membershipId || !uuid.test(input.membershipId))) {
       throw new MembershipDenied('invalid private membership change');
     }
+    const followSpace = input.kind === 'realm' && input.action === 'join'
+      ? await prepareRealmFollow(this.pool,input.ownerSubject) : null;
     const client = await this.pool.connect();
     try {
       await this.begin(client, true);
@@ -280,7 +283,7 @@ export class AccessPrivateMemberships {
           termsRevision: saved.rows[0].terms_revision,
           authorityEpoch: prior.rows[0].result_authority_epoch, replayed: true };
       }
-      if (input.kind === 'realm') await prepareRealmFollow(client,this.pool,input.ownerSubject);
+      if (followSpace) await registerFollowSpace(client,followSpace);
       const policy = await client.query<Policy>(`SELECT revision, terms_revision, open
         FROM access.membership_policy WHERE kind = $1 AND owner_subject = $2 FOR SHARE`,
       [input.kind, input.ownerSubject]);

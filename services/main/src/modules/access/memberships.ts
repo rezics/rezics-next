@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
-import { realmAgentBanned } from './realm-ban.ts';
+import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { prepareRealmFollow } from '../follows/recovery.ts';
+import { registerFollowSpace } from '../follows/targets.ts';
 
 export class MembershipDenied extends Error {}
 export class MembershipConflict extends Error {}
@@ -279,6 +280,8 @@ export class AccessMemberships {
         || input.termsRevision.length > 128 || !consentId.test(input.consentReference))) {
       throw new MembershipDenied('invalid membership request');
     }
+    const followSpace = input.kind === 'realm' && input.action === 'join'
+      ? await prepareRealmFollow(this.pool,input.ownerSubject) : null;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -346,7 +349,7 @@ export class AccessMemberships {
       } else {
         await this.manager(client, input.principal, input.kind, input.ownerSubject);
       }
-      if (input.kind === 'realm') await prepareRealmFollow(client,this.pool,input.ownerSubject);
+      if (followSpace) await registerFollowSpace(client,followSpace);
       const policy = await client.query<Policy>(`SELECT revision, terms_revision, open
         FROM access.membership_policy WHERE kind = $1 AND owner_subject = $2 FOR SHARE`,
       [input.kind, input.ownerSubject]);

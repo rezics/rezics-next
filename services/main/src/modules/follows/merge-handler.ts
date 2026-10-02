@@ -12,12 +12,12 @@ import { checkedItem, checkedOutcome, InvalidMerge, itemCommandKey, MERGE_COST, 
   type MergeTask, type RecordedItem } from '../identity-merge/contract.ts';
 import { checkedTask } from '../identity-merge/journal.ts';
 import { targetRef } from '../target/contract.ts';
-import { followKind, followLevel, followSource } from './contract.ts';
+import { defaultFollowLevel, followKind, followLevel, followSource } from './contract.ts';
 
 export interface FollowsMergeDependencies { accessPool: Pool; graph: Pick<FusekiClient, 'query'> }
 const uuid = t.String({ pattern: '^[0-9a-f-]{36}$' });
 const rowSchema = t.Object({ principal_id: uuid, target: targetRef, acting_subject: targetRef,
-  kind: followKind, level: followLevel, source: followSource, pin_position: t.Nullable(t.Integer()),
+  kind: followKind, level: t.Optional(followLevel), source: t.Optional(followSource), pin_position: t.Optional(t.Nullable(t.Integer())),
   following: t.Boolean(), revision: uuid }, { additionalProperties: false });
 type Row = Static<typeof rowSchema>;
 const snapshotSchema = t.Object({ source: rowSchema, survivor: t.Nullable(rowSchema) }, { additionalProperties: false });
@@ -25,6 +25,10 @@ type Snapshot = Static<typeof snapshotSchema>;
 const owner = 'follows';
 const columns = 'principal_id::text,target,kind,acting_subject,following,revision::text,level,source,pin_position';
 const json = (value: unknown) => canonicalCandidate(value).candidate;
+const defaults = (row: Row) => ({ ...row,level: row.level ?? defaultFollowLevel(row.kind),
+  source: row.source ?? 'explicit',pin_position: row.pin_position ?? null });
+const comparable = (value: Snapshot) => ({ source: value.source ? defaults(value.source) : null,
+  survivor: value.survivor ? defaults(value.survivor) : null });
 
 function snapshot(source: Row, survivor: Row | null): MergeItem {
   return checkedItem({ key: source.principal_id, expectedHead: source.revision, before: json({ source, survivor }) });
@@ -49,7 +53,7 @@ async function put(client: PoolClient, row: Row) {
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (principal_id,target) DO UPDATE SET
       kind=EXCLUDED.kind,acting_subject=EXCLUDED.acting_subject,following=EXCLUDED.following,revision=EXCLUDED.revision,
       level=EXCLUDED.level,source=EXCLUDED.source,pin_position=EXCLUDED.pin_position`,
-  [row.principal_id,row.target,row.kind,row.acting_subject,row.following,row.revision,row.level,row.source,row.pin_position]);
+  [row.principal_id,row.target,row.kind,row.acting_subject,row.following,row.revision,row.level ?? defaultFollowLevel(row.kind),row.source ?? 'explicit',row.pin_position ?? null]);
 }
 
 /** The existing follow inventory lock serializes this native command with
@@ -95,7 +99,7 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
         const after = original.result.after;
         if (original.owner !== owner || original.key !== item.key || !Value.Check(snapshotSchema, after)
           || original.result.afterHead !== mergeDigest(after)) throw new InvalidMerge('Invalid follow compensation receipt');
-        if (!inventoryPresent || !current.source || mergeDigest(current) !== original.result.afterHead) outcome = 'ambiguous';
+        if (!inventoryPresent || !current.source || mergeDigest(comparable(current)) !== mergeDigest(comparable(after))) outcome = 'ambiguous';
         else {
           next = { source: { ...saved.source, revision: randomUUID() }, survivor: saved.survivor
             ? { ...saved.survivor, revision: randomUUID() }
@@ -103,7 +107,7 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
           outcome = 'moved';
         }
       } else {
-        if (!inventoryPresent || !current.source || mergeDigest(current) !== mergeDigest(saved)) outcome = 'retained';
+        if (!inventoryPresent || !current.source || mergeDigest(comparable(current)) !== mergeDigest(comparable(saved))) outcome = 'retained';
         else {
           next = { source: { ...saved.source, following: false, revision: randomUUID() },
             survivor: saved.survivor ?? { ...saved.source, target: task.plan.survivor.resource, revision: randomUUID() } };

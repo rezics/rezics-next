@@ -7,8 +7,8 @@ import { notificationsHref, parseSelection } from '../features/shell/notificatio
 describe('G-868 settings topics', () => {
   const api = SETTINGS_NOTIFICATION_TOPICS.map(item => item.topic);
 
-  test('every translated topic still has an active producer, and new API topics use the existing fallback', () => {
-    expect(api.filter(topic => (settingsNotificationTopics as readonly string[]).includes(topic))).toEqual([...settingsNotificationTopics]);
+  test('every settings topic has a translated label and an active producer', () => {
+    expect(api).toEqual([...settingsNotificationTopics]);
     expect(Object.keys(notificationTopicLabel)).toEqual([...settingsNotificationTopics]);
   });
 

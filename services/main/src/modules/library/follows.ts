@@ -27,8 +27,8 @@ export async function projectLibraryFollow(
       `library-follow:${agent}:${work}`,
     ]);
     const current = (
-      await content.query<{ version: string }>(
-        'SELECT version::text FROM reader.library_status WHERE agent=$1 AND work=$2',
+      await content.query<{ version: string; title_key: string | null }>(
+        'SELECT version::text,title_key FROM reader.library_status WHERE agent=$1 AND work=$2',
         [agent, work],
       )
     ).rows[0];
@@ -55,7 +55,7 @@ export async function projectLibraryFollow(
         [agents.map((row) => row.agent_id), work],
       )
     ).rowCount;
-    await automaticFollow(client, person.principal_id, agent, work, 'work', 'library', active);
+    if (!await automaticFollow(client, person.principal_id, agent, work, 'work', 'library', active,current.title_key)) return;
     await client.query(
       `INSERT INTO access.library_follow_position(agent,work,version) VALUES($1,$2,$3)
       ON CONFLICT(agent,work) DO UPDATE SET version=EXCLUDED.version`,
@@ -83,11 +83,12 @@ export async function recoverLibraryFollows(content: Pool, access: Pool) {
       [cursor.library_agent, cursor.library_work, RELATIONSHIP_RECOVERY_COST.libraryRows],
     )
   ).rows;
-  for (const row of rows) await projectLibraryFollow(content, access, row.agent, row.work);
-  const last = rows.at(-1);
-  await access.query(
-    'UPDATE access.relationship_recovery_cursor SET library_agent=$1,library_work=$2 WHERE id',
-    [last?.agent ?? '', last?.work ?? ''],
-  );
+  for (const row of rows) {
+    try { await projectLibraryFollow(content, access, row.agent, row.work); }
+    catch (error) { console.warn('Library follow recovery row deferred', error); }
+    await access.query('UPDATE access.relationship_recovery_cursor SET library_agent=$1,library_work=$2 WHERE id',
+      [row.agent,row.work]);
+  }
+  if (!rows.length) await access.query("UPDATE access.relationship_recovery_cursor SET library_agent='',library_work='' WHERE id");
   return rows.length;
 }

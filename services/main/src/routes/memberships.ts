@@ -52,7 +52,7 @@ export function membershipsRoutes(work: MainWorkDependencies) {
           await workRead(
             work,
             new Request(request.url),
-            { language: query.language },
+            { language: query.language, movingGraph: true },
             async (session) => {
               const order = query.order ?? 'recent',
                 limit = query.limit ?? 20,
@@ -73,7 +73,8 @@ export function membershipsRoutes(work: MainWorkDependencies) {
                 order,
                 query.language ?? null,
               ];
-              const cursor = decodeReadCursor(query.cursor, binding, session.position);
+              const cursorPosition = { dataEpoch: session.position.dataEpoch, sequence: '0' };
+              const cursor = decodeReadCursor(query.cursor, binding, cursorPosition);
               if (cursor && cursor.order !== first.revision)
                 throw new WorkReadMoved('Memberships changed');
               const page = await joinedSpaces(
@@ -83,6 +84,7 @@ export function membershipsRoutes(work: MainWorkDependencies) {
                 cursor?.after ?? null,
                 order,
                 limit,
+                query.q,
               );
               if (page.revision !== first.revision) throw new WorkReadMoved('Memberships changed');
               const rows = page.rows.slice(0, limit),
@@ -151,18 +153,13 @@ export function membershipsRoutes(work: MainWorkDependencies) {
                 page.rows.length > limit && last
                   ? encodeReadCursor(
                       binding,
-                      session.position,
+                      cursorPosition,
                       JSON.stringify({ key: last.order_key, realm: last.realm }),
                       first.revision,
                     )
                   : null;
-              const search = query.q?.normalize('NFKC').toLowerCase();
               return {
-                items: search
-                  ? items.filter((item) =>
-                      item.name?.value.normalize('NFKC').toLowerCase().includes(search),
-                    )
-                  : items,
+                items,
                 nextCursor,
                 complete: nextCursor === null,
               };

@@ -34,10 +34,9 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
     realm: null, href: `/?tab=${view.id}` };
   }
   if (kind === 'space') {
-    const space = await followSpace(session,target);
-    if (!space || space.space !== target) throw new WorkReadMissing('Space is unavailable');
-    const realm = await readFollowTarget(session,space.realm,'realm',summaries);
-    return { ...realm, id: target, kind };
+    const space = (await spaceFollowTargets(session,[target],reader)).get(target);
+    if (!space) throw new WorkReadMissing('Space is unavailable');
+    return space;
   }
   if (kind === 'agent') {
     const agent = await readAgent(session, target);
@@ -132,20 +131,24 @@ export async function readFollowTargets(session: WorkReadSession, targets: reado
 }
 
 async function spaceFollowTargets(session: WorkReadSession, spaces: readonly string[],
-  summaries?: ReadonlyMap<string, ResourceSummary>) {
+  reader?: { principal: VerifiedPrincipal; agent: string }) {
   const result = new Map<string, Static<typeof followTarget>>();
   if (!spaces.length) return result;
   const rows = await session.query(`SELECT ?space ?realm WHERE { VALUES ?space { ${spaces.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+    GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:realmCapability ?realm .
       ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
-      FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
       FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
     } } LIMIT ${spaces.length+1}`,spaces.length);
   if (new Set(rows.map(row => row.space?.value)).size !== rows.length) throw new WorkReadUnavailable('Space identities are ambiguous');
-  const realms = await readFollowTargets(session,rows.map(row => row.realm!.value),'realm',summaries);
+  const summaries = await readResourceSummaries(session.deps.environment,session.deps.media?.store,
+    { realmReadProof: async realm => reader
+      ? await session.deps.access.realmReadProof?.(reader.principal,reader.agent,realm) ?? null : null },
+    { resources: rows.map(row => row.realm!.value),context: DEFAULT_MEDIA_CONTEXT,language: session.options.language ?? null });
+  const names = new Map(summaries.summaries.map(summary => [summary.reference,summary]));
   for (const row of rows) {
-    const realm = realms.get(row.realm!.value);
-    if (realm) result.set(row.space!.value,{ ...realm,id: row.space!.value,kind: 'space' });
+    const summary = names.get(row.realm!.value);
+    if (summary?.status==='available') result.set(row.space!.value,{ id: row.space!.value,kind: 'space',
+      name: summary.name,icon: summary.avatar,realm: row.realm!.value,href: `/r/${row.realm!.value.slice(-36)}` });
   }
   return result;
 }
@@ -158,14 +161,14 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
   principal: VerifiedPrincipal, agent: string, kind?: FollowKind, includeNewSince = false,
   query: { q?: string; order?: 'recent' | 'pinned' } = {}) {
   const identity = await store.matches(principal, agent, []);
-  const activityRevision = await store.activityRevision();
-  const orderRevision = `${identity.revision ?? 'none'}:${activityRevision}`;
+  const orderRevision = identity.revision ?? 'none';
+  const cursorPosition = { dataEpoch: session.position.dataEpoch, sequence: '0' };
   const binding = ['follows-v1', identity.owner, agent, kind ?? null,
     session.options.language ?? null, query.q ?? null, query.order ?? 'recent'];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+  const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
   if (cursor && cursor.order !== orderRevision) throw new WorkReadMoved('Follows changed');
   const limit = Math.min(session.options.limit ?? 20, FOLLOWS_COST.candidates);
-  const page = await store.manage(principal, agent, cursor?.after ?? null, kind, query.order ?? 'recent', limit);
+  const page = await store.manage(principal, agent, cursor?.after ?? null, kind, query.order ?? 'recent', limit, query.q);
   if (page.revision !== identity.revision) throw new WorkReadMoved('Follows changed');
   const items: Static<typeof followsPage>['items'] = [];
   const unavailable = (row: Pick<FollowRow, 'target' | 'kind' | 'revision' | 'level' | 'source' | 'pin_position'>) => ({
@@ -176,7 +179,7 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
   const summaries = new Map((await session.summaries(ids)).map(summary => [summary.reference, summary]));
   const spaces = page.rows.slice(0,limit).filter(row => row.kind==='space').map(row => row.target);
   const agents = page.rows.slice(0,limit).filter(row => row.kind==='agent').map(row => row.target);
-  const [spaceTargets,agentTargets] = await Promise.all([spaceFollowTargets(session,spaces),readAgentCards(session,agents)]);
+  const [spaceTargets,agentTargets] = await Promise.all([spaceFollowTargets(session,spaces,{ principal,agent }),readAgentCards(session,agents)]);
   for (const row of page.rows.slice(0, limit)) {
     try {
       const target = row.kind==='space' ? spaceTargets.get(row.target) : row.kind==='agent'
@@ -188,7 +191,7 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
     catch (error) { if (!(error instanceof WorkReadMissing)) throw error; items.push(unavailable(row)); }
   }
   const fenced = new Map((await session.summaries(ids)).map(summary => [summary.reference, summary]));
-  const [spaceFence,agentFence] = await Promise.all([spaceFollowTargets(session,spaces),readAgentCards(session,agents)]);
+  const [spaceFence,agentFence] = await Promise.all([spaceFollowTargets(session,spaces,{ principal,agent }),readAgentCards(session,agents)]);
   for (const [index, item] of items.entries()) {
     if (!item.available) continue;
     try {
@@ -227,14 +230,18 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
     }
   }
   if ((await store.matches(principal, agent, [])).revision !== page.revision) throw new WorkReadMoved('Follows changed');
-  if (await store.activityRevision() !== activityRevision) throw new WorkReadMoved('Follow activity changed');
   const last = page.rows[limit - 1];
-  const nextCursor = page.rows.length > limit && last ? encodeReadCursor(binding, session.position,
+  const nextCursor = page.rows.length > limit && last ? encodeReadCursor(binding, cursorPosition,
     JSON.stringify({ key: last.order_key, target: last.target }), orderRevision) : null;
-  const search = query.q?.normalize('NFKC').toLocaleLowerCase();
-  return { profile: 'follows-v1' as const, ...pageResult(session, search
-    ? items.filter(item => item.available && item.name.value.normalize('NFKC').toLocaleLowerCase().includes(search)) : items,
-  nextCursor), complete: nextCursor === null };
+  // Transitional Realm/Zone transports keep the existing shell's capability ids.
+  // The inventory, CAS and source still belong to the canonical Space.
+  if (kind==='realm' || kind==='zone') for (const [index,item] of items.entries()) {
+    if (item.kind!=='space' || !item.available || !item.realm) continue;
+    const alias = kind==='realm' ? item.realm : (await followSpace(session,item.id))?.aliases
+      .find(id => id!==item.id && id!==item.realm);
+    items[index] = { ...item,id: alias ?? item.realm,kind: alias ? kind : 'realm' };
+  }
+  return { profile: 'follows-v1' as const, ...pageResult(session,items,nextCursor), complete: nextCursor === null };
 }
 
 type FollowedAuthor = Static<typeof followedAuthorsPage>['items'][number];

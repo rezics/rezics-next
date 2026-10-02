@@ -471,8 +471,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         ),
       ),
     ).toMatchObject({ subscription: null });
-    await json(await request('PUT',`/v1/me/proposal-subscriptions/${withdrawn.proposal}`,{
-      profile: 'proposal-subscription-v1', level: 'all', expectedRevision: null },tokenB));
+    await json(await subscription(withdrawn.proposal, 'participating', null, tokenB));
     await producer.runEditorialOnce();
     await json(
       await request('POST', `/v1/editorial/proposals/${withdrawn.proposal}/withdrawal`, {
@@ -487,7 +486,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         (item) =>
           item.topic === 'proposal-withdrawn' &&
           item.proposal?.id === withdrawn.proposal &&
-          item.reason === 'steward',
+          item.reason === 'manual',
       ),
     ).toBe(true);
     const rejected = await newProposal();

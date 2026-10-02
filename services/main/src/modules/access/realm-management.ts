@@ -8,6 +8,7 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
 import { changeRealmMember } from './realm-management-members.ts';
 import { prepareRealmFollow } from '../follows/recovery.ts';
+import { registerFollowSpace } from '../follows/targets.ts';
 import { searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings } from './realm-management-settings.ts';
 import { spaceSettingsCommand, type SpaceSettingsCommand } from '../realm-admin/contract.ts';
@@ -171,11 +172,12 @@ export class AccessRealmManagement {
     });
   }
 
-  changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string, env?: WorkActivationEnvironment) {
+  async changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string, env?: WorkActivationEnvironment) {
     if (!Value.Check(memberCommand, input)) throw new RealmAdminInvalid('Invalid member change');
+    const identity = input.action==='add' ? await prepareRealmFollow(this.pool,realm) : null;
     return this.write(principal, realm, input, key, 'realm.members.manage',
       async (client, principalId, receiptId, generation) => {
-        await prepareRealmFollow(client,this.pool,realm);
+        if (identity) await registerFollowSpace(client,identity);
         return { receiptId, generation, replayed: false,
           ...await changeRealmMember(client, realm, input, principalId, receiptId, env) };
       });

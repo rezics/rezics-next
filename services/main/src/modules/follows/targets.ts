@@ -14,6 +14,7 @@ export interface SpaceIdentity {
   space: string;
   realm: string;
   aliases: string[];
+  nameKey?: string;
 }
 /** Bounded capability projection, never a disclosure grant. */
 export async function followSpace(
@@ -33,18 +34,21 @@ export async function followSpace(
   if (rows.length !== 1 || !rows[0]?.space || !rows[0].realm)
     throw new WorkReadUnavailable('Space identity is ambiguous');
   const row = rows[0];
+  const names = await session.query(`SELECT (MIN(STR(?label)) AS ?name) WHERE { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(row.space!.value)} <http://www.w3.org/2000/01/rdf-schema#label> ?label } }`,1);
   return {
     space: row.space!.value,
     realm: row.realm!.value,
+    nameKey: names[0]?.name?.value.normalize('NFKC').toLowerCase(),
     aliases: [row.space!.value, row.realm!.value, ...(row.zone ? [row.zone.value] : [])],
   };
 }
 export async function registerFollowSpace(client: PoolClient, identity: SpaceIdentity) {
   await client.query(
-    `INSERT INTO access.follow_space_alias(alias,space,realm)
-    SELECT alias,$2,$3 FROM unnest($1::text[]) alias ON CONFLICT(alias) DO UPDATE SET
-    space=EXCLUDED.space,realm=EXCLUDED.realm`,
-    [identity.aliases, identity.space, identity.realm],
+    `INSERT INTO access.follow_space_alias(alias,space,realm,name_key)
+    SELECT alias,$2,$3,$4 FROM unnest($1::text[]) alias ON CONFLICT(alias) DO UPDATE SET
+    space=EXCLUDED.space,realm=EXCLUDED.realm,name_key=COALESCE(EXCLUDED.name_key,access.follow_space_alias.name_key)`,
+    [identity.aliases, identity.space, identity.realm,identity.nameKey ?? null],
   );
 }
 /** Structural owners choose a grain; extensible descriptive types use the

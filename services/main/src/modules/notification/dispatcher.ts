@@ -172,7 +172,7 @@ export class NotificationDispatcher {
           AND n.state = 'disabled') AS disabled,
         EXISTS (SELECT 1 FROM access.watch sub WHERE sub.principal_id = p.id
           AND sub.proposal = pc.proposal AND sub.level = 'ignore'
-          AND pc.reason = 'manual'
+          AND pc.reason IN ('manual','steward')
           AND i.disclosure_basis = 'editorial-proposal-v1') AS muted
       FROM access.notification_delivery d
       JOIN access.notification_item i ON i.id = d.item_id

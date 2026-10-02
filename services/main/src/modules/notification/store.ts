@@ -109,9 +109,6 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'social', topic: 'mention' },
   { purpose: 'social', topic: 'post-vote' },
   { purpose: 'subscription', topic: 'followed-chapter' },
-  { purpose: 'subscription', topic: 'new-work' },
-  { purpose: 'subscription', topic: 'new-release' },
-  { purpose: 'subscription', topic: 'collection-change' },
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
   ...REVIEW_NOTIFICATION_TOPICS.map((topic) => ({ purpose: 'governance' as const, topic })),
@@ -321,7 +318,7 @@ export class NotificationStore {
         if (event.proposal) {
           const subscription = (await client.query<{ level: string }>(`SELECT level FROM access.watch
             WHERE principal_id = $1 AND proposal = $2 FOR SHARE`,[principalId,event.proposal.id])).rows[0];
-          if (subscription?.level === 'ignore' && (event.proposal.reasons[principalId] ?? 'manual') === 'manual') continue;
+          if (subscription?.level === 'ignore' && ['manual','steward'].includes(event.proposal.reasons[principalId] ?? 'manual')) continue;
         }
         const first = await client.query(`INSERT INTO access.notification_seen
           (principal_id, source_owner, source_event, topic)
@@ -433,7 +430,7 @@ export class NotificationStore {
           JSON.stringify({ principalId, generation: stream.generation, head: sequence })]);
       }
       if (event.relationshipPlan) await client.query(`UPDATE access.notification_recipient_progress
-        SET after_principal=$4,complete=$5 WHERE source_owner=$1 AND source_event=$2 AND topic=$3`,
+        SET after_principal=$4,complete=$5,updated_at=clock_timestamp() WHERE source_owner=$1 AND source_event=$2 AND topic=$3`,
       [event.sourceOwner,event.sourceEvent,event.topic,nextCursor,nextCursor === null]);
       return results;
     });
@@ -860,7 +857,9 @@ export class NotificationStore {
           [principalId, proposal],
         )
       ).rows[0];
-      return { proposal, subscription: row ?? null };
+      // The existing proposal transport has a binary Watch toggle. Generic
+      // Watch reads expose the native level; this adapter keeps its on state.
+      return { proposal, subscription: row ? { ...row, level: row.level === 'all' ? 'participating' as const : row.level } : null };
     });
   }
 
@@ -903,12 +902,13 @@ export class NotificationStore {
         throw new NotificationStale('subscription revision changed');
       const reason = current?.reason ?? 'manual',
         next = current ? (BigInt(current.revision) + 1n).toString() : '1';
+      const level = reason === 'manual' && input.level === 'participating' ? 'all' : input.level;
       if (current) await client.query(`UPDATE access.watch
         SET level = $3,revision = $4 WHERE principal_id = $1 AND proposal = $2`,
-      [principalId,proposal,input.level,next]);
+      [principalId,proposal,level,next]);
       else if (!(await client.query(`INSERT INTO access.watch (principal_id,proposal,reason,level)
         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING principal_id`,
-      [principalId,proposal,reason,input.level])).rowCount) {
+      [principalId,proposal,reason,level])).rowCount) {
         throw new NotificationStale('automatic subscription appeared');
       }
       return { proposal, reason, level: input.level, revision: next };

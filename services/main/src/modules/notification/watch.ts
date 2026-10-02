@@ -49,10 +49,11 @@ export type Watch = Static<typeof watchState>;
  * is always proved by the owner adapter, including read and hidden targets. */
 export class WatchStore {
   constructor(private readonly pool: Pool) {}
-  read(principal: VerifiedPrincipal, agent: string, target: string, disclose: () => Promise<void>) {
+  async read(principal: VerifiedPrincipal, agent: string, target: string, disclose: () => Promise<void>) {
+    await controlRead(this.pool,client => followPrincipal(client,principal,agent));
+    await disclose();
     return controlRead(this.pool, async (client) => {
       const owner = await followPrincipal(client, principal, agent);
-      await disclose();
       return (
         (
           await client.query<Watch>(
@@ -63,13 +64,23 @@ export class WatchStore {
       );
     });
   }
-  set(
+  async set(
     principal: VerifiedPrincipal,
     input: WatchInput,
     key: string,
     disclose: () => Promise<void>,
   ): Promise<Static<typeof watchReceipt>> {
     commandKey(key);
+    const old = await controlRead(this.pool,async client => {
+      const owner = await followPrincipal(client,principal,input.actingSubject);
+      return (await client.query<{ request_digest: string; result: Static<typeof watchReceipt> }>(
+        'SELECT request_digest,result FROM access.watch_receipt WHERE principal_id=$1 AND idempotency_key=$2',[owner,key])).rows[0];
+    });
+    if (old) {
+      if (old.request_digest!==digest(input)) throw new ControlConflict('Key binds another Watch intent');
+      return { ...old.result,replayed: true };
+    }
+    await disclose();
     return controlTransaction(this.pool, async (client) => {
       const owner = await followPrincipal(client, principal, input.actingSubject);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
@@ -90,7 +101,6 @@ export class WatchStore {
           throw new ControlConflict('Key binds another Watch intent');
         return { ...receipt.result, replayed: true };
       }
-      await disclose();
       const current = (
         await client.query<Watch>(
           'SELECT target,kind,level,reason,revision::text FROM access.watch WHERE principal_id=$1 AND target=$2 FOR UPDATE',
@@ -100,6 +110,9 @@ export class WatchStore {
       if ((current?.revision ?? null) !== input.expectedRevision)
         throw new ControlStale('Watch changed');
       if (current && current.kind !== input.kind) throw new ControlInvalid('Watch kind differs');
+      if (!current && Number((await client.query<{ count: string }>(
+        'SELECT count(*) FROM access.watch WHERE principal_id=$1',[owner])).rows[0]!.count)>=10000)
+        throw new ControlInvalid('Watch budget exceeded');
       const next = current ? (BigInt(current.revision) + 1n).toString() : '1';
       const reason = current?.reason ?? 'manual';
       const proposal =
@@ -135,4 +148,4 @@ export class WatchStore {
     });
   }
 }
-export const WATCH_COST = { targetSlots: 1, receiptSlots: 1, recipients: 256 } as const;
+export const WATCH_COST = { targetSlots: 1, receiptSlots: 1, recipients: 256,maximumWatching: 10000 } as const;

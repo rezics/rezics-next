@@ -111,6 +111,11 @@ test('G-938 follows traverse twenty-item pages, atomic management preserves sour
     const first = await json<Page>(await list('&order=pinned'));
     expect(first.items).toHaveLength(20);
     expect(first.complete).toBe(false);
+    const recent = await json<Page>(await list('&order=recent&limit=1'));
+    await stack.publicWork(author,['en'],'Feed activity between follow pages');
+    await home.project();
+    const resumed = await json<Page>(await list(`&order=recent&limit=1&cursor=${encodeURIComponent(recent.nextCursor!)}`));
+    expect(resumed.items).toHaveLength(1);
     const second = await json<Page>(
       await list(`&order=pinned&cursor=${encodeURIComponent(first.nextCursor!)}`),
     );
@@ -184,6 +189,9 @@ test('G-938 follows traverse twenty-item pages, atomic management preserves sour
       )) as { replayed: boolean },
     ).toMatchObject({ replayed: true });
     const search = await json<Page>(await list('&q=Relationship%20Work%201&order=pinned'));
+    expect(search.items).toHaveLength(11);
+    expect(search.complete).toBe(true);
+    expect((await json<Page>(await list('&q=Relationship%20Work%2021&limit=1'))).items).toHaveLength(1);
     expect(search.items.every((item) => item.name.value.includes('Relationship Work 1'))).toBe(
       true,
     );
@@ -269,6 +277,8 @@ test('G-938 follows traverse twenty-item pages, atomic management preserves sour
         direct: [home.reader.principalId],
       }),
     ).toEqual([home.reader.principalId]);
+    expect(await relationshipRecipients(stack.accessPool,{ targets: [],highlights: true,
+      watches: [one.id],relationships: [home.reader.principalId] })).toEqual([]);
     const authorFollow = await json<Receipt>(await follow(author, true, null));
     const news = await resourceNotification(stack.accessPool, stack.fuseki, {
       id: randomUUID(),
@@ -421,7 +431,7 @@ test('G-938 follows traverse twenty-item pages, atomic management preserves sour
     const firstIntake = await notifications.enqueue(event);
     expect(firstIntake).toHaveLength(256);
     expect(firstIntake.complete).toBe(false);
-    const recoveredIntake = await notifications.enqueue(event);
+    const recoveredIntake = await new NotificationStore(stack.accessPool).enqueue(event);
     expect(recoveredIntake.complete).toBe(true);
     expect(recoveredIntake).toHaveLength(5); // the native reader also follows it
     expect(new Set([...firstIntake, ...recoveredIntake].map((item) => item.principalId)).size).toBe(
@@ -514,15 +524,13 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
       items: [{ realm: space.realm, space: space.space, following: true, source: 'join' }],
       complete: true,
     });
-    const leavePath = `/v1/realms/${space.realm.slice(-36)}/leave`;
-    await json(
-      await call(
-        'POST',
-        leavePath,
-        { actingSubject: reader, expectedMembershipGeneration: joined.membershipGeneration },
-        home.reader.token,
-      ),
-    );
+    const leave = async (generation: string) => {
+      const current = await admin.settings(ownerPrincipal,space.realm,owner,stack.env);
+      return admin.changeMember(ownerPrincipal,space.realm,{ actingSubject: owner,member: reader,
+        action: 'remove',expectedGeneration: current.generation,expectedMembershipGeneration: generation,
+        reason: 'Member left',consent: null,durationSeconds: null },randomUUID());
+    };
+    await leave(joined.membershipGeneration);
     expect(await home.deps.follows.state(space.space, { principal, agent: reader })).toMatchObject({
       following: false,
       source: 'join',
@@ -547,19 +555,11 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
           following: true,
           expectedRevision: state.revision,
           actingSubject: reader,
-          level: 'all',
         },
         home.reader.token,
       ),
     );
-    await json(
-      await call(
-        'POST',
-        leavePath,
-        { actingSubject: reader, expectedMembershipGeneration: second.membershipGeneration },
-        home.reader.token,
-      ),
-    );
+    await leave(second.membershipGeneration);
     expect(await home.deps.follows.state(space.space, { principal, agent: reader })).toMatchObject({
       following: true,
       source: 'explicit',

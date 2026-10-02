@@ -93,7 +93,6 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       const policy = await readRealmPolicy(env, input.realm);
       if (!policy) return hidden;
       const relationship = input.disclosureBasis === 'relationship-reply-v1';
-      if (relationship && policy.visibility !== 'public') return hidden;
       const candidates = policy.visibility === 'private'
         ? await realmActors(access, input.principalId, input.realm) : [];
       if (policy.visibility === 'private' && !candidates.length) return hidden;
@@ -110,7 +109,7 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       const reply = await replies.readCurrent(input.ref);
       if (!reply || reply.revisionId !== placement.revisionId) return { status: 'erased' };
       const identity = await replies.readReply(input.ref);
-      const eligible = () => relationshipEligible(access,input.principalId,{ targets: [input.realm!,reply.rootTarget,reply.author],
+      const eligible = () => relationshipEligible(access,input.principalId,{ targets: [input.realm!,reply.author],
         highlights: false, watches: [reply.rootTarget, ...identity?.parentReply ? [identity.parentReply] : []] });
       if (relationship && !await eligible()) return hidden;
       if (!await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)) return hidden;

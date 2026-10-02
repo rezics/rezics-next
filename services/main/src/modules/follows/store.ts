@@ -45,7 +45,7 @@ export const followMetadata = (row: Pick<FollowRow, 'level' | 'source' | 'pin_po
   source: row.source,
   pinPosition: row.pin_position,
 });
-export type FollowDescription = { target: string; kind: string; space?: SpaceIdentity };
+export type FollowDescription = { target: string; kind: string; nameKey?: string; space?: SpaceIdentity };
 type Describe = (target: string, kind?: string) => Promise<FollowDescription | void>;
 /** Old immutable receipts remain replayable after adding relationship metadata.
  * Defaults describe their original explicit intent, not today's mutable row. */
@@ -78,25 +78,46 @@ export async function automaticFollow(
   kind: string,
   source: 'join' | 'library',
   following: boolean,
+  nameKey?: string | null,
 ) {
-  await client.query('SELECT access.automatic_follow($1,$2,$3,$4,$5,$6)', [
+  return (await client.query<{ automatic_follow: boolean }>('SELECT access.automatic_follow($1,$2,$3,$4,$5,$6,$7)', [
     owner,
     agent,
     target,
     kind,
     source,
     following,
-  ]);
+    nameKey ?? null,
+  ])).rows[0]!.automatic_follow;
 }
 
 export class FollowsStore {
   constructor(readonly pool: Pool) {}
-  async activityRevision() {
-    return (
-      await this.pool.query<{ revision: string }>(
-        'SELECT revision::text FROM access.follow_activity_head WHERE id',
-      )
-    ).rows[0]!.revision;
+  private async descriptions(principal: VerifiedPrincipal, agent: string, input: unknown, key: string,
+    profile: string, targets: BatchFollowCommand['targets'], describe: Describe) {
+    commandKey(key);
+    const preflight = await controlRead(this.pool, async client => {
+      const owner = await followPrincipal(client,principal,agent);
+      const receipt = (await client.query<{ request_digest: string; result: FollowResult | BatchFollowResult }>(
+        'SELECT request_digest,result FROM access.follow_receipt WHERE principal_id=$1 AND idempotency_key=$2', [owner,key])).rows[0];
+      if (receipt && (receipt.request_digest !== digest(input) || receipt.result.profile !== profile))
+        throw new ControlConflict('Idempotency key has another follow intent');
+      return { receipt, rows: (await client.query<FollowRow & { requested_target: string }>(`WITH targets AS (
+        SELECT id,COALESCE(alias.space,id) AS target FROM unnest($2::text[]) id
+          LEFT JOIN access.follow_space_alias alias ON alias.alias=id)
+        SELECT f.*,t.id AS requested_target FROM targets t JOIN access.follow f ON
+          (f.target=t.target OR f.target IN (SELECT alias FROM access.follow_space_alias WHERE space=t.target))
+          WHERE f.principal_id=$1`,
+        [owner,targets.map(item => item.target)])).rows };
+    });
+    if (preflight.receipt) return { receipt: replayFollowReceipt(preflight.receipt.result), describe };
+    const descriptions = new Map<string,FollowDescription | void>();
+    // Graph disclosure never holds an Access transaction or scope gate.
+    for (const item of targets) {
+      if (item.following !== false && (!preflight.rows.some(row => row.requested_target===item.target && row.following)
+        || item.expectedRevision === null)) descriptions.set(item.target,await describe(item.target,item.kind));
+    }
+    return { receipt: null, describe: async (target: string) => descriptions.get(target) };
   }
   private async allowPerson(client: PoolClient, target: string, kind: string) {
     if (kind !== 'agent') return;
@@ -169,7 +190,11 @@ export class FollowsStore {
     const originalTarget = alias?.space ?? input.target;
     const old = (
       await client.query<FollowRow>(
-        'SELECT * FROM access.follow WHERE principal_id=$1 AND target=$2',
+        `SELECT f.*,EXISTS(SELECT 1 FROM access.follow active WHERE active.principal_id=$1 AND active.following
+          AND (active.target=$2 OR active.target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2))) AS following
+          FROM access.follow f WHERE f.principal_id=$1 AND
+          (f.target=$2 OR f.target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2))
+          ORDER BY (f.target=$2) DESC,f.following DESC,f.changed_at DESC LIMIT 1`,
         [owner, originalTarget],
       )
     ).rows[0];
@@ -189,11 +214,15 @@ export class FollowsStore {
         ? old
         : (
             await client.query<FollowRow>(
-              'SELECT * FROM access.follow WHERE principal_id=$1 AND target=$2',
+              `SELECT f.*,EXISTS(SELECT 1 FROM access.follow active WHERE active.principal_id=$1 AND active.following
+          AND (active.target=$2 OR active.target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2))) AS following
+          FROM access.follow f WHERE f.principal_id=$1 AND
+          (f.target=$2 OR f.target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2))
+          ORDER BY (f.target=$2) DESC,f.following DESC,f.changed_at DESC LIMIT 1`,
               [owner, target],
             )
           ).rows[0];
-    const kind = described?.kind ?? prior?.kind ?? input.kind;
+    const kind = described?.kind ?? (alias ? 'space' : prior?.kind) ?? input.kind;
     if (!kind) throw new ControlInvalid('Follow target kind is unavailable');
     if (
       input.kind &&
@@ -227,30 +256,36 @@ export class FollowsStore {
     ).rows[0]!;
     if (following && !prior?.following && inventory.active_count >= FOLLOWS_COST.maximumFollowing)
       throw new ControlInvalid('Follow budget exceeded');
-    const source =
-      input.following !== undefined ||
-      !prior ||
-      (input.level === undefined && input.pinPosition === undefined)
-        ? 'explicit'
-        : prior.source;
+    const settingsOnly = prior && following === prior.following &&
+      (input.level !== undefined || input.pinPosition !== undefined);
+    const source = settingsOnly ? prior.source : 'explicit';
+    await client.query(`DELETE FROM access.follow WHERE principal_id=$1 AND target<>$2
+      AND target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2)`,[owner,target]);
+    if (prior && prior.target !== target) await client.query(
+      'DELETE FROM access.follow WHERE principal_id=$1 AND target=$2',[owner,prior.target]);
+    if (!following) await client.query(`UPDATE access.follow SET following=false,revision=$3,pin_position=NULL
+      WHERE principal_id=$1 AND following AND target IN
+        (SELECT alias FROM access.follow_space_alias WHERE space=$2)`,[owner,target,randomUUID()]);
     return (
       await client.query<FollowRow>(
         `INSERT INTO access.follow
-      (principal_id,target,kind,acting_subject,following,revision,level,source,pin_position)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(principal_id,target) DO UPDATE SET
+      (principal_id,target,kind,acting_subject,following,revision,level,source,pin_position,name_key)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(principal_id,target) DO UPDATE SET
       kind=EXCLUDED.kind,following=EXCLUDED.following,acting_subject=EXCLUDED.acting_subject,
       revision=EXCLUDED.revision,level=EXCLUDED.level,source=EXCLUDED.source,pin_position=EXCLUDED.pin_position,
-      changed_at=clock_timestamp() RETURNING *`,
-        [owner, target, kind, agent, following, randomUUID(), level, source, pin],
+      name_key=COALESCE(EXCLUDED.name_key,access.follow.name_key),changed_at=clock_timestamp() RETURNING *`,
+        [owner, target, kind, agent, following, randomUUID(), level, source, pin, described?.nameKey ?? null],
       )
     ).rows[0]!;
   }
-  set(
+  async set(
     principal: VerifiedPrincipal,
     input: FollowCommand,
     key: string,
     describe: Describe,
   ): Promise<FollowResult> {
+    const ready = await this.descriptions(principal,input.actingSubject,input,key,'follow-receipt-v1',[input],describe);
+    if (ready.receipt) return ready.receipt as FollowResult;
     return this.command(
       principal,
       input.actingSubject,
@@ -258,7 +293,7 @@ export class FollowsStore {
       key,
       'follow-receipt-v1',
       async (client, owner) => {
-        const row = await this.put(client, owner, input.actingSubject, input, describe);
+        const row = await this.put(client, owner, input.actingSubject, input, ready.describe);
         return {
           profile: 'follow-receipt-v1',
           target: row.target,
@@ -272,12 +307,14 @@ export class FollowsStore {
       },
     );
   }
-  batch(
+  async batch(
     principal: VerifiedPrincipal,
     input: BatchFollowCommand,
     key: string,
     describe: Describe,
   ): Promise<BatchFollowResult> {
+    const ready = await this.descriptions(principal,input.actingSubject,input,key,'follow-batch-receipt-v1',input.targets,describe);
+    if (ready.receipt) return ready.receipt as BatchFollowResult;
     return this.command(
       principal,
       input.actingSubject,
@@ -300,7 +337,7 @@ export class FollowsStore {
             item.expectedRevision === undefined
           )
             throw new ControlInvalid('Management requires expectedRevision');
-          const row = await this.put(client, owner, input.actingSubject, item, describe);
+          const row = await this.put(client, owner, input.actingSubject, item, ready.describe);
           if (items.some((prior) => prior.target === row.target))
             throw new ControlInvalid('Canonical batch targets repeat');
           items.push({
@@ -349,8 +386,7 @@ export class FollowsStore {
       return { owner, revision: inventory?.revision ?? null, rows };
     });
   }
-  /** Tuple keyset over the bounded inventory. Search uses live disclosed names
-   * in the reader; empty search pages still carry continuation. */
+  /** Tuple keyset over the bounded inventory. Name filtering precedes seeking and LIMIT in SQL. */
   async manage(
     principal: VerifiedPrincipal,
     agent: string,
@@ -358,6 +394,7 @@ export class FollowsStore {
     kind: string | undefined,
     order: 'recent' | 'pinned',
     limit: number,
+    q?: string,
   ) {
     let seek: { key: string; target: string } | null = null;
     if (after) {
@@ -384,12 +421,19 @@ export class FollowsStore {
       const rows = (
         await client.query<FollowRow>(
           `SELECT f.*,(${expression})::text AS order_key FROM access.follow f
+        LEFT JOIN access.follow_space_alias s ON s.alias=f.target
+        LEFT JOIN access.agent_provision agent ON agent.agent_id=f.target
+        LEFT JOIN access.saved_filter view ON view.principal_id=f.principal_id
+          AND f.target='urn:rezics:saved-view:'||view.id::text
         LEFT JOIN LATERAL (SELECT max(activity_at) AS activity_at FROM access.follow_activity
           WHERE target=f.target OR target IN (SELECT alias FROM access.follow_space_alias WHERE space=f.target)) a ON true
         WHERE f.principal_id=$1 AND f.following
-        AND ($2::text IS NULL OR f.kind=$2) AND ($3::numeric IS NULL OR (${expression},f.target)>($3::numeric,$4::text))
+        AND ($2::text IS NULL OR f.kind=$2 OR $2 IN ('realm','zone') AND f.kind='space')
+        AND ($6::text IS NULL OR access.follow_space_notifying(f.principal_id,f.target)
+          AND strpos(lower(normalize(COALESCE(view.name,f.name_key,s.name_key,agent.display_name,''),NFKC)),$6)>0)
+        AND ($3::numeric IS NULL OR (${expression},f.target)>($3::numeric,$4::text))
         ORDER BY ${expression},f.target LIMIT $5`,
-          [owner, kind ?? null, seek?.key ?? null, seek?.target ?? null, limit + 1],
+          [owner, kind ?? null, seek?.key ?? null, seek?.target ?? null, limit + 1, q?.normalize('NFKC').toLowerCase() || null],
         )
       ).rows;
       return { owner, revision: inventory?.revision ?? null, rows };
@@ -397,11 +441,17 @@ export class FollowsStore {
   }
   async state(target: string, reader?: { principal: VerifiedPrincipal; agent: string }) {
     return controlRead(this.pool, async (client) => {
+      target = (await client.query<{ space: string }>(
+        'SELECT space FROM access.follow_space_alias WHERE alias=$1',[target])).rows[0]?.space ?? target;
       const owner = reader ? await followPrincipal(client, reader.principal, reader.agent) : null;
       const row = owner
         ? (
             await client.query<FollowRow>(
-              'SELECT * FROM access.follow WHERE principal_id=$1 AND target=$2',
+              `SELECT f.*,EXISTS(SELECT 1 FROM access.follow active WHERE active.principal_id=$1 AND active.following
+                AND (active.target=$2 OR active.target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2))) AS following
+                FROM access.follow f WHERE f.principal_id=$1 AND
+          (f.target=$2 OR f.target IN (SELECT alias FROM access.follow_space_alias WHERE space=$2))
+          ORDER BY (f.target=$2) DESC,f.following DESC,f.changed_at DESC LIMIT 1`,
               [owner, target],
             )
           ).rows[0]
@@ -409,7 +459,12 @@ export class FollowsStore {
       const counts = (
         await client.query<{ count: number; scanned: number }>(
           `WITH candidates AS MATERIALIZED (
-        SELECT principal_id FROM access.follow WHERE target=$1 AND following ORDER BY principal_id LIMIT $2)
+        SELECT DISTINCT f.principal_id FROM access.follow f WHERE following AND
+          (target=$1 OR target IN (SELECT alias FROM access.follow_space_alias WHERE space=$1))
+          AND NOT (source='join' AND EXISTS(SELECT 1 FROM access.follow_space_alias alias
+            JOIN access.private_membership member ON member.owner_subject=alias.realm AND member.principal_id=f.principal_id
+            WHERE alias.space=$1 AND member.kind='realm' AND member.state='joined'))
+          ORDER BY f.principal_id LIMIT $2)
         SELECT count(*)::integer AS scanned,count(p.id)::integer AS count FROM candidates c
         LEFT JOIN access.principal p ON p.id=c.principal_id AND p.active`,
           [target, FOLLOWS_COST.countProbe],
@@ -444,7 +499,8 @@ export class FollowsStore {
         await client.query<{ target: string; kind: FollowKind; identity: string }>(
           `WITH identities AS (
         SELECT id,COALESCE(a.space,id) AS target FROM unnest($2::text[]) id LEFT JOIN access.follow_space_alias a ON a.alias=id)
-        SELECT f.target,f.kind,i.id AS identity FROM identities i JOIN access.follow f ON f.target=i.target
+        SELECT f.target,f.kind,i.id AS identity FROM identities i JOIN access.follow f ON (f.target=i.target OR f.target IN
+          (SELECT alias FROM access.follow_space_alias WHERE space=i.target))
         WHERE f.principal_id=$1 AND f.following`,
           [owner, [...new Set(candidates.flat())]],
         )

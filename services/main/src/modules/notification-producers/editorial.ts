@@ -98,7 +98,7 @@ export async function editorialNotification(
       WHEN proposal.proposer_principal=s.principal_id THEN 'author'
       WHEN EXISTS(SELECT 1 FROM access.editorial_review review WHERE review.proposal=s.proposal
         AND review.principal=s.principal_id) THEN 'reviewer'
-      WHEN s.principal_id=ANY($6::uuid[]) THEN 'steward' ELSE NULL END AS reason
+      WHEN s.principal_id=ANY($6::uuid[]) AND s.reason<>'manual' THEN 'steward' ELSE NULL END AS reason
       FROM access.watch s JOIN access.editorial_proposal proposal ON proposal.id=s.proposal
       WHERE s.proposal=$1 OR ($2::uuid IS NOT NULL AND s.proposal=$2))
     SELECT DISTINCT ON (s.principal_id) s.principal_id::text,s.reason
@@ -116,10 +116,11 @@ export async function editorialNotification(
     )
   ).rows;
   if (recipients.length > 256) throw new Error('editorial recipient bound exceeded');
-  const relationshipPlan: RelationshipRecipients = { targets: [row.resource,row.work,row.context,event.actor],
+  const relationshipPlan: RelationshipRecipients = { targets: [row.resource===row.work ? null : row.resource,row.context,event.actor].filter((id): id is string => !!id),
     highlights: ['proposal-decided','proposal-reverted'].includes(topic),
     watches: [`urn:rezics:proposal:${event.proposal}`],
-    direct: recipients.filter(item => item.reason !== 'manual').map(item => item.principal_id),
+    direct: recipients.filter(item => ['author','reviewer'].includes(item.reason)).map(item => item.principal_id),
+    relationships: stewards.map(item => item.id),
     except: row.actor_principal ? [row.actor_principal] : [] };
   const related = await relationshipRecipients(access,relationshipPlan);
   if (!related.length) return null;
@@ -174,8 +175,9 @@ export function editorialNotificationSubjectReader(
         )
       ).rows[0];
       if (!row) return { status: 'undisclosed' };
-      if (input.recipientReason === 'manual' && !await relationshipEligible(access,input.principalId,{
-        targets: [row.resource,row.work,row.context], highlights: ['proposal-decided','proposal-reverted'].includes(input.topic ?? ''),
+      if (['manual','steward'].includes(input.recipientReason ?? '') && !await relationshipEligible(access,input.principalId,{
+        targets: [row.resource===row.work ? null : row.resource,row.context].filter((id): id is string => !!id),
+        relationships: input.recipientReason==='steward' ? [input.principalId] : [], highlights: ['proposal-decided','proposal-reverted'].includes(input.topic ?? ''),
         watches: [`urn:rezics:proposal:${input.ref}`] })) {
         return { status: 'undisclosed' };
       }

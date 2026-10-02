@@ -5,6 +5,7 @@ ALTER TABLE access.follow ADD CONSTRAINT follow_kind_check CHECK (length(kind) B
   ADD COLUMN level text NOT NULL DEFAULT 'highlights' CHECK (level IN ('all','highlights','off')),
   ADD COLUMN source text NOT NULL DEFAULT 'explicit' CHECK (source IN ('explicit','join','library')),
   ADD COLUMN pin_position integer CHECK (pin_position BETWEEN 0 AND 9999),
+  ADD COLUMN name_key text,
   ADD COLUMN changed_at timestamptz NOT NULL DEFAULT clock_timestamp();
 UPDATE access.follow SET level = CASE WHEN kind = 'work' THEN 'all'
   WHEN kind = 'concept' THEN 'off' ELSE 'highlights' END;
@@ -13,22 +14,13 @@ ALTER TABLE access.follow_inventory ADD CONSTRAINT follow_inventory_active_count
   CHECK (active_count BETWEEN 0 AND 10000);
 CREATE INDEX follow_pins ON access.follow(principal_id,pin_position,target) WHERE following;
 CREATE TABLE access.follow_activity(target text PRIMARY KEY,activity_at timestamptz NOT NULL);
-CREATE TABLE access.follow_activity_head(id boolean PRIMARY KEY DEFAULT true CHECK(id),revision uuid NOT NULL);
-INSERT INTO access.follow_activity_head(id,revision) VALUES(true,gen_random_uuid());
-CREATE FUNCTION access.follow_activity_change() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE access.follow_activity_head SET revision=gen_random_uuid() WHERE id;
-  RETURN NULL;
-END $$;
-CREATE TRIGGER follow_activity_change AFTER INSERT OR UPDATE ON access.follow_activity
-  FOR EACH STATEMENT EXECUTE FUNCTION access.follow_activity_change();
-
 -- Capability identity is projected from the admitted graph by the follow owner.
 -- Mapping a Realm/Zone never grants disclosure or membership.
 CREATE TABLE access.follow_space_alias (
   alias text PRIMARY KEY,
   space text NOT NULL,
-  realm text NOT NULL
+  realm text NOT NULL,
+  name_key text
 );
 CREATE INDEX follow_space_identity ON access.follow_space_alias(space,alias);
 
@@ -50,14 +42,19 @@ CREATE TRIGGER follow_inventory_change AFTER INSERT OR UPDATE OR DELETE ON acces
   FOR EACH ROW EXECUTE FUNCTION access.follow_inventory_change();
 
 CREATE FUNCTION access.automatic_follow(who uuid, actor text, resource text, resource_kind text,
-  origin text, enabled boolean) RETURNS void LANGUAGE plpgsql AS $$
+  origin text, enabled boolean, search_name text DEFAULT NULL) RETURNS boolean LANGUAGE plpgsql AS $$
 BEGIN
   INSERT INTO access.follow_inventory(principal_id,revision) VALUES(who,gen_random_uuid()) ON CONFLICT DO NOTHING;
   PERFORM 1 FROM access.follow_inventory WHERE principal_id=who FOR UPDATE;
   IF enabled THEN
-    INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level,source)
+    -- Automatic interest spends available budget; admission is never rejected.
+    IF (SELECT active_count FROM access.follow_inventory WHERE principal_id=who)>=10000
+      AND NOT EXISTS(SELECT 1 FROM access.follow WHERE principal_id=who AND target=resource AND following)
+      THEN RETURN false; END IF;
+    INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level,source,name_key)
       VALUES(who,resource,resource_kind,actor,true,gen_random_uuid(),
-        CASE WHEN origin='library' THEN 'all' ELSE 'highlights' END,origin)
+        CASE WHEN origin='library' THEN 'all' ELSE 'highlights' END,origin,
+        COALESCE(search_name,(SELECT name_key FROM access.follow_space_alias WHERE alias=resource)))
       ON CONFLICT(principal_id,target) DO UPDATE SET following=true,revision=gen_random_uuid(),
         changed_at=clock_timestamp(),source=EXCLUDED.source
       WHERE access.follow.source<>'explicit' AND NOT access.follow.following;
@@ -65,6 +62,7 @@ BEGIN
     UPDATE access.follow SET following=false,revision=gen_random_uuid(),changed_at=clock_timestamp(),pin_position=NULL
       WHERE principal_id=who AND target=resource AND source=origin AND following;
   END IF;
+  RETURN true;
 END $$;
 
 CREATE FUNCTION access.membership_follow() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -105,3 +103,16 @@ CREATE TABLE access.relationship_recovery_cursor(id boolean PRIMARY KEY DEFAULT 
   library_agent text NOT NULL DEFAULT '',library_work text NOT NULL DEFAULT '',
   space_after_principal uuid,space_after_target text NOT NULL DEFAULT '',member_after uuid);
 INSERT INTO access.relationship_recovery_cursor(id) VALUES(true);
+
+-- Private Space interest pauses only after the current membership is lost.
+CREATE FUNCTION access.follow_space_notifying(who uuid, resource text) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT NOT EXISTS(SELECT 1 FROM access.follow_space_alias alias
+    JOIN access.realm_admin_settings settings ON settings.realm=alias.realm
+    WHERE (alias.alias=resource OR alias.space=resource) AND settings.visibility='private'
+    AND NOT EXISTS(SELECT 1 FROM access.private_membership m WHERE m.principal_id=who
+      AND m.owner_subject=alias.realm AND m.kind='realm' AND m.state='joined')
+    AND NOT EXISTS(SELECT 1 FROM access.membership m JOIN access.agent_provision a ON a.agent_id=m.member_subject
+      WHERE a.principal_id=who AND a.agent_kind='person' AND a.state='active'
+        AND m.owner_subject=alias.realm AND m.kind='realm' AND m.state='joined'))
+$$;
+CREATE INDEX follow_activity_retention ON access.follow_activity(activity_at,target);

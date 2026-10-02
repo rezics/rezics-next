@@ -20,9 +20,15 @@ CREATE INDEX watch_target_recipients ON access.watch(target,principal_id);
 CREATE TABLE access.watch_participation(principal_id uuid NOT NULL REFERENCES access.principal(id),
   target text NOT NULL,PRIMARY KEY(principal_id,target));
 INSERT INTO access.watch_participation(principal_id,target)
-  SELECT principal_id,target FROM access.watch WHERE reason<>'manual';
+  SELECT principal_id,target FROM access.watch WHERE reason IN ('author','reviewer');
 CREATE FUNCTION access.guard_watch() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP='INSERT' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('watch-budget:' || NEW.principal_id::text,0));
+    IF (SELECT count(*) FROM access.watch WHERE principal_id=NEW.principal_id)>=10000
+      AND NOT EXISTS(SELECT 1 FROM access.watch WHERE principal_id=NEW.principal_id
+        AND (target=NEW.target OR proposal=NEW.proposal)) THEN RETURN NULL; END IF;
+  END IF;
   IF TG_OP='INSERT' AND NEW.proposal IS NOT NULL THEN NEW.target:='urn:rezics:proposal:' || NEW.proposal::text; END IF;
   IF TG_OP='DELETE' OR TG_OP='INSERT' AND NEW.revision<>1 OR TG_OP='UPDATE' AND
     (NEW.principal_id<>OLD.principal_id OR NEW.target<>OLD.target OR NEW.kind<>OLD.kind
@@ -42,12 +48,14 @@ BEGIN
     INSERT INTO access.watch(principal_id,proposal,reason,level)
       VALUES(NEW.proposer_principal,NEW.id,'author','participating') ON CONFLICT DO NOTHING;
     INSERT INTO access.watch_participation(principal_id,target)
-      VALUES(NEW.proposer_principal,'urn:rezics:proposal:' || NEW.id::text) ON CONFLICT DO NOTHING;
+      SELECT principal_id,target FROM access.watch WHERE principal_id=NEW.proposer_principal AND proposal=NEW.id
+      ON CONFLICT DO NOTHING;
   ELSE
     INSERT INTO access.watch(principal_id,proposal,reason,level)
       VALUES(NEW.principal,NEW.proposal,'reviewer','participating') ON CONFLICT DO NOTHING;
     INSERT INTO access.watch_participation(principal_id,target)
-      VALUES(NEW.principal,'urn:rezics:proposal:' || NEW.proposal::text) ON CONFLICT DO NOTHING;
+      SELECT principal_id,target FROM access.watch WHERE principal_id=NEW.principal AND proposal=NEW.proposal
+      ON CONFLICT DO NOTHING;
   END IF;
   RETURN NEW;
 END $$;

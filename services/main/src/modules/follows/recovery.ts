@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
@@ -10,12 +10,12 @@ const graphs = new WeakMap<Pool, Pick<FusekiClient, 'query'>>();
 export function configureFollowGraph(pool: Pool, graph: Pick<FusekiClient, 'query'>) {
   graphs.set(pool, graph);
 }
-export async function prepareRealmFollow(client: PoolClient, pool: Pool, realm: string) {
+export async function prepareRealmFollow(pool: Pool, realm: string) {
   const graph = graphs.get(pool);
-  if (!graph) return;
+  if (!graph) throw new Error('Follow graph registry is not configured');
   const { publicTargetRead } = await import('../target/resolve.ts');
   const space = await publicTargetRead(graph, (session) => followSpace(session, realm));
-  if (space) await registerFollowSpace(client, space);
+  return space;
 }
 export const RELATIONSHIP_RECOVERY_COST = {
   legacyRows: 16,
@@ -48,13 +48,15 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
       ],
     )
   ).rows;
-  for (const row of rows)
-    await controlTransaction(pool, async (client) => {
+  for (const row of rows) {
+    try {
+      const identity = await prepareRealmFollow(pool,row.target);
+      await controlTransaction(pool, async (client) => {
       await client.query(
         'SELECT revision FROM access.follow_inventory WHERE principal_id=$1 FOR UPDATE',
         [row.principal_id],
       );
-      await prepareRealmFollow(client, pool, row.target);
+      if (identity) await registerFollowSpace(client,identity);
       const alias = (
         await client.query<{ space: string }>(
           'SELECT space FROM access.follow_space_alias WHERE alias=$1',
@@ -79,12 +81,13 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
         row.principal_id,
         row.target,
       ]);
-      if (
-        prior &&
-        ((prior.source === 'explicit' && latest.source !== 'explicit') ||
-          prior.changed_at >= latest.changed_at)
-      )
+      if (prior) {
+        // A canonical Space owns settings. Legacy Realm/Zone interest is a union.
+        if (latest.following && !prior.following) await client.query(`UPDATE access.follow
+          SET following=true,revision=$3,changed_at=clock_timestamp() WHERE principal_id=$1 AND target=$2`,
+          [row.principal_id,alias.space,randomUUID()]);
         return;
+      }
       await client.query(
         `INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level,source,pin_position,changed_at)
       VALUES($1,$2,'space',$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(principal_id,target) DO UPDATE SET
@@ -102,13 +105,13 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
           latest.changed_at,
         ],
       );
-    });
-  // A join before this release (or before mapping recovery) has no follow yet.
-  const last = rows.at(-1);
-  await pool.query(
-    'UPDATE access.relationship_recovery_cursor SET space_after_principal=$1,space_after_target=$2 WHERE id',
-    [last?.principal_id ?? null, last?.target ?? ''],
-  );
+      });
+    } catch (error) { console.warn('Space follow recovery row deferred',error); }
+    await pool.query('UPDATE access.relationship_recovery_cursor SET space_after_principal=$1,space_after_target=$2 WHERE id',
+      [row.principal_id,row.target]);
+  }
+  if (!rows.length) await pool.query("UPDATE access.relationship_recovery_cursor SET space_after_principal=NULL,space_after_target='' WHERE id");
+  // Missing membership projections recover independently of failed legacy rows.
   const members = (
     await pool.query<{ owner: string; actor: string; realm: string; id: string; private: boolean }>(
       `WITH candidates AS (SELECT m.id,a.principal_id AS owner,a.agent_id AS actor,m.owner_subject AS realm,false AS private
@@ -127,11 +130,13 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
       [RELATIONSHIP_RECOVERY_COST.membershipRows, cursor.member_after],
     )
   ).rows;
-  for (const member of members)
-    await controlTransaction(pool, async (client) => {
+  for (const member of members) {
+    try {
+      const identity = await prepareRealmFollow(pool,member.realm);
+      await controlTransaction(pool, async (client) => {
       await client.query("SELECT id FROM access.scope_gate WHERE id='work:create:root' FOR UPDATE");
       if (!(await baselineMemberProof(client, member.owner, member.actor))) return;
-      await prepareRealmFollow(client, pool, member.realm);
+      if (identity) await registerFollowSpace(client,identity);
       if (
         !(
           await client.query(
@@ -159,9 +164,10 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
           'join',
           true,
         );
-    });
-  await pool.query('UPDATE access.relationship_recovery_cursor SET member_after=$1 WHERE id', [
-    members.at(-1)?.id ?? null,
-  ]);
+      });
+    } catch (error) { console.warn('Membership follow recovery row deferred',error); }
+    await pool.query('UPDATE access.relationship_recovery_cursor SET member_after=$1 WHERE id',[member.id]);
+  }
+  if (!members.length) await pool.query('UPDATE access.relationship_recovery_cursor SET member_after=NULL WHERE id');
   return rows.length + members.length;
 }

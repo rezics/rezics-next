@@ -24,6 +24,8 @@ async function mentionEvents(currentRevision: string) {
     if (sql.includes('FROM access.admission')) return { rows: [{ principal_id: id(8) }] };
     if (sql.includes('FROM access.agent_handle')) return { rows: [{ agent_id: native(9) }] };
     if (sql.includes('FROM access.representation')) return { rows: [{ id: id(10) }] };
+    if (sql.includes('access.watch')) return { rows: [],rowCount: 1 };
+    if (sql.includes('WITH targets AS')) return { rows: [] };
     throw new Error(`Unexpected Access read: ${sql}`);
   } } as unknown as Pool;
   const content = { query: async () => ({ rows: [{ reply: native(2), author: native(6),

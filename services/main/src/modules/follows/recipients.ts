@@ -5,6 +5,7 @@ export interface RelationshipRecipients {
   highlights: boolean;
   watches?: readonly string[];
   direct?: readonly string[];
+  relationships?: readonly string[];
   except?: readonly string[];
   languages?: readonly string[];
 }
@@ -20,6 +21,7 @@ export async function relationshipRecipientPage(
     input.targets.length > 7 ||
     (input.watches?.length ?? 0) > 4 ||
     (input.direct?.length ?? 0) > 256 ||
+    (input.relationships?.length ?? 0) > 256 ||
     (input.languages?.length ?? 0) > 20
   )
     throw new Error('Relationship recipient input bound exceeded');
@@ -27,17 +29,16 @@ export async function relationshipRecipientPage(
     await pool.query<{ id: string }>(
       `WITH targets AS (
     SELECT COALESCE(a.space,id) AS target FROM unnest($1::text[]) id LEFT JOIN access.follow_space_alias a ON a.alias=id
-  ), candidates AS (
+  ), identities AS (SELECT target FROM targets UNION SELECT a.alias FROM access.follow_space_alias a JOIN targets t ON t.target=a.space), candidates AS (
     SELECT id,true AS direct FROM unnest($4::uuid[]) id
-    UNION ALL SELECT f.principal_id,false FROM access.follow f JOIN targets t ON t.target=f.target
+    UNION ALL SELECT id,false FROM unnest($8::uuid[]) id
+    UNION ALL SELECT f.principal_id,false FROM access.follow f JOIN identities t ON t.target=f.target
       LEFT JOIN access.person_preferences pref ON pref.agent_id=f.acting_subject
       WHERE f.following AND (f.level='all' OR ($2 AND f.level='highlights'))
       AND (cardinality($7::text[])=0 OR COALESCE(cardinality(pref.content_languages),0)=0
         OR EXISTS(SELECT 1 FROM unnest($7::text[]) actual,unnest(pref.content_languages) wanted
           WHERE lower(actual)=lower(wanted) OR lower(actual) LIKE lower(wanted)||'-%'))
-      AND (f.kind<>'space' OR NOT EXISTS(SELECT 1 FROM access.follow_space_alias alias
-        JOIN access.realm_admin_settings settings ON settings.realm=alias.realm
-        WHERE alias.space=f.target AND settings.visibility='private'))
+      AND access.follow_space_notifying(f.principal_id,f.target)
     UNION ALL SELECT w.principal_id,false FROM access.watch w WHERE w.target=ANY($3::text[])
       AND (w.level='all' OR w.level='participating' AND EXISTS(SELECT 1 FROM access.watch_participation participant
         WHERE participant.principal_id=w.principal_id AND participant.target=w.target))
@@ -56,6 +57,7 @@ export async function relationshipRecipientPage(
         input.except ?? [],
         after,
         input.languages ?? [],
+        input.relationships ?? [],
       ],
     )
   ).rows;
@@ -77,24 +79,23 @@ export async function relationshipEligible(
   const row = (
     await pool.query(
       `WITH targets AS (SELECT COALESCE(a.space,id) AS target
-    FROM unnest($2::text[]) id LEFT JOIN access.follow_space_alias a ON a.alias=id)
+    FROM unnest($2::text[]) id LEFT JOIN access.follow_space_alias a ON a.alias=id),
+    identities AS (SELECT target FROM targets UNION SELECT a.alias FROM access.follow_space_alias a JOIN targets t ON t.target=a.space)
     SELECT 1 FROM access.principal p WHERE p.id=$1 AND p.active
     AND NOT EXISTS(SELECT 1 FROM access.person_block b WHERE b.principal_id=p.id AND b.target_agent=ANY($2::text[]))
     AND NOT EXISTS(SELECT 1 FROM access.home_exclusion e WHERE e.principal_id=p.id AND e.strength='mute' AND e.target=ANY($2::text[]))
     AND NOT EXISTS(SELECT 1 FROM access.watch w WHERE w.principal_id=p.id AND w.target=ANY($4::text[]) AND w.level='ignore')
-    AND (EXISTS(SELECT 1 FROM access.follow f JOIN targets t ON t.target=f.target
+    AND (p.id=ANY($6::uuid[]) OR EXISTS(SELECT 1 FROM access.follow f JOIN identities t ON t.target=f.target
       LEFT JOIN access.person_preferences pref ON pref.agent_id=f.acting_subject
       WHERE f.principal_id=p.id AND f.following AND (f.level='all' OR ($3 AND f.level='highlights'))
         AND (cardinality($5::text[])=0 OR COALESCE(cardinality(pref.content_languages),0)=0
           OR EXISTS(SELECT 1 FROM unnest($5::text[]) actual,unnest(pref.content_languages) wanted
             WHERE lower(actual)=lower(wanted) OR lower(actual) LIKE lower(wanted)||'-%'))
-        AND (f.kind<>'space' OR NOT EXISTS(SELECT 1 FROM access.follow_space_alias alias
-          JOIN access.realm_admin_settings settings ON settings.realm=alias.realm
-          WHERE alias.space=f.target AND settings.visibility='private')))
+        AND access.follow_space_notifying(f.principal_id,f.target))
       OR EXISTS(SELECT 1 FROM access.watch w WHERE w.principal_id=p.id AND w.target=ANY($4::text[])
         AND (w.level='all' OR w.level='participating' AND EXISTS(SELECT 1 FROM access.watch_participation participant
           WHERE participant.principal_id=w.principal_id AND participant.target=w.target))))`,
-      [principal, input.targets, input.highlights, input.watches ?? [], input.languages ?? []],
+      [principal, input.targets, input.highlights, input.watches ?? [], input.languages ?? [],input.relationships ?? []],
     )
   ).rowCount;
   return !!row;

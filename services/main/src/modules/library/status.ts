@@ -390,7 +390,10 @@ export class ReaderLibraryStatusStore {
     const result = await this.writeStatus(input,transaction);
     // Content has committed and released its connection before cross-owner
     // delivery. Supplied transactions are recovered from their standing slots.
-    if (!transaction) await followWriters.get(this.pool)?.(input.agent,input.work);
+    if (!transaction) {
+      try { await followWriters.get(this.pool)?.(input.agent,input.work); }
+      catch (error) { console.warn('Library follow deferred to recovery', error); }
+    }
     return result;
   }
 

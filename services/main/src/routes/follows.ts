@@ -37,7 +37,8 @@ export function followsRoutes(work: MainWorkDependencies) {
     (target: string, hint?: string) => workRead(work,new Request(request.url),{},async session => {
       const identity = await resolveFollowIdentity(session,target);
       if (identity.kind === 'work') identity.target = (await resolveTargets(session,[identity.target],'discussion'))[0]!.resource;
-      await readFollowTarget(session,identity.target,identity.kind,undefined,{ principal,agent });
+      const described = await readFollowTarget(session,identity.target,identity.kind,undefined,{ principal,agent });
+      identity.nameKey = described.name.value.normalize('NFKC').toLowerCase();
       if (hint && hint!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(hint))) throw new ControlInvalid('Follow kind does not match target');
       return identity;
     });
@@ -66,7 +67,7 @@ export function followsRoutes(work: MainWorkDependencies) {
         try {
           if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
           const principal = await work.account.verify(request, ['follow:read']);
-          return Response.json(await workRead(work, new Request(request.url), { ...query, actingSubject: undefined },
+          return Response.json(await workRead(work, new Request(request.url), { ...query, actingSubject: undefined, movingGraph: true },
             session => readFollows(session, work.follows!, principal, query.actingSubject, query.kind,
               query.include === 'newSince', query)), { headers: homeHeaders });
         } catch (error) { return homeError(error); }

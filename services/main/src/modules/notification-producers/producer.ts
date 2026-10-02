@@ -272,7 +272,20 @@ export class NotificationProducer {
   }
 
   async runRelationshipRecoveryOnce(): Promise<number> {
-    return await recoverSpaceFollows(this.access,this.graph) + await recoverLibraryFollows(this.content,this.access);
+    // Bounded expiry batches; no feed writer or global head is involved.
+    await this.access.query(`DELETE FROM access.follow_activity WHERE target IN
+      (SELECT target FROM access.follow_activity WHERE activity_at<clock_timestamp()-interval '90 days'
+        ORDER BY activity_at,target LIMIT 256)`);
+    await this.access.query(`DELETE FROM access.notification_recipient_progress WHERE (source_owner,source_event,topic) IN
+      (SELECT source_owner,source_event,topic FROM access.notification_recipient_progress
+        WHERE updated_at<clock_timestamp()-interval '30 days' ORDER BY updated_at LIMIT 256)`);
+    let count = 0;
+    for (const recover of [() => recoverSpaceFollows(this.access,this.graph),
+      () => recoverLibraryFollows(this.content,this.access)]) {
+      try { count += await recover(); }
+      catch (error) { console.warn('Relationship recovery deferred', error); }
+    }
+    return count;
   }
 
   private async runOtherAccessOnce(): Promise<number> {
@@ -464,13 +477,14 @@ export class NotificationProducer {
     const participants = await represented(this.access,author as string,null,'agent.control');
     const watchTargets = [root as string, ...typeof parent === 'string' ? [parent] : []];
     if (participants.length) {
-      await this.access.query(`INSERT INTO access.watch_participation(principal_id,target)
-        SELECT id,target FROM unnest($1::uuid[]) id CROSS JOIN unnest($2::text[]) target ON CONFLICT DO NOTHING`, [participants,watchTargets]);
       await this.access.query(`INSERT INTO access.watch(principal_id,target,kind,reason,level)
         SELECT id,target,'thread','reviewer','participating' FROM unnest($1::uuid[]) id
           CROSS JOIN unnest($2::text[]) target ON CONFLICT DO NOTHING`, [participants,watchTargets]);
+      await this.access.query(`INSERT INTO access.watch_participation(principal_id,target)
+        SELECT principal_id,target FROM access.watch WHERE principal_id=ANY($1::uuid[]) AND target=ANY($2::text[])
+        ON CONFLICT DO NOTHING`, [participants,watchTargets]);
     }
-    const relationshipPlan: RelationshipRecipients = { targets: [realm as string,root as string,author as string],
+    const relationshipPlan: RelationshipRecipients = { targets: [realm as string,author as string],
       highlights: false, watches: watchTargets,
       except: [actor,...direct] };
     const related = await relationshipRecipients(this.access,relationshipPlan);
