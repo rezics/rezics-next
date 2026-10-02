@@ -74,9 +74,11 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   request: Request, input: AuthoredContentDraftInput,
   rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<SaveDraftResult & { byteDigest: string }> {
   let body;
-  try { body = authoredDocumentBody(input); }
+  // Content's text API retains its 65,536 UTF-16-unit budget. UTF-8 custody
+  // permits up to three bytes per unit; Contribution and reply limits differ.
+  try { body = authoredDocumentBody(input, 3 * 65_536); }
   catch { throw new ContentConflict('invalid authored Content body'); }
-  if (input.variant.resourceId !== input.resourceId
+  if (body.body.length > 65_536 || input.variant.resourceId !== input.resourceId
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.resourceId)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.actingSubject)
     || !/^urn:rezics:variant:[0-9a-f-]{36}$/i.test(input.variant.id)
