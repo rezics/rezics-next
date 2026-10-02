@@ -1,5 +1,103 @@
 # Observability, health and diagnosis
 
+## Telemetry configuration
+
+Decision, maintainer, 2026-10-02: use Aspire for development and OpenTelemetry,
+GreptimeDB and Perses for the server observability plane. This change prepares
+configuration; it does not deploy a host or change the private NixOS flake.
+
+Main, Account and Main relay share
+[`@rezics/observability`](../../packages/observability/src/runtime.ts). Bun
+preloads it before `pg` imports, through the Task commands, AppHost and release
+entrypoint. Content runs inside Main and shares its service resource. Aspire's
+`withOtlpExporter(HttpProtobuf)` injects its endpoint and secret headers. An
+absent endpoint or `OTEL_SDK_DISABLED=true` disables the SDK. Supported settings
+come from the [common spec](../../packages/observability/src/config.ts) and the
+generated Main and Account `.env.example` files. Production examples use a
+parent-based 10% root trace sample; metrics and logs remain independent.
+
+The application owns SDK startup and bounded shutdown after requests, jobs and
+pools drain. Traces, metrics and selected structured service events use OTLP
+HTTP protobuf. Console output is not blindly forwarded: use `telemetryLog` with
+public event names and explicitly chosen attributes. Fetch spans measure time
+to response headers and preserve streaming bodies. Only configured internal
+origins receive generated W3C headers; baggage is not propagated. `pg` query
+spans omit SQL text, parameters and results at export. These signals cover HTTP,
+outbound fetch, PostgreSQL and relay/mail jobs, not every business outcome or
+host/Fuseki resource metric.
+
+The pinned Elysia 2 beta plugin has a
+[small Yarn patch](../../.yarn/patches/elysia-opentelemetry-status.patch)
+to read the actual `Response.status` and defer span status until response mapping
+finishes. Without it, direct Responses and mounted
+Better Auth responses can report 200. The regression test covers these forms,
+exceptions, redirects, streams, unmatched routes, overlapping request context,
+PostgreSQL, privacy, correlated logs and real protobuf export. Keep one resolved
+OTel API version: mixed API copies previously disabled providers silently.
+
+Span exports allowlist operational attributes and omit raw URLs, path values,
+query strings, bodies, headers, IPs, user agents, exception payloads and status
+messages. Unmatched requests get a bounded name. Metrics retain bounded route
+templates and explicit histogram buckets with cumulative temporality. This
+matches [GreptimeDB's OTLP limitations](https://docs.greptime.com/user-guide/ingest-data/for-observability/opentelemetry/),
+which currently exclude exponential histograms and store delta values without
+converting them to cumulative series.
+
+## Configuration and operation
+
+The optional [observability Compose model](../../infra/observability/compose.yaml)
+is a runnable reference for pinned versions and local validation, independent
+of the application stack. It is also the source topology for a later NixOS or
+Nomad translation. It supplies resource limits, non-root service data ownership,
+private loopback ports, authenticated GreptimeDB, persistent WAL/data and a
+Collector disk queue with bounded capacity and retries. Queue exhaustion, disk
+failure and process crashes can still lose data. The GreptimeDB exporter uses
+separate pipelines and the required `greptime_trace_v1` header, following
+[the official Collector integration](https://docs.greptime.com/user-guide/ingest-data/for-observability/otel-collector/).
+
+Use [the environment example](../../infra/observability/.env.example) to supply
+four external secret files. The GreptimeDB user file contains
+`telemetry=<password>`; the Collector password file contains that password.
+Perses needs a persistent exactly 32-byte encryption key, and a JSON `Secret`
+resource named `greptimedb` in project `rezics`, with
+`spec.basicAuth.username=telemetry` and `spec.basicAuth.password` matching the
+database. Keep those files outside Git. Secret rotation must update every
+consumer; retain the encryption key with the Perses data backup.
+
+Perses uses [File DB configuration](../../infra/observability/perses/config.yaml)
+and [Git-owned provisioning resources](../../infra/observability/perses/provisioning/services.json).
+Provisioning synchronizes every minute; edit the checked-in datasource and
+dashboard resources and review their diff. The HTTP API is read-only. File DB
+stores runtime state and encrypted secrets on a persistent volume; it is not
+the source for dashboard edits. A single Perses process owns this volume. To
+remove a resource, remove its source and deliberately remove the retained File
+DB object during maintenance: removing a provisioning file alone need not
+delete an existing resource. Back up this volume and its encryption key before
+changing Perses versions. See [Perses provisioning](https://perses.dev/perses/docs/configuration/provisioning/).
+
+Datasources proxy through Perses using the external secret. The dashboard
+includes request rate, 5xx ratio, p95 latency, recent events and traces. Initial
+table-creation hints retain metrics for 30 days and logs/traces for 7 days.
+Changing these headers does not change existing tables; explicitly review and
+apply `ALTER TABLE ... SET 'ttl'=...` for existing data. Shortening TTL deletes
+older telemetry asynchronously. Capacity and retention need measurement under
+the real workload.
+
+`task observability:check` validates Compose and the pinned Collector binary in
+a disposable container. `task observability:smoke` creates only an isolated
+local observability project, exercises authentication, ingestion and Perses
+provisioning, and removes its containers/volumes. It never starts or changes the
+shared application stack. Both need a running local Docker daemon. Tests use
+disposable files under `.temp/observability`; no production secrets are needed.
+
+The reference exposes only loopback HTTP endpoints. Access Perses through SSH
+or an authenticated private ingress; its native auth is disabled under this
+boundary. Cross-host application traffic needs a host-local Collector or an
+explicit receiver bind plus WireGuard/authenticated TLS transport. Public
+ingress and the private NixOS/Nomad configuration are separate deployment work.
+Perses displays signals; automated alert evaluation and delivery still require
+a separately configured rule engine and notification receiver.
+
 ## Signals and readiness
 
 Use operation/causation IDs, graph epoch and sequence, index generation and

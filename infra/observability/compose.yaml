@@ -1,0 +1,83 @@
+# Optional observability plane. Local/private ingress only; no application stack
+# is started here. Checked by `task observability:check` and isolated smoke tests.
+services:
+  data-permissions:
+    image: oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895
+    user: "0:0"
+    command: [bun, -e, "const fs = require('node:fs'); for (const [path, uid] of [['/data/collector', 10001], ['/data/greptime', 10001], ['/data/perses', 65532]]) fs.chownSync(path, uid, uid);"]
+    volumes:
+      - collector-queue:/data/collector
+      - greptime-data:/data/greptime
+      - perses-data:/data/perses
+    network_mode: none
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+  greptimedb:
+    image: greptime/greptimedb:v1.2.1@sha256:9982e36cf3ddb6f2bc813f93ec164509dce59e8c0667c6c38b826f293ec09477
+    command: [standalone, start, --config-file, /etc/greptime/standalone.toml]
+    restart: unless-stopped
+    user: "10001:10001"
+    depends_on:
+      data-permissions: { condition: service_completed_successfully }
+    stop_grace_period: 30s
+    ports: ["127.0.0.1:${GREPTIME_HTTP_PORT:-4000}:4000"]
+    volumes:
+      - ./greptime.toml:/etc/greptime/standalone.toml:ro
+      - greptime-data:/var/lib/greptime
+    secrets: [greptime-users]
+    mem_limit: 4g
+    cpus: 2
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+    command: [--config=/etc/otelcol/config.yaml]
+    restart: unless-stopped
+    stop_grace_period: 15s
+    depends_on:
+      greptimedb: { condition: service_started }
+      data-permissions: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"]
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+      - collector-queue:/var/lib/otelcol
+    secrets: [greptime-password]
+    mem_limit: 768m
+    cpus: 1
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  perses:
+    image: persesdev/perses:v0.54.0@sha256:a0e34ddaf9d7599d96036611af205b948c1179646844202d869f3bcf3d5d9e9c
+    command: [--config=/etc/perses/config.yaml]
+    restart: unless-stopped
+    stop_grace_period: 15s
+    depends_on:
+      greptimedb: { condition: service_started }
+      data-permissions: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:${PERSES_HTTP_PORT:-8088}:8080"]
+    volumes:
+      - ./perses/config.yaml:/etc/perses/config.yaml:ro
+      - ./perses/provisioning:/etc/perses/provisioning:ro
+      - perses-data:/var/lib/perses
+    secrets:
+      - perses-encryption-key
+      - source: perses-greptime
+        target: /etc/perses/secret-provisioning/greptimedb.json
+    mem_limit: 512m
+    cpus: 1
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+secrets:
+  greptime-users:
+    file: ${GREPTIME_USERS_FILE:?Provide the external GreptimeDB user file}
+  greptime-password:
+    file: ${GREPTIME_PASSWORD_FILE:?Provide the external Collector password file}
+  perses-encryption-key:
+    file: ${PERSES_ENCRYPTION_KEY_FILE:?Provide a persistent 32-byte encryption key file}
+  perses-greptime:
+    file: ${PERSES_GREPTIME_SECRET_FILE:?Provide an external Perses Secret provisioning resource}
+volumes:
+  greptime-data:
+  collector-queue:
+  perses-data:

@@ -12,6 +12,7 @@
     "packages/zone-sdk",
     "services/main",
     "packages/wiki-toolkit",
+    "packages/observability",
     "services/account",
     "services/content",
     "apphost"
@@ -35,5 +36,11 @@
     "workerd": {
       "built": true
     }
+  },
+  "resolutions": {
+    "@elysia/opentelemetry@npm:2.0.0-beta.1": "patch:@elysia/opentelemetry@npm%3A2.0.0-beta.1#./.yarn/patches/elysia-opentelemetry-status.patch",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-node": "0.222.0",
+    "@opentelemetry/instrumentation": "0.222.0"
   }
 }

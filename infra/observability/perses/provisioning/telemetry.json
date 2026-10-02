@@ -1,0 +1,19 @@
+{
+  "kind": "Datasource",
+  "metadata": { "name": "telemetry", "project": "rezics" },
+  "spec": {
+    "plugin": {
+      "kind": "GreptimeDBDatasource",
+      "spec": {
+        "proxy": {
+          "kind": "HTTPProxy",
+          "spec": {
+            "url": "http://greptimedb:4000",
+            "allowedEndpoints": [{ "endpointPattern": "/v1/sql", "method": "POST" }],
+            "secret": "greptimedb"
+          }
+        }
+      }
+    }
+  }
+}

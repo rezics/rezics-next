@@ -1,0 +1,74 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -337,7 +337,6 @@
+ 					else if (typeof status !== "number" && typeof error?.status === "number") status = error.status;
+ 					if (typeof status === "number") {
+ 						attributes["http.response.status_code"] = status;
+-						if (status >= 500) rootSpan.setStatus({ code: SpanStatusCode.ERROR });
+ 					}
+ 					rootSpan.setAttributes(attributes);
+ 				}
+@@ -442,7 +441,7 @@
+ 				attributes["http.request.body.size"] = size;
+ 			}
+ 			{
+-				let status = context$1.set.status ?? 200;
++				let status = context$1.responseValue instanceof Response ? context$1.responseValue.status : context$1.set.status ?? 200;
+ 				if (typeof status === "string") status = StatusMap[status] ?? 200;
+ 				attributes["http.response.status_code"] = status;
+ 			}
+@@ -453,15 +452,13 @@
+ 				attributes["http.response.body.size"] = size;
+ 			}
+ 			if (!rootSpan.ended) {
+-				const statusCode = attributes["http.response.status_code"];
+-				if (typeof statusCode === "number" && statusCode >= 500) rootSpan.setStatus({ code: SpanStatusCode.ERROR });
+ 				rootSpan.setAttributes(attributes);
+ 			}
+ 		});
+ 		onAfterResponse((event) => {
+ 			inspect("AfterResponse")(event);
+ 			{
+-				let status = context$1.set.status ?? 200;
++				let status = context$1.responseValue instanceof Response ? context$1.responseValue.status : context$1.set.status ?? 200;
+ 				if (typeof status === "string") status = StatusMap[status] ?? 200;
+ 				attributes["http.response.status_code"] = status;
+ 			}
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -338,7 +338,6 @@
+ 					else if (typeof status !== "number" && typeof error?.status === "number") status = error.status;
+ 					if (typeof status === "number") {
+ 						attributes["http.response.status_code"] = status;
+-						if (status >= 500) rootSpan.setStatus({ code: _opentelemetry_api.SpanStatusCode.ERROR });
+ 					}
+ 					rootSpan.setAttributes(attributes);
+ 				}
+@@ -443,7 +442,7 @@
+ 				attributes["http.request.body.size"] = size;
+ 			}
+ 			{
+-				let status = context.set.status ?? 200;
++				let status = context.responseValue instanceof Response ? context.responseValue.status : context.set.status ?? 200;
+ 				if (typeof status === "string") status = elysia.StatusMap[status] ?? 200;
+ 				attributes["http.response.status_code"] = status;
+ 			}
+@@ -454,15 +453,13 @@
+ 				attributes["http.response.body.size"] = size;
+ 			}
+ 			if (!rootSpan.ended) {
+-				const statusCode = attributes["http.response.status_code"];
+-				if (typeof statusCode === "number" && statusCode >= 500) rootSpan.setStatus({ code: _opentelemetry_api.SpanStatusCode.ERROR });
+ 				rootSpan.setAttributes(attributes);
+ 			}
+ 		});
+ 		onAfterResponse((event) => {
+ 			inspect("AfterResponse")(event);
+ 			{
+-				let status = context.set.status ?? 200;
++				let status = context.responseValue instanceof Response ? context.responseValue.status : context.set.status ?? 200;
+ 				if (typeof status === "string") status = elysia.StatusMap[status] ?? 200;
+ 				attributes["http.response.status_code"] = status;
+ 			}

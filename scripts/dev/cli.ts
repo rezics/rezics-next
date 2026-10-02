@@ -373,7 +373,7 @@ async function webAuthFixtureCurrent(apps: Record<string, string>, publicPath: s
 
 const overridesFile = join(root, '.env.dev');
 /** Variable names whose values are masked in output and passed to Aspire as secrets. */
-const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$/;
+const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$|^OTEL_EXPORTER_OTLP_HEADERS$/;
 
 /** Start storage, apply migrations, check graph lineage and register the local
  * web OAuth client. Returns the application environment: the stack's derived

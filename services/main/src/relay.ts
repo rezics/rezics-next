@@ -1,4 +1,6 @@
 import { Pool } from 'pg';
+import { shutdownTelemetry, withTelemetrySpan } from '@rezics/observability/runtime';
+import { telemetryLog } from '@rezics/observability/log';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { relayMainOutboxOnce, RelayEventBlocked } from './modules/outbox/relay.ts';
 import { cleanEnv } from 'envalid';
@@ -19,7 +21,8 @@ process.on('SIGINT', () => { running = false; });
 process.on('SIGTERM', () => { running = false; });
 
 try {
-  await runMainRelay(async () => !!await relayMainOutboxOnce(fuseki, pool, consumer), () => running, interval,
+  telemetryLog('main_relay_started');
+  await runMainRelay(() => withTelemetrySpan('main.outbox.relay', async () => !!await relayMainOutboxOnce(fuseki, pool, consumer)), () => running, interval,
     { consumer });
 } catch (error) {
   console.error(JSON.stringify(error instanceof RelayEventBlocked
@@ -30,5 +33,6 @@ try {
       reason: error instanceof Error ? error.message : String(error) }));
   throw error;
 } finally {
-  await pool.end();
+  try { await pool.end(); }
+  finally { telemetryLog('main_relay_stopped'); await shutdownTelemetry(); }
 }

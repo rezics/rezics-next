@@ -11,7 +11,8 @@ venv/
 .ruff_cache/
 node_modules/
 node_modules
-.yarn/
+.yarn/*
+!.yarn/patches/
 target/
 !/services/main/src/modules/target/
 dist/

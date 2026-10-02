@@ -5,6 +5,7 @@ import { mainSpec, relaySpec, relayInitSpec } from '../../services/main/src/conf
 import { accountSpec, accountCoreSpec } from '../../services/account/src/config.ts';
 import { webSpec } from '../../apps/web/features/config/env.ts';
 import { accountsSpec } from '../../apps/accounts/features/config/env.ts';
+import { telemetryConfig } from '@rezics/observability/config';
 
 export const productionSpecs = {
   main: mainSpec,
@@ -29,8 +30,16 @@ export type ProductionRole = keyof typeof productionSpecs;
  * and defaults. Private storage may be local to a host; public origins cannot. */
 export const developmentValues: Record<
   string,
-  'private-url' | 'public-url' | 'secret' | 'fixture' | 'directory' | 'smtp' | 'sender'
+  | 'private-url'
+  | 'public-url'
+  | 'telemetry-url'
+  | 'secret'
+  | 'fixture'
+  | 'directory'
+  | 'smtp'
+  | 'sender'
 > = {
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'telemetry-url',
   FUSEKI_URL: 'private-url',
   ACCESS_DATABASE_URL: 'private-url',
   CONTENT_DATABASE_URL: 'private-url',
@@ -122,6 +131,7 @@ export function checkProductionEnv(
   env: Record<string, string | undefined>,
   roles: ProductionRole[] = ['main', 'account', 'relay', 'relay-init', 'migrate'],
 ) {
+  telemetryConfig(env);
   assertClassifiedDefaults();
   const specs = Object.assign({}, ...roles.map((role) => productionSpecs[role])) as Record<
     string,
@@ -178,7 +188,9 @@ export function checkProductionEnv(
     throw new Error('Production SMTP requires TLS');
   }
   if (/^(?:true|1)$/i.test(env.ACCOUNTS_COUNTRY_FROM_HEADER ?? ''))
-    throw new Error('Production takes the sign-up country from the Cloudflare edge, never ACCOUNTS_COUNTRY_FROM_HEADER');
+    throw new Error(
+      'Production takes the sign-up country from the Cloudflare edge, never ACCOUNTS_COUNTRY_FROM_HEADER',
+    );
   for (const name of [
     'FUSEKI_MAINTENANCE_TOKEN',
     'FUSEKI_COMMAND_TOKEN',

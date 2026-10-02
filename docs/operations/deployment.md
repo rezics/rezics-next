@@ -23,12 +23,12 @@ The old REZICS site's `deploy/nomad` jobspecs ran on them and are the precedent
 for this system's jobs.
 
 - **A, edge and control.** The sole Nomad server and an `edge` client; Traefik,
-  the release gateway, the private image registry, and SigNoz's UI and OTLP
-  collector. A two-server Nomad quorum was rejected: it tolerates no failure.
+  the release gateway and the private image registry. A two-server Nomad quorum
+  was rejected: it tolerates no failure.
   The hosts are 16-core/64 GB and 12-core/32 GB: placement constraints, not
   qualified production capacity.
-- **B, data.** A `data` client with the stateful volumes, SigNoz's ClickHouse
-  and Databasus backups.
+- **B, data.** A `data` client with the stateful volumes and Databasus backups.
+  SigNoz belonged to the old site's deployment; rezics-next has no SigNoz wiring.
 - **Network.** WireGuard between A and B. The public interface exposes only
   SSH; Cloudflare Tunnel carries public routes to loopback listeners on A.
 - **Releases.** A stable tag sends one GitHub OIDC request to the gateway, which
@@ -47,7 +47,7 @@ Proposed placement, to confirm by measurement when deploying:
 | Imports, index rebuilds, restore drills | B, as batch jobs | They read and write the data volumes. |
 | Media and snapshots | Cloudflare R2 | `MAIN_S3_*` already speaks S3. |
 | Web, Accounts and about | Cloudflare Workers | Web and Accounts make authenticated private calls through the Tunnel; about serves public pages and its notify form. |
-| Telemetry | SigNoz | Services export OTLP; no separate error tracker. |
+| Telemetry | Collector beside each application host; GreptimeDB on B, Perses on A or B | Shared OTLP instrumentation; [checked-in configuration](../../infra/observability/compose.yaml) and [operating procedure](observability.md#configuration-and-operation). Host integration remains a deployment task. |
 
 ## Open decision: NixOS and Nomad
 
@@ -56,7 +56,7 @@ Settle this when the deployment phase starts. Planning view of 2026-09-29:
 - **Keep NixOS.** Declarative hosts, sops secrets, pinned closures and
   whole-host rollback already work; nothing here needs another OS.
 - **Keep Nomad for stateless services and batch work.** The release graph,
-  maintenance fallback, autoscaler and SigNoz jobs exist, and bulk imports,
+  maintenance fallback and autoscaler are precedents, and bulk imports,
   rebuilds, migrations and restore drills are batch jobs by nature.
 - **Stateful singletons are the open question.** Fuseki and PostgreSQL gain
   little from a scheduler, and a scheduling mistake there is the costliest (a

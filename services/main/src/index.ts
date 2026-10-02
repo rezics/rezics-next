@@ -2,6 +2,8 @@ import { MediaScreenStore } from './modules/media-screen/store.ts';
 import { MediaScreenWorker } from './modules/media-screen/worker.ts';
 import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { Pool } from 'pg';
+import { shutdownTelemetry } from '@rezics/observability/runtime';
+import { telemetryLog } from '@rezics/observability/log';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
 import { WikiEvidenceStore } from './modules/wiki/evidence.ts';
@@ -539,6 +541,7 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
+telemetryLog('main_listening');
 const libraryBackfillController = new AbortController();
 const libraryBackfill = prepareLibraryShelves(contentPool, pool, fuseki,
   { signal: libraryBackfillController.signal }).catch(error => {
@@ -568,14 +571,15 @@ notificationDeliveryWorker?.start();
 
 let stopping = false;
 async function stop(): Promise<void> {
+  if (stopping) return;
+  stopping = true;
+  try {
   await realmPolicyRecovery.stop();
   await libraryImportRetentionWorker.stop();
   await mediaScreenWorker.stop();
   await serialStats?.stop();
   await zoneBrowse?.stop();
   await readRankings.stop();
-  if (stopping) return;
-  stopping = true;
   libraryBackfillController.abort();
   await libraryBackfill;
   await app.stop();
@@ -586,15 +590,12 @@ async function stop(): Promise<void> {
   await notificationDigestWorker.stop();
   await notificationDeliveryWorker?.stop();
   await notificationRealtime?.stop();
-  try {
-  try { await worker.stop(); }
-  finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
-  await erasureRelayPool?.end();
-  } finally { await ownerRelayPool?.end(); }
   await recommendationWorker?.stop();
-  try { await worker.stop(); }
-  finally { await Promise.all([pool.end(), contentPool.end(), relayPool?.end()]); }
-  await recommendationRelayPool?.end();
+  await worker.stop();
+  } finally {
+    try { await Promise.all([pool.end(), contentPool.end(), relayPool?.end(), erasureRelayPool?.end(), ownerRelayPool?.end(), recommendationRelayPool?.end()]); }
+    finally { telemetryLog('main_stopped'); await shutdownTelemetry(); }
+  }
 }
 process.once('SIGINT', () => { void stop(); });
 process.once('SIGTERM', () => { void stop(); });

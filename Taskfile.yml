@@ -270,6 +270,22 @@ tasks:
 
   # Checks and tests
 
+  observability:typecheck:
+    desc: Type-check the shared telemetry runtime and probes.
+    cmds:
+      - bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
+      - bun node_modules/typescript/bin/tsc --project scripts/observability/tsconfig.json
+
+  observability:check:
+    desc: Validate the pinned observability Compose and Collector configurations with disposable local secrets.
+    cmds:
+      - bun scripts/observability/cli.ts check
+
+  observability:smoke:
+    desc: Exercise OTLP ingestion and Perses provisioning on an isolated disposable local observability stack.
+    cmds:
+      - bun scripts/observability/cli.ts smoke
+
   check:
     desc: Run every static gate (types, generated contracts, docs, lint, format, code shape, catalogs, unused files, imports).
     cmds:
@@ -440,7 +456,7 @@ tasks:
   account:dev:
     desc: Run Account in watch mode.
     cmds:
-      - bun --watch services/account/src/index.ts
+      - bun --preload ./services/account/src/telemetry.ts --watch services/account/src/index.ts
 
   account:test:
     desc: Run Account unit tests.
@@ -473,12 +489,12 @@ tasks:
   main:dev:
     desc: Run Main in watch mode.
     cmds:
-      - bun --watch services/main/src/index.ts
+      - bun --preload ./services/main/src/telemetry.ts --watch services/main/src/index.ts
 
   main:relay:
     desc: Run the Main relay.
     cmds:
-      - bun services/main/src/relay.ts {{.CLI_ARGS}}
+      - bun --preload ./services/main/src/relay-telemetry.ts services/main/src/relay.ts {{.CLI_ARGS}}
 
   main:relay:init:
     desc: Initialize the Main relay.

@@ -1,0 +1,16 @@
+{
+  "kind": "Datasource",
+  "metadata": { "name": "metrics", "project": "rezics" },
+  "spec": {
+    "default": true,
+    "plugin": {
+      "kind": "PrometheusDatasource",
+      "spec": {
+        "proxy": {
+          "kind": "HTTPProxy",
+          "spec": { "url": "http://greptimedb:4000/v1/prometheus", "secret": "greptimedb" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+default_timezone = "UTC"
+user_provider = "static_user_provider:file:/run/secrets/greptime-users"
+enable_telemetry = false
+max_in_flight_write_bytes = "128MB"
+max_concurrent_queries = 16
+
+[logging]
+dir = "/var/lib/greptime/logs"
+
+[http]
+addr = "0.0.0.0:4000"
+timeout = "30s"
+body_limit = "16MB"
+enable_cors = false
+
+[grpc]
+bind_addr = "127.0.0.1:4001"
+
+[mysql]
+enable = false
+
+[postgres]
+enable = false
+
+[opentsdb]
+enable = false
+
+[influxdb]
+enable = false
+
+[jaeger]
+enable = false
+
+[otlp]
+enable = true
+
+[query]
+parallelism = 2
+memory_pool_size = "512MB"
+
+[storage]
+type = "File"
+data_home = "/var/lib/greptime/data"
+
+[wal]
+provider = "raft_engine"
+dir = "/var/lib/greptime/wal"
+sync_write = true
+purge_threshold = "1GB"
+
+[[region_engine]]
+[region_engine.mito]
+global_write_buffer_size = "256MB"
+global_write_buffer_reject_size = "512MB"
+sst_meta_cache_size = "128MB"
+vector_cache_size = "64MB"
+page_cache_size = "128MB"
+selector_result_cache_size = "64MB"
+range_result_cache_size = "64MB"
+prefilter_result_cache_size = "32MB"

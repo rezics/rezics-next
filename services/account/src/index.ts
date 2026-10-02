@@ -1,4 +1,6 @@
 import { Pool } from 'pg';
+import { shutdownTelemetry, withTelemetrySpan } from '@rezics/observability/runtime';
+import { telemetryLog } from '@rezics/observability/log';
 import { createAccountAuth } from './auth.ts';
 import { createAccountApp } from './app.ts';
 import { accountConfig } from './config.ts';
@@ -29,13 +31,14 @@ const email = accountEmailQueue(pool, secret, smtpSender({ host: config.ACCOUNT_
   requireTLS: config.ACCOUNT_SMTP_REQUIRE_TLS, user: config.ACCOUNT_SMTP_USER,
   password: config.ACCOUNT_SMTP_PASSWORD, from: config.ACCOUNT_EMAIL_FROM }), baseURL);
 let delivering = false;
+let delivery: Promise<unknown> | undefined;
 const deliveryTimer = setInterval(() => {
   if (delivering) return;
   delivering = true;
-  void email.drain().catch(() => console.error('Account email queue unavailable'))
+  delivery = withTelemetrySpan('account.email.drain', () => email.drain()).catch(() => telemetryLog('account_email_unavailable', 'error'))
     .finally(() => { delivering = false; });
 }, 1_000);
-createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
+const app = createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
   turnstileSecretKey: config.ACCOUNT_TURNSTILE_SECRET_KEY,
   turnstileMode: config.ACCOUNT_TURNSTILE_MODE as 'local' | 'cloudflare',
   accessDeletionFence: access ? async subject => {
@@ -53,3 +56,17 @@ createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUs
   notificationDigest: { accountSecret: secret, mainSecret: config.ACCOUNT_MAIN_CLIENT_SECRET } })
   .cleanup(() => { clearInterval(deliveryTimer); })
   .listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
+telemetryLog('account_listening');
+let stopping = false;
+async function stop() {
+  if (stopping) return;
+  stopping = true;
+  clearInterval(deliveryTimer);
+  try { await app.stop(); await delivery; }
+  finally {
+    try { await Promise.all([pool.end(), accessPool?.end(), relayPool?.end()]); }
+    finally { telemetryLog('account_stopped'); await shutdownTelemetry(); }
+  }
+}
+process.once('SIGINT', () => { void stop(); });
+process.once('SIGTERM', () => { void stop(); });

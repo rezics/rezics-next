@@ -1,0 +1,77 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage:
+    directory: /var/lib/otelcol/queue
+    create_directory: true
+  basicauth/greptime:
+    client_auth:
+      username: telemetry
+      password_file: /run/secrets/greptime-password
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 16777216
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    timeout: 1s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+  # Defence at the boundary for other producers too. Application exporters also
+  # allowlist span attributes and omit exception payloads before transmission.
+  transform/privacy:
+    error_mode: propagate
+    trace_statements:
+      - context: span
+        statements:
+          - keep_keys(attributes, ["http.request.method", "http.response.status_code", "http.route", "url.scheme", "server.address", "server.port", "db.system.name", "db.namespace", "db.operation.name", "error.type"])
+      - context: spanevent
+        statements:
+          - keep_keys(attributes, [])
+exporters:
+  otlp_http/traces:
+    endpoint: http://greptimedb:4000/v1/otlp
+    auth: { authenticator: basicauth/greptime }
+    headers:
+      x-greptime-db-name: public
+      x-greptime-pipeline-name: greptime_trace_v1
+      x-greptime-trace-table-name: rezics_traces
+      x-greptime-hints: ttl=7d
+    timeout: 5s
+    sending_queue: { enabled: true, num_consumers: 2, queue_size: 2048, storage: file_storage }
+    retry_on_failure: { enabled: true, initial_interval: 1s, max_interval: 30s, max_elapsed_time: 0s }
+  otlp_http/metrics:
+    endpoint: http://greptimedb:4000/v1/otlp
+    auth: { authenticator: basicauth/greptime }
+    headers: { x-greptime-db-name: public, x-greptime-hints: ttl=30d }
+    timeout: 5s
+    sending_queue: { enabled: true, num_consumers: 2, queue_size: 2048, storage: file_storage }
+    retry_on_failure: { enabled: true, initial_interval: 1s, max_interval: 30s, max_elapsed_time: 0s }
+  otlp_http/logs:
+    endpoint: http://greptimedb:4000/v1/otlp
+    auth: { authenticator: basicauth/greptime }
+    headers: { x-greptime-db-name: public, x-greptime-log-table-name: rezics_logs, x-greptime-hints: ttl=7d }
+    timeout: 5s
+    sending_queue: { enabled: true, num_consumers: 2, queue_size: 2048, storage: file_storage }
+    retry_on_failure: { enabled: true, initial_interval: 1s, max_interval: 30s, max_elapsed_time: 0s }
+service:
+  extensions: [health_check, file_storage, basicauth/greptime]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/privacy, batch]
+      exporters: [otlp_http/traces]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/logs]

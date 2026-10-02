@@ -21,7 +21,7 @@ import { mainSpec, relaySpec } from '../services/main/src/config.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
 import { accountsSpec } from '../apps/accounts/features/config/env.ts';
-import { createBuilder } from './.aspire/modules/aspire.mjs';
+import { createBuilder, OtlpProtocol } from './.aspire/modules/aspire.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const web = resolve(root, 'apps/web');
@@ -32,7 +32,7 @@ const envFile = process.env.REZICS_DEV_ENV;
 if (!envFile) throw new Error('REZICS_DEV_ENV is unset; start the AppHost with `task dev`');
 const env = Object.fromEntries(readFileSync(envFile, 'utf8').split('\n').filter(Boolean)
   .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
-const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$/;
+const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$|^OTEL_EXPORTER_OTLP_HEADERS$/;
 
 const builder = await createBuilder();
 const parameters = new Map<string, ReturnType<typeof builder.addParameter>>();
@@ -76,16 +76,19 @@ if (mode === 'frontend') {
     ? { port, env: variable }
     : { port: Number(env[variable]), isProxied: false };
   const account = configure(builder.addExecutable('account', 'bun', root,
-    ['--watch', 'services/account/src/index.ts']), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
+    ['--preload', './services/account/src/telemetry.ts', '--watch', 'services/account/src/index.ts']), accountSpec, fixed ? ['ACCOUNT_PORT'] : [])
+    .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
     .withHttpEndpoint(serviceEndpoint(3002, 'ACCOUNT_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' });
   const main = configure(builder.addExecutable('main', 'bun', root,
-    ['--watch', 'services/main/src/index.ts']), mainSpec, fixed ? ['MAIN_PORT'] : [])
+    ['--preload', './services/main/src/telemetry.ts', '--watch', 'services/main/src/index.ts']), mainSpec, fixed ? ['MAIN_PORT'] : [])
+    .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf })
     .withHttpEndpoint(serviceEndpoint(3001, 'MAIN_PORT'))
     .withHttpHealthCheck({ path: '/health/ready' })
     .waitFor(account);
   await configure(builder.addExecutable('main-relay', 'bun', root,
-    ['services/main/src/relay.ts']), relaySpec).waitFor(main);
+    ['--preload', './services/main/src/relay-telemetry.ts', 'services/main/src/relay.ts']), relaySpec)
+    .withOtlpExporter({ protocol: OtlpProtocol.HttpProtobuf }).waitFor(main);
   accountUrl = account.getEndpoint('http');
   mainUrl = main.getEndpoint('http');
   backend = main;

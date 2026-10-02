@@ -16,8 +16,11 @@ if (!Object.hasOwn(entrypoints, role)) throw new Error('Unknown release runtime 
 checkProductionEnv(process.env, [role as ProductionRole]);
 if (process.env.ACCESS_DATABASE_URL)
   await assertNoPaymentProvider(process.env.ACCESS_DATABASE_URL, role === 'migrate');
-const child = Bun.spawn([process.execPath, entrypoints[role as keyof typeof entrypoints]], {
-  env: process.env,
+const preload = role === 'main' ? './services/main/src/telemetry.ts'
+  : role === 'account' ? './services/account/src/telemetry.ts'
+    : role === 'relay' ? './services/main/src/relay-telemetry.ts' : undefined;
+const child = Bun.spawn([process.execPath, ...(preload ? ['--preload', preload] : []), entrypoints[role as keyof typeof entrypoints]], {
+  env: { ...process.env, OTEL_DEPLOYMENT_ENVIRONMENT: process.env.OTEL_DEPLOYMENT_ENVIRONMENT ?? 'production' },
   stdin: 'inherit',
   stdout: 'inherit',
   stderr: 'inherit',

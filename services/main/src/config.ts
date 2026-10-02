@@ -2,6 +2,7 @@
 // declaration of the variables one entry point reads; `task env:example`
 // renders them into services/main/.env.example.
 import { cleanEnv, num, port, str, url } from 'envalid';
+import { telemetrySpec } from '@rezics/observability/config';
 
 const postgres = (desc: string) => url({ desc, example: 'postgres://role:password@127.0.0.1:5432/role' });
 const optionalPostgres = (desc: string) => url({ desc, default: undefined,
@@ -19,6 +20,7 @@ const graph = {
 
 /** The Main API process (`services/main/src/index.ts`). */
 export const mainSpec = {
+  ...telemetrySpec,
   ...graph,
   MAIN_PORT: port({ default: 3001, desc: 'Port Main listens on at 127.0.0.1.' }),
   MAIN_ROUTING_EPOCH: str({ desc: 'Graph routing epoch this stack was initialized with.', example: '1' }),
@@ -73,6 +75,7 @@ export const mainSpec = {
 
 /** The Main relay process (`services/main/src/relay.ts`). */
 export const relaySpec = {
+  ...telemetrySpec,
   FUSEKI_URL: graph.FUSEKI_URL,
   FUSEKI_MAINTENANCE_TOKEN: graph.FUSEKI_MAINTENANCE_TOKEN,
   FUSEKI_COMMAND_TOKEN: graph.FUSEKI_COMMAND_TOKEN,

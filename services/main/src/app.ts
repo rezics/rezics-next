@@ -1,5 +1,6 @@
 import { safetyCaseRoutes } from './routes/safety-cases.ts';
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
+import { httpTelemetry } from '@rezics/observability/elysia';
 import { mcpRoutes } from './routes/mcp.ts';
 import { entityPageRoutes, setMountedReads } from './routes/entity-pages.ts';
 import { readingPositionsRoutes } from './routes/reading-positions.ts';
@@ -299,6 +300,7 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   if (work) composeDisclosure(work);
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
+    .use(httpTelemetry())
     .error(({ error, request }) => wikiSchemaError(error, request))
     .request(async ({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;

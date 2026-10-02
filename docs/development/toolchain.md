@@ -159,6 +159,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @cloudflare/vite-plugin | 1.58.0 | apps/accounts, apps/web |
 | @elysia/eden | 2.0.0-beta.5 | apps/web, services/account, services/main |
 | @elysia/openapi | 2.0.0-beta.4 | services/account, services/main |
+| @elysia/opentelemetry | 2.0.0-beta.1 | packages/observability |
 | @emnapi/runtime | 1.11.3 | apps/about |
 | @fontsource-variable/geist-mono | 5.3.0 | apps/about, apps/web |
 | @fontsource-variable/manrope | 5.3.0 | apps/about, apps/accounts, apps/web |
@@ -168,10 +169,23 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @microsoft/aspire-cli | 13.5.4 | apphost |
 | @modelcontextprotocol/client | 2.0.0 | services/main |
 | @modelcontextprotocol/server | 2.0.0 | services/main |
+| @opentelemetry/api | 1.9.1 | packages/observability |
+| @opentelemetry/api-logs | 0.222.0 | packages/observability |
+| @opentelemetry/core | 2.11.0 | packages/observability |
+| @opentelemetry/exporter-logs-otlp-proto | 0.222.0 | packages/observability |
+| @opentelemetry/exporter-metrics-otlp-proto | 0.222.0 | packages/observability |
+| @opentelemetry/exporter-trace-otlp-proto | 0.222.0 | packages/observability |
+| @opentelemetry/instrumentation-pg | 0.74.0 | packages/observability |
+| @opentelemetry/resources | 2.11.0 | packages/observability |
+| @opentelemetry/sdk-logs | 0.222.0 | packages/observability |
+| @opentelemetry/sdk-metrics | 2.11.0 | packages/observability |
+| @opentelemetry/sdk-node | 0.222.0 | packages/observability |
+| @opentelemetry/sdk-trace-base | 2.11.0 | packages/observability |
 | @playwright/test | 1.63.0 | . |
 | @resvg/resvg-js | 2.6.2 | apps/about |
 | @rezics/account | workspace:* | apps/accounts |
 | @rezics/main | workspace:* | apps/web |
+| @rezics/observability | workspace:* | services/account, services/main |
 | @rezics/ui | workspace:* | apps/about, apps/accounts, apps/web |
 | @rezics/wiki-toolkit | workspace:* | packages/model, services/main |
 | @rezics/zone-sdk | workspace:* | apps/web |
@@ -183,10 +197,10 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
 | @tanstack/react-query | 5.103.2 | apps/web |
 | @tensorflow/tfjs | 4.22.0 | services/main |
-| @types/bun | 1.4.2 | apps/about, apps/accounts, packages/model, services/account, services/content, services/main |
+| @types/bun | 1.4.2 | apps/about, apps/accounts, packages/model, packages/observability, services/account, services/content, services/main |
 | @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
 | @types/nodemailer | 8.0.2 | services/account |
-| @types/pg | 8.23.1 | services/account, services/content, services/main |
+| @types/pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
 | @types/react | 19.2.18 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
 | @types/react-dom | 19.2.7 | apps/about, apps/accounts, apps/web, packages/ui |
 | @vinext/cloudflare | 1.0.0-beta.9 | apps/web |
@@ -202,9 +216,9 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | buffer | 6.0.3 | services/main |
 | dependency-cruiser | 18.4.0 | . |
 | drizzle-orm | 0.45.3 | services/content |
-| elysia | 2.0.0-beta.16 | apps/web, services/account, services/main |
-| envalid | 8.2.0 | apps/accounts, apps/web, services/account, services/main |
-| exact-mirror | 1.2.6 | services/account, services/main |
+| elysia | 2.0.0-beta.16 | apps/web, packages/observability, services/account, services/main |
+| envalid | 8.2.0 | apps/accounts, apps/web, packages/observability, services/account, services/main |
+| exact-mirror | 1.2.6 | packages/observability, services/account, services/main |
 | fast-check | 4.10.2 | packages/model |
 | fflate | 0.8.3 | packages/wiki-toolkit |
 | iconv-lite | 0.7.3 | packages/wiki-toolkit |
@@ -219,12 +233,13 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | nodemailer | 10.0.10 | services/account |
 | nsfwjs | 4.4.0 | services/main |
 | nuqs | 2.10.1 | apps/web |
-| openapi-types | 12.1.3 | services/account, services/main |
+| openapi-types | 12.1.3 | packages/observability, services/account, services/main |
 | oxfmt | 0.70.0 | . |
 | oxlint | 1.85.0 | . |
 | oxlint-tsgolint | 7.0.2003 | . |
-| pg | 8.23.0 | services/account, services/content, services/main |
+| pg | 8.23.0 | packages/observability, services/account, services/content, services/main |
 | playwright | 1.63.0 | apps/accounts, apps/web |
+| protobufjs | 7.6.6 | packages/observability |
 | react | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
 | react-dom | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui |
 | react-is | 19.3.0 | packages/ui |
@@ -237,8 +252,8 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |
 | tsx | 4.23.13 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
-| typebox | 1.3.34 | packages/model, packages/wiki-toolkit, services/account, services/main |
-| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
+| typebox | 1.3.34 | packages/model, packages/observability, packages/wiki-toolkit, services/account, services/main |
+| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/observability, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
 | typescript-6 | npm:typescript@6.0.2 | apps/about, packages/wiki-toolkit |
 | vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
 | vite | 8.3.0 | apps/about, apps/accounts, apps/web |
@@ -258,6 +273,10 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |
 | Fuseki build | maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 |
 | Fuseki build | eclipse-temurin:21.0.12_8-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f |
+| Observability | oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 |
+| Observability | greptime/greptimedb:v1.2.1@sha256:9982e36cf3ddb6f2bc813f93ec164509dce59e8c0667c6c38b826f293ec09477 |
+| Observability | otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1 |
+| Observability | persesdev/perses:v0.54.0@sha256:a0e34ddaf9d7599d96036611af205b948c1179646844202d869f3bcf3d5d9e9c |
 
 ### Other pinned images
 
@@ -336,6 +355,9 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
 | `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 5 when it is unset. |
+| `task observability:typecheck` | Type-check the shared telemetry runtime and probes. |
+| `task observability:check` | Validate the pinned observability Compose and Collector configurations with disposable local secrets. |
+| `task observability:smoke` | Exercise OTLP ingestion and Perses provisioning on an isolated disposable local observability stack. |
 | `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, catalogs, unused files, imports). |
 | `task check:backend` | Run the static gates without UI and web sources. |
 | `task check:unused` | Report unused files, dependencies and exports with Knip. |

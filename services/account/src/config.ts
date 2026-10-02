@@ -1,6 +1,7 @@
 // Environment configuration for Account processes. `task env:example` renders
 // these specs into services/account/.env.example.
 import { bool, cleanEnv, port, str, url } from 'envalid';
+import { telemetrySpec } from '@rezics/observability/config';
 
 /** Variables every Account entry point needs to build its auth instance. */
 export const accountCoreSpec = {
@@ -14,6 +15,7 @@ export const accountCoreSpec = {
 
 /** The Account HTTP process (`services/account/src/index.ts`). */
 export const accountSpec = {
+  ...telemetrySpec,
   ...accountCoreSpec,
   ACCOUNT_TURNSTILE_MODE: str({ choices: ['local', 'cloudflare'], default: 'cloudflare', devDefault: 'local',
     desc: 'Enrollment verifier: cloudflare in production; local always-pass mode permits offline dev/test API clients.' }),

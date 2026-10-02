@@ -1,0 +1,23 @@
+database:
+  file:
+    folder: /var/lib/perses
+    extension: json
+    case_sensitive: false
+security:
+  readonly: true
+  # Access is through loopback/SSH or an authenticated private ingress. This
+  # config deliberately grants no public endpoint; ingress authentication is
+  # owned by the host, not by a provisioned application Account user.
+  enable_auth: false
+  encryption_key_file: /run/secrets/perses-encryption-key
+provisioning:
+  interval: 1m
+  folders:
+    - /etc/perses/provisioning
+    - /etc/perses/secret-provisioning
+ephemeral_dashboard:
+  enable: false
+frontend:
+  important_dashboards:
+    - project: rezics
+      dashboard: services

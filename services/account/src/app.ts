@@ -1,4 +1,5 @@
 import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
+import { httpTelemetry } from '@rezics/observability/elysia';
 import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
 import { Pool } from 'pg';
@@ -217,6 +218,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     } finally { client.release(); }
   };
   const app = new Elysia({ introspect: true })
+    .use(httpTelemetry())
     .request(({ request, server }) => {
       const peer = server?.requestIP(request)?.address;
       if (new URL(request.url).pathname === '/api/auth/oauth2/register') {

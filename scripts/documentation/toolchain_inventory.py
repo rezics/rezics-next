@@ -56,6 +56,8 @@ def image_pins(root: Path) -> list[tuple[str, str]]:
     dockerfile = (root / "infra/jena/Dockerfile").read_text()
     rows = [("Compose", image) for image in re.findall(r"^    image:\s*(\S+)", compose, re.MULTILINE)]
     rows += [("Fuseki build", image) for image in re.findall(r"^FROM\s+(\S+)", dockerfile, re.MULTILINE)]
+    observability = (root / "infra/observability/compose.yaml").read_text()
+    rows += [("Observability", image) for image in re.findall(r"^    image:\s*(\S+)", observability, re.MULTILINE)]
     if not rows:
         raise ValueError("No Compose or Fuseki image pins found")
     return list(dict.fromkeys(rows))
