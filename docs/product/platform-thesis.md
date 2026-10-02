@@ -106,7 +106,7 @@ produces a misleading map, score or availability claim.
 | Listed | Collection membership | Mixed-type lists: ordered, annotated, exportable |
 | Reviewable | Target grain, question, scale and population | Contextual ratings and reviews |
 | Discussed, Documented | Resource-targeted threads and documents | Discussion and wiki sections |
-| Followed | Subscription to a resource or saved view | Inbox, digests, change feeds |
+| Followed | A Follow of any resource or saved view, with a notification level ([interactions](../contracts/community-interactions.md#follow-join-and-notification)) | Following feed, inbox, digests, change feeds |
 
 Table, map and calendar are views; switching between them never changes query
 meaning. Identity reconciliation, provenance, rights and freshness are
@@ -276,11 +276,13 @@ fingerprints, file recognition) runs in clients or external tools; the server
 keeps confidence and abstention, never automatic merges.
 
 Out of scope are hosted generation and inference, live voice and streaming,
-memberships and tips, open marketplaces, physical goods, ticket settlement,
-adult-content operations and artifact CDNs. These prevent full replacement of
-products such as Patreon, Discogs, DLsite or OpenArt, but not the goal. The
-exception is distribution, which is in scope: metadata and outbound links do not
-complete it.
+tips, open marketplaces, physical goods, ticket settlement, adult-content
+operations and artifact CDNs. These prevent full replacement of products such
+as Discogs, DLsite or OpenArt, but not the goal. Two exceptions are in scope:
+distribution, because metadata and outbound links do not complete it, and paid
+membership as a tier of Join after the commerce gate (maintainer, 2026-10-02),
+which reuses the existing plans and entitlements rather than a separate
+membership product.
 
 ## First manifests and proof
 

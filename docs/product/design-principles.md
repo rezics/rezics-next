@@ -49,6 +49,11 @@ constraints win; an adopted change goes to its owner.
    bespoke when it only consumes public APIs and holds no business logic.
    Generated code makes presentation cheap, not backend complexity
    ([goal](goal.md#backend-one-frontend-free)).
+9. **Every collection is traversable.** A list that can grow is never shown as
+   a fixed slice: it offers search, continuation, a meaningful order and an
+   honest count, and a preview links to the whole
+   ([collections at any size](../plan/frontend.md#collections-at-any-size)).
+   A missing list parameter is an API defect, fixed in the API.
 
 ## Meaning survives every adapter
 

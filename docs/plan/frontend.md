@@ -38,8 +38,7 @@ Decided 2026-09-28 from research into Reddit, the old site's feed and published
 critiques of Goodreads: people come back to track what they read and to get the
 next chapter, then to keep up with communities, then to discover.
 
-- **Frame.** Left: followed Zones and Realms with new-activity dots, official
-  Zones, Manage for moderators. Centre: a **Continue** strip (each item opens
+- **Frame.** Left: the sidebar (see [Sidebar](#sidebar)). Centre: a **Continue** strip (each item opens
   the next unread chapter or a compatible package update), then the feed.
   Right rail: trending in my Realms, Realms to follow, my moderation queue.
 - **Tabs.** `Following`, `All`, then the Saved Filters a reader pins (usually
@@ -107,9 +106,68 @@ next chapter, then to keep up with communities, then to discover.
   Concepts, which become follows and pinned tabs, and follows suggested Realms
   in one step. Broad fields are Zones, listed in the left navigation; Home has
   no kind chips and no official-Zone chip row.
-- **Styled controls only.** No native `<select>`: menus and selects use
-  `@rezics/ui` Select and Menu, enforced by a lint rule, so every control
-  matches the design in every browser and theme.
+- **Styled controls only.** No native `<select>`, radio or checkbox in
+  features: selects, menus, radio groups, checkboxes and pickers come from
+  `@rezics/ui`, enforced by ast-grep rules that `task check` runs, so every
+  control matches the design in every browser and theme.
+
+## Sidebar
+
+Maintainer, 2026-10-02. The sidebar is built from the reader's relationships
+([Follow, Join and notification](../contracts/community-interactions.md#follow-join-and-notification)),
+in this order:
+
+1. **Pinned**: anything followed that the reader pinned, in their order.
+2. **Communities and sites**: joined and followed Spaces, most recently active
+   first, with new-activity dots. A few show by default; "Show all" expands an
+   inline list with a name filter and continuation, and **Manage** opens a page
+   for sorting, pinning, notification levels and bulk unfollowing at any count.
+3. **Moderation**, for Spaces the reader manages.
+4. **Official Zones**, only while the reader follows nothing; afterwards they
+   live in Discover.
+
+People, Works and Concepts reach the Following feed, the Continue strip and
+Home tabs instead, unless pinned. Each Follow or Join button carries the
+notification bell (All, Highlights, Off) and an overflow with Mute and Block.
+
+## Discover
+
+Maintainer, 2026-10-02. Discover is one browse over every resource type, the
+same capability as a Zone's browse with the whole catalogue as its population:
+one Query compiler, one card set. Type is a Facet: All, Works, Communities,
+Sites, People, Lists and Topics. The communities directory is Discover's
+Communities tab; `/r` redirects there.
+
+- The first screen is search, then topic chips (followed topics first), then
+  sections Main returns, each with its reason: popular in followed topics,
+  communities in the reader's languages, new sites. Things the reader already
+  follows are not recommended. The frontend names no type: the former Books,
+  Guides and Recipes shelves were hardcoded storage types.
+- Personalization uses explicit signals only (follows, languages, library), as
+  the [recommendation contract](../contracts/recommendations.md) requires, and
+  can be turned off.
+- **Topics** use the shared picker below: typing searches Concepts in every
+  language; an empty field shows followed and frequently used topics, never an
+  alphabet; each result shows its broader Concept and a count; several topics
+  combine as removable include or exclude chips that apply at once through the
+  URL, without an Apply button.
+
+## Collections at any size
+
+Maintainer, 2026-10-02. An unbounded collection never renders as a fixed slice.
+Wherever a list can grow (Realms, Concepts, members, follows, chapters,
+editions, rating populations), the UI offers search, continuation, a meaningful
+order and an exact or "at least" count; a preview of a few items links to the
+complete traversal. Pickers over such lists use the shared asynchronous
+`EntityPicker` (a combobox over Main's list convention: `q`, `cursor` and
+`limit` in, `items`, `nextCursor` and `complete` out). Main's list reads accept
+those parameters, which contract tests check.
+
+- **Rating scope.** Global, the reader's communities and the communities with
+  the most ratings for this target come first; "Other communities…" opens the
+  picker over every population that rated it.
+- The same rule covers choosing a Realm to submit to, the wiki position chooser
+  and a community's related communities.
 
 ## Work page
 
@@ -136,7 +194,8 @@ omitted, and the rest keep stable anchors.
    chapter-guide preview within the reader's position, and named route links;
    a wiki shortcut also sits near the header.
 6. **Ratings and reviews**: the distribution, counts, and the question,
-   population and target behind them; filters by release and review language;
+   population and target behind them, the population chosen with the
+   [rating scope picker](#collections-at-any-size); filters by release and review language;
    a review never requires a score.
 7. **Discussion and communities**: active Work, part and release threads with
    "Discuss this episode" actions; reading needs no membership.
@@ -209,7 +268,8 @@ and how Reddit, Discourse, Fandom, Tumblr and Shopify admit custom code.
   can, the host applies only a Zone's structure tokens, and a test keeps
   package CSS to the platform's colours and faces.
 - **Browse beside the home** (2026-09-28, after Modrinth's search). Every Zone
-  has `/r/<zone>/browse`: search, Facet Conditions, sort and a list or grid,
+  has a browse route, by default `/z/<space>/browse`
+  ([routers](../contracts/space.md#surfaces-and-routers)): search, Facet Conditions, sort and a list or grid,
   each a link with its own URL. Every browse Condition is an admitted Facet
   from Main's registry: type, Concept, status and length. Mod loader, game
   version, environment and dependency Conditions are deferred to correlated
@@ -261,9 +321,15 @@ should not have to learn the model's vocabulary. The locale is a path prefix so
 each language version of a public page has its own indexable URL with
 `hreflang` alternates; content language belongs to a version and never enters
 the route. [URLs and SEO](../product/urls-and-seo.md) owns durable identifiers,
-per-language slugs, canonical redirects and eligible alternates. Signed out, a
-language select and a theme button sit in the header;
-signed in, they live in the avatar menu and settings. Zones may carry their
+names and slugs, canonical redirects and eligible alternates. Signed out, a
+language select and a theme button sit in the header; signed in, they live in
+the account menu and settings. The account menu (maintainer, 2026-10-02) puts
+identity first (the acting Agent and switching), then profile, library, Studio
+and notifications, then **Language ›**, **Appearance ›** and **Content
+preferences ›**, then settings, account and sign out. On desktop the arrows
+open submenus; on phones the bottom sheet pushes a second panel with a back
+control, as YouTube's account sheet does. Content languages and adult-content
+switches are settings, reached from Content preferences, not quick toggles. Zones may carry their
 own themes, which people can turn off.
 
 **Natively multilingual, not bilingual** (manager, 2026-09-28, after the

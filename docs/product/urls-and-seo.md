@@ -9,28 +9,112 @@ implementation owners.
 
 ## Durable addresses
 
-Use `/{locale}/{type}/{sid}[-{slug}]`, leaving following segments for tabs and
-actions. `sid` reversibly encodes all 128 UUID bits in a fixed, case-sensitive
-22-character Base58 value with a frozen alphabet. Keep UUIDs and canonical entity
-IRIs; do not allocate a second identity, truncate IDs or use a display suffix.
-A reversible codec such as [short-uuid](https://github.com/oculus42/short-uuid)
-avoids another registry; [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html)
-also makes clear that UUIDv7 timing is not concealed by encoding.
+Maintainer and manager, 2026-10-02, revising the 2026-09-29 adoption: one
+address model for every resource, with an opaque identity, optional names and a
+canonical form that each name scope tunes. Identity must survive renaming, and
+a page must open whether or not anyone chose a name for it.
 
-Resolve the ID before the optional slug. Store approved slugs per language,
-preserving native script, normalized Unicode and hyphenated spaces; romanization
-is optional. A title or library update does not automatically rename published
-URLs. Missing or stale slugs 301 directly to the current canonical address when
-one exists; a canonical bare ID returns 200. Keep tab and meaningful
-language/version selections, and preserve anchors where applicable. Normalize
-host, HTTPS and trailing slash without redirect chains. Share copies the canonical
-URL; a short link omits the slug.
+| Layer | What it is | Set by | Used to resolve |
+| --- | --- | --- | --- |
+| `sid` | All 128 UUID bits as a fixed, case-sensitive 22-character Base58 value with a frozen alphabet | Main, at creation | Always |
+| Name | A unique key a person chose within a scope: an Agent or Space handle, a Work address, a Zone page title | Holder or editors; optional | Yes |
+| Slug | Readable words from the name the page shows in its language | Derived when rendering | Never |
 
-Keep legacy UUID links and handle/wiki-title aliases, with durable rename
-redirects and no automatic retired-name reuse. Merges redirect only to equivalent
-successors. Confusable protection follows [UTS #39](https://unicode.org/reports/tr39/).
-Missing/inaccessible, retired and failed reads retain distinct appropriate HTTP
-outcomes; unavailable infrastructure must not become an indexable empty page.
+| Resource | Name form | Identity form |
+| --- | --- | --- |
+| Agent (person or organization) | `/@{handle}` | `/a/{sid}[-{slug}]` |
+| Space as a community (Realm) | `/r/{handle}` | `/r/{sid}[-{slug}]` |
+| Space as a site (Zone) | `/z/{handle}` | `/z/{sid}[-{slug}]` |
+| Work | `/w/{address}` | `/w/{sid}[-{slug}]` |
+| Concept | none | `/concepts/{sid}[-{slug}]` |
+| Any other resource | none | `/e/{sid}[-{slug}]`; a Work redirects to `/w/` |
+| A Zone's detail route | `/z/{space}/{route}/{title}` on a name-keyed route | `/z/{space}/{route}/{sid}[-{slug}]` |
+
+Every form sits under `/{locale}`; following segments are tabs and actions.
+Keep UUIDs and canonical entity IRIs; the `sid` is an encoding, not a second
+identity, and is never truncated. A reversible codec such as
+[short-uuid](https://github.com/oculus42/short-uuid) avoids another registry.
+Opaque, permanent identifiers that carry no meaning follow
+[Cool URIs don't change](https://www.w3.org/Provider/Style/URI) and lesson 4 of
+[McMurry et al. 2017](https://journals.plos.org/plosbiology/article?id=10.1371%2Fjournal.pbio.2001414);
+a permanent ID beside changeable human names is how
+[Matrix rooms](https://spec.matrix.org/v1.1/client-server-api/) (room ID,
+aliases, one canonical alias) and the
+[AT Protocol](https://atproto.com/specs/handle) (DID and handle) work.
+
+**Canonical form, name first by default.** Each name scope declares a policy.
+`name` makes the current name canonical when one exists and is the default for
+Agents, Spaces and Works, because handles and titles are what people share and
+type. `id` makes `{sid}-{slug}` canonical, the pattern of Stack Overflow and
+Reddit posts, for content whose names are not unique or not chosen; a Zone
+picks `name` or `id` per detail route, so a franchise wiki can use titles as
+Fandom and Wikipedia do. Resolution reads the `sid` or the name and ignores the
+slug. Any other form (a bare or stale-slug `sid`, an old name, a UUID link)
+answers one 301 to the canonical URL, which answers 200; a page without a name
+is complete at its identity form. Keep tab and meaningful language or version
+selections, and preserve anchors where applicable. Normalize host, HTTPS and
+trailing slash without redirect chains. Share copies the canonical URL; a short
+link is the bare `sid` form.
+
+**Names.** One registry and one resolver serve every scope; scopes differ only
+in policy: character set, reserved words, cooldown and who may claim.
+
+- Handles (Agents and Spaces) use ASCII letters, digits, `_` and `-`, 3–30
+  characters, starting and ending with a letter or digit, compared without case
+  as the [PRECIS username profile](https://www.rfc-editor.org/info/rfc8265/)
+  recommends. Display names and slugs already carry every script, and a handle
+  is the namespace where impersonation pays. Single-script native handles may
+  open later under the "Highly Restrictive" level of
+  [UTS #39](https://unicode.org/reports/tr39/).
+- Work addresses and Zone titles accept any script, NFC-normalized, compared
+  without case, with whitespace as `-`, and limited to the UTS #39 "Highly
+  Restrictive" mixtures so that one title cannot impersonate another.
+- No name may decode as a valid `sid`, so each segment has one reading.
+- A rename keeps the old name as a permanent redirect to the same resource. A
+  retired or replaced name is never given to another holder: abandoned Twitter
+  names were reclaimed for malicious content and SEO
+  ([Mariconti et al., WWW 2017](https://arxiv.org/abs/1702.04256)). Merges
+  redirect only to equivalent successors.
+- The same handle in the Agent and Space scopes may belong only to one
+  controller, so `@kadokawa` and `/r/kadokawa` cannot be different parties;
+  confusable skeletons are compared across both scopes.
+- Later: an organization may prove a handle against a domain it controls, by
+  the AT Protocol's bidirectional DNS or `/.well-known` binding.
+
+**Slugs are derived, not stored.** The slug comes from the name an anonymous
+reader of that locale sees ([language order](#language-and-anonymous-representation)),
+NFC-normalized, keeping native script, with whitespace and punctuation collapsed
+to `-` and cut at a word boundary near 60 characters. Because resolution never
+reads it, a title change or a new translation moves the canonical URL with one
+301. This replaces the 2026-09-29 store of approved per-language slugs: it
+needed an editorial workflow for a value that identifies nothing, and Stack
+Overflow shows that derived slugs with redirects suffice.
+
+**Addresses never grant reading.** Private resources answer 404 to readers
+Access does not admit, unless their Space shows a join request page
+([Space visibility](../contracts/space.md#visibility-listing-and-history)).
+Unlisted resources open for anyone with the link, carry `noindex`, stay out of
+sitemaps, search, Discover and recommendations, and send
+`Referrer-Policy: no-referrer`. Unlisted means hard to find, not secret
+([Hartzog and Stutzman 2013](https://www.ssrn.com/abstract=1597745)): a UUIDv7
+keeps about 74 random bits and reveals its creation time
+([RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html)), below the 120 bits
+the [W3C TAG](https://www.w3.org/2001/tag/doc/capability-urls/) asks of a
+capability URL, and short tokens have been enumerated in practice
+([Georgiev and Shmatikov 2016](https://arxiv.org/abs/1604.02734)). If link-only
+access to private material is ever offered, it uses its own revocable, expiring
+token of at least 120 random bits, never a `sid` or a short link. Address
+resolution is rate limited per principal class. Missing or inaccessible,
+retired and failed reads keep distinct appropriate HTTP outcomes; unavailable
+infrastructure must not become an indexable empty page.
+
+**Draft, not scheduled: hosts.** A site may later be served on its own host.
+Subdomains would sit under a separate registrable domain listed in the
+[Public Suffix List](https://publicsuffix.org/), as `github.io` is, so that one
+site cannot read or set another's or the main site's cookies
+([RFC 6265](https://www.rfc-editor.org/rfc/rfc6265.html)); custom domains would
+follow. The `/z/` path form stays canonical until a host is bound, then
+redirects to it.
 
 [Google's URL guidance](https://developers.google.com/search/docs/crawling-indexing/url-structure)
 supports audience-language words and correct percent-encoding; it does not show

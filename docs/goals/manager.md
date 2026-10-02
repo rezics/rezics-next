@@ -63,10 +63,10 @@ bind until the maintainer changes them.
 4. **Other accounts run out within their cycle** (2026-09-30). The two Codex
    accounts (default and `codex-1`), the Grok CLI and Cursor Agent (Grok 4.7)
    have no reserve to protect. GPT-6.1 Sol replaces GPT-6 Sol and the retired
-   GPT-6 Astra on both Codex accounts. Usage-limit reset credits on both Codex
-   accounts may be used freely (maintainer, 2026-09-30, superseding the earlier
-   no-reset rule); token efficiency still matters: cheap models for mechanical
-   work, small briefs and no wasted runs. The Grok CLI and Cursor are two
+   GPT-6 Astra on both Codex accounts. **Usage-limit reset credits are
+   forbidden** (maintainer, 2026-10-02, reversing the 2026-09-30 permission):
+   spend each account within its own weekly cycle. Token efficiency still
+   matters: cheap models for mechanical work, small briefs and no wasted runs. The Grok CLI and Cursor are two
    separate quotas and two full lanes of feature work, frontend included.
 5. **Human-role agents.** Opus 5.5 and GPT-6.1 Sol can take the human role: they
    may challenge a brief, correct documentation and process in their area, and
@@ -95,6 +95,18 @@ bind until the maintainer changes them.
    must ship and what is deferred if time runs short), report a projected
    completion at every checkpoint and run the maximum useful parallelism within
    host memory.
+9. **Addresses, relationships and discovery** (maintainer, 2026-10-02). Fix
+   the foundations the maintainer found missing, completely and by best
+   practice, before further surface work: durable addresses with optional
+   names, separate community and site routers, one Follow/Join/notification
+   model, Discover as one browse over every resource type, and searchable,
+   traversable pickers wherever a collection is unbounded. The manager leads
+   and reviews; GPT-6.1 Sol carries the implementation, frontend included.
+   Subdomain hosting stays a draft. The decisions live in their owners
+   ([URLs](../product/urls-and-seo.md), [Space](../contracts/space.md),
+   [interactions](../contracts/community-interactions.md),
+   [notifications](../contracts/notifications.md),
+   [frontend](../plan/frontend.md)).
 
 ## Resources
 
@@ -122,8 +134,8 @@ or a Grok X/web lookup from an empty temporary directory.
 The manager revises this strategy from measurements. As of 2026-09-30 13:00 CST:
 Claude 7d was 5% used and resets on 2026-10-05 at 23:00 CST (weekly at the same
 time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
-`codex-1` 45% used (reset about 2026-10-06 18:40). Reset credits may be used
-(direction 4).
+`codex-1` 45% used (reset about 2026-10-06 18:40). On 2026-10-02 `codex` was at
+33% and `codex-1` at 75%; reset credits are no longer used (direction 4).
 
 - **Measured ratio (2026-09-28).** A full 5-hour window is about 15% of the
   Claude week: the first 96 minutes moved the 5-hour window 32 points and the
