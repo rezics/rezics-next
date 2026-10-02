@@ -156,16 +156,30 @@ consumers.
 
 ## Document editor choice
 
-Decision 22, product manager under maintainer delegation, 2026-09-29.
-Use BlockNote's MPL-2.0 core/React packages, excluding GPL XL, behind a
-REZICS-owned immutable block contract with stable IDs. Tiptap is the fallback.
-One editor serves Studio, posts, wiki, reviews and notes; a pure static renderer
-and block-anchored paragraph comments preserve reading and review independently
-of the editing runtime.
+Maintainer decision, 2026-10-02, superseding decision 22's BlockNote preference.
+Use Tiptap's maintained editing ecosystem with the independent Apache-2.0
+[REZICS Document contract](../../packages/document/README.md). Core, Text and
+Blocks share ProseMirror's JSON model and Tiptap node names; the package owns
+the published schemas, stable unit IDs and preserved opaque component payloads.
+It requires no REZICS account, service or semantic graph. Semantic Web models
+are design references; no RDF projection is needed for editing.
 
-The reason is to reuse editing mechanics without making library JSON the custody
-contract. [BlockNote's licence split](https://github.com/TypeCellOS/BlockNote#license)
-and [Tiptap's static renderer](https://tiptap.dev/docs/editor/api/utilities/static-renderer)
-support that boundary. Admission still requires package licence review, a vinext
-Workers build, real CJK IMEs on phones and lossless migration. This decision does
-not assert those gates have passed or add a dependency.
+The reason is to reuse mature text, list and table mechanics while keeping the
+format implementable outside the application. The shared Tiptap editor serves
+Studio and discussion writing; a pure React renderer reads saved documents
+without loading the editing runtime. Explicit `document` writes retain the
+snapshot and derive a plain projection for search, counts and existing reads.
+Legacy plain text and Markdown remain readable, and editing imports them
+without flattening new snapshots. JSON export preserves the complete document;
+plain-text export is an explicit projection.
+
+The [editor stories](../../packages/ui/src/components/rich-text-editor.stories.tsx)
+and Studio stories exercise formatting, restore, conflicts and publication.
+Browser tests do not substitute for physical CJK IME testing on phones.
+
+Writing starts with contextual controls: a selection menu for inline formatting,
+a right-click/keyboard formatting menu, and separate block insertion controls.
+Discussion composers stay compact. Studio exposes the complete toolbar and
+file import/export through an explicit advanced-mode toggle without changing
+the saved document or recreating the editor. The reason is to keep writing and
+replying direct while leaving specialist formatting discoverable.
