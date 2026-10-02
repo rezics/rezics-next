@@ -1,3 +1,5 @@
+import { resourceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
@@ -11,26 +13,37 @@ import { chooseOption } from './g-934-choose.ts';
 let catalogue: IntakeCatalogue;
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  const result = spawnSync('bun', ['apps/web/tests/g-843-seed.ts'], { cwd: process.cwd(), env: process.env,
-    encoding: 'utf8', timeout: 240_000 });
+  const result = spawnSync('bun', ['apps/web/tests/g-843-seed.ts'], {
+    cwd: process.cwd(),
+    env: process.env,
+    encoding: 'utf8',
+    timeout: 240_000,
+  });
   if (result.status !== 0 || result.error) {
-    throw new Error(`G-843 seed failed: ${result.stderr || result.error?.message || result.status}`);
+    throw new Error(
+      `G-843 seed failed: ${result.stderr || result.error?.message || result.status}`,
+    );
   }
   catalogue = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as IntakeCatalogue;
 });
 
 const started = Date.now();
 /** Progress lines in the Playwright log, so a run that hits its budget says where it was. */
-const mark = (step: string) => process.stderr.write(`[g-843 +${Math.round((Date.now() - started) / 1000)}s] ${step}\n`);
+const mark = (step: string) =>
+  process.stderr.write(`[g-843 +${Math.round((Date.now() - started) / 1000)}s] ${step}\n`);
 test.use({ actionTimeout: 15_000 });
 const uuid = (iri: string) => iri.slice(-36);
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
-const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+const overflows = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 /** One screenshot per viewport, none with horizontal overflow. */
 async function shoot(page: Page, name: string, info: TestInfo) {
-  for (const [label, viewport] of [['desktop', desktop], ['phone', phone]] as const) {
+  for (const [label, viewport] of [
+    ['desktop', desktop],
+    ['phone', phone],
+  ] as const) {
     await page.setViewportSize(viewport);
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
     expect(await overflows(page), `${name} ${label}`).toBe(false);
@@ -39,8 +52,10 @@ async function shoot(page: Page, name: string, info: TestInfo) {
   await page.setViewportSize(desktop);
 }
 
-const searchbox = (page: Page) => page.getByRole('searchbox', { name: 'Title, alias, creator or ISBN' });
-const titles = (page: Page) => page.getByRole('list', { name: 'Existing records' }).getByRole('heading', { level: 3 });
+const searchbox = (page: Page) =>
+  page.getByRole('searchbox', { name: 'Title, alias, creator or ISBN' });
+const titles = (page: Page) =>
+  page.getByRole('list', { name: 'Existing records' }).getByRole('heading', { level: 3 });
 
 /** Types a title and waits until its results have returned. */
 async function search(page: Page, text: string) {
@@ -61,17 +76,24 @@ async function addStory(page: Page, title: string) {
   await page.getByRole('button', { name: 'Create record' }).click();
 }
 
-test('a contributor searches first, adds a translation to an existing volume, and is stopped at the pending limit', async ({ page }, info) => {
+test('a contributor searches first, adds a translation to an existing volume, and is stopped at the pending limit', async ({
+  page,
+}, info) => {
   test.setTimeout(600_000);
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
-  if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
-  const { member } = JSON.parse(readFileSync(path, 'utf8')) as { member: { email: string; password: string } };
+  if (!path)
+    throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
+  const { member } = JSON.parse(readFileSync(path, 'utf8')) as {
+    member: { email: string; password: string };
+  };
   const { series, volumeOne } = catalogue;
   await page.setViewportSize(desktop);
 
   // Signed out, the wizard offers no search, only the way to sign in.
   await page.goto('/en/catalogue/new');
-  await expect(page.getByRole('heading', { name: 'Sign in to add to the catalogue' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Sign in to add to the catalogue' }),
+  ).toBeVisible();
   await expect(searchbox(page)).toHaveCount(0);
   await signInAtAccounts(page, '/en/catalogue/new', member);
 
@@ -97,7 +119,9 @@ test('a contributor searches first, adds a translation to an existing volume, an
   await shoot(page, 'search-volume', info);
   const row = page.locator(`[data-candidate="${uuid(volumeOne.work)}"]`);
   await row.getByRole('button', { name: 'Add a translation or edition' }).click();
-  await page.waitForURL(new RegExp(`/en/w/${uuid(volumeOne.work)}/edit/editions$`));
+  await page.waitForURL(
+    new RegExp(localizedPath(`${resourceHref('/w/', uuid(volumeOne.work))}/edit/editions$`, 'en')),
+  );
   mark('editions page');
   const realization = page.getByRole('form', { name: 'Add a realization' });
   await realization.getByRole('textbox', { name: 'Language', exact: true }).fill('zh-Hans');
@@ -106,7 +130,7 @@ test('a contributor searches first, adds a translation to an existing volume, an
   await realization.getByRole('button', { name: 'Add realization' }).click();
   await expect(page.getByText(/Receipt: /).first()).toBeVisible();
   await expect(async () => {
-    await page.goto(`/en/w/${uuid(volumeOne.work)}/editions`);
+    await page.goto(localizedPath(`${resourceHref('/w/', uuid(volumeOne.work))}/editions`, 'en'));
     await expect(page.locator('[data-language-group="zh-Hans"]')).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 45_000 });
   mark('realization listed');
@@ -119,13 +143,17 @@ test('a contributor searches first, adds a translation to an existing volume, an
   const first = 'Alternative Intake Story A';
   await addStory(page, first);
   await expect(page.getByText('Record created')).toBeVisible();
-  await expect(page.locator('[data-provisional]').getByText('Unverified', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('[data-provisional]').getByText('Unverified', { exact: true }),
+  ).toBeVisible();
   await page.getByText('Where these fields came from').click({ timeout: 30_000 });
   await expect(page.locator('[data-provenance-fields]').getByText('Title')).toBeVisible();
   await shoot(page, 'created', info);
   await page.getByRole('link', { name: 'Open the record' }).click();
   await expect(page.getByRole('heading', { level: 1, name: first })).toBeVisible();
-  await expect(page.locator('[data-provisional]').getByText('Unverified', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('[data-provisional]').getByText('Unverified', { exact: true }),
+  ).toBeVisible();
 
   mark('first created');
   // Two more fill the pending quota; the fourth is explained with Main's Retry-After.

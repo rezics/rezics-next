@@ -1,9 +1,12 @@
+import type { CanonicalAddress } from '@rezics/model/address';
 import type { MainClient } from '../discover/types.ts';
 
 // Main's `entity-page-v1` projection and the section reads it links, taken from
 // the typed Eden client so a contract change breaks this build.
 type Resource = ReturnType<MainClient['v1']['resources']>;
-type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
+type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
+  ? NonNullable<Data>
+  : never;
 
 export type EntityProjection = Ok<Resource['page']['get']>;
 export type EntitySection = EntityProjection['sections'][number];
@@ -16,7 +19,13 @@ export type { RelationsPage } from '../work-levels/types.ts';
 
 /** What a link from an entity page points at: another resource, or another page of a list on this one. */
 export type EntityLink =
-  | { kind: 'resource'; iri: string; base: TargetBase | null; type: string | null }
+  | {
+      kind: 'resource';
+      iri: string;
+      base: TargetBase | null;
+      type: string | null;
+      address?: CanonicalAddress;
+    }
   | { kind: 'continue'; section: SectionId; cursor: string | null };
 
 /**

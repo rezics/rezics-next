@@ -1,3 +1,5 @@
+import { resourceHref, spaceHref, zoneMemberHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
@@ -78,7 +80,10 @@ for (const viewport of [
   }, info) => {
     test.setTimeout(180_000);
     await page.setViewportSize(viewport);
-    const path = `/en/r/franchise-wiki/characters/${seed.entities.elizabeth.slice(-36)}`;
+    const path = localizedPath(
+      zoneMemberHref('franchise-wiki', 'characters', seed.entities.elizabeth.slice(-36)),
+      'en',
+    );
     await page.goto(`${path}?position=${seed.facts[0]!.position.slice(-36)}`);
     await expect(page.locator('[data-wiki-entity]')).toBeVisible();
     await expect(page.getByText(seed.facts[0]!.text, { exact: true }).first()).toBeVisible();
@@ -120,7 +125,7 @@ for (const viewport of [
   }, info) => {
     test.setTimeout(180_000);
     await page.setViewportSize(viewport);
-    await page.goto('/en/r/franchise-wiki');
+    await page.goto(localizedPath(spaceHref('franchise-wiki', 'site'), 'en'));
     const button = page.getByRole('button', { name: /^Up to:/ });
     await expect(button).toHaveAttribute('data-hydrated', 'true');
     await button.click();
@@ -134,11 +139,11 @@ for (const viewport of [
   }, info) => {
     test.setTimeout(180_000);
     await page.setViewportSize(viewport);
-    await page.goto(`/en/w/${seed.thai.work.slice(-36)}`);
+    await page.goto(localizedPath(resourceHref('/w/', seed.thai.work.slice(-36)), 'en'));
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('เจ้าหญิงแห่งดวงจันทร์');
     await expect(page.getByRole('heading', { level: 1 })).toHaveAttribute('lang', 'th');
     await clean(page, info, `thai-${viewport.width}`);
-    await page.goto(`/en/w/${seed.arabic.work.slice(-36)}`);
+    await page.goto(localizedPath(resourceHref('/w/', seed.arabic.work.slice(-36)), 'en'));
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('اسم عربي للاختبار');
     await expect(page.getByRole('heading', { level: 1 })).toHaveAttribute('lang', 'ar');
     await expect(page.getByRole('heading', { level: 1 })).toHaveAttribute('dir', 'rtl');

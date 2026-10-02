@@ -1,3 +1,5 @@
+import { spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -7,12 +9,22 @@ import { character, characterRelations, wikiRealm } from './hub-fixtures.ts';
 import { messages } from './messages.ts';
 import { WikiSectionView } from './wiki.tsx';
 
-interface WikiArgs { locale: UiLocale; zone: string | null; characters: Loaded<RelationsPage> | null }
+interface WikiArgs {
+  locale: UiLocale;
+  zone: string | null;
+  characters: Loaded<RelationsPage> | null;
+}
 
 function Wiki({ locale, zone, characters }: WikiArgs) {
-  return <PageContainer className="max-w-3xl">
-    <WikiSectionView wiki={{ zone: { ok: true, data: zone }, characters }} locale={locale} messages={messages[locale]} />
-  </PageContainer>;
+  return (
+    <PageContainer className="max-w-3xl">
+      <WikiSectionView
+        wiki={{ zone: { ok: true, data: zone }, characters }}
+        locale={locale}
+        messages={messages[locale]}
+      />
+    </PageContainer>
+  );
 }
 
 const kirito = character('Kirito', 'c1');
@@ -32,15 +44,25 @@ export const WikiPresent: WikiStory = {
     const canvas = within(canvasElement);
     const section = canvas.getByRole('region', { name: 'Explore the wiki' });
     const list = within(section).getByRole('list', { name: 'Main characters' });
-    await expect(within(list).getByRole('link', { name: 'Kirito' })).toHaveAttribute('href',
-      expect.stringMatching(/^\/en\/e\/[0-9a-f-]{36}$/));
-    await expect(within(section).getByRole('link', { name: 'All characters' })).toHaveAttribute('href',
-      `/en/r/${wikiRealm}/characters`);
-    await expect(within(section).getByRole('link', { name: 'Chapter guide' })).toHaveAttribute('href',
-      `/en/r/${wikiRealm}/chapters`);
-    await expect(within(section).getByRole('link', { name: 'Timeline' })).toHaveAttribute('href',
-      `/en/r/${wikiRealm}/events`);
-    await expect(within(section).getByText('Shown up to your reading position, so nothing is given away.')).toBeVisible();
+    await expect(within(list).getByRole('link', { name: 'Kirito' })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/^\/en\/e\/[0-9a-f-]{36}$/),
+    );
+    await expect(within(section).getByRole('link', { name: 'All characters' })).toHaveAttribute(
+      'href',
+      localizedPath(spaceHref(wikiRealm, 'site', ['characters']), 'en'),
+    );
+    await expect(within(section).getByRole('link', { name: 'Chapter guide' })).toHaveAttribute(
+      'href',
+      localizedPath(spaceHref(wikiRealm, 'site', ['chapters']), 'en'),
+    );
+    await expect(within(section).getByRole('link', { name: 'Timeline' })).toHaveAttribute(
+      'href',
+      localizedPath(spaceHref(wikiRealm, 'site', ['events']), 'en'),
+    );
+    await expect(
+      within(section).getByText('Shown up to your reading position, so nothing is given away.'),
+    ).toBeVisible();
   },
 };
 
@@ -62,16 +84,27 @@ export const WikiWithheldByPosition: WikiStory = {
     await expect(section).toHaveTextContent('Nothing is revealed yet at your place in the story.');
     await expect(within(section).queryByText('Kirito')).toBeNull();
     // The wiki itself is still one tap away.
-    await expect(within(section).getByRole('link', { name: 'Open the wiki' })).toHaveAttribute('href', `/en/r/${wikiRealm}`);
+    await expect(within(section).getByRole('link', { name: 'Open the wiki' })).toHaveAttribute(
+      'href',
+      localizedPath(spaceHref(wikiRealm, 'community'), 'en'),
+    );
   },
 };
 
 export const WikiFailed: WikiStory = {
-  render: ({ locale }) => <PageContainer className="max-w-3xl">
-    <WikiSectionView wiki={{ zone: { ok: false, failure: 'unavailable' }, characters: null }} locale={locale}
-      messages={messages[locale]} /></PageContainer>,
+  render: ({ locale }) => (
+    <PageContainer className="max-w-3xl">
+      <WikiSectionView
+        wiki={{ zone: { ok: false, failure: 'unavailable' }, characters: null }}
+        locale={locale}
+        messages={messages[locale]}
+      />
+    </PageContainer>
+  ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('The wiki could not be loaded.');
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
+      'The wiki could not be loaded.',
+    );
   },
 };
 

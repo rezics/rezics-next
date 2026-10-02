@@ -1,3 +1,6 @@
+import { profileHref } from '../features/profile/route.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import { resourceHref, spaceHref } from '../features/address/path.ts';
 import { type Browser, expect, test } from '@playwright/test';
 import { type PerfEdge, startPerfEdge } from './perf-edge.ts';
 import { measure, perfProfiles, type PerfSample } from './perf-measure.ts';
@@ -22,16 +25,28 @@ const vitals = {
  * script, 33 KB of CSS, 24–74 KB of fonts and 17–33 KB of HTML (a Zone's Realm page 66 KB). */
 const initial = { script: 330 * 1024, stylesheet: 36 * 1024, font: 80 * 1024, document: 40 * 1024 };
 
-const pages: { name: string; path: (targets: PageTargets) => string; signedIn?: boolean;
-  budget?: Partial<typeof initial> }[] = [
+const pages: {
+  name: string;
+  path: (targets: PageTargets) => string;
+  signedIn?: boolean;
+  budget?: Partial<typeof initial>;
+}[] = [
   { name: 'home', path: () => '/en' },
   { name: 'discover', path: () => '/en/discover' },
   { name: 'search', path: () => '/en/search?q=tide' },
-  { name: 'work', path: targets => `/en/w/${targets.work}` },
-  { name: 'reader', path: targets => `/en/w/${targets.work}/read/${targets.chapter}` },
+  { name: 'work', path: (targets) => localizedPath(resourceHref('/w/', targets.work), 'en') },
+  {
+    name: 'reader',
+    path: (targets) =>
+      localizedPath(`${resourceHref('/w/', targets.work)}/read/${targets.chapter}`, 'en'),
+  },
   // A Zone's front page server-renders every module's tiles.
-  { name: 'realm', path: targets => `/en/r/${targets.realm}`, budget: { document: 72 * 1024 } },
-  { name: 'profile', path: targets => `/en/@${targets.profile}` },
+  {
+    name: 'realm',
+    path: (targets) => localizedPath(spaceHref(targets.realm, 'community'), 'en'),
+    budget: { document: 72 * 1024 },
+  },
+  { name: 'profile', path: (targets) => localizedPath(profileHref(targets.profile), 'en') },
   { name: 'studio', path: () => '/en/studio', signedIn: true },
 ];
 
@@ -51,10 +66,14 @@ async function session(browser: Browser, account: { email: string; password: str
   try {
     await signIn(await context.newPage(), '/en', account);
     return await context.storageState();
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
 }
 
-test.afterAll(async () => { await edge?.close(); });
+test.afterAll(async () => {
+  await edge?.close();
+});
 
 for (const entry of pages) {
   test(`${entry.name} loads within its budgets on desktop and phone`, async ({ browser }, info) => {
@@ -63,18 +82,35 @@ for (const entry of pages) {
     test.skip(Boolean(entry.signedIn) && !account, 'No member to sign in');
     const samples: PerfSample[] = [];
     for (const profile of perfProfiles) {
-      const sample = await measure(browser, edge.origin, { name: entry.name, path: entry.path(targets) }, profile,
-        entry.signedIn ? { storageState: await session(browser, account!) } : {});
+      const sample = await measure(
+        browser,
+        edge.origin,
+        { name: entry.name, path: entry.path(targets) },
+        profile,
+        entry.signedIn ? { storageState: await session(browser, account!) } : {},
+      );
       samples.push(sample);
       const budget = vitals[profile.name];
       const label = `${entry.name} on ${profile.name}`;
-      expect.soft(sample.lcp, `${label}: LCP ms (${sample.lcpElement})`).toBeLessThanOrEqual(budget.lcp);
-      expect.soft(sample.cls, `${label}: CLS (${JSON.stringify(sample.shifts)})`).toBeLessThanOrEqual(budget.cls);
+      expect
+        .soft(sample.lcp, `${label}: LCP ms (${sample.lcpElement})`)
+        .toBeLessThanOrEqual(budget.lcp);
+      expect
+        .soft(sample.cls, `${label}: CLS (${JSON.stringify(sample.shifts)})`)
+        .toBeLessThanOrEqual(budget.cls);
       expect.soft(sample.tbt, `${label}: TBT ms`).toBeLessThanOrEqual(budget.tbt);
-      for (const [kind, limit] of Object.entries({ ...initial, ...entry.budget }) as [keyof typeof initial, number][]) {
-        expect.soft(sample.initial[kind], `${label}: ${kind} bytes the page needs`).toBeLessThanOrEqual(limit);
+      for (const [kind, limit] of Object.entries({ ...initial, ...entry.budget }) as [
+        keyof typeof initial,
+        number,
+      ][]) {
+        expect
+          .soft(sample.initial[kind], `${label}: ${kind} bytes the page needs`)
+          .toBeLessThanOrEqual(limit);
       }
     }
-    await info.attach(`${entry.name}.json`, { body: JSON.stringify(samples, null, 2), contentType: 'application/json' });
+    await info.attach(`${entry.name}.json`, {
+      body: JSON.stringify(samples, null, 2),
+      contentType: 'application/json',
+    });
   });
 }

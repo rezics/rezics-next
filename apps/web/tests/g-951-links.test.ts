@@ -1,3 +1,7 @@
+import type { CanonicalAddress } from '@rezics/model/address';
+import type { AvailableSummary } from '../features/work-levels/types.ts';
+import { summaryHref } from '../features/entity-page/views.tsx';
+import { standaloneHrefFor } from '../features/entity-page/route.ts';
 import { describe, expect, test } from 'bun:test';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address';
 import { addressPath, type AddressTarget, spaceHref } from '../features/address/path.ts';
@@ -21,8 +25,32 @@ function parsed(href: string) {
 }
 
 describe('G-951 durable links preserve navigation state', () => {
+  test('entity summaries carry Main canonical policy through the section adapter', () => {
+    const address: CanonicalAddress = {
+      prefix: '/w/',
+      key: 'spring-story',
+      slugSource: 'Spring story',
+    };
+    const summary = {
+      status: 'available',
+      reference: iri(work),
+      base: 'work',
+      type: 'work',
+      address,
+    } as AvailableSummary & { address: CanonicalAddress };
+    const hrefFor = summaryHref(standaloneHrefFor({}, globalWorkHref(work)));
+    expect(parsed(hrefFor(summary)!).path.lookup.key).toBe('spring-story');
+    const { address: _address, ...legacy } = summary;
+    expect(parsed(hrefFor(legacy)!).path.lookup.key).toBe(uuidToSid(work));
+    expect(hrefFor({ ...summary, base: null })).toBeNull();
+  });
+
   test('a UUID, native IRI and SID all point to the same short Work identity', () => {
-    const links = [globalWorkHref(work), globalWorkHref(iri(work)), globalWorkHref(uuidToSid(work))];
+    const links = [
+      globalWorkHref(work),
+      globalWorkHref(iri(work)),
+      globalWorkHref(uuidToSid(work)),
+    ];
     expect(new Set(links).size).toBe(1);
     const { path } = parsed(links[0]!);
     expect(path.lookup.scope).toBe('work');
@@ -31,7 +59,11 @@ describe('G-951 durable links preserve navigation state', () => {
   });
 
   test('a supplied name address follows Main policy and encodes its segment', () => {
-    const named: AddressTarget = { prefix: '/w/', key: '海の地図', slugSource: 'The Cartographer of Tides' };
+    const named: AddressTarget = {
+      prefix: '/w/',
+      key: '海の地図',
+      slugSource: 'The Cartographer of Tides',
+    };
     expect(parsed(globalWorkHref(named)).path.lookup.key).toBe('海の地図');
     const identity: AddressTarget = { ...named, key: uuidToSid(work) };
     const { path } = parsed(globalWorkHref(identity));
@@ -40,7 +72,9 @@ describe('G-951 durable links preserve navigation state', () => {
   });
 
   test('tabs retain Realm scope and cursor without using a capability UUID as an address', () => {
-    const { path, url } = parsed(workHref(work, 'versions', { kind: 'realm', realm: space }, { cursor: 'a/b+c' }));
+    const { path, url } = parsed(
+      workHref(work, 'versions', { kind: 'realm', realm: space }, { cursor: 'a/b+c' }),
+    );
     expect(path.tail).toEqual(['versions']);
     expect(url.searchParams.get('realm')).toBe(space);
     expect(url.searchParams.get('cursor')).toBe('a/b+c');
@@ -59,12 +93,16 @@ describe('G-951 durable links preserve navigation state', () => {
   });
 
   test('connection, edition and edit links retain their specific section and query', () => {
-    const connections = parsed(connectionsHref(work, { grain: 'parts', partsAfter: 'next/page' }, 'parts'));
+    const connections = parsed(
+      connectionsHref(work, { grain: 'parts', partsAfter: 'next/page' }, 'parts'),
+    );
     expect(connections.path.tail).toEqual(['connections']);
     expect(connections.url.searchParams.get('grain')).toBe('parts');
     expect(connections.url.searchParams.get('partsAfter')).toBe('next/page');
     expect(connections.url.hash).toBe('#parts');
-    expect(parsed(editionsHref(work, { releasesAfter: 'next' }, 'releases')).path.tail).toEqual(['editions']);
+    expect(parsed(editionsHref(work, { releasesAfter: 'next' }, 'releases')).path.tail).toEqual([
+      'editions',
+    ]);
     expect(parsed(editHref(work, 'relations')).path.tail).toEqual(['edit', 'relations']);
     expect(parsed(editHref(work, 'relations')).path.lookup.key).toBe(uuidToSid(work));
   });
@@ -74,7 +112,9 @@ describe('G-951 durable links preserve navigation state', () => {
     expect(wiki.path.surface).toBe('site');
     expect(wiki.path.lookup.key).toBe(uuidToSid(space));
     expect(wiki.path.tail).toEqual(['characters']);
-    const member = parsed(memberHref({ ref: space, choice: { kind: 'all' } }, 'characters', iri(work)));
+    const member = parsed(
+      memberHref({ ref: space, choice: { kind: 'all' } }, 'characters', iri(work)),
+    );
     expect(member.path.surface).toBe('site');
     expect(member.path.tail).toEqual(['characters', uuidToSid(work)]);
     expect(member.url.searchParams.get('position')).toBe('all');

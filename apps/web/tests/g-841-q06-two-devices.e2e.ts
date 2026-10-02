@@ -1,5 +1,17 @@
+import type { UiLocale } from '../i18n/define.ts';
+import { resourceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { expect, type Page } from '@playwright/test';
-import { desktop, device, member, phone, seeded, test, uuid, type Seeded } from './g-841-fixture.ts';
+import {
+  desktop,
+  device,
+  member,
+  phone,
+  seeded,
+  test,
+  uuid,
+  type Seeded,
+} from './g-841-fixture.ts';
 
 // Query 6 of the catalogue acceptance fixtures, read through the web UI as the stack's web member. The page is
 // compared with what Main answered for the same fixture (`answers`, recorded by `g-841-catalogue.ts`), so a
@@ -12,30 +24,43 @@ test.beforeAll(() => {
   data = seeded();
 });
 
-
-test('query 6: progress in the web Spider never completes the book; the offer needs explicit acceptance', async ({ browser }, info) => {
+test('query 6: progress in the web Spider never completes the book; the offer needs explicit acceptance', async ({
+  browser,
+}, info) => {
   test.setTimeout(420_000);
   const { actingSubject } = member();
   const { web, book } = data.spider;
-  expect(data.answers.relations['D03.web']!.some(item => item.counterparts.includes(book))).toBe(true);
-  const at = (locale: string, iri: string, rest = '') => `/${locale}/w/${uuid(iri)}${rest}`;
+  expect(data.answers.relations['D03.web']!.some((item) => item.counterparts.includes(book))).toBe(
+    true,
+  );
+  const at = (locale: UiLocale, iri: string, rest = '') =>
+    localizedPath(`${resourceHref('/w/', uuid(iri))}${rest}`, locale);
   // One reader on two devices: a desktop and a phone, each signed in on its own.
   const a = await device(browser, info, desktop, at('en', web, '/connections'));
   const b = await device(browser, info, phone, at('en', book));
 
   const finished = async (page: Page, iri: string) => {
-    const response = await page.request.get(`/api/main/v1/me/sessions?actingSubject=${encodeURIComponent(actingSubject)}&target=${encodeURIComponent(iri)}`);
+    const response = await page.request.get(
+      `/api/main/v1/me/sessions?actingSubject=${encodeURIComponent(actingSubject)}&target=${encodeURIComponent(iri)}`,
+    );
     expect(response.status(), await response.text()).toBe(200);
-    return (await response.json() as { items: { state: string; target: { resource: string } }[] }).items
-      .some(item => item.state === 'finished' && item.target.resource === iri);
+    return (
+      (await response.json()) as { items: { state: string; target: { resource: string } }[] }
+    ).items.some((item) => item.state === 'finished' && item.target.resource === iri);
   };
   /** The reader's shelf status of a Work, as Main keeps it. */
   const shelf = async (page: Page, iri: string) => {
-    const response = await page.request.get(`/api/main/v1/me/work-states?works=${encodeURIComponent(iri)}&actingSubject=${encodeURIComponent(actingSubject)}`);
+    const response = await page.request.get(
+      `/api/main/v1/me/work-states?works=${encodeURIComponent(iri)}&actingSubject=${encodeURIComponent(actingSubject)}`,
+    );
     expect(response.status(), await response.text()).toBe(200);
-    return (await response.json() as { items: { status: { status: string | null } }[] }).items[0]?.status.status ?? null;
+    return (
+      ((await response.json()) as { items: { status: { status: string | null } }[] }).items[0]
+        ?.status.status ?? null
+    );
   };
-  const shot = (page: Page, name: string) => page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
+  const shot = (page: Page, name: string) =>
+    page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
 
   // Neither is started. The phone shows the book as something to read.
   expect(await shelf(a, web)).not.toBe('read');
@@ -73,7 +98,7 @@ test('query 6: progress in the web Spider never completes the book; the offer ne
   // Accepting is explicit: only then does the book count as read, on the phone too.
   await offerZh.click();
   await expect(a.getByText(/^已將「.*」標為已讀。$/)).toBeVisible();
-  expect(await shelf(a, book) === 'read' || await finished(a, book)).toBe(true);
+  expect((await shelf(a, book)) === 'read' || (await finished(a, book))).toBe(true);
   await b.goto(at('en', book));
   await expect(b.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
   await shot(b, 'q6-book-phone-after');

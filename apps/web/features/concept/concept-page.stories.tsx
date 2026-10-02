@@ -1,11 +1,26 @@
+import { resourceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { works as discoveryWorks } from '../discover/fixtures.ts';
 import { memoryFollowActions } from '../profile/fixtures.ts';
 import { Providers } from '../shell/providers.tsx';
 import { ConceptMalformed, ConceptPage, ConceptUnavailable } from './concept-page.tsx';
-import { conceptFacet, conceptUuid, failed, fantasy, follow, localConcept, localRealm, memorySearch, ok,
-  state, works, worksLoader, worksPage } from './fixtures.ts';
+import {
+  conceptFacet,
+  conceptUuid,
+  failed,
+  fantasy,
+  follow,
+  localConcept,
+  localRealm,
+  memorySearch,
+  ok,
+  state,
+  works,
+  worksLoader,
+  worksPage,
+} from './fixtures.ts';
 import { facetLabel } from './facets.ts';
 import { type ConceptMessages, messages } from './messages.ts';
 import zhHant from './messages/zh-Hant.ts';
@@ -17,15 +32,32 @@ const zh = { ...messages, ...zhHans };
 const zhHantMessages: ConceptMessages = { ...messages, ...zhHant };
 const jaMessages: ConceptMessages = { ...messages, ...ja };
 const koMessages: ConceptMessages = { ...messages, ...ko };
-const page = `/en/concepts/${conceptUuid(1)}`;
+const page = localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'en');
 const signedOut = { signedIn: false };
 
 const meta = {
-  title: 'Concept/Page', component: ConceptPage,
-  args: { concept: fantasy, facet: facetLabel(conceptFacet, 'en'), state: state(), realms: {},
-    works: ok(worksPage(state(), works)), follow: ok(follow(12)), reader: signedOut, loadWorks: worksLoader([]),
-    searchConcepts: memorySearch, locale: 'en', messages },
-  decorators: [Story => <Providers><Story /></Providers>],
+  title: 'Concept/Page',
+  component: ConceptPage,
+  args: {
+    concept: fantasy,
+    facet: facetLabel(conceptFacet, 'en'),
+    state: state(),
+    realms: {},
+    works: ok(worksPage(state(), works)),
+    follow: ok(follow(12)),
+    reader: signedOut,
+    loadWorks: worksLoader([]),
+    searchConcepts: memorySearch,
+    locale: 'en',
+    messages,
+  },
+  decorators: [
+    (Story) => (
+      <Providers>
+        <Story />
+      </Providers>
+    ),
+  ],
   parameters: { route: { pathname: page } },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof ConceptPage>;
@@ -46,21 +78,38 @@ export const Concept: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'Fantasy' })).toBeVisible();
     await expect(canvas.getAllByText('Tags')[0]).toBeVisible();
     await expect(canvas.getByText(/Stories built on the impossible/)).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Fiction' })).toHaveAttribute('href', `/en/concepts/${conceptUuid(5)}`);
-    await expect(canvas.getByRole('link', { name: 'High fantasy' })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(6)}`);
+    await expect(canvas.getByRole('link', { name: 'Fiction' })).toHaveAttribute(
+      'href',
+      localizedPath(resourceHref('/concepts/', conceptUuid(5)), 'en'),
+    );
+    await expect(canvas.getByRole('link', { name: 'High fantasy' })).toHaveAttribute(
+      'href',
+      localizedPath(resourceHref('/concepts/', conceptUuid(6)), 'en'),
+    );
     await expect(canvas.getByText('and more')).toBeVisible();
     // Signed out, Follow leads to sign-in and back; the count is everyone's.
     await expect(canvas.getByText('12 followers')).toBeVisible();
-    await expect(canvas.getByRole('link', { name: /^Follow/ })).toHaveAttribute('href',
-      `/auth/start?next=${encodeURIComponent(page)}`);
+    await expect(canvas.getByRole('link', { name: /^Follow/ })).toHaveAttribute(
+      'href',
+      `/auth/start?next=${encodeURIComponent(page)}`,
+    );
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
     await expect(bar.getByText('Fantasy, this page’s tag')).toBeInTheDocument();
     // Concepts the listed Works also carry are one step from included or excluded.
-    await expect(bar.getByRole('link', { name: 'Include Dragons' })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(1)}?include=${conceptUuid(8)}`);
-    await expect(bar.getByRole('link', { name: 'Exclude Romance' })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(1)}?exclude=${conceptUuid(3)}`);
+    await expect(bar.getByRole('link', { name: 'Include Dragons' })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(8)}`,
+        'en',
+      ),
+    );
+    await expect(bar.getByRole('link', { name: 'Exclude Romance' })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/concepts/', conceptUuid(1))}?exclude=${conceptUuid(3)}`,
+        'en',
+      ),
+    );
     const list = within(canvas.getByRole('region', { name: 'Works' }));
     await expect(list.getByText('5 works')).toBeVisible();
     await expect(list.getAllByRole('heading', { level: 3 })).toHaveLength(5);
@@ -81,18 +130,36 @@ export const IncludeAndExclude: Story = {
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
     await expect(bar.getByText('Dragons')).toBeInTheDocument();
     await expect(bar.getByText('Romance')).toBeInTheDocument();
-    await expect(bar.getByRole('link', { name: 'Remove Dragons' })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(1)}?exclude=${conceptUuid(3)}`);
-    await expect(bar.getByRole('link', { name: 'Remove Romance' })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(1)}?include=${conceptUuid(8)}`);
+    await expect(bar.getByRole('link', { name: 'Remove Dragons' })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/concepts/', conceptUuid(1))}?exclude=${conceptUuid(3)}`,
+        'en',
+      ),
+    );
+    await expect(bar.getByRole('link', { name: 'Remove Romance' })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(8)}`,
+        'en',
+      ),
+    );
     const match = within(bar.getByRole('group', { name: 'Match' }));
     await expect(match.getByRole('link', { name: /^All/ })).toHaveAttribute('aria-current', 'true');
-    await expect(match.getByRole('link', { name: /^Any/ })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(1)}?include=${conceptUuid(8)}&exclude=${conceptUuid(3)}&match=any`);
-    await expect(bar.getByRole('link', { name: 'Clear Conditions' }))
-      .toHaveAttribute('href', `/en/concepts/${conceptUuid(1)}`);
-    await expect(within(canvas.getByRole('region', { name: 'Works' })).getAllByRole('heading', { level: 3 }))
-      .toHaveLength(2);
+    await expect(match.getByRole('link', { name: /^Any/ })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(8)}&exclude=${conceptUuid(3)}&match=any`,
+        'en',
+      ),
+    );
+    await expect(bar.getByRole('link', { name: 'Clear Conditions' })).toHaveAttribute(
+      'href',
+      localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'en'),
+    );
+    await expect(
+      within(canvas.getByRole('region', { name: 'Works' })).getAllByRole('heading', { level: 3 }),
+    ).toHaveLength(2);
   },
 };
 
@@ -104,9 +171,16 @@ export const MatchAny: Story = {
   })(),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('Works with this page’s Concept and any other included Concept')).toBeVisible();
-    const match = within(canvas.getByRole('region', { name: 'Conditions' })).getByRole('group', { name: 'Match' });
-    await expect(within(match).getByRole('link', { name: /^Any/ })).toHaveAttribute('aria-current', 'true');
+    await expect(
+      canvas.getByText('Works with this page’s Concept and any other included Concept'),
+    ).toBeVisible();
+    const match = within(canvas.getByRole('region', { name: 'Conditions' })).getByRole('group', {
+      name: 'Match',
+    });
+    await expect(within(match).getByRole('link', { name: /^Any/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
   },
 };
 
@@ -127,15 +201,27 @@ export const AddByName: Story = {
 
 /** Following shows at once and the count moves with it; unfollowing takes it back. */
 export const Follow: Story = {
-  args: { reader: { signedIn: true, actingSubject: 'https://rezics.com/id/00000077-7c1d-4e2f-9a3b-5c6d7e8f9a0b' },
-    follow: ok(follow(12, false)), followActions: memoryFollowActions() },
+  args: {
+    reader: {
+      signedIn: true,
+      actingSubject: 'https://rezics.com/id/00000077-7c1d-4e2f-9a3b-5c6d7e8f9a0b',
+    },
+    follow: ok(follow(12, false)),
+    followActions: memoryFollowActions(),
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Fantasy' }));
-    await expect(canvas.getByRole('button', { name: 'Following · Unfollow Fantasy' })).toBeVisible();
+    await expect(
+      canvas.getByRole('button', { name: 'Following · Unfollow Fantasy' }),
+    ).toBeVisible();
     await expect(canvas.getByText('13 followers')).toBeVisible();
-    await waitFor(() => expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute('aria-disabled',
-      'true'));
+    await waitFor(() =>
+      expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    );
     await userEvent.click(canvas.getByRole('button', { name: /^Following/ }));
     await expect(canvas.getByRole('button', { name: 'Follow · Fantasy' })).toBeVisible();
     await expect(canvas.getByText('12 followers')).toBeVisible();
@@ -144,8 +230,10 @@ export const Follow: Story = {
 
 /** More Works than a page: "Show more" reads the next through the BFF. */
 export const ShowMore: Story = {
-  args: { works: ok(worksPage(state(), works.slice(0, 4), true)),
-    loadWorks: worksLoader([{ ...discoveryWorks.pride, classifications: [] }]) },
+  args: {
+    works: ok(worksPage(state(), works.slice(0, 4), true)),
+    loadWorks: worksLoader([{ ...discoveryWorks.pride, classifications: [] }]),
+  },
   async play({ canvasElement }) {
     const list = within(within(canvasElement).getByRole('region', { name: 'Works' }));
     await expect(list.getByText('4+ works')).toBeVisible();
@@ -164,8 +252,10 @@ export const NoMatches: Story = {
   async play({ canvasElement }) {
     const list = within(within(canvasElement).getByRole('region', { name: 'Works' }));
     await expect(list.getByText('No works match these Conditions')).toBeVisible();
-    await expect(list.getByRole('link', { name: 'Show all works with Fantasy' })).toHaveAttribute('href',
-      `/en/concepts/${conceptUuid(1)}`);
+    await expect(list.getByRole('link', { name: 'Show all works with Fantasy' })).toHaveAttribute(
+      'href',
+      localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'en'),
+    );
   },
 };
 
@@ -197,18 +287,41 @@ export const ValueMissing: Story = {
 /** A community's Concept, opened from its page: its Works as that community accepted them. */
 export const CommunityConcept: Story = {
   args: (() => {
-    const scoped = state({ concept: localConcept.id.slice(-36), scope: { kind: 'realm', realm: localRealm } });
-    return { concept: localConcept, state: scoped, works: failed('unbuilt'),
-      realms: { [localRealm]: { value: 'Tidewater Readers', language: 'en', direction: 'ltr', basis: 'requested' } } };
+    const scoped = state({
+      concept: localConcept.id.slice(-36),
+      scope: { kind: 'realm', realm: localRealm },
+    });
+    return {
+      concept: localConcept,
+      state: scoped,
+      works: failed('unbuilt'),
+      realms: {
+        [localRealm]: {
+          value: 'Tidewater Readers',
+          language: 'en',
+          direction: 'ltr',
+          basis: 'requested',
+        },
+      },
+    };
   })(),
-  parameters: { route: { pathname: `/en/concepts/${localConcept.id.slice(-36)}` } },
+  parameters: {
+    route: {
+      pathname: localizedPath(resourceHref('/concepts/', localConcept.id.slice(-36)), 'en'),
+    },
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('From Tidewater Readers')).toBeVisible();
     const scope = within(canvas.getByRole('navigation', { name: 'Accepted by' }));
-    await expect(scope.getByRole('link', { name: 'In Tidewater Readers' })).toHaveAttribute('aria-current', 'true');
-    await expect(scope.getByRole('link', { name: 'Everyone' })).toHaveAttribute('href',
-      `/en/concepts/${localConcept.id.slice(-36)}`);
+    await expect(scope.getByRole('link', { name: 'In Tidewater Readers' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    await expect(scope.getByRole('link', { name: 'Everyone' })).toHaveAttribute(
+      'href',
+      localizedPath(resourceHref('/concepts/', localConcept.id.slice(-36)), 'en'),
+    );
     await expect(canvas.getByText('Works aren’t ready here yet')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'See everyone’s works' })).toBeVisible();
   },
@@ -225,16 +338,26 @@ export const Failed: Story = {
 };
 
 export const ChineseDark: Story = {
-  args: { locale: 'zh-Hans', messages: zh, facet: facetLabel(conceptFacet, 'zh-Hans'),
+  args: {
+    locale: 'zh-Hans',
+    messages: zh,
+    facet: facetLabel(conceptFacet, 'zh-Hans'),
     state: state({ include: [conceptUuid(2)] }),
-    works: ok(worksPage(state({ include: [conceptUuid(2)] }), [works[2]!])) },
+    works: ok(worksPage(state({ include: [conceptUuid(2)] }), [works[2]!])),
+  },
   globals: { locale: 'zh-Hans', theme: 'dark' },
-  parameters: { route: { pathname: `/zh-Hans/concepts/${conceptUuid(1)}` } },
+  parameters: {
+    route: { pathname: localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'zh-Hans') },
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByText('标签')[0]).toBeVisible();
-    await expect(canvas.getByRole('region', { name: '筛选条件' })).toHaveTextContent('Magic schools');
-    await expect(within(canvas.getByRole('region', { name: '作品' })).getByText('1 部作品')).toBeVisible();
+    await expect(canvas.getByRole('region', { name: '筛选条件' })).toHaveTextContent(
+      'Magic schools',
+    );
+    await expect(
+      within(canvas.getByRole('region', { name: '作品' })).getByText('1 部作品'),
+    ).toBeVisible();
   },
 };
 
@@ -248,13 +371,22 @@ export const Phone: Story = {
 };
 
 export const PhoneChineseDark: Story = {
-  args: { ...Phone.args, locale: 'zh-Hans', messages: zh, facet: facetLabel(conceptFacet, 'zh-Hans') },
+  args: {
+    ...Phone.args,
+    locale: 'zh-Hans',
+    messages: zh,
+    facet: facetLabel(conceptFacet, 'zh-Hans'),
+  },
   globals: { viewport: { value: 'phone' }, locale: 'zh-Hans', theme: 'dark' },
   play: noOverflow,
 };
 
-const localizedPhone = (locale: 'zh-Hant' | 'ja' | 'ko', translated: ConceptMessages,
-  followerCount: string, worksLabel: string): Story => ({
+const localizedPhone = (
+  locale: 'zh-Hant' | 'ja' | 'ko',
+  translated: ConceptMessages,
+  followerCount: string,
+  worksLabel: string,
+): Story => ({
   args: { ...Phone.args, locale, messages: translated, facet: facetLabel(conceptFacet, locale) },
   globals: { viewport: { value: 'phone' }, locale },
   async play({ canvasElement }) {
@@ -265,23 +397,39 @@ const localizedPhone = (locale: 'zh-Hant' | 'ja' | 'ko', translated: ConceptMess
   },
 });
 
-export const TraditionalChinesePhone: Story = localizedPhone('zh-Hant', zhHantMessages, '12 位追蹤者', '作品');
+export const TraditionalChinesePhone: Story = localizedPhone(
+  'zh-Hant',
+  zhHantMessages,
+  '12 位追蹤者',
+  '作品',
+);
 export const JapanesePhone: Story = localizedPhone('ja', jaMessages, 'フォロワー12人', '作品');
 export const KoreanPhone: Story = localizedPhone('ko', koMessages, '팔로워 12명', '작품');
 
 /** A link whose Conditions repeat or contradict themselves is said so, never silently widened. */
 export const MalformedLink: Story = {
-  render: args => <ConceptMalformed concept={conceptUuid(1)} locale={args.locale} messages={args.messages} />,
+  render: (args) => (
+    <ConceptMalformed concept={conceptUuid(1)} locale={args.locale} messages={args.messages} />
+  ),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { level: 1, name: 'This link’s Conditions aren’t valid' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Works' })).toHaveAttribute('href', `/en/concepts/${conceptUuid(1)}`);
+    await expect(
+      canvas.getByRole('heading', { level: 1, name: 'This link’s Conditions aren’t valid' }),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Works' })).toHaveAttribute(
+      'href',
+      localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'en'),
+    );
   },
 };
 
 export const Unavailable: Story = {
-  render: args => <ConceptUnavailable state={args.state} locale={args.locale} messages={args.messages} />,
+  render: (args) => (
+    <ConceptUnavailable state={args.state} locale={args.locale} messages={args.messages} />
+  ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('This Concept can’t be shown right now');
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
+      'This Concept can’t be shown right now',
+    );
   },
 };

@@ -1,3 +1,6 @@
+import { resourceHref } from '../features/address/path.ts';
+import type { ResolvedAddress } from '../features/address/client.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { NextRequest } from 'next/server';
 import { type AccountClient, refreshTokens } from '../features/auth/account.ts';
@@ -8,7 +11,10 @@ import { proxy } from '../proxy.ts';
 
 const realFetch = globalThis.fetch;
 const env = { ...process.env };
-afterEach(() => { globalThis.fetch = realFetch; process.env = { ...env }; });
+afterEach(() => {
+  globalThis.fetch = realFetch;
+  process.env = { ...env };
+});
 
 /** A JWT-shaped token naming `sub`; the session layer reads claims, never signatures. */
 function token(sub: string, id = crypto.randomUUID()): string {
@@ -16,7 +22,9 @@ function token(sub: string, id = crypto.randomUUID()): string {
   return `${part({ alg: 'none' })}.${part({ sub, jti: id })}.x`;
 }
 
-interface Exchange { body: URLSearchParams }
+interface Exchange {
+  body: URLSearchParams;
+}
 function account(answer: (exchange: Exchange) => Response | Promise<Response>) {
   const exchanges: Exchange[] = [];
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -24,19 +32,29 @@ function account(answer: (exchange: Exchange) => Response | Promise<Response>) {
     exchanges.push(exchange);
     return answer(exchange);
   }) as typeof fetch;
-  const client: AccountClient = { accountOrigin: 'http://account.test', clientId: 'web',
-    resource: 'https://main.rezics.test', fetch: fetcher };
+  const client: AccountClient = {
+    accountOrigin: 'http://account.test',
+    clientId: 'web',
+    resource: 'https://main.rezics.test',
+    fetch: fetcher,
+  };
   return { client, exchanges, fetcher };
 }
-const issued = (sub = 'user-1') => Response.json({ access_token: token(sub),
-  refresh_token: crypto.randomUUID(), expires_in: 300 });
-const jar = (values: Record<string, string>) => ({ get: (name: string) =>
-  values[name] === undefined ? undefined : { value: values[name]! } });
+const issued = (sub = 'user-1') =>
+  Response.json({ access_token: token(sub), refresh_token: crypto.randomUUID(), expires_in: 300 });
+const jar = (values: Record<string, string>) => ({
+  get: (name: string) => (values[name] === undefined ? undefined : { value: values[name]! }),
+});
 
 test('IAM01: concurrent requests with one refresh token share one Account exchange', async () => {
   let release!: () => void;
-  const gate = new Promise<void>(resolve => { release = resolve; });
-  const { client, exchanges } = account(async () => { await gate; return issued(); });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { client, exchanges } = account(async () => {
+    await gate;
+    return issued();
+  });
   const refreshToken = crypto.randomUUID();
   const pending = Array.from({ length: 6 }, () => refreshTokens(client, refreshToken));
   release();
@@ -45,7 +63,9 @@ test('IAM01: concurrent requests with one refresh token share one Account exchan
   expect(exchanges[0]!.body.get('grant_type')).toBe('refresh_token');
   expect(exchanges[0]!.body.get('refresh_token')).toBe(refreshToken);
   expect(exchanges[0]!.body.get('resource')).toBe('https://main.rezics.test');
-  expect(new Set(results.map(result => result.status === 'issued' && result.tokens.accessToken)).size).toBe(1);
+  expect(
+    new Set(results.map((result) => result.status === 'issued' && result.tokens.accessToken)).size,
+  ).toBe(1);
 });
 
 test('IAM01: a request still carrying the rotated cookie reuses the rotation for 30 s, then asks again', async () => {
@@ -63,29 +83,44 @@ test('IAM01: a request still carrying the rotated cookie reuses the rotation for
 
 test('IAM01: two browser contexts with the same expired cookies receive one rotation', async () => {
   let release!: () => void;
-  const gate = new Promise<void>(resolve => { release = resolve; });
-  const { fetcher, exchanges } = account(async () => { await gate; return issued(); });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { fetcher, exchanges } = account(async () => {
+    await gate;
+    return issued();
+  });
   configure(fetcher);
   const stale = crypto.randomUUID();
   const sessionKey = crypto.randomUUID();
-  const record = encodeSessionRecord({ user: { id: 'user-1' },
-    expiresAt: '2030-01-01T00:00:00Z' });
-  const request = () => proxy(new NextRequest('http://web.test/en/w/book', { headers: {
-    cookie: `rezics_refresh=${stale}; rezics_session=${record}; rezics_session_key=${sessionKey}` } }));
+  const record = encodeSessionRecord({ user: { id: 'user-1' }, expiresAt: '2030-01-01T00:00:00Z' });
+  const request = () =>
+    proxy(
+      new NextRequest(`${'http://web.test'}${localizedPath(resourceHref('/w/', 'book'), 'en')}`, {
+        headers: {
+          cookie: `rezics_refresh=${stale}; rezics_session=${record}; rezics_session_key=${sessionKey}`,
+        },
+      }),
+    );
   const first = request();
   const second = request();
   release();
   const responses = await Promise.all([first, second]);
   expect(exchanges).toHaveLength(1);
-  const forwarded = responses.map(response => response.headers.get('x-middleware-request-cookie'));
-  const cookie = (value: string | null, name: string) => value?.split('; ')
-    .find(part => part.startsWith(`${name}=`));
+  const forwarded = responses.map((response) =>
+    response.headers.get('x-middleware-request-cookie'),
+  );
+  const cookie = (value: string | null, name: string) =>
+    value?.split('; ').find((part) => part.startsWith(`${name}=`));
   expect(cookie(forwarded[0], 'rezics_access')).toBe(cookie(forwarded[1], 'rezics_access'));
   expect(cookie(forwarded[0], 'rezics_refresh')).toBe(cookie(forwarded[1], 'rezics_refresh'));
   expect(cookie(forwarded[0], 'rezics_refresh')).not.toContain(stale);
   expect(cookie(forwarded[0], 'rezics_session_key')).toBe(`rezics_session_key=${sessionKey}`);
-  expect(responses.every(response => response.headers.getSetCookie()
-    .some(line => line.startsWith('rezics_refresh=')))).toBe(true);
+  expect(
+    responses.every((response) =>
+      response.headers.getSetCookie().some((line) => line.startsWith('rezics_refresh=')),
+    ),
+  ).toBe(true);
 });
 
 test('IAM01: an unavailable Account is retried by the next request; a refused grant ends the session', async () => {
@@ -96,30 +131,53 @@ test('IAM01: an unavailable Account is retried by the next request; a refused gr
   answer = () => Response.json({ error: 'invalid_grant' }, { status: 400 });
   expect(await refreshTokens(client, refreshToken)).toEqual({ status: 'rejected' });
   expect(exchanges).toHaveLength(2);
-  const failing = account(() => { throw new TypeError('connection refused'); });
-  expect(await refreshTokens(failing.client, crypto.randomUUID())).toEqual({ status: 'unavailable' });
+  const failing = account(() => {
+    throw new TypeError('connection refused');
+  });
+  expect(await refreshTokens(failing.client, crypto.randomUUID())).toEqual({
+    status: 'unavailable',
+  });
 });
 
 test('IAM01: refresh runs only when the access cookie is gone and keeps the signed-in user', async () => {
   const { client, exchanges } = account(() => issued('user-1'));
   const user = { id: 'user-1' };
   const record = encodeSessionRecord({ user, expiresAt: new Date().toISOString() });
-  expect(await refreshSession(jar({ rezics_access: token('user-1'), rezics_refresh: 'r', rezics_session: record }), client))
-    .toEqual({ kind: 'current' });
-  expect(await refreshSession(jar({ rezics_access: 'a', rezics_refresh: 'r' }), client))
-    .toEqual({ kind: 'ended' });
-  expect(await refreshSession(jar({ rezics_access: token('user-2'), rezics_session: record }), client))
-    .toEqual({ kind: 'ended' });
+  expect(
+    await refreshSession(
+      jar({ rezics_access: token('user-1'), rezics_refresh: 'r', rezics_session: record }),
+      client,
+    ),
+  ).toEqual({ kind: 'current' });
+  expect(await refreshSession(jar({ rezics_access: 'a', rezics_refresh: 'r' }), client)).toEqual({
+    kind: 'ended',
+  });
+  expect(
+    await refreshSession(jar({ rezics_access: token('user-2'), rezics_session: record }), client),
+  ).toEqual({ kind: 'ended' });
   expect(await refreshSession(jar({}), client)).toEqual({ kind: 'current' });
   expect(exchanges).toHaveLength(0);
-  const refreshed = await refreshSession(jar({ rezics_refresh: crypto.randomUUID(), rezics_session: record }), client);
+  const refreshed = await refreshSession(
+    jar({ rezics_refresh: crypto.randomUUID(), rezics_session: record }),
+    client,
+  );
   expect(refreshed.kind === 'refreshed' && refreshed.user).toEqual(user);
   // A record for someone else is display data only; the token decides who is signed in.
-  const other = await refreshSession(jar({ rezics_refresh: crypto.randomUUID(),
-    rezics_session: encodeSessionRecord({ user: { ...user, id: 'user-2' }, expiresAt: '2030-01-01T00:00:00Z' }) }), client);
+  const other = await refreshSession(
+    jar({
+      rezics_refresh: crypto.randomUUID(),
+      rezics_session: encodeSessionRecord({
+        user: { ...user, id: 'user-2' },
+        expiresAt: '2030-01-01T00:00:00Z',
+      }),
+    }),
+    client,
+  );
   expect(other.kind === 'refreshed' && other.user).toEqual({ id: 'user-1' });
   const opaque = account(() => Response.json({ access_token: 'opaque', expires_in: 300 }));
-  expect(await refreshSession(jar({ rezics_refresh: crypto.randomUUID() }), opaque.client)).toEqual({ kind: 'ended' });
+  expect(await refreshSession(jar({ rezics_refresh: crypto.randomUUID() }), opaque.client)).toEqual(
+    { kind: 'ended' },
+  );
 });
 
 test('IAM01: session cookies are httpOnly and Lax, the access cookie lapses before the token does', () => {
@@ -127,46 +185,92 @@ test('IAM01: session cookies are httpOnly and Lax, the access cookie lapses befo
   expect(accessMaxAge(60)).toBe(48);
   expect(accessMaxAge(3600)).toBe(270);
   expect(accessMaxAge(Number.NaN)).toBe(270);
-  const cookies = sessionCookies('https://web.rezics.test/studio',
+  const cookies = sessionCookies(
+    'https://web.rezics.test/studio',
     { accessToken: 'a', refreshToken: 'r', expiresIn: 300 },
-    { id: 'u' }, 0);
-  expect(cookies.map(cookie => [cookie.name, cookie.options.maxAge])).toEqual([
-    ['rezics_access', 270], ['rezics_session', 2_592_000], ['rezics_refresh', 2_592_000]]);
+    { id: 'u' },
+    0,
+  );
+  expect(cookies.map((cookie) => [cookie.name, cookie.options.maxAge])).toEqual([
+    ['rezics_access', 270],
+    ['rezics_session', 2_592_000],
+    ['rezics_refresh', 2_592_000],
+  ]);
   for (const { options } of cookies) {
     expect(options).toMatchObject({ httpOnly: true, sameSite: 'lax', secure: true, path: '/' });
   }
-  const withoutRefresh = sessionCookies('http://127.0.0.1:3000/', { accessToken: 'a',
-    refreshToken: null, expiresIn: 300 }, { id: 'u' }, 0);
-  expect(withoutRefresh.map(cookie => cookie.name)).toEqual(['rezics_access', 'rezics_session']);
+  const withoutRefresh = sessionCookies(
+    'http://127.0.0.1:3000/',
+    { accessToken: 'a', refreshToken: null, expiresIn: 300 },
+    { id: 'u' },
+    0,
+  );
+  expect(withoutRefresh.map((cookie) => cookie.name)).toEqual(['rezics_access', 'rezics_session']);
   expect(withoutRefresh[0]!.options.secure).toBe(false);
 });
 
 test('IAM01: the rewritten Cookie header replaces session cookies and keeps the rest', () => {
-  expect(rewriteCookieHeader('rezics_locale=en; rezics_access=old; theme=dark',
-    { rezics_access: 'new', rezics_refresh: 'r2', rezics_session: null }))
-    .toBe('rezics_locale=en; theme=dark; rezics_access=new; rezics_refresh=r2');
+  expect(
+    rewriteCookieHeader('rezics_locale=en; rezics_access=old; theme=dark', {
+      rezics_access: 'new',
+      rezics_refresh: 'r2',
+      rezics_session: null,
+    }),
+  ).toBe('rezics_locale=en; theme=dark; rezics_access=new; rezics_refresh=r2');
   expect(rewriteCookieHeader(null, { rezics_access: null })).toBe('');
 });
 
 function configure(fetcher: typeof fetch) {
   process.env.WEB_OAUTH_CLIENT_ID = 'web';
   process.env.ACCOUNT_ORIGIN = 'http://account.test';
-  globalThis.fetch = fetcher;
+  // Address resolution precedes session handling; this suite isolates the
+  // Account exchanges while admitting its public Work fixture through Main.
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+    if (url.pathname === '/v1/addresses/resolve') {
+      return Response.json({
+        profile: 'address-resolution-v1',
+        scope: 'work',
+        key: 'book',
+        status: 'resolved',
+        state: 'current',
+        holder: 'https://rezics.com/id/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+        canonical: { prefix: '/w/', key: 'book', slugSource: 'Book' },
+      } satisfies ResolvedAddress);
+    }
+    return fetcher(input, init);
+  }) as typeof fetch;
 }
 
 test('public paths redirect by cookie then Accept-Language; auth routes stay unprefixed', async () => {
+  configure(realFetch);
   delete process.env.WEB_OAUTH_CLIENT_ID;
-  const byHeader = await proxy(new NextRequest('http://web.test/search?q=river', {
-    headers: { 'accept-language': 'zh-Hans,zh;q=0.9,en;q=0.5' } }));
+  const byHeader = await proxy(
+    new NextRequest('http://web.test/search?q=river', {
+      headers: { 'accept-language': 'zh-Hans,zh;q=0.9,en;q=0.5' },
+    }),
+  );
   expect(byHeader.headers.get('location')).toBe('http://web.test/zh-Hans/search?q=river');
-  const byCookie = await proxy(new NextRequest('http://web.test/w/book', {
-    headers: { cookie: 'rezics_locale=en', 'accept-language': 'zh-Hans' } }));
-  expect(byCookie.headers.get('location')).toBe('http://web.test/en/w/book');
-  const explicit = await proxy(new NextRequest('http://web.test/zh-Hans/w/book', {
-    headers: { cookie: 'rezics_locale=en' } }));
+  const byCookie = await proxy(
+    new NextRequest(`${'http://web.test'}${resourceHref('/w/', 'book')}`, {
+      headers: { cookie: 'rezics_locale=en', 'accept-language': 'zh-Hans' },
+    }),
+  );
+  expect(byCookie.headers.get('location')).toBe(
+    `${'http://web.test'}${localizedPath(resourceHref('/w/', 'book'), 'en')}`,
+  );
+  const explicit = await proxy(
+    new NextRequest(
+      `${'http://web.test'}${localizedPath(resourceHref('/w/', 'book'), 'zh-Hans')}`,
+      {
+        headers: { cookie: 'rezics_locale=en' },
+      },
+    ),
+  );
   expect(explicit.headers.get('location')).toBeNull();
-  expect(explicit.headers.get('x-middleware-request-x-rezics-page-url'))
-    .toBe('http://web.test/zh-Hans/w/book');
+  expect(explicit.headers.get('x-middleware-request-x-rezics-page-url')).toBe(
+    `${'http://web.test'}${localizedPath(resourceHref('/w/', 'book'), 'zh-Hans')}`,
+  );
   const auth = await proxy(new NextRequest('http://web.test/auth/start'));
   expect(auth.headers.get('location')).toBeNull();
   const other = await proxy(new NextRequest('http://web.test/inbox'));
@@ -177,13 +281,18 @@ test('IAM01: the proxy refreshes before the page and hands the new session to bo
   const { fetcher, exchanges } = account(() => issued('user-1'));
   configure(fetcher);
   const refreshToken = crypto.randomUUID();
-  const response = await proxy(new NextRequest('http://web.test/en/studio', { headers: {
-    cookie: `rezics_locale=en; rezics_refresh=${refreshToken}` } }));
+  const response = await proxy(
+    new NextRequest('http://web.test/en/studio', {
+      headers: {
+        cookie: `rezics_locale=en; rezics_refresh=${refreshToken}`,
+      },
+    }),
+  );
   expect(exchanges).toHaveLength(1);
   const set = response.headers.getSetCookie();
-  expect(set.find(line => line.startsWith('rezics_access='))).toContain('HttpOnly');
-  expect(set.find(line => line.startsWith('rezics_refresh='))).not.toContain(refreshToken);
-  expect(set.find(line => line.startsWith('rezics_session_key='))).toContain('HttpOnly');
+  expect(set.find((line) => line.startsWith('rezics_access='))).toContain('HttpOnly');
+  expect(set.find((line) => line.startsWith('rezics_refresh='))).not.toContain(refreshToken);
+  expect(set.find((line) => line.startsWith('rezics_session_key='))).toContain('HttpOnly');
   // Code after the proxy reads the rotated tokens from the forwarded Cookie header.
   const forwarded = response.headers.get('x-middleware-request-cookie') ?? '';
   expect(forwarded).toContain('rezics_locale=en');
@@ -194,54 +303,95 @@ test('IAM01: the proxy refreshes before the page and hands the new session to bo
 test('IAM01: a refresh extends the same Main session Agent key', async () => {
   configure(account(() => issued('user-1')).fetcher);
   const key = crypto.randomUUID();
-  const response = await proxy(new NextRequest('http://web.test/en/studio', { headers: {
-    cookie: `rezics_refresh=${crypto.randomUUID()}; rezics_session_key=${key}` } }));
-  expect(response.headers.getSetCookie().find(line => line.startsWith('rezics_session_key=')))
-    .toContain(`rezics_session_key=${key}`);
-  expect(response.headers.get('x-middleware-request-cookie')).toContain(`rezics_session_key=${key}`);
+  const response = await proxy(
+    new NextRequest('http://web.test/en/studio', {
+      headers: {
+        cookie: `rezics_refresh=${crypto.randomUUID()}; rezics_session_key=${key}`,
+      },
+    }),
+  );
+  expect(
+    response.headers.getSetCookie().find((line) => line.startsWith('rezics_session_key=')),
+  ).toContain(`rezics_session_key=${key}`);
+  expect(response.headers.get('x-middleware-request-cookie')).toContain(
+    `rezics_session_key=${key}`,
+  );
 });
 
 test('IAM01: a refused refresh signs the browser out cleanly instead of failing the page', async () => {
   configure(account(() => Response.json({ error: 'invalid_grant' }, { status: 400 })).fetcher);
-  const response = await proxy(new NextRequest('http://web.test/en', { headers: {
-    cookie: `rezics_refresh=${crypto.randomUUID()}; rezics_session=x; rezics_subject=y; rezics_session_key=z` } }));
+  const response = await proxy(
+    new NextRequest('http://web.test/en', {
+      headers: {
+        cookie: `rezics_refresh=${crypto.randomUUID()}; rezics_session=x; rezics_subject=y; rezics_session_key=z`,
+      },
+    }),
+  );
   const set = response.headers.getSetCookie();
-  for (const name of ['rezics_access', 'rezics_refresh', 'rezics_session',
-    'rezics_session_key', 'rezics_subject']) {
-    expect(set.find(line => line.startsWith(`${name}=`))).toMatch(/Max-Age=0/);
+  for (const name of [
+    'rezics_access',
+    'rezics_refresh',
+    'rezics_session',
+    'rezics_session_key',
+    'rezics_subject',
+  ]) {
+    expect(set.find((line) => line.startsWith(`${name}=`))).toMatch(/Max-Age=0/);
   }
   expect(response.headers.get('x-middleware-request-cookie') ?? '').not.toContain('rezics_');
   // Signed out or current: no Account call and no changes.
   let calls = 0;
-  configure((async () => { calls += 1; return issued(); }) as unknown as typeof fetch);
-  const record = encodeSessionRecord({ user: { id: 'user-1' },
-    expiresAt: '2030-01-01T00:00:00Z' });
-  const untouched = await proxy(new NextRequest('http://web.test/en', { headers: {
-    cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_session_key=${crypto.randomUUID()}` } }));
+  configure((async () => {
+    calls += 1;
+    return issued();
+  }) as unknown as typeof fetch);
+  const record = encodeSessionRecord({ user: { id: 'user-1' }, expiresAt: '2030-01-01T00:00:00Z' });
+  const untouched = await proxy(
+    new NextRequest('http://web.test/en', {
+      headers: {
+        cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_session_key=${crypto.randomUUID()}`,
+      },
+    }),
+  );
   expect(calls).toBe(0);
   expect(untouched.headers.getSetCookie()).toEqual([]);
-  const migrated = await proxy(new NextRequest('http://web.test/en', { headers: {
-    cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_subject=old` } }));
-  expect(migrated.headers.getSetCookie().some(line => line.startsWith('rezics_session_key='))).toBe(true);
-  expect(migrated.headers.getSetCookie().find(line => line.startsWith('rezics_subject=')))
-    .toMatch(/Max-Age=0/);
+  const migrated = await proxy(
+    new NextRequest('http://web.test/en', {
+      headers: {
+        cookie: `rezics_access=${token('user-1')}; rezics_session=${record}; rezics_subject=old`,
+      },
+    }),
+  );
+  expect(
+    migrated.headers.getSetCookie().some((line) => line.startsWith('rezics_session_key=')),
+  ).toBe(true);
+  expect(
+    migrated.headers.getSetCookie().find((line) => line.startsWith('rezics_subject=')),
+  ).toMatch(/Max-Age=0/);
   expect(migrated.headers.get('x-middleware-request-cookie')).toContain('rezics_session_key=');
   expect(migrated.headers.get('x-middleware-request-cookie')).not.toContain('rezics_subject=');
 });
 
 test('IAM01: an unavailable refresh signs out this request and retries the next one', async () => {
   let available = false;
-  const { fetcher, exchanges } = account(() => available
-    ? issued() : new Response('Account unavailable', { status: 503 }));
+  const { fetcher, exchanges } = account(() =>
+    available ? issued() : new Response('Account unavailable', { status: 503 }),
+  );
   configure(fetcher);
   const stale = crypto.randomUUID();
-  const record = encodeSessionRecord({ user: { id: 'user-1' },
-    expiresAt: '2030-01-01T00:00:00Z' });
-  const request = () => proxy(new NextRequest('http://web.test/en/w/book', { headers: {
-    cookie: `rezics_refresh=${stale}; rezics_session=${record}` } }));
+  const record = encodeSessionRecord({ user: { id: 'user-1' }, expiresAt: '2030-01-01T00:00:00Z' });
+  const request = () =>
+    proxy(
+      new NextRequest(`${'http://web.test'}${localizedPath(resourceHref('/w/', 'book'), 'en')}`, {
+        headers: {
+          cookie: `rezics_refresh=${stale}; rezics_session=${record}`,
+        },
+      }),
+    );
   const first = await request();
   expect(first.headers.get('x-middleware-request-cookie')).not.toContain('rezics_access=');
-  expect(first.headers.getSetCookie().some(line => line.startsWith('rezics_refresh='))).toBe(false);
+  expect(first.headers.getSetCookie().some((line) => line.startsWith('rezics_refresh='))).toBe(
+    false,
+  );
   available = true;
   const second = await request();
   expect(second.headers.get('x-middleware-request-cookie')).toContain('rezics_access=');
@@ -249,10 +399,23 @@ test('IAM01: an unavailable refresh signs out this request and retries the next 
 });
 
 test('IAM01: a partial access session is removed from both page and browser', async () => {
-  configure(account(() => { throw new Error('partial sessions must not refresh'); }).fetcher);
-  const response = await proxy(new NextRequest('http://web.test/en/w/book', { headers: {
-    cookie: `rezics_access=orphan; rezics_refresh=${crypto.randomUUID()}; rezics_session_key=${crypto.randomUUID()}` } }));
+  configure(
+    account(() => {
+      throw new Error('partial sessions must not refresh');
+    }).fetcher,
+  );
+  const response = await proxy(
+    new NextRequest(`${'http://web.test'}${localizedPath(resourceHref('/w/', 'book'), 'en')}`, {
+      headers: {
+        cookie: `rezics_access=orphan; rezics_refresh=${crypto.randomUUID()}; rezics_session_key=${crypto.randomUUID()}`,
+      },
+    }),
+  );
   expect(response.headers.get('x-middleware-request-cookie') ?? '').not.toContain('rezics_');
-  expect(response.headers.getSetCookie().filter(line => line.startsWith('rezics_'))
-    .every(line => line.includes('Max-Age=0'))).toBe(true);
+  expect(
+    response.headers
+      .getSetCookie()
+      .filter((line) => line.startsWith('rezics_'))
+      .every((line) => line.includes('Max-Age=0')),
+  ).toBe(true);
 });

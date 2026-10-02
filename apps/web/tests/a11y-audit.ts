@@ -7,63 +7,127 @@
 //
 // `--account` signs in someone who writes in Studio and manages the Realm, as
 // the demo seed's first person does; without it only signed-out pages run.
+import { profileHref } from '../features/profile/route.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import { resourceHref, spaceHref } from '../features/address/path.ts';
 import { rmSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { type Browser, chromium, type Page } from '@playwright/test';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 import { signIn } from './perf-targets.ts';
 
-const { values } = parseArgs({ options: { base: { type: 'string' }, work: { type: 'string' },
-  chapter: { type: 'string' }, profile: { type: 'string' }, realm: { type: 'string', default: 'fiction' },
-  account: { type: 'string' }, only: { type: 'string' } } });
+const { values } = parseArgs({
+  options: {
+    base: { type: 'string' },
+    work: { type: 'string' },
+    chapter: { type: 'string' },
+    profile: { type: 'string' },
+    realm: { type: 'string', default: 'fiction' },
+    account: { type: 'string' },
+    only: { type: 'string' },
+  },
+});
 if (!values.base || !values.work || !values.chapter || !values.profile) {
   throw new Error('--base, --work, --chapter and --profile are required');
 }
 
-interface Target { name: string; path: string | ((page: Page) => Promise<string>) }
+interface Target {
+  name: string;
+  path: string | ((page: Page) => Promise<string>);
+}
 
-const work = `/en/w/${values.work}`;
+const work = localizedPath(resourceHref('/w/', values.work), 'en');
 const signedOut: Target[] = [
-  { name: 'home', path: '/en' }, { name: 'home-top', path: '/en?sort=top' },
-  { name: 'discover', path: '/en/discover' }, { name: 'search', path: '/en/search?q=the' },
-  { name: 'search-empty', path: '/en/search' }, { name: 'work', path: work },
-  { name: 'work-contents', path: `${work}/contents` }, { name: 'work-discussion', path: `${work}/discussion` },
-  { name: 'work-versions', path: `${work}/versions` }, { name: 'work-history', path: `${work}/history` },
-  { name: 'reader', path: `${work}/read/${values.chapter}` }, { name: 'realm', path: `/en/r/${values.realm}` },
-  { name: 'realm-about', path: `/en/r/${values.realm}/about` }, { name: 'realm-works', path: `/en/r/${values.realm}/works` },
-  { name: 'realm-discussions', path: `/en/r/${values.realm}/discussions` },
-  { name: 'profile', path: `/en/@${values.profile}` }, { name: 'profile-works', path: `/en/@${values.profile}/works` },
-  { name: 'notifications-signed-out', path: '/en/notifications' }, { name: 'not-found', path: '/en/no-such-page/x' },
+  { name: 'home', path: '/en' },
+  { name: 'home-top', path: '/en?sort=top' },
+  { name: 'discover', path: '/en/discover' },
+  { name: 'search', path: '/en/search?q=the' },
+  { name: 'search-empty', path: '/en/search' },
+  { name: 'work', path: work },
+  { name: 'work-contents', path: `${work}/contents` },
+  { name: 'work-discussion', path: `${work}/discussion` },
+  { name: 'work-versions', path: `${work}/versions` },
+  { name: 'work-history', path: `${work}/history` },
+  { name: 'reader', path: `${work}/read/${values.chapter}` },
+  { name: 'realm', path: localizedPath(spaceHref(values.realm, 'community'), 'en') },
+  {
+    name: 'realm-about',
+    path: localizedPath(spaceHref(values.realm, 'community', ['about']), 'en'),
+  },
+  { name: 'realm-works', path: localizedPath(spaceHref(values.realm, 'site', ['browse']), 'en') },
+  {
+    name: 'realm-discussions',
+    path: localizedPath(spaceHref(values.realm, 'community', ['discussions']), 'en'),
+  },
+  { name: 'profile', path: localizedPath(profileHref(values.profile), 'en') },
+  { name: 'profile-works', path: localizedPath(`${profileHref(values.profile)}/works`, 'en') },
+  { name: 'notifications-signed-out', path: '/en/notifications' },
+  { name: 'not-found', path: '/en/no-such-page/x' },
   { name: 'zh-home', path: '/zh-Hans' },
 ];
 
 /** The first link on the page whose address matches, for pages reached through data. */
 const firstLink = (from: string, pattern: RegExp) => async (page: Page) => {
   await page.goto(from);
-  const hrefs = await page.locator('a[href]').evaluateAll(links => links.map(link => link.getAttribute('href')!));
-  const href = hrefs.find(value => pattern.test(value));
+  const hrefs = await page
+    .locator('a[href]')
+    .evaluateAll((links) => links.map((link) => link.getAttribute('href')!));
+  const href = hrefs.find((value) => pattern.test(value));
   if (!href) throw new Error(`No link matching ${pattern} on ${from}`);
   return href;
 };
 
 const signedIn: Target[] = [
-  { name: 'home-signed-in', path: '/en' }, { name: 'notifications', path: '/en/notifications' },
-  { name: 'library', path: '/en/library' }, { name: 'settings', path: '/en/settings' },
-  { name: 'studio', path: async page => { await page.goto('/en/studio'); return new URL(page.url()).pathname; } },
-  { name: 'studio-new', path: async page => `${await studioDesk(page)}/new` },
-  { name: 'studio-work', path: async page => firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page) },
-  { name: 'studio-work-details', path: async page =>
-    `${await firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page)}?tab=details` },
-  { name: 'studio-write', path: async page =>
-    firstLink(`${await firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page)}?tab=chapters`,
-      /\/(?:write|chapters)\/[^/?]+$/)(page) },
+  { name: 'home-signed-in', path: '/en' },
+  { name: 'notifications', path: '/en/notifications' },
+  { name: 'library', path: '/en/library' },
+  { name: 'settings', path: '/en/settings' },
+  {
+    name: 'studio',
+    path: async (page) => {
+      await page.goto('/en/studio');
+      return new URL(page.url()).pathname;
+    },
+  },
+  { name: 'studio-new', path: async (page) => `${await studioDesk(page)}/new` },
+  {
+    name: 'studio-work',
+    path: async (page) => firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page),
+  },
+  {
+    name: 'studio-work-details',
+    path: async (page) =>
+      `${await firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page)}?tab=details`,
+  },
+  {
+    name: 'studio-write',
+    path: async (page) =>
+      firstLink(
+        `${await firstLink(await studioDesk(page), /\/works\/[^/?]+$/)(page)}?tab=chapters`,
+        /\/(?:write|chapters)\/[^/?]+$/,
+      )(page),
+  },
   { name: 'manage', path: '/en/manage' },
-  { name: 'manage-queue', path: async page => firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page) },
-  { name: 'manage-members', path: async page => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/members` },
-  { name: 'manage-roles', path: async page => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/roles` },
-  { name: 'manage-settings', path: async page =>
-    `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/settings` },
-  { name: 'manage-log', path: async page => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/log` },
+  {
+    name: 'manage-queue',
+    path: async (page) => firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page),
+  },
+  {
+    name: 'manage-members',
+    path: async (page) => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/members`,
+  },
+  {
+    name: 'manage-roles',
+    path: async (page) => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/roles`,
+  },
+  {
+    name: 'manage-settings',
+    path: async (page) => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/settings`,
+  },
+  {
+    name: 'manage-log',
+    path: async (page) => `${await firstLink('/en/manage', /\/manage\/r\/[^/?]+$/)(page)}/log`,
+  },
 ];
 
 async function studioDesk(page: Page) {
@@ -71,8 +135,8 @@ async function studioDesk(page: Page) {
   return new URL(page.url()).pathname;
 }
 
-const selected = (targets: Target[]) => targets.filter(target => !values.only
-  || values.only.split(',').includes(target.name));
+const selected = (targets: Target[]) =>
+  targets.filter((target) => !values.only || values.only.split(',').includes(target.name));
 
 /** axe on every target in both themes at both widths. One context carries a session throughout, so a token
  * refresh on one page is what the next page uses (Account revokes a reused refresh token). */
@@ -83,7 +147,10 @@ async function audit(browser: Browser, targets: Target[], storageState?: string)
   try {
     for (const target of selected(targets)) {
       for (const theme of ['light', 'dark'] as const) {
-        for (const viewport of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
+        for (const viewport of [
+          { width: 1280, height: 860 },
+          { width: 390, height: 844 },
+        ]) {
           try {
             await context.addCookies([{ name: 'rezics_theme', value: theme, url: values.base! }]);
             await page.setViewportSize(viewport);
@@ -103,7 +170,9 @@ async function audit(browser: Browser, targets: Target[], storageState?: string)
         }
       }
     }
-  } finally { await context.close(); }
+  } finally {
+    await context.close();
+  }
   return failures;
 }
 
@@ -111,15 +180,20 @@ const browser = await chromium.launch();
 try {
   let failures = await audit(browser, signedOut);
   if (values.account) {
-    const [email, password] = [values.account.slice(0, values.account.indexOf(':')),
-      values.account.slice(values.account.indexOf(':') + 1)];
+    const [email, password] = [
+      values.account.slice(0, values.account.indexOf(':')),
+      values.account.slice(values.account.indexOf(':') + 1),
+    ];
     const context = await browser.newContext({ baseURL: values.base });
     await signIn(await context.newPage(), '/en', { email, password });
     const state = `${process.env.TMPDIR ?? '/tmp'}/rezics-a11y-audit-${process.pid}.json`;
     await context.storageState({ path: state });
     await context.close();
-    try { failures += await audit(browser, signedIn, state); }
-    finally { rmSync(state, { force: true }); }
+    try {
+      failures += await audit(browser, signedIn, state);
+    } finally {
+      rmSync(state, { force: true });
+    }
   }
   console.log(`\n${failures} page states with violations`);
   process.exitCode = failures ? 1 : 0;

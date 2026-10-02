@@ -1,3 +1,4 @@
+import { profileHref } from '../features/profile/route.ts';
 import { describe, expect, test } from 'bun:test';
 import {
   EntityPickerSource,
@@ -140,7 +141,7 @@ describe('G-941 shared menu and localized controls', () => {
       'content-preferences',
       'settings',
     ]);
-    expect(sections[0]![0]).toMatchObject({ href: '/@aster' });
+    expect(sections[0]![0]).toMatchObject({ href: profileHref('aster') });
     expect(sections[1]![2]).toMatchObject({ href: '/settings#reading', arrow: true });
   });
   test('each picker locale supplies all labels and preserves placeholder meaning', () => {

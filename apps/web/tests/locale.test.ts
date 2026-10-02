@@ -1,8 +1,15 @@
+import { resourceHref } from '../features/address/path.ts';
 import { describe, expect, test } from 'bun:test';
 import { defineMessages, localeNames, uiLocales } from '../i18n/define.ts';
 import { i18n } from '../i18n/instance.ts';
-import { isPublicPagePath, localizedPath, matchUiLocaleTag, pathLocale, resolveLocale,
-  withoutLocale } from '../i18n/locale.ts';
+import {
+  isPublicPagePath,
+  localizedPath,
+  matchUiLocaleTag,
+  pathLocale,
+  resolveLocale,
+  withoutLocale,
+} from '../i18n/locale.ts';
 import { navigation } from '../features/shell/navigation.ts';
 import { defaultModuleTitle } from '../features/zones/messages.ts';
 
@@ -21,11 +28,21 @@ describe('interface locale', () => {
 
   test('all eight prefixes are canonical and regional browser tags match them', () => {
     expect(uiLocales).toEqual(['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']);
-    expect(Object.values(localeNames)).toEqual(['English', '繁體中文', '简体中文', '日本語',
-      '한국어', 'Deutsch', 'Français', 'Español']);
+    expect(Object.values(localeNames)).toEqual([
+      'English',
+      '繁體中文',
+      '简体中文',
+      '日本語',
+      '한국어',
+      'Deutsch',
+      'Français',
+      'Español',
+    ]);
     for (const locale of uiLocales) expect(pathLocale(`/${locale}/search`)).toBe(locale);
-    for (const tag of ['zh-Hant', 'zh-TW', 'zh-HK', 'zh-MO']) expect(matchUiLocaleTag(tag)).toBe('zh-Hant');
-    for (const tag of ['zh', 'zh-Hans', 'zh-CN', 'zh-SG']) expect(matchUiLocaleTag(tag)).toBe('zh-Hans');
+    for (const tag of ['zh-Hant', 'zh-TW', 'zh-HK', 'zh-MO'])
+      expect(matchUiLocaleTag(tag)).toBe('zh-Hant');
+    for (const tag of ['zh', 'zh-Hans', 'zh-CN', 'zh-SG'])
+      expect(matchUiLocaleTag(tag)).toBe('zh-Hans');
     expect(matchUiLocaleTag('ko-KR')).toBe('ko');
     expect(matchUiLocaleTag('pt-BR')).toBeUndefined();
   });
@@ -34,14 +51,14 @@ describe('interface locale', () => {
     for (const locale of uiLocales) {
       for (const item of navigation) expect(item.label[locale].trim()).not.toBe('');
     }
-    const notifications = navigation.find(item => item.href === '/notifications')!;
+    const notifications = navigation.find((item) => item.href === '/notifications')!;
     expect(notifications.label.de).toBe('Benachrichtigungen');
     expect(notifications.bottomLabel?.de).toBe('Meldungen');
     expect(notifications.label.fr).toBe('Notifications');
     expect(notifications.bottomLabel?.fr).toBe('Alertes');
     expect(notifications.label.es).toBe('Notificaciones');
     expect(notifications.bottomLabel?.es).toBe('Avisos');
-    const library = navigation.find(item => item.href === '/library')!;
+    const library = navigation.find((item) => item.href === '/library')!;
     expect(library.label.fr).toBe('Bibliothèque');
     expect(library.bottomLabel?.fr).toBe('Livres');
   });
@@ -64,14 +81,19 @@ describe('interface locale', () => {
   });
 
   test('page paths keep one locale prefix while preserving query and fragments', () => {
-    expect(pathLocale('/zh-Hans/w/book')).toBe('zh-Hans');
+    expect(pathLocale(localizedPath(resourceHref('/w/', 'book'), 'zh-Hans'))).toBe('zh-Hans');
     expect(pathLocale('/english/w/book')).toBeNull();
-    expect(localizedPath('/w/book?scope=realm#ratings', 'zh-Hans'))
-      .toBe('/zh-Hans/w/book?scope=realm#ratings');
-    expect(localizedPath('/en/w/book?scope=mine', 'zh-Hans')).toBe('/zh-Hans/w/book?scope=mine');
+    expect(localizedPath(`${resourceHref('/w/', 'book')}?scope=realm#ratings`, 'zh-Hans')).toBe(
+      localizedPath(`${resourceHref('/w/', 'book')}?scope=realm#ratings`, 'zh-Hans'),
+    );
+    expect(
+      localizedPath(localizedPath(`${resourceHref('/w/', 'book')}?scope=mine`, 'en'), 'zh-Hans'),
+    ).toBe(localizedPath(`${resourceHref('/w/', 'book')}?scope=mine`, 'zh-Hans'));
     expect(localizedPath('/', 'en')).toBe('/en');
-    expect(withoutLocale('/en/w/book')).toBe('/w/book');
-    expect(isPublicPagePath('/zh-Hans/w/book')).toBe(true);
+    expect(withoutLocale(localizedPath(resourceHref('/w/', 'book'), 'en'))).toBe(
+      resourceHref('/w/', 'book'),
+    );
+    expect(isPublicPagePath(localizedPath(resourceHref('/w/', 'book'), 'zh-Hans'))).toBe(true);
     expect(isPublicPagePath('/identity/select')).toBe(false);
     expect(isPublicPagePath('/inbox')).toBe(false);
   });
@@ -91,7 +113,10 @@ describe('interface locale', () => {
 
   test('every visible namespace resolves in all eight supported locales', async () => {
     for (const locale of uiLocales) {
-      const result = await i18n.getTranslation(['shell', 'home', 'search', 'auth', 'work', 'studio'], [locale]);
+      const result = await i18n.getTranslation(
+        ['shell', 'home', 'search', 'auth', 'work', 'studio'],
+        [locale],
+      );
       expect(result.locale.current).toBe(locale);
       expect(result.t.auth.signInHeading).toContain('REZICS');
       if (locale === 'en') expect(result.t.auth.signInHeading).toBe('Sign in to REZICS');
@@ -105,8 +130,19 @@ describe('interface locale', () => {
   });
 
   test('Zone module fallback headings resolve in every interface locale', async () => {
-    const types = ['hero-carousel', 'chip-nav', 'announcement', 'shelf', 'ranking', 'editorial-list',
-      'quote-stream', 'rising', 'decision-log', 'discussion-list', 'people'] as const;
+    const types = [
+      'hero-carousel',
+      'chip-nav',
+      'announcement',
+      'shelf',
+      'ranking',
+      'editorial-list',
+      'quote-stream',
+      'rising',
+      'decision-log',
+      'discussion-list',
+      'people',
+    ] as const;
     for (const locale of uiLocales) {
       const { t } = await i18n.getTranslation('zones', [locale]);
       for (const type of types) expect(defaultModuleTitle(type, t).trim()).not.toBe('');
