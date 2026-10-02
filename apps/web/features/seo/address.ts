@@ -2,10 +2,19 @@ import { headers } from 'next/headers';
 import { uiLocales, type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 
-/** The localized page's URL as the proxy recorded it, without its query; null for other requests. */
+/** The localized page's URL as the proxy recorded it, including its selections; null for other requests. */
 export async function pageUrl(): Promise<URL | null> {
   const url = (await headers()).get('x-rezics-page-url');
   return url ? new URL(url) : null;
+}
+
+/** Selections that change the anonymous representation survive canonical annotations. */
+export function representationPath(page: URL): string {
+  const query = new URLSearchParams();
+  for (const key of ['language', 'version']) {
+    for (const value of page.searchParams.getAll(key)) query.append(key, value);
+  }
+  return page.pathname + (query.size ? `?${query}` : '');
 }
 
 /**

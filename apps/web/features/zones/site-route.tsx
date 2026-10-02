@@ -1,6 +1,6 @@
 import type { ZoneMember, ZoneWork } from '@rezics/zone-sdk';
 import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { isUiLocale } from '../../i18n/define.ts';
 import { getMessages, getTranslation } from '../../i18n/server.ts';
@@ -8,13 +8,14 @@ import { zoneContentText } from '../language/untagged.ts';
 import { zoneText } from '../realm/adapt.ts';
 import type { RealmMessages } from '../realm/messages.ts';
 import { loadRealmView, RealmFrame } from '../realm/realm-page.tsx';
-import { readPresentation, readZoneRoute, resolveRealm } from '../realm/read.ts';
-import { parseCursor, parseRealmRef, realmHref, siteHref } from '../realm/route.ts';
+import { readPresentation, readZoneRoute, resolveSite, type SiteResolution } from '../realm/read.ts';
+import { parseCursor, siteHref } from '../realm/route.ts';
+import { RealmBrowseRoute, SiteHomeRoute } from '../realm/routes.tsx';
 import { RealmUnavailable } from '../realm/states.tsx';
 import type { ReadFailure, ZoneRouteRead } from '../realm/types.ts';
-import { ListFailure } from '../realm/views.tsx';
+import { ListFailure, Pager } from '../realm/views.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { localeAlternates, pageUrl } from '../seo/address.ts';
+import { pageUrl, representationPath } from '../seo/address.ts';
 import { workPageMetadata } from '../seo/work.ts';
 import { readEntityProjection } from '../entity-page/read.ts';
 import { readMembers } from '../wiki/members.ts';
@@ -31,52 +32,64 @@ import { DocumentPage, DocumentUnavailable, IndexPage, PageNotAvailable } from '
 import { ZoneEntityPage } from './site-entity.tsx';
 import type { SiteCrumb } from './site-navigation.tsx';
 import { workBase, workTabOf, ZoneWorkPage } from './site-work.tsx';
+import { addressKey } from '../address/path.ts';
+import { EntityPage } from '../entity-page/entity-page.tsx';
+import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
+import { zoneTheme } from './theme.ts';
+import { MemberList } from './site-pages.tsx';
+import type { ZoneContext } from '@rezics/zone-sdk';
+import { cookies, headers } from 'next/headers';
+import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
+import { ZONE_NONCE_HEADER } from './csp.ts';
 
-// `/{locale}/r/{ref}/…`: whatever Main resolves a path under the Zone to, rendered inside the Zone's frame.
-// Static Realm routes (`browse`, `about`, …) take precedence over this catch-all; Main decides what the rest
-// of the path is (mount, member, Work), so nothing here matches routes or checks membership.
+// /{locale}/z/{space}/… has one optional catch-all, including home. Main's
+// route table decides which mount or member a path names; community tabs cannot shadow it.
 
 type Search = Record<string, string | string[] | undefined>;
 export interface ZoneSiteProps {
-  params: Promise<{ locale: string; realm: string; path: string[] }>;
+  params: Promise<{ locale: string; space: string; path?: string[] }>;
   searchParams: Promise<Search>;
 }
 
 const routePath = (path: readonly string[]) => `/${path.join('/')}`;
 /** `cursor` pages a mount's own index; below the mount it belongs to a Work's tabs. */
 const routeCursor = (path: readonly string[], search: Search) => path.length === 1 ? parseCursor(search) : undefined;
-const stringQuery = (search: Search) => Object.fromEntries(Object.entries(search)
-  .filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
 
 /** Search and link-preview metadata: a Work's own (pointing at `/w/{id}`), or a mounted page's (its own address). */
 export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps): Promise<Metadata> {
-  const [{ locale, realm, path }, search] = await Promise.all([params, searchParams]);
+  const [{ locale, space, path = [] }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) return {};
-  const [resolved, { t }] = await Promise.all([resolveRealm(realm, locale), getTranslation('realm', [locale])]);
+  const [resolved, { t }] = await Promise.all([resolveSite(space, locale), getTranslation('realm', [locale])]);
   const hidden = { robots: { index: false } };
-  if (resolved.kind !== 'realm' || !resolved.zone) {
+  if (resolved.kind !== 'site') {
     return { title: resolved.kind === 'unavailable' ? t.unavailableTitle : t.notFoundTitle, ...hidden };
   }
   const cursor = routeCursor(path, search);
-  const read = await readZoneRoute(resolved.zone.id, routePath(path), cursor);
+  const read = await readZoneRoute(resolved.zone, routePath(path), cursor);
   if (!read.ok) {
     if (read.failure !== 'missing') return { title: t.unavailableTitle, ...hidden };
     const { t: page } = await getTranslation('zones', [locale]);
-    return { title: `${page.pageMissingTitle} · ${resolved.header.name.value}`, ...hidden };
+    if (resolved.realm && path.length === 1 && path[0] === 'browse') {
+      return { title: `${page.browseTab} · ${resolved.address.canonical.slugSource}`, ...hidden };
+    }
+    return { title: `${page.pageMissingTitle} · ${resolved.address.canonical.slugSource}`, ...hidden };
   }
   const route = read.data;
-  const zone = resolved.header.name.value;
+  const zone = resolved.address.canonical.slugSource;
   const address = async (title: string): Promise<Metadata> => {
-    const origin = (await pageUrl())?.origin;
+    const page = await pageUrl();
     return { title: `${title} · ${zone}`, ...cursor ? hidden : {},
-      ...origin ? { alternates: localeAlternates(origin, `/r/${encodeURIComponent(realm)}${routePath(path)}`, locale) } : {} };
+      ...page ? { alternates: { canonical: page.origin + representationPath(page) } } : {} };
   };
   if (route.kind === 'index') {
-    const presentation = await readPresentation(resolved.zone.id);
+    const presentation = await readPresentation(resolved.zone);
     const mount = presentation.ok ? presentation.data.navigation.find(item => item.segment === route.mount.segment) : null;
     return address(mount?.name.value ?? route.mount.segment);
   }
-  if (route.kind === 'home') return { title: zone };
+  if (route.kind === 'home') {
+    const presentation = await readPresentation(resolved.zone);
+    return presentation.ok ? { ...await address(zone), title: zone } : { title: t.unavailableTitle, ...hidden };
+  }
   const id = idOf(route.resource.id);
   const work = id ? await resolveWork(id, locale) : null;
   if (route.kind === 'document') return address(work?.kind === 'work' ? work.header.title.value : zone);
@@ -84,7 +97,7 @@ export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps):
   if (!work || work.kind !== 'work') return { title: zone, ...hidden };
   const tab = route.tab === null ? 'overview' : route.tab as WorkTab;
   const { scope: _scope, realm: _realm, ...rest } = search;
-  return { title: `${work.header.title.value} · ${zone}`, ...await workPageMetadata(work, { tab }, rest, locale) };
+  return { ...await workPageMetadata(work, { tab }, rest, locale), ...await address(work.header.title.value) };
 }
 
 /** A read made as the signed-in reader can also fail on their identity; to the page that is the Zone being unavailable. */
@@ -94,15 +107,21 @@ function failure(reason: ReadFailure | 'identity' | 'sign-in', firstPage: string
 }
 
 export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Promise<ReactNode> {
-  const [{ locale, realm, path }, search] = await Promise.all([params, searchParams]);
+  const [{ locale, space, path = [] }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
-  if (parseRealmRef(realm)?.kind === 'id') {
-    const resolved = await resolveRealm(realm, locale);
-    if (resolved.kind === 'realm' && resolved.zone?.segment) {
-      redirect(siteHref(locale, resolved.zone.segment, path, stringQuery(search)));
-    }
+  const resolved = await resolveSite(space, locale);
+  if (resolved.kind === 'missing') notFound();
+  if (resolved.kind === 'unavailable') return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+  if (!resolved.realm) return standaloneSite(resolved, locale, path, search);
+  // Read the Zone table before the starter Browse renderer, so a mount named
+  // browse is never shadowed. Main currently has no starter-browse route kind.
+  const routed = await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
+  const communityProps = { params: Promise.resolve({ locale, realm: space }), searchParams: Promise.resolve(search) };
+  if (routed.ok && routed.data.kind === 'home') return SiteHomeRoute(communityProps);
+  if (!routed.ok && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
+    return RealmBrowseRoute(communityProps);
   }
-  const view = await loadRealmView(realm, locale, search);
+  const view = await loadRealmView(space, locale, search, 'site');
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable') return <RealmUnavailable messages={await getMessages('realm', locale)} />;
   const zone = view.realm.zone;
@@ -119,7 +138,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     : await readZoneRoute(zone.id, routePath(path), cursor);
   if (!read.ok && read.failure === 'missing') notFound();
   const kept = (href: string) => withPosition(href, choice);
-  const home: SiteCrumb = { label: view.zone.name, href: kept(`/r/${encodeURIComponent(ref)}`) };
+  const home: SiteCrumb = { label: view.zone.name, href: kept(`/z/${encodeURIComponent(ref)}`) };
   const frame = (children: ReactNode, crumbs?: SiteCrumb[]) => <RealmFrame view={view} tab={null} locale={locale}
     search={search} address={address} crumbs={crumbs}>{children}</RealmFrame>;
   if (!read.ok) return frame(failure(read.failure, siteHref(locale, ref, path), view.messages));
@@ -129,7 +148,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     return mount ? zoneText(mount.name) : null;
   };
   switch (route.kind) {
-    case 'home': return redirect(realmHref(locale, ref));
+    case 'home': return SiteHomeRoute(communityProps);
     case 'document': {
       const id = idOf(route.resource.id);
       if (!id) notFound();
@@ -163,7 +182,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
     case 'detail': {
       const id = idOf(route.resource.id);
       if (!id) notFound();
-      const mount = route.mount ? { label: mountName(route.mount.segment) ?? zoneContentText(route.mount.segment), href: kept(`/r/${encodeURIComponent(ref)}/${encodeURIComponent(route.mount.segment)}`) } : null;
+      const mount = route.mount ? { label: mountName(route.mount.segment) ?? zoneContentText(route.mount.segment), href: kept(`/z/${encodeURIComponent(ref)}/${encodeURIComponent(route.mount.segment)}`) } : null;
       // What the page is comes from Main's page projection, which also answers 404 for a record not yet revealed.
       const projection = await readEntityProjection(id, state?.main);
       if (!projection.ok) {
@@ -175,7 +194,9 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
         const tab = workTabOf(route.tab);
         const work = await loadWork(id, locale);
         const title = work.ok ? zoneText(work.header.title) : zoneContentText(shortId(id));
-        return frame(<ZoneWorkPage base={workBase(ref, id, route.mount?.segment ?? null, view.context.realm)}
+        const base = workBase(ref, id, route.mount?.segment ?? null, view.context.realm);
+        base.path = `/z/${encodeURIComponent(ref)}/${(route.tab ? path.slice(0, -1) : path).map(encodeURIComponent).join('/')}`;
+        return frame(<ZoneWorkPage base={base}
           tab={tab} search={search} locale={locale} pkg={view.pkg} />,
         [home, ...mount ? [mount] : [], { label: title, href: null }]);
       }
@@ -185,8 +206,57 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
         : zoneContentText(shortId(id)));
       return frame(<ZoneEntityPage view={view} id={id} projection={projection.data} locale={locale} search={search}
         site={site} state={state} mount={route.mount?.segment ?? null}
-        path={`/r/${encodeURIComponent(ref)}/${path.map(encodeURIComponent).join('/')}`} />,
+        path={`/z/${encodeURIComponent(ref)}/${path.map(encodeURIComponent).join('/')}`} />,
       [home, ...mount ? [mount] : [], { label: title, href: null }]);
     }
   }
+}
+
+/** A site without a community uses only its Zone reads and the common renderer.
+ * It has no membership, Realm modules or invented Realm authority. */
+async function standaloneSite(resolved: Extract<SiteResolution, { kind: 'site' }>, locale: import('../../i18n/define.ts').UiLocale,
+  path: readonly string[], search: Search): Promise<ReactNode> {
+  const [route, presentation, messages, workMessages, jar, incoming] = await Promise.all([
+    readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)), readPresentation(resolved.zone),
+    getMessages('realm', locale), getMessages('workPage', locale), cookies(), headers(),
+  ]);
+  if (!route.ok && route.failure === 'missing') notFound();
+  if (!route.ok || !presentation.ok) return failure('unavailable', siteHref(locale,
+    addressKey(resolved.address.canonical), path), messages);
+  const ref = addressKey(resolved.address.canonical);
+  const zone: ZoneContext = { slug: presentation.data.official, realm: null,
+    name: zoneContentText(route.data.name ?? resolved.address.canonical.slugSource, route.data.language), description: null, icon: null, hero: null,
+    tokens: presentation.data.presentation.tokens, locale,
+    links: { home: siteHref(locale, ref, []), browse: siteHref(locale, ref, ['browse']),
+      works: siteHref(locale, ref, ['browse']), discussions: '', decisions: '', about: '' } };
+  const theme = zoneTheme(zone.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value), enabled: true });
+  const mounts = presentation.data.navigation;
+  const frame = (children: ReactNode) => <ZoneFrame zone={zone} dataZone={resolved.zone} theme={theme} pkg={null}
+    nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined} members={null} actions={null}
+    masthead={<ZoneMasthead zone={zone} members={null} actions={null} />} tabs={null}
+    site={{ label: zone.name.value, links: [{ href: siteHref(locale, ref, []),
+      label: zoneContentText(messages.home, locale) }, ...mounts.map(mount => ({ href: siteHref(locale, ref, [mount.segment]),
+      label: zoneText(mount.name) }))] }}>{children}</ZoneFrame>;
+  const read = route.data;
+  if (read.kind === 'home') return frame(<PageContainer><MemberList members={mounts.map(mount => ({
+    id: mount.target, href: siteHref(locale, ref, [mount.segment]), name: zoneText(mount.name), kind: null,
+  }))} /></PageContainer>);
+  if (read.kind === 'index') return frame(<PageContainer className="grid gap-6">
+    <MemberList members={read.items.map(item => ({ id: item.id, kind: null,
+      name: zoneText('title' in item ? item.title : item.name),
+      href: siteHref(locale, ref, [read.mount.segment, idOf(item.id)!]),
+    }))} />
+    <Pager next={read.nextCursor ? siteHref(locale, ref, path, { cursor: read.nextCursor }) : null}
+      first={parseCursor(search) ? siteHref(locale, ref, path) : null} messages={messages} />
+  </PageContainer>);
+  const id = idOf(read.resource.id);
+  if (!id) notFound();
+  if (read.kind === 'document') {
+    const work = await loadWork(id, locale);
+    if (!work.ok) return frame(<DocumentUnavailable messages={messages} workMessages={workMessages} />);
+    const text = await readText(work.header.mainVersion, work.header.selectedLanguage ?? undefined);
+    return frame(text.ok ? <DocumentPage work={work.header} text={text.data} messages={workMessages} />
+      : <DocumentUnavailable messages={messages} workMessages={workMessages} />);
+  }
+  return frame(<EntityPage resource={id} locale={locale} cursors={{}} />);
 }

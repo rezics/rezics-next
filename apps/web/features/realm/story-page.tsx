@@ -15,6 +15,7 @@ import type { Membership } from './membership-state.ts';
 import { messages as english, type RealmMessages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
 import { RealmTabs } from './realm-tabs.tsx';
+import { siteHref } from './route.ts';
 
 /** The Realm catalog a story renders in `locale`. */
 export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 'zh-Hans' ? { ...english, ...zhHans } : english;
@@ -26,7 +27,7 @@ export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 
  */
 export function RealmPageStory({ zone, modules = [], pkg = null, execution = { mode: 'fallback', reason: 'none-approved' },
   look = true, reader = 'light', members = null, navigation = [], membership = null,
-  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, position, locale, children }: {
+  membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, position, locale, children, site = false }: {
   zone: ZoneContext; modules?: readonly PlacedModule[]; pkg?: ZonePackage | null; execution?: Execution;
   look?: boolean; reader?: ReaderTheme; members?: string | null;
   navigation?: readonly { label: string; href: string }[];
@@ -36,26 +37,30 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
   browse?: ZoneBrowseEntry;
   /** The position control of a Zone that reads at the reader's place in a story. */
   position?: ReactNode;
-  locale: UiLocale; children?: ReactNode;
+  locale: UiLocale; children?: ReactNode; site?: boolean;
 }) {
   const zoneMessages = zoneMessagesFor(locale);
   const messages = realmMessagesFor(locale);
   const theme = zoneTheme(zone.tokens, { reader, enabled: look });
   const ref = zone.slug ?? 'classics';
   const actions = <>
-    <RealmMembership realm={zone.realm} realmName={zone.name.value} initial={membership}
+    {zone.realm ? <RealmMembership realm={zone.realm} realmName={zone.name.value} initial={membership}
       signedIn={membershipActions.kind !== 'signed-out'} signInHref="/auth/start" rulesHref={zone.links.about}
-      actions={membershipActions} locale={locale} messages={messages} />
+      actions={membershipActions} locale={locale} messages={messages} /> : null}
     <LookMenu enabled={look} labels={{ menu: zoneMessages.lookLabel, zone: zoneMessages.lookZone,
       standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
       saveFailed: zoneMessages.lookSaveFailed }} />
   </>;
   return <ZoneFrame zone={zone} dataZone={zone.slug ?? 'classics'} theme={theme} pkg={pkg} actions={actions}
     members={members} masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
-    tabs={<RealmTabs locale={locale} realmRef={ref} label={messages.sections} navigation={navigation}
+    tabs={site ? null : <RealmTabs locale={locale} realmRef={ref} label={messages.sections} navigation={navigation}
       labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
         discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
+    site={site ? { label: zoneMessages.browseTab, links: [
+      { href: siteHref(locale, ref, []), label: { value: messages.home, lang: locale, dir: 'ltr' } },
+      { href: siteHref(locale, ref, ['browse']), label: { value: zoneMessages.browseTab, lang: locale, dir: 'ltr' } },
+    ] } : undefined}
     position={position}
     notice={<ExecutionNotice execution={execution} showDesignHref={zone.links.home} messages={zoneMessages} />}>
     {/* Signed out, as a first visit: shelf controls lead to sign-in. */}

@@ -1,12 +1,14 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
-import { idOf, parseRealmRef } from './route.ts';
+import { idOf } from './route.ts';
+import { resolveAddress } from '../address/server.ts';
+import { addressKey } from '../address/path.ts';
+import type { ResolvedAddress } from '../address/client.ts';
 import { type AgentRead, failureOf, type FacetList, type Loaded,
-  type ModReleasePage, type OfficialZone,
+  type ModReleasePage,
   type RankingMetric, type RankingPage,
   type RealmDecisionsPage, type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmRoster,
-  type RealmZoneRead,
   type RealmWorksPage, type ZoneChapterPage, type ZoneDecisionPage, type ZoneEditorLists,
   type ZoneBrowsePage, type ZoneBrowseQuery, type ZoneGenrePage, type ZonePresentationRead, type ZoneReplyPage,
   type ZoneRouteRead, type ZoneWorkPage } from './types.ts';
@@ -42,53 +44,35 @@ export type RealmResolution =
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
-const officialZone = cache(async (segment: string): Promise<Loaded<OfficialZone>> =>
-  settle(() => main().v1.zones['by-segment']({ segment }).get()));
-
 export const readRealmHeader = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> =>
   settle(() => main().v1.realms({ realm }).get({ query: {} })));
 
-const readRealmZone = cache(async (realm: string): Promise<Loaded<RealmZoneRead>> =>
-  settle(() => main().v1.realms({ realm }).zone.get({ query: {} })));
-
 /**
- * The Realm behind `/r/{ref}`: a Realm UUID, an official Zone route segment,
- * or a community handle. Shared by every tab and its metadata.
+ * Main's shared resolver maps the Space address (including legacy capability
+ * links) to its Realm. Shared by every community tab and its metadata.
  */
 export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
-  const parsed = parseRealmRef(ref);
-  if (!parsed) return { kind: 'missing' };
-  let realm: string;
-  let zone: { id: string; segment: string | null } | null = null;
-  if (parsed.kind === 'segment') {
-    const official = await officialZone(parsed.segment);
-    if (official.ok) {
-      const realmId = idOf(official.data.realm);
-      const zoneId = idOf(official.data.zone);
-      if (!realmId || !zoneId) return { kind: 'unavailable' };
-      realm = realmId;
-      zone = { id: zoneId, segment: official.data.routeSegment };
-    } else {
-      if (official.failure !== 'missing') return { kind: 'unavailable' };
-      const community = await settle(() => main().v1.realms['by-handle']({ handle: parsed.segment }).get());
-      if (!community.ok) return { kind: community.failure === 'missing' ? 'missing' : 'unavailable' };
-      const realmId = idOf(community.data.realm);
-      if (!realmId) return { kind: 'unavailable' };
-      realm = realmId;
-    }
-  } else realm = parsed.id;
+  const resolved = await resolveAddress('space', ref, locale);
+  if (resolved.kind !== 'resolved') return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+  const realm = idOf(resolved.data.capabilities?.realm ?? '');
+  if (!realm) return { kind: 'missing' };
   const header = await readRealmHeader(realm, locale);
   if (!header.ok) return { kind: header.failure === 'missing' ? 'missing' : 'unavailable' };
-  const selected = await readRealmZone(realm);
-  if (selected.ok) {
-    const zoneId = idOf(selected.data.zone);
-    if (!zoneId || selected.data.realm !== header.data.id
-      || zone && (zone.id !== zoneId || zone.segment !== selected.data.routeSegment)) {
-      return { kind: 'unavailable' };
-    }
-    zone = { id: zoneId, segment: selected.data.routeSegment };
-  } else if (selected.failure !== 'missing' && !zone) return { kind: 'unavailable' };
-  return { kind: 'realm', ref, realm, header: header.data, zone };
+  const zoneId = idOf(resolved.data.capabilities?.zone ?? '');
+  return { kind: 'realm', ref: addressKey(resolved.data.canonical), realm, header: header.data,
+    zone: zoneId ? { id: zoneId, segment: null } : null };
+});
+
+export type SiteResolution = { kind: 'site'; address: ResolvedAddress; zone: string; realm: string | null }
+  | { kind: 'missing' } | { kind: 'unavailable' };
+
+/** Site resolution never guesses a Zone segment or requires a Realm capability. */
+export const resolveSite = cache(async (ref: string, locale: UiLocale): Promise<SiteResolution> => {
+  const resolved = await resolveAddress('space', ref, locale);
+  if (resolved.kind !== 'resolved') return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+  const zone = idOf(resolved.data.capabilities?.zone ?? '');
+  return zone ? { kind: 'site', address: resolved.data, zone,
+    realm: idOf(resolved.data.capabilities?.realm ?? '') } : { kind: 'missing' };
 });
 
 export const readPresentation = cache(async (zone: string): Promise<Loaded<ZonePresentationRead>> =>
@@ -168,8 +152,8 @@ export const readRealmDirectory = cache(async (_locale: UiLocale): Promise<Loade
   settle(() => main().v1.realms.get({ query: { limit: 6, sort: 'activity' } })));
 
 /** The members who chose to be listed (G-314's public roster), featured first by the moderators' choice. */
-export const readRoster = cache(async (realm: string): Promise<Loaded<RealmRoster>> =>
-  settle(() => main().v1.realms({ realm }).roster.get({ query: { limit: 24 } })));
+export const readRoster = cache(async (realm: string, cursor?: string): Promise<Loaded<RealmRoster>> =>
+  settle(() => main().v1.realms({ realm }).roster.get({ query: { limit: 24, after: cursor } }), cursor));
 
 /** An Agent's public profile, for a moderator's name and profile link. */
 export const readAgent = cache(async (agent: string): Promise<Loaded<AgentRead>> =>

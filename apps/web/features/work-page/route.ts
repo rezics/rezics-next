@@ -2,23 +2,22 @@
 // the routes, the components and their tests.
 
 import { withoutLocale } from '../../i18n/locale.ts';
+import { parseAddressSegment } from '../address/path.ts';
 
 /** The Work's views, in tab order. Each is its own URL. */
 export const workTabs = ['overview', 'contents', 'versions', 'discussion', 'history'] as const;
 export type WorkTab = (typeof workTabs)[number];
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// Main's address slug (`services/main/src/routes/addresses.ts`).
-const slug = /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/;
 const idPrefix = 'https://rezics.com/id/';
 
 /** A `/w/{ref}` segment: a Work UUID, or a slug Main resolves. A UUID-shaped ref is always an ID. */
 export type WorkRef = { kind: 'id'; id: string } | { kind: 'slug'; slug: string };
 
 export function parseWorkRef(ref: string): WorkRef | null {
-  if (uuid.test(ref)) return { kind: 'id', id: ref };
-  if (ref.length <= 64 && slug.test(ref)) return { kind: 'slug', slug: ref.toLowerCase() };
-  return null;
+  const parsed = parseAddressSegment(ref);
+  return !parsed ? null : parsed.kind === 'name' ? { kind: 'slug', slug: parsed.key }
+    : { kind: 'id', id: parsed.id };
 }
 
 /** The UUID of a native IRI (`https://rezics.com/id/{uuid}`), or null. */
@@ -92,7 +91,7 @@ function withQuery(path: string, query: Record<string, string | undefined>): str
 }
 
 /**
- * A Work's pages inside a Zone's site: `path` is the Work's address there (`/r/books/w/{id}`), `realm` the Zone's
+ * A Work's pages inside a Zone's site: `path` is the Work's address there (`/z/books/w/{id}`), `realm` the Zone's
  * default Realm, whose view the pages open with, and `ref` the Work's own reference, for the global reader.
  */
 export interface ZoneWorkBase { ref: string; path: string; realm: string }

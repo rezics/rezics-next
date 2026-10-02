@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!handle) return {};
   const locale = await requestLocale();
   const [resolved, messages] = await Promise.all([resolveProfile(handle, locale), getMessages('profile', locale)]);
-  if (resolved.kind !== 'profile') return {};
+  if (resolved.kind !== 'profile') return { robots: { index: false } };
   const works = await readProfileWorks(resolved.profile.id, locale, OVERVIEW_WORKS);
   return profileMetadata(resolved.profile, works.ok && works.data.items.length > 0, locale, messages);
 }

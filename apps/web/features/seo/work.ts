@@ -6,6 +6,7 @@ import { chapterHref, idOf, iriOf, parseContentsQuery, parseHistoryQuery, parseR
   parseVersionQuery, textHref, type WorkTab, workHref } from '../work-page/route.ts';
 import { localeAlternates, pageUrl } from './address.ts';
 import { mainApiWithToken } from '../api/main.ts';
+import { addressPath } from '../address/path.ts';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -59,7 +60,13 @@ export function workViewAddress(id: string, view: WorkView, query: SearchParams)
       }
     }
   })();
-  return address ?? { path: basePath(id, view), indexable: false };
+  const result = address ?? { path: basePath(id, view), indexable: false };
+  const language = parseReaderLanguage(query);
+  if (language === null) return { ...result, indexable: false };
+  if (!language) return result;
+  const path = new URL(result.path, 'https://rezics.invalid');
+  path.searchParams.set('language', language);
+  return { ...result, path: path.pathname + path.search };
 }
 
 /**
@@ -100,5 +107,14 @@ export async function workPageMetadata(work: WorkResolution, view: WorkView, que
       if (preview.error || !preview.data) return undisclosed;
     } catch { return undisclosed; }
   }
-  return workMetadata(work, view, query, locale, (await pageUrl())?.origin ?? null);
+  const page = await pageUrl();
+  const metadata = workMetadata(work, view, query, locale, page?.origin ?? null);
+  const path = page && addressPath(page.pathname);
+  if (page && path?.lookup.scope === 'work') {
+    const address = workViewAddress(path.lookup.key, view, query);
+    const canonical = new URL(`/${locale}${address.path}`, page.origin).toString();
+    metadata.alternates = { canonical };
+    if (metadata.openGraph) metadata.openGraph = { ...metadata.openGraph, url: canonical };
+  }
+  return metadata;
 }
