@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { publicWork } from './public-patterns.ts';
@@ -99,7 +100,9 @@ export class SerialStatisticsProjection {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = this.tick()
+      this.running = withWorkerTelemetry('main.serial.projection', () => this.tick(), count => ({
+        outcome: count ? 'worked' : 'idle', processed: count, unit: 'batch',
+      }))
         .catch((error) => {
           console.error('serial statistics projection deferred', error);
         })

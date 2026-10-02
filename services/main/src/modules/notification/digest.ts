@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { NotificationStore, ProposalSubscriptionReason } from './store.ts';
 
 /** One day and up to 51 event checks per tick. Account deduplicates the day
@@ -97,7 +98,9 @@ export class NotificationDigestWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = this.runOnce().then(() => {}, () => {
+      this.running = withWorkerTelemetry('main.notification.digest', () => this.runOnce(), worked => ({
+        outcome: worked ? 'worked' : 'idle', processed: worked ? 1 : 0, unit: 'day',
+      })).then(() => {}, () => {
         console.error('Notification digest intake unavailable');
       }).finally(() => { this.running = null; });
     }, DIGEST_COST.intervalMs);

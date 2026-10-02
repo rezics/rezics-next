@@ -2,7 +2,7 @@ import { MediaScreenStore } from './modules/media-screen/store.ts';
 import { MediaScreenWorker } from './modules/media-screen/worker.ts';
 import { LocalImageClassifier } from './modules/media-screen/classifier.ts';
 import { Pool } from 'pg';
-import { shutdownTelemetry } from '@rezics/observability/runtime';
+import { shutdownTelemetry, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { telemetryLog } from '@rezics/observability/log';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
@@ -543,8 +543,8 @@ new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
 telemetryLog('main_listening');
 const libraryBackfillController = new AbortController();
-const libraryBackfill = prepareLibraryShelves(contentPool, pool, fuseki,
-  { signal: libraryBackfillController.signal }).catch(error => {
+const libraryBackfill = withWorkerTelemetry('main.library.backfill', () => prepareLibraryShelves(contentPool, pool, fuseki,
+  { signal: libraryBackfillController.signal }), undefined, 'startup').catch(error => {
   if (!libraryBackfillController.signal.aborted) console.warn('Library shelf backfill paused; restart to resume', error);
 });
 const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,

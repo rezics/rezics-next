@@ -35,6 +35,23 @@ spans omit SQL text, parameters and results at export. These signals cover HTTP,
 outbound fetch, PostgreSQL and relay/mail jobs, not every business outcome or
 host/Fuseki resource metric.
 
+Scheduled Main workers and Account mail use `withWorkerTelemetry` for each
+finite invocation. Their named parent spans group PostgreSQL and fetch children;
+`rezics.worker.outcome` distinguishes idle/current, work, deferral, retry, blockage
+and failure. The wrapper preserves business return values and errors, and does
+not change polling intervals, leases, batch sizes or retries. A worker that does
+not report its result uses `completed`, rather than implying it was idle.
+`rezics.worker.runs` and `rezics.worker.processed` are cumulative counters;
+`rezics.worker.duration` is an explicit-bucket histogram in seconds, excluding
+the scheduled wait. Processing counters state their unit and count examined or
+acknowledged units, not successful external deliveries. Metric labels contain
+only fixed worker names, outcomes, triggers and units, never job IDs or source
+positions. Metrics continue when traces are sampled out. Failed and explicitly
+retrying/blocked invocations emit correlated `worker_run_failed` or
+`worker_run_deferred` events without exception payloads. Existing console
+diagnostics remain separate. The application and Collector span allowlists both
+retain these worker fields; changing only one loses them on the other path.
+
 The pinned Elysia 2 beta plugin has a
 [small Yarn patch](../../.yarn/patches/elysia-opentelemetry-status.patch)
 to read the actual `Response.status` and defer span status until response mapping

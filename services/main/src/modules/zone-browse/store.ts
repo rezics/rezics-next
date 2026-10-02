@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
 
@@ -27,7 +28,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = (this.ready ? this.catchUp() : this.backfill())
+      this.running = withWorkerTelemetry<number | void>('main.zone-browse.projection', async () => this.ready ? this.catchUp() : this.backfill(), count => ({
+        outcome: count === undefined ? 'completed' : count ? 'worked' : 'idle',
+        ...(count === undefined ? {} : { processed: count, unit: 'event' as const }),
+      }))
         .catch(error => { console.error('Zone browse projection deferred', error); })
         .finally(() => { this.running = undefined; });
     }, ZONE_BROWSE_PROJECTION_COST.pollMs);

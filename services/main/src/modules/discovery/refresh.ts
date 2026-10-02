@@ -1,4 +1,5 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { standingContextPattern } from '../rating/contexts.ts';
 import { digest, RecommendationRestart, RecommendationStale } from '../recommendation/derived-generation.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
@@ -146,7 +147,10 @@ export class DiscoveryRefreshWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = this.tick().catch(error => { console.error('discovery refresh tick failed', error); })
+      this.running = withWorkerTelemetry('main.discovery.refresh', () => this.tick(), outcome => ({
+        outcome: outcome === 'relay-behind' || outcome === 'inactive' ? 'deferred'
+          : outcome === 'advanced' || outcome === 'activated' ? 'worked' : outcome,
+      })).catch(error => { console.error('discovery refresh tick failed', error); })
         .finally(() => { this.running = undefined; });
     }, DISCOVERY_REFRESH_COST.intervalMs);
   }

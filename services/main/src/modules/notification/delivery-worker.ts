@@ -1,4 +1,5 @@
 import { NotificationUnavailable } from './store.ts';
+import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { NotificationDispatcher, DISPATCH_LIMITS } from './dispatcher.ts';
 
 /** Periodic bounded runner; database rows remain the durable schedule. */
@@ -11,15 +12,20 @@ export class NotificationDeliveryWorker {
   }
 
   async tick(): Promise<void> {
-    await this.dispatcher.recoverExpiredLeases(DISPATCH_LIMITS.batch);
-    await this.dispatcher.runOnce(DISPATCH_LIMITS.batch);
+    const recovered = await this.dispatcher.recoverExpiredLeases(DISPATCH_LIMITS.batch);
+    const summary = await this.dispatcher.runOnce(DISPATCH_LIMITS.batch);
+    recordWorkerOutcome({
+      outcome: summary.failed ? 'blocked' : summary.retried || summary.uncertain ? 'retry'
+        : summary.claimed || summary.cancelled || recovered ? 'worked' : 'idle',
+      processed: summary.claimed + summary.cancelled, unit: 'item',
+    });
   }
 
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = this.tick().catch(error => {
+      this.running = withWorkerTelemetry('main.notification.delivery', () => this.tick()).catch(error => {
         if (!(error instanceof NotificationUnavailable)) {
           console.error('notification delivery tick failed', error);
         }

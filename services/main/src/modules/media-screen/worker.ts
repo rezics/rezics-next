@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ImageClassifier } from './classifier.ts';
 import { SCREEN_LIMITS, screenUnavailable, screenVerdict, type ScreenVerdict } from './policy.ts';
@@ -14,6 +15,8 @@ export class MediaScreenWorker {
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > SCREEN_LIMITS.timeoutMs) throw new Error('invalid screen deadline');
   }
   async tick(): Promise<void> {
+    let processed = 0;
+    let retry = false;
     await this.store.cancelObsolete();
     await this.store.holdExhausted();
     const lease = await this.store.leaseNext();
@@ -35,17 +38,21 @@ export class MediaScreenWorker {
       } catch { verdict = screenUnavailable(); }
       finally { controller.abort(); if (timer) clearTimeout(timer); }
       await this.store.settle(lease, verdict);
+      processed++;
+      retry = verdict.reason === 'screen-unavailable';
     }
     for (const review of await this.store.pendingReviews()) {
       try { await this.store.reviewAttempt(review.job, await this.cases.openScreeningCase(review)); }
-      catch { await this.store.reviewAttempt(review.job, null); }
+      catch { retry = true; await this.store.reviewAttempt(review.job, null); }
+      processed++;
     }
+    recordWorkerOutcome({ outcome: retry ? 'retry' : processed ? 'worked' : 'idle', processed, unit: 'item' });
   }
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = this.tick().catch(error => console.error('media screen tick failed', error))
+      this.running = withWorkerTelemetry('main.media.screen', () => this.tick()).catch(error => console.error('media screen tick failed', error))
         .finally(() => { this.running = undefined; });
     }, 1_000);
   }

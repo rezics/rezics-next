@@ -1,7 +1,13 @@
 import { Elysia } from 'elysia';
 import { context, trace } from '@opentelemetry/api';
 import { httpTelemetry } from '../src/elysia.ts';
-import { shutdownTelemetry, startTelemetry, withTelemetrySpan } from '../src/runtime.ts';
+import {
+  recordWorkerOutcome,
+  shutdownTelemetry,
+  startTelemetry,
+  withTelemetrySpan,
+  withWorkerTelemetry,
+} from '../src/runtime.ts';
 import { telemetryLog } from '../src/log.ts';
 import { postgresPeer } from './postgres-fixture.ts';
 
@@ -29,6 +35,60 @@ const pool = new Pool({
   ssl: false,
 });
 await withTelemetrySpan('database.operation', () => pool.query("SELECT 'PRIVATE_SQL_LITERAL'"));
+await withWorkerTelemetry(
+  'main.content.projection',
+  () => pool.query("SELECT 'PRIVATE_WORKER_SQL'"),
+  (result) => ({ outcome: 'worked', processed: result.rowCount ?? 0, unit: 'event' }),
+);
+const workerContexts = await Promise.all([
+  withWorkerTelemetry(
+    'main.discovery.refresh',
+    async () => {
+      const before = trace.getSpan(context.active())!.spanContext().traceId;
+      await Bun.sleep(25);
+      await fetch(`${remote.url.origin}/PRIVATE_WORKER_URL`);
+      return { before, after: trace.getSpan(context.active())!.spanContext().traceId };
+    },
+    () => ({ outcome: 'current' }),
+  ),
+  withWorkerTelemetry('main.feed.refresh', async () => {
+    const before = trace.getSpan(context.active())!.spanContext().traceId;
+    await Bun.sleep(5);
+    recordWorkerOutcome({ outcome: 'deferred' });
+    return { before, after: trace.getSpan(context.active())!.spanContext().traceId };
+  }),
+]);
+const workerError = new Error('PRIVATE_WORKER_ERROR');
+workerError.name = 'PRIVATE_ERROR_NAME';
+let sameWorkerError = false;
+try {
+  await withWorkerTelemetry('main.notification.delivery', async () => {
+    throw workerError;
+  });
+} catch (error) {
+  sameWorkerError = error === workerError;
+}
+await withWorkerTelemetry(
+  'main.outbox.relay',
+  async () => null,
+  () => ({ outcome: 'idle', processed: 0, unit: 'batch' }),
+);
+await withWorkerTelemetry(
+  'main.ranking.build',
+  async () => {
+    recordWorkerOutcome({ outcome: 'retry' });
+    return 3;
+  },
+  (count) => ({ outcome: 'worked', processed: count, unit: 'batch' }),
+);
+const observedValue = await withWorkerTelemetry(
+  'main.library.backfill',
+  async () => 42,
+  () => {
+    throw new Error('PRIVATE_OBSERVER_ERROR');
+  },
+  'startup',
+);
 await pool.end();
 pgPeer.stop(true);
 const app = new Elysia()
@@ -107,4 +167,6 @@ await app.stop();
 await remote.stop(true);
 await shutdownTelemetry();
 await shutdownTelemetry();
-console.log(JSON.stringify({ result, outbound, responses }));
+console.log(
+  JSON.stringify({ result, outbound, responses, workerContexts, sameWorkerError, observedValue }),
+);

@@ -1,4 +1,5 @@
 import type { ContentProjectionResult } from './modules/content-publication/relay.ts';
+import { withWorkerTelemetry } from '@rezics/observability/runtime';
 
 function waitForPoll(intervalMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -41,7 +42,9 @@ export class ContentProjectionWorker {
   private async run(): Promise<void> {
     while (!this.stopSignal.signal.aborted) {
       let idle = false;
-      try { idle = (await this.poll()) === null; }
+      try { idle = (await withWorkerTelemetry('main.content.projection', () => this.poll(), result => ({
+        outcome: result === null ? 'idle' : 'worked', processed: result === null ? 0 : 1, unit: 'event',
+      }))) === null; }
       catch (error) { this.onError(error); idle = true; }
       if (idle && !this.stopSignal.signal.aborted) {
         await waitForPoll(this.intervalMs, this.stopSignal.signal);

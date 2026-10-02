@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import type { NotificationEvent, NotificationStore } from '../notification/store.ts';
@@ -253,6 +254,7 @@ export class NotificationProducer {
       // Account intake has an independent cursor: an outage cannot hold staff
       // deadline alerts, editorial mail or relay notifications behind it.
       console.error('Safety correspondence intake unavailable');
+      recordWorkerOutcome({ outcome: 'deferred' });
     }
     const count = (await this.runOtherAccessOnce()) + (await this.runEditorialOnce());
     try {
@@ -261,6 +263,7 @@ export class NotificationProducer {
       // A missing responder or failed safety intake must not stall the other
       // Access producers or prevent the worker's following relay tick.
       console.error('Safety alerts:', error);
+      recordWorkerOutcome({ outcome: 'deferred' });
       return count + mail;
     }
   }
@@ -519,7 +522,10 @@ export class NotificationProducerWorker {
     if (this.timer) throw new Error('notification producer worker is already started');
     const poll = () => {
       if (this.running) return;
-      this.running = this.producer.runAccessOnce().then(() => this.producer.runRelayOnce())
+      this.running = withWorkerTelemetry('main.notification.producer', async () => {
+        const access = await this.producer.runAccessOnce();
+        return access + await this.producer.runRelayOnce();
+      }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' }))
         .then(() => undefined).catch(error => { console.error('Notification producers:', error); })
         .finally(() => { this.running = null; });
     };

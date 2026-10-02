@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { shutdownTelemetry, withTelemetrySpan } from '@rezics/observability/runtime';
+import { shutdownTelemetry, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { telemetryLog } from '@rezics/observability/log';
 import { createAccountAuth } from './auth.ts';
 import { createAccountApp } from './app.ts';
@@ -35,7 +35,7 @@ let delivery: Promise<unknown> | undefined;
 const deliveryTimer = setInterval(() => {
   if (delivering) return;
   delivering = true;
-  delivery = withTelemetrySpan('account.email.drain', () => email.drain()).catch(() => telemetryLog('account_email_unavailable', 'error'))
+  delivery = withWorkerTelemetry('account.email.drain', () => email.drain()).catch(() => telemetryLog('account_email_unavailable', 'error'))
     .finally(() => { delivering = false; });
 }, 1_000);
 const app = createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,

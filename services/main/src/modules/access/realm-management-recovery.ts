@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { RealmAdminInvalid, RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { deliverRealmPolicy, type RealmPolicyDelivery } from '../space/policy.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
@@ -81,7 +82,10 @@ export class RealmPolicyRecoveryWorker {
     this.tick();
   }
   private tick() {
-    this.running = recoverRealmPolicies(this.pool, this.env, this.after).then(page => {
+    this.running = withWorkerTelemetry('main.realm-policy.recovery', () => recoverRealmPolicies(this.pool, this.env, this.after), page => ({
+      outcome: page.items.some(item => item.status === 'pending') ? 'retry' : page.items.length ? 'worked' : 'idle',
+      processed: page.items.filter(item => item.status === 'completed').length, unit: 'item',
+    })).then(page => {
       this.after = page.nextCursor ?? undefined;
       for (const item of page.items) console.info('Realm policy recovery', JSON.stringify(item));
     }).catch(error => { console.warn('Realm policy recovery paused', error); }).finally(() => {

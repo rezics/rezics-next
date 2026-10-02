@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { symmetricDecrypt, symmetricEncrypt } from 'better-auth/crypto';
 import nodemailer from 'nodemailer';
+import { recordWorkerOutcome } from '@rezics/observability/runtime';
 import type { Pool, PoolClient } from 'pg';
 import { emailCopy } from './email-copy/index.ts';
 import { optionalMailSuppressed, unsubscribeHeaders } from './mail-suppression.ts';
@@ -105,6 +106,10 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
       await enqueueAccountEmail(pool, secret, input);
     },
     async drain(limit = 20) {
+      let processed = 0;
+      let deferred = false;
+      let blocked = false;
+      recordWorkerOutcome({ outcome: 'idle', processed, unit: 'mail' });
       await pool.query(`UPDATE rezics_account_email SET state = 'uncertain', payload = NULL
         WHERE state = 'sending' AND started_at < now() - interval '2 minutes'`);
       await pool.query(`UPDATE rezics_account_email SET state = 'expired', payload = NULL
@@ -117,6 +122,8 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
           RETURNING id, user_id, payload`);
         const row = claimed.rows[0];
         if (!row) break;
+        processed++;
+        recordWorkerOutcome({ outcome: blocked ? 'blocked' : deferred ? 'deferred' : 'worked', processed, unit: 'mail' });
         try {
           const input = JSON.parse(await symmetricDecrypt({ key: secret, data: row.payload })) as
             Parameters<AccountEmail['enqueue']>[0];
@@ -146,6 +153,8 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
               available_at = now() + interval '10 seconds' WHERE id = $1`,
               [row.id],
             );
+            deferred = true;
+            recordWorkerOutcome({ outcome: blocked ? 'blocked' : 'deferred' });
             continue;
           }
           if (input.safetyCorrespondence && user?.rows[0]?.deletion_started_at) {
@@ -197,6 +206,8 @@ export function accountEmailQueue(pool: Pool, secret: string, send: ReturnType<t
         } catch {
           // Do not log a transport exception: it can contain recipient or link data.
           await pool.query(`UPDATE rezics_account_email SET state = 'uncertain', payload = NULL WHERE id = $1`, [row.id]);
+          blocked = true;
+          recordWorkerOutcome({ outcome: 'blocked' });
         }
       }
     },

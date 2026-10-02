@@ -30,7 +30,7 @@ processors:
     trace_statements:
       - context: span
         statements:
-          - keep_keys(attributes, ["http.request.method", "http.response.status_code", "http.route", "url.scheme", "server.address", "server.port", "db.system.name", "db.namespace", "db.operation.name", "error.type"])
+          - keep_keys(attributes, ["http.request.method", "http.response.status_code", "http.route", "url.scheme", "server.address", "server.port", "db.system.name", "db.namespace", "db.operation.name", "error.type", "rezics.worker.name", "rezics.worker.outcome", "rezics.worker.trigger", "rezics.worker.processed", "rezics.worker.unit"])
       - context: spanevent
         statements:
           - keep_keys(attributes, [])

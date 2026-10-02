@@ -138,7 +138,16 @@ try {
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),
     ]);
-    if (code !== 0 || stderr) throw new Error(`Telemetry producer failed: ${stderr}`);
+    const events = stderr
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).event);
+    if (
+      code !== 0 ||
+      events.join(',') !== 'worker_run_failed,worker_run_deferred' ||
+      stderr.includes('PRIVATE_')
+    )
+      throw new Error('Telemetry producer failed or emitted unexpected diagnostics');
     await waitFor('trace ingestion', async () => {
       const rows = await sql('SELECT count(*) FROM rezics_traces');
       return Number(rows?.[0]?.[0]) >= 9 ? true : undefined;
@@ -150,6 +159,14 @@ try {
     await waitFor('cumulative HTTP metrics', async () => {
       const rows = await sql('SELECT count(*) FROM http_server_request_duration_seconds_count');
       return Number(rows?.[0]?.[0]) >= 8 ? true : undefined;
+    });
+    await waitFor('worker run metrics', async () => {
+      const rows = await sql('SELECT count(*) FROM rezics_worker_runs_total');
+      return Number(rows?.[0]?.[0]) >= 7 ? true : undefined;
+    });
+    await waitFor('worker duration metrics', async () => {
+      const rows = await sql('SELECT count(*) FROM rezics_worker_duration_seconds_count');
+      return Number(rows?.[0]?.[0]) >= 7 ? true : undefined;
     });
     const tables = await sql('SHOW TABLES');
     writeFileSync(resolve(directory, 'tables.json'), JSON.stringify(tables, null, 2));

@@ -9,6 +9,8 @@ type TelemetryEvent =
   | 'account_listening'
   | 'account_stopped'
   | 'account_email_unavailable'
+  | 'worker_run_failed'
+  | 'worker_run_deferred'
   | 'request_completed';
 
 /** Event names and caller-selected public attributes only; never serialize Errors or request bodies. */
@@ -23,6 +25,9 @@ export function telemetryLog(
     'graph_epoch',
     'graph_sequence',
     'index_generation',
+    'rezics.worker.name',
+    'rezics.worker.outcome',
+    'rezics.worker.trigger',
   ]);
   attributes = Object.fromEntries(Object.entries(attributes).filter(([key]) => allowed.has(key)));
   const span = trace.getSpanContext(context.active());

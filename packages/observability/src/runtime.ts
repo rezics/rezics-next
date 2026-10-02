@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { context, propagation, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { context, metrics, propagation, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { resourceFromAttributes } from '@opentelemetry/resources';
@@ -21,6 +22,7 @@ import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { telemetryConfig } from './config.ts';
+import { telemetryLog } from './log.ts';
 
 const spanAttributes = new Set([
   'http.request.method',
@@ -33,6 +35,11 @@ const spanAttributes = new Set([
   'db.namespace',
   'db.operation.name',
   'error.type',
+  'rezics.worker.name',
+  'rezics.worker.outcome',
+  'rezics.worker.trigger',
+  'rezics.worker.processed',
+  'rezics.worker.unit',
 ]);
 const metricAttributes = [
   'http.request.method',
@@ -46,7 +53,146 @@ const metricAttributes = [
   'db.operation.name',
   'state',
   'error.type',
+  'rezics.worker.name',
+  'rezics.worker.outcome',
+  'rezics.worker.trigger',
+  'rezics.worker.unit',
 ];
+
+/** Fixed operation names, never job, recipient, generation or resource IDs. */
+export type WorkerName =
+  | 'main.outbox.relay'
+  | 'main.content.projection'
+  | 'main.discovery.refresh'
+  | 'main.feed.refresh'
+  | 'main.ranking.build'
+  | 'main.read-ranking.projection'
+  | 'main.serial.projection'
+  | 'main.zone-browse.projection'
+  | 'main.realm-policy.recovery'
+  | 'main.library-import.retention'
+  | 'main.library.backfill'
+  | 'main.media.screen'
+  | 'main.verification.correction'
+  | 'main.notification.producer'
+  | 'main.notification.digest'
+  | 'main.notification.delivery'
+  | 'account.email.drain';
+export interface WorkerObservation {
+  outcome:
+    | 'completed'
+    | 'idle'
+    | 'worked'
+    | 'current'
+    | 'deferred'
+    | 'retry'
+    | 'blocked'
+    | 'failed';
+  processed?: number;
+  unit?:
+    | 'event'
+    | 'batch'
+    | 'item'
+    | 'recipient'
+    | 'day'
+    | 'upload'
+    | 'principal'
+    | 'screen'
+    | 'mail';
+}
+const workerRun = new AsyncLocalStorage<WorkerObservation>();
+let workerInstruments: ReturnType<typeof createWorkerInstruments> | undefined;
+
+function createWorkerInstruments() {
+  const meter = metrics.getMeter('rezics-workers');
+  return {
+    runs: meter.createCounter('rezics.worker.runs', {
+      description: 'Completed worker invocations.',
+    }),
+    processed: meter.createCounter('rezics.worker.processed', {
+      description: 'Processed units, grouped by unit.',
+    }),
+    duration: meter.createHistogram('rezics.worker.duration', {
+      unit: 's',
+      description: 'Duration of a finite worker invocation, excluding its scheduled wait.',
+      advice: {
+        explicitBucketBoundaries: [
+          0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300,
+        ],
+      },
+    }),
+  };
+}
+
+/** Annotate an already running job without changing its return value or scheduling. */
+export function recordWorkerOutcome(observation: WorkerObservation): void {
+  const run = workerRun.getStore();
+  if (run) Object.assign(run, observation);
+}
+
+/** One finite invocation owns its SQL/fetch children. Metrics do not depend on trace sampling. */
+export function withWorkerTelemetry<T>(
+  name: WorkerName,
+  work: () => Promise<T>,
+  observe?: (result: T) => WorkerObservation,
+  trigger: 'poll' | 'startup' = 'poll',
+): Promise<T> {
+  if (!telemetryEnabled()) return work();
+  const { runs, processed, duration } = (workerInstruments ??= createWorkerInstruments());
+  const attributes = { 'rezics.worker.name': name, 'rezics.worker.trigger': trigger };
+  return trace
+    .getTracer('rezics-workers')
+    .startActiveSpan(name, { kind: SpanKind.INTERNAL, attributes }, (span) =>
+      workerRun.run({ outcome: 'completed' }, async () => {
+        const run = workerRun.getStore()!;
+        const started = performance.now();
+        try {
+          const result = await work();
+          // Observation must never turn a successful business operation into a failure.
+          try {
+            if (observe) {
+              const next = observe(result);
+              Object.assign(run, next, {
+                outcome: run.outcome === 'completed' ? next.outcome : run.outcome,
+              });
+            }
+          } catch {
+            /* retain the recorded result */
+          }
+          if (run.outcome === 'retry' || run.outcome === 'blocked' || run.outcome === 'failed') {
+            span.setStatus({ code: SpanStatusCode.ERROR });
+            span.setAttribute('error.type', `worker.${run.outcome}`);
+            telemetryLog('worker_run_deferred', 'warn', {
+              ...attributes,
+              'rezics.worker.outcome': run.outcome,
+            });
+          }
+          return result;
+        } catch (error) {
+          run.outcome = 'failed';
+          // Exception messages/names may contain private provider or database data.
+          span.setAttribute('error.type', 'worker.execution_failed');
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          telemetryLog('worker_run_failed', 'error', {
+            ...attributes,
+            'rezics.worker.outcome': run.outcome,
+          });
+          throw error;
+        } finally {
+          const labels = { ...attributes, 'rezics.worker.outcome': run.outcome };
+          span.setAttributes(labels);
+          runs.add(1, labels);
+          duration.record((performance.now() - started) / 1000, labels);
+          if (run.unit && Number.isSafeInteger(run.processed) && run.processed! >= 0) {
+            span.setAttribute('rezics.worker.processed', run.processed!);
+            span.setAttribute('rezics.worker.unit', run.unit);
+            processed.add(run.processed!, { ...labels, 'rezics.worker.unit': run.unit });
+          }
+          span.end();
+        }
+      }),
+    );
+}
 
 /** Sanitize the exported copy, after all lifecycle hooks have finished. */
 export function safeSpan(span: ReadableSpan): ReadableSpan {
