@@ -106,7 +106,12 @@
       "project": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
     },
     "packages/observability": {
-      "entry": ["src/*.ts", "tests/**/*.test.ts", "tests/runtime-child.ts"],
+      "entry": [
+        "src/*.ts",
+        "tests/**/*.test.ts",
+        "tests/runtime-child.ts",
+        "tests/worker-sampling-child.ts"
+      ],
       "project": ["src/**/*.ts", "tests/**/*.ts"]
     },
     // Aspire runs the AppHost with `npx tsx`; the CLI launcher and the generated
