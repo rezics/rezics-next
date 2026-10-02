@@ -3,7 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { accountMenuSections } from './account-menu-items.ts';
+import { accountMenuSections, accountRowName, contentPreferenceValue, type AccountContentPreferences } from './account-menu-items.ts';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator,
@@ -14,7 +14,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { themes, type Theme } from '../shell/preferences.ts';
 import { useShell } from '../shell/shell-provider.tsx';
-import { BFF_PREFIX } from '../api/browser.ts';
+import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { currentVanityHandle } from '../onboarding/handle.ts';
 import { agentName, type SessionAgent } from './acting-identity.ts';
 import type { AuthMessages } from './messages.ts';
@@ -34,6 +34,14 @@ export function agentSummary(agent: SessionAgent, messages: AuthMessages): {
       ? agentName({ iri: agent.previous, label: null }, messages) : messages.agentUnverified,
     attention: !agent.previous };
   }
+}
+
+/** The full value remains in the accessible name when the visible row truncates. */
+function AccountRowValue({ label, value, lang }: { label: string; value: string; lang?: string }) {
+  return <span aria-hidden="true" className="flex min-w-0 flex-1 items-center gap-1">
+    <span className="shrink-0">{label}</span><span className="text-muted-foreground">·</span>
+    <span lang={lang} className="truncate text-muted-foreground">{value}</span>
+  </span>;
 }
 
 function AttentionDot() {
@@ -81,6 +89,18 @@ export function AccountMenu({ session, messages, accountOrigin }: {
   const { locale, t, theme, setTheme } = useShell();
   useSessionSync(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const actingSubject = session.agent.status === 'selected' ? session.agent.agent.iri : null;
+  const [content, setContent] = useState<{ agent: string; value: AccountContentPreferences | null } | null>(null);
+  useEffect(() => {
+    if (!(menuOpen || sheetOpen) || !actingSubject) return;
+    let current = true;
+    setContent(null);
+    void browserMainApi().v1.me['person-preferences'].get({ query: { actingSubject } })
+      .then(({ data }) => { if (current) setContent({ agent: actingSubject, value: data ?? null }); },
+        () => { if (current) setContent({ agent: actingSubject, value: null }); });
+    return () => { current = false; };
+  }, [menuOpen, sheetOpen, actingSubject]);
   const [panel, setPanel] = useState<'language' | 'appearance' | null>(null);
   const phoneTrigger = useRef<HTMLButtonElement>(null);
   const panelBody = useRef<HTMLDivElement>(null);
@@ -106,6 +126,11 @@ export function AccountMenu({ session, messages, accountOrigin }: {
   const agent = agentSummary(session.agent, messages);
   const sections = accountMenuSections(session, messages);
   const themeLabels: Record<Theme, string> = { system: t.themeSystem, light: t.themeLight, dark: t.themeDark };
+  const contentValue = !actingSubject ? messages.preferencesUnavailable
+    : content?.agent !== actingSubject ? messages.preferencesLoading
+    : content.value ? contentPreferenceValue(content.value, locale, messages) : messages.preferencesUnavailable;
+  const rowValue = (id: string) => id === 'language' ? localeNames[locale]
+    : id === 'appearance' ? themeLabels[theme] : contentValue;
   const chooseLocale = (choice: UiLocale) => {
     if (!localeField.current || !localeForm.current) return;
     localeField.current.value = choice;
@@ -119,7 +144,7 @@ export function AccountMenu({ session, messages, accountOrigin }: {
   };
   return <>
     <div className="hidden sm:block">
-      <Menu onSelect={({ value }) => {
+      <Menu onOpenChange={({ open }) => setMenuOpen(open)} onSelect={({ value }) => {
         if (value === 'switch-agent') switchAgent();
         else if (value === 'sign-out') signOut();
       }}>
@@ -142,7 +167,9 @@ export function AccountMenu({ session, messages, accountOrigin }: {
           {sections.map((section, index) => <div key={index}>
             <MenuSeparator />
             {section.map(entry => 'panel' in entry ? <MenuSub key={entry.id}>
-              <MenuSubTrigger>{entry.label}</MenuSubTrigger>
+              <MenuSubTrigger aria-label={accountRowName(entry.label, rowValue(entry.id))}>
+                <AccountRowValue label={entry.label} value={rowValue(entry.id)} lang={entry.id === 'language' ? locale : undefined} />
+              </MenuSubTrigger>
               <MenuSubContent className="w-52">
                 <MenuRadioGroup heading={entry.label} value={entry.id === 'language' ? locale : theme}
                   onValueChange={({ value }) => entry.id === 'language' ? chooseLocale(value as UiLocale) : setTheme(value as Theme)}>
@@ -152,7 +179,8 @@ export function AccountMenu({ session, messages, accountOrigin }: {
                 </MenuRadioGroup>
               </MenuSubContent>
             </MenuSub> : <MenuItem key={entry.id} value={entry.id} asChild>
-              <LocalizedLink href={localizedPath(entry.href, locale)}>{entry.label}
+              <LocalizedLink href={localizedPath(entry.href, locale)} aria-label={entry.arrow ? accountRowName(entry.label, rowValue(entry.id)) : undefined}>
+                {entry.arrow ? <AccountRowValue label={entry.label} value={rowValue(entry.id)} /> : entry.label}
                 {entry.arrow ? <ChevronRightIcon aria-hidden="true" className="ms-auto size-4" /> : null}
               </LocalizedLink></MenuItem>)}
           </div>)}
@@ -194,10 +222,11 @@ export function AccountMenu({ session, messages, accountOrigin }: {
               <Button type="button" variant="ghost" className="min-h-11 justify-start" onClick={switchAgent}>{messages.switchAgent}</Button>
               {sections.map((section, index) => <div key={index} className="grid gap-1 border-border/60 border-t py-2">
                 {section.map(entry => 'panel' in entry ? <Button key={entry.id} data-panel={entry.id} type="button" variant="ghost"
-                  className="min-h-11 justify-between" onClick={() => setPanel(entry.id)}>
-                  {entry.label}<ChevronRightIcon aria-hidden="true" /></Button>
+                  className="min-h-11 justify-between" aria-label={accountRowName(entry.label, rowValue(entry.id))} onClick={() => setPanel(entry.id)}>
+                  <AccountRowValue label={entry.label} value={rowValue(entry.id)} lang={entry.id === 'language' ? locale : undefined} /><ChevronRightIcon aria-hidden="true" /></Button>
                   : <Button key={entry.id} variant="ghost" className="min-h-11 justify-between" asChild>
-                    <LocalizedLink href={localizedPath(entry.href, locale)}>{entry.label}
+                    <LocalizedLink href={localizedPath(entry.href, locale)} aria-label={entry.arrow ? accountRowName(entry.label, rowValue(entry.id)) : undefined}>
+                      {entry.arrow ? <AccountRowValue label={entry.label} value={rowValue(entry.id)} /> : entry.label}
                       {entry.arrow ? <ChevronRightIcon aria-hidden="true" /> : null}</LocalizedLink></Button>)}
               </div>)}
               <Button variant="ghost" className="min-h-11 justify-start" asChild><a href={accountOrigin}>{messages.manageAccount}</a></Button>
