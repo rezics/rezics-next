@@ -6,12 +6,14 @@ import { EntityPage } from '../../../../features/entity-page/entity-page.tsx';
 import { entityMetadata } from '../../../../features/entity-page/metadata.ts';
 import { readEntityProjection } from '../../../../features/entity-page/read.ts';
 import { parseEntityCursors, parseEntityRef } from '../../../../features/entity-page/route.ts';
+import { pageUrl, representationPath } from '../../../../features/seo/address.ts';
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const [{ ref }, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
-  return entityMetadata(ref, query, locale);
+  const [metadata, page] = await Promise.all([entityMetadata(ref, query, locale), pageUrl()]);
+  return { ...metadata, ...(page ? { alternates: { canonical: page.origin + representationPath(page) } } : {}) };
 }
 
 /**

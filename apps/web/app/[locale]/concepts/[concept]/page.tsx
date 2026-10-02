@@ -6,7 +6,9 @@ import { facetByRef, facetLabel } from '../../../../features/concept/facets.ts';
 import { conceptReader, readConcept, readConceptFollow, readFacets, readFirstWorks,
   readScopeRealm } from '../../../../features/concept/read.ts';
 import { parseConceptState } from '../../../../features/concept/state.ts';
-import { idOf, isUuid, type SearchParams } from '../../../../features/discover/scope.ts';
+import { idOf, type SearchParams } from '../../../../features/discover/scope.ts';
+import { parseConceptRef } from '../../../../features/concept/route.ts';
+import { pageUrl, representationPath } from '../../../../features/seo/address.ts';
 import { Providers } from '../../../../features/shell/providers.tsx';
 import { getMessages, requestLocale } from '../../../../i18n/server.ts';
 
@@ -15,14 +17,16 @@ type Props = { params: Promise<{ concept: string }>; searchParams: Promise<Searc
 // Metadata reads the Concept directly and never throws notFound(): vinext
 // streams metadata, so a 404 thrown there would answer 200. The page does.
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { concept } = await params;
-  if (!isUuid(concept)) return {};
+  const concept = parseConceptRef((await params).concept);
+  if (!concept) return {};
   const locale = await requestLocale();
   const [read, messages] = await Promise.all([readConcept(concept, locale), getMessages('concept', locale)]);
   if (!read.ok) return {};
   const t = materializeData(messages, { locale });
   const name = read.data.name.value;
-  return { title: t.metaTitle({ name }), description: read.data.description?.value ?? t.metaDescription({ name }) };
+  const page = await pageUrl();
+  return { title: t.metaTitle({ name }), description: read.data.description?.value ?? t.metaDescription({ name }),
+    ...(page ? { alternates: { canonical: page.origin + representationPath(page) } } : {}) };
 }
 
 /**
@@ -30,8 +34,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * narrowed by the Condition bar in the address. Any other ID is a 404.
  */
 export default async function ConceptRoute({ params, searchParams }: Props) {
-  const [{ concept }, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
-  if (!isUuid(concept)) notFound();
+  const [path, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
+  const concept = parseConceptRef(path.concept);
+  if (!concept) notFound();
   const [read, facets, messages] = await Promise.all([readConcept(concept, locale), readFacets(),
     getMessages('concept', locale)]);
   if (!read.ok) {

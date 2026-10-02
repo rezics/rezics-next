@@ -21,7 +21,7 @@ export function workTabOf(tab: string | null): WorkTab {
 
 /** Where a Work's pages are in this Zone's site: under its mount when it came through one, else under `/w`. */
 export function workBase(ref: string, id: string, mount: string | null, realm: string): ZoneWorkBase {
-  return { ref: id, path: `/r/${encodeURIComponent(ref)}/${mount ? encodeURIComponent(mount) : 'w'}/${id}`, realm };
+  return { ref: id, path: `/z/${encodeURIComponent(ref)}/${mount ? encodeURIComponent(mount) : 'w'}/${id}`, realm };
 }
 
 /**

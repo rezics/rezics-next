@@ -24,7 +24,9 @@ export function ZoneSiteNavigation({ links, label }: { links: readonly SiteLink[
   return <nav aria-label={label} data-zone-site-navigation="" className="border-border/70 border-b">
     <ul className={cn(column, 'gap-1 overflow-x-auto py-1 [scrollbar-width:none]')}>
       {links.map(link => {
-        const current = here === link.href || here.startsWith(`${link.href}/`);
+        const target = withoutLocale(link.href.split(/[?#]/)[0]!);
+        const home = /^\/z\/[^/]+$/.test(target);
+        const current = here === target || !home && here.startsWith(`${target}/`);
         return <li key={link.href}>
           <LocalizedLink href={link.href} aria-current={current ? 'page' : undefined} lang={link.label.lang || undefined}
             dir={link.label.dir}

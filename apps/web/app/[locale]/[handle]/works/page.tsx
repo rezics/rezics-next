@@ -17,7 +17,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (!handle) return {};
   const locale = await requestLocale();
   const [resolved, messages] = await Promise.all([resolveProfile(handle, locale), getMessages('profile', locale)]);
-  if (resolved.kind !== 'profile') return {};
+  if (resolved.kind !== 'profile') return { robots: { index: false } };
   const t = materializeData(messages, { locale });
   // Later pages repeat the first page's subject; only the first is a document to index.
   return { title: t.worksHeading({ name: resolved.profile.displayName }),

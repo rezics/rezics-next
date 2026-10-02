@@ -1,15 +1,15 @@
-import type { Metadata } from 'next';
-import { CommunityDirectory } from '../../../features/communities/directory.tsx';
-import { communityText } from '../../../features/communities/messages.ts';
+import { redirect } from 'next/navigation';
 import { requestLocale } from '../../../i18n/server.ts';
-
-export async function generateMetadata(): Promise<Metadata> {
-  return { title: communityText.title[await requestLocale()] };
-}
 
 export default async function Page({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [locale, search] = await Promise.all([requestLocale(), searchParams]);
-  return <CommunityDirectory locale={locale} search={search} />;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) {
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) query.append(key, item);
+  }
+  query.set('type', 'communities');
+  // The proxy sends HTTP 301 before rendering; this fallback covers direct component invocations.
+  redirect(`/${locale}/discover?${query}`);
 }

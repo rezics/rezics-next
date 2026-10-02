@@ -2,13 +2,13 @@
 // route, the components and their tests.
 
 import { idOf } from '../work-page/route.ts';
+import { parseAddressSegment } from '../address/path.ts';
 import type { EntityLink, HrefFor, SectionId } from './types.ts';
-
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** The UUID of an `/e/{ref}` segment or native IRI; a resource has no slug, so anything else is no address. */
 export function parseEntityRef(ref: string): string | null {
-  return uuid.test(ref) ? ref : idOf(ref);
+  const parsed = parseAddressSegment(ref);
+  return parsed && parsed.kind !== 'name' ? parsed.id : idOf(ref);
 }
 
 export const entityHref = (resource: string) => `/e/${idOf(resource) ?? resource}`;
@@ -58,4 +58,3 @@ export function standaloneHrefFor(current: EntityCursors, self: string): HrefFor
     return link.base === 'work' ? `/w/${id}` : entityHref(link.iri);
   };
 }
-

@@ -1,27 +1,24 @@
-// Realm addresses: `/{locale}/r/{realm}/{tab}`. `{realm}` is a Realm UUID or
-// an official Zone's route segment (`fiction`). Pure functions shared by the
-// routes, the components and their tests.
+// Community views live under /r; site paths live under /z. Both name a Space.
 
 import { type UiLocale } from '../../i18n/define.ts';
 import { withoutLocale } from '../../i18n/locale.ts';
+import { parseAddressSegment } from '../address/path.ts';
 
 /** The Realm's views in the tab bar, in order. Each is its own URL. */
-export const realmTabs = ['home', 'browse', 'discussions', 'decisions', 'about'] as const;
+export const realmTabs = ['home', 'discussions', 'decisions', 'about'] as const;
 /** Every view with a URL: `works`, the adopted Works a page at a time, now opens Browse's grid. */
-export type RealmTab = (typeof realmTabs)[number] | 'works';
+export type RealmTab = (typeof realmTabs)[number] | 'works' | 'browse';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-// Main's official route segment (`services/main/src/routes/zones.ts`).
-const segment = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const idPrefix = 'https://rezics.com/id/';
 
 export type RealmRef = { kind: 'id'; id: string } | { kind: 'segment'; segment: string };
 
-/** A `/r/{ref}` segment. A UUID is always an ID; anything else must be an official Zone's segment. */
+/** An identity (including a legacy capability UUID), or a name for Main's shared resolver. */
 export function parseRealmRef(ref: string): RealmRef | null {
-  if (uuid.test(ref)) return { kind: 'id', id: ref };
-  if (ref.length <= 64 && segment.test(ref)) return { kind: 'segment', segment: ref };
-  return null;
+  const parsed = parseAddressSegment(ref);
+  return !parsed ? null : parsed.kind === 'name' ? { kind: 'segment', segment: parsed.key }
+    : { kind: 'id', id: parsed.id };
 }
 
 /** The UUID of a native IRI, or null. */
@@ -31,7 +28,7 @@ export function idOf(iri: string): string | null {
 }
 
 /** A Realm view's address in the page's locale, which may differ from the shell's until the next request. */
-export function realmHref(locale: UiLocale, ref: string, tab: RealmTab = 'home',
+export function realmHref(locale: UiLocale, ref: string, tab: RealmTab | 'rules' | 'members' = 'home',
   query: Record<string, string | undefined> = {}): string {
   const path = `/${locale}/r/${encodeURIComponent(ref)}${tab === 'home' ? '' : `/${tab}`}`;
   const entries = Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined);
@@ -50,7 +47,7 @@ export function repeatsTab(href: string, ref: string): boolean {
 const zoneRouterPath = /^\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * A presentation link the Zone router resolves (`/`, `/catalogue`) opens that page of this community.
+ * A presentation link the Zone router resolves (`/`, `/catalogue`) opens that page of its site.
  * A link that is already a full address stays as written.
  */
 export function zoneNavigationHref(href: string, ref: string): string {
@@ -59,7 +56,7 @@ export function zoneNavigationHref(href: string, ref: string): string {
   const rest = cut < 0 ? '' : href.slice(cut);
   if (path !== '/' && !zoneRouterPath.test(path)) return href;
   const page = path === '/' ? '' : path;
-  return `/r/${encodeURIComponent(ref)}${page}${rest}`;
+  return `/z/${encodeURIComponent(ref)}${page}${rest}`;
 }
 
 /** The in-page anchor of a Decision on the Decisions tab. */
@@ -81,13 +78,13 @@ export function tabOf(pathname: string): RealmTab | null {
 }
 
 /**
- * A Work page inside the Zone's site, so ratings and classification stay the Zone's Realm's: `/r/{ref}/w/{work}`
- * for a Work its Realm adopted, or `/r/{ref}/{mount}/{work}` for a member of a mounted Collection. Without a
+ * A Work page inside the Zone's site, so ratings and classification stay the Zone's Realm's: `/z/{ref}/w/{work}`
+ * for a Work its Realm adopted, or `/z/{ref}/{mount}/{work}` for a member of a mounted Collection. Without a
  * tab it opens the Work's overview.
  */
 export function realmWorkHref(ref: string, work: string, mount: string | null = null, tab?: 'discussion'): string {
   const id = idOf(work) ?? work;
-  return `/r/${encodeURIComponent(ref)}/${mount ? encodeURIComponent(mount) : 'w'}/${id}${tab ? `/${tab}` : ''}`;
+  return `/z/${encodeURIComponent(ref)}/${mount ? encodeURIComponent(mount) : 'w'}/${id}${tab ? `/${tab}` : ''}`;
 }
 
 /** A Work page in a Realm's scope for a Realm with no Zone site to open it in. */
@@ -96,11 +93,11 @@ export function scopedWorkHref(work: string, realm: string): string {
   return `/w/${id}?${new URLSearchParams({ scope: 'realm', realm })}`;
 }
 
-/** A page of the Zone's site: a mounted document or Collection (`/r/{ref}/{segment}`), or a page under it. */
+/** A page of the Zone's site: a mounted document or Collection (`/z/{ref}/{segment}`), or a page under it. */
 export function siteHref(locale: UiLocale, ref: string, path: readonly string[],
   query: Record<string, string | undefined> = {}): string {
   const entries = Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined);
-  const base = `/${locale}/r/${encodeURIComponent(ref)}/${path.map(encodeURIComponent).join('/')}`;
+  const base = `/${locale}/z/${encodeURIComponent(ref)}${path.length ? `/${path.map(encodeURIComponent).join('/')}` : ''}`;
   return entries.length ? `${base}?${new URLSearchParams(entries)}` : base;
 }
 

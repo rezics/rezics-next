@@ -10,7 +10,7 @@ export const ZONE_NONCE_HEADER = 'x-rezics-nonce';
 
 /** `/{locale}/r/{realm}` and its tabs. */
 export function isZonePage(pathname: string): boolean {
-  return pathLocale(pathname) !== null && /^\/r\/[^/]+/.test(withoutLocale(pathname));
+  return pathLocale(pathname) !== null && /^\/z\/[^/]+(?:\/|$)/.test(withoutLocale(pathname));
 }
 
 export function zoneNonce(): string {

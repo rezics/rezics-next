@@ -23,10 +23,11 @@ import { readAgent, readFacets, readRealmDecision, readRealmDecisions, readRealm
   readZoneBrowse, resolveRealm } from './read.ts';
 import type { ZoneBrowsePage } from './types.ts';
 import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
-import { idOf, parseCursor, parseDecision, parseRealmRef, type RealmTab, realmHref } from './route.ts';
+import { idOf, parseCursor, parseDecision, type RealmTab, realmHref, siteHref } from './route.ts';
+import { RealmDiscussionsRoute } from './discussions-route.tsx';
 import { RealmUnavailable } from './states.tsx';
 import type { ReadFailure } from './types.ts';
-import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
+import { type AboutPerson, ListFailure, Pager, RealmAbout, RealmDecisions } from './views.tsx';
 import { profileHref } from '../profile/route.ts';
 import { CommunitySetupChecklist } from '../communities/setup-checklist.tsx';
 
@@ -40,44 +41,40 @@ export interface RealmRouteProps {
   searchParams: Promise<Search>;
 }
 
-export async function realmMetadata({ params }: Pick<RealmRouteProps, 'params'>, tab: RealmTab): Promise<Metadata> {
+type CommunityPage = RealmTab | 'rules' | 'members';
+
+export async function realmMetadata({ params }: Pick<RealmRouteProps, 'params'>, tab: CommunityPage): Promise<Metadata> {
   const { locale, realm } = await params;
   if (!isUiLocale(locale)) return {};
   const [resolved, { t }] = await Promise.all([resolveRealm(realm, locale), getTranslation('realm', [locale])]);
-  if (resolved.kind !== 'realm') return { title: resolved.kind === 'missing' ? t.notFoundTitle : t.unavailableTitle };
+  if (resolved.kind !== 'realm') return { title: resolved.kind === 'missing' ? t.notFoundTitle : t.unavailableTitle,
+    robots: { index: false } };
   const name = resolved.header.name.value;
-  return { title: tab === 'home' ? name : `${t[tab]} · ${name}`,
+  return { title: tab === 'home' ? name : `${tab === 'rules' ? t.rules : tab === 'members' ? t.membersTitle : t[tab]} · ${name}`,
     description: resolved.header.description?.value };
 }
 
 type Content = (view: RealmView, locale: UiLocale, search: Search) => Promise<ReactNode>;
 
-async function realmRoute({ params, searchParams }: RealmRouteProps, tab: RealmTab, content: Content) {
+async function realmRoute({ params, searchParams }: RealmRouteProps, tab: CommunityPage, content: Content, site = false) {
   const [{ locale, realm }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
-  if (parseRealmRef(realm)?.kind === 'id') {
-    const resolved = await resolveRealm(realm, locale);
-    if (resolved.kind === 'realm' && resolved.zone?.segment) {
-      const query = Object.fromEntries(Object.entries(search).filter((entry): entry is [string, string] =>
-        typeof entry[1] === 'string'));
-      redirect(realmHref(locale, resolved.zone.segment, tab, query));
-    }
-  }
-  const view = await loadRealmView(realm, locale, search);
+  const view = await loadRealmView(realm, locale, search, site ? 'site' : 'community');
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable') return <RealmUnavailable messages={await getMessages('realm', locale)} />;
-  return <RealmFrame view={view} tab={tab} locale={locale} search={search}>{await content(view, locale, search)}
+  return <RealmFrame view={view} tab={site ? null : tab === 'rules' || tab === 'members' ? 'about' : tab} locale={locale} search={search}
+    address={site ? siteHref(locale, view.context.ref, tab === 'home' ? [] : [tab]) : undefined}>{await content(view, locale, search)}
   </RealmFrame>;
 }
 
 /** Cursor links for a paged tab: the next page, and the first page once past it. */
-function paging(view: RealmView, tab: RealmTab, cursor: string | undefined, next: string | null) {
+function paging(view: RealmView, tab: CommunityPage, cursor: string | undefined, next: string | null) {
   const { locale, ref } = view.context;
   return { next: next ? realmHref(locale, ref, tab, { cursor: next }) : null,
     first: cursor ? realmHref(locale, ref, tab) : null };
 }
 
-function failure(view: RealmView, tab: RealmTab, reason: ReadFailure) {
+function failure(view: RealmView, tab: CommunityPage, reason: ReadFailure) {
   return <PageContainer><ListFailure failure={reason} messages={view.messages}
     firstPage={realmHref(view.context.locale, view.context.ref, tab)} /></PageContainer>;
 }
@@ -93,6 +90,10 @@ function facetCounts(page: ZoneBrowsePage): FacetCounts {
 }
 
 export function RealmHomeRoute(props: RealmRouteProps) {
+  return RealmDiscussionsRoute(props);
+}
+
+export function SiteHomeRoute(props: RealmRouteProps) {
   return realmRoute(props, 'home', async (view, _locale, search) => {
     // A package that sets out the Zone's home itself (a wiki's lists at the reader's position) replaces the modules.
     if (view.pkg?.slots.home) return <ZoneSiteHome view={view} search={search} />;
@@ -113,7 +114,7 @@ export function RealmHomeRoute(props: RealmRouteProps) {
         <LocalizedLink href={view.zone.links.about} className={buttonVariants({ variant: 'outline' })}>
           {view.messages.seeAbout}</LocalizedLink>
       </EmptyState>} /></div>;
-  });
+  }, true);
 }
 
 /**
@@ -155,7 +156,7 @@ export function RealmBrowseRoute(props: RealmRouteProps) {
       {header ? <PageContainer className="pb-0 sm:pb-0 lg:pb-0">{header}</PageContainer> : null}
       <ZoneBrowse model={model} messages={view.zoneMessages} card={card} />
     </>;
-  });
+  }, true);
 }
 
 /** The former Works tab: every adopted Work, newest first, is Browse's grid. */
@@ -214,5 +215,27 @@ export function RealmAboutRoute(props: RealmRouteProps) {
             featured: item.featured }] : []) } : null}
       rules={header.rules?.map(rule => ({ id: rule.id, title: rule.title.value, body: rule.body.value,
         governed: rule.governanceRule !== null, lang: rule.title.language })) ?? null} />;
+  });
+}
+
+export function RealmRulesRoute(props: RealmRouteProps) {
+  return realmRoute(props, 'rules', async (view, locale) => <RealmAbout only="rules" realmName={view.zone.name.value}
+    description={null} moderators={null} members={null} listed={null} others={[]} locale={locale} messages={view.messages}
+    rules={view.realm.header.rules?.map(rule => ({ id: rule.id, title: rule.title.value, body: rule.body.value,
+      governed: rule.governanceRule !== null, lang: rule.title.language })) ?? null} />);
+}
+
+export function RealmMembersRoute(props: RealmRouteProps) {
+  return realmRoute(props, 'members', async (view, locale, search) => {
+    const cursor = parseCursor(search);
+    const roster = await readRoster(view.context.realm, cursor);
+    if (!roster.ok) return failure(view, 'members', roster.failure);
+    const people = roster.data.items.flatMap(item => item.displayName ? [{ id: item.agent, name: item.displayName,
+      href: profileHref(`agent-${idOf(item.agent)}`), kind: 'person' as const, avatarUrl: null, featured: item.featured }] : []);
+    return <RealmAbout only="members" realmName={view.zone.name.value} description={null} moderators={null}
+      members={membersText(view.realm.header.membership.count, locale, view.messages)} rules={null} others={[]}
+      listed={{ people, more: roster.data.nextCursor !== null }} locale={locale} messages={view.messages}>
+      <Pager {...paging(view, 'members', cursor, roster.data.nextCursor)} messages={view.messages} />
+    </RealmAbout>;
   });
 }

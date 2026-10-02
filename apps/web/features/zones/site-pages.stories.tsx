@@ -12,7 +12,7 @@ import { cardRenderer } from './zone-home.tsx';
 // The pages a Zone's mounts give it, and the navigation and breadcrumbs that lead to them.
 
 const name = (value: string) => ({ value, lang: 'en', dir: direction('en', value) });
-const links = [{ href: '/r/books/guide', label: name('Guide') }, { href: '/r/books/picks', label: name('Picks') }];
+const links = [{ href: '/z/books/guide', label: name('Guide') }, { href: '/z/books/picks', label: name('Picks') }];
 const zone = fictionZone('en');
 const card = cardRenderer(zone, null, 'en', zoneMessagesFor('en'));
 
@@ -26,7 +26,7 @@ const route = { name: 'Books', language: 'en', direction: direction('en', 'Books
 
 const meta = {
   title: 'Zones/Site pages',
-  parameters: { route: { pathname: '/en/r/books/guide' } },
+  parameters: { route: { pathname: '/en/z/books/guide' } },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -35,7 +35,7 @@ type Story = StoryObj<typeof meta>;
 export const Navigation: Story = {
   render: () => <div className="bg-(--zone-page)">
     <ZoneSiteNavigation links={links} label="Pages in this community" />
-    <ZoneBreadcrumbs label="Breadcrumb" crumbs={[{ label: name('Books'), href: '/r/books' },
+    <ZoneBreadcrumbs label="Breadcrumb" crumbs={[{ label: name('Books'), href: '/z/books' },
       { label: name('Guide'), href: null }]} />
   </div>,
   async play({ canvasElement }) {
@@ -43,7 +43,7 @@ export const Navigation: Story = {
     await expect(canvas.getByRole('link', { name: 'Guide' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('link', { name: 'Picks' })).not.toHaveAttribute('aria-current');
     const crumbs = within(canvas.getByRole('navigation', { name: 'Breadcrumb' }));
-    await expect(crumbs.getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/r/books');
+    await expect(crumbs.getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/z/books');
     await expect(crumbs.getByText('Guide')).toHaveAttribute('aria-current', 'page');
   },
 };
@@ -70,8 +70,8 @@ export const Index: Story = {
     await expect(canvas.getByRole('heading', { name: 'Picks' })).toBeVisible();
     const hrefs = canvas.getAllByRole('link').map(link => link.getAttribute('href') ?? '');
     await expect(hrefs.filter(href => href.includes('/w/') || href.includes('/picks/')).every(href =>
-      href.startsWith('/en/r/books/picks/'))).toBe(true);
-    await expect(canvas.getByRole('link', { name: /Next page/ })).toHaveAttribute('href', '/en/r/books/picks?cursor=next');
+      href.startsWith('/en/z/books/picks/'))).toBe(true);
+    await expect(canvas.getByRole('link', { name: /Next page/ })).toHaveAttribute('href', '/en/z/books/picks?cursor=next');
   },
 };
 

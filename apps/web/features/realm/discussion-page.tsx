@@ -1,6 +1,6 @@
 import { materializeData } from 'native-i18n';
 import { cookies } from 'next/headers';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { isUiLocale, type UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -13,8 +13,7 @@ import type { FeedMessages } from '../feed/messages.ts';
 import type { ReplyMode } from '../feed/reply-composer.tsx';
 import { offerOf } from './membership-state.ts';
 import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
-import { resolveRealm } from './read.ts';
-import { parseRealmRef, realmHref } from './route.ts';
+import { realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
 
@@ -31,14 +30,6 @@ export type Search = Record<string, string | string[] | undefined>;
 export async function discussionView(locale: string, ref: string, search: Search, rest = ''):
   Promise<{ view: RealmView; locale: UiLocale; feed: FeedMessages } | { page: ReactNode }> {
   if (!isUiLocale(locale)) notFound();
-  if (parseRealmRef(ref)?.kind === 'id') {
-    const resolved = await resolveRealm(ref, locale);
-    if (resolved.kind === 'realm' && resolved.zone?.segment) {
-      const query = new URLSearchParams(Object.entries(search).filter((entry): entry is [string, string] =>
-        typeof entry[1] === 'string'));
-      redirect(`${realmHref(locale, resolved.zone.segment, 'discussions')}${rest}${query.size ? `?${query}` : ''}`);
-    }
-  }
   const [view, feed] = await Promise.all([loadRealmView(ref, locale, search), getMessages('feed', locale)]);
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable') return { page: <RealmUnavailable messages={await getMessages('realm', locale)} /> };

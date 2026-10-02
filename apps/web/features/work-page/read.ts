@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { cache } from 'react';
+import { resolveAddress } from '../address/server.ts';
+import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
 import { mainApiWithToken } from '../api/main.ts';
@@ -90,20 +92,9 @@ export type ResolvedRef =
 /** A `/w/{ref}` segment to a Work UUID. Slugs never become alternate Work identities. */
 export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> => {
   if (ref.kind === 'id') return { kind: 'work', id: ref.id };
-  const { main } = await reader();
-  try {
-    // A renamed slug answers 308 with the current one; read it rather than follow it.
-    const { data, error } = await main.v1.addresses.work({ slug: ref.slug }).get({ fetch: { redirect: 'manual' } });
-    if (data) {
-      // A merged Work's page is its survivor's: the hub moves there rather than showing the duplicate.
-      const survivor = mergedSurvivor(data);
-      return survivor ? { kind: 'moved', slug: survivor } : { kind: 'work', id: data.work.slice(-36) };
-    }
-    if (error?.status === 308) return { kind: 'moved', slug: error.value.canonical.slug };
-    return error && failureOf(error.status) === 'missing' ? { kind: 'missing' } : { kind: 'unavailable' };
-  } catch {
-    return { kind: 'unavailable' };
-  }
+  const resolved = await resolveAddress('work', ref.slug, await requestLocale());
+  return resolved.kind === 'resolved' ? { kind: 'work', id: resolved.data.holder.slice(-36) }
+    : { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
 });
 
 export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promise<Loaded<WorkHeader>> => {

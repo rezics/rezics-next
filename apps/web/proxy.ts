@@ -7,6 +7,10 @@ import { refreshSession } from './features/auth/refresh.ts';
 import { type SessionCookie, sessionCookies } from './features/auth/session-state.ts';
 import { isPublicPagePath, isReportPath, LOCALE_COOKIE, pathLocale, resolveLocale } from './i18n/locale.ts';
 import { isZonePage, ZONE_NONCE_HEADER, zoneCsp, zoneNonce } from './features/zones/csp.ts';
+import { ADDRESS_HEADER, readAddress } from './features/address/client.ts';
+import { addressPath } from './features/address/path.ts';
+import { decideAddress } from './features/address/redirect.ts';
+import { displayLanguages } from './i18n/display-languages.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -14,9 +18,17 @@ import { isZonePage, ZONE_NONCE_HEADER, zoneCsp, zoneNonce } from './features/zo
 // tokens to that code; Set-Cookie carries them to the browser.
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
-  if (isPublicPagePath(pathname) && !pathLocale(pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
-    const locale = resolveLocale(request.cookies.get(LOCALE_COOKIE)?.value,
-      request.headers.get('accept-language'));
+  const locale = pathLocale(pathname) ?? resolveLocale(request.cookies.get(LOCALE_COOKIE)?.value,
+    request.headers.get('accept-language'));
+  const pageRequest = request.method === 'GET' || request.method === 'HEAD';
+  const addressed = pageRequest ? await decideAddress(new URL(request.url), locale, lookup =>
+    readAddress(lookup, displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','))) : { kind: 'pass' as const };
+  if (addressed.kind === 'redirect') {
+    return NextResponse.redirect(new URL(addressed.location, request.url), addressed.status);
+  }
+  if (addressed.kind === 'error') return new NextResponse(null, { status: addressed.status,
+    headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
+  if ((isPublicPagePath(pathname) || addressPath(pathname)) && !pathLocale(pathname) && pageRequest) {
     const destination = request.nextUrl.clone();
     destination.pathname = `/${locale}${pathname === '/' ? '' : pathname}`;
     return NextResponse.redirect(destination);
@@ -40,6 +52,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (legacyAgent) cookies.push({ name: AGENT_COOKIE, value: '',
     options: cookieOptions(request.url, 0) });
   const headers = new Headers(request.headers);
+  headers.delete(ADDRESS_HEADER);
+  // HTTP header values are bytes; native-script names need an ASCII envelope.
+  if ('data' in addressed && addressed.data) headers.set(ADDRESS_HEADER, encodeURIComponent(JSON.stringify(addressed.data)));
   if (pathLocale(pathname)) headers.set('x-rezics-page-url', request.nextUrl.origin + pathname + request.nextUrl.search);
   else headers.delete('x-rezics-page-url');
   headers.set('cookie', rewriteCookieHeader(request.headers.get('cookie'), Object.fromEntries(
