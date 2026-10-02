@@ -561,6 +561,9 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
         home.reader.token,
       ),
     );
+    const explicit = await home.deps.follows.state(space.space,{ principal,agent: reader });
+    await json(await call('POST','/v1/follows',{ profile: 'follow-command-v1',target: space.space,
+      following: true,expectedRevision: explicit.revision,actingSubject: reader,level: 'all' },home.reader.token));
     await leave(second.membershipGeneration);
     expect(await home.deps.follows.state(space.space, { principal, agent: reader })).toMatchObject({
       following: true,

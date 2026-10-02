@@ -6,7 +6,7 @@ import { batchFollowCommand, batchFollowResult, followCommand, followKind, follo
 import { readFollowedAuthors, readFollows, readFollowTarget } from '../modules/follows/read.ts';
 import { resolveFollowIdentity } from '../modules/follows/targets.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
-import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
+import { workRead, WorkReadMissing, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -39,7 +39,7 @@ export function followsRoutes(work: MainWorkDependencies) {
       if (identity.kind === 'work') identity.target = (await resolveTargets(session,[identity.target],'discussion'))[0]!.resource;
       const described = await readFollowTarget(session,identity.target,identity.kind,undefined,{ principal,agent });
       identity.nameKey = described.name.value.normalize('NFKC').toLowerCase();
-      if (hint && hint!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(hint))) throw new ControlInvalid('Follow kind does not match target');
+      if (hint && hint!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(hint))) throw new WorkReadMissing('Follow target is unavailable for this kind');
       return identity;
     });
   /** Followers of a target, and with a bearer whether the reader follows it. Only the count is public. */
