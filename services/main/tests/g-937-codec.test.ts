@@ -91,6 +91,8 @@ test('G-937: names keep native script, fold canonically and reject mixed-script 
     fc.property(fc.uuid(), (uuid) => {
       for (const policy of ['ascii-handle', 'unicode-title'] as const) {
         expect(() => normalizeAddressName(uuidToSid(uuid), policy)).toThrow();
+        expect(() => normalizeAddressName(`${uuidToSid(uuid)}-`, policy)).toThrow();
+        expect(() => normalizeAddressName(`${uuidToSid(uuid)}-title`, policy)).toThrow();
         expect(() => normalizeAddressName(uuid, policy)).toThrow();
       }
     }),

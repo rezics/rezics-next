@@ -857,6 +857,26 @@ export class AccessAdmissionRegistry {
     }
   }
 
+  /** Commit an Access-owned SQL effect under the ordinary, live admission
+   * policy. No graph admission is created. All selected authority locks stay
+   * held until the callback and its owner receipt commit in this transaction. */
+  async withOwnerAuthority<T>(request: Omit<AdmissionRequest, 'editorialPermit' | 'idempotencyKey' | 'requestDigest'>,
+    operation: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const probe = { ...request, idempotencyKey: `authority:${Bun.randomUUIDv7()}`, requestDigest: '0'.repeat(64) };
+      const result = await withCommandOwnerAuthority(this.pool, probe, this.baselineGraph, async () => {
+        try { await this.registerRequest(probe, client, true); }
+        catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
+        return operation(client);
+      });
+      await client.query('COMMIT');
+      return result;
+    } catch (error) { await rollback(client); throw error; }
+    finally { client.release(); }
+  }
+
   private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false): Promise<RegisteredAdmission> {
     if (request.editorialPermit) {
       const principalId = await this.activePrincipalId(request.principal);

@@ -26,13 +26,16 @@ test('G836: public old IDs, slugs and retained revisions explain a merge without
     for (const work of [source.work, survivor.work]) await f.grant(`work:read:${work}`, 'work.read');
     await f.grant(`address:claim:${source.work}`, 'address.claim');
     const slug = `sao-836-${randomUUID().slice(0, 8)}`;
-    const address = await f.json<{ revision: string; address: string }>(await f.call('POST', '/v1/addresses/claims',
-      { profile: 'work-address-claim-v1', work: source.work, slug, actingSubject: f.actor }), 201);
+    const address = await f.json<{ revision: string }>(await f.call('POST', '/v1/addresses/claims',
+      { profile: 'name-write-v1',operation: 'claim',scope: 'work',holder: source.work,name: slug,
+        expectedRevision: null,actingSubject: f.actor }), 201);
     const revisionPath = `/v1/revisions/${shortId(source.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`;
     const mainPath = `/v1/main-versions/${shortId(source.mainVersion)}/revisions/${shortId(source.mainRevision)}?actingSubject=${encodeURIComponent(f.actor)}`;
     const original = await f.json<Record<string, unknown>>(await f.call('GET', revisionPath), 200);
     const originalMain = await f.json<Record<string, unknown>>(await f.call('GET', mainPath), 200);
-    const originalAddress = await f.json<Record<string, unknown>>(await anonymous(`/v1/addresses/work/${slug}/revisions/${shortId(address.revision)}`), 200);
+    const addressPath = `/v1/addresses/resolve?scope=work&key=${slug}`;
+    const addressRevisionPath = `/v1/addresses/revisions/${address.revision}?scope=work&key=${slug}`;
+    const originalAddress = await f.json<Record<string, unknown>>(await anonymous(addressRevisionPath), 200);
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(source.work)} rv:mergedInto ${iri(survivor.work)} } }`);
     const resolution: MergedIdentity = { state: 'merged', source: source.work, survivor: survivor.work, hops: 1 };
@@ -44,11 +47,11 @@ test('G836: public old IDs, slugs and retained revisions explain a merge without
     expect(batch.summaries).toHaveLength(3);
     expect(batch.summaries[0]).toMatchObject({ reference: source.work, status: 'available', resolution });
     expect(batch.summaries[2]).toEqual(batch.summaries[0]);
-    const route = await f.json<{ state: string; work: string; resolution: MergedIdentity }>(
-      await anonymous(`/v1/addresses/work/${slug}`), 200);
-    expect(route).toMatchObject({ state: 'current', work: source.work, resolution });
+    const route = await f.json<{ state: string; holder: string; resolution: MergedIdentity }>(
+      await anonymous(addressPath), 200);
+    expect(route).toMatchObject({ state: 'current', holder: source.work, resolution });
     // Survivor deliberately has no slug: identity resolution still succeeds.
-    expect(await f.json(await anonymous(`/v1/addresses/work/${slug}/revisions/${shortId(address.revision)}`), 200))
+    expect(await f.json(await anonymous(addressRevisionPath), 200))
       .toEqual({ ...originalAddress, resolution });
     expect(await f.json(await f.call('GET', revisionPath), 200)).toEqual({ ...original, resolution });
     expect(await f.json(await f.call('GET', mainPath), 200)).toEqual({ ...originalMain, resolution });
@@ -56,18 +59,18 @@ test('G836: public old IDs, slugs and retained revisions explain a merge without
       GRAPH ${iri(GRAPHS.current)} { ${iri(survivor.work)} rv:catalogueVisible true } }`);
     // No survivor identity or metadata escapes through a public source alias.
     expect((await anonymous(`/v1/resources/${shortId(source.work)}`)).status).toBe(404);
-    expect((await anonymous(`/v1/addresses/work/${slug}`)).status).toBe(503);
+    expect((await anonymous(addressPath)).status).toBe(404);
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(survivor.work)} rv:catalogueVisible true ; rv:mergedInto ${iri(source.work)} } }`);
     expect((await anonymous(`/v1/resources/${shortId(source.work)}`)).status).toBe(503);
-    expect((await anonymous(`/v1/addresses/work/${slug}`)).status).toBe(503);
+    expect((await anonymous(addressPath)).status).toBe(503);
     // Unmerge read projection restores old identities, addresses and bytes.
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(source.work)} rv:mergedInto ${iri(survivor.work)} .
         ${iri(survivor.work)} rv:mergedInto ${iri(source.work)} } }`);
     expect(await f.json(await f.call('GET', revisionPath), 200)).toEqual(original);
     expect(await f.json(await f.call('GET', mainPath), 200)).toEqual(originalMain);
-    expect(await f.json(await anonymous(`/v1/addresses/work/${slug}/revisions/${shortId(address.revision)}`), 200)).toEqual(originalAddress);
-    expect(await f.json(await anonymous(`/v1/addresses/work/${slug}`), 200)).toMatchObject({ state: 'current', work: source.work });
+    expect(await f.json(await anonymous(addressRevisionPath), 200)).toEqual(originalAddress);
+    expect(await f.json(await anonymous(addressPath), 200)).toMatchObject({ state: 'current', holder: source.work });
   } finally { await f.close(); rmSync(directory, { recursive: true, force: true }); }
-});
+},30_000);

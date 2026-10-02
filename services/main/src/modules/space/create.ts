@@ -1,3 +1,4 @@
+import { normalizeAddressName } from '@rezics/model/address/names';
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -14,7 +15,7 @@ export const SELECTION_POLICY = 'https://rezics.com/definition/realm-manager-fix
 export const MEMBERSHIP_POLICY = 'https://rezics.com/definition/realm-closed-v1';
 export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-reviewed-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-export const COMMUNITY_HANDLE = /^[a-z][a-z0-9-]{2,29}$/;
+export const COMMUNITY_HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
 export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 1, handleChecks: 2,
   graphCommandCalls: 1, deadlineMs: 10_000 } as const;
 export const COMMUNITY_HANDLE_READ_COST = { resultRows: 2, queryBytes: 1024 } as const;
@@ -62,7 +63,7 @@ export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
     ...(language === 'en' ? {} : { language }),
     capabilities: ['realm'], owner: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, membershipPolicy: MEMBERSHIP_POLICY,
-    reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: input.handle } : {},
+    reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: normalizeAddressName(input.handle,'ascii-handle').key } : {},
     ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }));
 }
 
@@ -79,18 +80,6 @@ async function validateTopics(env: WorkActivationEnvironment, topics: readonly s
       }
     } LIMIT ${SPACE_CREATE_COST.topics + 1}`, 2048)).results?.bindings ?? [];
   if (rows.length !== topics.length) throw new InvalidSpaceInput('Community topics must be active global Concepts');
-}
-
-/** One graph lookup, also used after a guard miss to report a racing handle claim. */
-export async function communityHandleTaken(env: WorkActivationEnvironment, handle: string): Promise<boolean> {
-  if (!COMMUNITY_HANDLE.test(handle)) throw new InvalidSpaceInput('Invalid community handle');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.current)} {
-      { ?realm a rv:Realm ; rv:communityHandle ${lit(handle)} }
-      UNION { ?zone a rv:Zone ; rv:official true ; rv:routeSegment ${lit(handle)} }
-    }
-  }`, 1024);
-  return result.boolean === true;
 }
 
 export function spaceCreationReceiptIri(admissionId: string): string {
@@ -166,12 +155,9 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   await assertNotInvalidProfileReceipt(env.fuseki, spaceCreationReceiptIri(admission.id));
   const existing = await readSpaceCreationReceipt(env, admission.id);
   if (existing) return checked(existing, admission, input, digest);
-  if (input.handle && await communityHandleTaken(env, input.handle)) {
-    throw new InvalidSpaceInput('Community handle is already taken');
-  }
   await validateTopics(env, input.topics ?? []);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
-  const space = ID + Bun.randomUUIDv7();
+  const space = ID + admission.id;
   const realm = ID + Bun.randomUUIDv7();
   const spaceRevision = ID + Bun.randomUUIDv7();
   const realmRevision = ID + Bun.randomUUIDv7();
@@ -183,7 +169,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const realmManifest = prepareComponent(env.objectDirectory, realm,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
       membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: REVIEW_POLICY,
-      ...input.handle ? { handle: input.handle } : {},
+      ...input.handle ? { handle: normalizeAddressName(input.handle,'ascii-handle').key } : {},
       ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
   const receipt = spaceCreationReceiptIri(admission.id);
@@ -204,7 +190,6 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           rdfs:label ${lit(input.name)}@${language} ; rv:head ${iri(spaceRevision)} .
         ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
           rv:definitionProfile ${iri(SPACE_REALM_PROFILE)} ;
-          ${input.handle ? `rv:communityHandle ${lit(input.handle)} ;` : ''}
           ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
           rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;
@@ -244,10 +229,6 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(space)} ?sp ?so } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} ?rp ?ro } }
-      ${input.handle ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        { ?otherRealm a rv:Realm ; rv:communityHandle ${lit(input.handle)} }
-        UNION { ?otherZone a rv:Zone ; rv:official true ; rv:routeSegment ${lit(input.handle)} }
-      } }` : ''}
       BIND(?n + 1 AS ?next)
     }` }, admission);
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
@@ -260,9 +241,6 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   }
   const committed = await readSpaceCreationReceipt(env, admission.id);
   if (committed) return checked(committed, admission, input, digest);
-  if (input.handle && await communityHandleTaken(env, input.handle)) {
-    throw new InvalidSpaceInput('Community handle is already taken');
-  }
   throw new PendingActivation(updateError
     ? 'Space update outcome unknown' : 'Space creation guard did not match');
 }
@@ -274,7 +252,10 @@ export async function sealRealmSpaceAdmission(env: WorkActivationEnvironment,
     throw new IdempotencyConflict('unsupported Space admission');
   }
   const existing = await readSpaceCreationReceipt(env, admission.id);
-  if (existing) return existing;
+  if (existing) {
+    if (existing.outcome === 'cancelled') await env.addresses?.retireFailedCreation(ID + admission.id);
+    return existing;
+  }
   const receipt = spaceCreationReceiptIri(admission.id);
   const digest = hash(`${receipt}\0cancel`);
   const event = `urn:rezics:event:${digest}`;
@@ -315,5 +296,6 @@ export async function sealRealmSpaceAdmission(env: WorkActivationEnvironment,
     throw new PendingActivation(updateError
       ? 'Space cancellation outcome unknown' : 'Space cancellation guard did not match');
   }
+  await env.addresses?.retireFailedCreation(ID + admission.id);
   return committed;
 }

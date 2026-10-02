@@ -24,13 +24,13 @@ interface ZoneHead {
   zone: string; space: string; navigation: string; revision: string; manifest: string;
   state: 'active' | 'retired'; disclosure: 'public' | 'private';
   spaceVisibility: 'public' | 'private'; listing: ResourceListing;
-  defaultRealm?: string; presentation?: string; official?: { routeSegment: string };
+  defaultRealm?: string; presentation?: string; official?: Record<string, never>;
   defaultContext?: { context: string; semanticRevision: string };
 }
 
 async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<ZoneHead> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?navigation ?head
-    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?segment ?spaceDisclosure ?listing WHERE {
+    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
         rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state ;
         rv:disclosure ?disclosure .
@@ -39,7 +39,6 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
         OPTIONAL { ${iri(zone)} rv:defaultRealm ?realm }
         OPTIONAL { ${iri(zone)} rv:presentation ?presentation }
         OPTIONAL { ${iri(zone)} rv:official ?official }
-        OPTIONAL { ${iri(zone)} rv:routeSegment ?segment }
         OPTIONAL { ${iri(zone)} rv:defaultContext ?context }
         OPTIONAL { ${iri(zone)} rv:defaultContextRevision ?contextRevision } }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ZoneRevision ;
@@ -54,9 +53,6 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   }
   if (!!row.context?.value !== !!row.contextRevision?.value) {
     throw new ZoneUnavailable('Zone Context selection is incomplete');
-  }
-  if (!!row.official?.value !== !!row.segment?.value) {
-    throw new ZoneUnavailable('Official Zone marker is incomplete');
   }
   if (row.official?.value && row.official.value !== 'true') {
     throw new ZoneUnavailable('Official Zone marker differs');
@@ -73,8 +69,7 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
     ...(row.context?.value && row.contextRevision?.value ? { defaultContext: {
       context: row.context.value, semanticRevision: row.contextRevision.value } } : {}),
     ...(row.presentation?.value ? { presentation: row.presentation.value } : {}),
-    ...(row.official?.value === 'true' && row.segment?.value
-      ? { official: { routeSegment: row.segment.value } } : {}) };
+    ...(row.official?.value === 'true' ? { official: {} } : {}) };
 }
 
 export async function readZoneConfiguration(env: WorkActivationEnvironment, zone: string) {
@@ -109,7 +104,7 @@ export interface ZoneRevisionInput {
   zone: string; expectedHead: string; actingSubject: string; idempotencyKey: string;
   operation: 'configure' | 'retire' | 'recover';
   patch?: { name?: string; language?: string;
-    defaultRealm?: string | null; official?: { routeSegment: string } | null;
+    defaultRealm?: string | null; official?: Record<string, never> | null;
     presentation?: ZonePresentation | null;
     defaultContext?: ZoneConfiguration['defaultContext'] | null;
     budget?: ZoneConfiguration['budget']; queryBlocks?: ZoneQueryBlock[];
@@ -236,12 +231,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         ${activeDefinitionDependenciesGuard(selected.semanticRevision)} }`);
       if (available.boolean !== true) return invalid(new InvalidZoneConfiguration('selected Context is unavailable'));
     }
-    if (config.official) {
-      const occupied = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-        ?other a rv:Zone ; rv:official true ; rv:routeSegment ${lit(config.official.routeSegment)} .
-        FILTER(?other != ${iri(input.zone)}) } }`);
-      if (occupied.boolean === true) return invalid(new InvalidZoneConfiguration('Official route segment is occupied'));
-    }
     const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const manifest = prepareComponent(env.objectDirectory, input.zone, { configuration: config,
@@ -256,15 +245,14 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(input.expectedHead)} ;
           rv:zoneState ?oldState ; rv:defaultRealm ?oldRealm ; rv:official ?oldOfficial ;
-          rv:routeSegment ?oldSegment ; rv:presentation ?oldPresentation ;
+          rv:presentation ?oldPresentation ;
           rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision . } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(revision)} ;
           rv:zoneState rv:${config.state === 'active' ? 'Active' : 'Retired'} .
           ${config.defaultRealm ? `${iri(input.zone)} rv:defaultRealm ${iri(config.defaultRealm)} .` : ''}
-          ${config.official ? `${iri(input.zone)} rv:official true ;
-            rv:routeSegment ${lit(config.official.routeSegment)} .` : ''}
+          ${config.official ? `${iri(input.zone)} rv:official true .` : ''}
           ${config.defaultContext ? `${iri(input.zone)} rv:defaultContext ${iri(config.defaultContext.context)} ;
             rv:defaultContextRevision ${iri(config.defaultContext.semanticRevision)} .` : ''}
           ${config.presentation ? `${iri(input.zone)} rv:presentation ${iri(typeof config.presentation === 'string'
@@ -293,7 +281,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:zoneState ?oldState .
           OPTIONAL { ${iri(input.zone)} rv:defaultRealm ?oldRealm }
           OPTIONAL { ${iri(input.zone)} rv:official ?oldOfficial }
-          OPTIONAL { ${iri(input.zone)} rv:routeSegment ?oldSegment }
           OPTIONAL { ${iri(input.zone)} rv:presentation ?oldPresentation }
           OPTIONAL { ${iri(input.zone)} rv:defaultContext ?oldContext }
           OPTIONAL { ${iri(input.zone)} rv:defaultContextRevision ?oldContextRevision } }
@@ -301,9 +288,6 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           ${iri(head.navigation)} rv:selectedGeneration ?generation .
           ?generation rv:placementCount 0 . }` : ''}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-        ${config.official ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?other a rv:Zone ; rv:official true ; rv:routeSegment ${lit(config.official.routeSegment)} .
-          FILTER(?other != ${iri(input.zone)}) } }` : ''}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         BIND(?n + 1 AS ?next) }`;
     const validations = await profileValidations(env.fuseki, 'zone-capability-v1', [

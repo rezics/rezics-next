@@ -111,6 +111,7 @@ export class CommandRejected extends Error {
 const RECEIPTS = 'urn:rezics:graph:receipts';
 const RV = 'https://rezics.com/vocab/';
 const MAINTENANCE_RECEIPTS = [
+  'urn:rezics:name-migration:',
   'urn:rezics:receipt:bootstrap:', 'urn:rezics:receipt:restore-cutover:',
   'urn:rezics:receipt:restore-release:', 'urn:rezics:receipt:retained-zero:',
   'urn:rezics:receipt:content-rebuild:', 'urn:rezics:receipt:chapter-search-index:',

@@ -92,14 +92,14 @@ export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> =
   if (ref.kind === 'id') return { kind: 'work', id: ref.id };
   const { main } = await reader();
   try {
-    // A renamed slug answers 308 with the current one; read it rather than follow it.
-    const { data, error } = await main.v1.addresses.work({ slug: ref.slug }).get({ fetch: { redirect: 'manual' } });
-    if (data) {
+    // The shared resolver reports a retained alias and its current canonical key.
+    const { data, error } = await main.v1.addresses.resolve.get({ query: { scope: 'work',key: ref.slug } });
+    if (data && data.status === 'resolved') {
       // A merged Work's page is its survivor's: the hub moves there rather than showing the duplicate.
       const survivor = mergedSurvivor(data);
-      return survivor ? { kind: 'moved', slug: survivor } : { kind: 'work', id: data.work.slice(-36) };
+      return survivor ? { kind: 'moved', slug: survivor } : data.state === 'redirect'
+        ? { kind: 'moved',slug: data.canonical.key } : { kind: 'work', id: data.holder.slice(-36) };
     }
-    if (error?.status === 308) return { kind: 'moved', slug: error.value.canonical.slug };
     return error && failureOf(error.status) === 'missing' ? { kind: 'missing' } : { kind: 'unavailable' };
   } catch {
     return { kind: 'unavailable' };

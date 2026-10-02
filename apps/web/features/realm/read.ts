@@ -3,7 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { idOf, parseRealmRef } from './route.ts';
 import { type AgentRead, failureOf, type FacetList, type Loaded,
-  type ModReleasePage, type OfficialZone,
+  type ModReleasePage,
   type RankingMetric, type RankingPage,
   type RealmDecisionsPage, type RealmDecisionRead, type RealmDirectoryPage, type RealmHeader, type RealmRoster,
   type RealmZoneRead,
@@ -42,9 +42,6 @@ export type RealmResolution =
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
-const officialZone = cache(async (segment: string): Promise<Loaded<OfficialZone>> =>
-  settle(() => main().v1.zones['by-segment']({ segment }).get()));
-
 export const readRealmHeader = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> =>
   settle(() => main().v1.realms({ realm }).get({ query: {} })));
 
@@ -61,20 +58,16 @@ export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise
   let realm: string;
   let zone: { id: string; segment: string | null } | null = null;
   if (parsed.kind === 'segment') {
-    const official = await officialZone(parsed.segment);
-    if (official.ok) {
-      const realmId = idOf(official.data.realm);
-      const zoneId = idOf(official.data.zone);
-      if (!realmId || !zoneId) return { kind: 'unavailable' };
-      realm = realmId;
-      zone = { id: zoneId, segment: official.data.routeSegment };
-    } else {
-      if (official.failure !== 'missing') return { kind: 'unavailable' };
-      const community = await settle(() => main().v1.realms['by-handle']({ handle: parsed.segment }).get());
-      if (!community.ok) return { kind: community.failure === 'missing' ? 'missing' : 'unavailable' };
-      const realmId = idOf(community.data.realm);
-      if (!realmId) return { kind: 'unavailable' };
-      realm = realmId;
+    const resolved = await settle(() => main().v1.addresses.resolve.get({ query: { scope: 'space',key: parsed.segment } }));
+    if (!resolved.ok) return { kind: resolved.failure === 'missing' ? 'missing' : 'unavailable' };
+    if (resolved.data.status !== 'resolved' || !resolved.data.capabilities?.realm) return { kind: 'missing' };
+    const realmId = idOf(resolved.data.capabilities.realm);
+    if (!realmId) return { kind: 'unavailable' };
+    realm = realmId;
+    if (resolved.data.capabilities.zone) {
+      const zoneId = idOf(resolved.data.capabilities.zone);
+      if (!zoneId) return { kind: 'unavailable' };
+      zone = { id: zoneId,segment: resolved.data.canonical.key };
     }
   } else realm = parsed.id;
   const header = await readRealmHeader(realm, locale);

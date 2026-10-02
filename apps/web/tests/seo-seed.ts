@@ -5,9 +5,8 @@
 // admit; it prints the IDs and slugs.
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
-import { claimWorkAddress, workAddressDigest } from '../../../services/main/src/modules/address/claim.ts';
-import { disposeWorkAddress, workAddressDispositionDigest } from '../../../services/main/src/modules/address/dispose.ts';
-import { renameWorkAddress, workAddressRenameDigest } from '../../../services/main/src/modules/address/rename.ts';
+import { NameRegistry,type NameReceipt } from '../../../services/main/src/modules/address/registry.ts';
+import { GRAPHS,iri } from '../../../services/main/src/modules/work/activate.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
   throw new Error('The search-metadata seed writes only into an isolated QA run');
@@ -19,7 +18,7 @@ const stack = await startMediaStack('seo-e2e');
 // Owner commands keep revision bytes where the running Main reads them, as services/main/src/index.ts configures it.
 const workObjects = stack.objects('semantic/work/');
 await workObjects.initialize();
-Object.assign(stack.env, { objectDirectory, workObjects });
+Object.assign(stack.env, { objectDirectory, workObjects,addresses: new NameRegistry(stack.accessPool) });
 try {
   const author = await stack.member('seo-author');
   const tag = randomUUID().slice(0, 8);
@@ -33,38 +32,29 @@ try {
       localized: [{ language: 'en', title: null, mainVersionLabel: null, description }] } });
   if (saved.status !== 200) throw new Error(`Description failed with ${saved.status}: ${await saved.text()}`);
 
-  const admitted = (target: string, verb: string, action: string, digest: string) =>
-    stack.admission(author.actor, `address:${verb}:${target}`, action, digest);
-  const claim = async (target: string, slug: string) => {
-    const input = { work: target, slug, actingSubject: author.actor };
-    const receipt = await claimWorkAddress(stack.env, admitted(target, 'claim', 'address.claim',
-      workAddressDigest(input)), input);
-    if (receipt.outcome !== 'succeeded' || !receipt.revision) throw new Error(`Claiming ${slug} failed`);
-    return receipt.revision;
+  const change = async (target: string,operation: 'claim' | 'rename' | 'release' | 'merge',
+    name: string | null,expectedRevision: string | null,successor?: string) => {
+    const family = operation === 'claim' ? 'claim' : operation === 'rename' ? 'rename' : 'dispose';
+    await author.grant(`address:${family}:${target}`,`address.${family}`);
+    const response = await author.send('POST',`/v1/addresses/${operation === 'claim' ? 'claims' : operation === 'rename' ? 'renames' : 'dispositions'}`, {
+      profile: 'name-write-v1',scope: 'work',holder: target,operation,expectedRevision,
+      ...(name === null ? {} : { name }),actingSubject: author.actor,...(successor ? { successor } : {}),
+    });
+    if (response.status !== 201) throw new Error(`Name write failed: ${await response.text()}`);
+    return response.json() as Promise<NameReceipt>;
   };
-  const dispose = async (target: string, slug: string, revision: string, targetWork?: string) => {
-    const input = targetWork ? { operation: 'merge' as const, work: target, slug, expectedRevision: revision, targetWork,
-      actingSubject: author.actor } : { operation: 'retire' as const, work: target, slug, expectedRevision: revision,
-      actingSubject: author.actor };
-    const receipt = await disposeWorkAddress(stack.env, admitted(target, 'dispose', 'address.dispose',
-      workAddressDispositionDigest(input)), input);
-    if (receipt.outcome !== 'succeeded') throw new Error(`Disposing of ${slug} failed`);
-  };
-
+  const claim = async (target: string,name: string) => (await change(target,'claim',name,null)).revision;
   const first = `salt-road-${tag}`;
   const current = `salt-road-almanac-${tag}`;
-  const rename = { work: work.work, slug: first, newSlug: current, expectedRevision: await claim(work.work, first),
-    actingSubject: author.actor };
-  const renamed = await renameWorkAddress(stack.env, admitted(work.work, 'rename', 'address.rename',
-    workAddressRenameDigest(rename)), rename);
-  if (renamed.outcome !== 'succeeded') throw new Error('Renaming the address failed');
+  await change(work.work,'rename',current,await claim(work.work,first));
 
-  const draft = await stack.privateWork(author.actor);
+  const draft = await stack.publicWork(author.actor,['en'],'Equivalent old Work');
   const merged = `salt-road-draft-${tag}`;
-  await dispose(draft.work, merged, await claim(draft.work, merged), work.work);
-  const withdrawn = await stack.privateWork(author.actor);
+  await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(draft.work)} rv:mergedInto ${iri(work.work)} } }`);
+  await change(draft.work,'merge',null,await claim(draft.work,merged),work.work);
+  const withdrawn = await stack.publicWork(author.actor,['en'],'Withdrawn name');
   const retired = `salt-road-withdrawn-${tag}`;
-  await dispose(withdrawn.work, retired, await claim(withdrawn.work, retired));
+  await change(withdrawn.work,'release',null,await claim(withdrawn.work,retired));
 
   const hidden = await stack.privateWork(author.actor, `A Private Ledger ${tag}`);
   console.log(JSON.stringify({ work: work.work, title, description, first, current, merged, retired,

@@ -2499,7 +2499,6 @@ export async function reconcileRetainedRealmSpaceCreate(
             rdfs:label ${lit(spaceState.name)}@${language} ; rv:head ${iri(spaceRevision)} .
           ${iri(realm)} a rv:Realm ; rv:space ${iri(space)} ; rv:realmState rv:Active ;
             ${profile !== SPACE_REALM_PROFILE_V1 ? `rv:definitionProfile ${iri(profile)} ;` : ''}
-            ${handle !== undefined ? `rv:communityHandle ${lit(handle)} ;` : ''}
             ${Array.isArray(topics) && topics.length ? `rv:topic ${topics.map(topic => iri(topic as string)).join(', ')} ;` : ''}
             rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
             rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ;

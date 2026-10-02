@@ -21,6 +21,8 @@ import type { MergedIdentity } from '../identity-merge/resolution.ts';
 import type { ImageNsfw } from './presentation.ts';
 import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
+import { identityCanonical, canonicalAddresses } from '../address/canonical.ts';
 
 export { direction } from '../display-language/select.ts';
 
@@ -30,11 +32,13 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 
 export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concept'
+  | 'agent' | 'zone'
   | 'character' | 'context' | 'role' | 'relation-definition'
   | 'release' | 'occurrence' | 'realization' | 'resource' | 'collection';
 
 /** Entry axes and owners without a supported exact revision path have no target base. */
 export const summaryBases = { work: 'work', 'main-version': null, space: null,
+  agent: null, zone: null,
   realm: null, concept: null, character: 'resource', context: 'resource',
   role: 'resource', 'relation-definition': null, release: 'release',
   occurrence: 'occurrence', realization: 'realization', resource: 'resource', collection: null,
@@ -82,13 +86,14 @@ export type AvatarDescriptor =
 export type ResourceSummary =
   | { reference: string; status: 'available'; type: ResourceType; disclosure: 'public' | 'restricted';
     base: Base | null; work: string | null;
+    address: CanonicalAddress;
     name: DisplayName & { context?: string; preferenceRevision?: string };
     avatar: AvatarDescriptor; resolution?: MergedIdentity }
   | { reference: string; status: 'unavailable' };
 
 export interface SummaryBatch {
   summaries: ResourceSummary[];
-  generation: { graph: string; media: string | null };
+  generation: { graph: string; media: string | null; addresses?: string };
   /** Owner round trips spent by this batch, reported for the cost contract. */
   cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
 }
@@ -183,6 +188,7 @@ async function readSemanticResourceNames(env: WorkActivationEnvironment,
   return names;
 }
 const typePriority: readonly ResourceType[] = [
+  'agent', 'zone',
   'work', 'main-version', 'release', 'occurrence', 'realization',
   'space', 'realm', 'concept', 'context', 'character', 'role', 'relation-definition', 'collection', 'resource',
 ];
@@ -240,6 +246,15 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           UNION { ?r a rv:Realization ; rv:work ?work ; rv:head ?realizationRevision .
             BIND("realization" AS ?type) }
           UNION { ?r a rv:Space . BIND("space" AS ?type) }
+          UNION { ?r a rv:Agent ; rv:head ?agentHead .
+            FILTER EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?agentHead a rv:RevisionAnchor ;
+              rv:component ?r ; rv:modelRevision <https://rezics.com/definition/agent-provision-v1> .
+              FILTER NOT EXISTS { ?agentHead a rv:ErasedRevision } } }
+            FILTER NOT EXISTS { ?r a rv:AgentTombstone }
+            FILTER NOT EXISTS { ?r rv:protectionHead ?agentProtection }
+            FILTER NOT EXISTS { ?r rv:profileDisclosure rv:Private }
+            BIND("agent" AS ?type) }
+          UNION { ?r a rv:Zone ; rv:zoneState rv:Active . BIND("zone" AS ?type) }
           UNION { ?r a rv:Collection ; rv:collectionState rv:Active .
             FILTER NOT EXISTS { ?r rv:protectionHead ?protection }
             BIND("collection" AS ?type) }
@@ -260,6 +275,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
         OPTIONAL { FILTER(${workType})
           GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
+        OPTIONAL { FILTER(?type IN ("agent","zone")) GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r schema:name ?label } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r rv:collectionNameHead ?nameHead }
           OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?nameHead a rv:CollectionNameRevision ;
@@ -288,9 +304,10 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           ?r rv:space ?realmSpace . ?realmSpace rv:realmCapability ?r ; rv:disclosure rv:Public } },
           IF(?type = "concept", true,
           IF(?type = "context" || ?type = "collection", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
-          IF(?type = "space",
+          IF(?type IN ("space","zone"),
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
-          IF(${workType} && BOUND(?work), EXISTS { ${publicWork('?work', '?pm')} }, false)))))
+          IF(?type = "agent", true,
+          IF(${workType} && BOUND(?work), EXISTS { ${publicWork('?work', '?pm')} }, false))))))
           AS ?public)
       }
     }`);
@@ -553,6 +570,8 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
     const selectedContext = contextBatch.selectedNames.has(reference)
       ? contextBatch.contexts.get(input.context) : undefined;
     return { reference, status: 'available', type: row.type,
+      address: identityCanonical(row.type,reference,selectDisplayName(row.localizedName ?? row.labels,
+        input.languages ?? readerLanguages(input.language))!.value),
       base: summaryBases[row.type], work: row.work,
       disclosure: row.public ? 'public' : 'restricted',
       name: { ...selectDisplayName(row.localizedName ?? row.labels,
@@ -561,7 +580,11 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
           ? { context: input.context, preferenceRevision: selectedContext.preferenceRevision } : {}) },
       avatar: avatar(row.type, reference, avatars.get(reference)) };
   });
-  return { summaries, generation: { graph: graph.generation, media: mediaGeneration }, cost,
+  const available = summaries.filter(summary => summary.status === 'available');
+  const addresses = await canonicalAddresses(env,available);
+  if (available.some(summary => ['space','realm','zone'].includes(summary.type))) cost.graphQueries++;
+  for (const summary of available) summary.address = addresses.get(summary.reference)!;
+  return { summaries, generation: { graph: graph.generation, media: mediaGeneration,addresses: addressGeneration(summaries) }, cost,
     redirects: graph.redirects };
 }
 
@@ -620,13 +643,21 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
     }
   }
   const bySource = new Map(paths.map(path => [path.source, path]));
-  return { generation: first.generation, cost: first.cost,
-    summaries: input.resources.map(reference => {
+  const result: ResourceSummary[] = input.resources.map(reference => {
       const path = bySource.get(reference)!, summary = summaries.get(reference)!;
       if (path.hidden) return { reference, status: 'unavailable' };
       return summary.status === 'available' && path.hops ? { ...summary,
+        address: (summaries.get(path.current) as Extract<ResourceSummary,{ status: 'available' }>).address,
         resolution: { state: 'merged' as const, source: reference, survivor: path.current, hops: path.hops } } : summary;
-    }) };
+    });
+  return { generation: { ...first.generation,addresses: addressGeneration(result) },cost: first.cost,summaries: result };
+}
+
+/** SQL name changes do not move the graph position. Conditional reads must
+ * include canonical addresses in their generation so a rename changes ETags. */
+function addressGeneration(summaries: readonly ResourceSummary[]): string {
+  return createHash('sha256').update(JSON.stringify(summaries.map(summary => summary.status === 'available'
+    ? [summary.reference,summary.address] : [summary.reference]))).digest('hex');
 }
 
 /** Main Version content availability for one summary: actual language basis or metadata-only. */

@@ -21,8 +21,9 @@ export async function seedAccounts(state: SeedState) {
         displayName: person.name, avatarSelection: current.avatarSelection, bio: current.bio,
       }, token, seedKey('agent-name-v2', `${person.id}:${current.revision.slice(-12)}`));
     }
-    await api.put(`/v1/agents/${agent.agent.slice(-36)}/handle`,
-      { profile: 'agent-handle-v1', handle: person.handle, expectedHandle: null },
+    await api.post('/v1/addresses/claims',
+      { profile: 'name-write-v1',scope: 'agent',holder: agent.agent,operation: 'claim',
+        name: person.handle,expectedRevision: null,actingSubject: agent.agent },
       token, seedKey('handle', person.id));
     state.sessions.push({ id: person.id, accountId: signed.id, cookie: signed.cookie,
       token, issuedAt: Date.now(), actingSubject: agent.agent });

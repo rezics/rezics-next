@@ -39,12 +39,13 @@ const segment = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const managedAddress = cache(async (ref: string): Promise<ManagedAddress | null> => {
   if (isUuid(ref)) return { id: ref, address: ref };
   if (ref.length > 64 || !segment.test(ref)) return null;
-  const zone = await settle(() => mainApiWithToken(undefined).v1.zones['by-segment']({ segment: ref }).get());
+  const zone = await settle(() => mainApiWithToken(undefined).v1.addresses.resolve.get({ query: { scope: 'space',key: ref } }));
   if (!zone.ok) {
     if (zone.failure === 'missing') return null;
     throw new Error(`Official Zone ${ref} could not be resolved`);
   }
-  const id = uuidOf(zone.data.realm);
+  if (zone.data.status !== 'resolved' || !zone.data.capabilities?.realm) return null;
+  const id = uuidOf(zone.data.capabilities.realm);
   return isUuid(id) ? { id, address: ref } : null;
 });
 

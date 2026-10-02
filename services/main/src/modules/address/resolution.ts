@@ -1,222 +1,205 @@
-import { DATASET, GRAPHS, RV, iri, lit,
-  type WorkActivationEnvironment } from '../work/activate.ts';
-import { AddressClaimUnavailable, InvalidAddressClaim,
-  normalizedWorkSlug } from './claim.ts';
-import { MAX_WORK_REDIRECT_HOPS } from './contract.ts';
-import { readMergedIdentity } from '../identity-merge/resolution.ts';
-import { MergeUnavailable } from '../identity-merge/contract.ts';
-import { admittedPublicWorks, publicWork } from '../work/public-patterns.ts';
+import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
+import { readResourceSummaries } from '../media/summary.ts';
+import { readerLanguages } from '../display-language/select.ts';
+import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
+import { resolveZoneRoute, ZoneRouteMissing } from '../zone/route.ts';
+import { uuidToSid, identityKeyUuid } from '@rezics/model/address/sid';
+import { fusekiReadBudget, FusekiReadBudgetExceeded } from '../../infrastructure/fuseki.ts';
+import {
+  NAME_COST,
+  NameInvalid,
+  NameUnavailable,
+  scopeKind,
+  type NameScope,
+  type NameRow,
+} from './registry.ts';
 
-export { MAX_WORK_REDIRECT_HOPS };
-
-const WORK = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-
-export async function reverseWorkAddress(env: WorkActivationEnvironment, work: string) {
-  if (!WORK.test(work)) throw new InvalidAddressClaim('invalid Work identity');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX schema: <https://schema.org/> SELECT ?main ?address ?revision ?slug ?mergedInto WHERE {
-    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} .
-      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-    GRAPH ${iri(GRAPHS.current)} {
-      ${iri(work)} a schema:CreativeWork ; rv:mainVersion ?main .
-      ?main a rv:MainVersion ; rv:work ${iri(work)} .
-      OPTIONAL { ${iri(work)} rv:mergedInto ?mergedInto }
-      OPTIONAL { ?address a rv:RouteBinding ; rv:routeNamespace "work" ;
-        rv:targetWork ${iri(work)} ; rv:routeState rv:Current ;
-        rv:routeRevision ?revision ; rv:normalizedSlug ?slug . }
-    }
-  } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) return null;
-  if (rows.length !== 1 || !rows[0]?.main
-    || (rows[0].address && (!rows[0].revision || !rows[0].slug))) {
-    throw new AddressClaimUnavailable('reverse Work address is ambiguous');
-  }
-  const row = rows[0]!;
-  const resolution = row.mergedInto ? await disclosedAddressMerge(env, work) : null;
-  return { profile: 'work-address-reverse-v1' as const, namespace: 'work' as const,
-    ...(resolution ? { resolution } : {}),
-    work, mainVersion: row.main!.value, canonical: row.address
-      ? { address: row.address.value, revision: row.revision!.value,
-        slug: row.slug!.value, href: `/v1/addresses/work/${row.slug!.value}` }
-      : null };
+export type AddressScope = NameScope | 'resource' | 'concept';
+export interface AddressLookup {
+  scope: AddressScope;
+  key: string;
+  route?: string;
 }
 
-export async function resolveWorkRoute(env: WorkActivationEnvironment, rawSlug: string) {
-  const slug = normalizedWorkSlug(rawSlug);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX schema: <https://schema.org/>
-    SELECT ?address ?revision ?work ?state ?redirectWork ?main ?sequence ?mergedInto WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:sequence ?sequence .
-        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-      GRAPH ${iri(GRAPHS.current)} { ?address a rv:RouteBinding ;
-        rv:routeNamespace "work" ; rv:normalizedSlug ${lit(slug)} ;
-        rv:targetWork ?work ; rv:routeState ?state ; rv:routeRevision ?revision .
-        OPTIONAL { ?address rv:redirectWork ?redirectWork }
-        OPTIONAL { ?work rv:mergedInto ?mergedInto }
-        OPTIONAL { ?work a schema:CreativeWork ; rv:mainVersion ?main .
-          ?main a rv:MainVersion ; rv:work ?work . }
-      }
-    } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) return null;
-  const row = rows[0]!;
-  if (rows.length !== 1 || !row.address || !row.revision || !row.work || !row.state
-    || ![`${RV}Current`, `${RV}Redirected`, `${RV}Retired`].includes(row.state.value)
-    || !row.sequence || !/^(0|[1-9][0-9]*)$/.test(row.sequence.value)) {
-    throw new AddressClaimUnavailable('Work address is ambiguous');
-  }
-  if (row.mergedInto && row.state.value !== `${RV}Retired`) {
-    const resolution = await disclosedAddressMerge(env, row.work.value, row.sequence.value);
-    if (!resolution) throw new AddressClaimUnavailable('Work identity merge changed');
-    if (!row.main) throw new AddressClaimUnavailable('Original Work is unavailable');
-    return { state: 'current' as const, profile: 'work-address-v1' as const,
-      namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-      address: row.address.value, revision: row.revision.value,
-      work: row.work.value, mainVersion: row.main.value, resolution };
-  }
-  if (row.state.value === `${RV}Current`) {
-    if (!row.main || row.redirectWork) return null;
-    return { state: 'current' as const, profile: 'work-address-v1' as const,
-      namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-      address: row.address.value, revision: row.revision.value,
-      work: row.work.value, mainVersion: row.main.value };
-  }
-  if (row.state.value === `${RV}Retired` && !row.redirectWork) {
-    const resolution = row.mergedInto ? await disclosedAddressMerge(env, row.work.value, row.sequence.value) : null;
-    return { state: 'retired' as const, profile: 'work-address-retired-v1' as const,
-      ...(resolution ? { resolution } : {}),
-      namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-      address: row.address.value, revision: row.revision.value,
-      originalWork: row.work.value };
-  }
-  if (row.state.value !== `${RV}Redirected` || !row.redirectWork) {
-    throw new AddressClaimUnavailable('unsupported Work address state');
-  }
-  // A rename points the old slug to the SAME Work's new Current binding.
-  const seen = new Set<string>(row.redirectWork.value === row.work.value ? [] : [row.work.value]);
-  let work = row.redirectWork.value;
-  for (let hop = 0; hop < MAX_WORK_REDIRECT_HOPS; hop++) {
-    if (seen.has(work)) throw new AddressClaimUnavailable('Work address redirect cycle');
-    seen.add(work);
-    const follow = await env.fuseki.query(`PREFIX rv: <${RV}>
-      PREFIX schema: <https://schema.org/>
-      SELECT ?address ?revision ?slug ?state ?disposition ?redirectWork ?sequence ?mergedInto WHERE {
-        GRAPH ${iri(GRAPHS.control)} {
-          ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-            rv:sequence ?sequence .
-          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
-        }
-        FILTER(STR(?sequence) = ${lit(row.sequence.value)})
-        GRAPH ${iri(GRAPHS.current)} {
-          ${iri(work)} a schema:CreativeWork ; rv:mainVersion ?main .
-          ?main a rv:MainVersion ; rv:work ${iri(work)} .
-          OPTIONAL { ${iri(work)} rv:mergedInto ?mergedInto }
-          OPTIONAL { ?address a rv:RouteBinding ; rv:routeNamespace "work" ;
-            rv:targetWork ${iri(work)} ; rv:routeState ?state ;
-            rv:routeRevision ?revision ; rv:normalizedSlug ?slug .
-          OPTIONAL { ?address rv:routeDisposition ?disposition }
-          OPTIONAL { ?address rv:redirectWork ?redirectWork }
-          FILTER(?state = rv:Current || ?disposition IN (rv:Merged, rv:Retired)) }
-        }
-      } LIMIT 2`);
-    const nextRows = follow.results?.bindings ?? [];
-    const next = nextRows[0];
-    if (nextRows.length === 1 && next?.mergedInto && next.sequence?.value === row.sequence.value) {
-      const resolution = await disclosedAddressMerge(env, work, row.sequence.value,
-        MAX_WORK_REDIRECT_HOPS - hop - 1, new Set([...seen].filter(value => value !== work)));
-      if (!resolution) throw new AddressClaimUnavailable('Work identity merge changed');
-      if (!row.main) throw new AddressClaimUnavailable('Original Work is unavailable');
-      return { state: 'current' as const, profile: 'work-address-v1' as const,
-        namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-        address: row.address.value, revision: row.revision.value,
-        work: row.work.value, mainVersion: row.main.value, resolution };
-    }
-    if (nextRows.length !== 1 || !next?.address || !next.revision || !next.slug
-      || !next.state || next.sequence?.value !== row.sequence.value) {
-      throw new AddressClaimUnavailable('Work address redirect target is unavailable');
-    }
-    if (next.state.value === `${RV}Current` && !next.disposition && !next.redirectWork) {
-      return { state: 'redirected' as const, profile: 'work-address-redirect-v1' as const,
-        namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-        address: row.address.value, revision: row.revision.value,
-        originalWork: row.work.value, targetWork: work,
-        canonical: { address: next.address.value, revision: next.revision.value,
-          slug: next.slug.value, href: `/v1/addresses/work/${next.slug.value}` } };
-    }
-    if (next.state.value === `${RV}Retired`
-      && next.disposition?.value === `${RV}Retired` && !next.redirectWork) {
-      return { state: 'retired' as const, profile: 'work-address-retired-v1' as const,
-        namespace: 'work' as const, slug, normalization: 'ascii-lower-v1' as const,
-        address: row.address.value, revision: row.revision.value,
-        originalWork: row.work.value };
-    }
-    if (next.state.value !== `${RV}Redirected`
-      || next.disposition?.value !== `${RV}Merged` || !next.redirectWork) {
-      throw new AddressClaimUnavailable('Work address redirect target is invalid');
-    }
-    work = next.redirectWork.value;
-  }
-  throw new AddressClaimUnavailable('Work address redirect exceeds bounded depth');
-}
-
-/** Read one immutable route revision without replacing it with the current head. */
-export async function exactWorkRoute(env: WorkActivationEnvironment,
-  rawSlug: string, revision: string) {
-  const slug = normalizedWorkSlug(rawSlug);
-  if (!WORK.test(revision)) throw new InvalidAddressClaim('invalid address revision');
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX schema: <https://schema.org/>
-    SELECT ?address ?work ?state ?redirectWork ?disposition ?mergedInto WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} .
-        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-      GRAPH ${iri(GRAPHS.current)} { ?address a rv:RouteBinding ;
-        rv:routeNamespace "work" ; rv:normalizedSlug ${lit(slug)} ; rv:targetWork ?work .
-        ?work a schema:CreativeWork ; rv:mainVersion ?main .
-        ?main a rv:MainVersion ; rv:work ?work . }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:mergedInto ?mergedInto } }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ;
-        rv:component ?address ; rv:targetWork ?work ; rv:normalizedSlug ${lit(slug)} .
-        OPTIONAL { ${iri(revision)} rv:routeState ?state }
-        OPTIONAL { ${iri(revision)} rv:redirectWork ?redirectWork }
-        OPTIONAL { ${iri(revision)} rv:routeDisposition ?disposition }
-      }
-    } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) return null;
-  const row = rows[0]!;
-  if (rows.length !== 1 || !row.address || !row.work
-    || (row.state && ![`${RV}Current`, `${RV}Redirected`, `${RV}Retired`].includes(row.state.value))
-    || (row.state?.value === `${RV}Redirected` && !row.redirectWork)
-    || (row.state?.value === `${RV}Retired` && row.redirectWork)) {
-    throw new AddressClaimUnavailable('exact Work address revision is ambiguous');
-  }
-  const resolution = row.mergedInto ? await disclosedAddressMerge(env, row.work.value) : null;
-  return { profile: 'work-address-revision-v1' as const, namespace: 'work' as const,
-    ...(resolution ? { resolution } : {}),
-    slug, normalization: 'ascii-lower-v1' as const, address: row.address.value,
-    revision, work: row.work.value,
-    state: row.state?.value === `${RV}Redirected` ? 'redirected' as const
-      : row.state?.value === `${RV}Retired` ? 'retired' as const : 'current' as const,
-    ...(row.redirectWork ? { redirectWork: row.redirectWork.value } : {}),
-    ...(row.disposition ? { disposition: row.disposition.value === `${RV}Merged`
-      ? 'merged' as const : 'retired' as const } : {}) };
-}
-
-/** Anonymous address reads disclose every visited identity. The immutable
- * address revision continues to describe its original Work and route state. */
-async function disclosedAddressMerge(env: WorkActivationEnvironment, work: string,
-  sequence?: string, maxHops = MAX_WORK_REDIRECT_HOPS, previous = new Set<string>()) {
+/** One resolver for all scopes. SQL inventory lookup never establishes reading:
+ * only the anonymous summary/disclosure owner admits a returned holder. */
+export async function resolveAddresses(
+  work: MainWorkDependencies,
+  request: Request,
+  inputs: readonly AddressLookup[],
+) {
+  if (!work.environment.addresses) throw new NameUnavailable('Name registry is unavailable');
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(NAME_COST.deadlineMs)]);
   try {
-    return await readMergedIdentity(env, work, async current => {
-      if (previous.has(current)) throw new AddressClaimUnavailable('Work address redirect cycle');
-      return (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        ASK { ${publicWork(iri(current), '?mergeMain')} }`, 4096)).boolean === true
-        && (await admittedPublicWorks(env, [current])).has(current);
-    }, { ...(sequence ? { position: { sequence } } : {}), maxHops });
+    return await fusekiReadBudget.run({ signal, callsLeft: 4096, bytesLeft: 8 * 1024 * 1024 }, () =>
+      work.environment.addresses!.withRead(() => resolveAddressBatch(work, request, inputs)),
+    );
   } catch (error) {
-    if (error instanceof MergeUnavailable) throw new AddressClaimUnavailable('Work identity resolution is unavailable');
+    if (signal.aborted || error instanceof FusekiReadBudgetExceeded)
+      throw new NameUnavailable('Address read exceeded its budget');
     throw error;
   }
+}
+
+async function resolveAddressBatch(
+  work: MainWorkDependencies,
+  request: Request,
+  inputs: readonly AddressLookup[],
+) {
+  if (!inputs.length || inputs.length > NAME_COST.batch)
+    throw new NameInvalid('Address batch exceeds its bound');
+  const env = work.environment,
+    registry = env.addresses;
+  if (!registry) throw new NameUnavailable('Name registry is unavailable');
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const selected: Array<{ input: AddressLookup; holder: string | null; name: NameRow | null }> = [];
+  const deadline = Date.now() + NAME_COST.deadlineMs;
+  for (const input of inputs) {
+    if (Date.now() > deadline) throw new NameUnavailable('Address read deadline exceeded');
+    if (input.scope === 'resource' || input.scope === 'concept') {
+      const uuid = identityKeyUuid(input.key);
+      selected.push({ input, holder: uuid ? `https://rezics.com/id/${uuid}` : null, name: null });
+    } else selected.push({ input, ...(await registry.identify(input.scope, input.key)) });
+  }
+  const aliases = selected.filter(
+    (item) => (item.input.scope === 'space' || item.input.scope === 'resource') && item.holder,
+  );
+  const capabilities = new Map<string, { realm?: string; zone?: string }>();
+  if (aliases.length) {
+    const rows =
+      (
+        await env.fuseki.query(
+          `PREFIX rv: <${RV}> SELECT DISTINCT ?resource ?space ?realm ?zone WHERE {
+      VALUES ?resource { ${[...new Set(aliases.map((item) => item.holder!))].map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} {
+        { ?resource a rv:Space . BIND(?resource AS ?space) }
+        UNION { ?resource a rv:Realm ; rv:realmState rv:Active ; rv:space ?space . ?space rv:realmCapability ?resource }
+        UNION { ?resource a rv:Zone ; rv:zoneState rv:Active ; rv:disclosure rv:Public ; rv:space ?space }
+        ?space rv:disclosure rv:Public .
+        OPTIONAL { ?space rv:realmCapability ?realm . ?realm rv:realmState rv:Active }
+        OPTIONAL { ?space rv:zoneCapability ?zone . ?zone rv:zoneState rv:Active ; rv:disclosure rv:Public }
+      } } LIMIT ${NAME_COST.batch + 1}`,
+          64 * 1024,
+        )
+      ).results?.bindings ?? [];
+    const identities = new Map(rows.map((row) => [row.resource?.value, row.space?.value]));
+    if (identities.size !== rows.length)
+      throw new NameUnavailable('Space capability identity is ambiguous');
+    for (const row of rows)
+      if (row.space)
+        capabilities.set(row.space.value, {
+          ...(row.realm ? { realm: row.realm.value } : {}),
+          ...(row.zone ? { zone: row.zone.value } : {}),
+        });
+    for (const item of aliases)
+      item.holder =
+        identities.get(item.holder!) ?? (item.input.scope === 'space' ? null : item.holder);
+  }
+  const resources = [
+    ...new Set(
+      selected.flatMap((item) =>
+        item.holder ? [item.holder, ...(item.name?.successor ? [item.name.successor] : [])] : [],
+      ),
+    ),
+  ];
+  const summaries = new Map();
+  for (let at = 0; at < resources.length; at += NAME_COST.batch) {
+    const batch = await readResourceSummaries(
+      env,
+      work.media?.store,
+      {
+        ...(work.mediaAccess
+          ? {
+              canReadSemantics: (targets: readonly string[]) =>
+                work.mediaAccess!.canReadSemantics(null, null, targets, env.fuseki),
+            }
+          : {}),
+      },
+      {
+        resources: resources.slice(at, at + NAME_COST.batch),
+        context: DEFAULT_MEDIA_CONTEXT,
+        language: null,
+        languages: readerLanguages(
+          request.headers.get('x-rezics-display-languages'),
+          request.headers.get('accept-language'),
+        ),
+        includeCollections: true,
+      },
+    );
+    for (const summary of batch.summaries) summaries.set(summary.reference, summary);
+  }
+  return Promise.all(
+    selected.map(async ({ input, holder, name }) => {
+      const summary = holder ? summaries.get(holder) : null;
+      const kind =
+        input.scope === 'resource' || input.scope === 'concept'
+          ? input.scope
+          : scopeKind(input.scope);
+      if (
+        !summary ||
+        summary.status !== 'available' ||
+        (kind !== 'zone' && kind !== 'resource' && summary.type !== kind)
+      ) {
+        return { scope: input.scope, key: input.key, status: 'unavailable' as const };
+      }
+      if (name?.successor) {
+        const next = summaries.get(name.successor);
+        if (!next || next.status !== 'available')
+          return { scope: input.scope, key: input.key, status: 'unavailable' as const };
+        if (
+          !summary.resolution ||
+          summary.resolution.survivor !== (next.resolution?.survivor ?? name.successor)
+        ) {
+          throw new NameUnavailable('Name successor is no longer equivalent');
+        }
+      }
+      let canonical = summary.address;
+      if (kind === 'zone' && name?.state !== 'retired') {
+        const site = (
+          await env.fuseki.query(
+            `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        SELECT ?zone ?segment WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ?zone a rv:Zone ; rv:space ${iri(input.scope.slice(5))} ; rv:zoneState rv:Active ; rv:disclosure rv:Public ; rv:navigation ?navigation .
+          ?navigation rv:selectedGeneration ?generation .
+          ?mount a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrenceRole rv:MountRole ; schema:item ?collection ; rv:qualifier ?q .
+          ?q rv:zone ?zone ; rv:routeSegment ?segment ; rv:disclosure rv:Public .
+          ?collection a rv:Collection ; rv:structure ?structure . ?structure rv:selectedGeneration ?members .
+          ?member a rv:OccurrencePlacement ; rv:generation ?members ; rv:occurrenceRole rv:MemberRole ; schema:item ${iri(holder!)} .
+          FILTER NOT EXISTS { ?mount rv:removedBy ?removedMount }
+          FILTER NOT EXISTS { ?member rv:removedBy ?removedMember }
+          ${input.route ? `FILTER(?segment = ${lit(input.route)})` : ''}
+        } } ORDER BY STR(?segment) LIMIT 1`,
+            8192,
+          )
+        ).results?.bindings?.[0];
+        if (site?.zone && site.segment) {
+          try {
+            const resolved = await resolveZoneRoute(work, request, {
+              zone: site.zone.value,
+              path: `/${site.segment.value}/${uuidToSid(holder!.slice(-36))}`,
+            });
+            if (resolved.kind === 'detail') canonical = resolved.resource.address;
+          } catch (error) {
+            if (!(error instanceof ZoneRouteMissing)) throw error;
+            return { scope: input.scope, key: input.key, status: 'unavailable' as const };
+          }
+        } else if (input.route)
+          return { scope: input.scope, key: input.key, status: 'unavailable' as const };
+      }
+      return {
+        profile: 'address-resolution-v1' as const,
+        scope: input.scope,
+        key: input.key,
+        status: name?.state === 'retired' ? ('retired' as const) : ('resolved' as const),
+        holder: holder!,
+        state: name?.state ?? ('current' as const),
+        canonical,
+        ...(name ? { revision: name.revision } : {}),
+        ...(summary.type === 'space' ? { capabilities: capabilities.get(holder!) ?? {} } : {}),
+        ...(summary.resolution ? { resolution: summary.resolution } : {}),
+      };
+    }),
+  );
 }

@@ -6,9 +6,11 @@ import { targetBase, targetRef } from '../target/contract.ts';
 import { mergedIdentity } from '../identity-merge/resolution.ts';
 import { readAssessment } from '../suitability/contract.ts';
 import { imageNsfw } from './presentation-contract.ts';
+import { canonicalAddress } from '../address/schema.ts';
 
 // Written as literals, not mapped from an array, so the contract's static type is the union and not `never`.
 const resourceType = t.Union([t.Literal('work'), t.Literal('main-version'), t.Literal('space'), t.Literal('realm'),
+  t.Literal('agent'), t.Literal('zone'),
   t.Literal('concept'), t.Literal('character'), t.Literal('context'), t.Literal('role'),
   t.Literal('relation-definition'), t.Literal('release'), t.Literal('occurrence'), t.Literal('realization'),
   t.Literal('resource'), t.Literal('collection')]);
@@ -35,6 +37,7 @@ export const resourceSummary = t.Union([
     { additionalProperties: false }),
   t.Object({ reference: t.String(), status: t.Literal('available'), type: resourceType,
     base: t.Nullable(targetBase), work: t.Nullable(targetRef),
+    address: canonicalAddress,
     disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]), name, avatar,
     resolution: t.Optional(mergedIdentity) },
   { additionalProperties: false }),
@@ -44,7 +47,7 @@ export const resourceSummary = t.Union([
 export const resourceSummaryBatch = t.Object({ profile: t.Literal('resource-summary-batch-v1'),
   complete: t.Literal(true), summaries: t.Array(resourceSummary,
     { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
-  generation: t.Object({ graph: t.String(), media: t.Nullable(t.String()) },
+  generation: t.Object({ graph: t.String(), media: t.Nullable(t.String()),addresses: t.Optional(t.String()) },
     { additionalProperties: false }),
   cost: t.Object({ graphQueries: t.Integer({ minimum: 1 }), mediaQueries: t.Integer({ minimum: 0, maximum: 1 }),
     accessChecks: t.Integer({ minimum: 0 }), accessQueries: t.Integer({ minimum: 0 }) },

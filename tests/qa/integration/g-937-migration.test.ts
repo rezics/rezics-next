@@ -1,0 +1,134 @@
+import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { GRAPHS, iri, prepareComponent } from '../../../services/main/src/modules/work/activate.ts';
+import { migrateGraphNames } from '../../../services/main/src/modules/address/migrate.ts';
+import { addressFixture } from './g-937-support.ts';
+import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
+import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
+import { ZONE_PROFILE } from '../../../services/main/src/modules/zone/config-format.ts';
+
+test('G937: former graph names move once, retain holders and recover after native cleanup', async () => {
+  const f = await addressFixture('migration');
+  try {
+    const record = await f.work('Migrated Work');
+    await f.grant('space:create:root', 'space.create');
+    const { space, realm } = await f.json<{ space: string; realm: string }>(
+      await f.call('POST', '/v1/spaces', {
+        profile: 'space-realm-v1',
+        name: 'Migrated Space',
+        language: 'en',
+        capabilities: ['realm'],
+        actingSubject: f.actor,
+      }),
+      201,
+    );
+    const objects = new S3ImmutableObjects({
+      endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+      bucket: Bun.env.MAIN_S3_BUCKET!,
+      region: Bun.env.MAIN_S3_REGION!,
+      accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
+      secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/structure/',
+    });
+    await objects.initialize();
+    Object.assign(f.env, { structureObjects: objects });
+    const zone = `https://rezics.com/id/${randomUUID()}`,
+      binding = `https://rezics.com/id/${randomUUID()}`,
+      revision = `https://rezics.com/id/${randomUUID()}`;
+    await f.grant(`zone:edit:${zone}`, 'zone.edit');
+    await f.json(
+      await f.call('POST', '/v1/zones', {
+        zone,
+        space,
+        disclosure: 'public',
+        actingSubject: f.actor,
+      }),
+      201,
+    );
+    const key = `migrated-${randomUUID().slice(0, 8)}`;
+    const retained = `https://rezics.com/id/${randomUUID()}`;
+    const before = await readZoneConfiguration(f.env, zone);
+    const legacyManifest = prepareComponent(
+      f.env.objectDirectory,
+      zone,
+      {
+        configuration: {
+          ...before.configuration,
+          defaultRealm: realm,
+          official: { routeSegment: key },
+        },
+      },
+      ZONE_PROFILE,
+    );
+    await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(before.revision)} rv:manifest ?manifest } }
+      INSERT { GRAPH ${iri(GRAPHS.revisions)} { ${iri(before.revision)} rv:manifest <urn:rezics:sha256:${legacyManifest}> }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} rv:defaultRealm ${iri(realm)} } }
+      WHERE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(before.revision)} rv:manifest ?manifest } }`);
+    await f.nativeFuseki
+      .update(`PREFIX rv: <https://rezics.com/vocab/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+      INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(realm)} rv:communityHandle "${key}" .
+        ${iri(zone)} rv:official true ; rv:routeSegment "${key}" .
+        ${iri(binding)} a rv:RouteBinding ; rv:routeNamespace "work" ; rv:normalizedSlug "${key}" ; rv:targetWork ${iri(record.work)} ; rv:routeState rv:Current ; rv:routeRevision ${iri(revision)} .
+      } GRAPH ${iri(GRAPHS.revisions)} { ${iri(retained)} a rv:RevisionAnchor ; rv:component ${iri(binding)} ;
+        rv:targetWork ${iri(record.work)} ; rv:normalizedSlug "${key}" ; rv:routeState rv:Current } }`);
+    await f.accessPool.query('DELETE FROM access.name_graph_import WHERE data_epoch = $1', [
+      f.env.lineage.dataEpoch,
+    ]);
+    const original = f.accessPool.query.bind(f.accessPool);
+    let interrupt = true;
+    f.accessPool.query = (async (sql: string, ...args: unknown[]) => {
+      if (interrupt && sql.startsWith('INSERT INTO access.name_graph_import')) {
+        interrupt = false;
+        throw new Error('Lost completion marker');
+      }
+      return original(sql, ...(args as []));
+    }) as typeof f.accessPool.query;
+    await expect(migrateGraphNames(f.env)).rejects.toThrow('Lost completion marker');
+    f.accessPool.query = original;
+    await migrateGraphNames(f.env);
+    await migrateGraphNames(f.env);
+    expect((await f.env.addresses.lookup('space', key))?.holder).toBe(space);
+    expect((await f.env.addresses.lookup('work', key))?.holder).toBe(record.work);
+    expect((await readZoneConfiguration(f.env, zone)).configuration.official).toEqual({});
+    expect(
+      (
+        await f.accessPool.query(
+          'SELECT count(*)::int AS count FROM access.name_history WHERE scope = $1 AND key = $2',
+          ['work', key],
+        )
+      ).rows[0].count,
+    ).toBe(2);
+    expect(await f.env.addresses.exact('work', key, retained.slice(-36))).toMatchObject({
+      holder: record.work,
+      state: 'current',
+    });
+    expect(
+      (
+        await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+      GRAPH ${iri(GRAPHS.current)} { { ?r rv:communityHandle ?key } UNION { ?r a rv:Zone ; rv:routeSegment ?key }
+        UNION { ?r a rv:RouteBinding } } }`)
+      ).boolean,
+    ).toBe(false);
+    expect(await f.json(await f.lookup('work', key), 200)).toMatchObject({
+      holder: record.work,
+      canonical: { key },
+    });
+    for (const value of ['1'.repeat(22), 'z'.repeat(22), '1'.repeat(21) + '0', randomUUID()]) {
+      const expected = value === '1'.repeat(22);
+      expect(
+        (await f.accessPool.query('SELECT access.is_address_sid($1) AS sid', [value])).rows[0].sid,
+      ).toBe(expected);
+    }
+    expect(
+      (
+        await f.accessPool.query(
+          `SELECT obj_description('access.agent_handle'::regclass) AS description`,
+        )
+      ).rows[0].description,
+    ).toContain('notification-producers/producer.ts:444');
+  } finally {
+    await f.close();
+  }
+}, 30_000);

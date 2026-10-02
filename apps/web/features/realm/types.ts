@@ -34,7 +34,7 @@ export type ZoneRouteRead = Ok<Zone['routes']['get']>;
 /** A public mount in the Zone's navigation, in Structure order. */
 export type ZoneMount = ZonePresentationRead['navigation'][number];
 export type RealmDirectoryPage = Ok<MainClient['v1']['realms']['get']>;
-export type OfficialZone = Ok<ReturnType<MainClient['v1']['zones']['by-segment']>['get']>;
+export type OfficialZone = { zone: string; realm: string; routeSegment: string; cost: { graphReads: number; rows: number } };
 export type RealmRoster = Ok<Realm['roster']['get']>;
 export type AgentRead = Ok<ReturnType<MainClient['v1']['agents']>['get']>;
 /** The Work card fields every Realm and Zone module read shares. */

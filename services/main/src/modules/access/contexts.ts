@@ -252,8 +252,8 @@ export class AccessActingContexts {
       if (rows.length > subjects.length * 20 || rows.some(row => !subjects.includes(row.agent?.value ?? ''))) {
         throw new Error('Agent label batch overflow or unexpected subject');
       }
-      const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT agent_id, handle
-        FROM access.agent_handle WHERE agent_id = ANY($1::text[]) AND state = 'current'`, [subjects]);
+      const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT holder AS agent_id, key AS handle
+        FROM access.name_registry WHERE scope = 'agent' AND holder = ANY($1::text[]) AND state = 'current'`, [subjects]);
       const handles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
       const kinds: Record<string, AgentDiscoveryOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
@@ -304,8 +304,8 @@ export class AccessActingContexts {
         } LIMIT ${subjects.length + 1}`, 65_536)).results?.bindings ?? [];
       if (rows.length > subjects.length) throw new Error('Agent descriptions are ambiguous');
       const allowed = new Set(subjects);
-      const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT agent_id, handle
-        FROM access.agent_handle WHERE agent_id = ANY($1::text[]) AND state = 'current'`, [subjects]);
+      const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT holder AS agent_id, key AS handle
+        FROM access.name_registry WHERE scope = 'agent' AND holder = ANY($1::text[]) AND state = 'current'`, [subjects]);
       const currentHandles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
       const kinds: Record<string, ActingContextOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',

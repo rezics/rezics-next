@@ -20,6 +20,7 @@ function project(state: PlacementState, generation: string) {
   const subject = iri(id);
   return { iri: id, triples: [
     `${subject} a rv:ZoneMount ; rv:generation ${iri(generation)} ; rv:zone ${iri(mount.zone)} ;`,
+    `  rv:routeKey ${lit(mount.key ?? 'id')} ;`,
     `  rv:routeSegment ${lit(mount.routeSegment)} ; rv:disclosure rv:${mount.disclosure === 'public' ? 'Public' : 'Private'} .`,
     ...(mount.presentation ? [`${subject} rv:presentation ${iri(mount.presentation)} .`] : []),
   ] };
@@ -27,15 +28,17 @@ function project(state: PlacementState, generation: string) {
 
 async function hydrate(env: WorkActivationEnvironment, state: PlacementState):
   Promise<OccurrenceRecord['qualifier'] | undefined> {
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?segment ?disclosure ?presentation WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?segment ?disclosure ?presentation ?key WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(state.placement)} rv:qualifier ?q .
       ?q a rv:ZoneMount ; rv:zone ?zone ; rv:routeSegment ?segment ; rv:disclosure ?disclosure .
+      OPTIONAL { ?q rv:routeKey ?key }
       OPTIONAL { ?q rv:presentation ?presentation } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1) return undefined;
   const row = rows[0]!;
   if (!row.zone?.value || !row.segment?.value || !row.disclosure?.value) return undefined;
   return { type: 'zone-mount', zone: row.zone.value, routeSegment: row.segment.value,
+    key: row.key?.value === 'name' ? 'name' : 'id',
     disclosure: row.disclosure.value === `${RV}Public` ? 'public' : 'private',
     ...(row.presentation?.value ? { presentation: row.presentation.value } : {}) };
 }

@@ -33,8 +33,7 @@ export const ZoneConfiguration = Type.Object({
   state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
   disclosure: Type.Union([Type.Literal('public'), Type.Literal('private')]),
   defaultRealm: Type.Optional(nativeId),
-  official: Type.Optional(Type.Object({ routeSegment: Type.String({
-    pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }) }, { additionalProperties: false })),
+  official: Type.Optional(Type.Object({}, { additionalProperties: false })),
   /** An exact, shared semantic Context selection for this Zone's presentation. */
   defaultContext: Type.Optional(Type.Object({ context: nativeId, semanticRevision: nativeId },
     { additionalProperties: false })),

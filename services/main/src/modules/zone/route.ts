@@ -23,17 +23,21 @@ import { ZONE_ROUTE_COST } from './route-cost.ts';
 import { collectionPopulation, realmPopulation, readZonePopulation, ZONE_POPULATION_COST }
   from './route-population.ts';
 import { ReadingBoundary } from '../reading-position/boundary.ts';
+import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
+import type { CanonicalAddress } from '@rezics/model/address';
+import { canonicalAddresses } from '../address/canonical.ts';
 export { ZONE_ROUTE_COST } from './route-cost.ts';
 
 export class ZoneRouteMissing extends Error {}
+export class ZoneRouteRetired extends ZoneRouteMissing {}
 type Publication = Awaited<ReturnType<typeof readZonePublication>>;
 type Available = Extract<ResourceSummary, { status: 'available' }>;
 type Row = NonNullable<SparqlResult['results']>['bindings'][number];
-export interface ZoneMountBinding { occurrence: string; segment: string; target: string }
+export interface ZoneMountBinding { occurrence: string; segment: string; target: string; key?: 'name' | 'id' }
 export interface ZoneNavigationItem extends ZoneMountBinding {
   kind: 'document' | 'index'; name: Available['name'];
 }
-interface ResourceBinding { id: string; types: string[]; name: Available['name'] }
+interface ResourceBinding { id: string; types: string[]; name: Available['name']; address: CanonicalAddress }
 interface RouteBasis { profile: 'zone-route-v1'; zone: string; path: string;
   name: Publication['name']; language: string; direction: Publication['direction'];
   realm: string | null; revision: string; sourcePosition: ReadPosition; cost: typeof ZONE_ROUTE_COST }
@@ -239,11 +243,12 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
 
 async function mountAt(read: RouteRead, state: Publication, header: CompositionHeader, segment: string) {
   const rows = (await read.work.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?occurrence ?target ?disclosure WHERE { GRAPH ${iri(GRAPHS.current)} {
+    SELECT ?occurrence ?target ?disclosure ?key WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(header.structure)} rv:structureHead ${iri(header.head)} ; rv:selectedGeneration ${iri(header.generation)} .
       ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
         rv:occurrence ?occurrence ; rv:occurrenceRole rv:MountRole ; schema:item ?target ; rv:qualifier ?q .
       ?q a rv:ZoneMount ; rv:zone ${iri(state.zone)} ; rv:routeSegment ${lit(segment)} ; rv:disclosure ?disclosure .
+      OPTIONAL { ?q rv:routeKey ?key }
       FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
     } } LIMIT 2`, 8192)).results?.bindings ?? [];
   const row = rows[0];
@@ -252,7 +257,7 @@ async function mountAt(read: RouteRead, state: Publication, header: CompositionH
     throw new ZoneRouteMissing('Zone route is unavailable');
   }
   if (row.disclosure.value !== `${RV}Public`) await read.semantic(state.zone);
-  return { occurrence: row.occurrence.value, target: row.target.value, segment };
+  return { occurrence: row.occurrence.value, target: row.target.value, segment,key: row.key?.value === 'name' ? 'name' as const : 'id' as const };
 }
 
 async function resourceTypes(read: RouteRead, target: string): Promise<ResourceBinding> {
@@ -277,7 +282,7 @@ async function resourceTypeBatch(read: RouteRead, targets: readonly string[]) {
     }
     const summary = await read.target(target);
     if (!summary) throw new ZoneRouteMissing('Zone route is unavailable');
-    result.set(target,{ id: target,types: found.map(row => row.type!.value),name: summary.name });
+    result.set(target,{ id: target,types: found.map(row => row.type!.value),name: summary.name,address: summary.address });
   }
   return result;
 }
@@ -375,11 +380,23 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     if (summary?.type !== 'collection') throw new ZoneRouteMissing('Zone route is unavailable');
     const header = await collectionHeader(read, mount.target);
     if (path.resource !== null) {
-      const resource = `https://rezics.com/id/${path.resource}`;
+      const uuid = identityKeyUuid(path.resource);
+      const identified = uuid ? { holder: `https://rezics.com/id/${uuid}`,name: null }
+        : mount.key === 'name' ? await work.environment.addresses?.identify(`zone:${state.configuration.space}`,path.resource) : null;
+      if (!identified?.holder) throw new ZoneRouteMissing('Zone route is unavailable');
+      const resource = identified.holder;
       if (!await collectionMember(read, header, resource) || !await read.target(resource)) {
         throw new ZoneRouteMissing('Zone route is unavailable');
       }
+      if (identified.name?.state === 'retired') throw new ZoneRouteRetired('Zone title is retired');
       const binding = await resourceTypes(read, resource);
+      const names = work.environment.addresses;
+      const spaceKey = (await canonicalAddresses(work.environment,[{ reference: state.configuration.space,
+        type: 'space',name: { value: state.name ?? '' } }])).get(state.configuration.space)!.key;
+      const routeName = mount.key === 'name' && names ? (await names.pool.query<{ key: string }>(`SELECT key FROM access.name_registry
+        WHERE scope = $1 AND holder = $2 AND state = 'current'`, [`zone:${state.configuration.space}`,resource])).rows[0]?.key : null;
+      binding.address = { prefix: `/z/${spaceKey}/${mount.segment}/`,key: routeName ?? uuidToSid(resource.slice(-36)),
+        slugSource: (await read.target(resource))?.disclosure === 'public' ? binding.name.value : '' };
       const fenced = await read.targets([mount.target, resource]);
       if (fenced.some(target => !target)) throw new ZoneRouteMissing('Zone route is unavailable');
       return { ...basis, kind: 'detail', mount, collection: mount.target, resource: binding, tab: path.tab };

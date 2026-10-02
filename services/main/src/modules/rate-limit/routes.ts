@@ -4,6 +4,10 @@ import type { RateLimitFamily } from './budgets.ts';
 // family fails both composed-route and OpenAPI coverage tests. Parameter names
 // are immaterial; whole path segments match, never prefix lookalikes.
 const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])[] = [
+  ['GET','/v1/addresses/resolve','address'],
+  ['POST','/v1/addresses/resolutions','address'],
+  ['GET','/v1/addresses/availability','address'],
+  ['GET','/v1/addresses/revisions/{revision}','address'],
   // MCP messages have no domain budget; each tool call is budgeted by its dispatched operation.
   ['*', '/mcp', 'read'],
   ['GET', '/.well-known/oauth-protected-resource', 'read'],

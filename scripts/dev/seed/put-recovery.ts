@@ -21,7 +21,6 @@ export function seedPutConflict(path: string, code: string): boolean {
     || code.startsWith('stale_') || code === 'head_conflict') return true;
   const owners: Record<string, RegExp> = {
     agent_profile_conflict: /^\/v1\/agents\/[^/]+\/profile$/,
-    agent_handle_conflict: /^\/v1\/agents\/[^/]+\/handle$/,
     library_visibility_conflict: /^\/v1\/agents\/[^/]+\/library-visibility$/,
     reader_status_conflict: /^\/v1\/works\/[^/]+\/reader-status$/,
     progress_conflict: /^\/v1\/compositions\/[^/]+\/occurrences\/[^/]+\/progress$/,
@@ -85,10 +84,6 @@ export async function recoverSeedPut(path: string, input: unknown, read: SeedRea
     }
     return refreshed(current, { expectedHead: current.revision }, planned,
       { ...current, displayName: current.originalDisplayName ?? current.displayName });
-  }
-  if (/^\/v1\/agents\/[^/]+\/handle$/.test(path)) {
-    const current = await read(path.slice(0, -7), false);
-    return refreshed(current, { expectedHandle: current.handle });
   }
   if (/^\/v1\/agents\/[^/]+\/library-visibility$/.test(path)) {
     const current = await read(path, true);

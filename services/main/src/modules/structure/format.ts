@@ -79,6 +79,7 @@ const qualifier = Type.Union([
     { additionalProperties: false }),
   Type.Object({
     type: Type.Literal('zone-mount'), zone: nativeId,
+    key: Type.Optional(Type.Enum(['name','id'])),
     routeSegment: Type.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
     disclosure: Type.Union([Type.Literal('public'), Type.Literal('private')]),
     presentation: Type.Optional(reference),

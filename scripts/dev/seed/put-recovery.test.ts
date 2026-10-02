@@ -12,7 +12,6 @@ const release = { profile: 'release-v1', ...actor, id, expectedHead: null,
 test('G-909: owner-specific stale/key conflicts are scoped to their PUT contract', () => {
   const owners = [
     ['agent_profile_conflict', `/v1/agents/${uuid}/profile`],
-    ['agent_handle_conflict', `/v1/agents/${uuid}/handle`],
     ['library_visibility_conflict', `/v1/agents/${uuid}/library-visibility`],
     ['reader_status_conflict', `/v1/works/${uuid}/reader-status`],
     ['progress_conflict', `/v1/compositions/${uuid}/occurrences/${uuid}/progress`],
@@ -45,8 +44,6 @@ const scenarios: Scenario[] = [
     originalDisplayName: 'A name', displayName: '名字', localizedNames: label,
     avatarSelection: null, bio: { text: 'Bio', language: 'en' } }, basis: { expectedHead: head },
     readPath: `/v1/agents/${uuid}`, authenticated: false },
-  { path: `/v1/agents/${uuid}/handle`, body: { expectedHandle: null, handle: 'reader' },
-    current: { handle: 'reader' }, basis: { expectedHandle: 'reader' }, readPath: `/v1/agents/${uuid}`, authenticated: false },
   { path: `/v1/agents/${uuid}/library-visibility`, body: { expectedVersion: 0, visibility: 'public' },
     current: { visibility: 'public', version: 3 }, basis: { expectedVersion: 3 }, readPath: `/v1/agents/${uuid}/library-visibility` },
   { path: `/v1/works/${uuid}/reader-status`, body: { ...actor, expectedVersion: 0, status: 'reading',

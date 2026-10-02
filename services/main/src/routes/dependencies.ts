@@ -180,6 +180,7 @@ export interface MainWorkDependencies {
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canProtectMedia'|'canManageMedia'|'canActAsPlatformAdministrator'>>
     & Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>
+    & Partial<Pick<AccessAdmissionRegistry, 'withOwnerAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'hasNonBaselineWorkCreateAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'withRealmPolicy'>>
     & Partial<Pick<AccessAdmissionRegistry, 'realmHistoryFloor'>>

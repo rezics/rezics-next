@@ -43,8 +43,7 @@ export function isSid(value: string): boolean {
 export function identityKeyUuid(key: string): string | null {
   if (UUID.test(key)) return key.toLowerCase();
   const sid = key.slice(0, SID_LENGTH);
-  if (key.length !== SID_LENGTH && (key[SID_LENGTH] !== '-' || key.length === SID_LENGTH + 1))
-    return null;
+  if (key.length !== SID_LENGTH && key[SID_LENGTH] !== '-') return null;
   try {
     return sidToUuid(sid);
   } catch {
