@@ -142,6 +142,7 @@ import { governanceServices } from './modules/governance/composition.ts';
 import { PublicReports } from './modules/public-report/store.ts';
 import { publicReportOwners } from './modules/public-report/owners.ts';
 import { AccessRealmManagement } from './modules/access/realm-management.ts';
+import { RealmJoinRequests } from './modules/realm-admin/join-requests.ts';
 import { RealmPolicyRecoveryWorker } from './modules/access/realm-management-recovery.ts';
 import { ManagementReadStore } from './modules/management-reads/read-store.ts';
 import { ManagementDecisionBasis } from './modules/management-reads/decision-basis.ts';
@@ -438,6 +439,7 @@ const app = createMainApp(fuseki, {
   realmRoster: new AccessRealmRoster(pool, environment),
   managedRealms: new AccessManagedRealms(pool, environment),
   realmAdmin: new AccessRealmManagement(pool),
+  realmJoinRequests: new RealmJoinRequests(pool, environment),
   realmSubmissions: new RealmSubmissionStore(pool, access, environment),
   realmSubmissionReads: new RealmSubmissionReads(pool),
   ...(relayPool ? { notifications: { store: notificationStore, realtime: notificationRealtime,

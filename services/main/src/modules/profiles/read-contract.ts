@@ -3,6 +3,8 @@ import { readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../w
 import { discoveryRating } from '../discovery/contract.ts';
 import { AGENT_HANDLE_PATTERN } from '../agent/handle.ts';
 import { VANITY_HANDLE_PATTERN } from '../agent/vanity.ts';
+import { pageDiscovery } from '../realm-reads/read-contract.ts';
+import { resourceListing } from '../realm-admin/contract.ts';
 
 export const profileHandle = t.String({ pattern: `^(?:${AGENT_HANDLE_PATTERN.slice(1, -1)}|${VANITY_HANDLE_PATTERN.slice(1, -1)})$` });
 export const agentRevision = t.String({ pattern:
@@ -20,6 +22,7 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
   avatarSelection: t.Nullable(t.String()), avatarUrl: t.Nullable(t.String()),
   kind: t.Union([t.Literal('person'), t.Literal('organization'), t.Literal('service')]),
   handle: profileHandle, disclosure: t.Literal('public'), sourcePosition: readPosition,
+  listing: t.Optional(resourceListing), discovery: t.Optional(pageDiscovery),
   library: t.Object({ visibility: t.Union([t.Literal('public'), t.Literal('followers'), t.Literal('private')]),
     statusShelvesVisible: t.Boolean() }),
   links: t.Object({ profile: t.String(), works: t.String(), collections: t.String(),

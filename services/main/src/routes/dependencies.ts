@@ -118,6 +118,7 @@ export interface MainWorkDependencies {
   serialStats?: import('../modules/work/serial-projection.ts').SerialStatisticsProjection;
   readRankings?: import('../modules/rankings/projection.ts').ReadRankingProjection;
   realmAdmin?: import('../modules/access/realm-management.ts').AccessRealmManagement;
+  realmJoinRequests?: import('../modules/realm-admin/join-requests.ts').RealmJoinRequests;
   media?: import('../modules/media/commands.ts').MediaDependencies;
   follows?: import('../modules/follows/store.ts').FollowsStore;
   feed?: import('../modules/feed/store.ts').FeedStore;
@@ -180,6 +181,7 @@ export interface MainWorkDependencies {
     & Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'hasNonBaselineWorkCreateAuthority'>>
     & Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'withRealmPolicy'>>
+    & Partial<Pick<AccessAdmissionRegistry, 'realmHistoryFloor'>>
     & Partial<Pick<AccessAdmissionRegistry, 'verifyContentDraftProof'
       | 'publicRealmCount' | 'realmDirectory'
       | 'withWorkEditAuthority'

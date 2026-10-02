@@ -16,6 +16,8 @@ import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
+import { realmHistoryCutFilter } from '../realm-admin/history.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -28,7 +30,7 @@ export function realmReplyDigest(value: unknown): string {
 }
 
 type RealmReadAuthority = Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'canReadWork'
-  | 'canReadSemanticResource'>>;
+  | 'canReadSemanticResource' | 'realmHistoryFloor'>>;
 
 async function realmReplyReadProof(access: RealmReadAuthority, env: WorkActivationEnvironment,
   realm: string, principal?: VerifiedPrincipal, actor?: string): Promise<string | null> {
@@ -49,6 +51,17 @@ export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'o
   if (origin?.realm && origin.realm !== realm) return null;
   const placement = await readPlacementHead(env, realm, reply);
   if (!placement) return null;
+  const policy = await readRealmPolicy(env, realm);
+  if (policy?.visibility === 'private' && policy.history === 'from-admission') {
+    if (!principal || !actor || !access.realmHistoryFloor) throw new RealmReplyUnavailable('Realm history admission is unavailable');
+    const floor = await access.realmHistoryFloor(principal, actor, realm);
+    if (floor) {
+      const filter = await realmHistoryCutFilter(env, floor);
+      const allowed = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(placement.placement)} rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . } ${filter} }`, 1024);
+      if (allowed.boolean !== true) return null;
+    }
+  }
   if (!await content.currentReview(realm, reply, placement.revisionId,
     placement.reviewDecisionId, placement.preparationId)) return null;
   return await realmReplyReadProof(access, env, realm, principal, actor) === before ? placement : null;
@@ -60,7 +73,7 @@ export class RealmReplyStore {
     private readonly contentCore: Pick<ContentCore, 'settlePublication'>,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
       & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'
-        | 'canReadWork' | 'canReadSemanticResource'>>,
+        | 'canReadWork' | 'canReadSemanticResource' | 'realmHistoryFloor'>>,
     private readonly env: WorkActivationEnvironment) {}
 
   private async admission(principal: VerifiedPrincipal, actingSubject: string, action: string,
@@ -290,8 +303,7 @@ export class RealmReplyStore {
       work: rootTarget, context: realm })), disclosureViewer(principal ?? null), 'count');
     for (const [index, placement] of page.heads.entries()) {
       if (decisions[index] !== 'visible') continue;
-      if (await this.content.currentReview(realm, placement.reply, placement.revisionId,
-        placement.reviewDecisionId, placement.preparationId)) count++;
+      if (await this.visible(realm, placement.reply, principal, actor)) count++;
     }
     if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) throw new RealmReplyDenied('Realm is unavailable');
     return { realm, rootTarget, count, complete: page.complete };

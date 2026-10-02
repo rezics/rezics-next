@@ -278,6 +278,9 @@ export class AccessAdmissionRegistry {
     try { return await this.withRealmPolicy(principal, actor, realm, 'read', async permit => permit.stamp); }
     catch (error) { if (error instanceof AdmissionDenied) return null; throw error; }
   }
+  realmHistoryFloor(principal: VerifiedPrincipal, actor: string, realm: string) {
+    return this.withRealmPolicy(principal, actor, realm, 'read', async permit => permit.historyFloor);
+  }
   readonly realmDirectory: RealmDirectoryIndex;
   constructor(private readonly pool: Pool, private readonly titleAdmissionKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY) {
     this.realmDirectory = new RealmDirectoryIndex(pool);

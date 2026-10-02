@@ -317,7 +317,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
         if (!key || key.length > 128 || key.includes('\0')) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
         }
-        const result = await work.memberships.change({ ...body, principal,
+        const result = await work.memberships.change({ ...body, principal, historyEnvironment: work.environment,
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });
@@ -575,7 +575,7 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
         if (!key || key.length > 128 || key.includes('\0')) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
         }
-        const result = await work.privateMemberships.change({ ...body, principal,
+        const result = await work.privateMemberships.change({ ...body, principal, historyEnvironment: work.environment,
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-private-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });

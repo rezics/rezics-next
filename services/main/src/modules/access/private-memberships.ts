@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
 import type { VerifiedPrincipal } from './admission.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
   MembershipUnavailable, type MembershipKind } from './memberships.ts';
@@ -31,6 +33,7 @@ export interface PrivateMembershipConsentResult {
   replayed: boolean;
 }
 export interface PrivateMembershipChange {
+  historyEnvironment?: WorkActivationEnvironment;
   principal: VerifiedPrincipal;
   kind: MembershipKind;
   ownerSubject: string;
@@ -392,6 +395,8 @@ export class AccessPrivateMemberships {
         UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
         WHERE id = $1 RETURNING authority_epoch`, [SCOPE]);
       const authorityEpoch = bumped.rows[0]!.authority_epoch;
+      if (input.kind === 'realm' && input.action === 'join') await recordRealmHistoryAdmission(client,
+        input.historyEnvironment, input.ownerSubject, 'private', member.id, member.generation);
       await client.query(`INSERT INTO access.private_membership_history
         (membership_id, generation, state, policy_revision, terms_revision,
           consent_reference, changed_by_principal) VALUES ($1,$2,$3,$4,$5,$6,$7)`,

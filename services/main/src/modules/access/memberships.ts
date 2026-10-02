@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
 
 export class MembershipDenied extends Error {}
 export class MembershipConflict extends Error {}
@@ -83,6 +85,7 @@ export async function currentMembershipDependency(client: PoolClient,
 }
 
 export interface MembershipChange {
+  historyEnvironment?: WorkActivationEnvironment;
   principal: VerifiedPrincipal;
   kind: MembershipKind;
   ownerSubject: string;
@@ -396,6 +399,8 @@ export class AccessMemberships {
           input.consentReference]);
       }
       if (input.action === 'join') {
+        if (input.kind === 'realm') await recordRealmHistoryAdmission(client, input.historyEnvironment,
+          input.ownerSubject, 'agent', membershipId, generation);
         await client.query(`INSERT INTO access.membership_consent_use
           (consent_id, membership_id, generation) VALUES ($1,$2,$3)`,
         [input.consentReference, membershipId, generation]);

@@ -2,12 +2,22 @@ import { t } from 'elysia';
 import { pageFields, readAvatar, readId, readName, readPosition, WORK_READ_COST, workCard }
   from '../work/read-contract.ts';
 import { ZonePresentation } from '../zone/presentation-format.ts';
+import { resourceListing, realmHistory, realmAdmission } from '../realm-admin/contract.ts';
+export const pageDiscovery = t.Object({ indexable: t.Boolean(), robots: t.Union([t.Literal('index'), t.Literal('noindex')]),
+  referrerPolicy: t.Nullable(t.Literal('no-referrer')) });
+export const realmJoinPage = t.Object({ profile: t.Literal('realm-join-page-v1'), id: readId, space: readId,
+  name: readName, description: t.Nullable(readName),
+  rules: t.Array(t.Object({ id: t.String(), title: readName, body: readName }), { maxItems: 12 }),
+  action: t.Object({ kind: t.Literal('request'), href: t.String(), method: t.Literal('POST'), basis: t.String() }),
+  listing: resourceListing, discovery: pageDiscovery, sourcePosition: readPosition });
 
 export const realmHeader = t.Object({ profile: t.Literal('realm-read-v1'), id: readId,
   space: readId, revision: readId, name: readName, originalName: t.Optional(readName), icon: readAvatar,
   visibility: t.Union([t.Literal('public'),t.Literal('restricted'),t.Literal('private')]),
   reviewMode: t.Union([t.Literal('mandatory'),t.Literal('trusted-members'),t.Literal('open')]),
   policyRevision: t.Nullable(t.String()),
+  listing: t.Optional(resourceListing), history: t.Optional(realmHistory), admission: t.Optional(realmAdmission),
+  discovery: t.Optional(pageDiscovery),
   profileRevision: t.Nullable(readId),
   profileContract: t.Optional(t.Nullable(t.Union([t.Literal('realm-public-profile-v1'), t.Literal('realm-public-profile-v2')]))),
   description: t.Nullable(readName),
@@ -42,6 +52,7 @@ export const realmDecisionsPage = t.Object({ profile: t.Literal('realm-decisions
 export const realmDecisionRead = t.Object({ profile: t.Literal('realm-decision-v1'),
   ...realmDecision.properties, sourcePosition: readPosition });
 export const realmZoneRead = t.Object({ profile: t.Literal('realm-zone-v1'), realm: readId,
+  listing: t.Optional(resourceListing), discovery: t.Optional(pageDiscovery),
   zone: readId, routeSegment: t.Nullable(t.String()), revision: readId,
   presentation: ZonePresentation, presentationUrl: t.String(), sourcePosition: readPosition });
 

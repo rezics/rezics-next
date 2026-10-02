@@ -20,6 +20,7 @@ import { readWorkRating } from '../work/read-rating.ts';
 import { selectDisplayName, type LocalizedText } from '../display-language/select.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
 import { admittedPage } from '../disclosure/admitted-page.ts';
+import { pageDiscoveryPolicy } from '../space/visibility.ts';
 
 export function profileAccess(session: WorkReadSession) {
   if (!session.deps.profiles) throw new WorkReadUnavailable('Profile owner is unavailable');
@@ -130,6 +131,7 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     }
   }
   const library = await owner.visibility.read(agent);
+  const listing = await owner.listing.read(agent);
   let currentHandle: string;
   try {
     currentHandle = (await session.deps.agentHandles?.current(agent)) ?? field(row, 'handle');
@@ -153,7 +155,8 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   }
   if (
     (await owner.agentFence(agent)) !== before ||
-    (await owner.visibility.read(agent)).version !== library.version
+    (await owner.visibility.read(agent)).version !== library.version ||
+    (await owner.listing.read(agent)).version !== listing.version
   ) {
     throw new WorkReadMoved('Agent profile changed');
   }
@@ -171,6 +174,8 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     avatarUrl: avatarSelection ? `/v1/media/avatars/${avatarSelection}` : null,
     handle: currentHandle,
     disclosure: 'public' as const,
+    listing: listing.listing,
+    discovery: pageDiscoveryPolicy('public', listing.listing),
     sourcePosition: session.position,
     library: { visibility: library.visibility, statusShelvesVisible: statusShelves !== null },
     links: {

@@ -4,17 +4,22 @@ import { SPACE_REALM_PROFILE, SPACE_REALM_PROFILE_V1, SPACE_REALM_PROFILE_V2 } f
 
 export type RealmVisibility = 'public' | 'restricted' | 'private';
 export type RealmReviewMode = 'mandatory' | 'trusted-members' | 'open';
+export type ResourceListing = 'listed' | 'unlisted';
+export type RealmHistory = 'everything' | 'from-admission';
+export type RealmAdmission = 'open' | 'request' | 'invitation';
 export const reviewPolicy = (mode: RealmReviewMode) => `https://rezics.com/definition/${
   mode === 'mandatory' ? 'realm-manager-reviewed-v1' : mode === 'trusted-members' ? 'realm-members-direct-v1' : 'realm-open-v1'}`;
-export interface RealmPolicy { visibility: RealmVisibility; reviewMode: RealmReviewMode; revision: string | null; space: string; realmRevision: string | null }
+export interface RealmPolicy { visibility: RealmVisibility; reviewMode: RealmReviewMode; revision: string | null; space: string; realmRevision: string | null;
+  listing: ResourceListing; history: RealmHistory; admission: RealmAdmission }
 export interface RealmPolicyDelivery { realm: string; receipt_id: string; generation: string;
-  visibility: RealmVisibility; review_mode: RealmReviewMode }
+  visibility: RealmVisibility; review_mode: RealmReviewMode;
+  listing?: ResourceListing; history?: RealmHistory; admission?: RealmAdmission }
 export const policyHead = (id: string) => `urn:rezics:realm-policy:${id}`;
 
 /** One exact Realm/Space read, at most 2 rows/8 KiB. Old Realms retain their
  * profile's defaults until the first explicit unified policy publication. */
 export async function readRealmPolicy(env: WorkActivationEnvironment, realm: string): Promise<RealmPolicy | null> {
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?realmRevision ?disclosure ?visibility ?mode ?head WHERE {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?realmRevision ?disclosure ?visibility ?mode ?head ?listing ?history ?admission WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} . }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
@@ -22,6 +27,9 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
       ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure ?disclosure .
       OPTIONAL { ${iri(realm)} rv:head ?realmRevision }
       OPTIONAL { ${iri(realm)} rv:visibility ?visibility ; rv:reviewMode ?mode ; rv:realmPolicyHead ?head }
+      OPTIONAL { ?space rv:listing ?listing }
+      OPTIONAL { ${iri(realm)} rv:historyVisibility ?history }
+      OPTIONAL { ${iri(realm)} rv:admissionMode ?admission }
     } } LIMIT 2`, 8192)).results?.bindings ?? [];
   if (rows.length !== 1) return null;
   const row = rows[0]!;
@@ -29,7 +37,11 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
   const reviewMode = row.mode?.value ?? 'mandatory';
   if (!['public','restricted','private'].includes(visibility) || !['mandatory','trusted-members','open'].includes(reviewMode)
     || row.disclosure?.value !== `${RV}${visibility === 'private' ? 'Private' : 'Public'}`) return null;
+  const listing = row.listing?.value ?? 'listed', history = row.history?.value ?? 'everything', admission = row.admission?.value ?? 'invitation';
+  if (!['listed','unlisted'].includes(listing) || !['everything','from-admission'].includes(history)
+    || !['open','request','invitation'].includes(admission)) throw new Error('Space policy is invalid');
   return { visibility: visibility as RealmVisibility, reviewMode: reviewMode as RealmReviewMode, revision: row.head?.value ?? null,
+    listing: listing as ResourceListing, history: history as RealmHistory, admission: admission as RealmAdmission,
     space: row.space!.value, realmRevision: row.realmRevision?.value ?? null };
 }
 
@@ -41,8 +53,15 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
 export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: RealmPolicyDelivery): Promise<void> {
   const receipt = policyHead(op.receipt_id);
   const digest = hash(JSON.stringify(op));
+  // An acknowledgement lost before migration 1000 can already have the older
+  // graph digest. Only its implicit defaults may replay that exact old intent.
+  const legacyDigest = hash(JSON.stringify({ realm: op.realm, receipt_id: op.receipt_id, generation: op.generation,
+    visibility: op.visibility, review_mode: op.review_mode }));
+  const legacyDefaults = (op.listing ?? 'listed') === 'listed' && (op.history ?? 'everything') === 'everything'
+    && (op.admission ?? 'invitation') === 'invitation';
   const committed = async () => (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded . }
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ?digest ; rv:outcome rv:Succeeded .
+      FILTER(?digest = ${lit(digest)}${legacyDefaults ? ` || ?digest = ${lit(legacyDigest)}` : ''}) }
   }`, 1024)).boolean === true;
   if (await committed()) return;
   const spaces = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?spaceProfile ?realmProfile WHERE {
@@ -71,12 +90,15 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
     update: `PREFIX rv: <${RV}>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} rv:disclosure ?disclosure .
+      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} rv:disclosure ?disclosure ; rv:listing ?listing .
         ${iri(op.realm)} rv:visibility ?visibility ; rv:reviewMode ?mode ; rv:realmPolicyHead ?head ; rv:reviewPolicy ?policy . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(op.realm)} rv:historyVisibility ?history ; rv:admissionMode ?admission . }
     } INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} rv:disclosure rv:${op.visibility === 'private' ? 'Private' : 'Public'} .
+      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} rv:disclosure rv:${op.visibility === 'private' ? 'Private' : 'Public'} ;
+        rv:listing ${lit(op.listing ?? 'listed')} .
         ${iri(op.realm)} rv:visibility ${lit(op.visibility)} ; rv:reviewMode ${lit(op.review_mode)} ;
+          rv:historyVisibility ${lit(op.history ?? 'everything')} ; rv:admissionMode ${lit(op.admission ?? 'invitation')} ;
           rv:realmPolicyHead ${iri(receipt)} ; rv:reviewPolicy ${iri(reviewPolicy(op.review_mode))} . }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
         rv:requestDigest ${lit(digest)} ; rv:realm ${iri(op.realm)} ; rv:space ${iri(space)} ;
@@ -91,7 +113,10 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       GRAPH ${iri(GRAPHS.current)} { ${iri(op.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(space)} ; rv:reviewPolicy ?policy .
         ${iri(space)} rv:realmCapability ${iri(op.realm)} ; rv:disclosure ?disclosure .
-        OPTIONAL { ${iri(op.realm)} rv:visibility ?visibility ; rv:reviewMode ?mode ; rv:realmPolicyHead ?head } }
+        OPTIONAL { ${iri(op.realm)} rv:visibility ?visibility ; rv:reviewMode ?mode ; rv:realmPolicyHead ?head }
+        OPTIONAL { ${iri(space)} rv:listing ?listing }
+        OPTIONAL { ${iri(op.realm)} rv:historyVisibility ?history }
+        OPTIONAL { ${iri(op.realm)} rv:admissionMode ?admission } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)

@@ -14,6 +14,7 @@ import { checkZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
 import { ZONE_PRESENTATION_PROFILE, type ZonePresentation } from './presentation-format.ts';
 import { readZoneName } from './read-name.ts';
+import type { ResourceListing } from '../space/policy.ts';
 
 export class ZoneUnavailable extends Error {}
 export class ZoneStale extends Error {}
@@ -22,16 +23,19 @@ export class ZoneOfficialDenied extends Error {}
 interface ZoneHead {
   zone: string; space: string; navigation: string; revision: string; manifest: string;
   state: 'active' | 'retired'; disclosure: 'public' | 'private';
+  spaceVisibility: 'public' | 'private'; listing: ResourceListing;
   defaultRealm?: string; presentation?: string; official?: { routeSegment: string };
   defaultContext?: { context: string; semanticRevision: string };
 }
 
 async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<ZoneHead> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?navigation ?head
-    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?segment WHERE {
+    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?segment ?spaceDisclosure ?listing WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
         rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state ;
         rv:disclosure ?disclosure .
+        ?space a rv:Space ; rv:disclosure ?spaceDisclosure .
+        OPTIONAL { ?space rv:listing ?listing }
         OPTIONAL { ${iri(zone)} rv:defaultRealm ?realm }
         OPTIONAL { ${iri(zone)} rv:presentation ?presentation }
         OPTIONAL { ${iri(zone)} rv:official ?official }
@@ -45,7 +49,7 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   if (rows.length !== 1) throw new ZoneUnavailable('Zone is unavailable');
   const row = rows[0]!;
   if (!row.space?.value || !row.navigation?.value || !row.head?.value
-    || !row.manifest?.value || !row.state?.value || !row.disclosure?.value) {
+    || !row.manifest?.value || !row.state?.value || !row.disclosure?.value || !row.spaceDisclosure?.value) {
     throw new ZoneUnavailable('Zone head is incomplete');
   }
   if (!!row.context?.value !== !!row.contextRevision?.value) {
@@ -57,10 +61,14 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   if (row.official?.value && row.official.value !== 'true') {
     throw new ZoneUnavailable('Official Zone marker differs');
   }
+  if (![`${RV}Public`,`${RV}Private`].includes(row.spaceDisclosure.value)
+    || !['listed','unlisted'].includes(row.listing?.value ?? 'listed')) throw new ZoneUnavailable('Zone Space visibility is invalid');
   return { zone, space: row.space.value, navigation: row.navigation.value,
     revision: row.head.value, manifest: row.manifest.value,
     state: row.state.value === `${RV}Retired` ? 'retired' : 'active',
     disclosure: row.disclosure.value === `${RV}Public` ? 'public' : 'private',
+    spaceVisibility: row.spaceDisclosure.value === `${RV}Public` ? 'public' : 'private',
+    listing: (row.listing?.value ?? 'listed') as ResourceListing,
     ...(row.realm?.value ? { defaultRealm: row.realm.value } : {}),
     ...(row.context?.value && row.contextRevision?.value ? { defaultContext: {
       context: row.context.value, semanticRevision: row.contextRevision.value } } : {}),

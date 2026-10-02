@@ -5,12 +5,17 @@ import { escalationCommand, escalationReceipt, impact, memberCommand, memberPage
   memberReceipt, roleCommand, roleList, roleReceipt, RealmAdminConflict, RealmAdminDenied,
   RealmAdminInvalid, RealmAdminLimit, RealmAdminStale, RealmAdminUnavailable } from '../modules/realm-admin/contract.ts';
 import { settingsCommand, settingsReceipt, settingsView } from '../modules/realm-admin/contract.ts';
+import { spaceSettingsCommand, spaceSettingsReceipt, spaceSettingsView } from '../modules/realm-admin/contract.ts';
 import { invitationPage } from '../modules/access/realm-management-joining-contract.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPage } from '../modules/realm-admin/join-requests.ts';
 
 export const openApiOperations = {
+  '/v1/realms/{realm}/join-requests/basis': { get: { bearer: true } },
+  '/v1/realms/{realm}/join-requests': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
+  '/v1/spaces/{space}/settings': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/management': { post: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/members': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/invitations': { get: { bearer: true } },
@@ -45,6 +50,55 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     return work.realmAdmin;
   };
   return new Elysia()
+    .get('/v1/realms/:realm/join-requests/basis', { params, query,
+      response: { 200: joinRequestBasis, ...authorizedReadProblems, ...problems },
+    }, async ({ request, params: path, query: options }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
+        return Response.json(await work.realmJoinRequests.basis(principal, `https://rezics.com/id/${path.realm}`, options.actingSubject), { headers });
+      } catch (error) { return errorResponse(error); }
+    })
+    .post('/v1/realms/:realm/join-requests', { params, body: joinRequestCommand,
+      response: { 200: joinRequestReceipt, 201: joinRequestReceipt, ...problems },
+    }, async ({ request, params: path, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
+        const result = await work.realmJoinRequests.request(principal, `https://rezics.com/id/${path.realm}`, body, key(request));
+        return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
+      } catch (error) { return errorResponse(error); }
+    })
+    .get('/v1/realms/:realm/join-requests', { params,
+      query: t.Object({ actingSubject: readId, after: t.Optional(readUuid), limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })) },
+        { additionalProperties: false }), response: { 200: joinRequestPage, ...authorizedReadProblems, ...problems },
+    }, async ({ request, params: path, query: options }) => {
+      try {
+        const principal = await work.account.verify(request, ['governance:decide']);
+        if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
+        return Response.json(await work.realmJoinRequests.list(principal, `https://rezics.com/id/${path.realm}`,
+          options.actingSubject, options.after, options.limit), { headers });
+      } catch (error) { return errorResponse(error); }
+    })
+    .get('/v1/spaces/:space/settings', { params: t.Object({ space: readUuid }), query,
+      response: { 200: spaceSettingsView, ...authorizedReadProblems, ...problems },
+    }, async ({ request, params: path, query: options }) => {
+      try {
+        const principal = await work.account.verify(request, ['governance:decide']);
+        return Response.json(await owner().spaceSettings(principal, `https://rezics.com/id/${path.space}`,
+          options.actingSubject, work.environment), { headers });
+      } catch (error) { return errorResponse(error); }
+    })
+    .put('/v1/spaces/:space/settings', { params: t.Object({ space: readUuid }), body: spaceSettingsCommand,
+      response: { 200: spaceSettingsReceipt, 201: spaceSettingsReceipt, ...problems },
+    }, async ({ request, params: path, body }) => {
+      try {
+        const principal = await work.account.verify(request, ['governance:decide']);
+        const result = await owner().changeSpaceSettings(principal, `https://rezics.com/id/${path.space}`,
+          body, key(request), work.environment);
+        return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
+      } catch (error) { return errorResponse(error); }
+    })
     .post('/v1/realms/:realm/management', { params, body: query,
       response: { 200: t.Object({ receiptId: readUuid, generation: t.String(), replayed: t.Boolean() }), ...problems },
     }, async ({ request, params: path, body }) => {
@@ -98,7 +152,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, body }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
-        const result = await owner().changeMember(principal, `https://rezics.com/id/${path.realm}`, body, key(request));
+        const result = await owner().changeMember(principal, `https://rezics.com/id/${path.realm}`, body, key(request), work.environment);
         return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
       } catch (error) { return errorResponse(error); }
     })

@@ -15,6 +15,10 @@ export const REALM_ADMIN_COST = { page: 50, roles: 32, assignments: 200,
 export const realmPermissions = ['governance.moderate', 'governance.rule.publish',
   'realm.members.manage', 'realm.roles.manage', 'realm.settings.manage', 'review.decide', 'publication.adopt'] as const;
 export type RealmPermission = typeof realmPermissions[number];
+export const spaceVisibility = t.Union([t.Literal('public'), t.Literal('private')]);
+export const resourceListing = t.Union([t.Literal('listed'), t.Literal('unlisted')]);
+export const realmHistory = t.Union([t.Literal('everything'), t.Literal('from-admission')]);
+export const realmAdmission = t.Union([t.Literal('open'), t.Literal('request'), t.Literal('invitation')]);
 export const realmPermission = t.Union([t.Literal('governance.moderate'), t.Literal('governance.rule.publish'),
   t.Literal('realm.members.manage'), t.Literal('realm.roles.manage'), t.Literal('realm.settings.manage'),
   t.Literal('review.decide'), t.Literal('publication.adopt')]);
@@ -63,6 +67,7 @@ export const memberCommand = t.Object({ ...commandFields, member: readId,
 { additionalProperties: false });
 export type MemberCommand = Static<typeof memberCommand>;
 export const realmSettings = t.Object({ visibility: t.Union([t.Literal('public'), t.Literal('restricted'), t.Literal('private')]),
+  listing: t.Optional(resourceListing), history: t.Optional(realmHistory), admission: t.Optional(realmAdmission),
   reviewRequired: t.Boolean(),
   reviewMode: t.Optional(t.Union([t.Literal('mandatory'), t.Literal('trusted-members'), t.Literal('open')])),
   whoMaySubmit: t.Union([t.Literal('granted'), t.Literal('members'), t.Literal('closed')]),
@@ -75,6 +80,18 @@ export type SettingsCommand = Static<typeof settingsCommand>;
 export const settingsView = t.Object({ generation, settings: realmSettings,
   ruleBasis: t.Object({ ref: t.String(), revision: t.Nullable(generation), digest: t.Nullable(t.String()) }) });
 export const settingsReceipt = t.Object({ ...settingsView.properties, receiptId: readUuid, replayed: t.Boolean() });
+/** One command changes the four access/discovery choices without rewriting rules
+ * or review policy. The generation is the existing Realm management revision. */
+export const spaceSettings = t.Object({ visibility: spaceVisibility, listing: resourceListing,
+  history: realmHistory, admission: realmAdmission }, { additionalProperties: false });
+export type SpaceSettings = Static<typeof spaceSettings>;
+export const spaceSettingsCommand = t.Object({ ...commandFields, settings: spaceSettings }, { additionalProperties: false });
+export type SpaceSettingsCommand = Static<typeof spaceSettingsCommand>;
+export const spaceSettingsView = t.Object({ space: readId, realm: readId, generation, settings: spaceSettings });
+export const spaceSettingsReceipt = t.Object({ ...spaceSettingsView.properties, receiptId: readUuid, replayed: t.Boolean() });
+export const SPACE_SETTINGS_COST = { capabilityRows: 2, capabilityBytes: 4096,
+  accessTransactions: 3, graphCommands: 2, contentScans: 0,
+  statementTimeoutMs: REALM_ADMIN_COST.statementTimeoutMs } as const;
 export const memberReceipt = t.Object({ receiptId: readUuid, generation, replayed: t.Boolean(),
   member: readId, membershipGeneration: generation, bannedUntil: t.Nullable(t.String()),
   banned: t.Boolean() });

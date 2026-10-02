@@ -5,6 +5,7 @@ import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import { AgentLibraryVisibilityStore } from './visibility.ts';
+import { AgentListingStore } from './listing.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
 
 export interface OwnRatingHead { id: string; revision: string; work: string; mainVersion: string;
@@ -15,7 +16,11 @@ export interface OwnRatingHead { id: string; revision: string; work: string; mai
  * leave this boundary in an HTTP response. No new authority or SQL schema. */
 export class ProfilesAccess {
   readonly visibility: AgentLibraryVisibilityStore;
-  constructor(private readonly pool: Pool) { this.visibility = new AgentLibraryVisibilityStore(pool); }
+  readonly listing: AgentListingStore;
+  constructor(private readonly pool: Pool) {
+    this.visibility = new AgentLibraryVisibilityStore(pool);
+    this.listing = new AgentListingStore(pool);
+  }
 
   /** `read` callbacks write nothing; see controlRead for their asynchronous commit. */
   private async transaction<T>(operation: (client: PoolClient) => Promise<T>, read = false): Promise<T> {

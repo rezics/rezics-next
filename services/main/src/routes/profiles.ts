@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
+import { workRead, WorkReadLimit, WorkReadMoved, type ReadOptions, type WorkReadSession } from '../modules/work/read-session.ts';
 import { pendingOperation } from '../api-contract.ts';
 import { pageFields, pageQuery, readId, readPosition, readQuery, readUuid } from '../modules/work/read-contract.ts';
 import { agentProfile, creditedWork, creditRole, libraryContribution, libraryRating,
@@ -14,6 +14,10 @@ import { RevisionReadBudgetExceeded } from '../modules/work/history.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
+import { resourceListing } from '../modules/realm-admin/contract.ts';
+import { pageDiscoveryHeaders, pageDiscoveryPolicy } from '../modules/space/visibility.ts';
+import { AgentListingConflict, AgentListingDenied, AgentListingUnavailable, InvalidAgentListing,
+  StaleAgentListing } from '../modules/profiles/listing.ts';
 
 const params = t.Object({ id: readUuid });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
@@ -21,22 +25,26 @@ const headers = { 'cache-control': 'private, no-store' };
 const visibility = t.Union([t.Literal('public'), t.Literal('followers'), t.Literal('private')]);
 const visibilityState = t.Object({ visibility, version: t.Integer({ minimum: 0 }),
   changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
-function response(value: unknown, status = 200) {
+function response(value: unknown, status = 200, pagePolicy?: ReturnType<typeof pageDiscoveryPolicy>) {
   const body = JSON.stringify(value);
   if (Buffer.byteLength(body) > PROFILE_READ_COST.responseBytes) throw new WorkReadLimit('Profile response exceeds budget');
-  return new Response(body, { status, headers: { ...headers, 'content-type': 'application/json' } });
+  const discovery = pagePolicy ?? (value && typeof value === 'object' && 'discovery' in value
+    ? value.discovery as Parameters<typeof pageDiscoveryHeaders>[0] : null);
+  return new Response(body, { status, headers: { ...headers, 'content-type': 'application/json',
+    ...(discovery ? pageDiscoveryHeaders(discovery) : {}) } });
 }
 function readError(error: unknown) {
   if (error instanceof RevisionReadBudgetExceeded) error = new WorkReadLimit('Rating manifest read exceeds budget');
   const result = error instanceof ControlDenied ? problem(403, 'library_denied', 'Library authority is unavailable')
-    : error instanceof LibraryVisibilityDenied ? problem(404, 'agent_unavailable', 'Agent unavailable')
-    : error instanceof ControlUnavailable || error instanceof LibraryVisibilityUnavailable
+    : error instanceof LibraryVisibilityDenied || error instanceof AgentListingDenied ? problem(404, 'agent_unavailable', 'Agent unavailable')
+    : error instanceof ControlUnavailable || error instanceof LibraryVisibilityUnavailable || error instanceof AgentListingUnavailable
       ? problem(503, 'profile_owner_unavailable', 'Profile owner is unavailable')
     : workReadError(error);
   result.headers.set('cache-control', 'private, no-store');
   return result;
 }
 export const openApiOperations = {
+  '/v1/agents/{id}/listing': { get: { bearer: true }, put: { bearer: true, idempotencyKey: true } },
   '/v1/agents/{id}': { get: { bearer: false } },
   '/v1/handles/{handle}': { get: { bearer: false } },
   '/v1/agents/{id}/works': { get: { bearer: false } },
@@ -49,7 +57,38 @@ export const openApiOperations = {
 } as const;
 
 export function profileRoutes(work: MainWorkDependencies) {
+  const agentPage = async (request: Request, query: ReadOptions, agent: string,
+    operation: (session: WorkReadSession) => Promise<unknown>) => {
+    if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
+    const result = await workRead(work, request, query, async session => {
+      const before = await work.profiles!.listing.read(agent);
+      const value = await operation(session);
+      if ((await work.profiles!.listing.read(agent)).version !== before.version) throw new WorkReadMoved('Agent listing changed');
+      return { value, listing: before.listing };
+    });
+    return response(result.value, 200, pageDiscoveryPolicy('public', result.listing));
+  };
   return new Elysia()
+    .get('/v1/agents/:id/listing', { params,
+      response: { 200: listingState, ...workReadProblems },
+    }, async ({ request, params: path }) => {
+      if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
+      try {
+        const principal = await work.account.verify(request, ['agent:create']);
+        return response(await work.profiles.listing.readForOwner(principal, `https://rezics.com/id/${path.id}`));
+      } catch (error) { return listingError(error); }
+    })
+    .put('/v1/agents/:id/listing', { params,
+      body: t.Object({ listing: resourceListing, expectedVersion: t.Integer({ minimum: 0 }) }, { additionalProperties: false }),
+      response: { 200: listingState, ...workReadProblems },
+    }, async ({ request, params: path, body }) => {
+      if (!work.profiles) return problem(503, 'profile_owner_unavailable', 'Profile owner unavailable');
+      try {
+        const principal = await work.account.verify(request, ['agent:create']);
+        return response(await work.profiles.listing.write(principal, `https://rezics.com/id/${path.id}`,
+          body.listing, body.expectedVersion, request.headers.get('idempotency-key') ?? ''));
+      } catch (error) { return listingError(error); }
+    })
     .get('/v1/agents/:id', { params, detail,
       query: t.Object(readQuery, { additionalProperties: false }),
       response: { 200: agentProfile, ...workReadProblems },
@@ -68,14 +107,15 @@ export function profileRoutes(work: MainWorkDependencies) {
       context: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return response(await workRead(work, request, query,
-        s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context))); }
+      try { return await agentPage(request, query, `https://rezics.com/id/${path.id}`,
+        s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context)); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/collections', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
-      try { return response(await workRead(work, request, query, s => readAgentCollections(s, `https://rezics.com/id/${path.id}`))); }
+      try { return await agentPage(request, query, `https://rezics.com/id/${path.id}`,
+        s => readAgentCollections(s, `https://rezics.com/id/${path.id}`)); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/library-visibility', { params,
@@ -135,6 +175,16 @@ export function profileRoutes(work: MainWorkDependencies) {
 }
 const creditResult = t.Object({ profile: t.Literal('native-agent-credit-v1'), credit: readId,
   revision: readId, work: readId, agent: readId, role: creditRole, replayed: t.Boolean(), sourcePosition: readPosition });
+const listingState = t.Object({ listing: resourceListing, version: t.Integer({ minimum: 0 }),
+  changedAt: t.Nullable(t.String()), replayed: t.Optional(t.Boolean()) });
+function listingError(error: unknown): Response {
+  if (error instanceof InvalidAgentListing) return problem(400, 'invalid_agent_listing', error.message);
+  if (error instanceof AgentListingConflict) return problem(409, 'idempotency_conflict', error.message);
+  if (error instanceof StaleAgentListing) return problem(409, 'stale_agent_listing', error.message);
+  if (error instanceof AgentListingDenied || error instanceof ControlDenied) return problem(403, 'agent_listing_denied', 'Agent control unavailable');
+  if (error instanceof AgentListingUnavailable || error instanceof ControlUnavailable) return problem(503, 'agent_listing_unavailable', 'Profile owner unavailable');
+  return readError(error);
+}
 
 function visibilityError(error: unknown): Response {
   if (error instanceof InvalidLibraryVisibility) return problem(400, 'invalid_library_visibility', error.message);

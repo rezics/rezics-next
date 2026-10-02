@@ -14,6 +14,7 @@ import { readRealmBasis } from './read-realm.ts';
 import type { Static } from 'typebox';
 import { realmWork } from './read-contract.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
+import { realmHistoryFilter } from '../realm-admin/history.ts';
 
 type RealmWork = Static<typeof realmWork>;
 
@@ -23,6 +24,7 @@ type RealmWork = Static<typeof realmWork>;
  * all D adopted Works: O(D log D) is the conservative discovery bound. */
 export async function readRealmWorks(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
+  const history = await realmHistoryFilter(session, realm, '?selectionEpoch', '?selectionSequence');
   const limit = session.options.limit ?? 20;
   const binding = ['realm-works-v1', realm, session.options.language ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
@@ -43,7 +45,9 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
       rv:mainVersion ?main ; rv:contribution ?contribution ;
       rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language .
       ?decision rv:disclosure rv:Public .
+      ${history ? '?selection rv:dataEpoch ?selectionEpoch ; rv:sequence ?selectionSequence .' : ''}
       FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
+    ${history}
     ${publicWork('?work', '?main')}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {

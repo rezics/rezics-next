@@ -9,6 +9,33 @@ import { currentRealmRulesDocument, realmRulesRef, publishRuleRevision } from '.
 import { checkedCommunityRules } from '../realm-profile/schema.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governance/store.ts';
 import type { RealmReviewMode } from '../space/policy.ts';
+import type { SpaceSettings } from '../realm-admin/contract.ts';
+
+/** Indexed owner reads, no duplicated admission enum in Realm settings. */
+export async function readRealmAccessSettings(client: PoolClient, realm: string): Promise<SpaceSettings> {
+  const row = (await client.query<{ visibility: string; listing: SpaceSettings['listing'];
+    history: SpaceSettings['history']; self_join: boolean; admission: 'request' | 'invitation' }>(`
+    SELECT COALESCE(s.visibility,'public') AS visibility,COALESCE(s.listing,'listed') AS listing,
+      COALESCE(s.history,'everything') AS history,COALESCE(s.self_join,false) AS self_join,p.admission
+    FROM (SELECT $1::text AS realm) target
+    LEFT JOIN access.realm_admin_settings s ON s.realm = target.realm
+    LEFT JOIN access.membership_policy p ON p.kind = 'realm' AND p.owner_subject = target.realm`, [realm])).rows[0];
+  return { visibility: row?.visibility === 'private' ? 'private' : 'public',
+    listing: row?.listing ?? 'listed', history: row?.history ?? 'everything',
+    admission: row?.self_join ? 'open' : row?.admission ?? 'invitation' };
+}
+
+export async function saveRealmAccessSettings(client: PoolClient, realm: string, settings: SpaceSettings) {
+  const before = await readRealmAccessSettings(client, realm);
+  await client.query(`INSERT INTO access.realm_admin_settings (realm,who_may_submit,visibility,listing,history,self_join)
+    VALUES ($1,'granted',$2,$3,$4,$5) ON CONFLICT (realm) DO UPDATE SET visibility = EXCLUDED.visibility,
+      listing = EXCLUDED.listing,history = EXCLUDED.history,self_join = EXCLUDED.self_join`,
+  [realm,settings.visibility,settings.listing,settings.history,settings.admission === 'open']);
+  const policy = await client.query(`UPDATE access.membership_policy SET admission = $2,
+    revision = revision + CASE WHEN $3 THEN 1 ELSE 0 END WHERE kind = 'realm' AND owner_subject = $1`,
+  [realm,settings.admission === 'request' ? 'request' : 'invitation',before.admission !== settings.admission]);
+  if (!policy.rowCount) throw new RealmAdminInvalid('Realm membership policy is unavailable');
+}
 
 const hash = (input: unknown) => createHash('sha256').update(JSON.stringify(input)).digest('hex');
 
@@ -24,7 +51,8 @@ export async function readRealmSettings(client: PoolClient, realm: string) {
   let currentRules: RealmSettings['rules'];
   try { currentRules = rules ? currentRealmRulesDocument(rules.document).rules : []; }
   catch { throw new RealmAdminInvalid('Realm rules document has an unsupported shape'); }
-  const settings = { visibility: row?.visibility ?? 'public', reviewRequired: (row?.review_mode ?? 'mandatory') === 'mandatory',
+  const choices = await readRealmAccessSettings(client, realm);
+  const settings = { ...choices, visibility: row?.visibility ?? 'public', reviewRequired: (row?.review_mode ?? 'mandatory') === 'mandatory',
     reviewMode: row?.review_mode ?? 'mandatory',
     whoMaySubmit: row?.who_may_submit ?? 'granted', selfJoin: row?.self_join ?? false, rules: currentRules };
   if (!Value.Check(realmSettings, settings)) throw new RealmAdminInvalid('Realm rules document has an unsupported shape');
@@ -34,6 +62,9 @@ export async function readRealmSettings(client: PoolClient, realm: string) {
 export async function saveRealmSettings(client: PoolClient, realm: string, principalId: string,
   input: SettingsCommand, key: string) {
   const settings = input.settings;
+  const before = await readRealmAccessSettings(client, realm);
+  if (settings.admission !== undefined && settings.selfJoin !== undefined
+    && settings.selfJoin !== (settings.admission === 'open')) throw new RealmAdminInvalid('Admission and selfJoin disagree');
   const mode = settings.reviewMode ?? (settings.reviewRequired ? 'mandatory' : 'open');
   if (settings.reviewRequired !== (mode === 'mandatory')) throw new RealmAdminInvalid('Review mode and reviewRequired disagree');
   try { checkedCommunityRules(settings.rules); }
@@ -55,6 +86,14 @@ export async function saveRealmSettings(client: PoolClient, realm: string, princ
       visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode,
       self_join = CASE WHEN $6 THEN EXCLUDED.self_join ELSE access.realm_admin_settings.self_join END`,
   [realm, settings.whoMaySubmit,settings.visibility,mode,settings.selfJoin ?? false,settings.selfJoin !== undefined]);
+  await client.query(`UPDATE access.realm_admin_settings SET listing = COALESCE($2,listing),
+    history = COALESCE($3,history),self_join = CASE WHEN $4::text IS NULL THEN self_join ELSE $4 = 'open' END
+    WHERE realm = $1`, [realm,settings.listing ?? null,settings.history ?? null,settings.admission ?? null]);
+  const admission = settings.admission ?? (settings.selfJoin === undefined ? before.admission
+    : settings.selfJoin ? 'open' : before.admission === 'open' ? 'invitation' : before.admission);
+  await client.query(`UPDATE access.membership_policy SET admission = $2,
+    revision = revision + CASE WHEN $3 THEN 1 ELSE 0 END WHERE kind = 'realm' AND owner_subject = $1`,
+  [realm,admission === 'request' ? 'request' : 'invitation',before.admission !== admission]);
   return { settings, ruleBasis: { ref, revision: published.revision, digest: published.digest } };
 }
 

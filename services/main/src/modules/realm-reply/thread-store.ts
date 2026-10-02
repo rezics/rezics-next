@@ -129,26 +129,39 @@ export class RealmReplyThreadStore {
    * the fixed depth. The walk stops after a fixed total; when it does, every
    * count is a lower bound.
    */
-  async counts(realm: string, threads: readonly string[]): Promise<{ counts: Map<string, number>; complete: boolean }> {
+  async counts(realm: string, threads: readonly string[], historyAdmission?: (replies: readonly string[]) => Promise<ReadonlySet<string>>): Promise<{ counts: Map<string, number>; complete: boolean }> {
     if (!native.test(realm) || threads.length > REALM_THREAD_COST.pageSize || threads.some(id => !native.test(id))) {
       throw new RealmReplyInvalid('invalid thread count');
     }
     const counts = new Map(threads.map(id => [id, 0]));
     if (!threads.length) return { counts, complete: true };
     const limit = threads.length * REALM_THREAD_COST.countPerThread;
-    const rows = await this.content.query<{ thread: string; id: string; root_target: string; visible: boolean }>(`WITH RECURSIVE tree AS (
+    const rows = await this.content.query<{ thread: string; id: string; parent_reply: string; root_target: string; visible: boolean }>(`WITH RECURSIVE tree AS (
         SELECT r.id AS thread, c.id, 1 AS depth FROM unnest($2::text[]) AS r(id)
           JOIN content.reply c ON c.parent_reply = r.id
         UNION ALL
         SELECT t.thread, c.id, t.depth + 1 FROM tree t JOIN content.reply c ON c.parent_reply = t.id
           WHERE t.depth < $3
       ), walked AS MATERIALIZED (SELECT thread, id FROM tree LIMIT $4)
-      SELECT thread, walked.id, reply.root_target,
+      SELECT thread, walked.id, reply.parent_reply, reply.root_target,
         ${approved('$1', 'walked.id', 'any', null, null)} AS visible FROM walked
         JOIN content.reply reply ON reply.id = walked.id`,
     [realm, [...threads], REALM_THREAD_COST.depth, limit + 1]);
     const reader = disclosurePoolReader(this.access);
     const candidates = rows.rows.filter(row => row.visible);
+    const eligible = new Set<string>();
+    if (historyAdmission) for (let offset = 0; offset < candidates.length; offset += DISCLOSURE_COST.batch) {
+      const admitted = await historyAdmission(candidates.slice(offset,offset + DISCLOSURE_COST.batch).map(row => row.id));
+      for (const id of admitted) eligible.add(id);
+    }
+    const byId = new Map(candidates.map(row => [row.id,row]));
+    const readableChain = (id: string, seen = new Set<string>()): boolean => {
+      if (threads.includes(id)) return true;
+      const row = byId.get(id);
+      if (!row || seen.has(id) || !eligible.has(id)) return false;
+      seen.add(id);
+      return readableChain(row.parent_reply,seen);
+    };
     for (let offset = 0; offset < candidates.length; offset += DISCLOSURE_COST.batch) {
       const page = candidates.slice(offset, offset + DISCLOSURE_COST.batch);
       const targets = page.map(row => ({ owner: 'content' as const, resource: row.id,
@@ -157,7 +170,7 @@ export class RealmReplyThreadStore {
         ? await discloseInventory(reader.environment, targets, currentDisclosureViewer(), 'count')
         : await reader.read(targets, currentDisclosureViewer(), 'count');
       page.forEach((row, index) => {
-        if (decisions[index] === 'visible') counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
+        if (decisions[index] === 'visible' && (!historyAdmission || readableChain(row.id))) counts.set(row.thread, (counts.get(row.thread) ?? 0) + 1);
       });
     }
     return { counts, complete: rows.rows.length <= limit };

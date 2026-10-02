@@ -8,7 +8,7 @@ import { readRealmBasis } from './read-realm.ts';
  * Native graph matching can scan Z active Zones; hydration remains one Zone. */
 export async function readRealmZone(session: WorkReadSession, realm: string,
   publicationRead: typeof readZonePublication = readZonePublication) {
-  await readRealmBasis(session, realm);
+  const basis = await readRealmBasis(session, realm);
   const rows = await session.query(`SELECT DISTINCT ?zone ?segment WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:zoneState rv:Active ;
       rv:disclosure rv:Public ; rv:defaultRealm ${iri(realm)} .
@@ -26,12 +26,14 @@ export async function readRealmZone(session: WorkReadSession, realm: string,
     if (error instanceof ZoneUnavailable) throw new WorkReadUnavailable('Realm Zone presentation is unavailable');
     throw error;
   }
-  if (publication.disclosure !== 'public' || publication.realm !== realm
+  if (publication.disclosure !== 'public' && basis.visibility !== 'private' || publication.realm !== realm
+    || publication.space !== basis.space
     || publication.official !== (rows[0].segment?.value ?? null)) {
     throw new WorkReadUnavailable('Realm Zone presentation differs from its public relation');
   }
   await readRealmBasis(session, realm);
   return { profile: 'realm-zone-v1' as const, realm, zone,
+    listing: publication.listing, discovery: publication.discovery,
     routeSegment: publication.official, revision: publication.revision,
     presentation: publication.presentation,
     presentationUrl: `/v1/zones/${zone.slice(-36)}/presentation`,

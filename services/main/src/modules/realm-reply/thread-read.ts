@@ -16,6 +16,7 @@ import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
+import { realmHistoryFilter } from '../realm-admin/history.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -160,6 +161,7 @@ function ranked<T extends { time: Date; placement: string }>(rows: readonly T[],
 export async function readRealmThreads(session: WorkReadSession, realm: string,
   query: { sort?: Sort; window?: Window; cursor?: string; limit?: number; now?: number }) {
   await readRealmBasis(session, realm);
+  const history = await realmHistoryFilter(session, realm);
   const threads = store(session);
   const sort = query.sort ?? 'best', window = query.window ?? 'week';
   const limit = query.limit ?? REALM_THREAD_COST.pageSize;
@@ -172,7 +174,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   const size = sort === 'new' ? limit + 1 : REALM_THREAD_COST.cohort + 1;
   const rows = (await session.query(`SELECT DISTINCT ?id ?reply ?work ?author ?revision ?review ?preparation
     ?rootRevision ?revisionEpoch ?sequence ?epochOrder WHERE {
-    ${epochs} ${headPattern(realm)}
+    ${epochs} ${headPattern(realm)} ${history}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?id rv:parentReply ?parent } }
     ${sort === 'new' && cursor && order ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
       && (?sequence < ${order[1]} || (?sequence = ${order[1]} && STR(?id) > ${lit(cursor.after)}))))` : ''}
@@ -205,7 +207,14 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   }
   const [texts, titles, named, counted] = await Promise.all([bodies(session, page, realm),
     works(session, page), authors(session, page.map(row => row.author)),
-    threads.counts(realm, page.map(row => row.reply))]);
+    threads.counts(realm, page.map(row => row.reply), history ? async replies => {
+      if (!replies.length) return new Set<string>();
+      const rows = await session.query(`SELECT DISTINCT ?reply WHERE {
+        VALUES (?slot ?reply) { ${replies.map(reply => `(${iri(replySlotIri(realm,reply))} ${iri(reply)})`).join(' ')} }
+        ${headPattern(realm)} ${history}
+      } LIMIT ${replies.length + 1}`, replies.length);
+      return new Set(rows.map(row => row.reply!.value));
+    } : undefined)]);
   const items: Summary[] = page.flatMap(row => {
     const text = texts.get(row.reply), about = titles.get(row.work);
     if (!about) return [];
@@ -232,6 +241,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   Promise<Static<typeof realmThread>> {
   await readRealmBasis(session, realm);
   const threads = store(session);
+  const history = await realmHistoryFilter(session, realm);
   const [subtree, parents] = await Promise.all([threads.subtree(focus), threads.ancestors(focus)]);
   if (!subtree.length || subtree[0]!.reply !== focus) throw new WorkReadMissing('Reply is unavailable');
   const complete = subtree.length <= REALM_THREAD_COST.replies + 1;
@@ -241,7 +251,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     ?sequence ?parent WHERE {
     VALUES (?slot ?reply) { ${nodes.map(item => `(${iri(replySlotIri(realm, item.reply))} ${iri(item.reply)})`)
       .join(' ')} }
-    ${headPattern(realm)}
+    ${headPattern(realm)} ${history}
     OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?id rv:parentReply ?parent } }
   }`, nodes.length + 1)).map(head);
   if (new Set(rows.map(row => row.reply)).size !== rows.length) {

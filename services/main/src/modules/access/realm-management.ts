@@ -8,7 +8,8 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
 import { changeRealmMember } from './realm-management-members.ts';
 import { searchRealmMembers } from './realm-management-search.ts';
-import { readRealmSettings, saveRealmSettings } from './realm-management-settings.ts';
+import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings } from './realm-management-settings.ts';
+import { spaceSettingsCommand, type SpaceSettingsCommand } from '../realm-admin/contract.ts';
 import { settleRealmPolicy } from './realm-management-recovery.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
@@ -169,11 +170,11 @@ export class AccessRealmManagement {
     });
   }
 
-  changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string) {
+  changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string, env?: WorkActivationEnvironment) {
     if (!Value.Check(memberCommand, input)) throw new RealmAdminInvalid('Invalid member change');
     return this.write(principal, realm, input, key, 'realm.members.manage',
       async (client, principalId, receiptId, generation) => ({ receiptId, generation, replayed: false,
-        ...await changeRealmMember(client, realm, input, principalId, receiptId) }));
+        ...await changeRealmMember(client, realm, input, principalId, receiptId, env) }));
   }
 
   private async settlePolicy(realm: string, env?: WorkActivationEnvironment) {
@@ -201,13 +202,58 @@ export class AccessRealmManagement {
           throw new RealmAdminUnavailable('Realm policy publication needs the graph owner');
         }
         const saved = await saveRealmSettings(client, realm, principalId, input, key);
-        if (env) await client.query(`INSERT INTO access.realm_policy_delivery
-          (realm,receipt_id,generation,visibility,review_mode) VALUES ($1,$2,$3,$4,$5)
-          ON CONFLICT (realm) DO UPDATE SET receipt_id = EXCLUDED.receipt_id,generation = EXCLUDED.generation,
-            visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode,delivered = false`,
-        [realm,receiptId,generation,input.settings.visibility,
-          input.settings.reviewMode ?? (input.settings.reviewRequired ? 'mandatory' : 'open')]);
+        if (env) await this.queuePolicy(client, realm, receiptId, generation);
         return { receiptId, generation, replayed: false, ...saved };
+      });
+    await this.settlePolicy(realm, env);
+    return result;
+  }
+
+  private async queuePolicy(client: PoolClient, realm: string, receipt: string, generation: string) {
+    await client.query(`INSERT INTO access.realm_policy_delivery
+      (realm,receipt_id,generation,visibility,review_mode,listing,history,admission)
+      SELECT s.realm,$2,$3,s.visibility,s.review_mode,s.listing,s.history,
+        CASE WHEN s.self_join THEN 'open' ELSE COALESCE(p.admission,'invitation') END FROM access.realm_admin_settings s
+      LEFT JOIN access.membership_policy p ON p.kind = 'realm' AND p.owner_subject = s.realm WHERE s.realm = $1
+      ON CONFLICT (realm) DO UPDATE SET receipt_id = EXCLUDED.receipt_id,generation = EXCLUDED.generation,
+        visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode,listing = EXCLUDED.listing,
+        history = EXCLUDED.history,admission = EXCLUDED.admission,delivered = false`, [realm,receipt,generation]);
+  }
+
+  /** One bounded Space capability lookup. G-937 owns creation of Zone-only
+   * Spaces; its manager integration must enroll their management authority. */
+  private async spaceRealm(space: string, env: WorkActivationEnvironment) {
+    if (!native.test(space)) throw new RealmAdminInvalid('Invalid Space');
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} a rv:Space ; rv:realmCapability ?realm .
+        ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(space)} . }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.realm) throw new RealmAdminDenied('Space management is unavailable');
+    return rows[0].realm.value;
+  }
+
+  async spaceSettings(principal: VerifiedPrincipal, space: string, actor: string, env: WorkActivationEnvironment) {
+    const realm = await this.spaceRealm(space, env);
+    await this.settlePolicy(realm, env);
+    return this.transaction(realm, async (client, generation) => {
+      await this.authorize(client, principal, realm, actor, 'realm.settings.manage');
+      return { space, realm, generation, settings: await readRealmAccessSettings(client, realm) };
+    });
+  }
+
+  async changeSpaceSettings(principal: VerifiedPrincipal, space: string, input: SpaceSettingsCommand,
+    key: string, env: WorkActivationEnvironment) {
+    if (!Value.Check(spaceSettingsCommand, input)) throw new RealmAdminInvalid('Invalid Space settings');
+    const realm = await this.spaceRealm(space, env);
+    await this.settlePolicy(realm, env);
+    const result = await this.write(principal, realm, input, key, 'realm.settings.manage',
+      async (client, _principal, receiptId, generation) => {
+        if ((await client.query('SELECT 1 FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered', [realm])).rowCount) {
+          throw new RealmAdminUnavailable('Space policy publication is pending; retry');
+        }
+        await saveRealmAccessSettings(client, realm, input.settings);
+        await this.queuePolicy(client, realm, receiptId, generation);
+        return { space, realm, receiptId, generation, replayed: false, settings: input.settings };
       });
     await this.settlePolicy(realm, env);
     return result;

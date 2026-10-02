@@ -2,9 +2,10 @@ import type { Pool, PoolClient } from 'pg';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from './admission.ts';
 import { realmMemberProof } from '../realm-reply/member-policy.ts';
 import type { RealmReviewMode, RealmVisibility } from '../space/policy.ts';
+import type { RealmHistoryFloor } from '../realm-admin/history.ts';
 
 export interface RealmPermit { visibility: RealmVisibility; reviewMode: RealmReviewMode;
-  member: boolean; revision: string | null; stamp: string }
+  member: boolean; revision: string | null; stamp: string; historyFloor: RealmHistoryFloor | null }
 
 /** All policy and membership reads are indexed point probes. Hold the Realm
  * gate through a bounded Content/graph write so settings cannot acknowledge a
@@ -22,7 +23,7 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
     ORDER BY r.id LIMIT 1 FOR SHARE OF p,r,s`, [principal.issuer, principal.subject, actor])).rows[0];
   if (!identity) throw new AdmissionDenied('Realm actor is unavailable');
   const settings = (await client.query<{ visibility: RealmVisibility; review_mode: RealmReviewMode;
-    who_may_submit: string }>(`SELECT visibility,review_mode,who_may_submit
+    who_may_submit: string; history: string }>(`SELECT visibility,review_mode,who_may_submit,history
     FROM access.realm_admin_settings WHERE realm = $1 FOR SHARE`, [realm])).rows[0];
   const delivery = (await client.query<{ receipt_id: string; delivered: boolean }>(`
     SELECT receipt_id,delivered FROM access.realm_policy_delivery WHERE realm = $1`, [realm])).rows[0];
@@ -45,7 +46,16 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
   if ((purpose === 'read' || visibility !== 'public') && !approved
     || purpose === 'submission' && (settings?.who_may_submit === 'closed'
       || settings?.who_may_submit === 'members' && !approved)) throw new AdmissionDenied('Realm membership is required');
-  return { visibility, reviewMode: settings?.review_mode ?? 'mandatory', member: !!approved,
+  let historyFloor: RealmHistoryFloor | null = null;
+  if (purpose === 'read' && visibility === 'private' && settings?.history === 'from-admission' && !owner) {
+    const [kind, id, generation] = member!.split(':');
+    const row = (await client.query<{ data_epoch: string; sequence: string }>(`SELECT data_epoch,sequence::text
+      FROM access.realm_history_admission WHERE kind = $1 AND membership_id = $2 AND generation = $3`,
+    [kind === 'private' ? 'private' : 'agent',id,generation])).rows[0];
+    if (!row) throw new AdmissionUnavailable('Realm history admission cut is missing');
+    historyFloor = { dataEpoch: row.data_epoch, sequence: row.sequence };
+  }
+  return { visibility, reviewMode: settings?.review_mode ?? 'mandatory', member: !!approved, historyFloor,
     revision: delivery ? `urn:rezics:realm-policy:${delivery.receipt_id}` : null,
     stamp: JSON.stringify([identity, gate?.authority_epoch ?? null, approved, delivery?.receipt_id ?? null]) };
 }
