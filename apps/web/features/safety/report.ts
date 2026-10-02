@@ -1,3 +1,4 @@
+import { parseAddressSegment } from '../address/path.ts';
 import type { browserMainApi } from '../api/browser.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { safetyText, type SafetyMessages } from './messages.ts';
@@ -84,11 +85,15 @@ const ID = 'https://rezics.com/id/';
 /**
  * The ID Main can resolve for a page this site shows a post on, or null when
  * the page's address carries none. Only discussion and reply pages do:
- * `/r/{realm}/discussions/{reply}` names a reply by its UUID.
+ * `/r/{realm}/discussions/{reply}` names a reply by its durable identity.
  */
 export function discussionTarget(href: string): string | null {
-  const reply = /\/discussions\/([0-9a-f-]{36})(?:[/?#]|$)/.exec(href)?.[1];
-  return reply ? ID + reply : null;
+  const segment = /\/discussions\/([^/?#]+)(?:[/?#]|$)/.exec(href)?.[1];
+  if (!segment) return null;
+  try {
+    const reply = parseAddressSegment(decodeURIComponent(segment));
+    return reply && reply.kind !== 'name' ? ID + reply.id : null;
+  } catch { return null; }
 }
 
 /** Whether `value` looks like something Main can resolve: a REZICS ID or a web address. Main decides which. */

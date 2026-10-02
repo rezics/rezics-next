@@ -2,7 +2,7 @@
 // route, the components and their tests.
 
 import { idOf } from '../work-page/route.ts';
-import { parseAddressSegment } from '../address/path.ts';
+import { resourceHref, parseAddressSegment, type AddressTarget } from '../address/path.ts';
 import type { EntityLink, HrefFor, SectionId } from './types.ts';
 
 /** The UUID of an `/e/{ref}` segment or native IRI; a resource has no slug, so anything else is no address. */
@@ -11,7 +11,7 @@ export function parseEntityRef(ref: string): string | null {
   return parsed && parsed.kind !== 'name' ? parsed.id : idOf(ref);
 }
 
-export const entityHref = (resource: string) => `/e/${idOf(resource) ?? resource}`;
+export const entityHref = (resource: AddressTarget) => resourceHref('/e/', resource);
 
 /** The cursor each list continues from. Statements and discussion answer `nextCursor`, relations `next`. */
 export const cursorKeys = { statements: 'statements', relations: 'relations', discussion: 'discussion' } as const;
@@ -55,6 +55,7 @@ export function standaloneHrefFor(current: EntityCursors, self: string): HrefFor
     }
     const id = idOf(link.iri);
     if (!id) return self;
-    return link.base === 'work' ? `/w/${id}` : entityHref(link.iri);
+    const address = 'address' in link ? link.address as AddressTarget : link.iri;
+    return link.base === 'work' ? resourceHref('/w/', address) : entityHref(address);
   };
 }

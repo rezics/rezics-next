@@ -1,7 +1,7 @@
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { typeEntry } from '../catalogue/types.ts';
 import { chapterPlaceHref } from '../work-page/route.ts';
 import type { ChapterSummary, WorkFacts, WorkSummary } from './types.ts';
-import { uuidOf } from './types.ts';
 
 /**
  * The Work a moderation target is about: a Work's own record (`graph`), or
@@ -60,7 +60,7 @@ export function subjectOf(iri: string, names: { works: Record<string, WorkSummar
   const bookName = partOf ? named(book) : null;
   const text = [title?.value ?? fallback, bookName?.value].filter(Boolean).join(' · ');
   return { iri, work, cover: partOf ? { iri: partOf.work, work: book } : { iri, work }, title, book: bookName, text,
-    href: (partOf && chapterPlaceHref(partOf)) || `/w/${uuidOf(iri)}`, chapter };
+    href: (partOf && chapterPlaceHref(partOf)) || resourceHref('/w/', work && 'address' in work ? work.address as AddressTarget : iri), chapter };
 }
 
 /** Whether a Work has its own facts to review: a mod's compatibility, a prompt's or a skill's text. */

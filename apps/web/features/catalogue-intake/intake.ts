@@ -1,3 +1,4 @@
+import { resourceHref } from '../address/path.ts';
 import { browserMainApi } from '../api/browser.ts';
 
 // The wizard's contract with Main. Search first: `POST /v1/catalogue/candidates` answers candidates
@@ -185,6 +186,6 @@ export const idOf = (iri: string) => iri.slice(-36);
  */
 export function destinationOf(ownerPath: string, work: string | null): string | null {
   if (/^\/v1\/collections$/.test(ownerPath)) return '/library';
-  if (work && /^\/v1\/works\/\{work\}\/(realizations|releases)\//.test(ownerPath)) return `/w/${encodeURIComponent(idOf(work))}/edit/editions`;
+  if (work && /^\/v1\/works\/\{work\}\/(realizations|releases)\//.test(ownerPath)) return `${resourceHref('/w/', work)}/edit/editions`;
   return null;
 }

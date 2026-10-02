@@ -1,3 +1,4 @@
+import { type AddressTarget } from '../../../../features/address/path.ts';
 import type { Metadata } from 'next';
 import { materializeData } from 'native-i18n';
 import { notFound } from 'next/navigation';
@@ -46,6 +47,7 @@ export default async function ConceptRoute({ params, searchParams }: Props) {
   const facet = facetByRef(facets.ok ? facets.data : null, read.data.facet);
   const state = parseConceptState(concept, query, facet?.cost.maxValues);
   if (!state) return <ConceptMalformed concept={concept} locale={locale} messages={messages} />;
+  if ('address' in read.data) state.address = read.data.address as AddressTarget;
   const realms = [...new Set([state.scope.kind === 'realm' ? state.scope.realm : null, idOf(read.data.realm ?? '')])]
     .filter((realm): realm is string => !!realm);
   const [reader, works, follow, names] = await Promise.all([conceptReader(), readFirstWorks(state, locale),

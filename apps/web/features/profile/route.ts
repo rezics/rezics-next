@@ -10,7 +10,7 @@
 // siblings (`/discover`, `/w`, …) still win, since routers try them first.
 
 import type { ShelfStatus } from './types.ts';
-import { identityHref } from '../address/path.ts';
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 
 // Main's handle forms (`services/main/src/modules/agent/handle.ts` and
 // `vanity.ts`): a native `agent-{uuid}`, or a vanity name Main matches without
@@ -43,8 +43,12 @@ export function parseShelfStatus(value: string): ShelfStatus | null {
 export type ProfileView = { kind: 'overview' } | { kind: 'works' } | { kind: 'shelf'; status: ShelfStatus };
 
 /** A profile view's address, before the locale prefix. */
-export function profileHref(handle: string, view: ProfileView = { kind: 'overview' }, cursor?: string): string {
-  const base = isNativeHandle(handle) ? identityHref('/a/', handle.slice(6)) : `/@${encodeURIComponent(handle)}`;
+export function profileHref(profile: string | { handle: string; address?: AddressTarget },
+  view: ProfileView = { kind: 'overview' }, cursor?: string): string {
+  const handle = typeof profile === 'string' ? profile : profile.handle;
+  const address = typeof profile === 'string' ? undefined : profile.address;
+  const base = address ? resourceHref('/a/', address) : isNativeHandle(handle)
+    ? resourceHref('/a/', handle.slice(6)) : resourceHref('/a/', { prefix: '/@', key: handle, slugSource: '' });
   const path = `${base}${view.kind === 'works' ? '/works' : view.kind === 'shelf' ? `/shelves/${view.status}` : ''}`;
   return cursor ? `${path}?${new URLSearchParams({ cursor })}` : path;
 }

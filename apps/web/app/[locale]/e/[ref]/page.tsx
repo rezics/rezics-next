@@ -1,3 +1,4 @@
+import { resourceHref, type AddressTarget } from '../../../../features/address/path.ts';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { localizedPath } from '../../../../i18n/locale.ts';
@@ -27,6 +28,10 @@ export default async function EntityRoute({ params, searchParams }: Props) {
   const cursors = parseEntityCursors(query);
   if (!id || !cursors) notFound();
   const projection = await readEntityProjection(id);
-  if (projection.ok && projection.data.target.base === 'work') permanentRedirect(localizedPath(`/w/${id}`, locale));
+  if (projection.ok && projection.data.target.base === 'work') {
+    const summary = projection.data.summary;
+    const address = 'address' in summary ? summary.address as AddressTarget : id;
+    permanentRedirect(localizedPath(resourceHref('/w/', address), locale));
+  }
   return <EntityPage resource={id} locale={locale} cursors={cursors} />;
 }

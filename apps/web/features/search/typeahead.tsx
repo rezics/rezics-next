@@ -1,5 +1,6 @@
 'use client';
 
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { Input, type InputProps } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
 import { materializeData } from 'native-i18n';
@@ -35,7 +36,7 @@ export function typeaheadPrefix(value: string): string | null {
 /** Where a suggestion leads: its Work, or a search for the credited name that matched. */
 export function suggestionHref(item: TypeaheadItem): string {
   return item.matchedField === 'credit' ? `/search?q=${encodeURIComponent(item.matchedText)}`
-    : `/w/${item.work.slice(-36)}`;
+    : resourceHref('/w/', 'address' in item ? item.address as AddressTarget : item.work);
 }
 
 /**

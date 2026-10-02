@@ -1,3 +1,4 @@
+import { communityHref } from './discussion.ts';
 import type { ReplyOutcome, ThreadApi } from './thread-api.ts';
 import type { ThreadRead, ThreadReply, ThreadSummary } from './thread.ts';
 
@@ -21,7 +22,7 @@ const people = {
 };
 
 export const storyRealm = { id: id(950, 'aaaa'), name: 'English Classics Reading Circle',
-  path: `/r/${id(950, 'aaaa').slice(-36)}` };
+  path: communityHref(id(950, 'aaaa')) };
 const work = { id: id(960, 'cccc'), title: name('Pride and Prejudice'),
   cover: { kind: 'fallback' as const, policy: 'avatar-fallback-v1', key: 'pride', resourceType: 'work' } };
 

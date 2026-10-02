@@ -1,3 +1,6 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { profileHref } from '../profile/route.ts';
+import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { bookClub, comfortReads, followedAuthors, libraryItems, libraryState, memoryLibraryApi, readingRows, storyNow,
@@ -53,7 +56,7 @@ export const All: Story = {
     const reading = within(canvas.getByRole('region', { name: 'Currently reading' }));
     await expect(reading.getAllByRole('heading', { level: 3 })).toHaveLength(3);
     await expect(reading.getAllByRole('link', { name: /^Continue/ })[0]).toHaveAttribute('href',
-      `/en/w/${libraryItems[0]!.work.id.slice(-36)}/read/chapter-10`);
+      localizedPath(`${resourceHref('/w/', libraryItems[0]!.work.id)}/read/chapter-10`, 'en'));
     await expect(reading.getByRole('progressbar', { name: /雨夜书店/ })).toHaveAttribute('aria-valuenow', '75');
     // All is the shelf list and this preview. The Works themselves are on their status shelves.
     await expect(canvas.queryByRole('region', { name: /^All / })).toBeNull();
@@ -282,7 +285,7 @@ export const UnavailableWork: Story = {
     const missingId = 'https://rezics.com/id/00000000-0000-4000-8000-000000000099';
     const missing = { ...named, available: false, rating: null, lastReadAt: null, customShelves: [],
       review: undefined, progress: null,
-      work: { ...named.work, id: missingId, href: `/w/${missingId.slice(-36)}`, title: null, cover: null, authors: [] } };
+      work: { ...named.work, id: missingId, href: resourceHref('/w/', missingId), title: null, cover: null, authors: [] } };
     const overview = storyOverview();
     return { state, reading: [],
       overview: { ok: true as const, data: { ...overview, counts: { ...overview.counts, read: 2 } } },
@@ -456,7 +459,7 @@ export const AuthorsYouFollow: Story = {
     const tiles = authors.getAllByRole('listitem');
     await expect(tiles).toHaveLength(3);
     // Lin Mei's serial is newer on REZICS than Pride and Prejudice; an author with nothing public comes last.
-    await expect(within(tiles[0]!).getByRole('link', { name: 'Lin Mei 林梅' })).toHaveAttribute('href', '/en/@lin_mei');
+    await expect(within(tiles[0]!).getByRole('link', { name: 'Lin Mei 林梅' })).toHaveAttribute('href', localizedPath(profileHref('lin_mei'), 'en'));
     await expect(within(tiles[0]!).getByRole('link', { name: /^雨夜书店/ })).toBeVisible();
     await expect(within(tiles[1]!).getByRole('link', { name: 'Jane Austen' }))
       .toHaveAttribute('href', '/en/authors/open-library/OL21594A');

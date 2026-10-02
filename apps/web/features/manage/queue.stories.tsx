@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -41,7 +43,7 @@ async function typeValue(field: () => HTMLInputElement | HTMLTextAreaElement, te
       await userEvent.clear(input);
       await userEvent.type(input, text);
     }
-    expect(field()).toHaveValue(text);
+    await expect(field()).toHaveValue(text);
   }, { timeout: 5000 });
 }
 
@@ -341,7 +343,7 @@ export const ChapterReport: Story = {
     await expect(detailTitle(canvas)).toHaveTextContent('第一章 雨夜 · 雨夜书店 · 连载小说');
     const detail = within(detailTitle(canvas).closest('section')!);
     await expect(detail.getByRole('link', { name: 'Read this chapter' }))
-      .toHaveAttribute('href', `/en/w/${uuid(book)}/read/${uuid(occurrences.one)}`);
+      .toHaveAttribute('href', localizedPath(`${resourceHref('/w/', book)}/read/${uuid(occurrences.one)}`, 'en'));
     await expect(detail.getByText('Chapter · Ongoing · 3 chapters · by Lin Mei 林梅')).toBeVisible();
     await expect(detail.getByRole('region', { name: 'Rule it may break' })).toHaveTextContent('No spoilers in titles');
     // The chapter's words stay hidden until asked for.
@@ -384,7 +386,7 @@ export const PublicationSubmission: Story = {
     const detail = within(detailTitle(canvas).closest('section')!);
     await expect(detail.getByText('Adds this exact published text to this Realm.')).toBeVisible();
     await expect(detail.getByRole('link', { name: 'Read this chapter' }))
-      .toHaveAttribute('href', `/en/w/${uuid(book)}/read/${uuid(occurrences.two)}`);
+      .toHaveAttribute('href', localizedPath(`${resourceHref('/w/', book)}/read/${uuid(occurrences.two)}`, 'en'));
     await userEvent.click(detail.getByRole('button', { name: 'Show text' }));
     await expect(detail.getByText(/抽屉里多了一封回信/)).toBeVisible();
   },

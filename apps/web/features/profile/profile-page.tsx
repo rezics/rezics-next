@@ -98,7 +98,7 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
         : <FollowControl target={profile.id} name={profile.displayName}
           following={follow.ok ? follow.data.following : null} revision={follow.ok ? follow.data.revision : null}
           followers={followers} signedIn={reader.signedIn} actingSubject={reader.actingSubject}
-          signInHref={signInPath(localizedPath(profileHref(profile.handle), locale))} actions={followActions}
+          signInHref={signInPath(localizedPath(profileHref(profile), locale))} actions={followActions}
           locale={locale} messages={messages} />}
       {profile.bio ? <Expandable more={t.showMore} less={t.showLess} className="max-w-prose">
         <p lang={profile.bio.language} className={cn('whitespace-pre-line text-pretty text-[1.0625rem]',
@@ -161,14 +161,14 @@ function WorksSection({ profile, works, own, avatarQuery, locale, messages }: {
 }) {
   const t = materializeData(messages, { locale });
   if (!works.ok) {
-    return <Failure failure={works.failure} title={t.worksUnavailable} retryHref={profileHref(profile.handle)} t={t} />;
+    return <Failure failure={works.failure} title={t.worksUnavailable} retryHref={profileHref(profile)} t={t} />;
   }
   return <section aria-labelledby="profile-works" className="grid gap-4">
     <header className="grid gap-1.5 border-border/70 border-b pb-4">
       <div className="flex items-end justify-between gap-4">
         <h2 id="profile-works" className="text-balance font-semibold text-2xl tracking-tight">
           {t.worksHeading({ name: profile.displayName })}</h2>
-        {works.data.nextCursor ? <Link href={profileHref(profile.handle, { kind: 'works' })}
+        {works.data.nextCursor ? <Link href={profileHref(profile, { kind: 'works' })}
           className="inline-flex shrink-0 items-center gap-0.5 rounded-sm font-medium text-primary text-sm outline-none
             underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{t.allWorks}
           <ChevronRightIcon aria-hidden="true" className="size-4 rtl:rotate-180" /></Link> : null}
@@ -195,7 +195,7 @@ function LibrarySection({ profile, library, avatarQuery, locale, messages }: {
   const heading = <h2 id="profile-shelves" className="text-balance font-semibold text-2xl tracking-tight">
     {t.shelvesHeading({ name: profile.displayName })}</h2>;
   if (library.kind === 'failed') {
-    return <Failure failure={library.failure} title={t.shelvesUnavailable} retryHref={profileHref(profile.handle)}
+    return <Failure failure={library.failure} title={t.shelvesUnavailable} retryHref={profileHref(profile)}
       t={t} />;
   }
   if (library.kind === 'private') {
@@ -213,7 +213,7 @@ function LibrarySection({ profile, library, avatarQuery, locale, messages }: {
       <nav aria-label={t.shelfSummary}>
         <ul className="flex flex-wrap gap-2">
           {library.shelves.map(shelf => <li key={shelf.status}>
-            <Link href={profileHref(profile.handle, { kind: 'shelf', status: shelf.status })} className={pillClass}>
+            <Link href={profileHref(profile, { kind: 'shelf', status: shelf.status })} className={pillClass}>
               {shelfLabel(shelf.status, t)}
               <span className="text-muted-foreground tabular-nums">{new Intl.NumberFormat(locale).format(shelf.count)}</span>
             </Link>
@@ -228,10 +228,10 @@ function LibrarySection({ profile, library, avatarQuery, locale, messages }: {
         {new Intl.NumberFormat(locale).format(shelf.count)}</span></>;
       return shelf.works.ok
         ? <WorkShelf key={shelf.status} heading={{ title,
-          seeAll: { href: profileHref(profile.handle, { kind: 'shelf', status: shelf.status }) } }}
+          seeAll: { href: profileHref(profile, { kind: 'shelf', status: shelf.status }) } }}
           works={shelf.works.data.map(shelfCard)} avatarQuery={avatarQuery} locale={locale} />
         : <Failure key={shelf.status} failure={shelf.works.failure} title={t.shelfUnavailable}
-          retryHref={profileHref(profile.handle)} t={t} />;
+          retryHref={profileHref(profile)} t={t} />;
     })}
   </>;
 }
@@ -269,7 +269,7 @@ export function ProfilePage({ profile, works, follow, library, reader, readerAct
     ? <LibrarySection profile={profile} library={library} avatarQuery={reader.avatarQuery} locale={locale}
       messages={messages} /> : null;
   return <ReaderActionsProvider signedIn={reader.signedIn} actions={readerActions}
-    signInHref={signInPath(localizedPath(profileHref(profile.handle), locale))}
+    signInHref={signInPath(localizedPath(profileHref(profile), locale))}
     actingSubject={reader.seed === null ? null : reader.actingSubject} seed={reader.seed ?? undefined}>
     {/* Names and headings mix Latin and CJK ("Moonlit Scribe的书架"); space them apart. */}
     <PageContainer className="grid gap-12 [text-autospace:normal]">
@@ -310,11 +310,11 @@ function ListFrame({ profile, title, count, view, cursor, nextCursor, reader, re
 }) {
   const t = materializeData(messages, { locale });
   return <ReaderActionsProvider signedIn={reader.signedIn} actions={readerActions}
-    signInHref={signInPath(localizedPath(profileHref(profile.handle, view, cursor), locale))}
+    signInHref={signInPath(localizedPath(profileHref(profile, view, cursor), locale))}
     actingSubject={reader.seed === null ? null : reader.actingSubject} seed={reader.seed ?? undefined}>
     <PageContainer className="grid gap-8 [text-autospace:normal]">
       <header className="grid gap-4">
-        <Link href={profileHref(profile.handle)} className="flex w-fit items-center gap-3 rounded-full pe-3
+        <Link href={profileHref(profile)} className="flex w-fit items-center gap-3 rounded-full pe-3
           outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
           <ProfileAvatar name={profile.displayName} kind={profile.kind} avatarUrl={profile.avatarUrl}
             avatarQuery={reader.avatarQuery} size="sm" />
@@ -330,9 +330,9 @@ function ListFrame({ profile, title, count, view, cursor, nextCursor, reader, re
       </header>
       {children}
       {cursor || nextCursor ? <nav aria-label={title} className="flex flex-wrap justify-between gap-3">
-        {cursor ? <Link href={profileHref(profile.handle, view)} className={buttonVariants({ variant: 'outline' })}>
+        {cursor ? <Link href={profileHref(profile, view)} className={buttonVariants({ variant: 'outline' })}>
           <ChevronLeftIcon aria-hidden="true" className="rtl:rotate-180" />{t.firstPage}</Link> : <span />}
-        {nextCursor ? <Link href={profileHref(profile.handle, view, nextCursor)} rel="next"
+        {nextCursor ? <Link href={profileHref(profile, view, nextCursor)} rel="next"
           className={buttonVariants({ variant: 'outline' })}>{t.nextPage}
           <ChevronRightIcon aria-hidden="true" className="rtl:rotate-180" /></Link> : null}
       </nav> : null}
@@ -350,7 +350,7 @@ export function ProfileWorksPage({ profile, works, cursor, reader, readerActions
   return <ListFrame profile={profile} title={t.worksHeading({ name: profile.displayName })} view={view} cursor={cursor}
     nextCursor={works.ok ? works.data.nextCursor : null} reader={reader} readerActions={readerActions} locale={locale}
     messages={messages}>
-    {!works.ok ? <Failure failure={works.failure} title={t.worksUnavailable} retryHref={profileHref(profile.handle, view)}
+    {!works.ok ? <Failure failure={works.failure} title={t.worksUnavailable} retryHref={profileHref(profile, view)}
       t={t} />
       : works.data.items.length ? <WorkRows page={works.data} profile={profile} own={ownProfile(reader, profile)}
         headingLevel={2}
@@ -372,7 +372,7 @@ export function ProfileShelfPage({ profile, status, shelf, cursor, reader, reade
   return <ListFrame profile={profile} title={shelfLabel(status, t)} count={count} view={view} cursor={cursor}
     nextCursor={shelf.ok ? shelf.data.nextCursor : null} reader={reader} readerActions={readerActions} locale={locale}
     messages={messages}>
-    {!shelf.ok ? <Failure failure={shelf.failure} title={t.shelfUnavailable} retryHref={profileHref(profile.handle, view)}
+    {!shelf.ok ? <Failure failure={shelf.failure} title={t.shelfUnavailable} retryHref={profileHref(profile, view)}
       t={t} />
       : shelf.data.cards.length ? <WorkGrid works={shelf.data.cards.map(shelfCard)} headingLevel={2}
         avatarQuery={reader.avatarQuery} locale={locale} />

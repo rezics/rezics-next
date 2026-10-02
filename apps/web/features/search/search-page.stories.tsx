@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { Providers } from '../shell/providers.tsx';
@@ -76,7 +78,7 @@ export const Populated: Story = {
     await expect(within(completeness).getByText('Searched 42 published texts in All of REZICS')).toBeVisible();
     await expect(completeness).toHaveTextContent('Search index as of change 47');
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' }))
-      .toHaveAttribute('href', '/en/w/00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f');
+      .toHaveAttribute('href', localizedPath(resourceHref('/w/', '00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f'), 'en'));
     // Each card names its author and says where the phrase was found.
     const reasons = canvas.getAllByRole('list', { name: 'Why this matched' });
     await expect(reasons[0]).toHaveTextContent('Title matches');
@@ -190,7 +192,7 @@ export const EmptySuggestsCloseTitles: Story = {
   args: { parsed: state('prejudise'), initial: results([]), fallback: {
     suggestions: [{ kind: 'work', item: suggestion(1, 'Pride and Prejudice') },
       { kind: 'name', name: 'Jane Austen', language: 'en' }],
-    popular: [11, 12, 13, 14, 15, 16].map(n => ({ id: id(n), href: `/w/${id(n).slice(-36)}`, title: name(['Emma',
+    popular: [11, 12, 13, 14, 15, 16].map(n => ({ id: id(n), href: resourceHref('/w/', id(n)), title: name(['Emma',
       'The Night Ferry Library', 'Salt and Starlight', 'The Cartographer of Tides', 'Weekend buttermilk pancakes',
       'Letters from the Lighthouse'][n - 11]!), cover: null, kind: 'book' as const,
     authors: n === 11 ? [{ name: 'Jane Austen', href: '/authors/open-library/OL21594A' }] : [],
@@ -200,7 +202,7 @@ export const EmptySuggestsCloseTitles: Story = {
     await expect(canvas.getByRole('heading', { name: 'Nothing matches “prejudise”' })).toBeVisible();
     await expect(canvas.getByText(/Did you mean/)).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Pride and Prejudice' })).toHaveAttribute('href',
-      '/en/w/00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f');
+      localizedPath(resourceHref('/w/', '00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f'), 'en'));
     await expect(canvas.getAllByRole('link', { name: 'Jane Austen' })[0])
       .toHaveAttribute('href', '/en/search?q=Jane+Austen');
     await expect(canvas.getByRole('heading', { name: 'Popular on REZICS' })).toBeVisible();

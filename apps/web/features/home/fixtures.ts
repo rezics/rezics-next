@@ -1,3 +1,5 @@
+import { communityHref } from '../feed/discussion.ts';
+import { resourceHref } from '../address/path.ts';
 import { NOW, realms, storyId } from '../feed/fixtures.ts';
 import type { ContinueItem, SuggestedFollow } from '../feed/types.ts';
 import type { Community } from '../shell/communities.ts';
@@ -13,16 +15,16 @@ const book = 'https://schema.org/Book';
 export const continueItems: ContinueItem[] = [
   { work: storyId(61, 'cccc'), title: name('雨夜书店', 'zh-Hans'), cover: cover('rain'), types: [book], source: 'reading',
     lastPosition: { occurrence: storyId(611, 'dddd'), position: null, completed: true, updatedAt: ago(20) },
-    nextUnread: { occurrence: storyId(612, 'dddd'), title: '第三章 最后一班车', href: `/w/${storyId(61, 'cccc').slice(-36)}/read/${storyId(612, 'dddd').slice(-36)}` },
+    nextUnread: { occurrence: storyId(612, 'dddd'), title: '第三章 最后一班车', href: `${resourceHref('/w/', storyId(61, 'cccc'))}/read/${storyId(612, 'dddd').slice(-36)}` },
     unreadCount: { value: 3, kind: 'exact' }, updatedAt: ago(2) },
   { work: storyId(62, 'cccc'), title: name('The Last Lantern'), cover: cover('lantern'), types: [book], source: 'followed',
     lastPosition: null, nextUnread: { occurrence: storyId(621, 'dddd'), title: 'Chapter 58 · The Siege',
-      href: `/w/${storyId(62, 'cccc').slice(-36)}/read/${storyId(621, 'dddd').slice(-36)}` },
+      href: `${resourceHref('/w/', storyId(62, 'cccc'))}/read/${storyId(621, 'dddd').slice(-36)}` },
     unreadCount: { value: 20, kind: 'lower-bound' }, updatedAt: ago(5) },
   { work: storyId(63, 'cccc'), title: name('Middlemarch'), cover: cover('middlemarch'), types: [book], source: 'reading',
     lastPosition: { occurrence: storyId(631, 'dddd'), position: null, completed: false, updatedAt: ago(30) },
     nextUnread: { occurrence: storyId(632, 'dddd'), title: null,
-      href: `/w/${storyId(63, 'cccc').slice(-36)}/read/${storyId(632, 'dddd').slice(-36)}` },
+      href: `${resourceHref('/w/', storyId(63, 'cccc'))}/read/${storyId(632, 'dddd').slice(-36)}` },
     unreadCount: { value: 1, kind: 'exact' }, updatedAt: ago(30) },
 ];
 
@@ -30,17 +32,17 @@ const community = (id: string, label: string, href: string, activity: Community[
   ({ id, kind: 'realm', name: label, language: 'en', icon: { kind: 'fallback', key: label }, href, activity });
 
 export const followedCommunities = {
-  realms: [community(realms.fiction.id, realms.fiction.name.value, `/r/${realms.fiction.id.slice(-36)}`, 'new'),
-    community(realms.classics.id, realms.classics.name.value, `/r/${realms.classics.id.slice(-36)}`, 'none'),
-    community(realms.kitchen.id, realms.kitchen.name.value, `/r/${realms.kitchen.id.slice(-36)}`, 'new')],
+  realms: [community(realms.fiction.id, realms.fiction.name.value, communityHref(realms.fiction.id), 'new'),
+    community(realms.classics.id, realms.classics.name.value, communityHref(realms.classics.id), 'none'),
+    community(realms.kitchen.id, realms.kitchen.name.value, communityHref(realms.kitchen.id), 'new')],
   zones: [], complete: true,
 };
 
 export const officialZones: Community[] = [
-  { ...community(storyId(951, 'aaaa'), 'Fiction · 小说', '/r/fiction', 'unknown'), kind: 'zone' },
-  { ...community(storyId(952, 'aaaa'), 'Books · 图书', '/r/books', 'unknown'), kind: 'zone' },
-  { ...community(storyId(953, 'aaaa'), 'Mods · 模组', '/r/mods', 'unknown'), kind: 'zone' },
-  { ...community(storyId(954, 'aaaa'), 'AI Workshop · AI 工作坊', '/r/ai-workshop', 'unknown'), kind: 'zone' },
+  { ...community(storyId(951, 'aaaa'), 'Fiction · 小说', communityHref(storyId(951, 'aaaa'), 'fiction'), 'unknown'), kind: 'zone' },
+  { ...community(storyId(952, 'aaaa'), 'Books · 图书', communityHref(storyId(952, 'aaaa'), 'books'), 'unknown'), kind: 'zone' },
+  { ...community(storyId(953, 'aaaa'), 'Mods · 模组', communityHref(storyId(953, 'aaaa'), 'mods'), 'unknown'), kind: 'zone' },
+  { ...community(storyId(954, 'aaaa'), 'AI Workshop · AI 工作坊', communityHref(storyId(954, 'aaaa'), 'ai-workshop'), 'unknown'), kind: 'zone' },
 ];
 
 export const suggestions: SuggestedFollow[] = [

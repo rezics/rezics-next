@@ -62,7 +62,8 @@ export const resolveProfile = cache(async (handle: string, locale: UiLocale): Pr
   if (address.kind !== 'resolved') return { kind: address.kind === 'unavailable' ? 'unavailable' : 'missing' };
   const read = await settle(() => main.v1.agents({ id: address.data.holder.slice(-36) }).get({ query: { actingSubject } }));
   if (!read.ok) return { kind: read.failure === 'missing' || read.failure === 'invalid' ? 'missing' : 'unavailable' };
-  return { kind: 'profile', profile: read.data };
+  const profile = { ...read.data, address: address.data.canonical };
+  return { kind: 'profile', profile };
 });
 
 /**

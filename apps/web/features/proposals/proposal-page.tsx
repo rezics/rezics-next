@@ -1,5 +1,6 @@
 'use client';
 
+import { resourceHref } from '../address/path.ts';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogHeader } from '@rezics/ui/dialog';
@@ -19,7 +20,6 @@ import type { ProposalMessages } from './messages.ts';
 import { type Agents, agentName, BlockerList, blockerText, ChangeList, EvidenceList, StateBadge, Timeline } from './parts.tsx';
 import { WatchToggle } from './watch-toggle.tsx';
 import type { BaseHead, HeaderState, ProposalRead, TargetName } from './types.ts';
-import { uuidOf } from './types.ts';
 
 /** What a revise dialog starts from, read from the candidate of a header correction; null for other candidates. */
 export function reviseSeed(view: ProposalRead): { state: HeaderState; language: string; fields: Fields;
@@ -176,7 +176,7 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
         {target ? <span lang={target.language} dir={target.direction}>{target.value}</span> : t.unknownTarget}</h1>
       <p className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground text-sm">
         <span>{t.proposedBy({ agent: agentName(proposal.proposer, agents, t) })}</span>
-        {work ? <LocalizedLink href={`/w/${uuidOf(work)}`} className="font-medium text-primary hover:underline">
+        {work ? <LocalizedLink href={resourceHref('/w/', work)} className="font-medium text-primary hover:underline">
           {t.openWork}</LocalizedLink> : null}
         {reverts ? <span>{t.revertsLead}{' '}<LocalizedLink href={`/proposals/${reverts}`}
           className="font-medium text-primary hover:underline">{t.revertsLink}</LocalizedLink></span> : null}

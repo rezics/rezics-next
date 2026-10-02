@@ -1,5 +1,8 @@
 'use client';
 
+import { type AddressTarget } from '../address/path.ts';
+import { communityHref } from './discussion.ts';
+
 import { materializeData } from 'native-i18n';
 import { createContext, type ReactNode, use, useCallback, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -36,7 +39,7 @@ interface FeedValue extends Omit<FeedEnvironment, 'messages' | 'api' | 'followed
   t: ReturnType<typeof materializeData<FeedMessages>>;
   api: () => FeedApi;
   /** A Realm's page, by its Zone's segment when it has one. */
-  realmPath: (realm: string) => string;
+  realmPath: (realm: string, address?: AddressTarget) => string;
   /** 'following', 'follow', or 'unknown' when the follow list is incomplete. */
   realmState: (realm: string) => 'following' | 'follow' | 'unknown';
   markFollowed: (realm: string, following: boolean) => void;
@@ -62,7 +65,7 @@ export function FeedProvider({ children, messages, api, followedRealms, realmSeg
   const value: FeedValue = {
     ...environment, t,
     api: getApi,
-    realmPath: realm => `/r/${realmSegments[realm] ?? realm.slice(-36)}`,
+    realmPath: (realm, address) => communityHref(address ?? realm, realmSegments[realm]),
     realmState(realm) {
       const now = changed.get(realm);
       if (now !== undefined) return now ? 'following' : 'follow';

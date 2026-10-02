@@ -1,3 +1,5 @@
+import { type AddressTarget } from '../address/path.ts';
+import { profileHref } from '../profile/route.ts';
 // Author page addresses: `/authors/open-library/{OL…A}` and its `/works` list.
 // Pure functions shared by the routes, the components and their tests; every
 // place that names an author links through `authorHref`.
@@ -30,9 +32,9 @@ export function externalAuthorFollow(key: string): string {
  * author page of someone Open Library lists. Work pages, cards and search
  * results link author names through this.
  */
-export function authorHref(credit: Pick<AuthorCredit, 'kind'> & ({ kind: 'agent'; handle: string }
+export function authorHref(credit: Pick<AuthorCredit, 'kind'> & ({ kind: 'agent'; handle: string; address?: AddressTarget }
   | { kind: 'external'; key: string })): string {
-  return credit.kind === 'agent' ? `/@${credit.handle}` : openLibraryAuthorHref(credit.key);
+  return credit.kind === 'agent' ? profileHref(credit) : openLibraryAuthorHref(credit.key);
 }
 
 /** A Main cursor from the URL, or undefined when absent or malformed. */

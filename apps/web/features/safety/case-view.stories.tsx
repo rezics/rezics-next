@@ -1,3 +1,4 @@
+import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { CaseView } from './case-view.tsx';
@@ -126,7 +127,7 @@ export const CounterNotice: Story = {
     await expect(canvas.getByRole('textbox', { name: 'What was removed by mistake, and why?' })).toHaveFocus();
     await expect(sent.some(call => call.body.kind === 'counter_notice')).toBe(false);
     await userEvent.type(canvas.getByRole('textbox', { name: 'What was removed by mistake, and why?' }), 'It is my own work.');
-    for (const [name, value] of [['Where the material was before it was removed', '/w/0001'], ['Your full name', 'Bo Li'],
+    for (const [name, value] of [['Where the material was before it was removed', resourceHref('/w/', '00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f')], ['Your full name', 'Bo Li'],
       ['Postal address', '2 Rain St'], ['Phone number', '+1 555 0100'], ['Court district for your address', 'N.D. Cal.'],
       ['Signature (type your full name)', 'Bo Li']] as const) {
       await userEvent.type(canvas.getByRole('textbox', { name: new RegExp(`^${name.replace(/[()]/g, '\\$&')}`) }), value);

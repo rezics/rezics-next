@@ -1,5 +1,6 @@
 'use client';
 
+import { addressPath, resourceHref, type AddressTarget } from '../address/path.ts';
 import { cn } from '@rezics/ui/utils';
 import { BookCheckIcon, BookOpenIcon, BookPlusIcon, EyeOffIcon, FileTextIcon, LibraryBigIcon, MessageCircleIcon,
   MessageSquareQuoteIcon, MessageSquareTextIcon, MessagesSquareIcon, PackageIcon, SparklesIcon, StampIcon,
@@ -22,7 +23,7 @@ type T = ReturnType<typeof useFeed>['t'];
 
 /** Where the post's title leads: its Work or thread. Lists have no page yet, so they lead nowhere. */
 function targetHref(item: FeedItem): string | null {
-  return item.links.target.startsWith('/w/') ? item.links.target : null;
+  return addressPath(item.links.target)?.lookup.scope === 'work' ? item.links.target : null;
 }
 
 /** The language a title is written in: Main's requested name, or the content's language for a fallback. */
@@ -39,7 +40,7 @@ function coverWork(item: FeedItem, title: string, lang: string | undefined): Cov
   return { id: item.target.work ?? item.target.id, title: { ...item.target.title, value: title,
     language: lang ?? item.target.title.language }, cover: item.target.cover, kind: coverKindOf(item.target.types),
   authors: item.authors.flatMap(author => author.displayName ? [{ name: author.displayName,
-    href: author.handle ? authorHref({ kind: 'agent', handle: author.handle })
+    href: author.handle ? authorHref({ ...author, kind: 'agent', handle: author.handle })
       : author.provider === 'open-library' && author.key
         ? authorHref({ kind: 'external', key: author.key }) : null }] : []) };
 }
@@ -141,7 +142,7 @@ function Authors({ authors }: { authors: FeedItem['authors'] }) {
   const marker = '\u2063';
   const [before = '', after = ''] = t.writtenBy({ names: marker }).split(marker);
   return <span className="block truncate">{before}{named.map((author, index) => {
-    const href = author.handle ? authorHref({ kind: 'agent', handle: author.handle })
+    const href = author.handle ? authorHref({ ...author, kind: 'agent', handle: author.handle })
       : author.provider === 'open-library' && author.key ? authorHref({ kind: 'external', key: author.key }) : null;
     return <span key={author.id}>{index ? separator : null}{href
       ? <LocalizedLink href={href} className={cn(rowLink, 'text-foreground')}>{author.displayName}</LocalizedLink>
@@ -239,7 +240,7 @@ function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' 
   if (!card.works.length) return null;
   return <div className="mt-1 flex items-end gap-2">
     <ul aria-label={t.listPreview} className="flex items-end gap-2">
-      {card.works.map(work => <li key={work.id}><LocalizedLink href={`/w/${work.id.slice(-36)}`}
+      {card.works.map(work => <li key={work.id}><LocalizedLink href={resourceHref('/w/', 'address' in work ? work.address as AddressTarget : work.id)}
         aria-label={work.title.value} className="relative z-10 block rounded-[0.1875rem] outline-none
           focus-visible:ring-2 focus-visible:ring-ring">
         <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),
@@ -253,19 +254,21 @@ function ListPreview({ card }: { card: Extract<FeedItem['card'], { kind: 'list' 
 
 /** A discussion or reply from Home, as the post it is: its thread is where it leads. */
 function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']> },
-  realmPath: (realm: string) => string): DiscussionPost {
+  realmPath: (realm: string, address?: AddressTarget) => string): DiscussionPost {
   const { target } = item;
+  const community = realmPath(item.realm.id, 'address' in item.realm ? item.realm.address as AddressTarget : undefined);
   return { kind: item.kind === 'reply' ? 'reply' : 'discussion',
-    href: threadPath(realmPath(item.realm.id), target.id),
+    href: threadPath(community, target.id),
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
-    realm: item.realm, lead: metaLead(item), author: { name: item.actor.name, handle: item.actor.handle }, time: item.time,
+    realm: item.realm, lead: metaLead(item), author: item.actor, time: item.time,
     title: item.post.title, body: item.post.excerpt ?? '', language: item.post.language,
     showSpoilers: item.viewerState.status === 'available' && item.viewerState.spoiler.policy === 'show',
-    work: target.work ? { id: target.work, title: target.title, cover: target.cover, types: target.types,
+    work: target.work ? { id: target.work,
+      address: 'address' in target ? target.address as AddressTarget : undefined, title: target.title, cover: target.cover, types: target.types,
       byline: authorLine(item.authors) } : null,
     comments: item.kind === 'discussion' ? item.comments : null,
     // Home groups a Realm's discussions of one Work on one day; the rest are on the Realm's Discussions tab.
-    more: item.group.count > 1 ? { count: item.group.count - 1, href: `${realmPath(item.realm.id)}/discussions` } : null };
+    more: item.group.count > 1 ? { count: item.group.count - 1, href: `${community}/discussions` } : null };
 }
 
 function FeedDiscussion({ item, position, total }: { item: FeedItem & { realm: NonNullable<FeedItem['realm']> };
@@ -306,6 +309,7 @@ function FeedPost({ item, position, total }: { item: FeedItem; position?: number
   const excerpt = hidden ? null : excerptOf(item);
   const byline = authorLine(item.authors);
   const attached: AttachedWork | null = item.target.work ? { id: item.target.work,
+    address: 'address' in item.target ? item.target.address as AddressTarget : undefined,
     title: { ...item.target.title, value: workTitle, language: lang ?? item.target.title.language },
     cover: item.target.cover, types: item.target.types, byline } : null;
   const contentLang = item.target.language ?? undefined;

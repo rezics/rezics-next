@@ -1,3 +1,5 @@
+import { profileHref } from '../profile/route.ts';
+import { resourceHref } from '../address/path.ts';
 import type { FeedApi, VoteReceipt } from './api.ts';
 import type { FeedHead, FeedItem, FeedPage, FeedQuery, Loaded, ReadFailure, SuggestedFollow } from './types.ts';
 
@@ -50,14 +52,14 @@ export function post(n: number, overrides: Overrides = {}): FeedItem {
       types: ['https://schema.org/Book'], excerpt: null, language: 'en' },
     realm: realms.fiction, time: ago(n * 37), timeBasis: 'revision', score: 12, vote: 0, voteRevision: null,
     comments: { value: 3, kind: 'exact' },
-    links: { target: `/w/${work.slice(-36)}`, actor: `/@${actor.handle}`, comments: `/w/${work.slice(-36)}/discussion`,
+    links: { target: resourceHref('/w/', work), actor: profileHref(actor.handle), comments: `${resourceHref('/w/', work)}/discussion`,
       vote: `/v1/feed/${storyId(n).slice(-36)}/vote` },
   };
   return { ...base, ...overrides, target: { ...base.target, ...overrides.target } };
 }
 
 const chapterAction = (n: number, chapter: number) => ({ kind: 'read-chapter' as const, work: storyId(n, 'cccc'),
-  occurrence: storyId(n * 10 + chapter, 'dddd'), href: `/w/${storyId(n, 'cccc').slice(-36)}/read/${storyId(n * 10 + chapter, 'dddd').slice(-36)}` });
+  occurrence: storyId(n * 10 + chapter, 'dddd'), href: `${resourceHref('/w/', storyId(n, 'cccc'))}/read/${storyId(n * 10 + chapter, 'dddd').slice(-36)}` });
 
 /** Every kind of post, in the anatomy the feed shares. */
 export const everyKind: FeedItem[] = [
@@ -81,19 +83,19 @@ export const everyKind: FeedItem[] = [
   post(4, { kind: 'contribution', realm: realms.mods, actor: people.leo, card: { kind: 'release', version: '2.4.0', level: 'Minor',
     changelogExcerpt: 'Adds Ginger Island crops to the planner, fixes the greenhouse overlap, and supports SMAPI 4.1.' },
     primaryAction: { kind: 'install', work: storyId(4, 'cccc'), revision: 'urn:rezics:content:revision:4',
-      href: `/w/${storyId(4, 'cccc').slice(-36)}`, compatibilityTargets: [] },
+      href: resourceHref('/w/', storyId(4, 'cccc')), compatibilityTargets: [] },
     target: { title: name('Crop Planner for Stardew Valley'), types: ['https://rezics.com/vocab/ModPackage'] } }),
   post(5, { realm: null, actor: people.aria, card: { kind: 'prompt',
     preview: 'You are a bilingual book club host. For the chapter below, ask three open questions in English and 中文, then…' },
     primaryAction: { kind: 'copy-prompt', work: storyId(5, 'cccc'), revision: 'urn:rezics:content:revision:5',
-      href: `/w/${storyId(5, 'cccc').slice(-36)}` },
+      href: resourceHref('/w/', storyId(5, 'cccc')) },
     target: { title: name('Bilingual book club discussion prompt'), types: ['https://schema.org/DigitalDocument',
       'https://rezics.com/vocab/PromptTemplate'] }, comments: { value: 0, kind: 'exact' } }),
   post(6, { realm: realms.kitchen, actor: people.mei, card: { kind: 'recipe', totalTime: '35 min', servings: 'Serves 4' },
     target: { title: name('韭菜鸡蛋饺子', 'zh-Hans'), language: 'zh-Hans', excerpt: '皮薄馅大，一次包好冷冻，随吃随煮。',
       types: ['https://schema.org/Recipe'] } }),
   // A discussion is titled by its first line; the Work it is about names its source.
-  post(7, { kind: 'discussion', realm: realms.classics, actor: people.leo, primaryAction: { kind: 'open', href: '/w/x' },
+  post(7, { kind: 'discussion', realm: realms.classics, actor: people.leo, primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(7, 'cccc')) },
     card: { kind: 'activity' }, score: 42, comments: { value: 17, kind: 'exact' },
     post: { title: 'Is Mr. Bennet a good father?', language: 'en', excerpt: 'Chapter 2 makes me think he enjoys his '
       + 'family’s confusion more than he should. He teases Mrs. Bennet in front of the girls and never once takes '
@@ -103,7 +105,7 @@ export const everyKind: FeedItem[] = [
         + 'should. He teases Mrs. Bennet in front of the girls and never once takes their future seriously.' } }),
   // Home groups one Realm's discussions of a Work on one day; the author announced spoilers in the title.
   post(15, { kind: 'discussion', realm: realms.fiction, actor: people.aria, score: 6, card: { kind: 'activity' },
-    primaryAction: { kind: 'open', href: '/w/x' }, group: { key: 'rainy-day', count: 3,
+    primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(15, 'cccc')) }, group: { key: 'rainy-day', count: 3,
       actors: [people.aria, people.leo, people.mei] },
     post: { title: '【剧透】《雨夜书店》第二章：那张旧车票', language: 'zh-Hans',
       excerpt: '信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' },
@@ -111,7 +113,7 @@ export const everyKind: FeedItem[] = [
       excerpt: '【剧透】《雨夜书店》第二章：那张旧车票\n信封里只有一张二十年前的车票。我的第一反应是：这是林梅母亲留下的。' } }),
   // A reply reads as a quoted comment that opens its place in the thread.
   post(16, { kind: 'reply', realm: realms.fiction, actor: people.daniel, score: 3, card: { kind: 'activity' },
-    primaryAction: { kind: 'open', href: '/w/x' },
+    primaryAction: { kind: 'open', href: resourceHref('/w/', storyId(16, 'cccc')) },
     post: { title: null, language: 'zh-Hans', excerpt: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' },
     target: { id: storyId(16, 'dddd'), title: name('雨夜书店', 'zh-Hans'), language: 'zh-Hans',
       excerpt: '第一章很短，但每一句都在铺垫。我已经去追第二章了，剧透帖见。' } }),
@@ -131,7 +133,7 @@ export const everyKind: FeedItem[] = [
         types: ['https://schema.org/Recipe'] }] },
     primaryAction: { kind: 'open', href: '/collections/9' },
     target: { id: storyId(9, 'ffff'), work: null, title: name('Autumn reading: slow novels'), excerpt: null, types: [] },
-    links: { target: '/collections/9', actor: '/@aria_wang', comments: '/collections/9', vote: '/v1/feed/9/vote' } }),
+    links: { target: '/collections/9', actor: profileHref('aria_wang'), comments: '/collections/9', vote: '/v1/feed/9/vote' } }),
   // An import is added to REZICS by someone who did not write it.
   post(12, { kind: 'added', realm: null, actor: people.mei, authors: [openLibrary(12, 'Lewis Carroll')],
     reasons: [{ kind: 'added-to-rezics', actor: people.mei.id }], target: { title: name('Alice’s Adventures in Wonderland'),
@@ -155,12 +157,12 @@ export const everyKind: FeedItem[] = [
 function review(n: number, options: { actor: FeedItem['actor']; realm: FeedItem['realm']; title: FeedItem['target']['title'];
   count?: number; card: Omit<Extract<FeedItem['card'], { kind: 'review' }>, 'kind' | 'review'> }): FeedItem {
   const id = storyId(n, 'abcd').slice(-36);
-  const href = `/w/${storyId(n, 'cccc').slice(-36)}#review-${id}`;
+  const href = `${resourceHref('/w/', storyId(n, 'cccc'))}#review-${id}`;
   return post(n, { kind: 'review', actor: options.actor, realm: options.realm,
     card: { kind: 'review', review: id, ...options.card }, primaryAction: { kind: 'read-review', review: id, href },
     group: { key: `review-${n}`, count: options.count ?? 1, actors: [options.actor] },
     target: { title: options.title, language: options.title.language },
-    links: { target: href, actor: `/@${options.actor.handle}`, comments: `/w/${storyId(n, 'cccc').slice(-36)}/discussion`,
+    links: { target: href, actor: profileHref(options.actor.handle), comments: `${resourceHref('/w/', storyId(n, 'cccc'))}/discussion`,
       vote: `/v1/feed/${storyId(n).slice(-36)}/vote` } });
 }
 
