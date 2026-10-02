@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
-import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, fn, userEvent, waitFor, within } from 'storybook/test';
+import { Button } from './button.tsx';
 import { EntityPicker, type EntityPickerSelection } from './entity-picker.tsx';
 import type { EntityPickerItem, EntityPickerLoad } from './entity-picker-state.ts';
 
@@ -58,6 +59,62 @@ const meta = {
 } satisfies Meta<typeof Demo>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+const inlineRequests = fn();
+function InlineLoaderFixture() {
+  const [revision, setRevision] = useState(0);
+  const [value, setValue] = useState<EntityPickerSelection[]>([]);
+  return (
+    <div className="grid max-w-sm gap-3 p-4">
+      <Button type="button" onClick={() => setRevision((previous) => previous + 1)}>
+        Re-render loader
+      </Button>
+      <output aria-label="Loader revision">{revision}</output>
+      <EntityPicker
+        label="Works"
+        value={value}
+        onValueChange={setValue}
+        load={async ({ q, cursor }) => {
+          inlineRequests({ q, cursor }, revision);
+          const index = Number(cursor ?? 0);
+          return {
+            items: [{ value: `${q}:${index}`, label: `${q} page ${index}, loader ${revision}` }],
+            nextCursor: index === 2 ? null : String(index + 1),
+            complete: index === 2,
+          };
+        }}
+      />
+    </div>
+  );
+}
+
+export const InlineLoaderRerender: Story = {
+  render: () => <InlineLoaderFixture />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const input = canvas.getByRole('combobox');
+    await userEvent.click(input);
+    await page.findByText('At least 1');
+    await userEvent.type(input, '星');
+    await page.findByRole('option', { name: '星 page 0, loader 0' });
+    await userEvent.click(page.getByRole('button', { name: 'Show more' }));
+    await page.findByText('At least 2');
+    const requestsBeforeRerender = inlineRequests.mock.calls.length;
+    // Re-render without moving focus or closing the popup, so this isolates loader identity.
+    await fireEvent.click(canvas.getByRole('button', { name: 'Re-render loader' }));
+    await expect(canvas.getByLabelText('Loader revision')).toHaveTextContent('1');
+    await expect(inlineRequests).toHaveBeenCalledTimes(requestsBeforeRerender);
+    await expect(page.getByText('At least 2')).toBeVisible();
+    await expect(input).toHaveValue('星');
+    await expect(page.getByRole('option', { name: '星 page 1, loader 0' })).toBeVisible();
+    await userEvent.click(page.getByRole('button', { name: 'Show more' }));
+    await expect(await page.findByText('3 results')).toBeVisible();
+    await expect(inlineRequests).toHaveBeenLastCalledWith({ q: '星', cursor: '2' }, 1);
+    await expect(page.getByRole('option', { name: '星 page 0, loader 0' })).toBeVisible();
+    await expect(page.getByRole('option', { name: '星 page 2, loader 1' })).toBeVisible();
+  },
+};
 
 export const TenThousand: Story = {
   async play({ canvasElement }) {

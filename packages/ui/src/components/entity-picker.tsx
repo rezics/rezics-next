@@ -2,7 +2,7 @@
 
 import { createListCollection } from '@ark-ui/react/combobox';
 import { XIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from './button.tsx';
 import {
   Combobox,
@@ -60,7 +60,10 @@ export function EntityPicker<T extends EntityPickerItem>({
   suggestions,
   renderItem,
 }: EntityPickerProps<T>) {
-  const source = useMemo(() => new EntityPickerSource(load), [load]);
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  // Inline loaders change identity on parent renders; keep traversal state for this mount.
+  const [source] = useState(() => new EntityPickerSource<T>((query) => loadRef.current(query)));
   const state = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
   const composing = useRef(false);
   const contextLocale = useLocale().locale;
