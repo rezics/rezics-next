@@ -49,7 +49,8 @@ async function fixture() {
     [];
   const api: BootstrapApi = {
     async read<T>(path: string): Promise<T> {
-      path = new URL(path, 'https://main.example').pathname;
+      const url = new URL(path, 'https://main.example');
+      path = url.pathname;
       if (path === '/v1/types')
         return {
           profile: 'types-v1',
@@ -58,8 +59,8 @@ async function fixture() {
         } as T;
       if (path.startsWith('/v1/lexicon/definitions/'))
         return definitions.get(path.split('/').at(-1)!) as T;
-      if (path.startsWith('/v1/addresses/resolve?')) {
-        const id = new URL(path,'https://main.test').searchParams.get('key')!;
+      if (path === '/v1/addresses/resolve') {
+        const id = url.searchParams.get('key')!;
         return { capabilities: { zone: resource(plan.namespace, `zone:${id}`) } } as T;
       }
       if (path.startsWith('/v1/zones/')) {
