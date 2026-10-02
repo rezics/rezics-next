@@ -20,16 +20,18 @@ type Channel = 'inbox' | 'email';
 type NotificationChoice = { purpose: 'social' | 'subscription' | 'governance'; topic: string;
   channel: Channel; state: 'enabled' | 'disabled'; revision: string | null };
 
-/** Topics with an active producer, in the preferences API's order. A label is required for each. */
+/** Known producer topics. The live list follows Main's response; the preview includes every labeled topic. */
 export const settingsNotificationTopics = [
-  'reply', 'mention', 'post-vote', 'followed-chapter', 'review-helpful', 'review',
+  'reply', 'mention', 'post-vote', 'followed-chapter', 'new-work', 'new-release', 'collection-change', 'review-helpful', 'review',
   'review-requested', 'changes-requested', 'proposal-revised', 'proposal-decided',
   'proposal-withdrawn', 'proposal-reverted',
 ] as const;
 type SettingsNotificationTopic = (typeof settingsNotificationTopics)[number];
 export const notificationTopicLabel: Record<SettingsNotificationTopic, keyof SettingsMessages> = {
   reply: 'notificationReply', mention: 'notificationMention', 'post-vote': 'notificationPostVote',
-  'followed-chapter': 'notificationFollowedChapter', 'review-helpful': 'notificationReviewHelpful',
+  'followed-chapter': 'notificationFollowedChapter',
+  'new-work': 'notificationNewWork', 'new-release': 'notificationNewRelease', 'collection-change': 'notificationCollectionChange',
+  'review-helpful': 'notificationReviewHelpful',
   review: 'notificationReview', 'review-requested': 'notificationReviewRequested',
   'changes-requested': 'notificationChangesRequested', 'proposal-revised': 'notificationProposalRevised',
   'proposal-decided': 'notificationProposalDecided', 'proposal-withdrawn': 'notificationProposalWithdrawn',
@@ -51,7 +53,7 @@ export function topicsShown(items: readonly { topic: string }[]): string[] {
 const governanceTopics = new Set<string>(['review-requested', 'changes-requested', 'proposal-revised',
   'proposal-decided', 'proposal-withdrawn', 'proposal-reverted']);
 function purposeOf(topic: string): NotificationChoice['purpose'] {
-  if (topic === 'followed-chapter') return 'subscription';
+  if (['followed-chapter', 'new-work', 'new-release', 'collection-change'].includes(topic)) return 'subscription';
   return governanceTopics.has(topic) ? 'governance' : 'social';
 }
 function labelFor(topic: string, t: SettingsMessages): string {
@@ -93,7 +95,7 @@ function Section({ id, title, help, children }: { id: string; title: string; hel
   </CardContent></Card>;
 }
 
-function Notifications({ t, locale, preview = false }: { t: SettingsMessages; locale: UiLocale; preview?: boolean }) {
+export function NotificationPreferences({ t, locale, preview = false }: { t: SettingsMessages; locale: UiLocale; preview?: boolean }) {
   const [choices, setChoices] = useState<NotificationChoice[] | null>(preview
     ? settingsNotificationTopics.flatMap(topic => (['inbox', 'email'] as const).map(channel => ({
       purpose: purposeOf(topic), topic, channel, state: 'enabled' as const, revision: null }))) : null);
@@ -396,7 +398,7 @@ export function SettingsSections({ agent, locale, accountOrigin, t, preview = fa
   children?: ReactNode;
 }) {
   return <>
-    <Notifications t={t} locale={locale} preview={preview} />
+    <NotificationPreferences t={t} locale={locale} preview={preview} />
     {agent ? <PersonControls agent={agent} locale={locale} t={t} preview={preview}
       previewLanguages={previewLanguages} /> : null}
     <Display locale={locale} t={t} preview={preview} />

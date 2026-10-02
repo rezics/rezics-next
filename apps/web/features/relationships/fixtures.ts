@@ -74,7 +74,7 @@ export function memoryRelationships(initial: Follow[] = [], failure?: 'read' | '
       calls.push({ operation: 'join', body: { realm, basis, listed }, key });
       if (basis.membershipGeneration !== policy(realm).membershipGeneration) throw new RelationshipError(409);
       const id = canonical(realm), before = follows.get(id);
-      const follow = before ?? { ...fixtureFollow(++revision), id, realm, source: 'join' as const };
+      const follow = { ...(before ?? fixtureFollow(++revision)), id, realm, source: 'join' as const, revision: `r${++revision}` };
       follows.set(id, follow);
       member.set(realm, { membershipId: `m${++revision}`, generation: '1', realm, space: id, member: actor,
         available: true, name: follow.name, following: true, level: follow.level, source: follow.source, pinPosition: follow.pinPosition });

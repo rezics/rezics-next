@@ -4,8 +4,7 @@ import type { Follow, FollowReceipt, FollowState, Membership, RelationshipsApi, 
 import type { EntityPickerPage } from '@rezics/ui/entity-picker';
 import type { MainClient } from '../discover/types.ts';
 
-/** Pending Main contract: goal/g-938, modules/follows/contract.ts and routes/{memberships,notifications,managed-realms}.ts.
- * Keep this adapter together until G-938 is merged and the MainApp generator can carry its types. */
+/** Main's relationship adapter: follows, membership lifecycle and Watch share this one client boundary. */
 export class RelationshipError extends Error {
   constructor(readonly status: number) { super(`Relationship request failed (${status})`); }
 }
@@ -31,8 +30,7 @@ export function mainRelationships(actingSubject: string, options: {
   const actor = { actingSubject };
   const realmPath = (realm: string) => `/v1/realms/${encodeURIComponent(realm.slice(-36))}`;
   return {
-    // G-938 c27c388 has manager-only membership changes, with no recipient Leave command.
-    canLeave: false,
+    canLeave: true,
     follows: query => request<EntityPickerPage<Follow>>('/v1/me/follows', { ...actor, limit: 20, ...query }),
     memberships: query => request<EntityPickerPage<Membership>>('/v1/me/memberships', { ...actor, limit: 20, ...query }),
     state: (target, kind) => request<FollowState>('/v1/me/follow-state', { ...actor, target, kind }),
@@ -44,7 +42,13 @@ export function mainRelationships(actingSubject: string, options: {
     join: (realm, policy, listed, key) => request(`${realmPath(realm)}/join`, undefined,
       { ...actor, expectedMembershipGeneration: policy.membershipGeneration,
         expectedPolicyRevision: policy.policyRevision, termsRevision: policy.termsRevision, listed }, 'POST', key),
-    leave: () => Promise.reject(new RelationshipError(501)),
+    async leave(realm, expectedGeneration, key) {
+      const policy = await request<JoinPolicy>(`${realmPath(realm)}/joining`, actor);
+      return request('/v1/access/membership-changes', undefined, {
+        profile: 'access-membership-change-v1', kind: 'realm', ownerSubject: realm,
+        memberSubject: actingSubject, action: 'leave', expectedGeneration, expectedPolicyRevision: policy.policyRevision,
+      }, 'POST', key);
+    },
     mute: (target, kind, muted, key) => request('/v1/me/mutes', undefined,
       { ...actor, target, kind, strength: muted ? 'mute' : 'clear' }, 'PUT', key),
     block: (target, blocked, key) => request('/v1/me/blocked-people', undefined, { ...actor, target, blocked }, 'PUT', key),

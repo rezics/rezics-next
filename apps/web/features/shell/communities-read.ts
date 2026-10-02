@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
-import { type FollowKind, settle, uuidOf } from '../feed/types.ts';
+import { settle, uuidOf } from '../feed/types.ts';
 import { serviceOrigin } from '../api/origins.ts';
 import { mainRelationships } from '../relationships/api.ts';
 import { displayLanguageHeaders } from '../../i18n/display-languages.ts';
@@ -45,10 +45,9 @@ export const readFollowed = cache(async (kind: 'realm' | 'zone'):
   Promise<{ items: Community[]; complete: boolean } | null> => {
   const api = await relationshipReader();
   if (!api) return null;
-  // Realm and Zone aliases now name one Space. Existing feed consumers still key membership by Realm.
-  if (kind === 'zone') return { items: [], complete: true };
+  // Main partitions Space follows by Zone alias for the existing feed consumers.
   try {
-    const page = await api.follows({ kind: 'space', include: 'newSince' });
+    const page = await api.follows({ kind, include: 'newSince' });
     return { items: page.items.map(followedCommunity).filter(item => item !== null)
       .map(item => ({ ...item, id: item.realm ?? item.id })), complete: page.complete };
   } catch { return null; }

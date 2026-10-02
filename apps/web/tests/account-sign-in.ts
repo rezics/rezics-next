@@ -11,6 +11,16 @@ export async function signInAtAccounts(page: Page, next: string,
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Enter your password').fill(member.password);
   await page.getByRole('button', { name: 'Next' }).click();
+  // Synthetic demo accounts may predate the current local policy revisions.
+  const accept = page.getByRole('button', { name: 'Accept and continue', exact: true });
+  await Promise.race([
+    page.waitForURL(next, { timeout: 60_000 }),
+    accept.waitFor({ state: 'visible', timeout: 60_000 }),
+  ]);
+  if (await accept.isVisible()) {
+    await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
+    await accept.click();
+  }
   // OAuth crosses Accounts and the Worker; use the same loaded-host allowance as hydration.
   await expect(page).toHaveURL(next, { timeout: 60_000 });
 }

@@ -3,6 +3,8 @@ import { mainRelationships, RelationshipError } from '../features/relationships/
 import { fixtureFollow, memoryRelationships, target, actor } from '../features/relationships/fixtures.ts';
 import { relationshipSource } from '../features/relationships/list.ts';
 import { messages } from '../features/relationships/messages.ts';
+import { messages as settingsMessages } from '../features/settings/messages.ts';
+import { notificationTopicLabel } from '../features/settings/settings-sections.tsx';
 import { followedCommunity, pinnedCommunities, spaceCommunities } from '../features/shell/communities-relationships.ts';
 import { uiLocales } from '../i18n/define.ts';
 
@@ -13,12 +15,12 @@ function fakeMain() {
     const url = new URL(String(input), 'http://main.test');
     requests.push({ path: url.pathname, query: url.searchParams, method: init?.method ?? 'GET',
       body: init?.body ? JSON.parse(String(init.body)) : null, key: new Headers(init?.headers).get('idempotency-key') });
-    return Response.json({ items: [], nextCursor: null, complete: true, watch: null }, { status });
+    return Response.json({ items: [], nextCursor: null, complete: true, watch: null, policyRevision: '3' }, { status });
   }) as typeof fetch;
   return { requests, api: mainRelationships(actor, { fetch: fetcher }), fail: () => { status = 409; } };
 }
 
-test('G-944: the pending Main adapter preserves cursor, search, arbitrary kinds, order and omitted fields', async () => {
+test('G-944: the Main adapter preserves cursor, search, arbitrary kinds, order and omitted fields', async () => {
   const main = fakeMain();
   await main.api.follows({ q: '小說', kind: 'https://example.org/Novel', order: 'pinned', cursor: 'next+page/2=', include: 'newSince' });
   expect(main.requests[0]!.query.get('cursor')).toBe('next+page/2=');
@@ -35,21 +37,24 @@ test('G-944: the pending Main adapter preserves cursor, search, arbitrary kinds,
   expect(main.requests[2]!.body?.targets).toEqual([{ target: target(10), expectedRevision: 'r10', level: 'off', pinPosition: null }]);
 });
 
-test('G-944: Join is one command; missing recipient Leave is explicit; Watch and negative relationships stay separate', async () => {
+test('G-944: Join is one command; Leave uses membership changes; Watch and negative relationships stay separate', async () => {
   const main = fakeMain();
   const policy = { policyRevision: '3', membershipGeneration: '0', termsRevision: 'rules-7', selfJoin: true, open: true, state: 'absent' as const };
   await main.api.join(target(10), policy, false, 'join-key');
   expect(main.requests).toHaveLength(1);
   expect(main.requests[0]!.path).toEndWith('/join');
   expect(main.requests[0]!.body).toEqual({ actingSubject: actor, expectedMembershipGeneration: '0', expectedPolicyRevision: '3', termsRevision: 'rules-7', listed: false });
-  expect(main.api.canLeave).toBe(false);
-  await expect(main.api.leave(target(10), '1')).rejects.toBeInstanceOf(RelationshipError);
-  expect(main.requests).toHaveLength(1);
+  expect(main.api.canLeave).toBe(true);
+  await main.api.leave(target(10), '1', 'leave-key');
+  expect(main.requests[2]!.path).toBe('/api/main/v1/access/membership-changes');
+  expect(main.requests[2]!.body).toEqual({ profile: 'access-membership-change-v1', kind: 'realm', ownerSubject: target(10),
+    memberSubject: actor, action: 'leave', expectedGeneration: '1', expectedPolicyRevision: '3' });
+  expect(main.requests[2]!.key).toBe('leave-key');
   await main.api.setWatch('urn:rezics:proposal:00000000-0000-4000-8000-000000000002', 'proposal', 'participating', null);
-  expect(main.requests[1]!.body?.level).toBe('participating');
+  expect(main.requests[3]!.body?.level).toBe('participating');
   await main.api.mute(target(10), 'realm', true);
   await main.api.block(target(11), true);
-  expect(main.requests.slice(2).map(item => item.path)).toEqual(['/api/main/v1/me/mutes', '/api/main/v1/me/blocked-people']);
+  expect(main.requests.slice(4).map(item => item.path)).toEqual(['/api/main/v1/me/mutes', '/api/main/v1/me/blocked-people']);
   main.fail();
   await expect(main.api.memberships()).rejects.toBeInstanceOf(RelationshipError);
 });
@@ -81,7 +86,7 @@ test('G-944: cancelled and superseded queries cannot publish old inventory resul
   expect(source.getSnapshot().items.map(item => item.id)).toEqual(['new']);
 });
 
-test('G-944: pinned traversal stops at the first unpinned row, and Spaces coalesce Realm/Zone membership without losing continuation', async () => {
+test('G-944: pinned traversal stops at the first unpinned row; Spaces preserve one server-ordered traversal', async () => {
   const projecting = fixtureFollow(10);
   projecting.newSince!.state = 'projecting';
   expect(followedCommunity(projecting)?.activity).toBe('unknown');
@@ -95,12 +100,13 @@ test('G-944: pinned traversal stops at the first unpinned row, and Spaces coales
   await memory.api.join(realm, await memory.api.joining(realm), false);
   // Older membership episodes can name only the Realm; the Space follow must still be shown once.
   memory.member.get(realm)!.space = null;
+  memory.api.memberships = async () => { throw new Error('The sidebar must not stitch another membership list'); };
   const spaces = await spaceCommunities(memory.api, '', null);
   expect(spaces.items.filter(item => item.id === rows[0]!.id)).toHaveLength(1);
   expect(spaces.complete).toBe(false);
   const next = await spaceCommunities(memory.api, '', spaces.nextCursor);
   expect(next.items).toHaveLength(20);
-  expect(JSON.parse(next.nextCursor!).memberships).toBeNull();
+  expect(next.nextCursor).toBe('40');
 });
 
 test('G-944: every locale has complete relationship copy with distinct notification levels', () => {
@@ -120,4 +126,31 @@ test('G-944: a moved continuation restarts the inventory instead of mixing snaps
   expect(source.getSnapshot().items[0]!.id).toBe('revision-1');
   await source.retry();
   expect(source.getSnapshot().items.map(item => item.id)).toEqual(['revision-2']);
+});
+
+test('G-944: the new subscription topics have native labels in all eight locales', () => {
+  for (const topic of ['new-work', 'new-release', 'collection-change'] as const) {
+    const key = notificationTopicLabel[topic];
+    for (const locale of uiLocales) {
+      expect(settingsMessages[locale][key].trim()).not.toBe('');
+      if (locale !== 'en') expect(settingsMessages[locale][key]).not.toBe(settingsMessages.en[key]);
+    }
+  }
+});
+
+test('G-944: Leave removes a join follow and keeps an explicit follow taken over after joining', async () => {
+  const memory = memoryRelationships([]);
+  const realm = target(500);
+  await memory.api.join(realm, await memory.api.joining(realm), false);
+  expect((await memory.api.state(realm, 'realm')).source).toBe('join');
+  await memory.api.leave(realm, (await memory.api.joining(realm)).membershipGeneration);
+  expect((await memory.api.state(realm, 'realm')).following).toBe(false);
+  await memory.api.join(realm, await memory.api.joining(realm), false);
+  const joined = await memory.api.state(realm, 'realm');
+  await memory.api.batch([{ target: realm, expectedRevision: joined.revision, level: 'all', pinPosition: 0 }]);
+  const configured = await memory.api.state(realm, 'realm');
+  expect(configured.source).toBe('join');
+  await memory.api.set({ target: realm, following: true, expectedRevision: configured.revision });
+  await memory.api.leave(realm, (await memory.api.joining(realm)).membershipGeneration);
+  expect(await memory.api.state(realm, 'realm')).toMatchObject({ following: true, source: 'explicit', level: 'all', pinPosition: 0 });
 });
