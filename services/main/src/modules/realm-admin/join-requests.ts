@@ -4,7 +4,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { realmActor, realmManager, realmTransaction, membershipRoot, realmKeyPattern } from '../access/realm-management-authority.ts';
+import { realmActor, realmManager, realmTransaction, membershipRoot, realmKeyPattern, realmIdPattern } from '../access/realm-management-authority.ts';
 import { readId, readUuid } from '../work/read-contract.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -12,8 +12,10 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { generation, reason, commandFields, RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale,
   RealmAdminUnavailable } from './contract.ts';
 import { recordRealmHistoryAdmission } from './history.ts';
+import { JOIN_REQUEST_READ_COST, JOIN_REQUEST_SEARCH_SQL, joinRequestCursor, requestSearch,
+  requestCursorBinding, encodeRequestCursor, decodeRequestCursor } from './join-requests-read.ts';
 
-const PAGE = 50;
+const PAGE = JOIN_REQUEST_READ_COST.page;
 export const joinRequestCommand = t.Object({ actingSubject: readId, expectedMembershipGeneration: generation,
   expectedPolicyRevision: generation, termsRevision: t.String({ minLength: 1, maxLength: 128 }), reason }, { additionalProperties: false });
 export type JoinRequestCommand = Static<typeof joinRequestCommand>;
@@ -21,9 +23,22 @@ export const joinRequestReceipt = t.Object({ requestId: readUuid, requestGenerat
   replayed: t.Boolean(), state: t.Literal('pending') });
 export const joinRequestBasis = t.Object({ policyRevision: generation, termsRevision: t.String(),
   membershipGeneration: generation, state: t.Union([t.Literal('absent'),t.Literal('joined'),t.Literal('left')]) });
-export const joinRequestPage = t.Object({ generation, items: t.Array(t.Object({ id: readUuid, member: readId,
+const requestView = t.Object({ id: readUuid, member: readId,
   requestGeneration: generation, membershipGeneration: generation, policyRevision: generation,
-  termsRevision: t.String(), reason: t.String(), createdAt: t.String() }), { maxItems: PAGE }), nextCursor: t.Nullable(readUuid) });
+  termsRevision: t.String(), reason: t.String(), createdAt: t.String() });
+export const joinRequestPage = t.Object({ generation, items: t.Array(requestView, { maxItems: PAGE }),
+  nextCursor: t.Nullable(joinRequestCursor), complete: t.Boolean() });
+export const joinRequestQuery = t.Object({ actingSubject: readId,
+  q: t.Optional(t.String({ maxLength: JOIN_REQUEST_READ_COST.search })),
+  cursor: t.Optional(joinRequestCursor), after: t.Optional(joinRequestCursor),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: PAGE })) }, { additionalProperties: false });
+export type JoinRequestQuery = Static<typeof joinRequestQuery>;
+export const ownJoinRequestQuery = t.Object({ actingSubject: readId, cursor: t.Optional(joinRequestCursor),
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: PAGE })) }, { additionalProperties: false });
+export type OwnJoinRequestQuery = Static<typeof ownJoinRequestQuery>;
+export const ownJoinRequestPage = t.Object({ items: t.Array(t.Object({ ...requestView.properties,
+  state: t.Union([t.Literal('pending'), t.Literal('accepted'), t.Literal('declined'), t.Literal('withdrawn')]),
+  decidedAt: t.Nullable(t.String()) }), { maxItems: PAGE }), nextCursor: t.Nullable(joinRequestCursor), complete: t.Boolean() });
 export const joinRequestWithdraw = t.Object({ actingSubject: readId, expectedRequestGeneration: generation, reason }, { additionalProperties: false });
 export type JoinRequestWithdraw = Static<typeof joinRequestWithdraw>;
 export const joinRequestDecision = t.Object({ ...commandFields, expectedRequestGeneration: generation,
@@ -36,6 +51,11 @@ type DecisionReceipt = Static<typeof joinRequestDecisionReceipt>;
 export class RealmJoinRequestMissing extends RealmAdminDenied {}
 interface RequestRow { id: string; member: string; membership_generation: string; policy_revision: string;
   terms_revision: string; principal_id: string }
+interface ReadRow { id: string; member: string; membership_generation: string; policy_revision: string;
+  terms_revision: string; reason: string; created_at: Date }
+const requestViewOf = (row: ReadRow, requestGeneration = '0') => ({ id: row.id, member: row.member, requestGeneration,
+  membershipGeneration: row.membership_generation, policyRevision: row.policy_revision, termsRevision: row.terms_revision,
+  reason: row.reason, createdAt: row.created_at.toISOString() });
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a],[b]) => a.localeCompare(b))) : item)).digest('hex');
@@ -80,6 +100,10 @@ export class RealmJoinRequests {
     const row = (await client.query<{ generation: string }>('SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1 FOR UPDATE',[realm])).rows[0];
     if (!row) throw new RealmAdminDenied('Realm management is unavailable');
     return row.generation;
+  }
+  private async inboxRevision(client: PoolClient, realm: string) {
+    return (await client.query<{ generation: string }>(`SELECT COALESCE((SELECT generation
+      FROM access.realm_join_request_inbox_revision WHERE realm = $1),0)::text AS generation`,[realm])).rows[0]!.generation;
   }
   basis(principal: VerifiedPrincipal, realm: string, actingSubject: string) {
     return this.discoverableRequest(realm).then(() => realmTransaction(this.pool,realm,false,async client => {
@@ -127,19 +151,66 @@ export class RealmJoinRequests {
       return { requestId: id,requestGeneration: '0',state: 'pending' as const,replayed: false };
     });
   }
-  list(principal: VerifiedPrincipal, realm: string, actor: string, after?: string, limit: number = PAGE) {
-    if (!Number.isInteger(limit) || limit < 1 || limit > PAGE || after && !/^[0-9a-f-]{36}$/.test(after)) throw new RealmAdminInvalid('Invalid request page');
+  list(principal: VerifiedPrincipal, realm: string, options: JoinRequestQuery) {
+    if (!Value.Check(joinRequestQuery, options) || options.after && options.cursor) throw new RealmAdminInvalid('Invalid request page');
+    const limit = options.limit ?? PAGE, search = requestSearch(options.q);
     return realmTransaction(this.pool,realm,false,async client => {
-      await realmManager(client,principal,realm,actor);
+      const manager = await realmManager(client,principal,realm,options.actingSubject);
       const generation = await this.revision(client,realm);
-      const rows = (await client.query<{ id: string; member: string; membership_generation: string; policy_revision: string;
-        terms_revision: string; reason: string; created_at: Date }>(`SELECT q.id,q.member,q.membership_generation::text,
+      const inbox = await this.inboxRevision(client,realm);
+      const binding = requestCursorBinding(['inbox',realm,options.actingSubject,search,generation,inbox,manager.id,manager.epoch,
+        manager.representation,manager.representationGeneration,manager.subjectGeneration,manager.grant,manager.grantGeneration]);
+      // Keep the existing after alias for callers; new cursor values are bound
+      // to the search, Realm generation and current manager authority.
+      const cursor = options.cursor ?? options.after;
+      const after = options.after && Value.Check(readUuid, options.after) ? options.after
+        : cursor ? decodeRequestCursor(cursor,binding) : null;
+      const native = search.startsWith('agent-') ? `https://rezics.com/id/${search.slice(6)}` : search;
+      const matches = search ? (await client.query<{ id: string }>(JOIN_REQUEST_SEARCH_SQL,
+        [realm,after,search,limit + 1,native.replace(/[\\%_]/g,'\\$&')])).rows.map(row => row.id) : null;
+      const rows = (await client.query<ReadRow>(`SELECT q.id,q.member,q.membership_generation::text,
         q.policy_revision::text,b.terms_revision,q.reason,q.created_at FROM access.realm_join_request_pending p
         JOIN access.realm_join_request q ON q.id = p.request_id JOIN access.realm_join_request_basis b ON b.request_id = q.id
-        WHERE p.realm = $1 AND ($2::uuid IS NULL OR p.request_id > $2) ORDER BY p.request_id LIMIT $3`,[realm,after ?? null,limit + 1])).rows;
-      return { generation,items: rows.slice(0,limit).map(row => ({ id: row.id,member: row.member,requestGeneration: '0',
-        membershipGeneration: row.membership_generation,policyRevision: row.policy_revision,termsRevision: row.terms_revision,
-        reason: row.reason,createdAt: row.created_at.toISOString() })),nextCursor: rows.length > limit ? rows[limit - 1]!.id : null };
+        WHERE p.realm = $1 AND ($2::uuid IS NULL OR p.request_id > $2)
+          AND ($4::uuid[] IS NULL OR p.request_id = ANY($4))
+        ORDER BY p.request_id LIMIT $3`,[realm,after,limit + 1,matches])).rows;
+      return { generation,items: rows.slice(0,limit).map(row => requestViewOf(row)),
+        nextCursor: rows.length > limit ? encodeRequestCursor(rows[limit - 1]!.id,binding) : null, complete: rows.length <= limit };
+    });
+  }
+  /** One current actor proof plus an indexed (Realm, member, id) history seek;
+   * hydrate at most page + 1 request/basis/unique decision rows. Retained consent
+   * generations authorize acceptance, not historical status disclosure. Current
+   * requester authority and the immutable private principal binding authorize
+   * this read even after policy/terms change. No graph or other requester read. */
+  own(principal: VerifiedPrincipal, realm: string, options: OwnJoinRequestQuery) {
+    if (!realmIdPattern.test(realm) || !Value.Check(ownJoinRequestQuery, options)) throw new RealmAdminInvalid('Invalid request page');
+    const limit = options.limit ?? PAGE;
+    // Use the shared recovery transaction, but map a missing Realm gate to the
+    // same 404 as an existing Realm without this requester's own intent.
+    return realmTransaction(this.pool,null,false,async client => {
+      if (!(await client.query(`SELECT 1 FROM access.scope_gate WHERE id = $1
+        AND open AND dispatch_open FOR SHARE`,[`governance:realm:${realm}`])).rowCount) {
+        throw new RealmJoinRequestMissing('Realm is unavailable');
+      }
+      const actor = await realmActor(client,principal,options.actingSubject,'access.membership.consent');
+      const owned = await client.query(`SELECT 1 FROM access.realm_join_request q
+        JOIN access.realm_join_request_basis b ON b.request_id = q.id
+        WHERE q.realm = $1 AND q.member = $2 AND b.principal_id = $3 LIMIT 1`,[realm,options.actingSubject,actor.id]);
+      if (!owned.rowCount) throw new RealmJoinRequestMissing('Realm is unavailable');
+      const binding = requestCursorBinding(['own',realm,options.actingSubject,actor.id,actor.epoch,actor.representation,
+        actor.representationGeneration,actor.subjectGeneration,await this.inboxRevision(client,realm)]);
+      const after = options.cursor ? decodeRequestCursor(options.cursor,binding) : null;
+      const rows = (await client.query<ReadRow & { state: 'pending'|'accepted'|'declined'|'withdrawn'; decided_at: Date | null }>(`
+        SELECT q.id,q.member,q.membership_generation::text,q.policy_revision::text,b.terms_revision,q.reason,q.created_at,
+          COALESCE(d.kind,'pending') AS state,d.decided_at
+        FROM access.realm_join_request q JOIN access.realm_join_request_basis b ON b.request_id = q.id
+        LEFT JOIN access.realm_join_request_decision d ON d.request_id = q.id
+        WHERE q.realm = $1 AND q.member = $2 AND b.principal_id = $3 AND ($4::uuid IS NULL OR q.id > $4)
+        ORDER BY q.id LIMIT $5`,[realm,options.actingSubject,actor.id,after,limit + 1])).rows;
+      return { items: rows.slice(0,limit).map(row => ({ ...requestViewOf(row,row.state === 'pending' ? '0' : '1'),
+        state: row.state,decidedAt: row.decided_at?.toISOString() ?? null })),
+      nextCursor: rows.length > limit ? encodeRequestCursor(rows[limit - 1]!.id,binding) : null,complete: rows.length <= limit };
     });
   }
   private async pending(client: PoolClient, realm: string, request: string, expected: string): Promise<RequestRow> {
