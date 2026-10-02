@@ -1,6 +1,7 @@
 import Type, { type Static } from 'typebox';
 import { Value } from 'typebox/value';
 
+/** Legacy BlockNote-shaped snapshot; new authoring uses the independent @rezics/document contract. */
 export const documentVersion = 'rezics-blocks-v1' as const;
 const id = Type.String({ minLength: 1, maxLength: 256 });
 const digest = Type.String({ minLength: 64, maxLength: 64, pattern: '^[0-9a-f]{64}$' });

@@ -1,0 +1,15 @@
+SPDX-License-Identifier: Apache-2.0
+REZICS Document protocol
+Copyright 2026 REZICS contributors
+
+The files distributed in this package are licensed under the Apache License,
+Version 2.0. This package does not import REZICS's AGPL application or services.
+
+Runtime dependencies are distributed separately under their own licenses:
+prosemirror-model, prosemirror-schema-basic, prosemirror-schema-list,
+prosemirror-tables and prosemirror-markdown — MIT — https://github.com/ProseMirror
+typebox — MIT — https://github.com/sinclairzx81/typebox
+markdown-it — MIT — https://github.com/markdown-it/markdown-it
+
+Dependency copyright and license texts remain in their installed distributions.
+No dependencies are bundled. Exact dependency versions are in package.json.

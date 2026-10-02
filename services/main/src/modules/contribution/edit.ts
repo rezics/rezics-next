@@ -6,14 +6,15 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
 import { CONTRIBUTION_PROFILE, InvalidContributionInput,
   validateTextContributionCandidate } from './draft.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftTriples, privateDraftUnit } from './private-projection.ts';
+import { serializeDocument } from '@rezics/document';
+import { authoredDocumentBody, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
 
 export class StaleContributionDraftHead extends Error {}
 export class ContributionEditUnavailable extends Error {}
 
-export interface EditTextContributionInput {
+export interface EditTextContributionInput extends AuthoredBodyInput {
   contribution: string;
   expectedHead: string;
-  body: string;
   actingSubject: string;
 }
 
@@ -36,16 +37,18 @@ export interface TextContributionEditReceipt {
 }
 
 export function textContributionEditDigest(input: EditTextContributionInput): string {
+  let content;
+  try { content = authoredDocumentBody(input); }
+  catch { throw new InvalidContributionInput('invalid text Contribution edit body'); }
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.contribution)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.expectedHead)
-    || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.actingSubject)
-    || typeof input.body !== 'string' || Buffer.byteLength(input.body, 'utf8') > 65536
-    || input.body.includes('\0')) {
+    || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.actingSubject)) {
     throw new InvalidContributionInput('invalid text Contribution edit');
   }
   return hash(JSON.stringify({ family: 'edit-text-contribution-v1',
     contribution: input.contribution, expectedHead: input.expectedHead,
-    actor: input.actingSubject, bodyDigest: hash(JSON.stringify(input.body)) }));
+    actor: input.actingSubject,
+    bodyDigest: hash(content.document ? serializeDocument(content.document) : JSON.stringify(content.body)) }));
 }
 
 export function textContributionEditReceiptIri(admissionId: string): string {
@@ -211,6 +214,7 @@ export async function editTextContributionDraft(
   input: EditTextContributionInput,
 ): Promise<TextContributionEditReceipt> {
   const digest = textContributionEditDigest(input);
+  const content = authoredDocumentBody(input);
   if (admission.action !== 'contribution.edit'
     || admission.scope !== `contribution:edit:${input.contribution}`
     || admission.actingSubject !== input.actingSubject
@@ -245,9 +249,10 @@ export async function editTextContributionDraft(
   const draftRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const validations = await validateTextContributionCandidate(env, input.contribution, draftRevision,
-    { work, actingSubject: author, language, body: input.body });
+    { work, actingSubject: author, language,
+      ...(content.document ? { document: content.document } : { body: content.body }) });
   const manifest = prepareComponent(env.objectDirectory, input.contribution,
-    { work, author, language, body: input.body, publication: 'draft' }, CONTRIBUTION_PROFILE);
+    { work, author, language, ...content, publication: 'draft' }, CONTRIBUTION_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution edit admission expired');
   const receipt = textContributionEditReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -272,7 +277,7 @@ export async function editTextContributionDraft(
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
       }
       GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
-        ${privateDraftTriples(input.contribution, draftRevision, work, language, input.body)}
+        ${privateDraftTriples(input.contribution, draftRevision, work, language, content.body)}
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;

@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { documentSnapshotSchema } from '../api-document.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { createAdmittedMetadataWork } from '../modules/work/create-admitted.ts';
 import { candidateText, declaredGrain, grainOwner, CatalogueInvalid, CataloguePendingLimit, CatalogueUnavailable } from '../modules/catalogue-intake/schema.ts';
@@ -43,6 +44,7 @@ const fixedReleaseRead = t.Object({ profile: t.Literal('fixed-native-text-releas
   release: t.String(), work: t.String(), mainVersion: t.String(), mainRevision: t.String(),
   selection: t.String(), contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), bodyDigest: t.String(), body: t.String(),
+  document: t.Optional(documentSnapshotSchema),
   externalReleases: t.Array(t.Object({ run: t.String(), release: t.String(),
     sourceClaim: t.String(), expectedPosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }),
     observation: t.String(), captureDigest: t.String() })),

@@ -2,6 +2,7 @@ import type { AgentOption } from '../auth/acting-identity.ts';
 import type { StudioChapter, InventoryView, RealmOption, ReviewPage, StudioWork, WorkSubmissions } from './read.ts';
 import type { ClassificationPage, ContentsPage, InventoryWork, MainClient, NativeVariants, Submission, WorkHeader }
   from './types.ts';
+import { documentText, parseDocument, type DocumentSnapshot } from '@rezics/document';
 
 // Stand-in data and an in-memory Main for Studio stories: the same response
 // shapes Main returns, so stories exercise the real components and adapters.
@@ -146,6 +147,15 @@ type Answer = { data: unknown; error: { status: number; value: unknown } | null 
 const ok = (data: unknown): Answer => ({ data, error: null });
 const fail = (status: number, code: string, extra: Record<string, unknown> = {}): Answer =>
   ({ data: null, error: { status, value: { code, status, ...extra } } });
+interface FixtureBody { body: string; document?: DocumentSnapshot }
+interface FixtureBodyInput { body?: string; document?: DocumentSnapshot }
+const bodyOf = (input: FixtureBodyInput): FixtureBody => {
+  if ((input.body === undefined) === (input.document === undefined)) throw new TypeError('one body or document is required');
+  if (!input.document) return { body: input.body! };
+  const document = parseDocument(structuredClone(input.document));
+  return { body: documentText(document), document };
+};
+const seedBody = (body: string | DocumentSnapshot) => bodyOf(typeof body === 'string' ? { body } : { document: body });
 
 export interface StoryMainOptions {
   /** Saves fail as if the network were down. */
@@ -169,11 +179,13 @@ export interface StoryMainOptions {
 export function storyMain(options: StoryMainOptions = {}) {
   let sequence = 1000;
   const next = () => id(++sequence);
-  const texts = new Map<string, { head: string; body: string; language: string; work: string; publication: string | null }>();
-  const drafts = new Map<string, string>();
+  const texts = new Map<string, FixtureBody & { head: string; language: string; work: string; publication: string | null }>();
+  const drafts = new Map<string, FixtureBody>();
+  const publications = new Map<string, { text: string; revision: string }>();
+  const selections = new Map<string, { selection: string; work: string; text: string; revision: string }>();
   const variants = new Map<string, { head: string; publication: string | null; eligibility: string | null;
     resource: string }>();
-  const revisions = new Map<string, { resource: string; variant: string; body: string }>();
+  const revisions = new Map<string, FixtureBody & { resource: string; variant: string }>();
   const structures = new Map<string, Outline>();
   const calls: string[] = [];
   const wait = () => new Promise(resolve => setTimeout(resolve, options.delayMs ?? 30));
@@ -181,18 +193,18 @@ export function storyMain(options: StoryMainOptions = {}) {
     await wait();
     if (options.offline?.()) throw new TypeError('Failed to fetch');
   };
-  const recordText = (text: string, body: string, language: string, work: string) => {
+  const recordText = (text: string, body: FixtureBody, language: string, work: string) => {
     const head = next();
-    texts.set(text, { head, body, language, work, publication: texts.get(text)?.publication ?? null });
+    texts.set(text, { head, ...body, language, work, publication: texts.get(text)?.publication ?? null });
     drafts.set(head, body);
     return head;
   };
-  const recordDraft = (resource: string, variant: string, body: string) => {
+  const recordDraft = (resource: string, variant: string, body: FixtureBody) => {
     const revision = next().slice(-36);
     const current = variants.get(variant);
     variants.set(variant, { head: revision, publication: current?.publication ?? null, eligibility: current?.eligibility ?? null,
       resource });
-    revisions.set(revision, { resource, variant, body });
+    revisions.set(revision, { resource, variant, ...body });
     return revision;
   };
   const contributions = Object.assign((params: { contribution: string }) => {
@@ -210,14 +222,14 @@ export function storyMain(options: StoryMainOptions = {}) {
         const current = texts.get(text);
         const body = drafts.get(revision);
         return body === undefined || !current ? fail(404, 'revision_unavailable') : ok({ contribution: text, revision,
-          work: current.work, author: agents[0]!.iri, language: current.language, body, sourcePosition: position });
+          work: current.work, author: agents[0]!.iri, language: current.language, ...body, sourcePosition: position });
       } }),
     };
-  }, { post: async (body: { work: string; language: string; body: string }) => {
+  }, { post: async (body: { work: string; language: string } & FixtureBodyInput) => {
     await offline();
     calls.push('create');
     const text = next();
-    return ok({ contribution: text, draftRevision: recordText(text, body.body, body.language, body.work), work: body.work,
+    return ok({ contribution: text, draftRevision: recordText(text, bodyOf(body), body.language, body.work), work: body.work,
       language: body.language, author: agents[0]!.iri, sourcePosition: position, replayed: false });
   } });
   const compositions = Object.assign((params: { id: string }) => ({ changes: { post: async (body: {
@@ -305,14 +317,14 @@ export function storyMain(options: StoryMainOptions = {}) {
     compositions,
     works,
     me,
-    'contribution-edits': { post: async (body: { contribution: string; expectedHead: string; body: string }) => {
+    'contribution-edits': { post: async (body: { contribution: string; expectedHead: string } & FixtureBodyInput) => {
       await offline();
       calls.push('edit');
       const current = texts.get(body.contribution);
       if (!current) return fail(404, 'contribution_unavailable');
       if (current.head !== body.expectedHead) return fail(409, 'stale_head', { currentHead: current.head });
       const predecessor = current.head;
-      return ok({ contribution: body.contribution, draftRevision: recordText(body.contribution, body.body, current.language,
+      return ok({ contribution: body.contribution, draftRevision: recordText(body.contribution, bodyOf(body), current.language,
         current.work), predecessor, sourcePosition: position, replayed: false });
     } },
     'contribution-publications': { post: async (body: { contribution: string; expectedDraftHead: string }) => {
@@ -323,15 +335,31 @@ export function storyMain(options: StoryMainOptions = {}) {
       const decision = next();
       const current = texts.get(body.contribution);
       if (current) current.publication = decision;
+      publications.set(decision, { text: body.contribution, revision: body.expectedDraftHead });
       return ok({ contribution: body.contribution, publicationDecision: decision, selectedDraft: body.expectedDraftHead,
         predecessor: null, sourcePosition: position, replayed: false });
     } },
-    'main-versions': () => ({ selection: { get: async () => { await wait(); return fail(404, 'selection_unavailable'); } } }),
-    'publication-selections': { post: async () => {
+    'main-versions': (params: { mainVersion: string }) => ({ selection: { get: async () => {
+      await wait();
+      const main = `https://rezics.com/id/${params.mainVersion}`;
+      const selection = selections.get(main);
+      const draft = selection && drafts.get(selection.revision);
+      const text = selection && texts.get(selection.text);
+      return !selection || !draft || !text ? fail(404, 'selection_unavailable') : ok({
+        work: selection.work, mainVersion: main, selection: selection.selection, contribution: selection.text,
+        selectedDraft: selection.revision, language: text.language, ...draft,
+      });
+    } } }),
+    'publication-selections': { post: async (body: { context: { id: string }; work: string;
+      contribution: string; publicationDecision: string }) => {
       await wait();
       calls.push('select');
-      return options.select === 'denied' ? fail(403, 'authority_denied')
-        : ok({ selection: next(), replayed: false, sourcePosition: position });
+      if (options.select === 'denied') return fail(403, 'authority_denied');
+      const publication = publications.get(body.publicationDecision);
+      if (!publication || publication.text !== body.contribution) return fail(404, 'publication_unavailable');
+      const selection = next();
+      selections.set(body.context.id, { selection, work: body.work, text: body.contribution, revision: publication.revision });
+      return ok({ selection, replayed: false, sourcePosition: position });
     } },
     realms: () => ({ submissions: { post: async () => {
       await wait();
@@ -339,13 +367,12 @@ export function storyMain(options: StoryMainOptions = {}) {
       if (options.submit === 'denied') return fail(403, 'authority_denied');
       return ok({ submission: { state: options.submit === 'accepted' ? 'accepted' : 'pending' }, replayed: false });
     } } }),
-    'content-drafts': { post: async (body: { resourceId: string; variantId: string; expectedHead: string | null;
-      body: string }) => {
+    'content-drafts': { post: async (body: { resourceId: string; variantId: string; expectedHead: string | null } & FixtureBodyInput) => {
       await offline();
       calls.push('draft');
       const current = variants.get(body.variantId)?.head ?? null;
       if (current !== body.expectedHead) return fail(409, 'stale_head', { currentHead: current });
-      const revision = recordDraft(body.resourceId, body.variantId, body.body);
+      const revision = recordDraft(body.resourceId, body.variantId, bodyOf(body));
       return ok({ resourceId: body.resourceId, variantId: body.variantId, revisionId: revision, predecessor: current,
         byteDigest: 'b'.repeat(64), sourcePosition: { owner: 'content', dataEpoch: 'story-epoch', sequence: '1' },
         replayed: false });
@@ -354,7 +381,9 @@ export function storyMain(options: StoryMainOptions = {}) {
       await wait();
       const revision = revisions.get(params.revision);
       return revision ? ok({ reference: { owner: 'content', resourceId: revision.resource, variantId: revision.variant,
-        revisionId: params.revision, byteDigest: 'b'.repeat(64) }, serializedJson: '', body: { body: revision.body } })
+        revisionId: params.revision, byteDigest: 'b'.repeat(64) },
+        serializedJson: JSON.stringify({ body: revision.body, ...(revision.document ? { document: revision.document } : {}) }),
+        body: { body: revision.body, ...(revision.document ? { document: revision.document } : {}) } })
         : fail(404, 'revision_unavailable');
     } }),
     'content-publications': { post: async (body: { variantId: string; revisionId: string;
@@ -386,9 +415,9 @@ export function storyMain(options: StoryMainOptions = {}) {
     main: main as unknown as MainClient,
     calls,
     /** Seeds an existing text and returns its head. */
-    seed: (text: string, body: string, language: string, work: string) => recordText(text, body, language, work),
+    seed: (text: string, body: string | DocumentSnapshot, language: string, work: string) => recordText(text, seedBody(body), language, work),
     /** Seeds a chapter's draft and returns its head (a bare revision ID, as Content names them). */
-    seedChapter: (chapter: string, variant: string, body: string) => recordDraft(chapter, variant, body),
+    seedChapter: (chapter: string, variant: string, body: string | DocumentSnapshot) => recordDraft(chapter, variant, seedBody(body)),
     /** Seeds a Book's composition with chapters at its top level. */
     seedBook: (book: string, chapters: Array<{ target: string; title: string }>) => {
       const structure = next();
@@ -419,11 +448,11 @@ export function storyMain(options: StoryMainOptions = {}) {
     /** One level of a seeded Book as Main's contents read returns it. */
     level: (book: string, parent?: string) => levelPage(outlineOf(book.slice(-36))!, parent),
     /** Another tab or device saves a newer version. */
-    writeElsewhere: (text: string, body: string) => {
+    writeElsewhere: (text: string, body: string | DocumentSnapshot) => {
       const current = texts.get(text);
-      if (current) recordText(text, body, current.language, current.work);
+      if (current) recordText(text, seedBody(body), current.language, current.work);
     },
-    writeChapterElsewhere: (chapter: string, variant: string, body: string) => recordDraft(chapter, variant, body),
+    writeChapterElsewhere: (chapter: string, variant: string, body: string | DocumentSnapshot) => recordDraft(chapter, variant, seedBody(body)),
     head: (text: string) => texts.get(text)?.head ?? null,
     chapterHead: (variant: string) => variants.get(variant)?.head ?? null,
     /** A Book's outline: its head, its top level (`items`) and every node. */

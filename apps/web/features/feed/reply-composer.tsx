@@ -4,13 +4,19 @@ import { Button } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { CircleAlertIcon, LockIcon, LogInIcon, UsersRoundIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import { useFeed } from './feed-context.tsx';
-import { type ReplyInput, type ReplyProgress, replyProgress, type ThreadApi } from './thread-api.ts';
-import { MarkdownEditor } from '../post-composer/markdown-editor.tsx';
+import {
+  type ReplyInput,
+  type ReplyProgress,
+  replyProgress,
+  type ThreadApi,
+} from './thread-api.ts';
+import { BodyEditor } from '../document-editor/body-editor.tsx';
+import { bodyText, hasBodyContent } from '../document-editor/body.ts';
 
 /** Main's longest reply body (`member-reply-draft-v1`). */
 const MAX_REPLY = 8192;
@@ -24,7 +30,10 @@ const MAX_REPLY = 8192;
  */
 export type ReplyMode = 'open' | 'sign-in' | 'join' | 'reviewed' | 'unavailable';
 
-export interface ReplyTarget extends Omit<ReplyInput, 'parent' | 'body' | 'language' | 'actingSubject'> {
+export interface ReplyTarget extends Omit<
+  ReplyInput,
+  'parent' | 'body' | 'language' | 'actingSubject'
+> {
   mode: ReplyMode;
   api: () => ThreadApi;
 }
@@ -33,12 +42,21 @@ export interface ReplyTarget extends Omit<ReplyInput, 'parent' | 'body' | 'langu
  * Write a reply to one reply or to the discussion. Once Main places it the
  * thread reads again and it takes its place; a Realm that refuses it says why.
  */
-export function ReplyComposer({ target, parent, parentAuthor, inline = false, autoFocus = false, onDone, id }: {
+export function ReplyComposer({
+  target,
+  parent,
+  parentAuthor,
+  inline = false,
+  autoFocus = false,
+  onDone,
+  id,
+}: {
   target: ReplyTarget;
   parent: ReplyInput['parent'];
   /** Whom an inline reply answers, for its label. */
   parentAuthor?: string;
-  inline?: boolean; autoFocus?: boolean;
+  inline?: boolean;
+  autoFocus?: boolean;
   onDone?: () => void;
   /** The anchor `#reply` links jump to. */
   id?: string;
@@ -50,45 +68,154 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<'idle' | 'failed' | 'refused' | 'posted'>('idle');
   const progress = useRef<ReplyProgress | null>(null);
+  const sentParent = useRef(parent);
+  if (!progress.current) sentParent.current = parent;
+  const storageKey = actingSubject
+    ? `rezics:reply-draft:${actingSubject}:${target.realm}:${parent.reply}`
+    : null;
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   // The writer's choice, or their first reading language; the interface language is never the answer.
   const [chosen, setChosen] = useState<string | null>(null);
   const reading = useReadingLanguages(actingSubject);
   const language = writingLanguage({ chosen, reading });
-  const written = textAttributes(language, text);
+  const projection = bodyText(text);
+  const written = textAttributes(language, projection);
   const label = parentAuthor ? t.replyTo({ name: parentAuthor }) : t.addComment;
+
+  useEffect(() => {
+    progress.current = null;
+    setText('');
+    setChosen(null);
+    if (storageKey) {
+      try {
+        const draft: unknown = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
+        if (
+          draft &&
+          typeof draft === 'object' &&
+          'body' in draft &&
+          typeof draft.body === 'string'
+        ) {
+          setText(draft.body);
+          if ('language' in draft && typeof draft.language === 'string') setChosen(draft.language);
+          if (
+            'progress' in draft &&
+            draft.progress &&
+            typeof draft.progress === 'object' &&
+            ['key', 'reply', 'variantId'].every(
+              (key) => typeof (draft.progress as Record<string, unknown>)[key] === 'string',
+            )
+          ) {
+            progress.current = draft.progress as ReplyProgress;
+            if ('parentRevision' in draft && typeof draft.parentRevision === 'string') {
+              sentParent.current = { ...parent, revisionId: draft.parentRevision };
+            }
+          }
+          if (draft.body || progress.current) setOpen(true);
+        }
+      } catch {
+        /* An unavailable or malformed local draft does not prevent writing. */
+      }
+    }
+    setHydratedKey(storageKey);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || hydratedKey !== storageKey) return;
+    try {
+      if (!text && !progress.current) localStorage.removeItem(storageKey);
+      else
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            body: text,
+            language: chosen,
+            progress: progress.current,
+            parentRevision: sentParent.current.revisionId,
+          }),
+        );
+    } catch {
+      /* Local drafts are optional when storage is unavailable. */
+    }
+  }, [text, chosen, storageKey, hydratedKey, busy, state]);
 
   if (target.mode !== 'open' || !actingSubject) {
     const mode = target.mode === 'open' ? 'unavailable' : target.mode;
     if (inline && mode === 'sign-in') {
-      return <a href={signInHref} className="text-primary text-sm underline-offset-4 hover:underline">{t.signInToReply}</a>;
+      return (
+        <a href={signInHref} className="text-primary text-sm underline-offset-4 hover:underline">
+          {t.signInToReply}
+        </a>
+      );
     }
     const Icon = mode === 'sign-in' ? LogInIcon : mode === 'join' ? UsersRoundIcon : LockIcon;
-    const text = mode === 'sign-in' ? t.signInToReply : mode === 'join' ? t.joinToReply
-      : mode === 'reviewed' ? t.repliesReviewed : t.replyUnavailable;
-    return <div id={id} className="flex scroll-mt-24 items-center gap-3 rounded-2xl border border-border/70 bg-muted/40
-      px-4 py-3 text-muted-foreground text-sm">
-      <Icon aria-hidden="true" className="size-4 shrink-0" />
-      {mode === 'sign-in' ? <a href={signInHref} className="font-medium text-primary underline-offset-4
-        hover:underline">{text}</a> : <p>{text}</p>}
-    </div>;
+    const text =
+      mode === 'sign-in'
+        ? t.signInToReply
+        : mode === 'join'
+          ? t.joinToReply
+          : mode === 'reviewed'
+            ? t.repliesReviewed
+            : t.replyUnavailable;
+    return (
+      <div
+        id={id}
+        className="flex scroll-mt-24 items-center gap-3 rounded-2xl border border-border/70 bg-muted/40
+      px-4 py-3 text-muted-foreground text-sm"
+      >
+        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        {mode === 'sign-in' ? (
+          <a
+            href={signInHref}
+            className="font-medium text-primary underline-offset-4
+        hover:underline"
+          >
+            {text}
+          </a>
+        ) : (
+          <p>{text}</p>
+        )}
+      </div>
+    );
   }
 
-  const input = (body: string): ReplyInput => ({ realm: target.realm, work: target.work,
-    rootRevision: target.rootRevision, parent, body, language, actingSubject: actingSubject! });
+  const input = (body: string): ReplyInput => ({
+    realm: target.realm,
+    work: target.work,
+    rootRevision: target.rootRevision,
+    parent: progress.current ? sentParent.current : parent,
+    body,
+    language,
+    actingSubject: actingSubject!,
+  });
   // Once Main holds the words, they stay as sent until the reply is placed or taken back.
   const saved = Boolean(progress.current?.revisionId);
 
   async function send() {
-    const body = text.trim();
-    if (!body || busy || !actingSubject) return;
+    const body = text;
+    if (!hasBodyContent(body) || projection.length > MAX_REPLY || busy || !actingSubject) return;
     setBusy(true);
     setState('idle');
+    setChosen(language);
     progress.current ??= replyProgress();
-    const outcome = await target.api().reply(input(body), progress.current);
+    let outcome;
+    try {
+      outcome = await target.api().reply(input(body), progress.current);
+    } catch {
+      setBusy(false);
+      setState('failed');
+      return;
+    }
     setBusy(false);
-    if (outcome.kind === 'failed') { progress.current = outcome.progress; setState('failed'); return; }
+    if (outcome.kind === 'failed') {
+      progress.current = outcome.progress;
+      setState('failed');
+      return;
+    }
     progress.current = null;
-    if (outcome.kind === 'refused') { setState('refused'); return; }
+    if (outcome.kind === 'refused') {
+      setState('refused');
+      return;
+    }
     setText('');
     setChosen(null);
     setState('posted');
@@ -97,31 +224,97 @@ export function ReplyComposer({ target, parent, parentAuthor, inline = false, au
     router.refresh();
   }
 
-  const expanded = open || text.length > 0;
-  return <form id={id} className={cn('grid scroll-mt-24 gap-2', !inline && 'rounded-2xl')}
-    onSubmit={event => { event.preventDefault(); void send(); }}>
-    <MarkdownEditor label={label} value={text} onChange={setText} maxLength={MAX_REPLY}
-      autoFocus={autoFocus} disabled={busy} placeholder={inline ? label : t.joinConversation}
-      rows={expanded ? 4 : 1} readOnly={saved} onFocus={() => setOpen(true)}
-      editLabel={t.write} previewLabel={t.preview} showSpoiler={t.showSpoiler} lang={written.lang} dir={written.dir}
-      onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void send(); }}
-      className={cn('bg-background', !expanded && 'min-h-11 py-2.5')} />
-    {expanded ? <div className="flex flex-wrap items-center justify-end gap-2">
-      <LanguageSelect value={language} onChange={setChosen} locale={locale} reading={reading} disabled={busy || saved}
-        className="me-auto" />
-      {text.length > MAX_REPLY - 500 ? <span className="text-muted-foreground text-xs tabular-nums">
-        {t.charactersLeft(MAX_REPLY - text.length)}</span> : null}
-      <Button type="button" variant="ghost" size="sm" pill disabled={busy} onClick={() => {
-        if (progress.current) void target.api().withdraw(input(text.trim()), progress.current);
-        setText(''); setChosen(null); setOpen(false); setState('idle'); progress.current = null; onDone?.();
-      }}>{t.cancel}</Button>
-      <Button type="submit" size="sm" pill isLoading={busy} disabled={!text.trim()}>
-        {inline ? t.replyAction : t.comment}</Button>
-    </div> : null}
-    {state === 'failed' ? <p role="alert" className="flex items-center gap-2 text-destructive-foreground text-sm">
-      <CircleAlertIcon aria-hidden="true" className="size-4 shrink-0" />{t.replyFailed}</p> : null}
-    {state === 'refused' ? <p role="alert" className="flex items-center gap-2 text-warning-foreground text-sm">
-      <CircleAlertIcon aria-hidden="true" className="size-4 shrink-0" />{t.replyRefused}</p> : null}
-    {state === 'posted' ? <p role="status" className="text-muted-foreground text-sm">{t.replyPosted}</p> : null}
-  </form>;
+  const expanded = open || hasBodyContent(text);
+  return (
+    <form
+      id={id}
+      className={cn('grid scroll-mt-24 gap-2', !inline && 'rounded-2xl')}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void send();
+      }}
+    >
+      <BodyEditor
+        label={label}
+        value={text}
+        onChange={setText}
+        maxLength={MAX_REPLY}
+        locale={locale}
+        legacyMarkdown
+        autoFocus={autoFocus}
+        disabled={busy}
+        placeholder={inline ? label : t.joinConversation}
+        compact
+        readOnly={saved}
+        onFocus={() => setOpen(true)}
+        lang={written.lang}
+        dir={written.dir}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void send();
+        }}
+        className={cn('bg-background', !expanded && 'min-h-11 py-2.5')}
+      />
+      {expanded ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <LanguageSelect
+            value={language}
+            onChange={setChosen}
+            locale={locale}
+            reading={reading}
+            disabled={busy || saved}
+            className="me-auto"
+          />
+          {projection.length > MAX_REPLY - 500 ? (
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {t.charactersLeft(MAX_REPLY - projection.length)}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            pill
+            disabled={busy}
+            onClick={() => {
+              if (progress.current) void target.api().withdraw(input(text), progress.current);
+              setText('');
+              setChosen(null);
+              setOpen(false);
+              setState('idle');
+              progress.current = null;
+              onDone?.();
+            }}
+          >
+            {t.cancel}
+          </Button>
+          <Button
+            type="submit"
+            size="sm"
+            pill
+            isLoading={busy}
+            disabled={!hasBodyContent(text) || projection.length > MAX_REPLY}
+          >
+            {inline ? t.replyAction : t.comment}
+          </Button>
+        </div>
+      ) : null}
+      {state === 'failed' ? (
+        <p role="alert" className="flex items-center gap-2 text-destructive-foreground text-sm">
+          <CircleAlertIcon aria-hidden="true" className="size-4 shrink-0" />
+          {t.replyFailed}
+        </p>
+      ) : null}
+      {state === 'refused' ? (
+        <p role="alert" className="flex items-center gap-2 text-warning-foreground text-sm">
+          <CircleAlertIcon aria-hidden="true" className="size-4 shrink-0" />
+          {t.replyRefused}
+        </p>
+      ) : null}
+      {state === 'posted' ? (
+        <p role="status" className="text-muted-foreground text-sm">
+          {t.replyPosted}
+        </p>
+      ) : null}
+    </form>
+  );
 }

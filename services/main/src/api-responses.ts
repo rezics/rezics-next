@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { pendingOperation, problemResult, sourcePosition } from './api-contract.ts';
+import { documentSnapshotSchema } from './api-document.ts';
 
 const ref = t.String();
 const nullableRef = t.Nullable(ref);
@@ -26,7 +27,7 @@ const classificationContext = {
 };
 const selectedText = {
   work: ref, mainVersion: ref, selection: ref, contribution: ref,
-  selectedDraft: ref, language: ref, body: t.String(),
+  selectedDraft: ref, language: ref, body: t.String(), document: t.Optional(documentSnapshotSchema),
 };
 const selectionWrite = {
   work: ref, mainVersion: ref, contribution: ref, publicationDecision: ref,
@@ -299,7 +300,7 @@ export const contributionWriteResult = t.Object({
 });
 export const contributionDraftReadResult = t.Object({
   contribution: ref, revision: ref, work: ref, author: ref, language: ref,
-  body: t.String(), predecessor: t.Optional(ref), sourcePosition,
+  body: t.String(), document: t.Optional(documentSnapshotSchema), predecessor: t.Optional(ref), sourcePosition,
 });
 export const contentEditWriteResult = t.Object({
   work: ref, revision: ref, predecessor: ref, ...replay,

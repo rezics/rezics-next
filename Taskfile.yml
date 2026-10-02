@@ -259,6 +259,17 @@ tasks:
     cmds:
       - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
 
+  document:typecheck:
+    desc: Type-check the independent document protocol.
+    dir: packages/document
+    cmds:
+      - ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
+
+  document:gen:
+    desc: Generate the standalone Document Core, Text and Blocks JSON Schemas.
+    cmds:
+      - bun packages/document/scripts/schema.ts
+
   # Goal
 
   goal:

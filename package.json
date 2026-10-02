@@ -8,6 +8,7 @@
     "apps/accounts",
     "apps/about",
     "packages/model",
+    "packages/document",
     "packages/ui",
     "packages/zone-sdk",
     "services/main",

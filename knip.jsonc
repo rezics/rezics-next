@@ -101,6 +101,10 @@
       "ignoreDependencies": ["typescript"]
     },
     "packages/model": { "project": ["src/**/*.ts", "tests/**/*.ts"] },
+    "packages/document": {
+      "entry": ["src/index.ts", "scripts/schema.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+    },
     "packages/observability": {
       "entry": ["src/*.ts", "tests/**/*.test.ts", "tests/runtime-child.ts"],
       "project": ["src/**/*.ts", "tests/**/*.ts"]

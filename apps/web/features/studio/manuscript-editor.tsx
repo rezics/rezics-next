@@ -2,22 +2,42 @@
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { AutosaveStatus } from '@rezics/ui/autosave-status';
-import { Editor, EditorFooter } from '@rezics/ui/editor';
+import { EditorFooter } from '@rezics/ui/editor';
 import { ArrowLeftIcon, InfoIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import Link from '../shell/localized-link.tsx';
 import { DraftAutosave, type SaveOutcome } from './autosave.ts';
 import { ConflictView } from './conflict-view.tsx';
 import { manuscriptLength } from './counts.ts';
-import { browserStorage, clearLocalDraft, readLocalDraft, restoreDecision, writeLocalDraft } from './local-draft.ts';
+import {
+  browserStorage,
+  clearLocalDraft,
+  readLocalDraft,
+  restoreDecision,
+  writeLocalDraft,
+} from './local-draft.ts';
 import type { StudioMessages } from './messages.ts';
 import { lengthLabel } from './parts.tsx';
+import { BodyEditor } from '../document-editor/body-editor.tsx';
+import { bodyText, hasBodyContent } from '../document-editor/body.ts';
 
 /** Same-device announcement of a saved draft; the channel is same-origin, and drafts are the writer's own. */
-interface TabSave { channel: string; head: string; body: string }
+interface TabSave {
+  channel: string;
+  head: string;
+  body: string;
+}
 const TAB_CHANNEL = 'rezics:studio:saves';
 
 /**
@@ -76,23 +96,57 @@ export interface ManuscriptEditorProps {
  * until Main has it, and stopped at a conflict until the writer chooses.
  * Autosave never publishes; the publish control does, as the Studio Agent.
  */
-export function ManuscriptEditor({ store, language, direction, placeholderDirection, back, context, title, initial,
-  notice: opening = null, publish, label, locale, messages, delay = 2_500 }: ManuscriptEditorProps) {
+export function ManuscriptEditor({
+  store,
+  language,
+  direction,
+  placeholderDirection,
+  back,
+  context,
+  title,
+  initial,
+  notice: opening = null,
+  publish,
+  label,
+  locale,
+  messages,
+  delay = 2_500,
+}: ManuscriptEditorProps) {
   const t = materializeData(messages, { locale });
   const storage = useMemo(browserStorage, []);
   const [notice, setNotice] = useState<string | null>(opening);
   const [value, setValue] = useState(initial.body);
   const [theirs, setTheirs] = useState<string | null | undefined>(undefined);
   const [conflictHead, setConflictHead] = useState<string | null>(null);
-  const [autosave] = useState(() => new DraftAutosave({ head: initial.head, body: initial.body, delay,
-    save: (body, head, key): Promise<SaveOutcome> => store.save(body, head, key),
-    keep: (body, base) => { writeLocalDraft(storage, store.deviceKey(), { body, base, changedAt: new Date().toISOString() }); },
-    release: () => clearLocalDraft(storage, store.deviceKey()) }));
-  const snapshot = useSyncExternalStore(autosave.subscribe, () => autosave.snapshot, () => autosave.snapshot);
+  const [autosave] = useState(
+    () =>
+      new DraftAutosave({
+        head: initial.head,
+        body: initial.body,
+        delay,
+        save: (body, head, key): Promise<SaveOutcome> => store.save(body, head, key),
+        keep: (body, base) => {
+          writeLocalDraft(storage, store.deviceKey(), {
+            body,
+            base,
+            changedAt: new Date().toISOString(),
+          });
+        },
+        release: () => clearLocalDraft(storage, store.deviceKey()),
+      }),
+  );
+  const snapshot = useSyncExternalStore(
+    autosave.subscribe,
+    () => autosave.snapshot,
+    () => autosave.snapshot,
+  );
 
   // Open with what this device kept: unsaved typing on the same head is restored; typing on an older head is a conflict.
   useEffect(() => {
-    const decision = restoreDecision({ head: initial.head, body: initial.body }, readLocalDraft(storage, store.deviceKey()));
+    const decision = restoreDecision(
+      { head: initial.head, body: initial.body },
+      readLocalDraft(storage, store.deviceKey()),
+    );
     if (decision.kind === 'restore') {
       setValue(decision.body);
       autosave.edit(decision.body);
@@ -115,16 +169,27 @@ export function ManuscriptEditor({ store, language, direction, placeholderDirect
     channel.current = tabs;
     tabs.onmessage = (event: MessageEvent<TabSave>) => {
       const save = event.data;
-      if (save?.channel && save.channel === store.channel() && save.head !== autosave.snapshot.head) {
+      if (
+        save?.channel &&
+        save.channel === store.channel() &&
+        save.head !== autosave.snapshot.head
+      ) {
         elsewhere.current = { head: save.head, body: save.body };
       }
     };
-    return () => { tabs.close(); channel.current = null; };
+    return () => {
+      tabs.close();
+      channel.current = null;
+    };
   }, [store, autosave]);
   useEffect(() => {
     const id = store.channel();
     if (!id || !snapshot.head || snapshot.state !== 'saved') return;
-    channel.current?.postMessage({ channel: id, head: snapshot.head, body: snapshot.saved } satisfies TabSave);
+    channel.current?.postMessage({
+      channel: id,
+      head: snapshot.head,
+      body: snapshot.saved,
+    } satisfies TabSave);
   }, [store, snapshot.head, snapshot.saved, snapshot.state]);
 
   // A conflict found while saving: the version that won, as Main named it, from another tab, or Main's latest.
@@ -138,12 +203,17 @@ export function ManuscriptEditor({ store, language, direction, placeholderDirect
     }
     let active = true;
     setTheirs(undefined);
-    void store.theirs(snapshot.theirs).catch(() => null).then(latest => {
-      if (!active) return;
-      setTheirs(latest?.body ?? null);
-      setConflictHead(latest?.head ?? null);
-    });
-    return () => { active = false; };
+    void store
+      .theirs(snapshot.theirs)
+      .catch(() => null)
+      .then((latest) => {
+        if (!active) return;
+        setTheirs(latest?.body ?? null);
+        setConflictHead(latest?.head ?? null);
+      });
+    return () => {
+      active = false;
+    };
   }, [snapshot.state, snapshot.theirs, conflictHead, store]);
 
   // Keep the address on the exact revision Studio last saved, so a reload or a shared link opens it.
@@ -151,13 +221,18 @@ export function ManuscriptEditor({ store, language, direction, placeholderDirect
     const target = snapshot.head ? store.href(snapshot.head) : null;
     if (!target) return;
     const href = localizedPath(target, locale);
-    if (`${location.pathname}${location.search}` !== href) history.replaceState(history.state, '', href);
+    if (`${location.pathname}${location.search}` !== href)
+      history.replaceState(history.state, '', href);
   }, [snapshot.head, store, locale]);
 
   // Save when the network returns, when the tab hides and before it closes.
   useEffect(() => {
-    const flush = () => { void autosave.flush(); };
-    const hidden = () => { if (document.visibilityState === 'hidden') flush(); };
+    const flush = () => {
+      void autosave.flush();
+    };
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
     window.addEventListener('online', flush);
     document.addEventListener('visibilitychange', hidden);
     window.addEventListener('pagehide', flush);
@@ -173,7 +248,7 @@ export function ManuscriptEditor({ store, language, direction, placeholderDirect
     setNotice(null);
     autosave.edit(next);
   };
-  const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
@@ -203,49 +278,98 @@ export function ManuscriptEditor({ store, language, direction, placeholderDirect
 
   const conflict = snapshot.state === 'conflict';
   const state = snapshot.denied ? 'error' : snapshot.state;
-  const ready = Boolean(snapshot.head && !conflict && !snapshot.denied && value.trim());
-  return <div className="min-h-dvh bg-background [text-autospace:normal]">
-    <div className="sticky top-0 z-10 border-border/60 border-b bg-background/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-3 py-2 sm:px-6">
-        <Link href={back.href} className="inline-flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-accent/60"
-          aria-label={back.label}>
-          <ArrowLeftIcon aria-hidden="true" className="size-4 shrink-0" />
-          <span lang={back.title.language} className="min-w-0 truncate">{back.title.value}</span>
-        </Link>
-        <AutosaveStatus className="ms-auto" state={state} savedAt={snapshot.savedAt} locale={locale}
-          onRetry={() => void autosave.flush()} labels={{ idle: t.autosaveIdle, unsaved: t.autosaveUnsaved,
-            saving: t.autosaveSaving, saved: t.autosaveSaved, offline: t.autosaveOffline, conflict: t.autosaveConflict,
-            error: snapshot.denied ? t.autosaveDenied : t.autosaveError, retry: t.retry }} />
-        {publish({ prepare, head: snapshot.head, body: value, ready, say: setNotice })}
+  const ready = Boolean(snapshot.head && !conflict && !snapshot.denied && hasBodyContent(value));
+  return (
+    <div className="min-h-dvh bg-background [text-autospace:normal]">
+      <div className="sticky top-0 z-10 border-border/60 border-b bg-background/90 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-3 py-2 sm:px-6">
+          <Link
+            href={back.href}
+            className="inline-flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-accent/60"
+            aria-label={back.label}
+          >
+            <ArrowLeftIcon aria-hidden="true" className="size-4 shrink-0" />
+            <span lang={back.title.language} className="min-w-0 truncate">
+              {back.title.value}
+            </span>
+          </Link>
+          <AutosaveStatus
+            className="ms-auto"
+            state={state}
+            savedAt={snapshot.savedAt}
+            locale={locale}
+            onRetry={() => void autosave.flush()}
+            labels={{
+              idle: t.autosaveIdle,
+              unsaved: t.autosaveUnsaved,
+              saving: t.autosaveSaving,
+              saved: t.autosaveSaved,
+              offline: t.autosaveOffline,
+              conflict: t.autosaveConflict,
+              error: snapshot.denied ? t.autosaveDenied : t.autosaveError,
+              retry: t.retry,
+            }}
+          />
+          {publish({ prepare, head: snapshot.head, body: value, ready, say: setNotice })}
+        </div>
+      </div>
+      <div className="mx-auto grid w-full max-w-[44rem] gap-5 px-4 pt-8 pb-24 sm:px-6 sm:pt-12">
+        <header className="grid gap-2">
+          <p className="text-muted-foreground text-sm">{context}</p>
+          <h1
+            lang={title.language}
+            className="text-balance break-words font-semibold font-work-title text-3xl/tight
+          sm:text-4xl/tight"
+          >
+            {title.value}
+          </h1>
+        </header>
+        {notice ? (
+          <Alert variant="info">
+            <InfoIcon aria-hidden="true" />
+            <AlertDescription role="status" className="text-foreground">
+              {notice}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {conflict ? (
+          <ConflictView
+            mine={value}
+            theirs={theirs}
+            lang={language}
+            dir={direction}
+            onKeepMine={resolveMine}
+            onTakeTheirs={resolveTheirs}
+            labels={t}
+            locale={locale}
+          />
+        ) : null}
+        <BodyEditor
+          label={label}
+          locale={locale}
+          lang={language}
+          dir={direction}
+          allowAdvanced
+          value={value}
+          placeholder={t.placeholder}
+          placeholderDirection={placeholderDirection}
+          maxLength={65536}
+          readOnly={conflict || snapshot.denied}
+          onChange={change}
+          onKeyDown={keyDown}
+          onBlur={() => void autosave.flush()}
+          autoFocus={!initial.body}
+        />
+      </div>
+      {/* On phones the shell's bottom navigation covers the last 4rem; the counts sit above it. */}
+      <div
+        className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] border-border/60 border-t bg-background/90
+      backdrop-blur md:bottom-0"
+      >
+        <EditorFooter className="mx-auto w-full max-w-[44rem] px-4 py-2 sm:px-6">
+          <span>{lengthLabel(manuscriptLength(bodyText(value), language), t)}</span>
+        </EditorFooter>
       </div>
     </div>
-    <div className="mx-auto grid w-full max-w-[44rem] gap-5 px-4 pt-8 pb-24 sm:px-6 sm:pt-12">
-      <header className="grid gap-2">
-        <p className="text-muted-foreground text-sm">{context}</p>
-        <h1 lang={title.language} className="text-balance break-words font-semibold font-work-title text-3xl/tight
-          sm:text-4xl/tight">{title.value}</h1>
-      </header>
-      {notice ? <Alert variant="info"><InfoIcon aria-hidden="true" />
-        <AlertDescription role="status" className="text-foreground">{notice}</AlertDescription></Alert> : null}
-      {conflict ? <ConflictView mine={value} theirs={theirs} lang={language} dir={direction}
-        onKeepMine={resolveMine} onTakeTheirs={resolveTheirs} labels={t} /> : null}
-      {/* Chromium ignores `direction` on ::placeholder. plaintext takes the direction from the
-          placeholder's first letter — the interface language — and text-align keeps that line at
-          the interface's start, so a period stays at the end of an English sentence in an Arabic chapter. */}
-      {placeholderDirection ? <style>{`textarea[data-placeholder-dir="ltr"]::placeholder{unicode-bidi:plaintext;text-align:left}
-textarea[data-placeholder-dir="rtl"]::placeholder{unicode-bidi:plaintext;text-align:right}`}</style> : null}
-      <Editor aria-label={label} lang={language} dir={direction}
-        {...(placeholderDirection ? { 'data-placeholder-dir': placeholderDirection } : {})}
-        value={value} placeholder={t.placeholder}
-        readOnly={conflict || snapshot.denied} onChange={event => change(event.target.value)} onKeyDown={keyDown}
-        onBlur={() => void autosave.flush()} autoFocus={!initial.body} />
-    </div>
-    {/* On phones the shell's bottom navigation covers the last 4rem; the counts sit above it. */}
-    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] border-border/60 border-t bg-background/90
-      backdrop-blur md:bottom-0">
-      <EditorFooter className="mx-auto w-full max-w-[44rem] px-4 py-2 sm:px-6">
-        <span>{lengthLabel(manuscriptLength(value, language), t)}</span>
-      </EditorFooter>
-    </div>
-  </div>;
+  );
 }

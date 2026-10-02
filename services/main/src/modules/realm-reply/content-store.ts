@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 
 export class RealmReplyInvalid extends Error {}
 export class RealmReplyDenied extends Error {}
@@ -337,26 +339,34 @@ export class RealmReplyContentStore {
       p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
       p.parent_reply AS "parentReply", p.parent_revision AS "parentRevision",
       p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
-      r.byte_digest AS "revisionDigest",
+      r.byte_digest AS "revisionDigest", r.body->'document' AS document,
       (r.availability = 'available' AND r.body->>'deleted' = 'false') AS visible
       FROM candidates p JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision r ON r.id = v.draft_head
       ORDER BY p.id`, [rootTarget, rootRevision, after ?? '', realm]);
     const candidates = rows.rows.slice(0, 32);
-    const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, ...row }) => row);
+    const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, document, ...row }) => {
+      try { return { ...row, ...retainedDocumentBody({ body: row.body, ...(document ? { document } : {}) }) }; }
+      catch { throw new RealmReplyUnavailable('reply document projection is corrupt'); }
+    });
     return { items, next: rows.rows.length > 32 ? candidates.at(-1)!.reply as string : null };
   }
 
   async readCurrent(reply: string) {
     if (!native.test(reply)) throw new RealmReplyInvalid('invalid reply');
     const row = (await this.pool.query<{ reply: string; author: string; rootTarget: string;
-      rootRevision: string; variantId: string; revisionId: string; body: string; revisionDigest: string; originRealm: string | null }>(`
+      rootRevision: string; variantId: string; revisionId: string; body: string; document: DocumentSnapshot | null;
+      revisionDigest: string; originRealm: string | null }>(`
       SELECT p.id AS reply, p.author, p.origin_realm AS "originRealm", p.root_target AS "rootTarget", p.root_revision AS "rootRevision",
-        p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body, r.byte_digest AS "revisionDigest"
+        p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
+        r.body->'document' AS document, r.byte_digest AS "revisionDigest"
       FROM content.reply p JOIN content.variant v ON v.id = p.variant_id
       JOIN content.revision r ON r.id = v.draft_head
       WHERE p.id = $1 AND r.availability = 'available' AND r.body->>'deleted' = 'false'`, [reply])).rows[0];
-    return row ?? null;
+    if (!row) return null;
+    const { document, ...result } = row;
+    try { return { ...result, ...retainedDocumentBody({ body: row.body, ...(document ? { document } : {}) }) }; }
+    catch { throw new RealmReplyUnavailable('reply document projection is corrupt'); }
   }
 
   async preparePlacement(admission: RegisteredAdmission,

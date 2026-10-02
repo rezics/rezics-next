@@ -7,10 +7,22 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { interfaceDirection, type UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
-import { type ChapterPublication, type ChapterTarget, type DraftBasis, readChapterRevision, saveChapterDraft }
-  from './content-api.ts';
+import {
+  type ChapterPublication,
+  type ChapterTarget,
+  type DraftBasis,
+  readChapterRevision,
+  saveChapterDraft,
+} from './content-api.ts';
 import { manuscriptLength } from './counts.ts';
-import { browserStorage, chapterMemoryKey, localDraftKey, readChapterMemory, rememberChapter } from './local-draft.ts';
+import { bodyText } from '../document-editor/body.ts';
+import {
+  browserStorage,
+  chapterMemoryKey,
+  localDraftKey,
+  readChapterMemory,
+  rememberChapter,
+} from './local-draft.ts';
 import { ManuscriptEditor, type ManuscriptStore, type PublishSlot } from './manuscript-editor.tsx';
 import type { StudioMessages } from './messages.ts';
 import { chapterHref, workHref } from './agent.ts';
@@ -38,75 +50,154 @@ export interface ChapterEditorProps {
  * conflict naming the head that won. Publishing sends the exact saved bytes;
  * an update names the publication it replaces.
  */
-export function ChapterEditor({ agent, book, chapter: data, locale, messages, delay, main }: ChapterEditorProps) {
+export function ChapterEditor({
+  agent,
+  book,
+  chapter: data,
+  locale,
+  messages,
+  delay,
+  main,
+}: ChapterEditorProps) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
-  const target: ChapterTarget = useMemo(() => ({ actingSubject: agent.iri, chapter: data.chapter.id, variant: data.variant,
-    language: data.chapter.language, direction: data.chapter.direction }), [agent.iri, data]);
+  const target: ChapterTarget = useMemo(
+    () => ({
+      actingSubject: agent.iri,
+      chapter: data.chapter.id,
+      variant: data.variant,
+      language: data.chapter.language,
+      direction: data.chapter.direction,
+    }),
+    [agent.iri, data],
+  );
   const memoryKey = chapterMemoryKey(agent.iri, data.variant);
   const storage = useMemo(browserStorage, []);
   // What publishing needs about the saved bytes: from Main on opening, then from every save.
-  const basis = useRef<DraftBasis | null>(data.head && data.digest
-    ? { head: data.head, digest: data.digest, epoch: data.epoch ?? '' } : null);
-  const [current, setCurrent] = useState<ChapterPublication | null>(data.publication
-    ? { publication: data.publication, eligibility: data.eligibility } : null);
+  const basis = useRef<DraftBasis | null>(
+    data.head && data.digest
+      ? { head: data.head, digest: data.digest, epoch: data.epoch ?? '' }
+      : null,
+  );
+  const [current, setCurrent] = useState<ChapterPublication | null>(
+    data.publication ? { publication: data.publication, eligibility: data.eligibility } : null,
+  );
   const [publishing, setPublishing] = useState<(DraftBasis & { body: string }) | null>(null);
 
   /** Publishing names the exact saved bytes: the last save's, or the saved head's as Main reads it. */
   const open = async (slot: PublishSlot) => {
-    if (!await slot.prepare() || !slot.head) return;
+    if (!(await slot.prepare()) || !slot.head) return;
     let known = basis.current?.head === slot.head ? basis.current : null;
     const epoch = known?.epoch || readChapterMemory(storage, memoryKey)?.epoch || data.epoch;
     if (!known?.digest) {
       const read = await readChapterRevision(agent.iri, slot.head, main).catch(() => null);
       known = read ? { head: slot.head, digest: read.digest, epoch: epoch ?? '' } : null;
     }
-    if (!known || !epoch) { slot.say(t.publishNeedsSave); return; }
+    if (!known || !epoch) {
+      slot.say(t.publishNeedsSave);
+      return;
+    }
     setPublishing({ ...known, epoch, body: slot.body });
   };
 
   // Main does not yet let a writer read their variant heads. When the address named none, reopen this device's last save.
   useEffect(() => {
     const known = readChapterMemory(storage, memoryKey);
-    if (!current && known?.publication) setCurrent({ publication: known.publication, eligibility: known.eligibility });
-    if (basis.current && !basis.current.epoch && known?.epoch) basis.current = { ...basis.current, epoch: known.epoch };
+    if (!current && known?.publication)
+      setCurrent({ publication: known.publication, eligibility: known.eligibility });
+    if (basis.current && !basis.current.epoch && known?.epoch)
+      basis.current = { ...basis.current, epoch: known.epoch };
     if (data.basis === 'none' && known?.head) {
-      router.replace(chapterHref(agent, book.id, data.chapter.id, known.head, data.chapter.language));
+      router.replace(
+        chapterHref(agent, book.id, data.chapter.id, known.head, data.chapter.language),
+      );
     }
   }, []);
 
   const [store] = useState((): ManuscriptStore => ({
     deviceKey: () => localDraftKey(agent.iri, data.chapter.id, data.variant),
     channel: () => data.variant,
-    href: head => chapterHref(agent, book.id, data.chapter.id, head, data.chapter.language),
-    save: (body, head, key) => saveChapterDraft(target, body, head, key, saved => {
-      basis.current = saved;
-      rememberChapter(storage, memoryKey, { head: saved.head, digest: saved.digest, epoch: saved.epoch,
-        length: manuscriptLength(body, data.chapter.language).value, savedAt: new Date().toISOString() });
-    }, main),
-    theirs: async head => {
+    href: (head) => chapterHref(agent, book.id, data.chapter.id, head, data.chapter.language),
+    save: (body, head, key) =>
+      saveChapterDraft(
+        target,
+        body,
+        head,
+        key,
+        (saved) => {
+          basis.current = saved;
+          rememberChapter(storage, memoryKey, {
+            head: saved.head,
+            digest: saved.digest,
+            epoch: saved.epoch,
+            length: manuscriptLength(bodyText(body), data.chapter.language).value,
+            savedAt: new Date().toISOString(),
+          });
+        },
+        main,
+      ),
+    theirs: async (head) => {
       if (!head) return null;
       const read = await readChapterRevision(agent.iri, head, main);
       return read ? { head, body: read.body } : null;
     },
   }));
 
-  return <ManuscriptEditor store={store} language={data.chapter.language} direction={data.chapter.direction}
-    placeholderDirection={interfaceDirection[locale]}
-    back={{ href: workHref(agent, book.id, 'chapters'), label: t.backToChapters, title: book.title }}
-    context={[book.title.value, languageName(data.chapter.language, locale), `${t.writingAs} ${studioAgentName(agent, t)}`]
-      .join(' · ')}
-    title={data.chapter.title} initial={{ head: data.head, body: data.body }} label={t.chapterLabel} locale={locale}
-    messages={messages} delay={delay}
-    publish={slot => <>
-      <Button type="button" size="sm" disabled={!slot.ready} onClick={() => void open(slot)}>
-        <SendIcon aria-hidden="true" />{current ? t.publishUpdate : t.publish}</Button>
-      {publishing ? <ChapterPublishDialog open onOpenChange={next => { if (!next) setPublishing(null); }} agent={agent}
-        book={book.title} title={data.chapter.title} target={target} basis={publishing} current={current} locale={locale}
-        messages={messages} main={main} onPublished={(publication, published) => {
-          setCurrent(publication);
-          rememberChapter(storage, memoryKey, { publication: publication.publication,
-            eligibility: publication.eligibility, publishedHead: published.head });
-        }} /> : null}
-    </>} />;
+  return (
+    <ManuscriptEditor
+      store={store}
+      language={data.chapter.language}
+      direction={data.chapter.direction}
+      placeholderDirection={interfaceDirection[locale]}
+      back={{
+        href: workHref(agent, book.id, 'chapters'),
+        label: t.backToChapters,
+        title: book.title,
+      }}
+      context={[
+        book.title.value,
+        languageName(data.chapter.language, locale),
+        `${t.writingAs} ${studioAgentName(agent, t)}`,
+      ].join(' · ')}
+      title={data.chapter.title}
+      initial={{ head: data.head, body: data.body }}
+      label={t.chapterLabel}
+      locale={locale}
+      messages={messages}
+      delay={delay}
+      publish={(slot) => (
+        <>
+          <Button type="button" size="sm" disabled={!slot.ready} onClick={() => void open(slot)}>
+            <SendIcon aria-hidden="true" />
+            {current ? t.publishUpdate : t.publish}
+          </Button>
+          {publishing ? (
+            <ChapterPublishDialog
+              open
+              onOpenChange={(next) => {
+                if (!next) setPublishing(null);
+              }}
+              agent={agent}
+              book={book.title}
+              title={data.chapter.title}
+              target={target}
+              basis={publishing}
+              current={current}
+              locale={locale}
+              messages={messages}
+              main={main}
+              onPublished={(publication, published) => {
+                setCurrent(publication);
+                rememberChapter(storage, memoryKey, {
+                  publication: publication.publication,
+                  eligibility: publication.eligibility,
+                  publishedHead: published.head,
+                });
+              }}
+            />
+          ) : null}
+        </>
+      )}
+    />
+  );
 }

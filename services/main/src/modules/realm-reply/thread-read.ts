@@ -5,7 +5,7 @@ import { readAgent, readAgentCards } from '../profiles/read.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
-  WorkReadMoved, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadMoved, WorkReadUnavailable, WorkReadLimit, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { clip, discussionParts } from './discussion-text.ts';
 import { replySlotIri } from './graph.ts';
 import { REALM_THREAD_COST, type realmThread, type realmThreadReply, type realmThreadSummary,
@@ -14,6 +14,8 @@ import type { PlacedHead, RealmReplyThreadStore, ThreadVote } from './thread-sto
 import { resolveTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
+import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
+import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -72,19 +74,20 @@ async function bodies(session: WorkReadSession, heads: readonly Head[], realm: s
     work: item.work, context: realm })), disclosureViewer(session.principal), 'thread');
   heads = heads.filter((_item, index) => decisions[index] === 'visible');
   const revisions = [...new Set(heads.map(item => item.revisionId))];
-  const read = new Map<string, { body: string; language: string | null }>();
+  const read = new Map<string, { body: string; document?: DocumentSnapshot; language: string | null }>();
   for (let start = 0; start < revisions.length; start += REALM_THREAD_COST.contentBatch) {
     const batch = revisions.slice(start, start + REALM_THREAD_COST.contentBatch);
     const results = await session.deps.content!.readExactBatch(batch, async ids => new Set(ids));
     for (const result of results) {
       if (result.status !== 'available' || typeof result.body.body !== 'string') continue;
       const { language } = result.reference;
-      read.set(result.revisionId, { body: result.body.body, language: language.kind === 'tag' ? language.tag : null });
+      read.set(result.revisionId, { ...retainedDocumentBody(result.body),
+        language: language.kind === 'tag' ? language.tag : null });
     }
   }
   return new Map(heads.flatMap(item => {
     const body = read.get(item.revisionId);
-    return body?.body.trim() ? [[item.reply, body] as const] : [];
+    return body && (body.document ? hasDocumentContent(body.document) : body.body.trim()) ? [[item.reply, body] as const] : [];
   }));
 }
 
@@ -284,6 +287,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       time: row.time.toISOString(), language: text?.language ?? null, revisionId: row.revisionId,
       title: hidden ? null : title,
       body: hidden ? '' : clip(body, REALM_THREAD_COST.bodyChars),
+      ...(!hidden && text?.document ? { document: text.document } : {}),
       vote: hidden ? closed : votes.get(row.placement) ?? closed }];
   };
   // Depth first, retaining a neutral parent position when its body is restricted.
@@ -311,8 +315,12 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   }
   await readRealmBasis(session, realm);
   if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
-  return { profile: 'realm-thread-v1', realm, thread: ancestors[0]?.reply ?? focus, focus, sort, work: about,
+  const response = { profile: 'realm-thread-v1' as const, realm, thread: ancestors[0]?.reply ?? focus, focus, sort, work: about,
     rootRevision: focused.rootRevision, ancestors, items, complete, sourcePosition: session.position };
+  if (Buffer.byteLength(JSON.stringify(response), 'utf8') > REALM_THREAD_COST.responseBytes) {
+    throw new WorkReadLimit('Thread content exceeds the complete response budget');
+  }
+  return response;
 }
 
 /** Eight newest candidates per page; each exposed entry must still be the current public placement. */

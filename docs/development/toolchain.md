@@ -184,6 +184,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @playwright/test | 1.63.0 | . |
 | @resvg/resvg-js | 2.6.2 | apps/about |
 | @rezics/account | workspace:* | apps/accounts |
+| @rezics/document | workspace:* | apps/web, packages/ui, services/content, services/main |
 | @rezics/main | workspace:* | apps/web |
 | @rezics/observability | workspace:* | services/account, services/main |
 | @rezics/ui | workspace:* | apps/about, apps/accounts, apps/web |
@@ -197,7 +198,21 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | @tailwindcss/vite | 4.3.3 | apps/about, apps/accounts, apps/web |
 | @tanstack/react-query | 5.103.2 | apps/web |
 | @tensorflow/tfjs | 4.22.0 | services/main |
-| @types/bun | 1.4.2 | apps/about, apps/accounts, packages/model, packages/observability, services/account, services/content, services/main |
+| @tiptap/core | 3.31.4 | packages/ui |
+| @tiptap/extension-bubble-menu | 3.31.4 | packages/ui |
+| @tiptap/extension-image | 3.31.4 | packages/ui |
+| @tiptap/extension-list | 3.31.4 | packages/ui |
+| @tiptap/extension-placeholder | 3.31.4 | packages/ui |
+| @tiptap/extension-table | 3.31.4 | packages/ui |
+| @tiptap/extension-text-align | 3.31.4 | packages/ui |
+| @tiptap/extension-text-style | 3.31.4 | packages/ui |
+| @tiptap/extension-unique-id | 3.31.4 | packages/ui |
+| @tiptap/extensions | 3.31.4 | packages/ui |
+| @tiptap/pm | 3.31.4 | packages/ui |
+| @tiptap/react | 3.31.4 | packages/ui |
+| @tiptap/starter-kit | 3.31.4 | packages/ui |
+| @types/bun | 1.4.2 | apps/about, apps/accounts, packages/document, packages/model, packages/observability, services/account, services/content, services/main |
+| @types/markdown-it | 14.2.0 | packages/document |
 | @types/node | 26.6.2 | apphost, apps/about, apps/accounts, apps/web, packages/wiki-toolkit |
 | @types/nodemailer | 8.0.2 | services/account |
 | @types/pg | 8.23.1 | packages/observability, services/account, services/content, services/main |
@@ -226,6 +241,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | knip | 6.38.0 | . |
 | kysely | 0.29.6 | services/account |
 | lucide-react | 1.47.0 | apps/about, apps/accounts, apps/web, packages/ui |
+| markdown-it | 14.3.2 | packages/document |
 | motion | 13.4.4 | apps/about |
 | nanostores | 1.5.3 | services/account |
 | native-i18n | 0.2.0 | apps/accounts, apps/web |
@@ -239,6 +255,11 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | oxlint-tsgolint | 7.0.2003 | . |
 | pg | 8.23.0 | packages/observability, services/account, services/content, services/main |
 | playwright | 1.63.0 | apps/accounts, apps/web |
+| prosemirror-markdown | 1.13.8 | packages/document |
+| prosemirror-model | 1.25.12 | packages/document |
+| prosemirror-schema-basic | 1.2.5 | packages/document |
+| prosemirror-schema-list | 1.5.1 | packages/document |
+| prosemirror-tables | 1.8.5 | packages/document |
 | protobufjs | 7.6.6 | packages/observability |
 | react | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui, packages/zone-sdk |
 | react-dom | 19.3.0 | apps/about, apps/accounts, apps/web, packages/ui |
@@ -252,8 +273,8 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | tailwindcss | 4.3.3 | apps/about, apps/accounts, apps/web |
 | tsx | 4.23.13 | apphost |
 | tw-animate-css | 1.4.0 | packages/ui |
-| typebox | 1.3.34 | packages/model, packages/observability, packages/wiki-toolkit, services/account, services/main |
-| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/model, packages/observability, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
+| typebox | 1.3.34 | packages/document, packages/model, packages/observability, packages/wiki-toolkit, services/account, services/main |
+| typescript | 7.0.2 | apphost, apps/accounts, apps/web, packages/document, packages/model, packages/observability, packages/ui, packages/wiki-toolkit, packages/zone-sdk, services/account, services/content, services/main |
 | typescript-6 | npm:typescript@6.0.2 | apps/about, packages/wiki-toolkit |
 | vinext | 1.0.0-beta.11 | apps/accounts, apps/web |
 | vite | 8.3.0 | apps/about, apps/accounts, apps/web |
@@ -354,6 +375,8 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task about:check` | Check the about site's types (Astro, TypeScript), lint, format and unit tests. |
 | `task about:e2e` | Build the about site, serve it with its Worker and a local D1 on 127.0.0.1:4322, and run the Playwright smoke and axe tests. |
 | `task ui:typecheck` | Type-check Rezics UI. |
+| `task document:typecheck` | Type-check the independent document protocol. |
+| `task document:gen` | Generate the standalone Document Core, Text and Blocks JSON Schemas. |
 | `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 5 when it is unset. |
 | `task observability:typecheck` | Type-check the shared telemetry runtime and probes. |
 | `task observability:aspire-smoke` | Verify real server spans, structured logs and OTLP authentication against the running backend AppHost. |

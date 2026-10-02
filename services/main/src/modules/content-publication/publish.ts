@@ -2,6 +2,8 @@ import type { ContentCore, ExactContentReference, PublicationPreparation } from 
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
 import { RevisionNotFound } from '../work/history.ts';
+import { hasDocumentContent } from '@rezics/document';
+import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ContentEmbedDenied, assertPublicContentEmbeds, publicContentEmbedConditions,
@@ -88,7 +90,12 @@ export async function assertContentPublicationBody(content: Pick<ContentCore, 'r
     throw new ContentPublicationConflict('Content revision differs from publication intent');
   }
   // Structured Content has owner-defined fields rather than a text body.
-  if (typeof exact.body.body === 'string' && !exact.body.body.trim()) {
+  let empty = typeof exact.body.body === 'string' && !exact.body.body.trim();
+  if (exact.body.document !== undefined) {
+    try { empty = !hasDocumentContent(retainedDocumentBody(exact.body).document!); }
+    catch { throw new ContentPublicationConflict('Content document projection differs'); }
+  }
+  if (empty) {
     throw new EmptyContentPublicationBody('Cannot publish an empty draft');
   }
 }

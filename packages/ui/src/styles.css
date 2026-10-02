@@ -539,3 +539,64 @@
       transparent 65%
     );
 }
+
+/* Document styles are shared by the editor and the server-rendered reading surface. */
+.rezics-document {
+  min-width: 0;
+  font-family: var(--font-work-serif);
+  font-size: 1.125rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  text-autospace: normal;
+}
+.rezics-document .tiptap { outline: none; min-width: 0; }
+.document-editor .tiptap { min-height: 45dvh; }
+.document-editor-compact .tiptap { min-height: 6rem; }
+.rezics-document p { margin-block: 0.75em; }
+.rezics-document > :first-child,
+.rezics-document .tiptap > :first-child { margin-block-start: 0; }
+.rezics-document h1 { font-size: 1.8em; font-weight: 700; line-height: 1.35; margin-block: 1em 0.4em; }
+.rezics-document h2 { font-size: 1.45em; font-weight: 700; line-height: 1.4; margin-block: 1em 0.4em; }
+.rezics-document h3,
+.rezics-document h4,
+.rezics-document h5,
+.rezics-document h6 { font-size: 1.2em; font-weight: 600; line-height: 1.5; margin-block: 1em 0.4em; }
+.rezics-document ul { list-style: disc; padding-inline-start: 1.5em; margin-block: 0.75em; }
+.rezics-document ol { list-style: decimal; padding-inline-start: 1.5em; margin-block: 0.75em; }
+.rezics-document li > p { margin-block: 0.25em; }
+.rezics-document blockquote { border-inline-start: 3px solid var(--border); padding-inline-start: 1em; margin-block: 1em; color: var(--muted-foreground); }
+.rezics-document a { color: var(--primary); text-decoration: underline; text-underline-offset: 0.15em; }
+.rezics-document code { font-family: ui-monospace, monospace; font-size: 0.85em; background: var(--muted); border-radius: var(--radius-sm); padding: 0.12em 0.3em; }
+.rezics-document pre { overflow-x: auto; padding: 1em; border-radius: var(--radius); background: var(--muted); margin-block: 1em; white-space: pre; }
+.rezics-document pre code { background: none; padding: 0; }
+.rezics-document hr { border-block-start: 1px solid var(--border); margin-block: 1.5em; }
+.rezics-document figure { margin-block: 1em; }
+.rezics-document img,
+.rezics-document video { max-width: 100%; height: auto; border-radius: var(--radius); }
+.rezics-document audio { max-width: 100%; }
+.rezics-document figcaption { margin-block-start: 0.4em; font-family: var(--font-interface); font-size: 0.8em; color: var(--muted-foreground); }
+.rezics-document .document-table-scroll,
+.rezics-document .tableWrapper { overflow-x: auto; margin-block: 1em; }
+.rezics-document table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rezics-document td,
+.rezics-document th { position: relative; min-width: 4rem; border: 1px solid var(--border); padding: 0.5em 0.75em; vertical-align: top; }
+.rezics-document th { background: var(--muted); font-weight: 600; text-align: start; }
+.rezics-document td > p,
+.rezics-document th > p { margin-block: 0; }
+.rezics-document .selectedCell::after { content: ''; position: absolute; inset: 0; background: color-mix(in oklab, var(--primary) 16%, transparent); pointer-events: none; }
+.rezics-document ul[data-type='taskList'] { list-style: none; padding-inline-start: 0; }
+.rezics-document li[data-type='taskItem'] { display: flex; gap: 0.65em; align-items: baseline; }
+.rezics-document li[data-type='taskItem'] > label { flex-shrink: 0; }
+.rezics-document li[data-type='taskItem'] > div { min-width: 0; flex: 1; }
+.rezics-document li[data-type='taskItem'] > [role='checkbox']::before { content: '☐'; }
+.rezics-document li[data-type='taskItem'] > [role='checkbox'][aria-checked='true']::before { content: '☑'; }
+.rezics-document input[type='checkbox'] { accent-color: var(--primary); }
+.rezics-document ruby { ruby-align: center; }
+.rezics-document rt { font-size: 0.55em; }
+.rezics-document .document-component { display: block; border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75em 1em; background: var(--muted); font-family: var(--font-interface); font-size: 0.85em; margin-block: 0.75em; }
+.rezics-document span.document-component { display: inline; padding: 0.12em 0.35em; }
+.rezics-document .ProseMirror-selectednode { outline: 2px solid var(--primary); outline-offset: 2px; }
+.rezics-document .document-spoiler-authored { background: var(--accent); color: var(--accent-foreground); border-radius: var(--radius-sm); }
+.rezics-document p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: inline-start; color: var(--muted-foreground); height: 0; pointer-events: none; }
+[data-placeholder-dir='ltr'] .tiptap [data-placeholder]::before { unicode-bidi: plaintext; text-align: left; direction: ltr; }
+[data-placeholder-dir='rtl'] .tiptap [data-placeholder]::before { unicode-bidi: plaintext; text-align: right; direction: rtl; }

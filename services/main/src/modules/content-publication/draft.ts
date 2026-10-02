@@ -8,6 +8,7 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
   type GraphTerminalProof, type RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { RightsStore } from '../rights/store.ts';
+import { authoredDocumentBody, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
 
 export class ContentDraftDenied extends Error {}
 export class ContentDraftRightsDenied extends ContentDraftDenied {}
@@ -16,12 +17,11 @@ export class ContentDraftStale extends Error {
 }
 export class ContentDraftUnavailable extends Error {}
 
-export interface AuthoredContentDraftInput {
+export interface AuthoredContentDraftInput extends AuthoredBodyInput {
   resourceId: string;
   targetProfile?: 'work' | 'catalog-description';
   variant: VariantIdentity;
   expectedHead: string | null;
-  body: string;
   embeds?: string[];
   actingSubject: string;
   idempotencyKey: string;
@@ -73,20 +73,22 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request, input: AuthoredContentDraftInput,
   rights?: Pick<RightsStore, 'currentPublicDomainAssessment'>): Promise<SaveDraftResult & { byteDigest: string }> {
+  let body;
+  try { body = authoredDocumentBody(input); }
+  catch { throw new ContentConflict('invalid authored Content body'); }
   if (input.variant.resourceId !== input.resourceId
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.resourceId)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(input.actingSubject)
     || !/^urn:rezics:variant:[0-9a-f-]{36}$/i.test(input.variant.id)
     || (input.expectedHead !== null
       && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.expectedHead))
-    || typeof input.body !== 'string' || input.body.length > 65_536
     || (input.publicDomain !== undefined && (input.targetProfile === 'catalog-description'
       || !/^[0-9a-f-]{36}$/i.test(input.publicDomain.assessmentId)
       || !validPublicDomainSource(input.publicDomain.source)))) {
     throw new ContentConflict('invalid authored Content draft');
   }
   const embeds = directContentEmbeds(input.embeds);
-  const serializedJson = JSON.stringify({ body: input.body,
+  const serializedJson = JSON.stringify({ ...body,
     ...(embeds.length ? { embeds } : {}) });
   const command: SaveDraftCommand = { operationId: '', variant: input.variant,
     expectedHead: input.expectedHead,

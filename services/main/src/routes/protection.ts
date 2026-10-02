@@ -1,5 +1,6 @@
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
+import { authoredBodySchema } from '../api-document.ts';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { changeAdmittedProtection, decideAdmittedCorrection, proposeAdmittedCorrection, ProtectionDenied, ProtectionPending }
@@ -174,10 +175,10 @@ export function protectionRoutes(work: ProtectionDependencies) {
       } catch (error) { return failed(error); }
     })
     .post('/v1/corrections', {
-      body: t.Object({ profile: t.Literal('content-draft-correction-v1'),
+      body: authoredBodySchema({ profile: t.Literal('content-draft-correction-v1'),
         resourceId: t.String({ pattern: NATIVE }), variantId: t.String({ pattern: VARIANT }),
-        body: t.String({ minLength: 1, maxLength: 65536 }), predecessor: t.Union([t.String({ pattern: UUID }), t.Null()]),
-        ...basis }, { additionalProperties: false }),
+        predecessor: t.Union([t.String({ pattern: UUID }), t.Null()]),
+        ...basis }, 65_536, 1),
       response: writeResponses,
     }, async ({ request, body }) => {
       const store = work.editorialProtection;

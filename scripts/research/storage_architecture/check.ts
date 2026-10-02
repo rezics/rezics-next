@@ -6,6 +6,7 @@ if (process.argv.slice(2).some((arg) => arg !== '--backend')) {
 const backendSources = [
   'services',
   'packages/model',
+  'packages/document',
   'packages/observability',
   'scripts/api',
   'scripts/dev',
@@ -27,6 +28,7 @@ const commands: string[][] = [
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/account/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'services/content/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/model/tsconfig.json'],
+  ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/document/tsconfig.json'],
   ...(!backend
     ? [
         ['bun', 'node_modules/typescript/bin/tsc', '--project', 'packages/ui/tsconfig.json'],
@@ -51,7 +53,7 @@ const commands: string[][] = [
     '--format=unix',
     ...(!backend ? ['apps'] : []),
     'services',
-    ...(backend ? ['packages/model', 'packages/observability'] : ['packages']),
+    ...(backend ? ['packages/model', 'packages/document', 'packages/observability'] : ['packages']),
     'scripts/qa',
     'scripts/goal',
     'scripts/load',
@@ -79,6 +81,7 @@ const commands: string[][] = [
     'services/account/package.json',
     'services/content/package.json',
     'packages/model/package.json',
+    'packages/document/package.json',
     ...(!backend ? ['packages/ui/package.json'] : []),
     '.oxfmtrc.json',
     '.dependency-cruiser.json',

@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { fromPlainText } from '@rezics/document';
 import type { ContentCore } from '../../content/src/core.ts';
 import { assertContentPublicationBody, ContentPublicationConflict, EmptyContentPublicationBody,
   type PublishPinnedContentInput } from '../src/modules/content-publication/publish.ts';
@@ -30,5 +31,18 @@ test('G-593: only blank text is refused by the empty publication guard', async (
       .rejects.toBeInstanceOf(EmptyContentPublicationBody);
   }
   await expect(assertContentPublicationBody(contentBody({ body: 'Chapter one' }), input))
+    .resolves.toBeUndefined();
+});
+
+test('document publication checks visible content and rejects a false text projection', async () => {
+  const blank = fromPlainText(' \n');
+  await expect(assertContentPublicationBody(contentBody({ body: ' \n', document: blank }), input))
+    .rejects.toBeInstanceOf(EmptyContentPublicationBody);
+  const document = fromPlainText('A chapter');
+  await expect(assertContentPublicationBody(contentBody({ body: 'wrong', document }), input))
+    .rejects.toBeInstanceOf(ContentPublicationConflict);
+  const component = fromPlainText('', 'blocks');
+  component.doc.content!.push({ type: 'image', attrs: { id: 'image', src: 'https://example.org/image.png' } });
+  await expect(assertContentPublicationBody(contentBody({ body: '\n', document: component }), input))
     .resolves.toBeUndefined();
 });

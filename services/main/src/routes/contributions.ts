@@ -15,6 +15,8 @@ import { authorizedReadProblems, contributionDraftReadResult, contributionEditWr
   from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { authoredBodySchema } from '../api-document.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 
 export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
@@ -79,13 +81,12 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       }
     })
     .post('/v1/contribution-edits', {
-      body: t.Object({
+      body: authoredBodySchema({
         profile: t.Literal('text-contribution-v1'),
         contribution: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         expectedHead: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        body: t.String({ maxLength: 65536 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
+      }),
       response: { 200: contributionEditWriteResult, 202: pendingOperation,
         ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
@@ -96,7 +97,8 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       try {
         const receipt = await editAdmittedTextContribution(work.environment, work.account,
           work.access, request, { contribution: body.contribution, expectedHead: body.expectedHead,
-            body: body.body, actingSubject: body.actingSubject, idempotencyKey });
+            ...('document' in body ? { document: body.document as DocumentSnapshot } : { body: body.body }),
+            actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ contribution: receipt.contribution,
           draftRevision: receipt.draftRevision, predecessor: receipt.expectedHead,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
@@ -115,14 +117,13 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       }
     })
     .post('/v1/contributions', {
-      body: t.Object({
+      body: authoredBodySchema({
         profile: t.Literal('text-contribution-v1'),
         work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
         language: t.String({ minLength: 2, maxLength: 35,
           pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' }),
-        body: t.String({ maxLength: 65536 }),
         actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
+      }),
       response: { 200: contributionWriteResult, 201: contributionWriteResult,
         202: pendingOperation, ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
@@ -133,7 +134,8 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       try {
         const receipt = await createAdmittedTextContribution(work.environment, work.account,
           work.access, request, { work: body.work, language: body.language,
-            body: body.body, actingSubject: body.actingSubject, idempotencyKey });
+            ...('document' in body ? { document: body.document as DocumentSnapshot } : { body: body.body }),
+            actingSubject: body.actingSubject, idempotencyKey });
         return Response.json({ contribution: receipt.contribution,
           draftRevision: receipt.draftRevision, work: receipt.work,
           language: receipt.language, author: receipt.author,

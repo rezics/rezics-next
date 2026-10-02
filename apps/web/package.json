@@ -8,6 +8,7 @@
     "@fontsource-variable/geist-mono": "5.3.0",
     "@fontsource-variable/manrope": "5.3.0",
     "@fontsource-variable/source-serif-4": "5.3.0",
+    "@rezics/document": "workspace:*",
     "@rezics/main": "workspace:*",
     "@rezics/ui": "workspace:*",
     "@rezics/zone-sdk": "workspace:*",

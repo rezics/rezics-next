@@ -3,11 +3,32 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApi, mainApiWithToken } from '../api/main.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
+import { editorValue } from '../document-editor/body.ts';
 import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
-import { canonicalLanguage, type ClassificationPage, type ContentsPage, directionOf,
-  failureOf, idOf, iri, type InventoryPage, type InventoryState, type InventoryWork, type Loaded, type MainClient, type MyText,
-  type NativeVariants, type RealmChoice, type ReviewMode, workKind, type Submission, type TextDraft, type TextHead,
-  type WorkHeader, type WorkMetadata } from './types.ts';
+import {
+  canonicalLanguage,
+  type ClassificationPage,
+  type ContentsPage,
+  directionOf,
+  failureOf,
+  idOf,
+  iri,
+  type InventoryPage,
+  type InventoryState,
+  type InventoryWork,
+  type Loaded,
+  type MainClient,
+  type MyText,
+  type NativeVariants,
+  type RealmChoice,
+  type ReviewMode,
+  workKind,
+  type Submission,
+  type TextDraft,
+  type TextHead,
+  type WorkHeader,
+  type WorkMetadata,
+} from './types.ts';
 
 // Studio's server reads. Every read acts as the Studio Agent from the route,
 // never silently as the session Agent, and returns a `Loaded` result so one
@@ -33,16 +54,22 @@ type Page<T> = Loaded<{ items: T[]; nextCursor: string | null }>;
 // Main's contract types them as strings. Studio keeps them as ISO strings, so
 // a server render and the browser print the same `<time dateTime>`.
 const iso = (value: string | Date) => new Date(value).toISOString();
-const submissionTimes = <T extends { openedAt: string; updatedAt: string }>(item: T): T =>
-  ({ ...item, openedAt: iso(item.openedAt), updatedAt: iso(item.updatedAt) });
+const submissionTimes = <T extends { openedAt: string; updatedAt: string }>(item: T): T => ({
+  ...item,
+  openedAt: iso(item.openedAt),
+  updatedAt: iso(item.updatedAt),
+});
 
 // Main has no read of one Agent's texts or submissions for one Work, so the
 // Work page filters the Agent's own lists. Five pages bound it; the handoff
 // proposes the per-Work Studio read that removes it.
 const SCAN_PAGES = 5;
 
-async function scan<T>(page: (cursor: string | undefined) => Promise<Page<T>>, keep: (item: T) => boolean,
-  stopAtFirst = false): Promise<Loaded<T[]>> {
+async function scan<T>(
+  page: (cursor: string | undefined) => Promise<Page<T>>,
+  keep: (item: T) => boolean,
+  stopAtFirst = false,
+): Promise<Loaded<T[]>> {
   const found: T[] = [];
   let cursor: string | undefined;
   for (let index = 0; index < SCAN_PAGES; index += 1) {
@@ -57,21 +84,35 @@ async function scan<T>(page: (cursor: string | undefined) => Promise<Page<T>>, k
 }
 
 const myTexts = (main: MainClient, actingSubject: string) => (cursor: string | undefined) =>
-  settle(() => main.v1.me.contributions.get({ query: { actingSubject, limit: 20, ...(cursor ? { cursor } : {}) } }));
+  settle(() =>
+    main.v1.me.contributions.get({
+      query: { actingSubject, limit: 20, ...(cursor ? { cursor } : {}) },
+    }),
+  );
 
-const mySubmissions = (main: MainClient, actingSubject: string) => async (cursor: string | undefined):
-  Promise<Page<Submission>> => {
-  const page = await settle(() => main.v1.my.submissions.get({ query: { actingSubject, limit: 20,
-    ...(cursor ? { cursor } : {}) } })) as Page<Submission>;
-  return page.ok ? { ok: true, data: { ...page.data, items: page.data.items.map(submissionTimes) } } : page;
-};
+const mySubmissions =
+  (main: MainClient, actingSubject: string) =>
+  async (cursor: string | undefined): Promise<Page<Submission>> => {
+    const page = (await settle(() =>
+      main.v1.my.submissions.get({
+        query: { actingSubject, limit: 20, ...(cursor ? { cursor } : {}) },
+      }),
+    )) as Page<Submission>;
+    return page.ok
+      ? { ok: true, data: { ...page.data, items: page.data.items.map(submissionTimes) } }
+      : page;
+  };
 
 /** A cursor Main minted, as a page address carries it back; anything else starts from the first page. */
-export const validCursor = (cursor: unknown) => typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 2048
-  ? cursor : undefined;
+export const validCursor = (cursor: unknown) =>
+  typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 2048 ? cursor : undefined;
 
 /** A Book's chapters as its card counts them: the first page of its contents. */
-export interface BookChapters { count: number; more: boolean; published: number }
+export interface BookChapters {
+  count: number;
+  more: boolean;
+  published: number;
+}
 
 export interface InventoryView {
   page: InventoryPage;
@@ -84,16 +125,33 @@ export interface InventoryView {
  * records English when a creator names no language, so this is only the
  * last resort after the Main Version's own texts ({@link readWorkLanguages}).
  */
-const ownLanguageOf = (work: { title: { language: string } }) => canonicalLanguage(work.title.language);
+const ownLanguageOf = (work: { title: { language: string } }) =>
+  canonicalLanguage(work.title.language);
 
 /**
  * One page of a Book's contents as the Studio Agent reads them. Without a
  * language Main reads them in the Main Version's language, which is the
  * language the Book's text is published in; `language` names another.
  */
-function contentsPage(main: MainClient, actingSubject: string, book: string, cursor?: string, language?: string) {
-  return settle(() => main.v1.works({ id: idOf(book) }).contents.get({ query: { actingSubject, limit: 20,
-    ...(language ? { language } : {}), ...(cursor ? { cursor } : {}) } }));
+function contentsPage(
+  main: MainClient,
+  actingSubject: string,
+  book: string,
+  cursor?: string,
+  language?: string,
+) {
+  return settle(() =>
+    main.v1
+      .works({ id: idOf(book) })
+      .contents.get({
+        query: {
+          actingSubject,
+          limit: 20,
+          ...(language ? { language } : {}),
+          ...(cursor ? { cursor } : {}),
+        },
+      }),
+  );
 }
 
 /**
@@ -102,10 +160,16 @@ function contentsPage(main: MainClient, actingSubject: string, book: string, cur
  * the Book's text is published, since chapters can be published before the
  * Book's introduction is.
  */
-async function bookContents(main: MainClient, actingSubject: string, book: string, fallback: string):
-  Promise<Loaded<ContentsPage>> {
+async function bookContents(
+  main: MainClient,
+  actingSubject: string,
+  book: string,
+  fallback: string,
+): Promise<Loaded<ContentsPage>> {
   const first = await contentsPage(main, actingSubject, book);
-  return first.ok && first.data.language === null ? contentsPage(main, actingSubject, book, undefined, fallback) : first;
+  return first.ok && first.data.language === null
+    ? contentsPage(main, actingSubject, book, undefined, fallback)
+    : first;
 }
 
 /**
@@ -114,39 +178,95 @@ async function bookContents(main: MainClient, actingSubject: string, book: strin
  * a Book, never its chapters; each Book's chapters are counted from its
  * contents (one bounded read per Book on the page).
  */
-export async function readInventory(actingSubject: string, filter: { state?: InventoryState; view?: InventoryWork['relationship'] },
-  cursor: string | undefined): Promise<Loaded<InventoryView>> {
+export async function readInventory(
+  actingSubject: string,
+  filter: { state?: InventoryState; view?: InventoryWork['relationship'] },
+  cursor: string | undefined,
+): Promise<Loaded<InventoryView>> {
   const main = await mainApi();
-  const page = await settle(() => main.v1.me.agents({ agent: idOf(actingSubject) }).works.get({ query: { limit: 20,
-    view: filter.view ?? 'authored', ...(filter.state ? { state: filter.state } : {}), ...(cursor ? { cursor } : {}) } }));
+  const page = await settle(() =>
+    main.v1.me
+      .agents({ agent: idOf(actingSubject) })
+      .works.get({
+        query: {
+          limit: 20,
+          view: filter.view ?? 'authored',
+          ...(filter.state ? { state: filter.state } : {}),
+          ...(cursor ? { cursor } : {}),
+        },
+      }),
+  );
   if (!page.ok) return page;
-  const items = page.data.items.map(item => ({ ...item, createdAt: iso(item.createdAt), updatedAt: iso(item.updatedAt),
-    submissions: item.submissions.map(submissionTimes) }));
-  const books = items.filter(item => workKind(item.types) === 'book');
-  const contents = await Promise.all(books.map(async book => [book.id,
-    await bookContents(main, actingSubject, book.id, book.texts[0]?.language ?? ownLanguageOf(book))] as const));
+  const items = page.data.items.map((item) => ({
+    ...item,
+    createdAt: iso(item.createdAt),
+    updatedAt: iso(item.updatedAt),
+    submissions: item.submissions.map(submissionTimes),
+  }));
+  const books = items.filter((item) => workKind(item.types) === 'book');
+  const contents = await Promise.all(
+    books.map(
+      async (book) =>
+        [
+          book.id,
+          await bookContents(
+            main,
+            actingSubject,
+            book.id,
+            book.texts[0]?.language ?? ownLanguageOf(book),
+          ),
+        ] as const,
+    ),
+  );
   const view: InventoryView = { page: { ...page.data, items }, books: {} };
   for (const [book, loaded] of contents) {
     if (!loaded.ok) continue;
-    const chapters = loaded.data.items.filter(item => item.role === 'chapter');
-    view.books[book] = { count: chapters.length, more: Boolean(loaded.data.nextCursor),
-      published: chapters.filter(item => item.availability === 'available').length };
+    const chapters = loaded.data.items.filter((item) => item.role === 'chapter');
+    view.books[book] = {
+      count: chapters.length,
+      more: Boolean(loaded.data.nextCursor),
+      published: chapters.filter((item) => item.availability === 'available').length,
+    };
   }
   return { ok: true, data: view };
 }
 
-export interface RealmInfo { name: string; language: string; reviewMode: ReviewMode | null }
-export interface WorkName { value: string; language: string }
+export interface RealmInfo {
+  name: string;
+  language: string;
+  reviewMode: ReviewMode | null;
+}
+export interface WorkName {
+  value: string;
+  language: string;
+}
 
 /** Realm names and review modes, read as the Studio Agent so a Realm it belongs to answers too. At most 20. */
-async function realmInfo(main: MainClient, actingSubject: string, realms: readonly string[], locale: UiLocale):
-  Promise<Record<string, RealmInfo>> {
-  const entries = await Promise.all([...new Set(realms)].slice(0, 20).map(async realm => {
-    const loaded = await settle(() => main.v1.realms({ realm: idOf(realm) }).get({ query: { language: locale,
-      actingSubject } }));
-    return loaded.ok ? [[realm, { name: loaded.data.name.value, language: loaded.data.name.language,
-      reviewMode: loaded.data.reviewMode }] as const] : [];
-  }));
+async function realmInfo(
+  main: MainClient,
+  actingSubject: string,
+  realms: readonly string[],
+  locale: UiLocale,
+): Promise<Record<string, RealmInfo>> {
+  const entries = await Promise.all(
+    [...new Set(realms)].slice(0, 20).map(async (realm) => {
+      const loaded = await settle(() =>
+        main.v1.realms({ realm: idOf(realm) }).get({ query: { language: locale, actingSubject } }),
+      );
+      return loaded.ok
+        ? [
+            [
+              realm,
+              {
+                name: loaded.data.name.value,
+                language: loaded.data.name.language,
+                reviewMode: loaded.data.reviewMode,
+              },
+            ] as const,
+          ]
+        : [];
+    }),
+  );
   return Object.fromEntries(entries.flat());
 }
 
@@ -155,19 +275,44 @@ async function realmInfo(main: MainClient, actingSubject: string, realms: readon
  * header for any the batch leaves out (it does not yet name a private Work to
  * the writer who created it). A page names at most 20 Works.
  */
-async function workNames(main: MainClient, actingSubject: string, works: readonly string[], locale: UiLocale):
-  Promise<Record<string, WorkName>> {
+async function workNames(
+  main: MainClient,
+  actingSubject: string,
+  works: readonly string[],
+  locale: UiLocale,
+): Promise<Record<string, WorkName>> {
   const resources = [...new Set(works)].slice(0, 20);
   if (!resources.length) return {};
-  const loaded = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1', resources,
-    actingSubject, language: locale }), false);
-  const names: Record<string, WorkName> = loaded.ok ? Object.fromEntries(loaded.data.summaries.flatMap(summary =>
-    summary.status === 'available' ? [[summary.reference, { value: summary.name.value, language: summary.name.language }]]
-      : [])) : {};
-  await Promise.all(resources.filter(work => !names[work]).map(async work => {
-    const header = await settle(() => main.v1.works({ id: idOf(work) }).get({ query: { language: locale, actingSubject } }));
-    if (header.ok) names[work] = { value: header.data.title.value, language: header.data.title.language };
-  }));
+  const loaded = await settle(
+    () =>
+      main.v1.resources.summaries.post({
+        profile: 'resource-summary-batch-v1',
+        resources,
+        actingSubject,
+        language: locale,
+      }),
+    false,
+  );
+  const names: Record<string, WorkName> = loaded.ok
+    ? Object.fromEntries(
+        loaded.data.summaries.flatMap((summary) =>
+          summary.status === 'available'
+            ? [[summary.reference, { value: summary.name.value, language: summary.name.language }]]
+            : [],
+        ),
+      )
+    : {};
+  await Promise.all(
+    resources
+      .filter((work) => !names[work])
+      .map(async (work) => {
+        const header = await settle(() =>
+          main.v1.works({ id: idOf(work) }).get({ query: { language: locale, actingSubject } }),
+        );
+        if (header.ok)
+          names[work] = { value: header.data.title.value, language: header.data.title.language };
+      }),
+  );
   return names;
 }
 
@@ -178,29 +323,48 @@ export interface ReviewPage {
 }
 
 /** One page of the Studio Agent's Realm submissions, with the Works' titles and the Realms' names. */
-export async function readReviewPage(actingSubject: string, cursor: string | undefined, locale: UiLocale):
-  Promise<ReviewPage> {
+export async function readReviewPage(
+  actingSubject: string,
+  cursor: string | undefined,
+  locale: UiLocale,
+): Promise<ReviewPage> {
   const main = await mainApi();
   const submissions = await mySubmissions(main, actingSubject)(cursor);
   if (!submissions.ok) return { submissions, realms: {}, works: {} };
   const items = submissions.data.items;
-  const [realms, works] = await Promise.all([realmInfo(main, actingSubject, items.map(item => item.realm), locale),
-    workNames(main, actingSubject, items.map(item => item.work), locale)]);
+  const [realms, works] = await Promise.all([
+    realmInfo(
+      main,
+      actingSubject,
+      items.map((item) => item.realm),
+      locale,
+    ),
+    workNames(
+      main,
+      actingSubject,
+      items.map((item) => item.work),
+      locale,
+    ),
+  ]);
   return { submissions, realms, works };
 }
 
-export interface StudioWork { header: WorkHeader; metadata: Loaded<WorkMetadata> }
+export interface StudioWork {
+  header: WorkHeader;
+  metadata: Loaded<WorkMetadata>;
+}
 
 /** One Work as the Studio Agent sees it: its header and its editable details. */
-export const readStudioWork = cache(async (actingSubject: string, id: string, locale: UiLocale):
-  Promise<Loaded<StudioWork>> => {
-  const main = await mainApi();
-  const [header, metadata] = await Promise.all([
-    settle(() => main.v1.works({ id }).get({ query: { language: locale, actingSubject } })),
-    settle(() => main.v1.works({ id }).metadata.get({ query: { actingSubject } })),
-  ]);
-  return header.ok ? { ok: true, data: { header: header.data, metadata } } : header;
-});
+export const readStudioWork = cache(
+  async (actingSubject: string, id: string, locale: UiLocale): Promise<Loaded<StudioWork>> => {
+    const main = await mainApi();
+    const [header, metadata] = await Promise.all([
+      settle(() => main.v1.works({ id }).get({ query: { language: locale, actingSubject } })),
+      settle(() => main.v1.works({ id }).metadata.get({ query: { actingSubject } })),
+    ]);
+    return header.ok ? { ok: true, data: { header: header.data, metadata } } : header;
+  },
+);
 
 export interface WorkLanguages {
   /** What the Work is written in: its Main Version's published languages, else its title's. */
@@ -214,20 +378,35 @@ export interface WorkLanguages {
  * in, the Studio Agent's first. Main answers this public read from its
  * publication graph, so it names what readers get, whatever the title says.
  */
-export const readWorkLanguages = (actingSubject: string, header: Pick<WorkHeader, 'mainVersion' | 'title'>,
-  main?: MainClient) => workLanguages(actingSubject, header.mainVersion, ownLanguageOf(header), main);
+export const readWorkLanguages = (
+  actingSubject: string,
+  header: Pick<WorkHeader, 'mainVersion' | 'title'>,
+  main?: MainClient,
+) => workLanguages(actingSubject, header.mainVersion, ownLanguageOf(header), main);
 
 // Keyed by strings: React's cache compares arguments by identity.
-const workLanguages = cache(async (actingSubject: string, mainVersion: string, fallback: string, client?: MainClient):
-  Promise<WorkLanguages> => {
-  const main = client ?? await mainApi();
-  const loaded = await settle(() => main.v1['main-versions']({ mainVersion: idOf(mainVersion) })['native-variants']
-    .get({ query: {} }));
-  const variants = loaded.ok ? [...loaded.data.variants].sort((a, b) =>
-    Number(b.author === actingSubject) - Number(a.author === actingSubject)) : [];
-  const all = [...new Set(variants.map(variant => canonicalLanguage(variant.language)))];
-  return all.length ? { all, own: all[0]! } : { all: [fallback], own: fallback };
-});
+const workLanguages = cache(
+  async (
+    actingSubject: string,
+    mainVersion: string,
+    fallback: string,
+    client?: MainClient,
+  ): Promise<WorkLanguages> => {
+    const main = client ?? (await mainApi());
+    const loaded = await settle(() =>
+      main.v1['main-versions']({ mainVersion: idOf(mainVersion) })['native-variants'].get({
+        query: {},
+      }),
+    );
+    const variants = loaded.ok
+      ? [...loaded.data.variants].sort(
+          (a, b) => Number(b.author === actingSubject) - Number(a.author === actingSubject),
+        )
+      : [];
+    const all = [...new Set(variants.map((variant) => canonicalLanguage(variant.language)))];
+    return all.length ? { all, own: all[0]! } : { all: [fallback], own: fallback };
+  },
+);
 
 export interface BookChaptersView {
   page: Loaded<ContentsPage> | { ok: false; failure: 'none' };
@@ -242,86 +421,173 @@ export interface BookChaptersView {
  * Main resolves the chapter list and each writer's disclosed state together.
  * One request carries the language Studio writes in and the page cursor.
  */
-export async function readChapters(actingSubject: string, header: Pick<WorkHeader, 'id' | 'mainVersion' | 'title'>,
-  { cursor, parent, main: client, agents = [], readAs }: { cursor?: string; parent?: string; main?: MainClient;
-    agents?: readonly AgentOption[]; readAs?: string } = {}):
-  Promise<BookChaptersView> {
-  const main = client ?? await mainApi();
+export async function readChapters(
+  actingSubject: string,
+  header: Pick<WorkHeader, 'id' | 'mainVersion' | 'title'>,
+  {
+    cursor,
+    parent,
+    main: client,
+    agents = [],
+    readAs,
+  }: {
+    cursor?: string;
+    parent?: string;
+    main?: MainClient;
+    agents?: readonly AgentOption[];
+    readAs?: string;
+  } = {},
+): Promise<BookChaptersView> {
+  const main = client ?? (await mainApi());
   const { own: language } = await readWorkLanguages(actingSubject, header, main);
-  const chapterPage = (agent: string) => settle(() => main.v1.me.agents({ agent: idOf(agent) })
-    .works({ id: idOf(header.id) }).chapters.get({ query: { language, ...(cursor ? { cursor } : {}),
-      ...(parent ? { parent } : {}) } }));
+  const chapterPage = (agent: string) =>
+    settle(() =>
+      main.v1.me
+        .agents({ agent: idOf(agent) })
+        .works({ id: idOf(header.id) })
+        .chapters.get({
+          query: { language, ...(cursor ? { cursor } : {}), ...(parent ? { parent } : {}) },
+        }),
+    );
   let reader = readAs ?? actingSubject;
   let loaded = await chapterPage(reader);
   // The same person may open a writer's Book through another of their identities.
   // Main's Studio chapter read is fenced to the Book's maintainer, so resolve one credited
   // author among the identities this person controls when the current identity is refused.
-  if (!loaded.ok && (loaded.failure === 'missing' || loaded.failure === 'denied') && agents.length > 1) {
-    const credits = await settle(() => main.v1.works({ id: idOf(header.id) })['agent-credits']
-      .get({ query: { actingSubject } }));
-    const writer = credits.ok && credits.data.items.find(credit => credit.role === 'author'
-      && credit.agent !== actingSubject && agents.some(agent => agent.iri === credit.agent));
+  if (
+    !loaded.ok &&
+    (loaded.failure === 'missing' || loaded.failure === 'denied') &&
+    agents.length > 1
+  ) {
+    const credits = await settle(() =>
+      main.v1.works({ id: idOf(header.id) })['agent-credits'].get({ query: { actingSubject } }),
+    );
+    const writer =
+      credits.ok &&
+      credits.data.items.find(
+        (credit) =>
+          credit.role === 'author' &&
+          credit.agent !== actingSubject &&
+          agents.some((agent) => agent.iri === credit.agent),
+      );
     if (writer) {
       reader = writer.agent;
       loaded = await chapterPage(reader);
     }
   }
-  const page = loaded.ok ? { ok: true as const, data: loaded.data.page }
-    : !cursor && !parent && loaded.failure === 'missing' ? { ok: false as const, failure: 'none' as const } : loaded;
+  const page = loaded.ok
+    ? { ok: true as const, data: loaded.data.page }
+    : !cursor && !parent && loaded.failure === 'missing'
+      ? { ok: false as const, failure: 'none' as const }
+      : loaded;
   return { language, page, facts: loaded.ok ? loaded.data.facts : [], readAs: reader };
 }
 
 export type { ChapterFact, ChapterFacts, ChapterState, ChapterWriter } from './outline.ts';
 
 /** Names an owned writer from this person's current identity list. */
-export async function readChapterFacts(agent: AgentOption, agents: readonly AgentOption[], book: string,
-  chapters: BookChaptersView): Promise<ChapterFacts> {
+export async function readChapterFacts(
+  agent: AgentOption,
+  agents: readonly AgentOption[],
+  book: string,
+  chapters: BookChaptersView,
+): Promise<ChapterFacts> {
   void book;
   return chapterFacts(agent, agents, chapters.page.ok ? chapters.page.data : null, chapters.facts);
 }
 
 /** The Studio Agent's texts of one Work, one per language. */
-export async function readWorkTexts(actingSubject: string, work: string): Promise<Loaded<MyText[]>> {
+export async function readWorkTexts(
+  actingSubject: string,
+  work: string,
+): Promise<Loaded<MyText[]>> {
   const main = await mainApi();
-  return scan(myTexts(main, actingSubject), item => item.work?.id === work);
+  return scan(myTexts(main, actingSubject), (item) => item.work?.id === work);
 }
 
-export interface WorkSubmissions { submissions: Loaded<Submission[]>; realms: Record<string, RealmInfo> }
+export interface WorkSubmissions {
+  submissions: Loaded<Submission[]>;
+  realms: Record<string, RealmInfo>;
+}
 
 /** What Realms decided about one Work's submissions by the Studio Agent. */
-export async function readWorkSubmissions(actingSubject: string, work: string, locale: UiLocale): Promise<WorkSubmissions> {
+export async function readWorkSubmissions(
+  actingSubject: string,
+  work: string,
+  locale: UiLocale,
+): Promise<WorkSubmissions> {
   const main = await mainApi();
-  const submissions = await scan(mySubmissions(main, actingSubject), item => item.work === work);
-  const realms = submissions.ok ? await realmInfo(main, actingSubject, submissions.data.map(item => item.realm), locale)
+  const submissions = await scan(mySubmissions(main, actingSubject), (item) => item.work === work);
+  const realms = submissions.ok
+    ? await realmInfo(
+        main,
+        actingSubject,
+        submissions.data.map((item) => item.realm),
+        locale,
+      )
     : {};
   return { submissions, realms };
 }
 
 /** The Work's public texts by this Agent: what a Realm can review. */
-export async function readPublishedTexts(actingSubject: string, mainVersion: string):
-  Promise<Loaded<NativeVariants['variants']>> {
+export async function readPublishedTexts(
+  actingSubject: string,
+  mainVersion: string,
+): Promise<Loaded<NativeVariants['variants']>> {
   const main = await mainApi();
-  const loaded = await settle(() => main.v1['main-versions']({ mainVersion: idOf(mainVersion) })['native-variants']
-    .get({ query: {} }));
-  return loaded.ok ? { ok: true, data: loaded.data.variants.filter(variant => variant.author === actingSubject) } : loaded;
+  const loaded = await settle(() =>
+    main.v1['main-versions']({ mainVersion: idOf(mainVersion) })['native-variants'].get({
+      query: {},
+    }),
+  );
+  return loaded.ok
+    ? { ok: true, data: loaded.data.variants.filter((variant) => variant.author === actingSubject) }
+    : loaded;
 }
 
-export interface RealmOption extends Omit<RealmChoice, 'reviewMode'> { reviewMode: ReviewMode | null }
+export interface RealmOption extends Omit<RealmChoice, 'reviewMode'> {
+  reviewMode: ReviewMode | null;
+}
 
 /** Realms to submit to: the first page of the directory, each with its review mode. */
-export async function readRealmChoices(actingSubject: string, locale: UiLocale): Promise<Loaded<RealmOption[]>> {
+export async function readRealmChoices(
+  actingSubject: string,
+  locale: UiLocale,
+): Promise<Loaded<RealmOption[]>> {
   const main = await mainApi();
-  const loaded = await settle(() => mainApiWithToken(undefined).v1.realms.get({ query: { limit: 20, language: locale } }));
+  const loaded = await settle(() =>
+    mainApiWithToken(undefined).v1.realms.get({ query: { limit: 20, language: locale } }),
+  );
   if (!loaded.ok) return loaded;
-  const info = await realmInfo(main, actingSubject, loaded.data.items.map(item => item.id), locale);
-  return { ok: true, data: loaded.data.items.map(item => ({ ...item, reviewMode: info[item.id]?.reviewMode ?? null })) };
+  const info = await realmInfo(
+    main,
+    actingSubject,
+    loaded.data.items.map((item) => item.id),
+    locale,
+  );
+  return {
+    ok: true,
+    data: loaded.data.items.map((item) => ({
+      ...item,
+      reviewMode: info[item.id]?.reviewMode ?? null,
+    })),
+  };
 }
 
 /** The Work's accepted tags, as readers see them. */
-export async function readTags(actingSubject: string, work: string, locale: UiLocale): Promise<Loaded<ClassificationPage>> {
+export async function readTags(
+  actingSubject: string,
+  work: string,
+  locale: UiLocale,
+): Promise<Loaded<ClassificationPage>> {
   const main = await mainApi();
-  return settle(() => main.v1.works({ id: idOf(work) }).classifications.get({ query: { actingSubject, language: locale,
-    scope: 'global', limit: 20 } }));
+  return settle(() =>
+    main.v1
+      .works({ id: idOf(work) })
+      .classifications.get({
+        query: { actingSubject, language: locale, scope: 'global', limit: 20 },
+      }),
+  );
 }
 
 export interface StudioText {
@@ -334,26 +600,46 @@ export interface StudioText {
 }
 
 /** One text to edit, at Main's current draft head (or the revision the address names when Main cannot say). */
-export async function readStudioText(actingSubject: string, contribution: string, revision: string | null):
-  Promise<StudioText> {
+export async function readStudioText(
+  actingSubject: string,
+  contribution: string,
+  revision: string | null,
+): Promise<StudioText> {
   const main = await mainApi();
-  const current: Loaded<TextHead> = await settle(() => main.v1.contributions({ contribution }).get({ query: { actingSubject } }));
+  const current: Loaded<TextHead> = await settle(() =>
+    main.v1.contributions({ contribution }).get({ query: { actingSubject } }),
+  );
   const head = current.ok ? current.data.draftHead : null;
   const exact = head ?? (revision ? iri(revision) : null);
-  if (!exact) return { head: null, publication: null, publicationHead: null,
-    draft: { ok: false, failure: current.ok ? 'missing' : current.failure } };
-  const draft = await settle(() => main.v1.contributions({ contribution })
-    .drafts({ revision: idOf(exact) }).get({ query: { actingSubject } }));
+  if (!exact)
+    return {
+      head: null,
+      publication: null,
+      publicationHead: null,
+      draft: { ok: false, failure: current.ok ? 'missing' : current.failure },
+    };
+  const draft = await settle(() =>
+    main.v1
+      .contributions({ contribution })
+      .drafts({ revision: idOf(exact) })
+      .get({ query: { actingSubject } }),
+  );
   const publicationHead = current.ok ? current.data.publicationHead : null;
-  return { head, draft, publicationHead,
-    publication: current.ok ? publicationHead ? 'public' : 'draft' : null };
+  return {
+    head,
+    draft,
+    publicationHead,
+    publication: current.ok ? (publicationHead ? 'public' : 'draft') : null,
+  };
 }
 
 /** One Work's header as the Studio Agent reads it. */
-export const readWorkHeader = cache(async (actingSubject: string, id: string, locale: UiLocale): Promise<Loaded<WorkHeader>> => {
-  const main = await mainApi();
-  return settle(() => main.v1.works({ id }).get({ query: { language: locale, actingSubject } }));
-});
+export const readWorkHeader = cache(
+  async (actingSubject: string, id: string, locale: UiLocale): Promise<Loaded<WorkHeader>> => {
+    const main = await mainApi();
+    return settle(() => main.v1.works({ id }).get({ query: { language: locale, actingSubject } }));
+  },
+);
 
 export interface StudioChapter {
   chapter: { id: string; title: WorkName; language: string; direction: 'ltr' | 'rtl' };
@@ -378,34 +664,80 @@ export interface StudioChapter {
  * chapter list names (`requested`); an address without one opens the
  * chapter's existing text, else writes in the language of its title.
  */
-export async function readStudioChapter(actingSubject: string, chapter: string, revision: string | null, locale: UiLocale,
-  requested: string | null = null): Promise<Loaded<StudioChapter>> {
+export async function readStudioChapter(
+  actingSubject: string,
+  chapter: string,
+  revision: string | null,
+  locale: UiLocale,
+  requested: string | null = null,
+): Promise<Loaded<StudioChapter>> {
   const main = await mainApi();
-  const [header, listed] = await Promise.all([readWorkHeader(actingSubject, chapter, locale),
-    settle(() => main.v1.works({ id: chapter })['content-variants'].get({ query: { actingSubject } }))]);
+  const [header, listed] = await Promise.all([
+    readWorkHeader(actingSubject, chapter, locale),
+    settle(() =>
+      main.v1.works({ id: chapter })['content-variants'].get({ query: { actingSubject } }),
+    ),
+  ]);
   if (!header.ok) return header;
   const titled = ownLanguageOf(header.data);
-  const written = listed.ok ? listed.data.items.map(item => item.language.tag).filter((tag): tag is string => !!tag) : [];
-  const language = canonicalLanguage(requested
-    ?? written.find(tag => tag.toLowerCase() === titled.toLowerCase()) ?? written[0] ?? titled);
+  const written = listed.ok
+    ? listed.data.items.map((item) => item.language.tag).filter((tag): tag is string => !!tag)
+    : [];
+  const language = canonicalLanguage(
+    requested ??
+      written.find((tag) => tag.toLowerCase() === titled.toLowerCase()) ??
+      written[0] ??
+      titled,
+  );
   const variant = await chapterVariant(header.data.id, language);
   // Main lists a chapter's variant heads to the Agent that writes it or holds a grant to; to others it answers 404.
-  const known = listed.ok ? listed.data.items.find(item => item.variantId === variant)
-    ?? listed.data.items.find(item => item.language.tag?.toLowerCase() === language.toLowerCase()) : undefined;
+  const known = listed.ok
+    ? (listed.data.items.find((item) => item.variantId === variant) ??
+      listed.data.items.find((item) => item.language.tag?.toLowerCase() === language.toLowerCase()))
+    : undefined;
   const head = known?.draftHead ?? (listed.ok ? null : revision);
-  const base = { chapter: { id: header.data.id, title: { value: header.data.title.value, language },
-    language, direction: directionOf(language) }, variant: known?.variantId ?? variant,
-  publication: known?.publicationHead ?? null, eligibility: known?.eligibilityHead ?? null };
+  const base = {
+    chapter: {
+      id: header.data.id,
+      title: { value: header.data.title.value, language },
+      language,
+      direction: directionOf(language),
+    },
+    variant: known?.variantId ?? variant,
+    publication: known?.publicationHead ?? null,
+    eligibility: known?.eligibilityHead ?? null,
+  };
   if (!head) {
-    return { ok: true, data: { ...base, basis: listed.ok ? 'main' : 'none', head: null, body: '', digest: null,
-      epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null } };
+    return {
+      ok: true,
+      data: {
+        ...base,
+        basis: listed.ok ? 'main' : 'none',
+        head: null,
+        body: '',
+        digest: null,
+        epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null,
+      },
+    };
   }
-  const exact = await settle(() => main.v1['content-revisions']({ revision: head }).get({ query: { actingSubject } }));
+  const exact = await settle(() =>
+    main.v1['content-revisions']({ revision: head }).get({ query: { actingSubject } }),
+  );
   if (!exact.ok) return exact;
   const body = exact.data.body.body;
   if (exact.data.reference.resourceId !== header.data.id || typeof body !== 'string') {
     return { ok: false, failure: 'missing' };
   }
-  return { ok: true, data: { ...base, variant: exact.data.reference.variantId, basis: known ? 'main' : 'address',
-    head, body, digest: exact.data.reference.byteDigest, epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null } };
+  return {
+    ok: true,
+    data: {
+      ...base,
+      variant: exact.data.reference.variantId,
+      basis: known ? 'main' : 'address',
+      head,
+      body: editorValue(body, exact.data.body.document),
+      digest: exact.data.reference.byteDigest,
+      epoch: listed.ok ? listed.data.sourcePosition.dataEpoch : null,
+    },
+  };
 }

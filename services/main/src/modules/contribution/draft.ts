@@ -3,16 +3,17 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftTriples } from './private-projection.ts';
+import { serializeDocument } from '@rezics/document';
+import { authoredDocumentBody, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const CONTRIBUTION_PROFILE = 'https://rezics.com/definition/text-contribution-v1';
 
-export interface CreateTextContributionInput {
+export interface CreateTextContributionInput extends AuthoredBodyInput {
   work: string;
   language: string;
-  body: string;
   actingSubject: string;
 }
 
@@ -36,16 +37,17 @@ export class ContributionWorkUnavailable extends Error {}
 export class InvalidContributionInput extends Error {}
 
 export function textContributionDigest(input: CreateTextContributionInput): string {
+  let content;
+  try { content = authoredDocumentBody(input); }
+  catch { throw new InvalidContributionInput('invalid text Contribution body'); }
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.work)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.actingSubject)
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language)
-    || typeof input.body !== 'string' || Buffer.byteLength(input.body, 'utf8') > 65536
-    || input.body.includes('\0')) {
+    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language)) {
     throw new InvalidContributionInput('invalid text Contribution input');
   }
   return hash(JSON.stringify({ family: 'create-text-contribution-v1', work: input.work,
     language: input.language, author: input.actingSubject,
-    bodyDigest: hash(JSON.stringify(input.body)) }));
+    bodyDigest: hash(content.document ? serializeDocument(content.document) : JSON.stringify(content.body)) }));
 }
 
 export function textContributionReceiptIri(admissionId: string): string {
@@ -116,6 +118,7 @@ export async function activateTextContribution(
   input: CreateTextContributionInput,
 ): Promise<TextContributionReceipt> {
   const digest = textContributionDigest(input);
+  const content = authoredDocumentBody(input);
   if (admission.action !== 'contribution.create'
     || admission.scope !== `contribution:create:${input.work}`
     || admission.actingSubject !== input.actingSubject
@@ -138,7 +141,7 @@ export async function activateTextContribution(
   const validations = await validateTextContributionCandidate(env, contribution, draftRevision, input);
   const manifest = prepareComponent(env.objectDirectory, contribution,
     { work: input.work, author: input.actingSubject, language: input.language,
-      body: input.body, publication: 'draft' }, CONTRIBUTION_PROFILE);
+      ...content, publication: 'draft' }, CONTRIBUTION_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Contribution admission expired');
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
@@ -162,7 +165,7 @@ export async function activateTextContribution(
             rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
         }
         GRAPH ${iri(PRIVATE_SEARCH_GRAPH)} {
-          ${privateDraftTriples(contribution, draftRevision, input.work, input.language, input.body)}
+          ${privateDraftTriples(contribution, draftRevision, input.work, input.language, content.body)}
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;

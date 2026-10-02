@@ -28,6 +28,8 @@ import { authorizedReadProblems, mainSelectionReadResult, publicationRejectionWr
   from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { documentSnapshotSchema } from '../api-document.ts';
+import { readExactContributionDraft } from '../modules/contribution/history.ts';
 
 const nativeVariantRef = t.Object({ contribution: t.String(), publicationDecision: t.String(),
   selectedDraft: t.String(), language: t.String(), author: t.String() });
@@ -38,7 +40,7 @@ const nativeVariantSelection = t.Object({ profile: t.Literal('reader-native-vari
   work: t.String(), mainVersion: t.String(), mainSelection: t.Nullable(t.String()),
   reason: t.Union([t.Literal('personal-preference'), t.Literal('main-default'),
     t.Literal('preferred-ineligible')]), preference: readerPreferenceRef,
-  chosen: t.Object({ ...nativeVariantRef.properties, body: t.String() }),
+  chosen: t.Object({ ...nativeVariantRef.properties, body: t.String(), document: t.Optional(documentSnapshotSchema) }),
 });
 
 const realmRecommendationRef = t.Nullable(t.Object({ contribution: t.String(), revision: t.String() }));
@@ -55,7 +57,7 @@ const realmNativeVariantSelection = t.Union([
       t.Literal('preferred-ineligible'), t.Literal('recommended-ineligible'),
       t.Literal('preferred-and-recommended-ineligible')]),
     preference: readerPreferenceRef, recommendation: realmRecommendationRef,
-    chosen: t.Object({ ...nativeVariantRef.properties, body: t.String() }),
+    chosen: t.Object({ ...nativeVariantRef.properties, body: t.String(), document: t.Optional(documentSnapshotSchema) }),
   }),
 ]);
 
@@ -311,11 +313,16 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
                 + `/selections/${row.selection!.value.slice('https://rezics.com/id/'.length)}`
                 + `/media/${item.use}` })) };
         }
+        const exact = await readExactContributionDraft(work.environment,
+          row.contribution.value, row.draft.value, async () => true);
+        if (exact.work !== row.work!.value || exact.language !== row.language.value || exact.body !== row.body.value) {
+          throw new NativeVariantUnavailable('Realm selection differs from exact draft');
+        }
         return Response.json({ work: row.work!.value, mainVersion: main, realm,
           effectiveContext: row.effectiveContext!.value, reason: row.reason!.value,
           selection: row.selection!.value, contribution: row.contribution!.value,
           selectedDraft: row.draft!.value, language: row.language!.value,
-          body: row.body!.value, ...(media ? { media } : {}) },
+          body: row.body!.value, ...(exact.document ? { document: exact.document } : {}), ...(media ? { media } : {}) },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         if (error instanceof RealmMediaMissing) return problem(404, 'selection_unavailable', 'Realm media selection is unavailable');
@@ -481,7 +488,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             return Response.json({ profile: 'reader-native-variant-selection-v1',
               work: preferred.work, mainVersion, mainSelection: null,
               reason: 'personal-preference', preference,
-              chosen: { ...preferred.variant, body: preferred.body } },
+              chosen: { ...preferred.variant, body: preferred.body, document: preferred.document } },
             { headers: { 'cache-control': 'no-store' } });
           }
         }
@@ -489,7 +496,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         return Response.json({ profile: 'reader-native-variant-selection-v1',
           work: fallback.work, mainVersion, mainSelection: fallback.selection,
           reason: preference ? 'preferred-ineligible' : 'main-default', preference,
-          chosen: { ...fallback.variant, body: fallback.body } },
+          chosen: { ...fallback.variant, body: fallback.body, document: fallback.document } },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
@@ -589,7 +596,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             return Response.json({ profile, status: 'selected', work: preferred.work,
               mainVersion, realm, mainSelection: null, realmSelection: null,
               reason: 'personal-preference', preference, recommendation,
-              chosen: { ...preferred.variant, body: preferred.body } },
+              chosen: { ...preferred.variant, body: preferred.body, document: preferred.document } },
             { headers: { 'cache-control': 'no-store' } });
           }
         }
@@ -602,7 +609,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
             return Response.json({ profile, status: 'selected', work: recommended.work,
               mainVersion, realm, mainSelection: null, realmSelection: null,
               reason: 'realm-recommendation', preference, recommendation,
-              chosen: { ...recommended.variant, body: recommended.body } },
+              chosen: { ...recommended.variant, body: recommended.body, document: recommended.document } },
             { headers: { 'cache-control': 'no-store' } });
           }
         }
@@ -612,7 +619,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           reason: preference && recommendation ? 'preferred-and-recommended-ineligible'
             : preference ? 'preferred-ineligible'
             : recommendation ? 'recommended-ineligible' : 'main-default',
-          preference, recommendation, chosen: { ...fallback.variant, body: fallback.body } },
+          preference, recommendation, chosen: { ...fallback.variant, body: fallback.body, document: fallback.document } },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })
@@ -628,7 +635,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         return Response.json({ work: selected.work, mainVersion: main,
           selection: selected.selection, contribution: selected.variant.contribution,
           selectedDraft: selected.variant.selectedDraft, language: selected.variant.language,
-          body: selected.body }, { headers: { 'cache-control': 'no-store' } });
+          body: selected.body, document: selected.document }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });
 }

@@ -1,6 +1,8 @@
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readComponentState, RevisionCorrupt, RevisionNotFound } from '../work/history.ts';
 import { CONTRIBUTION_PROFILE } from './draft.ts';
+import type { DocumentSnapshot } from '@rezics/document';
+import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 
 export interface ExactContributionDraft {
   contribution: string;
@@ -9,6 +11,7 @@ export interface ExactContributionDraft {
   author: string;
   language: string;
   body: string;
+  document?: DocumentSnapshot;
   predecessor?: string;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
 }
@@ -56,8 +59,11 @@ export async function readExactContributionDraft(
     }
   }`);
   if (identity.boolean !== true) throw new RevisionCorrupt('draft payload differs from Contribution identity');
+  let content;
+  try { content = retainedDocumentBody(state); }
+  catch { throw new RevisionCorrupt('draft document or text projection is corrupt'); }
   return { contribution, revision, work: state.work, author: state.author,
-    language: state.language, body: state.body,
+    language: state.language, ...content,
     ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
     sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
       sequence: row.sequence.value } };

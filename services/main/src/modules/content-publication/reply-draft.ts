@@ -10,6 +10,8 @@ import { targetRead } from '../target/resolve.ts';
 import { WorkReadMissing } from '../work/read-session.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { ContentDraftStale, contentDraftReceiptIri, sealContentDraftAdmission } from './draft.ts';
+import { authoredDocumentBody } from '../../../../content/src/document-body.ts';
+import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 
 /** Direct root probes run before and after admission; Access baseline and
  * delegated target authority retain their owners' separate cost contracts. */
@@ -19,7 +21,7 @@ export interface MemberReplyDraft {
   originRealm?: string | null;
   reply: string; variantId: string; rootTarget: string; rootRevision: string;
   language: string; direction: 'ltr' | 'rtl' | 'none'; expectedHead: string | null;
-  body: string | null; actingSubject: string;
+  body?: string | null; document?: DocumentSnapshot; actingSubject: string;
 }
 
 /** The author/root binding and every edit/delete use Content's draft CAS and
@@ -33,10 +35,18 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     reply: string; variantId: string; revisionId: string; revisionDigest: string; predecessor: string | null; deleted: boolean;
     sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+  const deleted = input.body === null && input.document === undefined;
+  let body;
+  try { body = deleted ? { body: '' } : authoredDocumentBody({
+    ...(input.body !== undefined ? { body: input.body as string } : {}),
+    ...(input.document !== undefined ? { document: input.document } : {}),
+  }, MEMBER_REPLY_COST.bodyBytes); }
+  catch { throw new ContentConflict('invalid member reply body'); }
   if (![input.reply, input.rootTarget, input.rootRevision, input.actingSubject].every(value => native.test(value))
     || input.originRealm != null && !native.test(input.originRealm)
     || !/^urn:rezics:variant:[0-9a-f-]{36}$/.test(input.variantId)
-    || (input.body === null ? input.expectedHead === null : !input.body || Buffer.byteLength(input.body, 'utf8') > MEMBER_REPLY_COST.bodyBytes)) {
+    || (deleted ? input.expectedHead === null
+      : body.document ? !hasDocumentContent(body.document) : !body.body)) {
     throw new ContentConflict('invalid member reply draft');
   }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -63,8 +73,8 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   const command: SaveDraftCommand = { operationId: '', variant: { id: input.variantId,
     resourceId: input.reply, language: { kind: 'tag', tag: input.language, originalTag: input.language },
     direction: input.direction }, expectedHead: input.expectedHead, model: 'member-reply-v1',
-    sourceRevision: input.rootRevision, provenance: {}, serializedJson: JSON.stringify({ body: input.body ?? '',
-      deleted: input.body === null, rootTarget: input.rootTarget, rootRevision: input.rootRevision,
+    sourceRevision: input.rootRevision, provenance: {}, serializedJson: JSON.stringify({ ...body,
+      deleted, rootTarget: input.rootTarget, rootRevision: input.rootRevision,
       ...(input.originRealm ? { originRealm: input.originRealm } : {}) }) };
   const digest = contentDraftIntentDigest(command, input.actingSubject);
   const scope = `content:draft:${input.reply}`;
@@ -108,6 +118,6 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   if (saved.outcome !== 'succeeded') throw new AdmissionDenied('reply draft was cancelled');
   return { reply: input.reply, variantId: input.variantId, revisionId: saved.revisionId!,
     revisionDigest: createHash('sha256').update(command.serializedJson).digest('hex'),
-    predecessor: saved.predecessor, deleted: input.body === null,
+    predecessor: saved.predecessor, deleted,
     sourcePosition: saved.position, replayed: admission.replayed || saved.replayed };
 }

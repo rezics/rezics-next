@@ -9,10 +9,9 @@ import { cn } from '../utils.ts';
  * Han from Latin and digits. Give it `lang` and `dir` for the text's own language, not the
  * interface's.
  *
- * It is a native textarea on purpose. REZICS text drafts (`content-text-v1`) are plain text
- * with one paragraph per line, so a rich-text model would add a format Main cannot store, while
- * the native control keeps every script's IME composition, spellcheck, undo, mobile keyboards
- * and assistive technology intact. Handlers that react to typing should skip events whose
+ * Use the native textarea for plain fields such as synopses and notes. Document authoring uses
+ * RichTextEditor and its structured snapshot. This control keeps every script's IME composition,
+ * spellcheck, undo, mobile keyboards and assistive technology intact. Handlers should skip events whose
  * `nativeEvent.isComposing` is true and act on `compositionend` instead.
  */
 export const Editor = ({ className, typeface = 'serif', ...props }: React.ComponentProps<'textarea'> & {

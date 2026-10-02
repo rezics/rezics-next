@@ -5,6 +5,7 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 import { PUBLICATION_PROFILE } from '../contribution/publish.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   prepareWorkComponent, IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
@@ -63,6 +64,7 @@ export interface FixedRelease {
   language: string;
   bodyDigest: string;
   body: string;
+  document?: DocumentSnapshot;
   sealedBy: string;
   externalReleases: SealedExternalRelease[];
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
@@ -511,6 +513,6 @@ export async function readFixedRelease(env: WorkActivationEnvironment, release: 
     throw new RevisionCorrupt('fixed release body differs from sealed digest');
   }
   return { release, ...fields, externalReleases: externalReleases as SealedExternalRelease[],
-    body: exact.body, sourcePosition: {
+    body: exact.body, ...(exact.document ? { document: exact.document } : {}), sourcePosition: {
     datasetId: 'product', dataEpoch: row.epoch.value, sequence: row.sequence!.value } };
 }

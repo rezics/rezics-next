@@ -47,6 +47,7 @@ import { readTextContributionEditReceipt, textContributionEditDigest,
 import { PUBLICATION_PROFILE, readTextPublicationReceipt, textPublicationDigest,
   textPublicationReceiptIri } from '../contribution/publish.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
+import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 import { PRIVATE_SEARCH_GRAPH, privateDraftTriples, privateDraftUnit } from '../contribution/private-projection.ts';
 import { MAIN_SELECTION_PROFILE, PUBLIC_SEARCH_GRAPH, mainSelectionDigest,
   mainSelectionReceiptIri, readMainSelectionReceipt } from './select-main.ts';
@@ -2649,10 +2650,11 @@ export async function reconcileRetainedContributionDraftCreate(
   }
   const state = readComponentState(env.objectDirectory, draftManifest,
     contribution, CONTRIBUTION_PROFILE);
+  const content = retainedDocumentBody(state);
   if (state.work !== work || state.author !== author || state.language !== language
     || typeof state.body !== 'string' || state.publication !== 'draft'
     || textContributionDigest({ work, actingSubject: author, language,
-      body: state.body }) !== receipt.requestDigest) {
+      ...(content.document ? { document: content.document } : { body: content.body }) }) !== receipt.requestDigest) {
     throw new RetainedEffectConflict('retained Contribution payload differs from receipt');
   }
   const client = await accessPool.connect();
@@ -2829,6 +2831,7 @@ export async function reconcileRetainedContributionDraftEdit(
   }
   const state = readComponentState(env.objectDirectory, draftManifest,
     contribution, CONTRIBUTION_PROFILE);
+  const content = retainedDocumentBody(state);
   if (state.work !== work || state.author !== author || state.language !== language
     || typeof state.body !== 'string' || state.publication !== 'draft') {
     throw new RetainedEffectConflict('retained Contribution edit payload differs');
@@ -2850,7 +2853,8 @@ export async function reconcileRetainedContributionDraftEdit(
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
       || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
-      || textContributionEditDigest({ contribution, expectedHead, body: state.body,
+      || textContributionEditDigest({ contribution, expectedHead,
+        ...(content.document ? { document: content.document } : { body: content.body }),
         actingSubject: admitted.acting_subject }) !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove retained draft edit');
     }

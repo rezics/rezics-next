@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { readStudioText, readWorkHeader } from '../../../../../../../../features/studio/read.ts';
 import { studioAgent } from '../../../../../../../../features/studio/route.ts';
 import { TextEditor } from '../../../../../../../../features/studio/text-editor.tsx';
+import { editorValue } from '../../../../../../../../features/document-editor/body.ts';
 import { iri, uuid, workKind } from '../../../../../../../../features/studio/types.ts';
 import { WriteUnavailable } from '../../../../../../../../features/studio/write-states.tsx';
 import { getMessages, getTranslation, requestLocale } from '../../../../../../../../i18n/server.ts';
@@ -35,6 +36,6 @@ export default async function TextPage({ params, searchParams }: {
   return <TextEditor key={opened.head ?? draft.revision} agent={agent} work={{ id: data.id, title: data.title,
     mainVersion: data.mainVersion, book: workKind(data.types) === 'book' }} language={draft.language}
     text={draft.contribution} locale={locale} messages={messages}
-    initial={{ head: opened.head ?? draft.revision, body: draft.body, publication: opened.publication,
+    initial={{ head: opened.head ?? draft.revision, body: editorValue(draft.body, draft.document), publication: opened.publication,
       publicationHead: opened.publicationHead }} />;
 }

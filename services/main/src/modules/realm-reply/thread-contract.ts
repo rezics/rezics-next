@@ -1,6 +1,7 @@
 import { t } from 'elysia';
 import { pageFields, readAvatar, readId, readName, readPosition, readUuid } from '../work/read-contract.ts';
 import { DISCUSSION_TITLE_CHARS } from './discussion-text.ts';
+import { documentSnapshotSchema } from '../../api-document.ts';
 
 /**
  * Bounds of the Realm thread reads. A list page ranks at most `cohort` of the
@@ -10,7 +11,7 @@ import { DISCUSSION_TITLE_CHARS } from './discussion-text.ts';
  * exist. Reply counts walk at most `countPerThread` replies per listed thread.
  */
 export const REALM_THREAD_COST = { pageSize: 20, cohort: 256, replies: 191, depth: 32, ancestors: 32,
-  countPerThread: 64, excerptChars: 400, bodyChars: 20_000, contentBatch: 64 } as const;
+  countPerThread: 64, excerptChars: 400, bodyChars: 20_000, contentBatch: 64, responseBytes: 4 * 1024 * 1024 } as const;
 
 export const threadSort = t.Union([t.Literal('best'), t.Literal('new'), t.Literal('top')]);
 export const threadWindow = t.Union([t.Literal('week'), t.Literal('month'), t.Literal('all')]);
@@ -52,6 +53,8 @@ export const realmThreadReply = t.Object({ reply: readId, placement: readId, par
   author: threadAuthor, time: t.String(), language: t.Nullable(t.String()), revisionId: readUuid,
   title: t.Nullable(t.String({ maxLength: DISCUSSION_TITLE_CHARS + 1 })),
   body: t.String({ maxLength: REALM_THREAD_COST.bodyChars }),
+  /** Complete snapshot, including the root heading; renderers may omit it when already shown as title. */
+  document: t.Optional(documentSnapshotSchema),
   /** The reader blocked this author; the body and author are withheld from this read. */
   blocked: t.Optional(t.Boolean()), vote: threadVote });
 export const realmThreadQuery = t.Object({ sort: t.Optional(threadSort),

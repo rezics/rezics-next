@@ -4,6 +4,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import type { Pool, PoolClient } from 'pg';
 import { outbox, ownerControl, receipt } from './typed-schema.ts';
 import { ContentEmbedInvalid, directContentEmbeds } from './embed.ts';
+import { retainedDocumentBody } from './document-body.ts';
+import { hasDocumentContent } from '@rezics/document';
 
 export class ContentConflict extends Error {}
 export class ContentUnavailable extends Error {}
@@ -488,6 +490,10 @@ export class ContentCore {
     try { body = JSON.parse(command.serializedJson); }
     catch { throw new ContentConflict('body is not JSON'); }
     if (!body || Array.isArray(body) || typeof body !== 'object') throw new ContentConflict('body must be a JSON object');
+    if (body.document !== undefined) {
+      try { retainedDocumentBody(body); }
+      catch { throw new ContentConflict('invalid document or text projection'); }
+    }
     if (command.model === 'member-reply-v1'
       && (command.provenance.kind !== 'admitted-original-contribution-v1'
         || body.originRealm != null && (typeof body.originRealm !== 'string'
@@ -499,7 +505,8 @@ export class ContentCore {
         || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(body.rootRevision)
         || typeof body.body !== 'string' || Buffer.byteLength(body.body, 'utf8') > 8192
         || typeof body.deleted !== 'boolean'
-        || (body.deleted ? body.body !== '' || command.expectedHead === null : body.body.length === 0))) {
+        || (body.deleted ? body.body !== '' || body.document !== undefined || command.expectedHead === null
+          : body.document !== undefined ? !hasDocumentContent(retainedDocumentBody(body).document!) : body.body.length === 0))) {
       throw new ContentConflict('invalid author-bound reply draft');
     }
     if (command.model === 'content-shape-v1') {
@@ -765,6 +772,7 @@ export class ContentCore {
         if (!body || Array.isArray(body) || typeof body !== 'object' || stable(body) !== stable(row.body)) {
           return { revisionId, status: 'corrupt' };
         }
+        if (body.document !== undefined) retainedDocumentBody(body);
         return { revisionId, status: 'available', reference: referenceFromRow(row), serializedJson, body };
       } catch { return { revisionId, status: 'corrupt' }; }
     });

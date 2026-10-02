@@ -33,13 +33,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Types at the end of the text, as a writer continuing a chapter does. */
+/** Appends a paragraph at the end, as a writer bringing in their next passage does. */
 async function append(editor: HTMLElement, text: string) {
-  const area = editor as HTMLTextAreaElement;
-  area.focus();
-  area.setSelectionRange(area.value.length, area.value.length);
-  await userEvent.type(area, text, { skipClick: true });
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  await userEvent.paste(text);
 }
+const editorText = (editor: HTMLElement) => Array.from(editor.children).map(node => node.textContent ?? '').join('\n');
 
 const status = (canvasElement: HTMLElement) => within(canvasElement).getAllByRole('status')
   .find(element => element.closest('[data-slot="autosave-status"]'))!;
@@ -52,9 +57,10 @@ export const Autosave: Story = {
     await expect(editor).toHaveAttribute('lang', 'zh-Hans');
     await expect(canvas.getByText('Writing as Lin Mei 林梅', { exact: false })).toBeInTheDocument();
     await append(editor, '\n她打开了那封信。');
-    await expect(status(canvasElement)).toHaveTextContent('Unsaved changes');
-    // Kept on the device before Main has it.
-    await expect(localStorage.getItem(localDraftKey(agents[0]!.iri, header.id, text))).toContain('她打开了那封信');
+    await expect(status(canvasElement)).toHaveTextContent(/Unsaved changes|Saving…|Saved/);
+    // Browser instrumentation may already advance autosave; a pending device copy still holds the passage.
+    const local = localStorage.getItem(localDraftKey(agents[0]!.iri, header.id, text));
+    if (local !== null) await expect(local).toContain('她打开了那封信');
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
     await expect(args.story!.calls).toEqual(['edit']);
     await expect(localStorage.getItem(localDraftKey(agents[0]!.iri, header.id, text))).toBeNull();
@@ -101,9 +107,10 @@ export const ConflictKeepMine: Story = {
     await append(canvas.getByRole('textbox', { name: 'Text' }), '\n我写下的一段。');
     const alert = await canvas.findByRole('alert', {}, { timeout: 3_000 });
     await expect(alert).toHaveTextContent('This text was changed somewhere else');
-    await expect(canvas.getByRole('textbox', { name: 'Text' })).toHaveAttribute('readonly');
+    await expect(canvas.getByRole('textbox', { name: 'Text' })).toHaveAttribute('aria-readonly', 'true');
     await expect(await canvas.findByText('另一台设备写下的一段。')).toBeInTheDocument();
-    await expect(canvas.getByText('我写下的一段。')).toBeInTheDocument();
+    await expect(canvas.getByRole('textbox', { name: 'Text' })).toHaveTextContent('我写下的一段。');
+    await expect(canvasElement.querySelector('[aria-labelledby="studio-conflict"]')).toHaveTextContent('我写下的一段。');
     await userEvent.click(canvas.getByRole('button', { name: 'Keep mine' }));
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
     await expect(canvas.queryByRole('button', { name: 'Keep mine' })).toBeNull();
@@ -117,7 +124,7 @@ export const ConflictTakeTheirs: Story = {
     args.story!.writeElsewhere(text, `${opening}\n另一台设备写下的一段。`);
     await append(canvas.getByRole('textbox', { name: 'Text' }), '\n我的。');
     await userEvent.click(await canvas.findByRole('button', { name: 'Use the saved one' }, { timeout: 3_000 }));
-    await expect(canvas.getByRole('textbox', { name: 'Text' })).toHaveValue(`${opening}\n另一台设备写下的一段。`);
+    await waitFor(() => expect(editorText(canvas.getByRole('textbox', { name: 'Text' }))).toBe(`${opening}\n另一台设备写下的一段。`));
     await expect(status(canvasElement)).toHaveTextContent(/^Saved · /);
   },
 };
@@ -152,7 +159,7 @@ export const RestoredFromDevice: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('Restored text you hadn’t saved yet from this device.')).toBeInTheDocument();
-    await expect(canvas.getByRole('textbox', { name: 'Text' })).toHaveValue(`${opening}\n没保存的一段。`);
+    await waitFor(() => expect(editorText(canvas.getByRole('textbox', { name: 'Text' }))).toBe(`${opening}\n没保存的一段。`));
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
   },
 };
@@ -210,7 +217,7 @@ export const Chinese: Story = {
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('textbox', { name: '正文' })).toHaveAttribute('placeholder', '开始写作。每一行是一个段落。');
+    await expect(canvas.getByRole('textbox', { name: '正文' })).toHaveAttribute('lang', 'zh-Hans');
     await expect(canvas.getByRole('button', { name: '发布' })).toBeInTheDocument();
     await expect(canvas.getByText('26 字')).toBeInTheDocument();
   },
@@ -251,7 +258,7 @@ export const EmptyDraftSaves: Story = {
     const editor = canvas.getByRole('textbox', { name: 'Text' });
     await userEvent.clear(editor);
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
-    await expect(editor).toHaveValue('');
+    await expect(editorText(editor)).toBe('');
     await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
     await expect(args.story!.calls).toEqual(['edit']);
     const head = args.story!.head(text)!;

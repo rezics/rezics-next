@@ -19,6 +19,8 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { titleControlBasis } from './shared.ts';
 import { publicDomainRevisionCurrent } from '../modules/content-publication/public-domain-read.ts';
+import { authoredBodySchema } from '../api-document.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 
 const textDraftFields = {
   resourceId: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
@@ -27,7 +29,6 @@ const textDraftFields = {
     originalTag: t.String() }, { additionalProperties: false }),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl'), t.Literal('none')]),
   expectedHead: t.Union([t.String({ pattern: '^[0-9a-f-]{36}$' }), t.Null()]),
-  body: t.String({ maxLength: 65536 }),
   embeds: t.Optional(t.Array(t.String({
     pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
   }), { maxItems: 16 })),
@@ -51,11 +52,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
   return new Elysia()
     .post('/v1/content-drafts', {
       body: t.Union([
-        t.Object({ profile: t.Literal('content-text-v1'), ...textDraftFields },
-          { additionalProperties: false }),
-        t.Object({ profile: t.Literal('content-public-domain-text-v1'), ...textDraftFields,
-          assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }), source: publicDomainSource },
-        { additionalProperties: false }),
+        authoredBodySchema({ profile: t.Literal('content-text-v1'), ...textDraftFields }),
+        authoredBodySchema({ profile: t.Literal('content-public-domain-text-v1'), ...textDraftFields,
+          assessmentId: t.String({ pattern: '^[0-9a-f-]{36}$' }), source: publicDomainSource }),
       ]),
       response: { 200: contentDraftWriteResult, 201: contentDraftWriteResult,
         ...writeProblems, 413: problemResult(413) },
@@ -73,7 +72,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           { resourceId: body.resourceId,
             variant: { id: body.variantId, resourceId: body.resourceId,
               language: body.language, direction: body.direction },
-            expectedHead: body.expectedHead, body: body.body,
+            expectedHead: body.expectedHead,
+            ...('document' in body ? { document: body.document as DocumentSnapshot } : { body: body.body }),
             embeds: body.embeds,
             actingSubject: body.actingSubject, idempotencyKey,
             ...(body.profile === 'content-public-domain-text-v1' ? {
@@ -156,7 +156,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const selector = comment.target.selector;
         try {
           if (typeof text !== 'string') throw new ContentCommentInvalid('source has no text body');
-          const resolved = resolveParagraphSelector(text, selector.exact);
+          const resolved = resolveParagraphSelector(text, selector.exact, exact.body.document);
           if (resolved.prefix !== selector.prefix || resolved.suffix !== selector.suffix) {
             throw new ContentCommentInvalid('stored selector context differs');
           }
@@ -223,7 +223,7 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           }
           const selector = comment.target.selector;
           try {
-            const resolved = resolveParagraphSelector(text, selector.exact);
+            const resolved = resolveParagraphSelector(text, selector.exact, exact.body.document);
             if (resolved.prefix !== selector.prefix || resolved.suffix !== selector.suffix) {
               throw new ContentCommentInvalid('stored selector context differs');
             }

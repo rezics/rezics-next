@@ -1,4 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
+import { bodyInput, editorValue } from '../document-editor/body.ts';
 import type { SaveOutcome } from './autosave.ts';
 import { directionOf, idOf, type MainClient } from './types.ts';
 
@@ -10,8 +11,10 @@ import { directionOf, idOf, type MainClient } from './types.ts';
 
 type Failure = { status: number; value?: unknown };
 
-const field = (error: Failure, name: string) => (typeof error.value === 'object' && error.value !== null
-  && name in error.value ? (error.value as Record<string, unknown>)[name] : undefined);
+const field = (error: Failure, name: string) =>
+  typeof error.value === 'object' && error.value !== null && name in error.value
+    ? (error.value as Record<string, unknown>)[name]
+    : undefined;
 const code = (error: Failure) => String(field(error, 'code') ?? '');
 const offline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -25,7 +28,8 @@ export function saveOutcomeOf(error: Failure): SaveOutcome {
     return { kind: 'conflict', head: typeof head === 'string' ? head : null };
   }
   if (error.status === 401 || error.status === 403) return { kind: 'denied' };
-  if (error.status === 408 || error.status === 429 || error.status >= 500) return { kind: 'failed', retryable: true };
+  if (error.status === 408 || error.status === 429 || error.status >= 500)
+    return { kind: 'failed', retryable: true };
   return { kind: 'failed', retryable: false };
 }
 
@@ -35,13 +39,21 @@ export function saveOutcomeOf(error: Failure): SaveOutcome {
  * language: every device writes the same variant without having to read it.
  */
 export async function chapterVariant(chapter: string, language: string): Promise<string> {
-  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256',
-    new TextEncoder().encode(`rezics:studio:chapter-variant:v1\0${chapter}\0${language.toLowerCase()}`)));
-  const hex = [...bytes.slice(0, 16)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  const bytes = new Uint8Array(
+    await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(
+        `rezics:studio:chapter-variant:v1\0${chapter}\0${language.toLowerCase()}`,
+      ),
+    ),
+  );
+  const hex = [...bytes.slice(0, 16)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
   // RFC 9562 UUIDv8 (custom, name-based) with the RFC variant bits.
   const variant = ((Number.parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
-  return `urn:rezics:variant:${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${
-    hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  return `urn:rezics:variant:${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(
+    17,
+    20,
+  )}-${hex.slice(20, 32)}`;
 }
 
 export interface ChapterTarget {
@@ -54,32 +66,69 @@ export interface ChapterTarget {
 }
 
 /** What a save leaves for publishing: the exact bytes Main keeps and the Content owner epoch they belong to. */
-export interface DraftBasis { head: string; digest: string; epoch: string }
+export interface DraftBasis {
+  head: string;
+  digest: string;
+  epoch: string;
+}
 
 /** Saves a chapter draft on `expectedHead` (null for its first save); `onSaved` receives what publishing needs. */
-export async function saveChapterDraft(target: ChapterTarget, body: string, expectedHead: string | null, key: string,
-  onSaved: (basis: DraftBasis) => void, main: MainClient = browserMainApi()): Promise<SaveOutcome> {
+export async function saveChapterDraft(
+  target: ChapterTarget,
+  body: string,
+  expectedHead: string | null,
+  key: string,
+  onSaved: (basis: DraftBasis) => void,
+  main: MainClient = browserMainApi(),
+): Promise<SaveOutcome> {
   if (offline()) return { kind: 'offline' };
-  const saved = await main.v1['content-drafts'].post({ profile: 'content-text-v1', resourceId: target.chapter,
-    variantId: target.variant, language: { kind: 'tag', tag: target.language, originalTag: target.language },
-    direction: target.direction, expectedHead, body, actingSubject: target.actingSubject },
-  { headers: { 'idempotency-key': key } });
+  const saved = await main.v1['content-drafts'].post(
+    {
+      profile: 'content-text-v1',
+      resourceId: target.chapter,
+      variantId: target.variant,
+      language: { kind: 'tag', tag: target.language, originalTag: target.language },
+      direction: target.direction,
+      expectedHead,
+      ...bodyInput(body),
+      actingSubject: target.actingSubject,
+    },
+    { headers: { 'idempotency-key': key } },
+  );
   if (saved.error) return saveOutcomeOf(saved.error);
   if (!saved.data || 'operationId' in saved.data) return { kind: 'failed', retryable: true };
-  onSaved({ head: saved.data.revisionId, digest: saved.data.byteDigest, epoch: saved.data.sourcePosition.dataEpoch });
+  onSaved({
+    head: saved.data.revisionId,
+    digest: saved.data.byteDigest,
+    epoch: saved.data.sourcePosition.dataEpoch,
+  });
   return { kind: 'saved', head: saved.data.revisionId };
 }
 
 /** One exact chapter revision's text, or null when Main cannot give it to this Agent. */
-export async function readChapterRevision(actingSubject: string, revision: string,
-  main: MainClient = browserMainApi()): Promise<{ body: string; digest: string } | null> {
+export async function readChapterRevision(
+  actingSubject: string,
+  revision: string,
+  main: MainClient = browserMainApi(),
+): Promise<{ body: string; digest: string } | null> {
   if (!uuid.test(revision)) return null;
   const read = await main.v1['content-revisions']({ revision }).get({ query: { actingSubject } });
   const body = read.data?.body.body;
-  return read.data && typeof body === 'string' ? { body, digest: read.data.reference.byteDigest } : null;
+  return read.data && typeof body === 'string'
+    ? {
+        body: editorValue(body, read.data.body.document),
+        digest: read.data.reference.byteDigest,
+      }
+    : null;
 }
 
-export type PublishOutcome = 'done' | 'denied' | 'stale' | 'translation-basis-required' | 'pending' | 'failed';
+export type PublishOutcome =
+  | 'done'
+  | 'denied'
+  | 'stale'
+  | 'translation-basis-required'
+  | 'pending'
+  | 'failed';
 
 export interface ChapterPublication {
   /** The Content publication decision now current; the next update names it as its expected head. */
@@ -94,37 +143,96 @@ export interface ChapterPublication {
  * names the current publication and eligibility it replaces; a stale one is
  * refused rather than overwriting a publication made elsewhere.
  */
-export async function publishChapter(input: { target: ChapterTarget; basis: DraftBasis; current: ChapterPublication | null;
-  key: string }, main: MainClient = browserMainApi()): Promise<{ outcome: PublishOutcome; step: 'publish' | 'eligibility';
-  publication?: ChapterPublication }> {
+export async function publishChapter(
+  input: {
+    target: ChapterTarget;
+    basis: DraftBasis;
+    current: ChapterPublication | null;
+    key: string;
+  },
+  main: MainClient = browserMainApi(),
+): Promise<{
+  outcome: PublishOutcome;
+  step: 'publish' | 'eligibility';
+  publication?: ChapterPublication;
+}> {
   const { target, basis } = input;
-  const published = await main.v1['content-publications'].post({ profile: 'content-publication-v1',
-    // One preparation per exact revision: a retry of this publication resends it and replays.
-    preparationId: `studio:${idOf(target.chapter)}:${basis.head}`, revisionId: basis.head, expectedDigest: basis.digest,
-    expectedContentEpoch: basis.epoch, resourceId: target.chapter, variantId: target.variant,
-    expectedPublicationHead: input.current?.publication ?? null, actingSubject: target.actingSubject },
-  { headers: { 'idempotency-key': `${input.key}:publish` } });
+  const published = await main.v1['content-publications'].post(
+    {
+      profile: 'content-publication-v1',
+      // One preparation per exact revision: a retry of this publication resends it and replays.
+      preparationId: `studio:${idOf(target.chapter)}:${basis.head}`,
+      revisionId: basis.head,
+      expectedDigest: basis.digest,
+      expectedContentEpoch: basis.epoch,
+      resourceId: target.chapter,
+      variantId: target.variant,
+      expectedPublicationHead: input.current?.publication ?? null,
+      actingSubject: target.actingSubject,
+    },
+    { headers: { 'idempotency-key': `${input.key}:publish` } },
+  );
   if (published.error) {
     const status = published.error.status;
-    return { step: 'publish', outcome: code(published.error) === 'translation_basis_required' ? 'translation-basis-required'
-      : status === 401 || status === 403 ? 'denied' : status === 409 ? 'stale' : 'failed' };
+    return {
+      step: 'publish',
+      outcome:
+        code(published.error) === 'translation_basis_required'
+          ? 'translation-basis-required'
+          : status === 401 || status === 403
+            ? 'denied'
+            : status === 409
+              ? 'stale'
+              : 'failed',
+    };
   }
   const result = published.data;
-  if (!result || 'operationId' in result || result.status === 'pending') return { step: 'publish', outcome: 'pending' };
+  if (!result || 'operationId' in result || result.status === 'pending')
+    return { step: 'publish', outcome: 'pending' };
   // Main answers `rejected` when the publication head moved (or an embed was refused) and says no more.
-  if (result.status === 'rejected' || !result.decision) return { step: 'publish', outcome: 'stale' };
+  if (result.status === 'rejected' || !result.decision)
+    return { step: 'publish', outcome: 'stale' };
   const publication = result.decision;
-  const eligible = await main.v1['content-search-eligibility'].post({ profile: 'content-search-eligibility-v1',
-    resourceId: target.chapter, variantId: target.variant, publicationDecision: publication,
-    expectedEligibilityHead: input.current?.eligibility ?? null, actingSubject: target.actingSubject,
-    rightsBasis: 'original-contribution', disclosure: 'public' }, { headers: { 'idempotency-key': `${input.key}:eligibility` } });
-  if (eligible.error || !eligible.data || 'operationId' in eligible.data || !eligible.data.decision) {
+  const eligible = await main.v1['content-search-eligibility'].post(
+    {
+      profile: 'content-search-eligibility-v1',
+      resourceId: target.chapter,
+      variantId: target.variant,
+      publicationDecision: publication,
+      expectedEligibilityHead: input.current?.eligibility ?? null,
+      actingSubject: target.actingSubject,
+      rightsBasis: 'original-contribution',
+      disclosure: 'public',
+    },
+    { headers: { 'idempotency-key': `${input.key}:eligibility` } },
+  );
+  if (
+    eligible.error ||
+    !eligible.data ||
+    'operationId' in eligible.data ||
+    !eligible.data.decision
+  ) {
     const status = eligible.error?.status ?? 0;
-    return { step: 'eligibility', publication: { publication, eligibility: null },
-      outcome: eligible.error && code(eligible.error) === 'translation_basis_required' ? 'translation-basis-required'
-        : status === 401 || status === 403 ? 'denied' : status === 409 ? 'stale' : eligible.error ? 'failed' : 'pending' };
+    return {
+      step: 'eligibility',
+      publication: { publication, eligibility: null },
+      outcome:
+        eligible.error && code(eligible.error) === 'translation_basis_required'
+          ? 'translation-basis-required'
+          : status === 401 || status === 403
+            ? 'denied'
+            : status === 409
+              ? 'stale'
+              : eligible.error
+                ? 'failed'
+                : 'pending',
+    };
   }
-  return { step: 'eligibility', outcome: 'done', publication: { publication, eligibility: eligible.data.decision } };
+  return {
+    step: 'eligibility',
+    outcome: 'done',
+    publication: { publication, eligibility: eligible.data.decision },
+  };
 }
 
 type Refusal = 'stale' | 'denied' | 'failed' | 'pending';
@@ -134,44 +242,73 @@ type Refusal = 'stale' | 'denied' | 'failed' | 'pending';
  * command with this key, and the same request (same key) later answers with its
  * result. A few seconds bound the wait; after that the caller reports pending.
  */
-export async function settled<T extends { data: unknown }>(send: () => Promise<T>, attempts = 6): Promise<T> {
+export async function settled<T extends { data: unknown }>(
+  send: () => Promise<T>,
+  attempts = 6,
+): Promise<T> {
   let answer = await send();
   for (let attempt = 1; attempt < attempts; attempt += 1) {
     const data = answer.data as { operationId?: unknown; retry?: { afterMs?: unknown } } | null;
     if (!data || typeof data !== 'object' || !('operationId' in data)) return answer;
     const after = typeof data.retry?.afterMs === 'number' ? data.retry.afterMs : 1_000;
-    await new Promise(resolve => setTimeout(resolve, Math.min(Math.max(after, 250), 2_000)));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(after, 250), 2_000)));
     answer = await send();
   }
   return answer;
 }
 export type ChapterCommand = { outcome: 'done'; head: string } | { outcome: Refusal };
 
-const commandOf = (error: Failure): Refusal => error.status === 401 || error.status === 403 ? 'denied'
-  : error.status === 409 && code(error) !== 'idempotency_conflict' ? 'stale' : 'failed';
+const commandOf = (error: Failure): Refusal =>
+  error.status === 401 || error.status === 403
+    ? 'denied'
+    : error.status === 409 && code(error) !== 'idempotency_conflict'
+      ? 'stale'
+      : 'failed';
 
 /** The Book's composition and its current head, or null when it has none yet. */
-export async function readCompositionHead(actingSubject: string, book: string, language: string | undefined,
-  main: MainClient = browserMainApi()): Promise<{ structure: string; head: string } | null | 'unavailable'> {
-  const read = await main.v1.works({ id: idOf(book) }).contents.get({ query: { actingSubject, limit: 1,
-    ...(language ? { language } : {}) } });
+export async function readCompositionHead(
+  actingSubject: string,
+  book: string,
+  language: string | undefined,
+  main: MainClient = browserMainApi(),
+): Promise<{ structure: string; head: string } | null | 'unavailable'> {
+  const read = await main.v1
+    .works({ id: idOf(book) })
+    .contents.get({ query: { actingSubject, limit: 1, ...(language ? { language } : {}) } });
   if (read.data) return { structure: read.data.composition, head: read.data.compositionRevision };
   return read.error?.status === 404 ? null : 'unavailable';
 }
 
 /** The Book's composition, made first when it has none; another tab's composition is read and used. */
-export async function ensureComposition(input: { actingSubject: string; book: string; mainVersion: string;
-  language?: string; key: string }, main: MainClient = browserMainApi()):
-  Promise<{ structure: string; head: string } | Refusal> {
-  const created = await settled(() => main.v1.compositions.post({ profile: 'book-composition', work: input.book,
-    mainVersion: input.mainVersion, actingSubject: input.actingSubject },
-  { headers: { 'idempotency-key': `${input.key}:composition` } }));
+export async function ensureComposition(
+  input: {
+    actingSubject: string;
+    book: string;
+    mainVersion: string;
+    language?: string;
+    key: string;
+  },
+  main: MainClient = browserMainApi(),
+): Promise<{ structure: string; head: string } | Refusal> {
+  const created = await settled(() =>
+    main.v1.compositions.post(
+      {
+        profile: 'book-composition',
+        work: input.book,
+        mainVersion: input.mainVersion,
+        actingSubject: input.actingSubject,
+      },
+      { headers: { 'idempotency-key': `${input.key}:composition` } },
+    ),
+  );
   if (created.data && !('operationId' in created.data) && created.data.revision) {
     return { structure: created.data.structure, head: created.data.revision };
   }
   if (!created.error) return 'pending';
-  const found = created.error.status === 409
-    ? await readCompositionHead(input.actingSubject, input.book, input.language, main) : null;
+  const found =
+    created.error.status === 409
+      ? await readCompositionHead(input.actingSubject, input.book, input.language, main)
+      : null;
   return found && found !== 'unavailable' ? found : commandOf(created.error);
 }
 
@@ -184,35 +321,84 @@ export async function ensureComposition(input: { actingSubject: string; book: st
  * them. Each step keeps its key, so a retry replays instead of adding a second
  * chapter; the placement's key names the head it was made on.
  */
-export async function createChapter(input: { actingSubject: string; book: string; mainVersion: string;
-  composition: { structure: string; head: string } | null; title: string; language: string; key: string;
-  /** The volume, part or extras to add it at the end of; the Book's top level by default. */
-  parent?: string | null },
-main: MainClient = browserMainApi()): Promise<ChapterCommand & { chapter?: string; structure?: string;
-  /** The chapter's place in the composition, when Main's answer names it (a replayed answer may not). */
-  occurrence?: string }> {
+export async function createChapter(
+  input: {
+    actingSubject: string;
+    book: string;
+    mainVersion: string;
+    composition: { structure: string; head: string } | null;
+    title: string;
+    language: string;
+    key: string;
+    /** The volume, part or extras to add it at the end of; the Book's top level by default. */
+    parent?: string | null;
+  },
+  main: MainClient = browserMainApi(),
+): Promise<
+  ChapterCommand & {
+    chapter?: string;
+    structure?: string;
+    /** The chapter's place in the composition, when Main's answer names it (a replayed answer may not). */
+    occurrence?: string;
+  }
+> {
   const headers = (step: string) => ({ headers: { 'idempotency-key': `${input.key}:${step}` } });
-  const composition = input.composition ?? await ensureComposition(input, main);
+  const composition = input.composition ?? (await ensureComposition(input, main));
   if (typeof composition === 'string') return { outcome: composition };
   const { structure } = composition;
-  const work = await settled(() => main.v1.works.post({ profile: 'metadata-only-v1', title: input.title,
-    language: input.language, authoring: 'own-work', actingSubject: input.actingSubject }, headers('work')));
+  const work = await settled(() =>
+    main.v1.works.post(
+      {
+        profile: 'metadata-only-v1',
+        title: input.title,
+        language: input.language,
+        authoring: 'own-work',
+        actingSubject: input.actingSubject,
+      },
+      headers('work'),
+    ),
+  );
   if (work.error) return { outcome: commandOf(work.error), structure };
   if (!work.data || 'operationId' in work.data) return { outcome: 'pending', structure };
   // A chapter is the author's own Work, so it is always created; any other answer is unavailable.
   if ('outcome' in work.data) return { outcome: 'failed', structure };
   const chapter = work.data.work;
-  const placed = await settled(() => main.v1.compositions({ id: idOf(structure) }).changes.post({
-    profile: 'book-composition', expectedHead: composition.head, actingSubject: input.actingSubject,
-    operations: [{ op: 'insert', parent: input.parent ?? structure, position: 'last', role: 'chapter', target: chapter,
-      label: { value: input.title, language: input.language } }] }, headers(`insert:${idOf(composition.head)}`)));
+  const placed = await settled(() =>
+    main.v1.compositions({ id: idOf(structure) }).changes.post(
+      {
+        profile: 'book-composition',
+        expectedHead: composition.head,
+        actingSubject: input.actingSubject,
+        operations: [
+          {
+            op: 'insert',
+            parent: input.parent ?? structure,
+            position: 'last',
+            role: 'chapter',
+            target: chapter,
+            label: { value: input.title, language: input.language },
+          },
+        ],
+      },
+      headers(`insert:${idOf(composition.head)}`),
+    ),
+  );
   if (placed.error) return { outcome: commandOf(placed.error), chapter, structure };
-  if (!placed.data || 'operationId' in placed.data || !placed.data.revision) return { outcome: 'pending', chapter, structure };
-  return { outcome: 'done', head: placed.data.revision, chapter, structure, occurrence: placed.data.occurrences?.[0] };
+  if (!placed.data || 'operationId' in placed.data || !placed.data.revision)
+    return { outcome: 'pending', chapter, structure };
+  return {
+    outcome: 'done',
+    head: placed.data.revision,
+    chapter,
+    structure,
+    occurrence: placed.data.occurrences?.[0],
+  };
 }
 
 /** One change to a Book's composition as Main takes it (`POST /v1/compositions/{id}/changes`). */
-export type CompositionOperation = NonNullable<Parameters<ReturnType<MainClient['v1']['compositions']>['changes']['post']>[0]>['operations'][number];
+export type CompositionOperation = NonNullable<
+  Parameters<ReturnType<MainClient['v1']['compositions']>['changes']['post']>[0]
+>['operations'][number];
 
 /**
  * Applies one change to the Book's composition on its head. When another tab
@@ -220,21 +406,43 @@ export type CompositionOperation = NonNullable<Parameters<ReturnType<MainClient[
  * now, with a key of its own, since the intent (this chapter into that volume)
  * still holds; Main refuses it if it no longer can.
  */
-export async function changeComposition(input: { actingSubject: string; book: string; language?: string;
-  composition: { structure: string; head: string }; operations: CompositionOperation[]; key: string },
-main: MainClient = browserMainApi()): Promise<ChapterCommand & { occurrences?: string[] }> {
+export async function changeComposition(
+  input: {
+    actingSubject: string;
+    book: string;
+    language?: string;
+    composition: { structure: string; head: string };
+    operations: CompositionOperation[];
+    key: string;
+  },
+  main: MainClient = browserMainApi(),
+): Promise<ChapterCommand & { occurrences?: string[] }> {
   const send = async (head: string, key: string) => {
-    const changed = await settled(() => main.v1.compositions({ id: idOf(input.composition.structure) }).changes.post({
-      profile: 'book-composition', expectedHead: head, actingSubject: input.actingSubject,
-      operations: input.operations }, { headers: { 'idempotency-key': key } }));
+    const changed = await settled(() =>
+      main.v1.compositions({ id: idOf(input.composition.structure) }).changes.post(
+        {
+          profile: 'book-composition',
+          expectedHead: head,
+          actingSubject: input.actingSubject,
+          operations: input.operations,
+        },
+        { headers: { 'idempotency-key': key } },
+      ),
+    );
     if (changed.error) return { outcome: commandOf(changed.error) };
-    if (!changed.data || 'operationId' in changed.data || !changed.data.revision) return { outcome: 'pending' as const };
-    return { outcome: 'done' as const, head: changed.data.revision, occurrences: changed.data.occurrences ?? [] };
+    if (!changed.data || 'operationId' in changed.data || !changed.data.revision)
+      return { outcome: 'pending' as const };
+    return {
+      outcome: 'done' as const,
+      head: changed.data.revision,
+      occurrences: changed.data.occurrences ?? [],
+    };
   };
   const first = await send(input.composition.head, input.key);
   if (first.outcome !== 'stale') return first;
   const current = await readCompositionHead(input.actingSubject, input.book, input.language, main);
-  if (!current || current === 'unavailable' || current.head === input.composition.head) return first;
+  if (!current || current === 'unavailable' || current.head === input.composition.head)
+    return first;
   return send(current.head, `${input.key}:${idOf(current.head)}`);
 }
 
@@ -244,32 +452,75 @@ main: MainClient = browserMainApi()): Promise<ChapterCommand & { occurrences?: s
  * the draft head, its bytes and the publication it replaces; one key per
  * revision, so a retry replays instead of publishing twice.
  */
-export async function publishLatest(input: { actingSubject: string; chapter: string; language: string },
-  main: MainClient = browserMainApi()): Promise<PublishOutcome | 'nothing'> {
+export async function publishLatest(
+  input: { actingSubject: string; chapter: string; language: string },
+  main: MainClient = browserMainApi(),
+): Promise<PublishOutcome | 'nothing'> {
   const variant = await chapterVariant(input.chapter, input.language);
   const listed = await main.v1.works({ id: idOf(input.chapter) })['content-variants'].get({
-    query: { actingSubject: input.actingSubject } });
+    query: { actingSubject: input.actingSubject },
+  });
   if (listed.error || !listed.data) return listed.error?.status === 403 ? 'denied' : 'failed';
-  const current = listed.data.items.find(item => item.variantId === variant);
+  const current = listed.data.items.find((item) => item.variantId === variant);
   if (!current?.draftHead) return 'nothing';
   const exact = await readChapterRevision(input.actingSubject, current.draftHead, main);
   if (!exact) return 'failed';
-  const published = await publishChapter({ target: { actingSubject: input.actingSubject, chapter: input.chapter, variant,
-    language: input.language, direction: directionOf(input.language) },
-  basis: { head: current.draftHead, digest: exact.digest, epoch: listed.data.sourcePosition.dataEpoch },
-  current: current.publicationHead ? { publication: current.publicationHead, eligibility: current.eligibilityHead } : null,
-  key: `studio-publish:${idOf(input.chapter)}:${current.draftHead}` }, main);
+  const published = await publishChapter(
+    {
+      target: {
+        actingSubject: input.actingSubject,
+        chapter: input.chapter,
+        variant,
+        language: input.language,
+        direction: directionOf(input.language),
+      },
+      basis: {
+        head: current.draftHead,
+        digest: exact.digest,
+        epoch: listed.data.sourcePosition.dataEpoch,
+      },
+      current: current.publicationHead
+        ? { publication: current.publicationHead, eligibility: current.eligibilityHead }
+        : null,
+      key: `studio-publish:${idOf(input.chapter)}:${current.draftHead}`,
+    },
+    main,
+  );
   return published.outcome;
 }
 
 /** Moves one chapter to the top of the Book or after another chapter. */
-export async function moveChapter(input: { actingSubject: string; structure: string; head: string; occurrence: string;
-  after: string | null; key: string }, main: MainClient = browserMainApi()): Promise<ChapterCommand> {
-  const moved = await settled(() => main.v1.compositions({ id: idOf(input.structure) }).changes.post({
-    profile: 'book-composition', expectedHead: input.head, actingSubject: input.actingSubject,
-    operations: [{ op: 'move', occurrence: input.occurrence, parent: input.structure,
-      position: input.after ? { after: input.after } : 'first' }] }, { headers: { 'idempotency-key': input.key } }));
+export async function moveChapter(
+  input: {
+    actingSubject: string;
+    structure: string;
+    head: string;
+    occurrence: string;
+    after: string | null;
+    key: string;
+  },
+  main: MainClient = browserMainApi(),
+): Promise<ChapterCommand> {
+  const moved = await settled(() =>
+    main.v1.compositions({ id: idOf(input.structure) }).changes.post(
+      {
+        profile: 'book-composition',
+        expectedHead: input.head,
+        actingSubject: input.actingSubject,
+        operations: [
+          {
+            op: 'move',
+            occurrence: input.occurrence,
+            parent: input.structure,
+            position: input.after ? { after: input.after } : 'first',
+          },
+        ],
+      },
+      { headers: { 'idempotency-key': input.key } },
+    ),
+  );
   if (moved.error) return { outcome: commandOf(moved.error) };
-  if (!moved.data || 'operationId' in moved.data || !moved.data.revision) return { outcome: 'pending' };
+  if (!moved.data || 'operationId' in moved.data || !moved.data.revision)
+    return { outcome: 'pending' };
   return { outcome: 'done', head: moved.data.revision };
 }

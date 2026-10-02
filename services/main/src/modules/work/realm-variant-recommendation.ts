@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from '../access/admission.ts';
 import { readExactContributionDraft } from '../contribution/history.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from './activate.ts';
 import { InvalidNativeVariant, NativeVariantUnavailable, readNativeMainWork }
   from './native-variants.ts';
@@ -92,7 +93,7 @@ export async function readRealmVariantDecision(env: WorkActivationEnvironment,
 export async function readRealmAdoptedVariant(env: WorkActivationEnvironment,
   realm: string, mainVersion: string, work: string, selection: string): Promise<{
     contribution: string; publicationDecision: string; selectedDraft: string;
-    language: string; author: string; body: string }> {
+    language: string; author: string; body: string; document?: DocumentSnapshot }> {
   const query = `PREFIX rv: <${RV}> SELECT
     ?contribution ?decision ?draft ?language ?author ?body WHERE {
     GRAPH ${iri(GRAPHS.current)} {
@@ -133,7 +134,7 @@ export async function readRealmAdoptedVariant(env: WorkActivationEnvironment,
     throw new NativeVariantUnavailable('Realm adoption changed during read');
   }
   return { contribution, publicationDecision: row.decision.value,
-    selectedDraft, language, author, body };
+    selectedDraft, language, author, body, ...(exact.document ? { document: exact.document } : {}) };
 }
 
 /** Access owns a sparse, manager-authorized hint with local CAS and idempotent receipts. */

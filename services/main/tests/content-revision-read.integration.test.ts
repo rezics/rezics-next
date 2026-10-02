@@ -9,6 +9,7 @@ import { ContentCore, migrateContent, type VariantIdentity } from '../../content
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { fromPlainText } from '@rezics/document';
 
 const root = resolve(import.meta.dir, '../../..');
 
@@ -55,9 +56,12 @@ test('WORK09: partial Content exact history requires current Work disclosure and
     const first = await content.saveDraft({ operationId: `save-${randomUUID()}`, variant,
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
       provenance: { editor: 'test' }, serializedJson });
+    const document = fromPlainText('第二版');
+    document.doc.content![0]!.content![0]!.marks = [{ type: 'bold' }];
+    const structuredBytes = JSON.stringify({ body: '第二版', document });
     const second = await content.saveDraft({ operationId: `save-${randomUUID()}`, variant,
       expectedHead: first.revisionId, model: 'content-shape-v1', sourceRevision: null,
-      provenance: { editor: 'test' }, serializedJson: '{"body":"第二版","count":2}' });
+      provenance: { editor: 'test' }, serializedJson: structuredBytes });
     if (!first.revisionId || !second.revisionId) throw new Error('test drafts were not saved');
     const graph = new ReadGraph();
     let grant = true;
@@ -93,7 +97,12 @@ test('WORK09: partial Content exact history requires current Work disclosure and
     });
     expect(scopes).toEqual([['work:read']]);
     const head = await read(second.revisionId);
-    expect((await head.json() as { body: { body: string } }).body.body).toBe('第二版');
+    expect(await head.json()).toMatchObject({ serializedJson: structuredBytes,
+      body: { body: '第二版', document } });
+    await expect(content.saveDraft({ operationId: `save-${randomUUID()}`, variant,
+      expectedHead: second.revisionId, model: 'content-shape-v1', sourceRevision: null,
+      provenance: { editor: 'test' }, serializedJson: JSON.stringify({ body: 'false projection', document }) }))
+      .rejects.toThrow('invalid document or text projection');
 
     const unknown = await read(randomUUID());
     expect(unknown.status).toBe(404);

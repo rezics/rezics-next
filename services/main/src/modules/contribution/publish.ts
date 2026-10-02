@@ -5,6 +5,7 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactContributionDraft } from './history.ts';
+import { hasDocumentContent } from '@rezics/document';
 import type { RightsStore } from '../rights/store.ts';
 import { assertTranslationOriginalBasis, resolveTranslationOriginalPublicDomainBases,
   translationOriginalBasisConflictPattern } from '../work/translation-links.ts';
@@ -69,7 +70,9 @@ export async function assertTextPublicationBody(env: WorkActivationEnvironment,
   if (exact.author !== input.actingSubject) {
     throw new PublicationUnavailable('original contributor authority is required');
   }
-  if (!exact.body.trim()) throw new EmptyTextPublicationBody('Cannot publish an empty draft');
+  if (exact.document ? !hasDocumentContent(exact.document) : !exact.body.trim()) {
+    throw new EmptyTextPublicationBody('Cannot publish an empty draft');
+  }
 }
 
 export function textPublicationReceiptIri(admissionId: string): string {

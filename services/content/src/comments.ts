@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCommentTarget } from '../../../packages/model/src/locator.ts';
 import { ContentConflict, ContentUnavailable, type ContentPosition } from './core.ts';
+import { retainedDocumentBody } from './document-body.ts';
+import { checkDocument, documentParagraphs } from '@rezics/document';
 
 export interface ContentCommentInput {
   revisionId: string;
@@ -67,18 +69,26 @@ function decodeCursor(value: string, revisionId: string): CommentCursor {
     const bytes = Buffer.from(value, 'base64url');
     if (bytes.toString('base64url') !== value) throw new Error('noncanonical continuation');
     parsed = JSON.parse(bytes.toString('utf8'));
-  } catch { throw new ContentCommentInvalid('invalid comment continuation'); }
+  } catch {
+    throw new ContentCommentInvalid('invalid comment continuation');
+  }
   if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
     throw new ContentCommentInvalid('invalid comment continuation');
   }
   const cursor = parsed as Partial<CommentCursor>;
-  if (Object.keys(cursor).length !== 5 || cursor.version !== 1
-    || cursor.revisionId !== revisionId || typeof cursor.dataEpoch !== 'string'
-    || !uuid.test(cursor.dataEpoch)
-    || typeof cursor.throughOrder !== 'string' || typeof cursor.afterOrder !== 'string'
-    || !decimal.test(cursor.throughOrder) || !decimal.test(cursor.afterOrder)
-    || BigInt(cursor.throughOrder) > maxOrder
-    || BigInt(cursor.afterOrder) >= BigInt(cursor.throughOrder)) {
+  if (
+    Object.keys(cursor).length !== 5 ||
+    cursor.version !== 1 ||
+    cursor.revisionId !== revisionId ||
+    typeof cursor.dataEpoch !== 'string' ||
+    !uuid.test(cursor.dataEpoch) ||
+    typeof cursor.throughOrder !== 'string' ||
+    typeof cursor.afterOrder !== 'string' ||
+    !decimal.test(cursor.throughOrder) ||
+    !decimal.test(cursor.afterOrder) ||
+    BigInt(cursor.throughOrder) > maxOrder ||
+    BigInt(cursor.afterOrder) >= BigInt(cursor.throughOrder)
+  ) {
     throw new ContentCommentInvalid('invalid comment continuation');
   }
   return cursor as CommentCursor;
@@ -95,53 +105,110 @@ function hash(value: string | Buffer): string {
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value && typeof value === 'object') {
-    return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`;
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
+      .join(',')}}`;
   }
   return JSON.stringify(value);
 }
 
 export function contentCommentIntentDigest(input: ContentCommentInput): string {
-  return hash(JSON.stringify({ family: 'content-comment-v1', revisionId: input.revisionId,
-    resourceId: input.resourceId, author: input.author, exact: input.exact, body: input.body }));
+  return hash(
+    JSON.stringify({
+      family: 'content-comment-v1',
+      revisionId: input.revisionId,
+      resourceId: input.resourceId,
+      author: input.author,
+      exact: input.exact,
+      body: input.body,
+    }),
+  );
 }
 
 function validate(input: ContentCommentInput): void {
-  if (!uuid.test(input.revisionId) || !work.test(input.resourceId) || !work.test(input.author)
-    || !input.exact || input.exact.length > 4096 || input.exact.includes('\n')
-    || !input.body || input.body.length > 8192
-    || Buffer.from(input.exact, 'utf8').toString('utf8') !== input.exact
-    || Buffer.from(input.body, 'utf8').toString('utf8') !== input.body) {
+  if (
+    !uuid.test(input.revisionId) ||
+    !work.test(input.resourceId) ||
+    !work.test(input.author) ||
+    !input.exact ||
+    input.exact.length > 4096 ||
+    input.exact.includes('\n') ||
+    !input.body ||
+    input.body.length > 8192 ||
+    Buffer.from(input.exact, 'utf8').toString('utf8') !== input.exact ||
+    Buffer.from(input.body, 'utf8').toString('utf8') !== input.body
+  ) {
     throw new ContentCommentInvalid('invalid exact comment');
   }
 }
 
-export function resolveParagraphSelector(text: string, exact: string): ContentCommentTarget['selector'] {
-  if (!exact || exact.includes('\n') || !text.split('\n').includes(exact)
-    || text.indexOf(exact) !== text.lastIndexOf(exact)) {
+export function resolveParagraphSelector(
+  text: string,
+  exact: string,
+  document?: unknown,
+): ContentCommentTarget['selector'] {
+  if (document !== undefined && !checkDocument(document))
+    throw new ContentCommentInvalid('invalid document source');
+  const paragraphs = checkDocument(document)
+    ? documentParagraphs(document).map((unit) => unit.text)
+    : text.split('\n');
+  if (
+    !exact ||
+    (document === undefined && exact.includes('\n')) ||
+    !paragraphs.includes(exact) ||
+    text.indexOf(exact) !== text.lastIndexOf(exact)
+  ) {
     throw new ContentCommentInvalid('selector is not one unique paragraph of the exact revision');
   }
   const start = text.indexOf(exact);
-  return { type: 'TextQuoteSelector', exact,
+  if (document !== undefined)
+    return {
+      type: 'TextQuoteSelector',
+      exact,
+      prefix: Array.from(text.slice(0, start)).slice(-32).join(''),
+      suffix: Array.from(text.slice(start + exact.length))
+        .slice(0, 32)
+        .join(''),
+    };
+  return {
+    type: 'TextQuoteSelector',
+    exact,
     prefix: text.slice(Math.max(0, start - 32), start),
-    suffix: text.slice(start + exact.length, start + exact.length + 32) };
+    suffix: text.slice(start + exact.length, start + exact.length + 32),
+  };
 }
 
 function asComment(row: Record<string, any>, replayed: boolean): ContentComment {
-  return { type: 'Annotation', motivation: 'commenting',
-    comment: `https://rezics.com/id/${row.id}`, author: row.author,
-    resourceId: row.resource_id, variantId: row.variant_id, revisionId: row.revision_id,
-    byteDigest: row.byte_digest, body: row.comment_body,
-    target: { type: 'SpecificResource', source: `urn:rezics:content:revision:${row.revision_id}`,
-      selector: { type: 'TextQuoteSelector', exact: row.exact, prefix: row.prefix,
-        suffix: row.suffix } },
-    sourcePosition: { owner: 'content', dataEpoch: row.data_epoch,
-      sequence: row.sequence }, replayed };
+  return {
+    type: 'Annotation',
+    motivation: 'commenting',
+    comment: `https://rezics.com/id/${row.id}`,
+    author: row.author,
+    resourceId: row.resource_id,
+    variantId: row.variant_id,
+    revisionId: row.revision_id,
+    byteDigest: row.byte_digest,
+    body: row.comment_body,
+    target: {
+      type: 'SpecificResource',
+      source: `urn:rezics:content:revision:${row.revision_id}`,
+      selector: {
+        type: 'TextQuoteSelector',
+        exact: row.exact,
+        prefix: row.prefix,
+        suffix: row.suffix,
+      },
+    },
+    sourcePosition: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
+    replayed,
+  };
 }
 
 async function lock(client: PoolClient, admissionId: string): Promise<void> {
-  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-    [`content-comment:${admissionId}`]);
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+    `content-comment:${admissionId}`,
+  ]);
 }
 
 /** Content owns the immutable annotation anchor and writes its receipt and outbox
@@ -151,10 +218,13 @@ export class ContentComments {
 
   async create(command: ContentCommentCommand): Promise<ContentComment> {
     validate(command);
-    if (!uuid.test(command.admissionId) || !/^(0|[1-9][0-9]*)$/.test(command.authorityEpoch)
-      || command.scope !== `content:comment:${command.resourceId}`
-      || !sha.test(command.requestDigest)
-      || command.requestDigest !== contentCommentIntentDigest(command)) {
+    if (
+      !uuid.test(command.admissionId) ||
+      !/^(0|[1-9][0-9]*)$/.test(command.authorityEpoch) ||
+      command.scope !== `content:comment:${command.resourceId}` ||
+      !sha.test(command.requestDigest) ||
+      command.requestDigest !== contentCommentIntentDigest(command)
+    ) {
       throw new ContentConflict('comment admission does not bind the exact request');
     }
     const operationId = `content-comment:${command.admissionId}`;
@@ -162,12 +232,15 @@ export class ContentComments {
     try {
       await client.query('BEGIN');
       await lock(client, command.admissionId);
-      const previous = await client.query(`SELECT c.*, r.byte_digest,
+      const previous = await client.query(
+        `SELECT c.*, r.byte_digest,
         c.body AS comment_body, receipt.sequence::text AS sequence
         , receipt.action, receipt.request_digest AS receipt_digest
         FROM content.receipt receipt LEFT JOIN content.comment c ON c.operation_id = receipt.operation_id
         LEFT JOIN content.revision r ON r.id = c.revision_id
-        WHERE receipt.operation_id = $1`, [operationId]);
+        WHERE receipt.operation_id = $1`,
+        [operationId],
+      );
       if (previous.rowCount) {
         const row = previous.rows[0];
         if (row.receipt_digest !== command.requestDigest || row.action !== 'comment.create') {
@@ -177,77 +250,155 @@ export class ContentComments {
         await client.query('COMMIT');
         return asComment(row, true);
       }
-      const source = await client.query(`SELECT r.id, r.variant_id, r.byte_digest,
+      const source = await client.query(
+        `SELECT r.id, r.variant_id, r.byte_digest,
         r.byte_length, r.serialized_bytes, r.body, r.availability, v.resource_id
         FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
-        WHERE r.id = $1 FOR SHARE OF r`, [command.revisionId]);
+        WHERE r.id = $1 FOR SHARE OF r`,
+        [command.revisionId],
+      );
       const row = source.rows[0];
       if (!row || row.resource_id !== command.resourceId) {
         throw new ContentCommentMissing('exact comment source is unavailable');
       }
       const bytes = row.serialized_bytes as Buffer | null;
-      if (row.availability !== 'available' || !bytes || bytes.length !== row.byte_length
-        || hash(bytes) !== row.byte_digest) {
+      if (
+        row.availability !== 'available' ||
+        !bytes ||
+        bytes.length !== row.byte_length ||
+        hash(bytes) !== row.byte_digest
+      ) {
         throw new ContentUnavailable('exact comment source bytes are unavailable');
       }
       let parsed: unknown;
-      try { parsed = JSON.parse(bytes.toString('utf8')); }
-      catch { throw new ContentUnavailable('exact comment source bytes are corrupt'); }
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object'
-        || stable(parsed) !== stable(row.body)) {
+      try {
+        parsed = JSON.parse(bytes.toString('utf8'));
+      } catch {
+        throw new ContentUnavailable('exact comment source bytes are corrupt');
+      }
+      if (
+        !parsed ||
+        Array.isArray(parsed) ||
+        typeof parsed !== 'object' ||
+        stable(parsed) !== stable(row.body)
+      ) {
         throw new ContentUnavailable('exact comment source body differs');
       }
-      const text = (parsed as { body?: unknown }).body;
-      if (typeof text !== 'string') throw new ContentCommentInvalid('source has no text body');
-      const { prefix, suffix } = resolveParagraphSelector(text, command.exact);
+      let authoredSource: ReturnType<typeof retainedDocumentBody>;
+      try {
+        authoredSource = retainedDocumentBody(parsed as Record<string, unknown>);
+      } catch {
+        throw new ContentCommentInvalid('source text or document projection is invalid');
+      }
+      const { prefix, suffix } = resolveParagraphSelector(
+        authoredSource.body,
+        command.exact,
+        authoredSource.document,
+      );
       const owner = await client.query(`UPDATE content.owner_control SET sequence = sequence + 1
         WHERE singleton RETURNING data_epoch, sequence::text AS sequence`);
       if (owner.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
       const { data_epoch, sequence } = owner.rows[0];
       const id = randomUUID();
-      await client.query(`INSERT INTO content.receipt
+      await client.query(
+        `INSERT INTO content.receipt
         (operation_id, request_digest, action, outcome, variant_id, revision_id,
           data_epoch, sequence) VALUES ($1,$2,'comment.create','succeeded',$3,$4,$5,$6)`,
-      [operationId, command.requestDigest, row.variant_id, command.revisionId,
-        data_epoch, sequence]);
-      await client.query(`INSERT INTO content.comment
+        [
+          operationId,
+          command.requestDigest,
+          row.variant_id,
+          command.revisionId,
+          data_epoch,
+          sequence,
+        ],
+      );
+      await client.query(
+        `INSERT INTO content.comment
         (id, operation_id, request_digest, revision_id, resource_id, variant_id,
           author, exact, prefix, suffix, body, data_epoch, sequence)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [id, operationId, command.requestDigest, command.revisionId, command.resourceId,
-        row.variant_id, command.author, command.exact, prefix, suffix, command.body,
-        data_epoch, sequence]);
-      await client.query(`INSERT INTO content.outbox
+        [
+          id,
+          operationId,
+          command.requestDigest,
+          command.revisionId,
+          command.resourceId,
+          row.variant_id,
+          command.author,
+          command.exact,
+          prefix,
+          suffix,
+          command.body,
+          data_epoch,
+          sequence,
+        ],
+      );
+      await client.query(
+        `INSERT INTO content.outbox
         (id, data_epoch, sequence, operation_id, event_type, recipe, revision_id, payload)
         VALUES ($1,$2,$3,$4,'content.comment.created','content-body-v1',$5,$6::jsonb)`,
-      [randomUUID(), data_epoch, sequence, operationId, command.revisionId,
-        JSON.stringify({ comment: id, revisionId: command.revisionId })]);
+        [
+          randomUUID(),
+          data_epoch,
+          sequence,
+          operationId,
+          command.revisionId,
+          JSON.stringify({ comment: id, revisionId: command.revisionId }),
+        ],
+      );
       await client.query('COMMIT');
-      return asComment({ id, author: command.author, resource_id: command.resourceId,
-        variant_id: row.variant_id, revision_id: command.revisionId,
-        byte_digest: row.byte_digest, comment_body: command.body, exact: command.exact,
-        prefix, suffix, data_epoch, sequence }, false);
+      return asComment(
+        {
+          id,
+          author: command.author,
+          resource_id: command.resourceId,
+          variant_id: row.variant_id,
+          revision_id: command.revisionId,
+          byte_digest: row.byte_digest,
+          comment_body: command.body,
+          exact: command.exact,
+          prefix,
+          suffix,
+          data_epoch,
+          sequence,
+        },
+        false,
+      );
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   }
 
   async read(commentId: string): Promise<ContentComment | null> {
     if (!uuid.test(commentId)) throw new ContentCommentInvalid('invalid comment id');
-    const result = await this.pool.query(`SELECT c.*, r.byte_digest,
+    const result = await this.pool.query(
+      `SELECT c.*, r.byte_digest,
       c.body AS comment_body, c.sequence::text AS sequence
       FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
-      WHERE c.id = $1`, [commentId]);
+      WHERE c.id = $1`,
+      [commentId],
+    );
     return result.rowCount ? asComment(result.rows[0], false) : null;
   }
 
   /** A stable prefix of one revision's immutable comments. The owner sequence
    * lock in create orders commits with list_order allocation. The cursor grants
    * no authority; callers must check current disclosure on every page. */
-  async list(revisionId: string, pageSize = 50, continuation?: string): Promise<ContentCommentPage> {
-    if (!uuid.test(revisionId) || !Number.isSafeInteger(pageSize)
-      || pageSize < 1 || pageSize > 100) {
+  async list(
+    revisionId: string,
+    pageSize = 50,
+    continuation?: string,
+  ): Promise<ContentCommentPage> {
+    if (
+      !uuid.test(revisionId) ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 100
+    ) {
       throw new ContentCommentInvalid('invalid comment page request');
     }
     const prior = continuation ? decodeCursor(continuation, revisionId) : null;
@@ -257,54 +408,89 @@ export class ContentComments {
       const owner = await client.query(`SELECT data_epoch, sequence::text AS sequence
         FROM content.owner_control WHERE singleton`);
       if (owner.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
-      const position: ContentPosition = { owner: 'content',
-        dataEpoch: owner.rows[0].data_epoch, sequence: owner.rows[0].sequence };
+      const position: ContentPosition = {
+        owner: 'content',
+        dataEpoch: owner.rows[0].data_epoch,
+        sequence: owner.rows[0].sequence,
+      };
       if (prior && prior.dataEpoch !== position.dataEpoch) {
         throw new ContentCommentCursorStale('Content owner epoch changed');
       }
-      const maximum = await client.query<{ last: string }>(`SELECT COALESCE(MAX(list_order), 0)::text AS last
-        FROM content.comment WHERE revision_id = $1`, [revisionId]);
+      const maximum = await client.query<{ last: string }>(
+        `SELECT COALESCE(MAX(list_order), 0)::text AS last
+        FROM content.comment WHERE revision_id = $1`,
+        [revisionId],
+      );
       const lastOrder = maximum.rows[0]?.last ?? '0';
       if (prior && BigInt(prior.throughOrder) > BigInt(lastOrder)) {
-        throw new ContentCommentCursorStale('comment continuation is beyond the retained owner cut');
+        throw new ContentCommentCursorStale(
+          'comment continuation is beyond the retained owner cut',
+        );
       }
       const throughOrder = prior?.throughOrder ?? lastOrder;
       const afterOrder = prior?.afterOrder ?? '0';
-      const result = await client.query(`SELECT c.*, r.byte_digest,
+      const result = await client.query(
+        `SELECT c.*, r.byte_digest,
         c.body AS comment_body, c.sequence::text AS sequence,
         c.list_order::text AS list_order
         FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
         WHERE c.revision_id = $1 AND c.list_order > $2::bigint
           AND c.list_order <= $3::bigint
         ORDER BY c.list_order LIMIT $4`,
-      [revisionId, afterOrder, throughOrder, pageSize + 1]);
+        [revisionId, afterOrder, throughOrder, pageSize + 1],
+      );
       await client.query('COMMIT');
       const rows = result.rows.slice(0, pageSize);
-      const next = result.rows.length > pageSize
-        ? encodeCursor({ version: 1, revisionId, dataEpoch: position.dataEpoch,
-          throughOrder, afterOrder: rows.at(-1)!.list_order }) : null;
-      return { revisionId, comments: rows.map(row => asComment(row, false)),
-        sourcePosition: position, next };
+      const next =
+        result.rows.length > pageSize
+          ? encodeCursor({
+              version: 1,
+              revisionId,
+              dataEpoch: position.dataEpoch,
+              throughOrder,
+              afterOrder: rows.at(-1)!.list_order,
+            })
+          : null;
+      return {
+        revisionId,
+        comments: rows.map((row) => asComment(row, false)),
+        sourcePosition: position,
+        next,
+      };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   }
 
-  async readReceipt(admissionId: string): Promise<{ outcome: 'succeeded' | 'cancelled';
-    position: ContentPosition } | null> {
+  async readReceipt(
+    admissionId: string,
+  ): Promise<{ outcome: 'succeeded' | 'cancelled'; position: ContentPosition } | null> {
     if (!uuid.test(admissionId)) throw new ContentCommentInvalid('invalid admission id');
-    const result = await this.pool.query(`SELECT outcome, data_epoch,
+    const result = await this.pool.query(
+      `SELECT outcome, data_epoch,
       sequence::text AS sequence FROM content.receipt
       WHERE operation_id = $1 AND action = 'comment.create'`,
-    [`content-comment:${admissionId}`]);
+      [`content-comment:${admissionId}`],
+    );
     const row = result.rows[0];
-    return row ? { outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
-      position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence } } : null;
+    return row
+      ? {
+          outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
+          position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
+        }
+      : null;
   }
 
-  async cancel(admissionId: string, requestDigest: string): Promise<{
-    outcome: 'succeeded' | 'cancelled'; position: ContentPosition }> {
+  async cancel(
+    admissionId: string,
+    requestDigest: string,
+  ): Promise<{
+    outcome: 'succeeded' | 'cancelled';
+    position: ContentPosition;
+  }> {
     if (!uuid.test(admissionId) || !sha.test(requestDigest)) {
       throw new ContentCommentInvalid('invalid admission proof');
     }
@@ -313,35 +499,54 @@ export class ContentComments {
     try {
       await client.query('BEGIN');
       await lock(client, admissionId);
-      const previous = await client.query(`SELECT request_digest, action, outcome, data_epoch,
-        sequence::text AS sequence FROM content.receipt WHERE operation_id = $1`, [operationId]);
+      const previous = await client.query(
+        `SELECT request_digest, action, outcome, data_epoch,
+        sequence::text AS sequence FROM content.receipt WHERE operation_id = $1`,
+        [operationId],
+      );
       if (previous.rowCount) {
         const row = previous.rows[0];
         if (row.request_digest !== requestDigest || row.action !== 'comment.create') {
           throw new ContentConflict('comment operation key reused');
         }
         await client.query('COMMIT');
-        return { outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
-          position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence } };
+        return {
+          outcome: row.outcome === 'succeeded' ? 'succeeded' : 'cancelled',
+          position: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
+        };
       }
       const owner = await client.query(`UPDATE content.owner_control SET sequence = sequence + 1
         WHERE singleton RETURNING data_epoch, sequence::text AS sequence`);
       if (owner.rowCount !== 1) throw new ContentUnavailable('Content owner position unavailable');
       const { data_epoch, sequence } = owner.rows[0];
-      await client.query(`INSERT INTO content.receipt
+      await client.query(
+        `INSERT INTO content.receipt
         (operation_id, request_digest, action, outcome, data_epoch, sequence, reason)
         VALUES ($1,$2,'comment.create','rejected',$3,$4,'admission-fenced')`,
-      [operationId, requestDigest, data_epoch, sequence]);
-      await client.query(`INSERT INTO content.outbox
+        [operationId, requestDigest, data_epoch, sequence],
+      );
+      await client.query(
+        `INSERT INTO content.outbox
         (id, data_epoch, sequence, operation_id, event_type, recipe, payload)
         VALUES ($1,$2,$3,$4,'content.comment.cancelled','content-body-v1',$5::jsonb)`,
-      [randomUUID(), data_epoch, sequence, operationId,
-        JSON.stringify({ admissionId, reason: 'admission-fenced' })]);
+        [
+          randomUUID(),
+          data_epoch,
+          sequence,
+          operationId,
+          JSON.stringify({ admissionId, reason: 'admission-fenced' }),
+        ],
+      );
       await client.query('COMMIT');
-      return { outcome: 'cancelled', position: { owner: 'content', dataEpoch: data_epoch, sequence } };
+      return {
+        outcome: 'cancelled',
+        position: { owner: 'content', dataEpoch: data_epoch, sequence },
+      };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   }
 }

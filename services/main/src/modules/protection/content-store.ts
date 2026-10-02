@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { PROTECTION_RULE, CONTENT_DRAFT_PROTECTION, type ProtectionAction, type ProtectionMode } from './schema.ts';
+import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 
 /** Content owner procedures for content-draft-protection-v1 over migrations 130/131.
  * Each command takes the operation lock, replays an existing receipt, then locks the
@@ -210,6 +211,10 @@ export class ContentProtectionStore {
     if (!body || typeof body !== 'object' || Array.isArray(body) || bytes.length > MAX_CANDIDATE_BYTES
       || (input.predecessor !== null && !UUID.test(input.predecessor))) {
       throw new ProtectionInvalid('candidate must be a bounded JSON object');
+    }
+    if ('document' in body) {
+      try { retainedDocumentBody(body as Record<string, unknown>); }
+      catch { throw new ProtectionInvalid('invalid correction document projection'); }
     }
     return this.command('correction.propose', input.operationId, input.requestDigest, async (client, reject) => {
       const target = await this.lockTarget(client, input.variantId, input.resourceId);

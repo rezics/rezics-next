@@ -43,6 +43,7 @@ const runtimeWorkspaceRoots = [
   'services/account',
   'services/content',
   'packages/model',
+  'packages/document',
   'packages/zone-sdk',
 ];
 const runtimeArtifacts = [

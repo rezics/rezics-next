@@ -33,11 +33,16 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 async function append(editor: HTMLElement, text: string) {
-  const area = editor as HTMLTextAreaElement;
-  area.focus();
-  area.setSelectionRange(area.value.length, area.value.length);
-  await userEvent.type(area, text, { skipClick: true });
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  await userEvent.paste(text);
 }
+const editorText = (editor: HTMLElement) => Array.from(editor.children).map(node => node.textContent ?? '').join('\n');
 
 const status = (canvasElement: HTMLElement) => within(canvasElement).getAllByRole('status')
   .find(element => element.closest('[data-slot="autosave-status"]'))!;
@@ -87,7 +92,7 @@ export const ConflictTakeTheirs: Story = {
     args.story!.writeChapterElsewhere(args.chapter.chapter.id, args.chapter.variant, `${opening}\n另一台设备写下的一段。`);
     await append(canvas.getByRole('textbox', { name: 'Chapter text' }), '\n我的。');
     await userEvent.click(await canvas.findByRole('button', { name: 'Use the saved one' }, { timeout: 3_000 }));
-    await expect(canvas.getByRole('textbox', { name: 'Chapter text' })).toHaveValue(`${opening}\n另一台设备写下的一段。`);
+    await waitFor(() => expect(editorText(canvas.getByRole('textbox', { name: 'Chapter text' }))).toBe(`${opening}\n另一台设备写下的一段。`));
   },
 };
 
@@ -152,9 +157,10 @@ export const ArabicChapter: Story = {
     const editor = within(canvasElement).getByRole('textbox', { name: 'Chapter text' });
     await expect(editor).toHaveAttribute('lang', 'ar');
     await expect(editor).toHaveAttribute('dir', 'rtl');
-    await expect(editor).toHaveAttribute('data-placeholder-dir', 'ltr');
-    await expect(editor).toHaveAttribute('placeholder', 'Start writing. Each line is a paragraph.');
-    const placeholder = getComputedStyle(editor, '::placeholder');
+    await expect(editor.closest('[data-placeholder-dir]')).toHaveAttribute('data-placeholder-dir', 'ltr');
+    const paragraph = editor.querySelector('[data-placeholder]')!;
+    await expect(paragraph).toHaveAttribute('data-placeholder', 'Start writing. Each line is a paragraph.');
+    const placeholder = getComputedStyle(paragraph, '::before');
     await expect(placeholder.unicodeBidi).toBe('plaintext');
     await expect(placeholder.textAlign).toBe('left');
   },
@@ -178,7 +184,7 @@ export const EmptyDraftSaves: Story = {
     const editor = canvas.getByRole('textbox', { name: 'Chapter text' });
     await userEvent.clear(editor);
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
-    await expect(editor).toHaveValue('');
+    await expect(editorText(editor)).toBe('');
     await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
     await expect(args.story!.calls).toEqual(['draft']);
     const head = args.story!.chapterHead(args.chapter.variant)!;

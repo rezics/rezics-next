@@ -6,6 +6,8 @@ import { ProtectionInvalid, type ContentProtectionAction, type ContentProtection
   type CorrectionProposal, type OwnerOutcome, type ProtectionState, ProtectionIdempotencyConflict } from './content-store.ts';
 import type { ProtectionAction } from './schema.ts';
 import { protectionReceiptIri, contentReceiptFamilies, type ContentProtectionAdmissionAction } from './receipt-family.ts';
+import { authoredDocumentBody, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
+import { hasDocumentContent } from '@rezics/document';
 
 /** Account, Access and the Content owner admit each protected command. Edit, protect,
  * relax, propose and review are distinct Access actions; the client never supplies origin. */
@@ -33,7 +35,7 @@ interface Common {
   expectedRuleRevision: string; reason: string; evidence: string[];
 }
 export interface ProtectionCommand extends Common { resourceId: string; variantId: string; action: ProtectionAction }
-export interface CorrectionCommand extends Common { resourceId: string; variantId: string; body: string; predecessor: string | null }
+export interface CorrectionCommand extends Common, AuthoredBodyInput { resourceId: string; variantId: string; predecessor: string | null }
 export interface DecisionCommand extends Common {
   proposalRevision: string; outcome: 'approved' | 'rejected'; expectedCandidateDigest: string;
 }
@@ -128,7 +130,13 @@ export async function changeAdmittedProtection(store: ContentProtectionStore, ac
 export async function proposeAdmittedCorrection(store: ContentProtectionStore, account: Account, access: Access,
   request: Request, input: CorrectionCommand): Promise<OwnerOutcome<CorrectionProposal>> {
   target(input.resourceId, input.variantId, input.actingSubject);
-  const candidateJson = JSON.stringify({ body: input.body });
+  let body;
+  try { body = authoredDocumentBody(input); }
+  catch { throw new ProtectionInvalid('invalid correction body'); }
+  if (body.document ? !hasDocumentContent(body.document) : !body.body) {
+    throw new ProtectionInvalid('correction body is empty');
+  }
+  const candidateJson = JSON.stringify(body);
   const digest = digestOf('content-draft-correction-v1', { resourceId: input.resourceId, variantId: input.variantId,
     actingSubject: input.actingSubject, expectedContentHead: input.expectedContentHead,
     expectedProtectionHead: input.expectedProtectionHead, expectedRuleRevision: input.expectedRuleRevision,

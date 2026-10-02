@@ -3,6 +3,7 @@ import { unerased } from './public-patterns.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { readExactContributionDraft } from '../contribution/history.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { discloseInventory } from '../disclosure/read.ts';
@@ -121,7 +122,7 @@ export async function listEligibleNativeVariants(env: WorkActivationEnvironment,
 
 export async function readEligibleNativeVariant(env: WorkActivationEnvironment,
   mainVersion: string, contribution: string): Promise<{
-  work: string; variant: NativeVariant; body: string;
+  work: string; variant: NativeVariant; body: string; document?: DocumentSnapshot;
 } | null> {
   if (!nativeId.test(contribution)) throw new InvalidNativeVariant('invalid Contribution identity');
   const { work, variants } = await listEligibleNativeVariants(env, mainVersion);
@@ -151,7 +152,7 @@ export async function readEligibleNativeVariant(env: WorkActivationEnvironment,
   const [decision] = await discloseInventory(env, [{ owner: 'graph', resource: contribution,
     component: 'body', revision: variant.selectedDraft, work }], currentDisclosureViewer(), 'read');
   if (decision !== 'visible') return null;
-  return { work, variant, body: exact.body };
+  return { work, variant, body: exact.body, ...(exact.document ? { document: exact.document } : {}) };
 }
 
 export class ReaderVariantPreferenceStore {
@@ -256,7 +257,7 @@ export class ReaderVariantPreferenceStore {
 
 export async function readMainDefaultVariant(env: WorkActivationEnvironment,
   mainVersion: string, language?: string): Promise<{ work: string; selection: string;
-  variant: NativeVariant; body: string }> {
+  variant: NativeVariant; body: string; document?: DocumentSnapshot }> {
   checkedMain(mainVersion);
   const selected = chooseMainLanguage(await readMainLanguageHeads(env, mainVersion, true), language);
   if (!selected) throw new NativeVariantUnavailable('Main Version language is unavailable');
@@ -310,5 +311,5 @@ export async function readMainDefaultVariant(env: WorkActivationEnvironment,
     component: 'body', revision: variant.selectedDraft, work: row.work.value }], currentDisclosureViewer(), 'read');
   if (decision !== 'visible') throw new NativeVariantMissing('Main Version default is unavailable');
   return { work: row.work.value, selection: row.selection.value,
-    variant, body: exact.body };
+    variant, body: exact.body, ...(exact.document ? { document: exact.document } : {}) };
 }
