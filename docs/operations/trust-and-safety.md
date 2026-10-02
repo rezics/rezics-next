@@ -33,14 +33,18 @@ checks delivered images from day one; apply for
 [PhotoDNA](https://www.microsoft.com/en-us/photodna/faq), free for approved
 services, and register with [NCMEC as an electronic service provider](https://ncmec.org/csam),
 adding pre-publication matching once approved rather than waiting for it. A
-local classifier ([NSFWJS](https://github.com/infinitered/nsfwjs) or
-[OpenNSFW2](https://github.com/bhky/opennsfw2) on CPU) holds likely explicit
-images for review; its output is review evidence, not clearance. New accounts
-have upload rate limits, and
+client classifier ([NSFWJS](https://github.com/infinitered/nsfwjs)) supplies
+NSFW presentation evidence tied to the exact image. It neither establishes
+prohibited content nor grants clearance or creates a review hold. Human label
+corrections take precedence; failed or unavailable analysis remains unknown.
+The evidence producer can move to the server without changing these meanings.
+New accounts have upload rate limits, and
 [Turnstile](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/)
 protects abuse-prone enrollment. Imported covers display with their source
-attribution and are removed on a valid notice. A scanner outage holds new
-uploads for review instead of disabling media.
+attribution and are removed on a valid notice. An NSFW classifier outage permits
+manual labeling and does not create a governance hold. Required safety-matching
+outages follow their own admission policy. Actual review holds and removals
+remain explicit platform decisions.
 
 ## Platform suitability moderation setup
 
@@ -92,8 +96,13 @@ choice. Registration need not collect the date; applicable account minimums and
 parental-involvement requirements still need an admission path, including when
 age becomes known later. The prior no-age-evidence launch decision is superseded.
 
-The Account settings API, Main shared disclosure policy and Accounts UI now
-apply these choices together. Adult text requires a supported market and its
+The Account settings API, Main viewing state and Accounts UI apply these choices
+together. Ordinary interactive APIs return Access-authorized content with its
+assessments; the frontend checks current preferences before rendering each body
+or image. Ratings do not deny Access, propagate through an entire reference tree
+or suppress unrelated general text. Noninteractive preview, indexing, email and
+push retain their explicit default policies. NSFW masking defaults on and is
+independent of category opt-ins and author concealment. Adult text requires a supported market and its
 individual opt-in; KR and GB adult categories remain unavailable, mainland
 China registration is unavailable, and unknown markets cannot enable adults. Self-declaration is not automatically
 sufficient for every content type or country: record which representations and

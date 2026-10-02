@@ -2,6 +2,8 @@ import { insert, plural } from 'native-i18n';
 import { de as additions } from './additions-rest.ts';
 
 export default {
+  nsfwDisplayLabel: "NSFW-Bilder verdecken",
+  nsfwDisplayHelp: "Als NSFW markierte Bilder können für den Arbeitsplatz oder öffentliche Orte ungeeignet sein. Alterskategorien und vom Autor gesetzte Abdeckungen gelten weiterhin.",
   contentTitle: "Geburtstag und Inhalte",
   contentHelp: "Jede Kategorie lässt sich einzeln schalten. Altersgrenzen gelten zusätzlich.",
   birthdayLabel: "Geburtstag",

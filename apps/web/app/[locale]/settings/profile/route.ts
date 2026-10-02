@@ -7,6 +7,7 @@ import { readSession } from '../../../../features/auth/session.ts';
 import { type AvatarReport, profileSaveInput, saveAgentProfile } from '../../../../features/settings/profile-api.ts';
 import { isUiLocale } from '../../../../i18n/define.ts';
 import { localizedPath } from '../../../../i18n/locale.ts';
+import type { ClientImageInference } from '../../../../features/document-editor/image-inference.ts';
 
 export async function POST(request: Request, { params }: { params: Promise<{ locale: string }> }) {
   if (!sameOriginWrite(request)) return new Response('Origin mismatch', { status: 403 });
@@ -26,10 +27,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ loc
   if (profile.revision !== form.get('expectedHead')) return NextResponse.redirect(back('conflict'), 303);
   const file = form.get('avatar');
   const report: AvatarReport = {};
+  let imageInference: ClientImageInference | undefined;
+  if (form.has('imageInference')) {
+    try {
+      const raw = String(form.get('imageInference'));
+      if (raw.length > 4096) return NextResponse.redirect(back('invalid'), 303);
+      imageInference = JSON.parse(raw) as ClientImageInference;
+      if (!imageInference || typeof imageInference !== 'object' || Array.isArray(imageInference))
+        return NextResponse.redirect(back('invalid'), 303);
+    } catch { return NextResponse.redirect(back('invalid'), 303); }
+  }
   const result = await saveAgentProfile(profileSaveInput(profile, {
     token, agent, displayName: String(form.get('displayName') ?? ''),
     bioText: String(form.get('bio') ?? ''), bioLanguage: String(form.get('bioLanguage') ?? ''), avatar: file instanceof File && file.size ? file : undefined,
-    removeAvatar: form.get('removeAvatar') === 'on', key: String(form.get('key') ?? ''), report,
+    imageInference, removeAvatar: form.get('removeAvatar') === 'on', key: String(form.get('key') ?? ''), report,
   }));
   // A new avatar's check and a spent upload budget are told on the page that follows.
   if (result !== 'saved') {

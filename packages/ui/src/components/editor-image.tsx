@@ -12,7 +12,8 @@ import { Spinner } from './spinner.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './tabs.tsx';
 
 /** Stores an image the writer chose and returns the address the document will reference. */
-export type ImageUploader = (file: File) => Promise<{ src: string }>;
+export type UploadedImage = { src: string; representationId?: string; mediaUseId?: string; conceal?: boolean };
+export type ImageUploader = (file: File, occurrenceId: string) => Promise<UploadedImage>;
 
 export function imageFiles(list: FileList | null | undefined): File[] {
   return Array.from(list ?? []).filter(file => file.type.startsWith('image/'));
@@ -26,8 +27,8 @@ function trackPosition(editor: TiptapEditor, start: number) {
   return { get: () => position, stop: () => { editor.off('transaction', follow); } };
 }
 
-function insertImage(editor: TiptapEditor, position: number, src: string, alt: string) {
-  editor.chain().focus().insertContentAt(Math.min(position, editor.state.doc.content.size), { type: 'image', attrs: { src, alt: alt || null } }).run();
+function insertImage(editor: TiptapEditor, position: number, image: UploadedImage, alt: string, id = crypto.randomUUID()) {
+  editor.chain().focus().insertContentAt(Math.min(position, editor.state.doc.content.size), { type: 'image', attrs: { ...image, id, alt: alt || null } }).run();
 }
 
 /**
@@ -40,8 +41,10 @@ export async function uploadImagesAt(editor: TiptapEditor, files: File[], positi
   try {
     for (const file of files) {
       try {
-        const safe = safeDocumentUrl((await upload(file)).src, true);
-        if (safe && !editor.isDestroyed) insertImage(editor, tracked.get(), safe, '');
+        const occurrenceId = crypto.randomUUID();
+        const image = await upload(file, occurrenceId);
+        const safe = safeDocumentUrl(image.src, true);
+        if (safe && !editor.isDestroyed) insertImage(editor, tracked.get(), { ...image, src: safe }, '', occurrenceId);
         else ok = false;
       } catch {
         ok = false;
@@ -98,7 +101,7 @@ export function ImageInsert({ editor, labels, request, upload, onClose }: {
   function embed() {
     const safe = safeDocumentUrl(url.trim(), true);
     if (!safe) { setInvalid(true); return; }
-    insertImage(editor, tracked.current?.get() ?? request.position, safe, alt.trim());
+    insertImage(editor, tracked.current?.get() ?? request.position, { src: safe }, alt.trim());
     onClose();
   }
   async function send(files: File[]) {

@@ -32,6 +32,16 @@ const snapshot = (
   doc: { type: 'doc', content },
 });
 
+test('managed image identity and author concealment round-trip independently from content labels', () => {
+  const image = { type: 'image', attrs: { id: 'occurrence', src: '/media/image',
+    representationId: '11111111-1111-4111-8111-111111111111', mediaUseId: '22222222-2222-4222-8222-222222222222', conceal: true } };
+  const document = normalizeDocument(snapshot([image]));
+  expect(document.doc.content![0]!.attrs).toMatchObject(image.attrs);
+  expect(parseDocument(JSON.parse(serializeDocument(document)))).toEqual(document);
+  expect(checkDocument(snapshot([{ ...image, attrs: { ...image.attrs, nsfw: true } }]))).toBe(false);
+  expect(checkDocument(snapshot([{ ...image, attrs: { ...image.attrs, conceal: 'yes' } }]))).toBe(false);
+});
+
 test('plain text import preserves paragraphs, trailing newline and empty draft', () => {
   const imported = fromPlainText('漢字😀\r\n\r\nlast\n');
   expect(documentText(imported)).toBe('漢字😀\n\nlast\n');

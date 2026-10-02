@@ -2,6 +2,8 @@ import { insert, plural } from 'native-i18n';
 import { en as additions } from './additions.ts';
 
 export default {
+  nsfwDisplayLabel: "Mask NSFW images",
+  nsfwDisplayHelp: "Images marked NSFW may be unsuitable for work or public places. Age-category choices and author masks still apply.",
   contentTitle: "Birthday & content",
   contentHelp: "Choose each content category independently. Age eligibility also applies.",
   birthdayLabel: "Birthday",

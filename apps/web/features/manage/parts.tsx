@@ -7,6 +7,7 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { untaggedName } from '../language/untagged.ts';
@@ -42,7 +43,7 @@ export function Thumb({ image, label, fallbackKey, className }: {
 }) {
   const frame = cn('size-10 shrink-0 overflow-hidden rounded-xl border border-border/60', className);
   if (image?.kind === 'image') {
-    return <img src={`${BFF_PREFIX}${image.url}`} alt="" width={image.width} height={image.height}
+    return <WebMediaImage revealable={false} src={`${BFF_PREFIX}${image.url}`} alt="" width={image.width} height={image.height}
       loading="lazy" decoding="async" className={cn(frame, 'bg-muted object-cover')} />;
   }
   return <span aria-hidden="true" className={cn(frame, 'grid place-items-center font-semibold text-sm',

@@ -3,6 +3,7 @@ import { cn } from '@rezics/ui/utils';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { ShieldCheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { Execution } from './execution.ts';
 import type { ZoneMessages } from './messages.ts';
@@ -20,12 +21,12 @@ export function ZoneMasthead({ zone, members, actions }: { zone: ZoneContext; me
     <div aria-hidden="true" className={cn('relative -z-10 overflow-hidden',
       zone.hero ? 'h-36 sm:h-48 lg:h-56' : 'h-14 sm:h-16')}>
       {zone.hero ? <>
-        <img src={zone.hero.url} alt="" className="size-full object-cover" />
+        <WebMediaImage revealable={false} src={zone.hero.url} alt="" className="size-full object-cover" />
         <span className="absolute inset-0 bg-linear-to-t from-(--zone-page) via-(--zone-page)/10 to-transparent" />
       </> : null}
     </div>
     <div className="mx-auto flex w-full max-w-6xl flex-wrap items-end gap-x-4 gap-y-3 px-4 sm:px-6 lg:px-10">
-      {zone.icon ? <img src={zone.icon.url} alt="" className="-mt-10 size-18 shrink-0 rounded-2xl bg-card object-cover
+      {zone.icon ? <WebMediaImage revealable={false} src={zone.icon.url} alt="" className="-mt-10 size-18 shrink-0 rounded-2xl bg-card object-cover
         ring-4 ring-(--zone-page) sm:-mt-12 sm:size-22" />
         : <span aria-hidden="true" className="-mt-10 grid size-18 shrink-0 place-items-center rounded-2xl bg-primary
           font-(family-name:--zone-heading-font) font-semibold text-3xl text-primary-foreground ring-4 ring-(--zone-page)

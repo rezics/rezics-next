@@ -14,7 +14,7 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { png } from './media-support.ts';
 
-test('G-897 H1: rated summaries, public previews and statements are absent for anonymous and unknown-age readers', async () => {
+test('G-897 H1: interactive reads return rated payload while public previews retain anonymous presentation', async () => {
   const home = await startHomeStack('g897h1');
   try {
     const seeded = await seedHome(home, 3), work = seeded.works[0]!;
@@ -123,6 +123,15 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
       return call('GET', `${url.pathname}${url.search}`, undefined,
         signed && !path.startsWith('/v1/public-previews/'));
     };
+    const baselineStatus = new Map<string, number>();
+    for (const signed of [false, true]) for (const path of resourceGets) {
+      baselineStatus.set(`${signed}:${path}`, (await readResource(path, work.work, signed)).status);
+    }
+    for (const signed of [false, true]) for (const suffix of ['', `/revisions/${description.revision.slice(-36)}`]) {
+      const path = `/v1/semantic/resources/${work.work.slice(-36)}${suffix}`
+        + (signed ? `?actingSubject=${encodeURIComponent(seeded.author)}` : '');
+      baselineStatus.set(`${signed}:semantic:${suffix}`, (await call('GET', path, undefined, signed)).status);
+    }
     for (const signed of [false, true]) for (const read of requests(work.work, signed)) {
       const response = await read();
       expect(response.status, await response.clone().text()).toBe(200);
@@ -136,48 +145,57 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
     const assessment = await json<{ assessment: Assessed }>(await rate(['r18'], null));
     const absent = `https://rezics.com/id/${randomUUID()}`;
     for (const signed of [false, true]) {
-      const deniedReads = requests(work.work, signed), absentReads = requests(absent, signed);
-      for (const [index, read] of deniedReads.entries()) {
+      const ratedReads = requests(work.work, signed), absentReads = requests(absent, signed);
+      for (const [index, read] of ratedReads.entries()) {
         const response = await read(), missing = await absentReads[index]!();
         const body = await response.text(), missingBody = await missing.text();
-        expect(response.status, body).toBe(missing.status);
-        expect(body).not.toContain(work.title);
-        expect(body).not.toContain('G897 secret statement');
-        expect(body.replaceAll(work.work, absent)).toBe(missingBody);
+        if (index === 1) {
+          expect(response.status, body).toBe(404);
+          expect(response.status).toBe(missing.status);
+          expect(body).not.toContain(work.title);
+          expect(body.replaceAll(work.work, absent)).toBe(missingBody);
+        } else {
+          expect(response.status, body).toBe(200);
+          expect(body).toContain(index === 0 ? work.title : 'G897 secret statement');
+          expect(missingBody).not.toContain(work.title);
+          expect(missingBody).not.toContain('G897 secret statement');
+        }
       }
       for (const path of resourceGets) {
         const response = await readResource(path, work.work, signed);
         const missing = await readResource(path, absent, signed);
         const body = await response.text(), missingBody = await missing.text();
-        expect(response.status, `${path}: ${body}`).toBe(404);
-        expect(response.status).toBe(missing.status);
-        expect(body).toBe(missingBody);
+        expect(missing.status, missingBody).toBe(404);
+        if (path.startsWith('/v1/public-previews/')) {
+          expect(response.status, `${path}: ${body}`).toBe(404);
+          expect(body).toBe(missingBody);
+        } else expect(response.status, `${path}: ${body}`).toBe(baselineStatus.get(`${signed}:${path}`)!);
       }
       for (const suffix of ['', `/revisions/${description.revision.slice(-36)}`]) {
         const semantic = (target: string) => call('GET', `/v1/semantic/resources/${target.slice(-36)}${suffix}`
           + (signed ? `?actingSubject=${encodeURIComponent(seeded.author)}` : ''), undefined, signed);
-        const denied = await semantic(work.work), missing = await semantic(absent);
-        expect(denied.status, await denied.clone().text()).toBe(404);
-        expect(await denied.text()).toBe(await missing.text());
+        const rated = await semantic(work.work), missing = await semantic(absent);
+        expect(rated.status, await rated.clone().text()).toBe(baselineStatus.get(`${signed}:semantic:${suffix}`)!);
+        expect(missing.status).toBe(404);
       }
       const stats = (target: string) => call('GET', `/v1/works/${target.slice(-36)}/reader-stats`
         + (signed ? `?actingSubject=${encodeURIComponent(seeded.author)}` : ''), undefined, signed);
-      const deniedStats = await stats(work.work), missingStats = await stats(absent);
-      expect(deniedStats.status, await deniedStats.clone().text()).toBe(404);
-      expect(await deniedStats.text()).toBe(await missingStats.text());
+      const ratedStats = await stats(work.work), missingStats = await stats(absent);
+      expect(ratedStats.status, await ratedStats.clone().text()).toBe(200);
+      expect(missingStats.status).toBe(404);
       const delivery = await call('GET', `/v1/media/uses/${media.body.items[0]!.use}`
         + (signed ? `?actingSubject=${encodeURIComponent(seeded.author)}` : ''), undefined, signed);
       const absentDelivery = await call('GET', `/v1/media/uses/${randomUUID()}`
         + (signed ? `?actingSubject=${encodeURIComponent(seeded.author)}` : ''), undefined, signed);
-      expect(delivery.status).toBe(404);
-      expect(await delivery.text()).toBe(await absentDelivery.text());
+      expect(delivery.status).toBe(200);
+      expect(absentDelivery.status).toBe(404);
     }
-    const filtered = await search();
-    expect(filtered.total).toBe(2);
-    expect(JSON.stringify(filtered)).not.toContain(work.work);
+    const ratedResults = await search();
+    expect(ratedResults.total).toBe(3);
+    expect(JSON.stringify(ratedResults)).toContain(work.work);
     for (const child of [work.mainVersion, work.variants[0]!.contribution, release.release]) {
       expect((await discloseInventory(home.stack.env, [{ owner: 'graph', resource: child, component: 'record' }],
-        undefined, 'read'))[0]).not.toBe('visible');
+        undefined, 'read'))[0]).toBe('visible');
     }
     // Moderation is a command proof, independent of permission to read rated
     // content. Withdraw this Agent's Work read grant before correcting it.
@@ -186,8 +204,9 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
     const corrected = await json<{ assessment: Assessed }>(await rate(['r18g'], assessment.assessment.revision));
     expect(corrected.assessment.predecessor).toBe(assessment.assessment.revision);
     expect(corrected.assessment.labels).toEqual(['r18g']);
-    for (const read of requests(work.work, false)) {
-      expect(await (await read()).text()).not.toContain(work.title);
+    for (const [index, read] of requests(work.work, false).entries()) {
+      const response = await read();
+      expect(response.status, await response.clone().text()).toBe(index === 1 ? 404 : 200);
     }
     expect((await rate([], assessment.assessment.revision)).status).toBe(409);
     expect((await rate([], corrected.assessment.revision, seeded.author)).status).toBe(403);
@@ -215,8 +234,8 @@ test('G-897 H1: rated summaries, public previews and statements are absent for a
     // Exports run last: their owner sequence currently advances without a
     // Content outbox event, which would invalidate unrelated search fixtures.
     const exported = await json<{ plan: unknown }>(await call('POST', '/v1/exports', exportBody, true), 201);
-    expect(JSON.stringify(exported)).toContain('disclosure_restricted');
-    expect(JSON.stringify(exported)).not.toContain(work.title);
+    expect(JSON.stringify(exported)).not.toContain('disclosure_restricted');
+    expect(JSON.stringify(exported)).toContain(work.work);
     const cleared = await json<{ assessment: Assessed }>(await rate([], corrected.assessment.revision));
     expect(cleared.assessment.predecessor).toBe(corrected.assessment.revision);
     expect(cleared.assessment.labels).toEqual([]);

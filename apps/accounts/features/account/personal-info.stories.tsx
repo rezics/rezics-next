@@ -10,6 +10,7 @@ const meta = {
   title: 'Accounts/Account centre/Personal info', component: PersonalInfo, args: { user: ada,
     contentPreferences: { status: 'ok', data: { revision: 0, birthDate: null, country: null,
       birthdayPublic: false, publicId: null, age: 'unknown', accountEligible: true, adultAvailable: false,
+      nsfwDisplay: 'mask',
       categories: { general: true, r15: false, r18: false, r18g: false } } },
     preferences: { status: 'ok', data: { revision: 0, displayMode: 'system', showZoneThemes: true } } },
   decorators: [Story => <AccountFrame section="personal-info"><Story /></AccountFrame>],

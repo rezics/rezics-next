@@ -3,6 +3,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
 import { advanceContentSequence } from '../content-sequence.ts';
+import { MediaPresentationStore } from './presentation.ts';
+import type { ImageNsfw } from './presentation.ts';
+import type { ReadAssessment } from '../suitability/contract.ts';
+import { UNASSESSED } from '../suitability/policy.ts';
 
 /** Media commands in Main's Content database. Every command writes one
  * `content.receipt`, its `content.outbox` event and its media rows together. */
@@ -149,6 +153,9 @@ export interface AvatarRow {
   moderation: string | null;
   lifecycle: string | null;
   statePosition: string | null;
+  nsfw?: ImageNsfw;
+  ageRating?: ReadAssessment;
+  conceal?: boolean;
 }
 
 function hash(value: string): string {
@@ -223,7 +230,10 @@ export function assetManifest(asset: string, representation: { id: string; sha25
 }
 
 export class MediaStore {
-  constructor(private readonly pool: Pool, private readonly content: ContentCore) {}
+  readonly presentation: MediaPresentationStore;
+  constructor(private readonly pool: Pool, private readonly content: ContentCore) {
+    this.presentation = new MediaPresentationStore(pool);
+  }
 
   /** Create the asset when absent, then reserve one bounded quarantine upload. */
   async reserveUpload(admission: MediaAdmission, input: ReserveUploadInput): Promise<UploadReservation> {
@@ -297,7 +307,8 @@ export class MediaStore {
       u.declared_byte_length, u.declared_digest, u.quarantine_key, a.object_namespace, a.owner,
       u.expires_at <= clock_timestamp() AS expired, r.id AS representation, u.principal_id, u.reason,
       media.delivery_clearance(r) AS clearance, CASE
-        WHEN media.delivery_clearance(r) = 'rejected' THEN 'restricted' ELSE r.clearance_reason END AS clearance_reason
+        WHEN media.delivery_clearance(r) = 'rejected' THEN 'restricted'
+        WHEN media.delivery_clearance(r) = 'cleared' THEN NULL ELSE r.clearance_reason END AS clearance_reason
       FROM media.upload u JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.representation r ON r.upload_id = u.id WHERE u.id = $1`, [upload]);
     const row = result.rows[0];
@@ -866,7 +877,7 @@ export class MediaStore {
   /** Fence an admission whose dispatch Access closed; an existing outcome is returned unchanged. */
   async cancel(operationId: string, action: string, requestDigest: string): Promise<{
     outcome: 'succeeded' | 'cancelled'; position: ContentPosition }> {
-    if (!/^media-(upload|state|avatar):[0-9a-f-]{36}$/.test(operationId) || !sha.test(requestDigest)) {
+    if (!/^media-(upload|state|avatar|field|inference|document-use):[0-9a-f-]{36}$/.test(operationId) || !sha.test(requestDigest)) {
       throw new MediaInvalid('invalid media admission fence');
     }
     return transaction(this.pool, async client => {
@@ -899,13 +910,24 @@ export class MediaStore {
       SELECT c.target, c.context, c.head AS selection, r.sequence::text AS selection_position,
         u.id AS use, u.asset_id, u.crop, p.id AS representation, p.byte_digest, p.media_type, p.byte_length,
         p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, st.disclosure, st.moderation, st.lifecycle,
-        st.sequence::text AS state_position, o.data_epoch AS owner_epoch, o.sequence AS owner_sequence
+        st.sequence::text AS state_position, o.data_epoch AS owner_epoch, o.sequence AS owner_sequence,
+        COALESCE(nr.value, CASE WHEN legacy.reason = 'likely-explicit' THEN '"nsfw"'::jsonb
+          WHEN legacy.reason IS NULL AND legacy.evidence ? 'scores' THEN '"sfw"'::jsonb ELSE '"unknown"'::jsonb END) AS nsfw,
+        ar.id AS age_revision,ar.predecessor AS age_predecessor,ar.value AS age_rating,ar.source AS age_source,
+        ar.created_at AS age_created, cr.value AS conceal
       FROM owner o LEFT JOIN chosen c ON true
       LEFT JOIN media.selection_revision r ON r.id = c.head
       LEFT JOIN media.use u ON u.id = r.use_id
       LEFT JOIN media.asset a ON a.id = u.asset_id
       LEFT JOIN media.asset_state st ON st.id = a.state_head
-      LEFT JOIN media.representation p ON p.id = u.representation_id`, [targets, contexts]);
+      LEFT JOIN media.representation p ON p.id = u.representation_id
+      LEFT JOIN media.field_slot n ON n.representation_id = p.id AND n.field = 'nsfw'
+      LEFT JOIN media.field_revision nr ON nr.id = n.value_head
+      LEFT JOIN media.screen_result legacy ON legacy.source_id = p.id
+      LEFT JOIN media.field_slot ag ON ag.representation_id = p.id AND ag.field = 'ageRating'
+      LEFT JOIN media.field_revision ar ON ar.id = ag.value_head
+      LEFT JOIN media.field_slot cslot ON cslot.use_id = u.id AND cslot.field = 'conceal'
+      LEFT JOIN media.field_revision cr ON cr.id = cslot.value_head`, [targets, contexts]);
     const rows = new Map<string, AvatarRow>();
     for (const row of result.rows) {
       if (!row.target) continue;
@@ -914,7 +936,10 @@ export class MediaStore {
         representation: row.representation, sha256: row.byte_digest, mediaType: row.media_type,
         byteLength: row.byte_length, width: row.pixel_width, height: row.pixel_height,
         availability: row.availability, clearance: row.clearance, disclosure: row.disclosure, moderation: row.moderation,
-        lifecycle: row.lifecycle, statePosition: row.state_position });
+        lifecycle: row.lifecycle, statePosition: row.state_position, nsfw: row.nsfw,conceal:row.conceal??false,
+        ageRating:row.age_rating?.status==='assessed' ? {status:'assessed',labels:row.age_rating.labels,
+          revision:assetIri(row.age_revision),predecessor:row.age_predecessor?assetIri(row.age_predecessor):null,
+          basis:row.age_source==='platform'?'platform':'author',sourceId:null,createdAt:row.age_created.toISOString()}:UNASSESSED });
     }
     const owner = result.rows[0]!;
     return { rows, generation: { owner: 'content', dataEpoch: owner.owner_epoch, sequence: owner.owner_sequence } };

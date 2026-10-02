@@ -13,6 +13,8 @@ import { useReadingLanguages } from '../content-language/use-reading-languages.t
 import { textAttributes, writingLanguage } from '../content-language/writing-language.ts';
 import { uploadErrorText } from '../safety/upload-state.ts';
 import { AvatarFileField } from './avatar-file-field.tsx';
+import { classifyImage } from '../document-editor/image-inference.ts';
+import { WebImageSettings } from '../document-editor/image-settings.tsx';
 import type { SettingsMessages } from './messages.ts';
 
 export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operationKey }: {
@@ -45,7 +47,15 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
     setBusy(true);
     setFailure(undefined);
     try {
-      const response = await fetch(action, { method: 'POST', body: new FormData(event.currentTarget),
+      const form = new FormData(event.currentTarget);
+      const avatar = form.get('avatar');
+      if (avatar instanceof File && avatar.size) {
+        const bytes = await avatar.arrayBuffer();
+        const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+          byte => byte.toString(16).padStart(2, '0')).join('');
+        form.set('imageInference', JSON.stringify(await classifyImage(avatar, sha256)));
+      }
+      const response = await fetch(action, { method: 'POST', body: form,
         credentials: 'same-origin' });
       const result = new URL(response.url);
       if (response.redirected && result.origin === window.location.origin
@@ -83,6 +93,7 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
     <AvatarFileField label={t.avatar} choose={t.chooseAvatar} none={t.noAvatarSelected}
       disabled={!profile || busy} />
     <p className="text-muted-foreground text-sm">{t.avatarHelp}</p>
+    {profile?.avatarUrl ? <WebImageSettings src={profile.avatarUrl} actingSubject={agent} locale={locale} /> : null}
     {profile?.avatarSelection ? <Checkbox className="flex items-center gap-2 text-sm" name="removeAvatar" disabled={busy}>
       {t.removeAvatar}</Checkbox> : null}
     <input type="hidden" name="agent" value={agent} />

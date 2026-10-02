@@ -2,6 +2,8 @@ import { insert, plural } from 'native-i18n';
 import { ko as additions } from './additions-rest.ts';
 
 export default {
+  nsfwDisplayLabel: "NSFW 이미지 가리기",
+  nsfwDisplayHelp: "NSFW로 표시된 이미지는 직장이나 공공장소에서 보기에 적합하지 않을 수 있습니다. 연령 분류 설정과 작성자의 가림 설정은 계속 적용됩니다.",
   contentTitle: "생일 및 콘텐츠",
   contentHelp: "각 콘텐츠 분류를 개별적으로 설정할 수 있습니다. 열람에는 연령 조건도 적용됩니다.",
   birthdayLabel: "생일",

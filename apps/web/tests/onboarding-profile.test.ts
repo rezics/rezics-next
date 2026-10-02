@@ -26,7 +26,8 @@ test('profile save preserves the read revision and trims public text', async () 
 test('avatar upload, selection and profile CAS use the same Agent in order', async () => {
   const calls: Request[] = [];
   const replies = [Response.json({ asset: 'asset-id', upload: 'upload-id' }, { status: 201 }),
-    Response.json({ status: 'activated' }, { status: 201 }),
+    Response.json({ status: 'activated', representation: 'representation-id' }, { status: 201 }),
+    Response.json({ recorded: true }, { status: 201 }),
     Response.json({ selection: 'selection-id' }, { status: 201 }),
     Response.json({ revision: 'new' }, { status: 201 })];
   const send = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -39,14 +40,16 @@ test('avatar upload, selection and profile CAS use the same Agent in order', asy
   expect(await saveAgentProfile(input, send)).toBe('saved');
   expect(calls.map(call => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
     'POST /v1/media/uploads', 'PUT /v1/media/uploads/upload-id/bytes',
+    'POST /v1/media/representations/representation-id/inferences',
     'PUT /v1/resources/00000000-0000-4000-8000-000000000001/avatar',
     'PUT /v1/agents/00000000-0000-4000-8000-000000000001/profile',
   ]);
   expect(await calls[0]!.json()).toMatchObject({ actingSubject: agent, disclosure: 'public',
     mediaType: 'image/png' });
-  expect(await calls[2]!.json()).toMatchObject({ actingSubject: agent,
+  expect(await calls[2]!.json()).toMatchObject({ actingSubject: agent, status: 'unavailable', result: 'unknown' });
+  expect(await calls[3]!.json()).toMatchObject({ actingSubject: agent,
     expectedSelection: null, asset: 'asset-id' });
-  expect(await calls[3]!.json()).toMatchObject({ expectedHead: profile.revision,
+  expect(await calls[4]!.json()).toMatchObject({ expectedHead: profile.revision,
     avatarSelection: 'selection-id', bio: profile.bio });
 });
 

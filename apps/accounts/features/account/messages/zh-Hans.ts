@@ -2,6 +2,8 @@ import { insert, plural } from 'native-i18n';
 import { zhHans as additions } from './additions.ts';
 
 export default {
+  nsfwDisplayLabel: "遮罩 NSFW 图片",
+  nsfwDisplayHelp: "标记为 NSFW 的图片可能不适合在工作或公共场所查看。年龄分类设置与作者遮罩仍然适用。",
   contentTitle: "生日与内容",
   contentHelp: "各内容分类可独立开关，查看内容仍须符合年龄资格。",
   birthdayLabel: "生日",

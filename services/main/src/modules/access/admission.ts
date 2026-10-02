@@ -38,6 +38,7 @@ export interface VerifiedPrincipal {
   /** Live Account decision; never a cached JWT or client-supplied birthday. */
   contentEvidence?: { age: 'unknown' | 'under-15' | '15-17' | 'adult'; country: string | null;
     accountEligible: boolean; adultAvailable: boolean;
+    nsfwDisplay?: 'mask' | 'show';
     categories: { general: boolean; r15: boolean; r18: boolean; r18g: boolean } };
   /** Server-only callback bound to the original token and OAuth scope ceiling. */
   currentAssertion?: () => Promise<VerifiedPrincipal>;
@@ -409,6 +410,22 @@ export class AccessAdmissionRegistry {
       if (error instanceof AdmissionDenied) return false;
       throw error;
     }
+  }
+
+  /** Platform media field controls use the existing administrator proof and fences. */
+  async canProtectMedia(principal: VerifiedPrincipal, actingSubject: string, media: string,
+    action:'media.labels.protect'|'media.conceal.protect'='media.labels.protect'): Promise<boolean> {
+    if (!await this.canActAsPlatformAdministrator(principal,actingSubject)) return false;
+    return this.canReadScopedResource(principal, actingSubject, `media:protect:${media}`, action);
+  }
+
+  async canActAsPlatformAdministrator(principal:VerifiedPrincipal,actingSubject:string):Promise<boolean> {
+    const principalId=await this.activePrincipalId(principal);
+    return !!principalId && !!await platformAdministratorProof(this.pool,principalId,actingSubject);
+  }
+
+  async canManageMedia(principal: VerifiedPrincipal, actingSubject: string): Promise<boolean> {
+    return this.canReadScopedResource(principal, actingSubject, `media:owner:${actingSubject}`, 'media.upload');
   }
 
   /** Drafts require their own current grant, independent of Work or publication reads. */
@@ -1038,6 +1055,9 @@ export class AccessAdmissionRegistry {
       const administrator = administratorCandidate && await platformAdministratorTargetAllowed(client,
         this.baselineGraph, principalId, request.actingSubject, request.action, request.scope)
         ? administratorCandidate : null;
+      if (!existing && ['media.labels.protect','media.conceal.protect'].includes(request.action) && !administrator) {
+        throw new AdmissionDenied('media protection requires the platform administrator proof');
+      }
       const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
       if (administrator || baseline) {
         // A named grant source with its own pinned proof, recorded below in the

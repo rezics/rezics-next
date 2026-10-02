@@ -12,6 +12,8 @@ const rootActions: Record<string, string> = {
   'catalogue.verify': 'catalogue:verify:root',
 };
 const resourceActions: Record<string, string[]> = {
+  'media.labels.protect': ['media:protect'],
+  'media.conceal.protect': ['media:protect'],
   'zone.edit': ['zone:edit'],
   'zone.official': ['zone:official'],
   'semantic.read': ['semantic:read'],
@@ -43,6 +45,7 @@ export async function platformAdministratorTargetAllowed(
 ): Promise<boolean> {
   if (!platformAdministratorAction(action, scope)) return false;
   if (Object.hasOwn(rootActions, action) && rootActions[action] === scope) return true;
+  if (['media.labels.protect', 'media.conceal.protect'].includes(action)) return true;
   if (!graph || !native.test(actor)) return false;
   const target = scope.slice(scope.indexOf('https://rezics.com/id/'));
   if (scope.startsWith('semantic:edit:')) {

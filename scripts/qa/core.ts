@@ -51,11 +51,11 @@ export function testLogEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 export function command(root: string, name: string, args: string[], timeoutMs: number,
-  env: NodeJS.ProcessEnv = process.env): { ok: boolean; output: string; elapsedMs: number } {
+  env: NodeJS.ProcessEnv = process.env, maxBuffer?:number): { ok: boolean; output: string; elapsedMs: number } {
   const start = Date.now();
   const result = spawnSync(name, args, { cwd: root,
     env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env, encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs });
+    stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs,...(maxBuffer===undefined?{}:{maxBuffer}) });
   return { ok: result.status === 0 && !result.error,
     output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
     elapsedMs: Date.now() - start };
@@ -64,8 +64,9 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
 export function sourceIdentity(root: string): { head: string; fingerprint: string; clean: boolean } {
   const head = command(root, 'git', ['rev-parse', 'HEAD'], 5_000);
   const status = command(root, 'git', ['status', '--porcelain=v1', '--untracked-files=all'], 5_000);
-  const diff = command(root, 'git', ['diff', '--binary', 'HEAD'], 10_000);
-  if (!head.ok || !status.ok || !diff.ok) throw new Error('Cannot identify source tree');
+  const diff = command(root, 'git', ['diff', '--binary', 'HEAD'], 10_000,process.env,64*1024*1024);
+  if (!head.ok || !status.ok) throw new Error('Cannot identify source tree');
+  if (!diff.ok) throw new Error('Cannot identify source tree: git diff failed or exceeded the 64 MiB output limit');
   const hash = createHash('sha256').update(head.output).update(diff.output);
   for (const line of status.output.split('\n').filter(Boolean)) {
     const path = line.slice(3);

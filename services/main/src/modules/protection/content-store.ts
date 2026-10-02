@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { PROTECTION_RULE, CONTENT_DRAFT_PROTECTION, type ProtectionAction, type ProtectionMode } from './schema.ts';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
+import { validProtectionTransition } from './field-control.ts';
 
 /** Content owner procedures for content-draft-protection-v1 over migrations 130/131.
  * Each command takes the operation lock, replays an existing receipt, then locks the
@@ -185,7 +186,7 @@ export class ContentProtectionStore {
       if (target.protection_head !== input.expectedProtectionHead) return reject('stale_protection', target.id);
       if (input.expectedRuleRevision !== PROTECTION_RULE) return reject('stale_rule', target.id);
       const mode = target.mode ?? 'open';
-      if ((input.action === 'tighten' && mode !== 'open') || (input.action === 'relax' && mode !== 'review-required')) {
+      if (!validProtectionTransition(mode, input.action)) {
         return reject('unsupported_transition', target.id);
       }
       const id = randomUUID(), epoch = BigInt(target.epoch ?? '0') + 1n;

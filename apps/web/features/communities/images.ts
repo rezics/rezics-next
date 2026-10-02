@@ -1,4 +1,5 @@
 import { BFF_PREFIX } from '../api/browser.ts';
+import { recordImageInference } from '../document-editor/record-inference.ts';
 import { type Clearance, clearanceOf, limitedFor } from '../safety/upload-state.ts';
 
 const types = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -23,10 +24,11 @@ export async function uploadCommunityImage(input: { image: File; realm: string; 
     throw new Error('invalid-image');
   }
   const bytes = new Uint8Array(await input.image.arrayBuffer());
+  const sha256 = await digest(bytes);
   const reserved = await send(`${BFF_PREFIX}/v1/media/uploads`, { method: 'POST',
     headers: { 'content-type': 'application/json', 'idempotency-key': `${input.key}:reserve` },
     body: JSON.stringify({ profile: 'media-image-upload-v1', asset: null,
-      mediaType: input.image.type, byteLength: bytes.length, sha256: await digest(bytes),
+      mediaType: input.image.type, byteLength: bytes.length, sha256,
       disclosure: 'public', actingSubject: input.actingSubject }) });
   const limit = limitedFor(reserved);
   if (limit) throw new ImageRefused('limited', limit.retryAfter);
@@ -36,12 +38,14 @@ export async function uploadCommunityImage(input: { image: File; realm: string; 
     headers: { 'content-type': input.image.type }, body: bytes });
   const limited = limitedFor(sent);
   if (limited) throw new ImageRefused('limited', limited.retryAfter);
-  const stored = sent.ok ? await sent.json() as { status?: string; clearance?: string } : null;
+  const stored = sent.ok ? await sent.json() as { status?: string; clearance?: string; representation?: string } : null;
   if (stored?.status !== 'activated') throw new Error('image-upload-failed');
   const clearance = clearanceOf(stored.clearance);
   input.onClearance?.(clearance);
   // Main will not show an image it rejected, so it is not made the icon or banner.
   if (clearance === 'rejected') throw new ImageRefused('rejected');
+  if (!stored.representation) throw new Error('image-representation-missing');
+  await recordImageInference({ ...input, representation: stored.representation, sha256 }, send);
   const selected = await send(`${BFF_PREFIX}/v1/resources/${input.realm.slice(-36)}/avatar`, { method: 'PUT',
     headers: { 'content-type': 'application/json', 'idempotency-key': `${input.key}:select` },
     body: JSON.stringify({ profile: 'resource-avatar-selection-v1',

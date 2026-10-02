@@ -67,7 +67,7 @@ function OpeningPost({ post, read, realm, count }: { post: ThreadReply; read: Th
   const { t } = useFeed();
   const title = post.blocked ? t.blockedUser : post.title ?? '', body = post.body;
   const href = threadPath(realm.path, post.reply);
-  const words = body ? <ReplyBody reply={{ ...post, body }} className="text-base/relaxed" /> : null;
+  const words = body ? <ReplyBody reply={{ ...post, body }} ratingTarget={read.work.id} className="text-base/relaxed" /> : null;
   return <article aria-labelledby="thread-title" className="grid gap-3">
     <div className="flex items-center gap-2">
       <CommunityIcon icon={null} name={post.author?.name ?? '·'} person className="size-8 text-xs" />
@@ -114,7 +114,7 @@ function ReplyContext({ read, realm }: { read: ThreadRead; realm: ThreadViewProp
     {parent && parent.reply !== opening?.reply ? <figure className="grid gap-1 border-border border-s-2 ps-3">
       <figcaption className="text-muted-foreground text-xs">{t.inReplyTo}</figcaption>
       <ReplyByline reply={parent} opener={opening?.author?.id ?? null} />
-      <ReplyBody reply={parent} className="line-clamp-4 text-muted-foreground text-sm" />
+      <ReplyBody reply={parent} ratingTarget={read.work.id} className="line-clamp-4 text-muted-foreground text-sm" />
     </figure> : null}
   </div>;
 }

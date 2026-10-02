@@ -73,7 +73,7 @@ const representation = media.table('representation', {
   availability: text('availability').$type<'available' | 'erased' | 'unavailable'>().notNull().default('available'),
   operationId: text('operation_id').notNull(),
   createdAt: createdAt(),
-  clearance: text('clearance').$type<'screening' | 'cleared' | 'held' | 'rejected'>().notNull().default('screening'),
+  clearance: text('clearance').$type<'screening' | 'cleared' | 'held' | 'rejected'>().notNull().default('cleared'),
   clearanceReason: text('clearance_reason'),
 });
 
@@ -105,11 +105,12 @@ const use = media.table('use', {
   representationId: uuid('representation_id').notNull(),
   target: text('target').notNull(),
   context: text('context').notNull(),
-  role: text('role').$type<'avatar' | 'publication-item'>().notNull(),
+  role: text('role').$type<'avatar' | 'publication-item' | 'document-image'>().notNull(),
   crop: text('crop'),
   actor: text('actor').notNull(),
   operationId: text('operation_id').notNull(),
   createdAt: createdAt(),
+  occurrence: uuid('occurrence'),
 });
 
 const selectionSlot = media.table('selection_slot', {
@@ -141,6 +142,25 @@ const screenResult = media.table('screen_result', {
   clearance: text('clearance').$type<'cleared' | 'held'>().notNull(), reason: text('reason'),
   evidence: jsonb('evidence').notNull(), operationId: text('operation_id').notNull(), createdAt: createdAt(),
 });
+
+const fieldSlot = media.table('field_slot', {
+  slot:text('slot').primaryKey(),representationId:uuid('representation_id'),useId:uuid('use_id'),
+  field:text('field').$type<'nsfw'|'ageRating'|'conceal'>().notNull(),head:uuid('head'),
+  epoch:bigint('epoch',{mode:'bigint'}).notNull().default(0n),protectionHead:uuid('protection_head'),valueHead:uuid('value_head'),
+});
+const fieldRevision = media.table('field_revision', {
+  id:uuid('id').primaryKey(),slot:text('slot').notNull(),predecessor:uuid('predecessor'),
+  epoch:bigint('epoch',{mode:'bigint'}).notNull(),expectedProtection:uuid('expected_protection'),expectedValue:uuid('expected_value'),
+  mode:text('mode').$type<'edit'|'lock'|'unlock'>().notNull(),source:text('source').$type<'author'|'platform'|'client'|'server'>().notNull(),
+  value:jsonb('value').notNull(),actor:text('actor').notNull(),operationId:text('operation_id').notNull(),createdAt:createdAt(),
+});
+const inferenceObservation = media.table('inference_observation', {
+  id:uuid('id').primaryKey(),representationId:uuid('representation_id').notNull(),byteDigest:text('byte_digest').notNull(),
+  producer:text('producer').$type<'client'|'server'>().notNull(),model:text('model').notNull(),modelVersion:text('model_version').notNull(),
+  weightsDigest:text('weights_digest').notNull(),policyVersion:text('policy_version').notNull(),
+  status:text('status').$type<'completed'|'unavailable'>().notNull(),result:text('result').$type<'unknown'|'sfw'|'nsfw'>().notNull(),
+  scores:jsonb('scores'),actor:text('actor').notNull(),operationId:text('operation_id').notNull(),createdAt:createdAt(),
+});
 const screenReview = media.table('screen_review', {
   jobId: uuid('job_id').primaryKey(), caseId: uuid('case_id'),
   retryAfter: timestamp('retry_after', { withTimezone: true }).notNull().default(sql`clock_timestamp()`),
@@ -163,4 +183,4 @@ const suppressionLift = media.table('suppression_lift', {
 /** Every media owner table, for typed queries and the schema conformance test. */
 export const mediaTables = { asset, assetState, upload, representation, transformJob, use,
   selectionSlot, selectionRevision, screenResult, screenReview, clearanceDecision, suppressedDigest,
-  suppressionLift } as const;
+  suppressionLift,fieldSlot,fieldRevision,inferenceObservation } as const;

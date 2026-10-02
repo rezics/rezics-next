@@ -30,7 +30,7 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
 }) {
   return <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover,
     kind: coverKindOf(work.types), authors }} avatarQuery={avatarQuery} loading="eager"
-    className="w-full xl:w-60" />;
+    revealable className="w-full xl:w-60" />;
 }
 
 /**

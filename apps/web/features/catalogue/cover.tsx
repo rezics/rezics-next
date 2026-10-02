@@ -8,6 +8,6 @@ import { type CoverWork, coverProps } from './work.ts';
  * credited authors; the same Work then looks the same everywhere.
  */
 export function CatalogueCover({ work, avatarQuery, ...props }: { work: CoverWork; avatarQuery?: string }
-  & Pick<WorkCoverProps, 'size' | 'loading' | 'alt' | 'className' | 'style'>) {
+  & Pick<WorkCoverProps, 'size' | 'loading' | 'alt' | 'className' | 'style' | 'revealable'>) {
   return <WorkCover {...coverProps(work, avatarQuery)} {...props} />;
 }

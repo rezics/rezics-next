@@ -21,7 +21,7 @@ test('settings API preserves independent intent, privacy, defaults and concurren
     const user = await f.signup('categories@example.test');
     const change = (body: Record<string, unknown>, cookie = user.cookie, headers = {}) =>
       f.request('/api/account/content-preferences', body, cookie, headers);
-    expect(await readContentPreferences(f.pool, user.id)).toMatchObject({ birthDate: null,
+    expect(await readContentPreferences(f.pool, user.id)).toMatchObject({ birthDate: null, nsfwDisplay: 'mask',
       birthdayPublic: false, categories: { general: true, r15: false, r18: false, r18g: false } });
     expect((await f.request('/api/account/content-preferences')).status).toBe(401);
     expect((await change({ expectedRevision: 0, categories: { general: false } }, user.cookie,
@@ -54,6 +54,27 @@ test('settings API preserves independent intent, privacy, defaults and concurren
     const cleared = await change({ expectedRevision: 7, birthDate: null });
     expect(await cleared.json()).toMatchObject({ birthDate: null, birthdayPublic: false, publicId: null,
       age: 'unknown', categories: { general: false, r15: false, r18: true, r18g: false } });
+  } finally { await f.close(); }
+}, 60_000);
+
+test('NSFW display defaults to a mask, preserves omitted intent, and uses the same revision fence', async () => {
+  const f = await accountFixture();
+  try {
+    const user = await f.signup('nsfw-display@example.test');
+    const change = (body: Record<string, unknown>) =>
+      f.request('/api/account/content-preferences', body, user.cookie);
+    expect(await (await change({ expectedRevision: 0, nsfwDisplay: 'show' })).json())
+      .toMatchObject({ revision: 1, nsfwDisplay: 'show', birthDate: null,
+        categories: { general: true, r15: false, r18: false, r18g: false } });
+    expect(await (await change({ expectedRevision: 1, categories: { general: false } })).json())
+      .toMatchObject({ revision: 2, nsfwDisplay: 'show', categories: { general: false } });
+    expect((await change({ expectedRevision: 1, nsfwDisplay: 'mask' })).status).toBe(409);
+    expect((await change({ expectedRevision: 2, nsfwDisplay: 'allow' })).status).toBe(400);
+    expect(await (await change({ expectedRevision: 2, nsfwDisplay: 'mask' })).json())
+      .toMatchObject({ revision: 3, nsfwDisplay: 'mask', categories: { general: false, r18: false } });
+    const session = await f.auth.api.getSession({ headers: { cookie: user.cookie } });
+    expect((await exportAccountData(f.pool, f.secret, user.id, session!.session.id)).contentPreferences.nsfwDisplay)
+      .toBe('mask');
   } finally { await f.close(); }
 }, 60_000);
 
@@ -104,17 +125,18 @@ test('the same OAuth token observes live settings without receiving the raw birt
       return response.json() as Promise<Record<string, unknown>>;
     };
     expect((await inspect()).rezics_content_evidence)
-      .toMatchObject({ age: 'unknown', categories: { general: true, r15: false, r18: false, r18g: false } });
+      .toMatchObject({ age: 'unknown', nsfwDisplay: 'mask',
+        categories: { general: true, r15: false, r18: false, r18g: false } });
     await writeContentPreferences(f.pool, user.id, { expectedRevision: 0, birthDate: '1990-01-01', country: 'US',
-      categories: { r18g: true } }, null);
+      categories: { r18g: true }, nsfwDisplay: 'show' }, null);
     const live = await inspect();
-    expect(live.rezics_content_evidence).toMatchObject({ age: 'adult', adultAvailable: true,
+    expect(live.rezics_content_evidence).toMatchObject({ age: 'adult', adultAvailable: true, nsfwDisplay: 'show',
       categories: { general: true, r15: true, r18: false, r18g: true } });
     expect(JSON.stringify(live)).not.toContain('1990-01-01');
     expect(JSON.stringify(JSON.parse(Buffer.from(tokens.access_token.split('.')[1]!, 'base64url').toString())))
       .not.toMatch(/birth|content_evidence/);
     await writeContentPreferences(f.pool, user.id, { expectedRevision: 1, categories: { r15: false, r18g: false } }, null);
     expect((await inspect()).rezics_content_evidence)
-      .toMatchObject({ categories: { r15: false, r18g: false } });
+      .toMatchObject({ nsfwDisplay: 'show', categories: { r15: false, r18g: false } });
   } finally { await main?.stop(); await f.close(); }
 }, 60_000);

@@ -31,7 +31,7 @@ export class MediaScreenStore {
         WHERE j.profile = $1 AND (j.status = 'queued' OR
           (j.status = 'leased' AND j.lease_expires_at <= clock_timestamp())) AND j.attempt < 16
           AND s.lifecycle = 'active' AND s.erasure_epoch = j.erasure_epoch
-          AND p.availability = 'available' AND media.delivery_clearance(p) = 'screening'
+          AND p.availability = 'available' AND p.clearance = 'screening'
         ORDER BY j.created_at, j.id LIMIT 1 FOR UPDATE OF j SKIP LOCKED`, [SCREEN_POLICY.profile])).rows[0];
       if (!row) return null;
       const token = randomUUID();
@@ -55,7 +55,7 @@ export class MediaScreenStore {
       JOIN media.representation p ON p.id = j.source_id
       WHERE j.profile = $1 AND j.status IN ('queued','leased')
         AND (s.lifecycle <> 'active' OR s.erasure_epoch <> j.erasure_epoch
-          OR p.availability <> 'available' OR media.delivery_clearance(p) <> 'screening')
+          OR p.availability <> 'available' OR p.clearance <> 'screening')
       ORDER BY j.created_at, j.id LIMIT 1`, [SCREEN_POLICY.profile])).rows[0];
     if (!candidate) return;
     await this.transaction(async client => {
@@ -64,7 +64,7 @@ export class MediaScreenStore {
         JOIN media.asset a ON a.id = j.asset_id JOIN media.asset_state s ON s.id = a.state_head
         JOIN media.representation p ON p.id = j.source_id WHERE j.id = $1 AND j.status IN ('queued','leased')
           AND (s.lifecycle <> 'active' OR s.erasure_epoch <> j.erasure_epoch
-            OR p.availability <> 'available' OR media.delivery_clearance(p) <> 'screening') FOR UPDATE OF j`, [candidate.id])).rows[0];
+            OR p.availability <> 'available' OR p.clearance <> 'screening') FOR UPDATE OF j`, [candidate.id])).rows[0];
       if (!row) return;
       const operation = `media-screen:${row.id}`;
       const at = (await client.query(`UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton

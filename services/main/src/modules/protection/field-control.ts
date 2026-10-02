@@ -1,4 +1,11 @@
 import { createHash } from 'node:crypto';
+import type { ProtectionAction, ProtectionMode } from './schema.ts';
+
+/** Shared protocol transition check; owners bind its mode to their own stable slot. */
+export function validProtectionTransition(mode: ProtectionMode, action: ProtectionAction): boolean {
+  return action === 'confirm' || action === 'tighten' && mode === 'open'
+    || action === 'relax' && mode === 'review-required';
+}
 
 /** Stable field identity; a current literal or list offset is never a field key. */
 export interface EditorialFieldTarget {

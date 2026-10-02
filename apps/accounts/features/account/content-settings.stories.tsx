@@ -8,6 +8,7 @@ import type { ContentPreferences } from '../api/content-preferences.ts';
 
 const unknown: ContentPreferences = { revision: 0, birthDate: null, country: null, birthdayPublic: false,
   publicId: null, age: 'unknown', accountEligible: true, adultAvailable: false,
+  nsfwDisplay: 'mask',
   categories: { general: true, r15: false, r18: false, r18g: false } };
 const adult: ContentPreferences = { ...unknown, birthDate: '1990-01-01', country: 'US', age: 'adult', adultAvailable: true,
   categories: { general: true, r15: true, r18: false, r18g: false } };
@@ -62,6 +63,21 @@ export const AdultCategoriesAreSeparate: Story = {
     await userEvent.click(await canvas.findByRole('switch', { name: /^R18$/ }));
     await expect(sexual).toHaveBeenCalledWith({ expectedRevision: 0, categories: { r18: true } });
     await expect(canvas.getByRole('switch', { name: /^R18$/ })).toBeChecked();
+    await expect(canvas.getByRole('switch', { name: 'R18G' })).not.toBeChecked();
+  },
+};
+const shown = fn(async () => ({ ok: true as const, data: { ...unknown, revision: 1, nsfwDisplay: 'show' as const } }));
+export const NsfwDisplayIsIndependent: Story = {
+  parameters: { account: { api: { setContentPreferences: shown } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const preference = await canvas.findByRole('switch', { name: 'Mask NSFW images' });
+    await expect(preference).toBeChecked();
+    await userEvent.click(preference);
+    await expect(shown).toHaveBeenCalledWith({ expectedRevision: 0, nsfwDisplay: 'show' });
+    await expect(preference).not.toBeChecked();
+    await expect(canvas.queryByLabelText('Country or region')).toBeNull();
+    await expect(canvas.getByRole('switch', { name: 'R18' })).not.toBeChecked();
     await expect(canvas.getByRole('switch', { name: 'R18G' })).not.toBeChecked();
   },
 };

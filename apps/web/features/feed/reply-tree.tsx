@@ -14,6 +14,7 @@ import { ReplyComposer, type ReplyTarget } from './reply-composer.tsx';
 import { type ReplyNode, THREAD_DEPTH, type ThreadReply } from './thread.ts';
 import { absoluteTime, relativeTime } from './time.ts';
 import { MarkdownBody } from '../post-composer/markdown.tsx';
+import { WebRatedContent } from '../document-editor/rated-content.tsx';
 
 /** Replies scored this low start folded, as Reddit folds them; one tap opens them. */
 const FOLD_SCORE = -5;
@@ -66,7 +67,7 @@ function CopyLink({ href }: { href: string }) {
 }
 
 /** The reply's words, paragraph by paragraph, in its own language. */
-export function ReplyBody({ reply, className }: { reply: ThreadReply; className?: string }) {
+export function ReplyBody({ reply, className, ratingTarget }: { reply: ThreadReply; className?: string; ratingTarget?: string }) {
   const { t } = useFeed();
   const document =
     reply.document &&
@@ -88,11 +89,13 @@ export function ReplyBody({ reply, className }: { reply: ThreadReply; className?
         className,
       )}
     >
+      <WebRatedContent target={ratingTarget}>
       {document ? (
         <DocumentBody document={document} className="grid gap-2" spoilerLabel={t.showSpoiler} />
       ) : (
         <MarkdownBody text={reply.body} showSpoiler={t.showSpoiler} className="grid gap-2" />
       )}
+      </WebRatedContent>
     </div>
   );
 }
@@ -213,7 +216,7 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
           {reply.blocked ? (
             <p className="text-muted-foreground text-sm">{t.blockedUser}</p>
           ) : (
-            <ReplyBody reply={reply} />
+            <ReplyBody reply={reply} ratingTarget={context.target.work} />
           )}
           <fieldset className="-ms-1.5 flex flex-wrap items-center gap-0.5">
             <legend className="sr-only">{t.actions}</legend>

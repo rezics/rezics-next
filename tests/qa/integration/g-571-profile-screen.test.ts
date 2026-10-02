@@ -8,7 +8,7 @@ import { AgentVanityHandles } from '../../../services/main/src/modules/agent/van
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { png, sha, startMediaStack } from './media-support.ts';
 import type { PublicProfile } from '../../../services/main/src/modules/realm-profile/schema.ts';
-import { clearQueued, flagged, screening } from './g-571-screen-support.ts';
+import { clearQueued, flagged, screening, seedHistoricalScreen } from './g-571-screen-support.ts';
 
 async function json<T>(response: Response, expected = 201): Promise<T> {
   const body = await response.text();
@@ -17,7 +17,7 @@ async function json<T>(response: Response, expected = 201): Promise<T> {
 }
 const short = (id: string) => id.slice(-36);
 
-test('G571: Agent profile saves a screening selection; public reads withhold it until clearance and writes deny holds', async () => {
+test('G571: Agent profile exposes historical screening and NSFW selections; staff rejection still blocks writes', async () => {
   const s = await startMediaStack('g571-agent-screen', { autoClearUploads: false });
   try {
     await clearQueued(s);
@@ -50,7 +50,8 @@ test('G571: Agent profile saves a screening selection; public reads withhold it 
         profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png', byteLength: bytes.length,
         sha256: sha(bytes), disclosure: 'public', actingSubject: agent }));
       expect(await json(await s.call('PUT', `/v1/media/uploads/${reserved.upload}/bytes`, {
-        token: owner.token, raw: bytes }))).toMatchObject({ status: 'activated', clearance: 'screening' });
+        token: owner.token, raw: bytes }))).toMatchObject({ status: 'activated', clearance: 'cleared' });
+      await seedHistoricalScreen(s, (await s.store.readUpload(reserved.upload))!.representation!);
       return reserved;
     };
     const select = async (asset: string, expectedSelection: string | null) => json<{ selection: string }>(
@@ -62,8 +63,8 @@ test('G571: Agent profile saves a screening selection; public reads withhold it 
     const { selection } = await select(image.asset, null);
     const saved = await json<{ revision: string }>(await save(initial.revision, selection));
     expect(await json(await call('GET', path), 200)).toMatchObject({ revision: saved.revision,
-      avatarSelection: null, avatarUrl: null });
-    expect((await s.call('GET', `/v1/media/avatars/${selection}`)).status).toBe(404);
+      avatarSelection: selection, avatarUrl: `/v1/media/avatars/${selection}` });
+    expect((await s.call('GET', `/v1/media/avatars/${selection}`)).status).toBe(200);
     await clearQueued(s);
     expect(await json(await call('GET', path), 200)).toMatchObject({ avatarSelection: selection,
       avatarUrl: `/v1/media/avatars/${selection}` });
@@ -75,14 +76,15 @@ test('G571: Agent profile saves a screening selection; public reads withhold it 
     expect((await save(clearedSave.revision, selection)).status).toBe(400);
     const { worker, store } = screening(s, { classify: async () => flagged });
     await worker.tick();
-    expect((await save(clearedSave.revision, next.selection)).status).toBe(400);
+    const flaggedSave = await json<{ revision: string }>(await save(clearedSave.revision, next.selection));
+    expect((await s.call('GET', `/v1/media/avatars/${next.selection}`)).status).toBe(200);
     const representation = (await s.store.readUpload(held.upload))!.representation!;
     expect(await store.reviewOriginal(representation, 'held', randomUUID(), 'rejected')).toBe('applied');
-    expect((await save(clearedSave.revision, next.selection)).status).toBe(400);
+    expect((await save(flaggedSave.revision, next.selection)).status).toBe(400);
   } finally { await s.stop(); }
 }, 180_000);
 
-test('G571: community icon and banner saves accept screening or cleared selections, withhold public bytes, and deny holds', async () => {
+test('G571: community images remain deliverable through historical classifier holds; staff rejection stays enforced', async () => {
   const s = await startMediaStack('g571-community-screen', { autoClearUploads: false });
   try {
     await clearQueued(s);
@@ -96,8 +98,9 @@ test('G571: community icon and banner saves accept screening or cleared selectio
       await manager.send('PUT', `/v1/resources/${short(realm)}/avatar`, { profile: 'resource-avatar-selection-v1',
         asset, expectedSelection, actingSubject: manager.actor, ...(context ? { context } : {}) }));
     const image = await manager.upload(png(113, 113));
+    await seedHistoricalScreen(s, image.representation);
     expect(await (await manager.read(`/v1/media/uploads/${image.upload}`)).json()).toMatchObject({
-      status: 'activated', clearance: 'screening' });
+      status: 'activated', clearance: 'cleared' });
     const icon = await select(image.asset, null);
     const banner = await select(image.asset, null, realm);
     const path = `/v1/realms/${short(realm)}`;
@@ -109,25 +112,26 @@ test('G571: community icon and banner saves accept screening or cleared selectio
       profile: 'realm-public-profile-v2', expectedHead, actingSubject: manager.actor, publication: images });
     const saved = await json<{ revision: string }>(await save(null));
     expect(await json(await s.call('GET', path), 200)).toMatchObject({ profileRevision: saved.revision,
-      icon: { kind: 'fallback' }, banner: null });
-    for (const { selection } of [icon, banner]) expect((await s.call('GET', `/v1/media/avatars/${selection}`)).status).toBe(404);
+      icon: { kind: 'image', selection: icon.selection }, banner: { kind: 'image', url: `/v1/media/avatars/${banner.selection}` } });
+    for (const { selection } of [icon, banner]) expect((await s.call('GET', `/v1/media/avatars/${selection}`)).status).toBe(200);
     await clearQueued(s);
     expect(await json(await s.call('GET', path), 200)).toMatchObject({
       icon: { kind: 'image', selection: icon.selection }, banner: { kind: 'image', url: `/v1/media/avatars/${banner.selection}` } });
     for (const { selection } of [icon, banner]) expect((await s.call('GET', `/v1/media/avatars/${selection}`)).status).toBe(200);
     const clearedSave = await json<{ revision: string }>(await save(saved.revision));
     const held = await manager.upload(png(114, 114));
+    await seedHistoricalScreen(s, held.representation);
     const nextIcon = await select(held.asset, icon.selection);
     const nextBanner = await select(held.asset, banner.selection, realm);
     const { worker, store } = screening(s, { classify: async () => flagged });
     await worker.tick();
-    // Each field is checked separately; an accepted cleared field cannot mask a held one.
-    expect((await save(clearedSave.revision, { ...publication, iconSelection: nextIcon.selection,
-      bannerSelection: null })).status).toBe(400);
-    expect((await save(clearedSave.revision, { ...publication, iconSelection: null,
-      bannerSelection: nextBanner.selection })).status).toBe(400);
+    const iconSave = await json<{ revision: string }>(await save(clearedSave.revision, { ...publication,
+      iconSelection: nextIcon.selection, bannerSelection: null }));
+    const bannerSave = await json<{ revision: string }>(await save(iconSave.revision, { ...publication,
+      iconSelection: null, bannerSelection: nextBanner.selection }));
+    for (const next of [nextIcon, nextBanner]) expect((await s.call('GET', `/v1/media/avatars/${next.selection}`)).status).toBe(200);
     expect(await store.reviewOriginal(held.representation, 'held', randomUUID(), 'rejected')).toBe('applied');
-    expect((await save(clearedSave.revision, { ...publication, iconSelection: nextIcon.selection,
+    expect((await save(bannerSave.revision, { ...publication, iconSelection: nextIcon.selection,
       bannerSelection: nextBanner.selection })).status).toBe(400);
   } finally { await s.stop(); }
 }, 180_000);

@@ -1,6 +1,7 @@
 import { type WorkCoverImage, type WorkCoverKind, type WorkCoverProps, workCoverRatio } from '@rezics/ui/work-cover';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { imageReferenceFromUrl } from '../api/media-metadata.ts';
 import type { WorkCover as MainCover, WorkName } from '../discover/types.ts';
 import { coverOf } from './types.ts';
 
@@ -52,7 +53,8 @@ export const coverKindOf = coverOf;
  */
 export function coverImage(cover: MainCover | null, avatarQuery = ''): WorkCoverImage | null {
   if (cover?.kind !== 'image' || !cover.url.startsWith('/v1/media/')) return null;
-  return { src: `${BFF_PREFIX}${cover.url}${avatarQuery}`, width: cover.width, height: cover.height };
+  return { src: `${BFF_PREFIX}${cover.url}${avatarQuery}`, width: cover.width, height: cover.height,
+    ...imageReferenceFromUrl(cover.url) };
 }
 
 /** What a Work's one cover is drawn from, wherever it appears. */

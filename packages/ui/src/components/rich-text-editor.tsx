@@ -17,6 +17,8 @@ import {
 } from './editor-commands.tsx';
 import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.tsx';
 import { ImageInsert, imageFiles, uploadImagesAt, type ImageRequest, type ImageUploader } from './editor-image.tsx';
+import type { ImageLabelEditor } from './editor-image-view.tsx';
+import { ImageAuthoringScope, type ImageMetadataResolver } from './media-image.tsx';
 import { applyLink, LinkMenu, type LinkRange } from './editor-link.tsx';
 import { SelectionMenu } from './editor-selection-menu.tsx';
 import { idleSlashHandlers, SlashMenu, slashExtension } from './editor-slash-menu.tsx';
@@ -50,6 +52,9 @@ export interface RichTextEditorProps {
   discussionKeyboardBar?: boolean;
   /** Stores an image file and returns its address. Without it, images are embedded from links only. */
   onUploadImage?: ImageUploader;
+  onEditImageLabels?: ImageLabelEditor;
+  resolveImageMetadata?: ImageMetadataResolver;
+  imageMetadataScope?: string;
   disabled?: boolean;
   readOnly?: boolean;
   autoFocus?: boolean;
@@ -148,7 +153,7 @@ const ComposeActions = memo(function ComposeActions({ editor, labels, io }: { ed
 });
 
 /** A controlled Tiptap document editor. Initial hydration and controlled value updates never save a document. */
-export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage,
+export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage, onEditImageLabels, resolveImageMetadata, imageMetadataScope,
   disabled = false, readOnly = false, autoFocus = false, maxLength, onBlur, onFocus, onSave, onKeyDown, onSnapshotError }: RichTextEditorProps) {
   const labels = useMemo(() => ({ ...richTextEditorLabels, ...labelOverrides }), [labelOverrides]);
   const lastEmitted = useRef<DocumentSnapshot | null>(null);
@@ -180,12 +185,19 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   const [uploadFailed, setUploadFailed] = useState(false);
   const uploader = useRef(onUploadImage);
   uploader.current = onUploadImage;
+  const imageLabelsEditor = useRef(onEditImageLabels);
+  imageLabelsEditor.current = onEditImageLabels;
+  const editImageLabels = useMemo<ImageLabelEditor>(() => change => {
+    const edit = imageLabelsEditor.current;
+    if (!edit) return Promise.reject(new Error('image-label-editor-unavailable'));
+    return edit(change);
+  }, []);
   const selection = useRef<Selection>({ from: 0, to: 0 });
   const extensions = useMemo(() => [
-    ...documentExtensions({ placeholder, emptyLineHint: slashEnabled ? labels.slashHint : undefined, unknownComponentLabel: labels.unknownComponent, maxLength, blocks }),
+    ...documentExtensions({ placeholder, emptyLineHint: slashEnabled ? labels.slashHint : undefined, unknownComponentLabel: labels.unknownComponent, maxLength, blocks, onEditImageLabels: onEditImageLabels ? editImageLabels : undefined }),
     BlockActionShortcuts,
     ...(slashEnabled ? [slashExtension(slashHandlers)] : []),
-  ], [placeholder, slashEnabled, labels.slashHint, labels.unknownComponent, maxLength, blocks]);
+  ], [placeholder, slashEnabled, labels.slashHint, labels.unknownComponent, maxLength, blocks, onEditImageLabels, editImageLabels]);
   function publish(current: TiptapEditor) {
     if (current.view.composing) return;
     try {
@@ -235,7 +247,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
       ...(coarse ? { scrollMargin: { top: 8, right: 8, bottom: 72, left: 8 }, scrollThreshold: { top: 8, right: 8, bottom: 72, left: 8 } } : { scrollMargin: 5, scrollThreshold: 0 }),
       attributes: { role: 'textbox', 'aria-label': label, 'aria-multiline': 'true', 'aria-readonly': String(readOnly), 'aria-disabled': String(disabled), spellcheck: 'true', ...(lang ? { lang } : {}), ...(dir ? { dir } : {}) },
     } });
-  }, [editor, editable, coarse, label, readOnly, disabled, lang, dir]);
+  }, [editor, editable, coarse, label, readOnly, disabled, lang, dir, onEditImageLabels]);
   function startUploads(files: File[], position: number) {
     const current = editorRef.current, upload = uploader.current;
     if (!current || !upload) return;
@@ -342,7 +354,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
     }
   }
   const content = editor ? <EditorContent editor={editor} className={cn('rezics-document', compact ? 'document-editor-compact' : 'document-editor')} /> : null;
-  return <div className={cn('min-w-0 rounded-2xl border border-border/60 bg-background', disabled && 'opacity-64', className)} data-slot="rich-text-editor" data-pointer={coarse ? 'coarse' : 'fine'} onKeyDown={keyboard}
+  const rendered = <div className={cn('min-w-0 rounded-2xl border border-border/60 bg-background', disabled && 'opacity-64', className)} data-slot="rich-text-editor" data-pointer={coarse ? 'coarse' : 'fine'} onKeyDown={keyboard}
     onCompositionEnd={() => { if (editor) requestAnimationFrame(() => { if (!editor.isDestroyed) publish(editor); }); }}>
     {/* A row of every control fits a pointer's screen; a phone keeps its keyboard toolbar. */}
     {editor && editable && toolbarMode === 'full' && !coarse ? <Toolbar editor={editor} labels={labels} io={io} blocks={blocks} /> : null}
@@ -387,4 +399,5 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
       </DialogContent>
     </Dialog>
   </div>;
+  return resolveImageMetadata ? <ImageAuthoringScope resolve={resolveImageMetadata} scope={imageMetadataScope}>{rendered}</ImageAuthoringScope> : rendered;
 }

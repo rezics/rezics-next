@@ -24,7 +24,7 @@ const short = (ref: string) => ref.slice(-36);
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 type Target = Pick<EvidenceTarget, 'owner' | 'resource' | 'component' | 'revision'>;
 
-test('G-542: actual feed/thread/search/export/media endpoints restrict, restore and gate unknown-age viewers', async () => {
+test('G-542: endpoints enforce governance while returning rated content to unknown-age viewers', async () => {
   const home = await startHomeStack('g542endpointphrase');
   const { stack, author: member } = home;
   try {
@@ -201,7 +201,7 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
       revision: heads.head!.value, disclosure: 'public' as const };
     const assessment = await suitability.write(principal, resolved,
       { actingSubject: actor, expectedRevision: null, labels: ['r18'], basis: 'platform' }, randomUUID());
-    await check(false);
+    await check(true);
     const cleared = await suitability.write(principal, resolved, { actingSubject: actor,
       expectedRevision: assessment.assessment.revision, labels: [], basis: 'platform' }, randomUUID());
     await check(true);
@@ -238,7 +238,7 @@ test('G-542: actual feed/thread/search/export/media endpoints restrict, restore 
     const adult = await suitability.write(principal, { ...resolved, revision: heads.head!.value },
       { actingSubject: actor, expectedRevision: cleared.assessment.revision,
         labels: ['r18'], basis: 'platform' }, randomUUID());
-    await checkExport(false);
+    await checkExport(true);
     await suitability.write(principal, { ...resolved, revision: heads.head!.value },
       { actingSubject: actor, expectedRevision: adult.assessment.revision, labels: [], basis: 'platform' }, randomUUID());
     await checkExport(true);

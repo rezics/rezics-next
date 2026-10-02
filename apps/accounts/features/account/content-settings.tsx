@@ -112,6 +112,11 @@ export function ContentSettings({ initial }: { initial: Read<ContentPreferences>
           onCheckedChange={({ checked }) => toggle(category, checked)} />}>
         <p className="text-sm text-muted-foreground">{descriptions[category]}</p>
       </SettingsRow>)}
+      <SettingsRow label={t.nsfwDisplayLabel} action={<Switch aria-label={t.nsfwDisplayLabel}
+        checked={saved.nsfwDisplay === 'mask'} disabled={busy || editing}
+        onCheckedChange={({ checked }) => void save({ nsfwDisplay: checked ? 'mask' : 'show' })} />}>
+        <p className="text-sm text-muted-foreground">{t.nsfwDisplayHelp}</p>
+      </SettingsRow>
       {!saved.adultAvailable ? <p className="px-5 pb-4 text-sm text-muted-foreground sm:px-6">{t.contentMarketHelp}</p> : null}
     </>}
     {error ? <Alert role="alert" variant="destructive" className="mx-5 mb-4 sm:mx-6">

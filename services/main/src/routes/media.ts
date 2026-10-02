@@ -7,7 +7,11 @@ import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable }
 import type { AccessDownloadLeases, DownloadReadLease } from '../modules/access/download-leases.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { activateUploadedBytes, changeAdmittedAssetState, MediaDenied, reserveAdmittedUpload,
-  saveAdmittedMediaSet, type MediaDependencies } from '../modules/media/commands.ts';
+  saveAdmittedMediaSet, changeAdmittedMediaField, recordAdmittedImageInference, createAdmittedDocumentImageUse,
+  type MediaDependencies } from '../modules/media/commands.ts';
+import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand,
+  mediaDescriptor, metadataRead, metadataResult } from '../modules/media/presentation-contract.ts';
+import type { MetadataRef } from '../modules/media/presentation.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
   MediaUnavailable, avatarImageEligible } from '../modules/media/store.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
@@ -75,6 +79,13 @@ export const openApiOperations = {
   '/v1/media/assets/{asset}/state': { post: { bearer: true, idempotencyKey: true } },
   '/v1/media/publications': { post: { bearer: true, idempotencyKey: true } },
   '/v1/media/assets/{asset}/bytes': { get: { bearer: true } },
+  '/v1/media/metadata': { post: { bearer: false } },
+  '/v1/media/representations/{representation}': { get: { bearer: false } },
+  '/v1/media/representations/{representation}/bytes': { get: { bearer: false } },
+  '/v1/media/representations/{representation}/labels': { post: { bearer: true,idempotencyKey:true } },
+  '/v1/media/representations/{representation}/inferences': { post: { bearer: true,idempotencyKey:true } },
+  '/v1/media/uses': { post: { bearer: true,idempotencyKey:true } },
+  '/v1/media/uses/{use}/conceal': { post: { bearer: true,idempotencyKey:true } },
 } as const;
 
 const DOWNLOAD_CHUNK_BYTES = 64 * 1024;
@@ -138,7 +149,136 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       ? async (contexts: readonly string[]) => work.mediaAccess!.canReadPrivateContexts(
         await work.account.verify(request, ['context:read']), actingSubject, contexts) : undefined };
   };
+  const metadataFor = async (request: Request,refs: readonly MetadataRef[],actingSubject?:string) => {
+    if (!work.media) throw new MediaUnavailable('media owner unavailable');
+    await assertGraphAdmissionOpen(fuseki,work.environment.lineage);
+    const reader=await readerFor(request,actingSubject);
+    const principal=request.headers.get('authorization') ? await work.account.verify(request,['work:read']) : null;
+    const controlsActor=principal && actingSubject && !!(await work.access.canManageMedia?.(principal,actingSubject)
+      || await work.access.canReadAsBaselineMember?.(principal,actingSubject));
+    const administrator=!!(principal&&actingSubject&&(work.access.canActAsPlatformAdministrator
+      ? await work.access.canActAsPlatformAdministrator(principal,actingSubject):true));
+    const bases=await work.media.store.presentation.metadata(refs);
+    const groups=new Map<string,Set<string>>();
+    for (const basis of bases) if (basis?.target) {
+      const targets=groups.get(basis.context)??new Set<string>();targets.add(basis.target);groups.set(basis.context,targets);
+    }
+    const available=new Set<string>();
+    for (const [context,targets] of groups) {
+      const summaries=await readResourceSummaries(work.environment,undefined,reader,
+        {resources:[...targets],context,language:null,channel:'media'});
+      for (const summary of summaries.summaries) if (summary.status==='available') available.add(`${context}\0${summary.reference}`);
+    }
+    // Public profile avatar targets are Agents rather than Work/semantic resources.
+    const agentTargets=[...groups.get(DEFAULT_MEDIA_CONTEXT)??[]].filter(target=>!available.has(`${DEFAULT_MEDIA_CONTEXT}\0${target}`));
+    if (agentTargets.length) {
+      const agents=(await fuseki.query(`PREFIX rv: <${RV}> SELECT ?agent WHERE {
+        VALUES ?agent { ${agentTargets.map(iri).join(' ')} } ${publicAgent('?agent')} } LIMIT 65`,64*1024)).results?.bindings??[];
+      for (const agent of agents) if (agent.agent) available.add(`${DEFAULT_MEDIA_CONTEXT}\0${agent.agent.value}`);
+    }
+    return Promise.all(bases.map(async basis=>{
+      if (!basis || basis.target && !available.has(`${basis.context}\0${basis.target}`)
+        || basis.disclosure!=='public' && !(controlsActor && basis.owner===actingSubject)) return null;
+      const canProtectLabels=!!(administrator && principal && actingSubject && await work.access.canProtectMedia?.(principal,actingSubject,
+        `https://rezics.com/id/${basis.metadata.representation}`));
+      const canProtectConceal=!!(administrator && principal && actingSubject && basis.metadata.use
+        && await work.access.canProtectMedia?.(principal,actingSubject,`https://rezics.com/id/${basis.metadata.use}`,'media.conceal.protect'));
+      const labelControls={canEdit:!!(canProtectLabels || controlsActor && basis.owner===actingSubject),canProtect:canProtectLabels};
+      const concealControls={canEdit:!!(canProtectConceal || controlsActor && basis.actor===actingSubject),canProtect:canProtectConceal};
+      const nsfw={...basis.metadata.controls.nsfw,...labelControls,
+        canEdit:labelControls.canEdit&&(!basis.metadata.controls.nsfw.locked||canProtectLabels)};
+      const ageRating={...basis.metadata.controls.ageRating,...labelControls,
+        canEdit:labelControls.canEdit&&(!basis.metadata.controls.ageRating.locked||canProtectLabels)};
+      const conceal=basis.metadata.controls.conceal?{...basis.metadata.controls.conceal,...concealControls,
+        canEdit:concealControls.canEdit&&(!basis.metadata.controls.conceal.locked||canProtectConceal)}:null;
+      return {...basis,metadata:{...basis.metadata,
+        controls:{nsfw,ageRating,conceal},
+        canEdit:nsfw.canEdit||ageRating.canEdit||!!conceal?.canEdit,canProtect:canProtectLabels||canProtectConceal}};
+    }));
+  };
+  const fieldResult=t.Object({revision:t.Nullable(nativeId),position,replayed:t.Boolean(),admission:t.String()});
+  const fieldResponses={200:fieldResult,201:fieldResult,...writeProblems,404:problemResult(404)};
   return new Elysia()
+    .post('/v1/media/metadata',{body:metadataRead,detail:{security:[{}, {bearerAuth:[]}]},response:{200:metadataResult,...authorizedReadProblems}},
+      async ({request,body})=>{
+        try {
+          const items=await metadataFor(request,body.items,body.actingSubject);
+          return Response.json({items:items.map((basis,index)=>basis ? {status:'available',...basis.metadata}
+            : {status:'unavailable',reference:body.items[index]})},{headers:{'cache-control':'private, no-store'}});
+        } catch(error) {return mediaError(error);}
+      })
+    .get('/v1/media/representations/:representation',{params:t.Object({representation:uuid}),
+      query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid)},{additionalProperties:false}),
+      response:{200:mediaDescriptor,...authorizedReadProblems}},async ({request,params,query})=>{
+      try {
+        const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
+        return basis ? Response.json(basis.metadata,{headers:{'cache-control':'private, no-store'}}) : unavailable();
+      } catch(error) {return mediaError(error);}
+    })
+    .get('/v1/media/representations/:representation/bytes',{params:t.Object({representation:uuid}),
+      query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid)},{additionalProperties:false}),
+      response:{200:t.Any(),...authorizedReadProblems}},async ({request,params,query}: {request:Request;
+        params:{representation:string};query:{actingSubject?:string;use?:string}})=>{
+      let lease: DownloadReadLease|undefined;
+      try {
+        const basis=(await metadataFor(request,[{representation:params.representation,...(query.use?{use:query.use}:{})}],query.actingSubject))[0];
+        if (!basis || !work.media) return unavailable();
+        if (basis.disclosure==='public') return deliver(work.media,{objectNamespace:basis.objectNamespace,
+          sha256:basis.metadata.sha256,mediaType:basis.metadata.mediaType},true);
+        if (!work.downloadLeases || !basis.target || !query.actingSubject) return unavailable();
+        const principal=await work.account.verify(request,['work:read']);
+        lease=await work.downloadLeases.admit(principal,query.actingSubject,basis.target,basis.metadata.asset);
+        await work.downloadLeases.begin(lease,principal);
+        const bytes=await work.media.objects(basis.objectNamespace).get(basis.metadata.sha256);
+        if (bytes.byteLength!==basis.byteLength) throw new ObjectIntegrityError('media byte length differs');
+        return new Response(downloadBody(bytes,lease,work.downloadLeases),{headers:{'content-type':basis.metadata.mediaType,
+          'content-length':String(basis.byteLength),'x-content-type-options':'nosniff','cache-control':'private, no-store'}});
+      } catch(error) {
+        if (lease) await work.downloadLeases?.finish(lease.id,'aborted').catch(()=>undefined);
+        return mediaError(error);
+      }
+    })
+    .post('/v1/media/representations/:representation/labels',{params:t.Object({representation:uuid}),body:imageLabelCommand,response:fieldResponses},
+      async ({request,params,body})=>{
+        if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
+        const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
+        try {
+          const result=await changeAdmittedMediaField(work.environment,work.media,work.account,work.access,request,
+            {...body,representation:params.representation,authority:body.authority??'author',idempotencyKey:key});
+          return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
+        } catch(error){return mediaError(error);}
+      })
+    .post('/v1/media/uses/:use/conceal',{params:t.Object({use:uuid}),body:concealCommand,response:fieldResponses},
+      async ({request,params,body})=>{
+        if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
+        const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
+        try {
+          const result=await changeAdmittedMediaField(work.environment,work.media,work.account,work.access,request,
+            {...body,use:params.use,field:'conceal',authority:body.authority??'author',idempotencyKey:key});
+          return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
+        } catch(error){return mediaError(error);}
+      })
+    .post('/v1/media/representations/:representation/inferences',{params:t.Object({representation:uuid}),body:inferenceCommand,
+      response:{200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}},
+      async ({request,params,body})=>{
+        if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
+        const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
+        try {
+          const result=await recordAdmittedImageInference(work.environment,work.media,work.account,work.access,request,
+            {...body,representation:params.representation,idempotencyKey:key});
+          return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
+        } catch(error){return mediaError(error);}
+      })
+    .post('/v1/media/uses',{body:documentUseCommand,response:{200:t.Object({},{additionalProperties:true}),201:t.Object({},{additionalProperties:true}),...writeProblems,404:problemResult(404)}},
+      async ({request,body})=>{
+        if (!work.media) return problem(503,'media_unavailable','Media owner is unavailable');
+        const key=idempotencyKey(request);if (!key) return problem(400,'invalid_idempotency_key','A valid Idempotency-Key header is required');
+        try {
+          const result=await createAdmittedDocumentImageUse(work.environment,work.media,work.account,work.access,request,
+            {...body,context:body.context??DEFAULT_MEDIA_CONTEXT,conceal:body.conceal??false,idempotencyKey:key});
+          return Response.json(result,{status:result.replayed?200:201,headers:{'cache-control':'no-store'}});
+        } catch(error){return mediaError(error);}
+      })
     .post('/v1/media/uploads', {
       body: t.Object({ profile: t.Literal('media-image-upload-v1'), asset: t.Nullable(uuid),
         mediaType: t.Union([t.Literal('image/png'), t.Literal('image/jpeg'), t.Literal('image/webp'),

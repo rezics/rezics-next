@@ -235,6 +235,8 @@ export function ReplyComposer({
       }}
     >
       <BodyEditor
+        actingSubject={actingSubject ?? undefined}
+        mediaTarget={target.work}
         label={label}
         value={text}
         onChange={setText}

@@ -145,6 +145,8 @@ export function ChapterEditor({
 
   return (
     <ManuscriptEditor
+      actingSubject={agent.iri}
+      mediaTarget={data.chapter.id}
       store={store}
       language={data.chapter.language}
       direction={data.chapter.direction}

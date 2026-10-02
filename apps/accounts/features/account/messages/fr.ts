@@ -2,6 +2,8 @@ import { insert, plural } from 'native-i18n';
 import { fr as additions } from './additions-rest.ts';
 
 export default {
+  nsfwDisplayLabel: "Masquer les images NSFW",
+  nsfwDisplayHelp: "Les images marquées NSFW peuvent être inadaptées au travail ou dans les lieux publics. Les choix de catégories d’âge et les masques de l’auteur restent applicables.",
   contentTitle: "Anniversaire et contenus",
   contentHelp: "Activez chaque catégorie séparément. Les conditions d’âge s’appliquent également.",
   birthdayLabel: "Date de naissance",

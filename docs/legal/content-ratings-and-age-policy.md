@@ -29,7 +29,7 @@ The EU remains reachable under the current operating direction. Accessibility is
 
 **2. Our labels**
 
-| Label | Meaning | Basic access rule |
+| Label | Meaning | Basic presentation rule |
 | --- | --- | --- |
 | `general` | Assessed as eligible for the general presentation | Enabled by default; may be switched off without an age check |
 | `r15` | Mature themes unsuitable for younger viewers | Signed in, at least 15 and R15 enabled |
@@ -49,7 +49,7 @@ start disabled and require separate opt-ins. Cancelling a birthday request
 keeps the previous setting; later age checks do not overwrite an explicit off
 choice.
 
-Signed-out viewers and users under 15 receive only general and unassessed
+Signed-out viewers and users under 15 see only general and unassessed
 representations under the applicable presentation policy. An age-restricted
 account market still controls registration: for example, the `r15` category
 does not permit a 15-year-old to register in the EEA.
@@ -64,11 +64,30 @@ A rating does not establish copyright permission, consent or a right to distribu
 
 **4. Where the rules apply**
 
-The same eligibility rules apply to originals, translations, attachments, revisions, thumbnails, previews, search, feeds, caches, exports, offline delivery and AI context.
+The same category presentation choices apply when you view originals,
+translations, attachments, revisions, thumbnails, search and feeds. Ordinary
+interactive requests may return content with its rating metadata; the interface
+checks your current viewing settings before displaying each body or image. A
+rating is not a permission to read private material. Private-access and platform
+removal restrictions remain enforced by the service.
+
+An image's rating does not automatically change the rating of surrounding text
+or every linked object.
+
+NSFW labels warn that an image may be unsuitable for work or public places.
+They are separate from age ratings and do not by themselves mean that content
+is prohibited. NSFW images start masked; you can choose to show them immediately.
+An author can also mask any image, including an ordinary image. Author masks
+still apply when your NSFW setting allows immediate display. Opening a mask is
+a temporary viewing choice; it does not change a label, cast a spoiler vote or
+enable an age category.
 
 External search indexing and share previews use only the anonymous
-representation, which may include general and unassessed material. Internal
-search follows the viewer's eligibility and saved category preferences.
+presentation, which may include general and unassessed material. These channels
+have no interactive viewing settings and use their own default policy. Internal
+search displays content according to the viewer's current eligibility and saved
+category preferences. Caches, exports, offline delivery and AI context must
+retain the applicable classification and Access restrictions.
 
 Adult material is not included in email or push notifications. Necessary safety notices use neutral wording and safe links.
 
@@ -78,7 +97,12 @@ Realms may impose stricter rules. They cannot lower platform ages, remove requir
 
 **5. Assessment and imports**
 
-Contributors must provide accurate suitability information and update it when content changes. We may review, correct or restrict an assessment.
+Contributors must provide accurate suitability information and update it when content changes. We may review, correct or restrict an assessment. Platform administrators may lock an age assessment, NSFW label or author mask; contributors cannot edit a locked field until it is unlocked.
+
+Automatic image analysis supplies an initial NSFW suggestion, currently from
+the uploader's device. Contributors can correct it manually. Failed or
+unavailable analysis remains unknown rather than being treated as a safe image.
+A model's NSFW result is not proof of legality or a platform review decision.
 
 Missing information remains `unassessed`. Import rules include:
 
@@ -114,7 +138,12 @@ turning publication off does not remove age eligibility.
 
 **7. Availability and review**
 
-Image and cover uploads are available at launch under the layered media controls in the [Child Safety Policy](child-safety-policy.md), including screening that holds likely sexually explicit images for review. Imported covers show their source and are removed on a valid notice. A Work without a cover shows a typographic cover.
+Image and cover uploads are available at launch under the layered media controls
+in the [Child Safety Policy](child-safety-policy.md). An automatic NSFW suggestion
+controls presentation and does not by itself hold an image for review; an actual
+platform safety decision can restrict or remove it. Imported covers show their
+source and are removed on a valid notice. A Work without a cover shows a
+typographic cover.
 
 [REZICS TO FILL: actual enabled rating categories by market, effective dates and feature restrictions. Eligibility in this policy must not be presented as current feature availability.]
 

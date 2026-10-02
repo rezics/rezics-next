@@ -69,6 +69,8 @@ export interface PublishSlot {
 }
 
 export interface ManuscriptEditorProps {
+  actingSubject?: string;
+  mediaTarget?: string;
   store: ManuscriptStore;
   language: string;
   direction: 'ltr' | 'rtl';
@@ -97,6 +99,8 @@ export interface ManuscriptEditorProps {
  * Autosave never publishes; the publish control does, as the Studio Agent.
  */
 export function ManuscriptEditor({
+  actingSubject,
+  mediaTarget,
   store,
   language,
   direction,
@@ -345,6 +349,8 @@ export function ManuscriptEditor({
           />
         ) : null}
         <BodyEditor
+          actingSubject={actingSubject}
+          mediaTarget={mediaTarget}
           label={label}
           locale={locale}
           lang={language}

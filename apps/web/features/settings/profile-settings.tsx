@@ -1,5 +1,5 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
-import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/avatar';
+import { Avatar, AvatarFallback } from '@rezics/ui/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
 import { Card, CardContent } from '@rezics/ui/card';
 import { agentName, type AgentOption } from '../auth/acting-identity.ts';
@@ -17,6 +17,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { messages as fallbackMessages, type SettingsMessages } from './messages.ts';
 import { ProfileEditForm } from './profile-edit-form.tsx';
 import { SettingsSections } from './settings-sections.tsx';
+import { WebMediaImage } from '../document-editor/media-image.tsx';
 
 export function ProfileSettings({ agent, profile, locale, error, updated, accountOrigin, preview,
   messages: translatedMessages, readingLanguages, avatar = null, wait = null }: {
@@ -70,7 +71,7 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
         <p className="text-muted-foreground text-sm">{t.actingAs}</p>
         <div className="flex min-w-0 items-center gap-3">
           <Avatar size="lg">
-            {profile?.avatarUrl ? <AvatarImage src={`${BFF_PREFIX}${profile.avatarUrl}`} alt="" /> : null}
+            {profile?.avatarUrl ? <WebMediaImage revealable={false} src={`${BFF_PREFIX}${profile.avatarUrl}`} alt="" className="size-full object-cover" /> : null}
             <AvatarFallback>{initials(name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0"><strong className="block truncate">{name}</strong>

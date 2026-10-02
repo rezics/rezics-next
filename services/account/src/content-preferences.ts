@@ -7,19 +7,21 @@ import { marketRule } from './market-policy.ts';
 
 export type AgeBand = 'unknown' | 'under-15' | '15-17' | 'adult';
 export type Categories = { general: boolean; r15: boolean; r18: boolean; r18g: boolean };
+export type NsfwDisplay = 'mask' | 'show';
 export interface ContentPreferences {
   revision: number; birthDate: string | null; country: string | null;
   birthdayPublic: boolean; publicId: string | null;
   age: AgeBand; accountEligible: boolean; adultAvailable: boolean;
   categories: Categories;
+  nsfwDisplay: NsfwDisplay;
 }
 type Row = { revision: string; birth_date: string | null; country: string | null;
   birthday_public: boolean; public_id: string | null; general: boolean;
-  r15: boolean | null; r18: boolean; r18g: boolean };
+  r15: boolean | null; r18: boolean; r18g: boolean; nsfw_display: NsfwDisplay };
 type Database = Pick<Pool | PoolClient, 'query'>;
 export interface PreferenceChange {
   expectedRevision: number; birthDate?: string | null; country?: string;
-  birthdayPublic?: boolean; categories?: Partial<Categories>;
+  birthdayPublic?: boolean; categories?: Partial<Categories>; nsfwDisplay?: NsfwDisplay;
 }
 
 /** A civil date, never a timestamp. Feb 29 birthdays reach a threshold on March 1
@@ -45,13 +47,14 @@ function preferences(row?: Row, now = new Date()): ContentPreferences {
     country: row?.country ?? null, birthdayPublic: row?.birthday_public ?? false,
     publicId: row?.birthday_public ? row.public_id : null, age, accountEligible,
     adultAvailable: rule.adultAvailable,
+    nsfwDisplay: row?.nsfw_display ?? 'mask',
     categories: { general: row?.general ?? true,
       r15: row?.r15 ?? (years !== null && years >= 15 && accountEligible),
       r18: row?.r18 ?? false, r18g: row?.r18g ?? false } };
 }
 
 const select = `SELECT revision, birth_date::text, country, birthday_public, public_id,
-  general, r15, r18, r18g FROM rezics_content_preferences WHERE user_id = $1`;
+  general, r15, r18, r18g, nsfw_display FROM rezics_content_preferences WHERE user_id = $1`;
 export async function readContentPreferences(db: Database, userId: string, now = new Date()) {
   return preferences((await db.query<Row>(select, [userId])).rows[0], now);
 }
@@ -93,15 +96,17 @@ export async function writeContentPreferences(pool: Pool, userId: string, input:
     const publish = birth !== null && (input.birthdayPublic ?? prior?.birthday_public ?? false);
     if (input.birthdayPublic && birth === null) throw new AccountProblem('birth_date_required', 400);
     const publicId = publish ? prior?.public_id ?? randomUUID() : null;
+    const nsfwDisplay = input.nsfwDisplay ?? prior?.nsfw_display ?? 'mask';
     await client.query(`INSERT INTO rezics_content_preferences
-      (user_id, revision, birth_date, country, birthday_public, public_id, general, r15, r18, r18g)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      (user_id, revision, birth_date, country, birthday_public, public_id, general, r15, r18, r18g, nsfw_display)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (user_id) DO UPDATE SET revision = EXCLUDED.revision,
       birth_date = EXCLUDED.birth_date, country = EXCLUDED.country,
       birthday_public = EXCLUDED.birthday_public, public_id = EXCLUDED.public_id,
-      general = EXCLUDED.general, r15 = EXCLUDED.r15, r18 = EXCLUDED.r18, r18g = EXCLUDED.r18g`,
+      general = EXCLUDED.general, r15 = EXCLUDED.r15, r18 = EXCLUDED.r18, r18g = EXCLUDED.r18g,
+      nsfw_display = EXCLUDED.nsfw_display`,
     [userId, input.expectedRevision + 1, birth, country, publish, publicId,
-      categories.general, categories.r15, categories.r18, categories.r18g]);
+      categories.general, categories.r15, categories.r18, categories.r18g, nsfwDisplay]);
     // An age learned after registration must also enforce account admission.
     // The hold and session revocation commit atomically with the private date.
     if (belowMinimum) {
@@ -128,7 +133,8 @@ export function contentPreferencesApi(auth: AccountAuth, pool: Pool) {
     .post('/api/account/content-preferences', { body: t.Object({ expectedRevision: t.Integer({ minimum: 0 }),
       birthDate: t.Optional(t.Nullable(t.String({ maxLength: 10 }))),
       country: t.Optional(t.String({ pattern: '^[A-Z]{2}$' })), birthdayPublic: t.Optional(t.Boolean()),
-      categories: t.Optional(t.Partial(categoriesSchema)) }, { additionalProperties: false }),
+      categories: t.Optional(t.Partial(categoriesSchema)),
+      nsfwDisplay: t.Optional(t.Union([t.Literal('mask'), t.Literal('show')])) }, { additionalProperties: false }),
     response: accountResponses(view) }, async ({ request, body }) => {
       try { return accountJson(await writeContentPreferences(pool, (await accountSession(auth, request)).user.id,
         body, request.headers.get('x-rezics-request-country'))); }

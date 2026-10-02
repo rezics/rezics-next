@@ -17,6 +17,7 @@ import type { Clearance } from '../safety/upload-state.ts';
 import { type CoverOutcome, coverTypes, removeCover, uploadCover } from './cover-api.ts';
 import type { StudioMessages } from './messages.ts';
 import { StudioCover } from './studio-cover.tsx';
+import { WebImageSettings } from '../document-editor/image-settings.tsx';
 
 export interface CoverEditorProps {
   agent: AgentOption;
@@ -150,6 +151,7 @@ export function CoverEditor({ agent, work, cover, locale, messages, send }: Cove
     {clearance ? <UploadStatus clearance={clearance} locale={locale} /> : null}
     {rejected ? <UploadStatus clearance="rejected" locale={locale} /> : null}
     {limited !== null ? <UploadLimited retryAfter={limited} locale={locale} /> : null}
+    {current?.kind === 'image' ? <WebImageSettings src={current.url} actingSubject={agent.iri} locale={locale} send={send} /> : null}
     <Dialog open={source !== null} onOpenChange={details => { if (!details.open && busy === null) close(); }}>
       <DialogContent size="md">
         <DialogHeader title={t.cropHeading} description={t.cropHelp} />
