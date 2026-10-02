@@ -180,7 +180,7 @@ test('G-943 proxy emits HTTP 301; resolver sends no credentials; canonical reque
     headers: { [ADDRESS_HEADER]: 'forged' },
   }));
   expect(canonical.status).toBe(200);
-  expect(JSON.parse(canonical.headers.get(`x-middleware-request-${ADDRESS_HEADER}`)!).holder).toBe(holder);
+  expect(JSON.parse(decodeURIComponent(canonical.headers.get(`x-middleware-request-${ADDRESS_HEADER}`)!)).holder).toBe(holder);
 });
 test('G-943 proxy returns a non-indexable unavailable response rather than rendering an empty page', async () => {
   process.env.WEB_OAUTH_CLIENT_ID = 'g-943-test';
@@ -212,4 +212,14 @@ test('G-943 members continue the public roster; a stale cursor never silently re
   }) as typeof fetch;
   expect(await readRoster(uuid, 'stale+cursor')).toEqual({ ok: false, failure: 'moved' });
   expect(calls).toBe(1);
+});
+test('G-943 native-script addresses pass through real HTTP headers without a ByteString error', async () => {
+  process.env.WEB_OAUTH_CLIENT_ID = 'g-943-test';
+  const read = full(answer('work', '/w/', '春の物語', '春の物語'));
+  globalThis.fetch = (async () => Response.json(read)) as unknown as typeof fetch;
+  const response = await proxy(new NextRequest('https://rezics.test/ja/w/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E'));
+  expect(response.status).toBe(200);
+  const carried = response.headers.get(`x-middleware-request-${ADDRESS_HEADER}`)!;
+  expect(carried).toMatch(/^[\x20-\x7e]+$/);
+  expect(JSON.parse(decodeURIComponent(carried)).canonical).toEqual(read.canonical);
 });

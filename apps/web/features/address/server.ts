@@ -11,7 +11,7 @@ export const resolveAddress = cache(async (scope: AddressScope, key: string, loc
   const carried = incoming.get(ADDRESS_HEADER);
   if (carried) {
     try {
-      const data = resolvedAddress(JSON.parse(carried));
+      const data = resolvedAddress(JSON.parse(decodeURIComponent(carried)));
       if (data?.scope === scope && (data.key === key || data.holder.slice(-36) === key)) return { kind: 'resolved', data };
     } catch { /* A malformed internal header is never admission. */ }
   }

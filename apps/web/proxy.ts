@@ -53,7 +53,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     options: cookieOptions(request.url, 0) });
   const headers = new Headers(request.headers);
   headers.delete(ADDRESS_HEADER);
-  if ('data' in addressed && addressed.data) headers.set(ADDRESS_HEADER, JSON.stringify(addressed.data));
+  // HTTP header values are bytes; native-script names need an ASCII envelope.
+  if ('data' in addressed && addressed.data) headers.set(ADDRESS_HEADER, encodeURIComponent(JSON.stringify(addressed.data)));
   if (pathLocale(pathname)) headers.set('x-rezics-page-url', request.nextUrl.origin + pathname + request.nextUrl.search);
   else headers.delete('x-rezics-page-url');
   headers.set('cookie', rewriteCookieHeader(request.headers.get('cookie'), Object.fromEntries(
