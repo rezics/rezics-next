@@ -14,7 +14,13 @@ import { sessionAgentState } from '../auth/session.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
-import { decideExecution, type Execution, isSafeMode, ZONE_LOOK_COOKIE, zoneLookEnabled } from '../zones/execution.ts';
+import {
+  decideExecution,
+  type Execution,
+  isSafeMode,
+  ZONE_LOOK_COOKIE,
+  zoneLookEnabled,
+} from '../zones/execution.ts';
 import { LookMenu } from '../zones/look-menu.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
 import { defaultPresentation, moduleTitle, type ZonePresentation } from '../zones/presentation.ts';
@@ -35,13 +41,22 @@ import { type RealmTab, realmHref } from './route.ts';
 import { siteHref, zoneNavigationHref } from './route.ts';
 import { surfaceText } from '../address/messages.ts';
 import type { RealmHeader } from './types.ts';
+import { spaceHref } from '../address/path.ts';
+import { SpaceDiscovery } from '../space-access/discovery.tsx';
+import { PrivateSpaceJoinPage } from '../space-access/join-page.tsx';
+import { UnlistedSpaceNotice } from '../space-access/unlisted-notice.tsx';
+import { privateDiscovery, realmDiscovery } from '../address/space-read.ts';
+import type { JoinPage } from '../manage/settings-api.ts';
 
 type Search = Record<string, string | string[] | undefined>;
 type Resolved = Extract<RealmResolution, { kind: 'realm' }>;
 
 /** The members line in words; an unknown count says nothing. */
-export function membersText(count: RealmHeader['membership']['count'], locale: UiLocale,
-  messages: RealmMessages): string | null {
+export function membersText(
+  count: RealmHeader['membership']['count'],
+  locale: UiLocale,
+  messages: RealmMessages,
+): string | null {
   const t = materializeData(messages, { locale });
   if (count.kind === 'exact') return t.members(count.value);
   return count.kind === 'estimated' ? t.membersAbout(count.value) : null;
@@ -67,13 +82,18 @@ export interface RealmView {
   zoneMessages: ZoneMessages;
 }
 
-async function runnablePackage(execution: Execution): Promise<{ execution: Execution; pkg: ZonePackage | null }> {
+async function runnablePackage(
+  execution: Execution,
+): Promise<{ execution: Execution; pkg: ZonePackage | null }> {
   if (execution.mode !== 'package') return { execution, pkg: null };
   try {
     const pkg = await loadPackage(execution.slug);
     if (pkg) return { execution, pkg };
   } catch (error) {
-    console.error(`Official Zone package ${execution.slug} failed to load; showing its fallback`, error);
+    console.error(
+      `Official Zone package ${execution.slug} failed to load; showing its fallback`,
+      error,
+    );
   }
   return { execution: { mode: 'fallback', reason: 'load-failed' }, pkg: null };
 }
@@ -86,10 +106,28 @@ async function runnablePackage(execution: Execution): Promise<{ execution: Execu
 const realmReader = cache(async () => {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   const state = token ? await sessionAgentState() : null;
-  const actingSubject = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
-  return { signedIn: Boolean(token), actingSubject, personal: mainApiWithToken(actingSubject ? token : undefined),
-    avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '' };
+  const actingSubject = state?.sessionAgent.eligible
+    ? (state.sessionAgent.actingSubject ?? undefined)
+    : undefined;
+  return {
+    signedIn: Boolean(token),
+    actingSubject,
+    personal: mainApiWithToken(actingSubject ? token : undefined),
+    avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
+  };
 });
+
+export async function privateJoinPage(page: JoinPage, locale: UiLocale, here: string) {
+  const reader = await realmReader();
+  return (
+    <PrivateSpaceJoinPage
+      page={{ ...page, discovery: privateDiscovery(page.discovery) }}
+      locale={locale}
+      actingSubject={reader.actingSubject ?? null}
+      signInHref={signInPath(localizedPath(here, locale))}
+    />
+  );
+}
 
 /**
  * Everything a Realm tab renders around its content: the Realm, its Zone's
@@ -97,106 +135,277 @@ const realmReader = cache(async () => {
  * for this view, and the theme. Missing and unavailable Realms return their
  * resolution for the route to answer.
  */
-export async function loadRealmView(ref: string, locale: UiLocale, search: Search, surface: 'community' | 'site' = 'community'):
-  Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
-  const [realm, messages, zoneMessages, jar, reader] = await Promise.all([resolveRealm(ref, locale),
-    getMessages('realm', locale), getMessages('zones', locale), cookies(), realmReader()]);
+export async function loadRealmView(
+  ref: string,
+  locale: UiLocale,
+  search: Search,
+  surface: 'community' | 'site' = 'community',
+): Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
+  const [realm, messages, zoneMessages, jar, reader] = await Promise.all([
+    resolveRealm(ref, locale),
+    getMessages('realm', locale),
+    getMessages('zones', locale),
+    cookies(),
+    realmReader(),
+  ]);
   if (realm.kind !== 'realm') return realm;
-  const [read, membership] = await Promise.all([surface === 'site' && realm.zone ? readPresentation(realm.zone.id) : null,
-    reader.actingSubject ? readMembership(reader.personal, realm.header.id, reader.actingSubject) : null]);
-  if (surface === 'site' && (!read || !read.ok)) return { kind: read && !read.ok && read.failure === 'missing'
-    ? 'missing' : 'unavailable' };
+  const [read, membership] = await Promise.all([
+    surface === 'site' && realm.zone ? readPresentation(realm.zone.id) : null,
+    reader.actingSubject
+      ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
+      : null,
+  ]);
+  if (surface === 'site' && (!read || !read.ok))
+    return { kind: read && !read.ok && read.failure === 'missing' ? 'missing' : 'unavailable' };
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
-  const presentation: ZonePresentation = read?.ok ? { ...read.data.presentation,
-    modules: read.data.presentation.modules.map(({ titles, tabs, ...module }) => ({ ...module,
-      title: moduleTitle({ title: module.title, titles }, locale),
-      ...tabs ? { tabs: tabs.map(({ labels, ...tab }) => ({ ...tab, label: labels?.[locale] ?? tab.label })) } : {} })) }
+  const presentation: ZonePresentation = read?.ok
+    ? {
+        ...read.data.presentation,
+        modules: read.data.presentation.modules.map(({ titles, tabs, ...module }) => ({
+          ...module,
+          title: moduleTitle({ title: module.title, titles }, locale),
+          ...(tabs
+            ? {
+                tabs: tabs.map(({ labels, ...tab }) => ({
+                  ...tab,
+                  label: labels?.[locale] ?? tab.label,
+                })),
+              }
+            : {}),
+        })),
+      }
     : defaultPresentation(zoneMessages);
   const bannerMedia = read?.ok ? read.data.bannerMedia : [];
   const lookEnabled = zoneLookEnabled(jar.get(ZONE_LOOK_COOKIE)?.value);
   const main = read?.ok ? mainExecution(read.data) : null;
   const slug = read?.ok ? read.data.official : null;
-  const decided = decideExecution({ main, slug, safeMode: isSafeMode(search), lookEnabled,
-    installedDigest: main?.approved && slug ? await installedDigest(slug) : null });
-  const { execution, pkg } = await runnablePackage(surface === 'site' ? decided : { mode: 'fallback', reason: 'none-approved' });
+  const decided = decideExecution({
+    main,
+    slug,
+    safeMode: isSafeMode(search),
+    lookEnabled,
+    installedDigest: main?.approved && slug ? await installedDigest(slug) : null,
+  });
+  const { execution, pkg } = await runnablePackage(
+    surface === 'site' ? decided : { mode: 'fallback', reason: 'none-approved' },
+  );
   const header = realm.header;
   const mounts = read?.ok ? read.data.navigation : [];
   const zone: ZoneContext = {
-    slug, realm: header.id, name: zoneText(header.name), description: zoneText(header.description),
-    icon: zoneImage(header.icon, reader.avatarQuery), hero: zoneImage(header.banner, reader.avatarQuery),
-    tokens: presentation.tokens, locale,
-    links: { home: siteHref(locale, realm.ref, []), browse: siteHref(locale, realm.ref, ['browse']), works: siteHref(locale, realm.ref, ['browse']),
-      discussions: realmHref(locale, ref, 'discussions'), decisions: realmHref(locale, ref, 'decisions'),
-      about: realmHref(locale, ref, 'about') },
+    slug,
+    realm: header.id,
+    name: zoneText(header.name),
+    description: zoneText(header.description),
+    icon: zoneImage(header.icon, reader.avatarQuery),
+    hero: zoneImage(header.banner, reader.avatarQuery),
+    tokens: presentation.tokens,
+    locale,
+    links: {
+      home: siteHref(locale, realm.ref, []),
+      browse: siteHref(locale, realm.ref, ['browse']),
+      works: siteHref(locale, realm.ref, ['browse']),
+      discussions: realmHref(locale, realm.ref, 'discussions'),
+      decisions: realmHref(locale, realm.ref, 'decisions'),
+      about: realmHref(locale, realm.ref, 'about'),
+    },
   };
-  return { kind: 'view', realm, presentation, bannerMedia, execution, pkg, zone, lookEnabled, messages, zoneMessages,
-    reader: { signedIn: reader.signedIn, actingSubject: reader.actingSubject ?? null, avatarQuery: reader.avatarQuery },
+  return {
+    kind: 'view',
+    realm,
+    presentation,
+    bannerMedia,
+    execution,
+    pkg,
+    zone,
+    lookEnabled,
+    messages,
+    zoneMessages,
+    reader: {
+      signedIn: reader.signedIn,
+      actingSubject: reader.actingSubject ?? null,
+      avatarQuery: reader.avatarQuery,
+    },
     membership,
     mounts,
-    context: { locale, ref: realm.ref, realm: realm.realm, avatarQuery: reader.avatarQuery,
-      ...realm.zone && surface === 'site' ? { zone: realm.zone.id, mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }
-        : { unrouted: true } } };
+    context: {
+      locale,
+      ref: realm.ref,
+      realm: realm.realm,
+      avatarQuery: reader.avatarQuery,
+      ...(realm.zone && surface === 'site'
+        ? {
+            zone: realm.zone.id,
+            mounts: new Map(mounts.map((mount) => [mount.target, mount.segment])),
+          }
+        : { unrouted: true }),
+    },
+  };
 }
 
 /** A mounted page's address and its name, as the Zone's navigation and breadcrumbs link to it. */
 export function mountLinks(view: RealmView): SiteLink[] {
-  return view.mounts.map(mount => ({ href: `/z/${encodeURIComponent(view.context.ref)}/${
-    encodeURIComponent(mount.segment)}`, label: zoneText(mount.name) }));
+  return view.mounts.map((mount) => ({
+    href: spaceHref(view.context.ref, 'site', [mount.segment]),
+    label: zoneText(mount.name),
+  }));
 }
 
 /**
  * The Zone frame around one Realm tab, or around a page of the Zone's own site, which names its `address`
  * and the `crumbs` from the Zone's home to it.
  */
-export async function RealmFrame({ view, tab, locale, search, address, crumbs, children }: {
-  view: RealmView; tab: RealmTab | null; locale: UiLocale; search: Search; children: ReactNode;
-  address?: string; crumbs?: readonly SiteCrumb[];
+export async function RealmFrame({
+  view,
+  tab,
+  locale,
+  search,
+  address,
+  crumbs,
+  children,
+}: {
+  view: RealmView;
+  tab: RealmTab | null;
+  locale: UiLocale;
+  search: Search;
+  children: ReactNode;
+  address?: string;
+  crumbs?: readonly SiteCrumb[];
 }) {
   const [jar, request] = await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, zone, messages, zoneMessages, lookEnabled } = view;
   const site = tab === null;
-  const theme = zoneTheme(presentation.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value),
-    enabled: lookEnabled });
+  const theme = zoneTheme(presentation.tokens, {
+    reader: parseTheme(jar.get(THEME_COOKIE)?.value),
+    enabled: lookEnabled,
+  });
   const members = membersText(realm.header.membership.count, locale, messages);
   const here = localizedPath(address ?? realmHref(locale, realm.ref, tab ?? 'home'), locale);
   // A Zone whose package reads at the reader's position in a story offers the choice on every page.
   const positions = realm.zone ? await positionOf(pkg, realm.zone.id, parsePosition(search)) : null;
   // Join or Follow first, as every community page offers; the page style stays beside it.
-  const actions = <>
-    <RealmMembership realm={realm.header.id} realmName={zone.name.value} initial={view.membership}
-      signedIn={view.reader.signedIn} actingSubject={view.reader.actingSubject} signInHref={signInPath(here)}
-      rulesHref={realmHref(locale, realm.ref, 'about')} locale={locale} messages={messages} />
-    {realm.zone ? <LocalizedLink href={site ? realmHref(locale, realm.ref) : siteHref(locale, realm.ref, [])}
-      className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent">
-      {site ? surfaceText.community[locale] : surfaceText.site[locale]}</LocalizedLink> : null}
-    {site ? <LookMenu enabled={lookEnabled} labels={{ menu: zoneMessages.lookLabel,
-      zone: zoneMessages.lookZone, standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
-      saveFailed: zoneMessages.lookSaveFailed }} /> : null}
-  </>;
+  const actions = (
+    <>
+      <RealmMembership
+        realm={realm.header.id}
+        realmName={zone.name.value}
+        initial={view.membership}
+        signedIn={view.reader.signedIn}
+        actingSubject={view.reader.actingSubject}
+        signInHref={signInPath(here)}
+        rulesHref={realmHref(locale, realm.ref, 'about')}
+        locale={locale}
+        messages={messages}
+      />
+      {realm.zone ? (
+        <LocalizedLink
+          href={site ? realmHref(locale, realm.ref) : siteHref(locale, realm.ref, [])}
+          className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent"
+        >
+          {site ? surfaceText.community[locale] : surfaceText.site[locale]}
+        </LocalizedLink>
+      ) : null}
+      {site ? (
+        <LookMenu
+          enabled={lookEnabled}
+          labels={{
+            menu: zoneMessages.lookLabel,
+            zone: zoneMessages.lookZone,
+            standard: zoneMessages.lookStandard,
+            help: zoneMessages.lookHelp,
+            saveFailed: zoneMessages.lookSaveFailed,
+          }}
+        />
+      ) : null}
+    </>
+  );
   const design = new URL(here, 'https://rezics.invalid');
   for (const [key, value] of Object.entries(search)) {
     design.searchParams.delete(key);
-    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) design.searchParams.append(key, item);
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value])
+      design.searchParams.append(key, item);
   }
   design.searchParams.delete('safe');
   const showDesign = design.pathname + design.search + design.hash;
-  return <ZoneFrame zone={zone} dataZone={zone.slug ?? realm.realm} theme={theme} pkg={pkg}
-    nonce={request.get(ZONE_NONCE_HEADER) ?? undefined} actions={actions} members={members}
-    masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
-    tabs={site ? null : <RealmTabs locale={locale} realmRef={realm.ref} label={messages.sections} navigation={[]}
-      labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
-        discussions: messages.discussions,
-        decisions: messages.decisions, about: messages.about }} />}
-    site={site ? { label: surfaceText.site[locale], links: [
-      { href: siteHref(locale, realm.ref, []), label: { value: messages.home, lang: locale, dir: 'ltr' as const } },
-      ...presentation.navigation.map(item => ({ href: zoneNavigationHref(item.href, realm.ref),
-        label: { value: item.label, lang: locale, dir: 'ltr' as const } })), ...mountLinks(view),
-    ].filter((link, index, links) => links.findIndex(other => other.href === link.href) === index) } : undefined}
-    position={site && positions ? <PositionBar state={positions} here={here} locale={locale} /> : undefined}
-    crumbs={crumbs ? { label: messages.breadcrumbs, items: crumbs } : undefined}
-    notice={<ExecutionNotice execution={execution} showDesignHref={showDesign} messages={zoneMessages} />}>
-    {/* Shelf controls on every tile; signing in from one returns to this tab. */}
-    <ReaderActionsProvider signedIn={view.reader.signedIn} actingSubject={view.reader.actingSubject}
-      signInHref={signInPath(here)}>{children}</ReaderActionsProvider>
-  </ZoneFrame>;
+  const discovery = realmDiscovery(realm.header);
+  return (
+    <>
+      {discovery ? <SpaceDiscovery discovery={discovery} /> : null}
+      <ZoneFrame
+        zone={zone}
+        dataZone={zone.slug ?? realm.realm}
+        theme={theme}
+        pkg={pkg}
+        nonce={request.get(ZONE_NONCE_HEADER) ?? undefined}
+        actions={actions}
+        members={members}
+        masthead={<ZoneMasthead zone={zone} members={members} actions={actions} />}
+        tabs={
+          site ? null : (
+            <RealmTabs
+              locale={locale}
+              realmRef={realm.ref}
+              label={messages.sections}
+              navigation={[]}
+              labels={{
+                home: messages.home,
+                browse: zoneMessages.browseTab,
+                works: messages.works,
+                discussions: messages.discussions,
+                decisions: messages.decisions,
+                about: messages.about,
+              }}
+            />
+          )
+        }
+        site={
+          site
+            ? {
+                label: surfaceText.site[locale],
+                links: [
+                  {
+                    href: siteHref(locale, realm.ref, []),
+                    label: { value: messages.home, lang: locale, dir: 'ltr' as const },
+                  },
+                  ...presentation.navigation.map((item) => ({
+                    href: zoneNavigationHref(item.href, realm.ref),
+                    label: { value: item.label, lang: locale, dir: 'ltr' as const },
+                  })),
+                  ...mountLinks(view),
+                ].filter(
+                  (link, index, links) =>
+                    links.findIndex((other) => other.href === link.href) === index,
+                ),
+              }
+            : undefined
+        }
+        position={
+          site && positions ? (
+            <PositionBar state={positions} here={here} locale={locale} />
+          ) : undefined
+        }
+        crumbs={crumbs ? { label: messages.breadcrumbs, items: crumbs } : undefined}
+        notice={
+          <>
+            <ExecutionNotice
+              execution={execution}
+              showDesignHref={showDesign}
+              messages={zoneMessages}
+            />
+            {realm.header.listing === 'unlisted' && discovery ? (
+              <UnlistedSpaceNotice locale={locale} discovery={discovery} />
+            ) : null}
+          </>
+        }
+      >
+        {/* Shelf controls on every tile; signing in from one returns to this tab. */}
+        <ReaderActionsProvider
+          signedIn={view.reader.signedIn}
+          actingSubject={view.reader.actingSubject}
+          signInHref={signInPath(here)}
+        >
+          {children}
+        </ReaderActionsProvider>
+      </ZoneFrame>
+    </>
+  );
 }

@@ -8,19 +8,38 @@ import { decisions, fictionZone, works, zoneMessagesFor } from '../zones/fixture
 import { browseCounts } from '../zones/official-fixtures.ts';
 import { presetTokens } from '../zones/presentation.ts';
 import { cardRenderer } from '../zones/zone-home.tsx';
+import { profileHref } from '../profile/route.ts';
+import { realmHref, siteHref } from './route.ts';
 import { RealmNotFound, RealmUnavailable } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
 import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
 
 type Tab = 'browse' | 'decisions' | 'about' | 'browse-moved' | 'rules' | 'members';
 
-const person = (id: string, name: string, handle: string | null, featured = false): AboutPerson => ({
-  id: `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`, name,
-  href: handle ? `/@${handle}` : null, kind: 'person', avatarUrl: null, featured });
-const moderators = [person('a1', 'Daniel Chen 陈丹尼', 'daniel_chen'), person('a2', 'Lin Mei 林梅', 'lin_mei'),
-  person('a3', 'An Wu 吴安', 'an_wu')];
-const listed = [person('b1', '北岛听风', null, true), person('b2', 'Sophie Li 李素菲', null), person('b3', '橘子汽水', null),
-  person('b4', 'Maren Osei', null)];
+const person = (
+  id: string,
+  name: string,
+  handle: string | null,
+  featured = false,
+): AboutPerson => ({
+  id: `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`,
+  name,
+  href: handle ? profileHref(handle) : null,
+  kind: 'person',
+  avatarUrl: null,
+  featured,
+});
+const moderators = [
+  person('a1', 'Daniel Chen 陈丹尼', 'daniel_chen'),
+  person('a2', 'Lin Mei 林梅', 'lin_mei'),
+  person('a3', 'An Wu 吴安', 'an_wu'),
+];
+const listed = [
+  person('b1', '北岛听风', null, true),
+  person('b2', 'Sophie Li 李素菲', null),
+  person('b3', '橘子汽水', null),
+  person('b4', 'Maren Osei', null),
+];
 
 /** A Realm tab inside the Zone frame, under the Serial preset. */
 function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
@@ -29,28 +48,99 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
   const zone = { ...fictionZone(locale, presetTokens.serial), slug: 'fiction' };
   const state = parseBrowseState({ view: 'grid' });
   const content = {
-    browse: <ZoneBrowse card={cardRenderer(zone, null, locale, zoneMessages)} messages={zoneMessages}
-      model={browseModel({ base: `/${locale}/z/fiction/browse`, zoneName: zone.name.value, state, locale,
-        messages: zoneMessages, admitted: new Map(), page: { items: works, facets: browseCounts(works),
-          matches: { value: works.length, kind: 'exact' }, window: { scanned: works.length, complete: true },
-          tags: 'current', nextCursor: 'page-2', sort: 'newest' } })} />,
-    'browse-moved': <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10"><ListFailure failure="moved"
-      firstPage="/en/z/fiction/browse" messages={messages} /></div>,
-    decisions: <RealmDecisions decisions={decisions} next={null} first="/en/r/fiction/decisions" locale={locale}
-      messages={messages} zoneMessages={zoneMessages} />,
-    about: <RealmAbout realmName={zone.name.value} description={zone.description} locale={locale} messages={messages}
-      only={tab === 'rules' || tab === 'members' ? tab : undefined}
-      members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'} moderators={moderators}
-      listed={{ more: true, people: listed }}
-      others={[{ href: '/en/r/classics', name: { value: 'Classic Literature · 经典文学', lang: 'en' }, members: '860 members' },
-        { href: '/en/r/cooking', name: { value: '家常菜 · Home Cooking', lang: 'zh-Hans' }, members: null }]}
-      rules={[{ id: 'tagline', title: 'Every pick gets a one-line hook', lang: 'en', governed: false,
-        body: 'Editors write the line shown under the cover. It sells the story without spoiling it.' },
-      { id: 'translations', title: 'Translations are credited', lang: 'en', governed: true,
-        body: 'A translated serial names its translator and links the original when it is on REZICS.' }]} />,
+    browse: (
+      <ZoneBrowse
+        card={cardRenderer(zone, null, locale, zoneMessages)}
+        messages={zoneMessages}
+        model={browseModel({
+          base: siteHref(locale, 'fiction', ['browse']),
+          zoneName: zone.name.value,
+          state,
+          locale,
+          messages: zoneMessages,
+          admitted: new Map(),
+          page: {
+            items: works,
+            facets: browseCounts(works),
+            matches: { value: works.length, kind: 'exact' },
+            window: { scanned: works.length, complete: true },
+            tags: 'current',
+            nextCursor: 'page-2',
+            sort: 'newest',
+          },
+        })}
+      />
+    ),
+    'browse-moved': (
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10">
+        <ListFailure
+          failure="moved"
+          firstPage={siteHref(locale, 'fiction', ['browse'])}
+          messages={messages}
+        />
+      </div>
+    ),
+    decisions: (
+      <RealmDecisions
+        decisions={decisions}
+        next={null}
+        first={realmHref(locale, 'fiction', 'decisions')}
+        locale={locale}
+        messages={messages}
+        zoneMessages={zoneMessages}
+      />
+    ),
+    about: (
+      <RealmAbout
+        realmName={zone.name.value}
+        description={zone.description}
+        locale={locale}
+        messages={messages}
+        only={tab === 'rules' || tab === 'members' ? tab : undefined}
+        members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
+        moderators={moderators}
+        listed={{ more: true, people: listed }}
+        others={[
+          {
+            href: realmHref(locale, 'classics'),
+            name: { value: 'Classic Literature · 经典文学', lang: 'en' },
+            members: '860 members',
+          },
+          {
+            href: realmHref(locale, 'cooking'),
+            name: { value: '家常菜 · Home Cooking', lang: 'zh-Hans' },
+            members: null,
+          },
+        ]}
+        rules={[
+          {
+            id: 'tagline',
+            title: 'Every pick gets a one-line hook',
+            lang: 'en',
+            governed: false,
+            body: 'Editors write the line shown under the cover. It sells the story without spoiling it.',
+          },
+          {
+            id: 'translations',
+            title: 'Translations are credited',
+            lang: 'en',
+            governed: true,
+            body: 'A translated serial names its translator and links the original when it is on REZICS.',
+          },
+        ]}
+      />
+    ),
   }[tab === 'rules' || tab === 'members' ? 'about' : tab];
-  return <RealmPageStory zone={zone} locale={locale} site={tab === 'browse' || tab === 'browse-moved'}
-    members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}>{content}</RealmPageStory>;
+  return (
+    <RealmPageStory
+      zone={zone}
+      locale={locale}
+      site={tab === 'browse' || tab === 'browse-moved'}
+      members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
+    >
+      {content}
+    </RealmPageStory>
+  );
 }
 
 const meta = {
@@ -58,7 +148,9 @@ const meta = {
   component: TabPage,
   args: { tab: 'browse', locale: 'en' },
   parameters: { route: { pathname: '/en/z/fiction/browse' } },
-  render: (args, { globals }) => <TabPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+  render: (args, { globals }) => (
+    <TabPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
+  ),
 } satisfies Meta<typeof TabPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -67,11 +159,21 @@ type Story = StoryObj<typeof meta>;
 export const Browse: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Browse' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('link', { name: 'Grid' })).toHaveAttribute('aria-current', 'true');
-    await expect(canvas.getByRole('link', { name: /Next/ })).toHaveAttribute('href',
-      '/en/z/fiction/browse?view=grid&cursor=page-2');
-    await expect(canvas.getAllByRole('link', { name: /^Why .* is here$/ })).toHaveLength(works.length);
+    await expect(canvas.getByRole('link', { name: 'Browse' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(canvas.getByRole('link', { name: 'Grid' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    await expect(canvas.getByRole('link', { name: /Next/ })).toHaveAttribute(
+      'href',
+      '/en/z/fiction/browse?view=grid&cursor=page-2',
+    );
+    await expect(canvas.getAllByRole('link', { name: /^Why .* is here$/ })).toHaveLength(
+      works.length,
+    );
   },
 };
 
@@ -83,8 +185,13 @@ export const BrowseMoved: Story = {
   args: { tab: 'browse-moved' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('status')).toHaveTextContent('This list changed while you were browsing');
-    await expect(canvas.getByRole('link', { name: 'Start over' })).toHaveAttribute('href', '/en/z/fiction/browse');
+    await expect(canvas.getByRole('status')).toHaveTextContent(
+      'This list changed while you were browsing',
+    );
+    await expect(canvas.getByRole('link', { name: 'Start over' })).toHaveAttribute(
+      'href',
+      '/en/z/fiction/browse',
+    );
   },
 };
 
@@ -96,29 +203,38 @@ async function captureSection(name: string) {
   }
 }
 
-export const Rules: Story = { args: { tab: 'rules' }, parameters: { route: { pathname: '/en/r/fiction/rules' } },
+export const Rules: Story = {
+  args: { tab: 'rules' },
+  parameters: { route: { pathname: '/en/r/fiction/rules' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Community rules' })).toBeVisible();
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
     await expect(canvas.queryByRole('heading', { name: 'Members' })).toBeNull();
     await captureSection('rules');
-  } };
-export const Members: Story = { args: { tab: 'members' }, parameters: { route: { pathname: '/en/r/fiction/members' } },
+  },
+};
+export const Members: Story = {
+  args: { tab: 'members' },
+  parameters: { route: { pathname: '/en/r/fiction/members' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Members' })).toBeVisible();
     await expect(canvas.queryByRole('heading', { name: 'Community rules' })).toBeNull();
     await expect(canvas.queryByRole('heading', { name: 'Moderators' })).toBeNull();
     await captureSection('members');
-  } };
+  },
+};
 
 export const Decisions: Story = {
   args: { tab: 'decisions' },
   parameters: { route: { pathname: '/en/r/fiction/decisions' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Decisions' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('link', { name: 'Decisions' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
     const log = canvas.getByRole('region', { name: 'Decision log' });
     await expect(within(log).getAllByRole('listitem')).toHaveLength(decisions.length);
     await expect(canvasElement.querySelector('#decision-d1')).toHaveTextContent('Added 云端书简');
@@ -126,37 +242,61 @@ export const Decisions: Story = {
   },
 };
 
-export const DecisionsChinese: Story = { args: { tab: 'decisions' }, globals: { locale: 'zh-Hans' },
-  parameters: { route: { pathname: '/zh-Hans/r/fiction/decisions' } } };
+export const DecisionsChinese: Story = {
+  args: { tab: 'decisions' },
+  globals: { locale: 'zh-Hans' },
+  parameters: { route: { pathname: '/zh-Hans/r/fiction/decisions' } },
+};
 
 export const About: Story = {
   args: { tab: 'about' },
   parameters: { route: { pathname: '/en/r/fiction/about' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { level: 3, name: 'Rule 1: Every pick gets a one-line hook' })).toBeVisible();
+    await expect(
+      canvas.getByRole('heading', { level: 3, name: 'Rule 1: Every pick gets a one-line hook' }),
+    ).toBeVisible();
     const team = canvas.getByRole('region', { name: 'Moderators' });
-    await expect(within(team).getByRole('link', { name: /Lin Mei 林梅/ })).toHaveAttribute('href', '/en/@lin_mei');
+    await expect(within(team).getByRole('link', { name: /Lin Mei 林梅/ })).toHaveAttribute(
+      'href',
+      '/en/@lin_mei',
+    );
     const members = canvas.getByRole('region', { name: 'Members' });
     await expect(within(members).getAllByRole('listitem')[0]).toHaveTextContent('北岛听风Featured');
     await expect(within(members).getByText('12,408 members')).toBeVisible();
-    await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute('href', '/en/r/classics');
+    await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute(
+      'href',
+      '/en/r/classics',
+    );
   },
 };
 
-export const AboutDark: Story = { args: { tab: 'about' }, globals: { theme: 'dark' },
-  parameters: { route: { pathname: '/en/r/fiction/about' } } };
+export const AboutDark: Story = {
+  args: { tab: 'about' },
+  globals: { theme: 'dark' },
+  parameters: { route: { pathname: '/en/r/fiction/about' } },
+};
 
 export const NotFound: Story = {
-  render: (_, { globals }) => <RealmNotFound messages={realmMessagesFor((globals.locale as UiLocale | undefined) ?? 'en')} />,
+  render: (_, { globals }) => (
+    <RealmNotFound messages={realmMessagesFor((globals.locale as UiLocale | undefined) ?? 'en')} />
+  ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('heading', { level: 1, name: 'This community isn’t here' })).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole('heading', { level: 1, name: 'This community isn’t here' }),
+    ).toBeVisible();
   },
 };
 
 export const Unavailable: Story = {
-  render: (_, { globals }) => <RealmUnavailable messages={realmMessagesFor((globals.locale as UiLocale | undefined) ?? 'en')} />,
+  render: (_, { globals }) => (
+    <RealmUnavailable
+      messages={realmMessagesFor((globals.locale as UiLocale | undefined) ?? 'en')}
+    />
+  ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Couldn’t load this community');
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
+      'Couldn’t load this community',
+    );
   },
 };

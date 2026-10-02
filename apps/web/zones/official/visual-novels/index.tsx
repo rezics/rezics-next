@@ -4,7 +4,7 @@ import { VisualNovelBrowseHeader, VisualNovelCard, VisualNovelFooter } from './s
 import css from './visual-novels.css?raw';
 
 /**
- * The official Visual Novels Zone (`/r/visual-novels`): readers choose a language, platform, completeness
+ * The official Visual Novels Zone (`/z/visual-novels`): readers choose a language, platform, completeness
  * and official or fan translation, and get only visual novels that have one release meeting all of them,
  * each result naming that release. A novel's page leads with where it can be played. It states what it
  * does not cover and credits VNDB where its data appears.
@@ -15,5 +15,9 @@ export default defineZonePackage({
   releaseFilter,
   // Where a novel can be played comes before its description.
   hubOrder: ['availability', 'about'],
-  slots: { browseHeader: VisualNovelBrowseHeader, workCard: VisualNovelCard, footer: VisualNovelFooter },
+  slots: {
+    browseHeader: VisualNovelBrowseHeader,
+    workCard: VisualNovelCard,
+    footer: VisualNovelFooter,
+  },
 });

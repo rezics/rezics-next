@@ -12,7 +12,14 @@ import { FeedProvider } from '../feed/feed-context.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
 import type { ReplyMode } from '../feed/reply-composer.tsx';
 import { offerOf } from './membership-state.ts';
-import { loadRealmView, membersText, RealmFrame, type RealmView } from './realm-page.tsx';
+import {
+  loadRealmView,
+  membersText,
+  privateJoinPage,
+  RealmFrame,
+  type RealmView,
+} from './realm-page.tsx';
+import { spaceHref } from '../address/path.ts';
 import { realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
 import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
@@ -27,12 +34,28 @@ export type Search = Record<string, string | string[] | undefined>;
  * The Realm view for `/r/{ref}/discussions…`, or the response that replaces
  * the page: a Realm UUID with an official Zone moves to the Zone's address.
  */
-export async function discussionView(locale: string, ref: string, search: Search, rest = ''):
-  Promise<{ view: RealmView; locale: UiLocale; feed: FeedMessages } | { page: ReactNode }> {
+export async function discussionView(
+  locale: string,
+  ref: string,
+  search: Search,
+  rest = '',
+): Promise<{ view: RealmView; locale: UiLocale; feed: FeedMessages } | { page: ReactNode }> {
   if (!isUiLocale(locale)) notFound();
-  const [view, feed] = await Promise.all([loadRealmView(ref, locale, search), getMessages('feed', locale)]);
+  const [view, feed] = await Promise.all([
+    loadRealmView(ref, locale, search),
+    getMessages('feed', locale),
+  ]);
   if (view.kind === 'missing') notFound();
-  if (view.kind === 'unavailable') return { page: <RealmUnavailable messages={await getMessages('realm', locale)} /> };
+  if (view.kind === 'unavailable')
+    return { page: <RealmUnavailable messages={await getMessages('realm', locale)} /> };
+  if (view.kind === 'join')
+    return {
+      page: await privateJoinPage(
+        view.page,
+        locale,
+        `${realmHref(locale, ref, 'discussions')}${rest}`,
+      ),
+    };
   return { view, locale, feed };
 }
 
@@ -52,35 +75,81 @@ export function replyModeOf(view: RealmView): ReplyMode {
   if (!view.reader.actingSubject) return 'unavailable';
   const { reviewMode } = view.realm.header;
   if (reviewMode === 'mandatory') return 'reviewed';
-  if (reviewMode === 'trusted-members' && (!view.membership || offerOf(view.membership) !== 'joined')) return 'join';
+  if (
+    reviewMode === 'trusted-members' &&
+    (!view.membership || offerOf(view.membership) !== 'joined')
+  )
+    return 'join';
   return 'open';
 }
 
 /** The unlocalized `/r/{ref}` the feed's links build on. */
-export const realmPathOf = (view: RealmView) => `/r/${view.realm.ref}`;
+export const realmPathOf = (view: RealmView) => spaceHref(view.realm.ref, 'community');
 
 /** The Realm frame around a discussion page: the posts, and the community rail beside them. */
-export async function DiscussionFrame({ view, locale, feed, search, here, children }: { view: RealmView;
-  locale: UiLocale; feed: FeedMessages; search: Search;
+export async function DiscussionFrame({
+  view,
+  locale,
+  feed,
+  search,
+  here,
+  children,
+}: {
+  view: RealmView;
+  locale: UiLocale;
+  feed: FeedMessages;
+  search: Search;
   /** This page's own address, where signing in returns. */
-  here: string; children: ReactNode }) {
+  here: string;
+  children: ReactNode;
+}) {
   const t = materializeData(feed, { locale });
   const { header } = view.realm;
   const segments = view.realm.zone?.segment ? { [header.id]: view.realm.zone.segment } : {};
-  return <RealmFrame view={view} tab="discussions" locale={locale} search={search}>
-    <FeedProvider locale={locale} messages={feed} now={Date.now()} signedIn={view.reader.signedIn}
-      actingSubject={view.reader.actingSubject} signInHref={signInPath(localizedPath(here, locale))}
-      avatarQuery={view.reader.avatarQuery} tab="all" followedRealms={null} realmSegments={segments}>
-      <DiscussionColumns rail={<ThreadRail name={{ value: view.zone.name.value, lang: view.zone.name.lang }}
-          description={view.zone.description ? { value: view.zone.description.value,
-            lang: view.zone.description.lang } : null}
-          members={membersText(header.membership.count, locale, view.messages)}
-          aboutHref={realmHref(locale, view.realm.ref, 'about')}
-          rules={header.rules?.map(rule => ({ id: rule.id, title: rule.title.value, body: rule.body.value,
-            lang: rule.title.language })) ?? []}
-          labels={{ about: t.aboutCommunity, rules: t.communityRules, more: t.moreAboutCommunity }} />}>
-        {children}
-      </DiscussionColumns>
-    </FeedProvider>
-  </RealmFrame>;
+  return (
+    <RealmFrame view={view} tab="discussions" locale={locale} search={search}>
+      <FeedProvider
+        locale={locale}
+        messages={feed}
+        now={Date.now()}
+        signedIn={view.reader.signedIn}
+        actingSubject={view.reader.actingSubject}
+        signInHref={signInPath(localizedPath(here, locale))}
+        avatarQuery={view.reader.avatarQuery}
+        tab="all"
+        followedRealms={null}
+        realmSegments={segments}
+      >
+        <DiscussionColumns
+          rail={
+            <ThreadRail
+              name={{ value: view.zone.name.value, lang: view.zone.name.lang }}
+              description={
+                view.zone.description
+                  ? { value: view.zone.description.value, lang: view.zone.description.lang }
+                  : null
+              }
+              members={membersText(header.membership.count, locale, view.messages)}
+              aboutHref={realmHref(locale, view.realm.ref, 'about')}
+              rules={
+                header.rules?.map((rule) => ({
+                  id: rule.id,
+                  title: rule.title.value,
+                  body: rule.body.value,
+                  lang: rule.title.language,
+                })) ?? []
+              }
+              labels={{
+                about: t.aboutCommunity,
+                rules: t.communityRules,
+                more: t.moreAboutCommunity,
+              }}
+            />
+          }
+        >
+          {children}
+        </DiscussionColumns>
+      </FeedProvider>
+    </RealmFrame>
+  );
 }
