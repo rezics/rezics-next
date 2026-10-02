@@ -1,245 +1,187 @@
 import { buttonVariants } from '@rezics/ui/button';
-import { cn } from '@rezics/ui/utils';
-import { CircleSlashIcon, HourglassIcon, LibraryBigIcon, LinkIcon, StarIcon, XIcon } from 'lucide-react';
-import { type ContractOf, materializeData } from 'native-i18n';
-import type { ReactNode } from 'react';
+import { Input } from '@rezics/ui/input';
+import type { EntityPickerLoad } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
-import { isolate } from '../language/untagged.ts';
-import { withName } from '../language/with-name.tsx';
-import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
-import type { ReaderSeed } from '../catalogue/reader-store.ts';
-import type { CatalogueWork } from '../catalogue/work.ts';
-import { WorkShelf } from '../catalogue/work-shelf.tsx';
-import { RetryButton } from '../work-page/retry-button.tsx';
+import { localizedPath } from '../../i18n/locale.ts';
+import { DiscoverBrowseConditions } from '../query/condition-bar.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { DiscoverConditionBar, type NamedCondition } from '../query/condition-bar.tsx';
-import type { DiscoverMessages } from './messages.ts';
-import { fills } from './fills.ts';
-import { failureNotice, Notice } from './notice.tsx';
-import type { DiscoveryLoader } from './query.ts';
-import { type BrowseScope, sameScope, shortId } from './scope.ts';
-import { DiscoverShelf } from './shelf.tsx';
-import { entryLabel } from '../catalogue/types.ts';
-import { type DiscoverState, discoverHref, type ShelfSpec, type WorkTypeKey, workTypes } from './state.ts';
-import type { DiscoveryPage, DiscoveryQuery, Loaded, ReadFailure, WorkName } from './types.ts';
+import { RetryButton } from '../work-page/retry-button.tsx';
+import type { SectionReason } from './api.ts';
+import { browseMessages } from './browse-messages.ts';
+import { browseHref, browseTabs, changeBrowse, type BrowseState } from './browse-state.ts';
+import type { BrowseResult, LoadedBrowse } from './load.ts';
+import { messages } from './messages.ts';
+import { BrowseContinuation, ResourceList } from './resource-list.tsx';
+import type { TopicItem } from './topic-picker.tsx';
 
-/** A shelf with Main's query for it, its server-rendered first page and, for a genre, the genre's name. */
-export interface LoadedShelf { spec: ShelfSpec; query: DiscoveryQuery; initial: Loaded<DiscoveryPage>; genre?: WorkName }
-
-/** Rows an overview shows when none of its own can: what is trending, and in a community, everyone's lists. */
-export interface DiscoverFallback { trending: CatalogueWork[]; shelves: LoadedShelf[] }
-
-/** A Realm a page can name: its public name when Main gave one. */
-export interface ScopeRealm { id: string; name: WorkName | null }
-
-export interface DiscoverPageProps {
-  /** Null when the URL is malformed; the page says so instead of widening the view. */
-  state: DiscoverState | null;
-  realm: ScopeRealm | null;
-  /** The Realm in the URL is not public or does not exist. */
-  realmMissing?: boolean;
-  shelves: readonly LoadedShelf[];
-  /** Names of the Concepts in the Condition bar, when the shelves do not already carry them. */
-  conceptNames?: readonly NamedCondition[];
-  fallback?: DiscoverFallback;
-  signedIn: boolean;
-  signInHref: string;
-  avatarQuery?: string;
-  load?: DiscoveryLoader;
-  /** The Agent a signed-in reader acts as, and their state for the Works on the page. */
-  actingSubject?: string;
-  readerSeed?: ReaderSeed;
-  /** Stories supply reader actions; pages derive them from the session. */
-  readerActions?: ReaderActions;
+export interface DiscoverPageProps extends LoadedBrowse {
+  topicLoad?: EntityPickerLoad<TopicItem>;
+}
+function reasonLabel(reason: SectionReason, locale: UiLocale): string {
+  const t = browseMessages[locale];
+  switch (reason) {
+    case 'popular-in-followed-topics':
+      return t.followedTopics;
+    case 'popular':
+      return t.popular;
+    case 'communities-in-reader-languages':
+      return t.readerLanguages;
+    case 'communities':
+      return t.communities;
+    case 'new-sites':
+      return t.newSites;
+  }
+}
+function Failure({
+  read,
+  state,
+  locale,
+}: {
+  read: Extract<BrowseResult<unknown>, { ok: false }>;
+  state: BrowseState;
   locale: UiLocale;
-  messages: DiscoverMessages;
-}
-
-type Text = ContractOf<DiscoverMessages>;
-
-const byType = <K extends string>(prefix: K, type: WorkTypeKey | null) =>
-  `${prefix}${type ? `${type[0]!.toUpperCase()}${type.slice(1)}` : 'All'}` as
-    `${K}${'All' | 'Book' | 'Document' | 'Recipe'}`;
-
-/** A shelf's title in readers' words ("Readers’ favorites", "Popular in Adventure"). */
-export function shelfTitle(shelf: Pick<LoadedShelf, 'spec' | 'genre'>, t: Text): string {
-  const { topic } = shelf.spec;
-  const genre = shelf.genre?.value ?? t.thisGenre;
-  switch (topic.kind) {
-    case 'favorites': return t[byType('favorites', topic.type)];
-    case 'recent': return t[byType('recent', topic.type)];
-    case 'popular-in': return t.popularIn({ genre });
-    case 'new-in': return t.newIn({ genre });
-    case 'mine': return t.mineShelf;
-  }
-}
-
-/** A community's name, or "Community 1a2b3c4d" while Main cannot name it. */
-export const realmName = (realm: ScopeRealm, t: Text) => realm.name?.value ?? t.realmFallback({ id: shortId(realm.id) });
-
-/** A sentence naming the community: the name keeps its own language and direction inside the interface's. */
-function realmSentence(realm: ScopeRealm, message: (name: string) => string, t: Text): ReactNode {
-  return realm.name ? withName(message, realm.name) : message(realmName(realm, t));
-}
-
-/** Moving between scopes: a pinned rating question belongs to its scope, and Mine has no genres. */
-function hrefIn(state: DiscoverState, scope: BrowseScope): string {
-  return discoverHref({ ...state, scope, context: null, term: scope.kind === 'mine' ? null : state.term });
-}
-
-const pill = cn('inline-flex h-9 items-center rounded-full px-4 font-medium text-sm outline-none transition-colors',
-  'text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-  'aria-[current=page]:bg-foreground aria-[current=page]:text-background');
-
-/** Whose picks the page shows, small beside the title: scope matters here, but is not the headline. */
-function CommunitySwitch({ state, realm, t }: { state: DiscoverState; realm: ScopeRealm | null; t: Text }) {
-  const choices: { scope: BrowseScope; label: string; lang?: string; dir?: 'ltr' | 'rtl' }[] = [
-    { scope: { kind: 'global' }, label: t.everyone },
-    ...(state.scope.kind === 'realm' && realm ? [{ scope: state.scope, label: realmName(realm, t),
-      lang: realm.name?.language, dir: realm.name?.direction }] : []),
-    { scope: { kind: 'mine' }, label: t.mine },
-  ];
-  return <nav aria-label={t.community} className="flex max-w-full gap-1 overflow-x-auto rounded-full border
-    border-border/70 p-1 scrollbar-none">
-    {choices.map(choice => <Link key={choice.label} href={hrefIn(state, choice.scope)} lang={choice.lang} dir={choice.dir}
-      aria-current={sameScope(choice.scope, state.scope) ? 'page' : undefined}
-      className={cn(pill, 'h-8 max-w-56 shrink-0 truncate px-3.5')}>{choice.label}</Link>)}
-  </nav>;
-}
-
-/** The failure an overview names once for the rows it left out: one that needs the reader's action first. */
-function leadingFailure(shelves: readonly LoadedShelf[]): ReadFailure | null {
-  const failures = shelves.flatMap(shelf => shelf.initial.ok ? [] : [shelf.initial.failure]);
-  const order: ReadFailure[] = ['unavailable', 'sign-in', 'moved', 'budget', 'unsupported', 'invalid',
-    'missing', 'stale', 'unbuilt'];
-  return order.find(failure => failures.includes(failure)) ?? null;
-}
-
-/**
- * The overview's rows. A row that could not load or holds fewer than two
- * Works is left out, and the page says once why lists are missing. When none
- * of its own rows can show, it offers what readers are reading instead: the
- * trending list here and, in a community, everyone's favorites and newest.
- */
-function Overview({ shelves, fallback, realm, state, neighbour, seeAll, signInHref, avatarQuery, locale, messages }: {
-  shelves: readonly LoadedShelf[]; fallback?: DiscoverFallback; realm: ScopeRealm | null; state: DiscoverState;
-  neighbour?: { href: string; label: string }; seeAll: (shelf: LoadedShelf) => { href: string } | undefined;
-  signInHref: string; avatarQuery?: string; locale: UiLocale; messages: DiscoverMessages;
 }) {
-  const t = materializeData(messages, { locale });
-  const rows = shelves.filter(fills);
-  const failure = leadingFailure(shelves);
-  const substitutes = rows.length ? null : <>
-    {fallback?.trending.length ? <WorkShelf heading={{ title: state.scope.kind === 'realm' && realm
-      ? realmSentence(realm, name => t.trendingIn({ realm: name }), t) : t.trending }} works={fallback.trending}
-      avatarQuery={avatarQuery} locale={locale} /> : null}
-    {fallback?.shelves.map(shelf => <DiscoverShelf key={`everyone-${shelf.spec.key}`} mode="row" scope={{ kind: 'global' }}
-      heading={{ title: shelfTitle(shelf, t), subtitle: t.fromEveryone, seeAll: { href: discoverHref({ scope: { kind:
-        'global' }, context: null, type: shelf.spec.type, term: null }) } }} query={shelf.query} initial={shelf.initial}
-      signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
-  </>;
-  const fell = Boolean(fallback?.trending.length || fallback?.shelves.length);
-  const notice = failure && failure !== 'unbuilt' && failure !== 'stale'
-    ? <Notice {...failureNotice(failure, t.title, t)} headingLevel={2}>
-      {failure === 'unavailable' ? <RetryButton label={t.retry} pendingLabel={t.loadingMore} /> : null}
-      {failure === 'sign-in' ? <Link href={signInHref} className={buttonVariants({ size: 'sm' })}>{t.signIn}</Link> : null}
-    </Notice>
-    : failure ? <Notice icon={HourglassIcon} headingLevel={2} title={rows.length ? t.somePreparing : t.preparingAll}
-      description={fell ? t.preparingMeanwhile : t.preparingHelp}>
-      {neighbour && !fell ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-        {neighbour.label}</Link> : null}
-    </Notice>
-      : !rows.length ? <Notice icon={LibraryBigIcon} headingLevel={2} title={t.empty}
-        description={fell ? t.emptyMeanwhile : t.emptyHelp}>
-        {neighbour && !fell ? <Link href={neighbour.href} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
-          {neighbour.label}</Link> : null}
-      </Notice> : null;
-  return <>
-    {rows.length ? null : notice}
-    {rows.map(shelf => <DiscoverShelf key={shelf.spec.key} heading={{ title: shelfTitle(shelf, t), seeAll: seeAll(shelf) }}
-      mode="row" scope={state.scope} query={shelf.query} initial={shelf.initial} signInHref={signInHref}
-      avatarQuery={avatarQuery} locale={locale} messages={messages}
-      conditionState={state.conditions ? state : undefined} />)}
-    {substitutes}
-    {/* Some rows showed: the note about the missing ones comes after them, quietly. */}
-    {rows.length ? notice : null}
-  </>;
+  const t = browseMessages[locale];
+  return (
+    <div
+      role="alert"
+      className="grid justify-items-start gap-3 rounded-2xl border border-border p-5"
+    >
+      <p>{read.moved ? t.changed : t.unavailable}</p>
+      {read.moved ? (
+        <Link
+          href={browseHref({ ...state, cursor: null })}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
+          {t.first}
+        </Link>
+      ) : (
+        <RetryButton label={t.retry} pendingLabel={t.loading} />
+      )}
+    </div>
+  );
 }
-
-/**
- * `/discover`: shelves by meaning — readers' favorites, genres, recently
- * added books, guides and recipes — rather than by storage type. The overview
- * shows sideways rows; choosing a kind or genre shows its full lists. Scope
- * appears only once the reader picks a community or their own ratings.
- */
-export function DiscoverView({ state, realm, realmMissing, shelves, conceptNames, fallback, signedIn, signInHref,
-  avatarQuery, load, actingSubject, readerSeed, readerActions, locale, messages }: DiscoverPageProps) {
-  const t = materializeData(messages, { locale });
-  if (!state) {
-    return <PageContainer className="grid gap-8">
-      <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{t.title}</h1>
-      <Notice icon={LinkIcon} headingLevel={2} title={t.badLinkTitle} description={t.badLinkHelp}>
-        <Link href="/discover" className={buttonVariants({ size: 'sm' })}>{t.browseEverything}</Link>
-      </Notice>
-    </PageContainer>;
-  }
-  const { scope } = state;
-  const heading = scope.kind === 'realm' && realm
-    ? { title: realmSentence(realm, name => t.titleRealm({ realm: name }), t), description: t.descriptionRealm }
-    : scope.kind === 'mine' ? { title: t.titleMine, description: t.descriptionMine } : { title: t.title, description: t.description };
-  const overview = scope.kind !== 'mine' && !state.type && !state.term;
-  const neighbour = scope.kind === 'global' ? undefined : { href: hrefIn(state, { kind: 'global' }), label: t.seeEverything };
-  const genre = shelves.find(shelf => shelf.genre)?.genre
-    ?? shelves.flatMap(shelf => shelf.initial.ok && shelf.initial.data.matchedTerm ? [shelf.initial.data.matchedTerm.name] : [])[0];
-  const genreLabel = genre ? t.genreFilter({ genre: isolate(genre.value) }) : t.genreUnknown;
-  const seeAll = (shelf: LoadedShelf) => {
-    const { topic } = shelf.spec;
-    if (!overview || topic.kind === 'mine') return undefined;
-    return { href: discoverHref('term' in topic ? { ...state, term: topic.term } : { ...state, type: topic.type }) };
-  };
-  return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref} actingSubject={actingSubject}
-    seed={readerSeed} actions={readerActions}>
-    <PageContainer className="grid gap-10 sm:gap-12">
-      <header className="grid gap-5">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          <div className="min-w-0 space-y-1.5">
-            <h1 className="text-balance font-semibold text-3xl tracking-tight sm:text-4xl">
-              {heading.title}</h1>
-            <p className="text-pretty text-muted-foreground">{heading.description}</p>
-          </div>
-          <CommunitySwitch state={state} realm={realm} t={t} />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-          <nav aria-label={t.typeFilter} className="-mx-1 flex gap-1 overflow-x-auto px-1 scrollbar-none">
-            <Link href={discoverHref({ ...state, type: null })} aria-current={state.type === null ? 'page' : undefined}
-              className={pill}>{t.allTypes}</Link>
-            {workTypes().map(type => <Link key={type.key} href={discoverHref({ ...state, type: type.key })}
-              aria-current={state.type === type.key ? 'page' : undefined} className={pill}>{entryLabel(type.entry, locale, 'other')}</Link>)}
-          </nav>
-          {state.term ? <p className="inline-flex h-9 items-center gap-1 rounded-full bg-secondary ps-4 pe-1 text-sm">
-            <span className="max-w-[min(24rem,60vw)] truncate">{genre
-              ? withName(name => t.genreFilter({ genre: name }), genre) : genreLabel}</span>
-            <Link href={discoverHref({ ...state, term: null })} aria-label={t.removeFilter({ filter: genreLabel })}
-              className="grid size-7 place-items-center rounded-full outline-none hover:bg-background/70
-                focus-visible:ring-2 focus-visible:ring-ring"><XIcon aria-hidden="true" className="size-3.5" /></Link>
-          </p> : null}
-        </div>
+export function DiscoverView({
+  state,
+  topics,
+  sections,
+  results,
+  actingSubject,
+  avatarQuery,
+  locale,
+  topicLoad,
+}: DiscoverPageProps) {
+  const t = browseMessages[locale],
+    copy = messages[locale];
+  if (!state)
+    return (
+      <PageContainer className="grid gap-5">
+        <h1 className="font-semibold text-3xl">{copy.title}</h1>
+        <p role="alert">{copy.badLinkTitle}</p>
+        <Link href="/discover" className={buttonVariants({ variant: 'outline' })}>
+          {copy.browseEverything}
+        </Link>
+      </PageContainer>
+    );
+  return (
+    <PageContainer className="grid min-w-0 gap-7">
+      <header className="grid min-w-0 gap-4">
+        <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{copy.title}</h1>
+        <form action={localizedPath('/discover', locale)} className="flex min-w-0 max-w-2xl gap-2">
+          {Object.entries(
+            Object.fromEntries(
+              new URL(browseHref(changeBrowse(state, { q: '' })), 'http://local').searchParams,
+            ),
+          ).map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
+          <Input
+            type="search"
+            name="q"
+            aria-label={t.search}
+            placeholder={t.search}
+            defaultValue={state.q}
+            maxLength={80}
+            className="min-w-0 flex-1"
+          />
+          <button type="submit" className={buttonVariants({ variant: 'outline' })}>
+            {t.searchAction}
+          </button>
+        </form>
+        <DiscoverBrowseConditions
+          state={state}
+          locale={locale}
+          actingSubject={actingSubject}
+          topics={topics}
+          load={topicLoad}
+        />
+        <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
+          {browseTabs.map((tab) => (
+            <Link
+              key={tab}
+              href={browseHref(changeBrowse(state, { tab }))}
+              aria-current={state.tab === tab && !state.section ? 'page' : undefined}
+              className="inline-flex h-9 shrink-0 items-center rounded-full px-4 font-medium text-sm outline-none
+            hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-foreground
+            aria-[current=page]:text-background"
+            >
+              {t[tab]}
+            </Link>
+          ))}
+        </nav>
+        {actingSubject ? (
+          <Link
+            href={browseHref(changeBrowse(state, { personalized: !state.personalized }))}
+            aria-current={state.personalized ? 'true' : undefined}
+            className="justify-self-start text-muted-foreground text-sm underline underline-offset-4"
+          >
+            {t.personalize}
+            {state.personalized ? ' ✓' : ''}
+          </Link>
+        ) : null}
       </header>
-      <DiscoverConditionBar state={state} locale={locale} actingSubject={actingSubject}
-        values={[...(conceptNames ?? []), ...shelves.flatMap(shelf => shelf.initial.ok
-          ? shelf.initial.data.items.flatMap(item => item.classifications.map(tag => ({ id: tag.concept,
-            name: tag.name.value, language: tag.name.language }))) : [])]} />
-      {realmMissing ? <Notice icon={CircleSlashIcon} headingLevel={2} title={t.realmMissingTitle}>
-        <Link href={hrefIn(state, { kind: 'global' })} className={buttonVariants({ size: 'sm' })}>{t.browseEverything}</Link>
-      </Notice> : !shelves.length ? <Notice icon={StarIcon} headingLevel={2} title={t.noRatingsYet}
-        description={t.noRatingsHelp} /> : overview
-        ? <Overview shelves={shelves} fallback={fallback} realm={realm} state={state} neighbour={neighbour}
-          seeAll={seeAll} signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages} />
-        : shelves.map(shelf => <DiscoverShelf key={shelf.spec.key} heading={{ title: shelfTitle(shelf, t) }} mode="grid"
-          scope={scope} query={shelf.query} initial={shelf.initial} load={load} neighbour={neighbour}
-          signInHref={signInHref} avatarQuery={avatarQuery} locale={locale} messages={messages}
-          conditionState={state.conditions ? state : undefined} />)}
+      {sections ? (
+        sections.ok ? (
+          sections.data.map((section) => (
+            <section
+              key={section.id}
+              aria-label={reasonLabel(section.reason.kind, locale)}
+              className="grid gap-4"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="font-semibold text-xl">
+                  {reasonLabel(section.reason.kind, locale)}
+                </h2>
+                {!state.section ? (
+                  <Link
+                    href={browseHref(changeBrowse(state, { section: section.id }))}
+                    className="text-primary text-sm underline-offset-4 hover:underline"
+                  >
+                    {t.seeAll}
+                  </Link>
+                ) : null}
+              </div>
+              <ResourceList items={section.page.items} locale={locale} avatarQuery={avatarQuery} />
+              {state.section ? (
+                <BrowseContinuation page={section.page} state={state} locale={locale} />
+              ) : null}
+            </section>
+          ))
+        ) : (
+          <Failure read={sections} state={state} locale={locale} />
+        )
+      ) : null}
+      {results ? (
+        results.ok ? (
+          <section aria-label={t[state.tab]} className="grid gap-4">
+            <ResourceList items={results.data.items} locale={locale} avatarQuery={avatarQuery} />
+            <BrowseContinuation page={results.data} state={state} locale={locale} />
+          </section>
+        ) : (
+          <Failure read={results} state={state} locale={locale} />
+        )
+      ) : null}
     </PageContainer>
-  </ReaderActionsProvider>;
+  );
 }

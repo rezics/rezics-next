@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { mainApi, mainApiWithToken } from '../api/main.ts';
+import { mainApi } from '../api/main.ts';
+import { browseTypes, discoveryApi } from '../discover/api.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
 import { editorValue } from '../document-editor/body.ts';
@@ -545,19 +546,20 @@ export async function readPublishedTexts(
     : loaded;
 }
 
-export interface RealmOption extends Omit<RealmChoice, 'reviewMode'> {
+export interface RealmOption extends Pick<RealmChoice, 'id' | 'name'> {
   reviewMode: ReviewMode | null;
 }
 
-/** Realms to submit to: the first page of the directory, each with its review mode. */
+/** An initial preview only; the chooser continues and searches the same public Query. */
 export async function readRealmChoices(
   actingSubject: string,
   locale: UiLocale,
 ): Promise<Loaded<RealmOption[]>> {
   const main = await mainApi();
-  const loaded = await settle(() =>
-    mainApiWithToken(undefined).v1.realms.get({ query: { limit: 20, language: locale } }),
-  );
+  const loaded: Loaded<Awaited<ReturnType<ReturnType<typeof discoveryApi>['resources']>>> = await discoveryApi(main, locale)
+    .resources({ profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 20,
+      filter: { all: [{ facet: 'type', any: [browseTypes.communities] }] } })
+    .then(data => ({ ok: true as const, data }), () => ({ ok: false as const, failure: 'unavailable' as const }));
   if (!loaded.ok) return loaded;
   const info = await realmInfo(
     main,

@@ -4,15 +4,17 @@ import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTrigger } from '@rezics/ui/dialog';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@rezics/ui/input-group';
 import { Spinner } from '@rezics/ui/spinner';
 import { cn } from '@rezics/ui/utils';
-import { ArrowLeftIcon, ChevronRightIcon, PinIcon, PlusIcon, SearchIcon, SlidersHorizontalIcon } from 'lucide-react';
+import { ArrowLeftIcon, PinIcon, PlusIcon, SlidersHorizontalIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { EntityPicker } from '@rezics/ui/entity-picker';
+import { topicItem, type TopicItem } from '../discover/topic-picker.tsx';
+import { browseMessages } from '../discover/browse-messages.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Loaded } from '../feed/types.ts';
 import { type FeedDefaults, feedSearch, type FeedState, pinnedTab } from '../feed/state.ts';
@@ -138,32 +140,8 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
   known: readonly string[];
   unpinned: readonly SavedFilter[];
   onPin: (topic: Topic) => void; onPinFilter: (filter: SavedFilter) => void }) {
-  const [phrase, setPhrase] = useState('');
-  const [results, setResults] = useState<Loaded<Topic[]> | null>(null);
-  const [popular, setPopular] = useState<Topic[] | null>(null);
   const [selected, setSelected] = useState<Topic | null>(null);
   const [detail, setDetail] = useState<Loaded<ConceptDetail> | null>(null);
-  const request = useRef(0);
-
-  useEffect(() => {
-    let active = true;
-    void api().popularConcepts(locale).then(read => { if (active) setPopular(read.ok ? read.data : []); });
-    return () => { active = false; };
-  }, [api, locale]);
-
-  useEffect(() => {
-    const query = phrase.trim();
-    const id = ++request.current;
-    if (!query) { setResults(null); return; }
-    const timer = setTimeout(() => {
-      void api().searchConcepts(query, locale).then(read => {
-        if (id !== request.current) return;
-        setResults(read.ok ? { ok: true, data: read.data.map(item => ({ id: item.concept,
-          name: { value: item.label, language: item.language } })) } : read);
-      });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [api, phrase, locale]);
 
   useEffect(() => {
     if (!selected) { setDetail(null); return; }
@@ -204,49 +182,43 @@ function TopicSearch({ t, locale, api, disabled, busy, pinned, known, unpinned, 
   }
 
   return <div className="grid gap-4">
-    <Field>
-      <FieldLabel className="sr-only">{t.searchTopics}</FieldLabel>
-      <InputGroup>
-        <InputGroupAddon><SearchIcon aria-hidden="true" /></InputGroupAddon>
-        <InputGroupInput type="search" value={phrase} placeholder={t.searchTopics} aria-label={t.searchTopics}
-          onChange={event => setPhrase(event.target.value)} />
-      </InputGroup>
-    </Field>
-    {phrase.trim() ? !results ? <p role="status" className="flex items-center gap-2 text-muted-foreground text-sm">
-      <Spinner aria-hidden="true" />{t.searching}</p>
-      : !results.ok ? <p role="alert" className="text-destructive-foreground text-sm">{t.searchFailed}</p>
-        : !results.data.length ? <p role="status" className="text-muted-foreground text-sm">{t.noTopics}</p>
-          : <ul aria-label={t.searchTopics} className="-mx-3 grid">
-            {results.data.map(topic => <li key={topic.id}><button type="button" className={row}
-              onClick={() => setSelected(topic)}>
-              <span lang={topic.name.language} className="min-w-0 flex-1 truncate">{topic.name.value}</span>
-              <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground rtl:rotate-180" />
-            </button></li>)}
-          </ul>
-      : <>
-        {unpinned.length ? <section aria-label={t.yourTopics} className="grid gap-2">
-          <h3 className="font-medium text-muted-foreground text-xs">{t.yourTopics}</h3>
-          <ul className="-mx-3 grid">
-            {unpinned.slice(0, 8).map(filter => {
-              const title = filterTitle(filter);
-              return <li key={filter.id}><button type="button" className={row}
-                disabled={disabled || filter.home !== 'available'} onClick={() => onPinFilter(filter)}>
-                {filter.concept ? <PinIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-                  : <SlidersHorizontalIcon aria-hidden="true" className="size-4 text-muted-foreground" />}
-                <span lang={title?.language} className="min-w-0 flex-1 truncate">{title?.value ?? t.untitledTab}</span>
-                {busy === filter.id ? <Spinner aria-hidden="true" /> : null}
-              </button></li>;
-            })}
-          </ul>
-        </section> : null}
-        {popular?.some(topic => !known.includes(topic.id)) ? <section aria-label={t.popularTopics} className="grid gap-2">
-          <h3 className="font-medium text-muted-foreground text-xs">{t.popularTopics}</h3>
-          <ul className="flex flex-wrap gap-2">
-            {popular.filter(topic => !known.includes(topic.id)).map(topic => <li key={topic.id}><button type="button" className={chip} lang={topic.name.language}
-              onClick={() => setSelected(topic)}>{topic.name.value}</button></li>)}
-          </ul>
-        </section> : null}
-      </>}
+    <EntityPicker<TopicItem> label={t.searchTopics} locale={locale} value={[]} onValueChange={next => {
+      const item = next[0]?.item;
+      if (item) setSelected({ id: item.value, name: { value: item.label, language: item.language } });
+    }} load={async ({ q, cursor }) => {
+      const client = api();
+      if (client.conceptChoices) {
+        const read = await client.conceptChoices({ q, ...(cursor ? { cursor } : {}) }, locale);
+        if (!read.ok) throw new Error('Concept choices unavailable');
+        return { ...read.data, items: read.data.items.map(topicItem) };
+      }
+      // In-memory story APIs have a finite inventory. The real API always has conceptChoices.
+      if (q) {
+        const read = await client.searchConcepts(q, locale);
+        if (!read.ok) throw new Error('Concept choices unavailable');
+        return { items: read.data.map(item => ({ value: item.concept, label: item.label, language: item.language })),
+          nextCursor: null, complete: true };
+      }
+      const read = await client.popularConcepts(locale);
+      if (!read.ok) throw new Error('Concept choices unavailable');
+      return { items: read.data.filter(item => !known.includes(item.id)).map(item => ({ value: item.id,
+        label: item.name.value, language: item.name.language })), nextCursor: null, complete: true };
+    }} renderItem={item => <span className="grid min-w-0 gap-0.5"><span lang={item.language}>{item.label}</span>
+      {'broader' in item && item.broader?.length ? <span className="text-muted-foreground text-xs">
+        {item.broader.map(parent => parent.name.value).join(' · ')}</span> : null}
+      {'usageCount' in item && item.usageCount !== undefined ? <span className="text-muted-foreground text-xs">
+        {new Intl.NumberFormat(locale).format(item.usageCount)} {browseMessages[locale].usage}</span> : null}</span>} />
+    {unpinned.length ? <section aria-label={t.yourTopics} className="grid gap-2">
+      <h3 className="font-medium text-muted-foreground text-xs">{t.yourTopics}</h3>
+      <ul className="-mx-3 grid">{unpinned.map(filter => {
+        const title = filterTitle(filter);
+        return <li key={filter.id}><button type="button" className={row}
+          disabled={disabled || filter.home !== 'available'} onClick={() => onPinFilter(filter)}>
+          <SlidersHorizontalIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+          <span lang={title?.language} className="min-w-0 flex-1 truncate">{title?.value ?? t.untitledTab}</span>
+          {busy === filter.id ? <Spinner aria-hidden="true" /> : null}</button></li>;
+      })}</ul>
+    </section> : null}
   </div>;
 }
 

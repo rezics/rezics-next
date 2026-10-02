@@ -1,11 +1,13 @@
 'use client';
 
-import { buttonVariants } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezics/ui/sheet';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneText } from '@rezics/zone-sdk';
 import { BookMarkedIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { UiLocale } from '../../i18n/define.ts';
+import { browseMessages } from '../discover/browse-messages.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import type { WikiMessages } from './messages.ts';
 
@@ -24,6 +26,9 @@ export interface PositionControlProps {
   everything: { href: string; current: boolean };
   /** The story has more positions than `options` lists. */
   more: boolean;
+  locale?: UiLocale;
+  nextCursor?: string | null;
+  load?: (cursor: string) => Promise<{ items: PositionChoiceOption[]; nextCursor: string | null }>;
 }
 
 const row = 'flex w-full items-start gap-3 rounded-xl border border-transparent px-3 py-2.5 text-start text-sm outline-none '
@@ -39,8 +44,25 @@ function Text({ text }: { text: ZoneText }) {
  * see everything. Choosing is a link, so it works with the keyboard and a screen reader and the address carries
  * the choice. The choices open in a sheet, which on a phone is a panel from the edge.
  */
-export function PositionControl({ copy, at, options, progress, everything, more }: PositionControlProps) {
+export function PositionControl({ copy, at, options, progress, everything, more, locale = 'en', nextCursor, load }: PositionControlProps) {
   const [open, setOpen] = useState(false);
+  const [listed, setListed] = useState(options);
+  const [cursor, setCursor] = useState(nextCursor ?? null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const words = browseMessages[locale];
+  async function continueChoices() {
+    if (!cursor || !load || loading) return;
+    setLoading(true);
+    setFailed(false);
+    try {
+      const page = await load(cursor);
+      if (page.nextCursor === cursor) throw new Error('Position cursor did not advance');
+      setListed(current => [...new Map([...current, ...page.items].map(item => [item.id, item])).values()]);
+      setCursor(page.nextCursor);
+    } catch { setFailed(true); }
+    finally { setLoading(false); }
+  }
   // Tests and scripts wait for this before they press the trigger: the server-rendered button does nothing until then.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
@@ -65,7 +87,7 @@ export function PositionControl({ copy, at, options, progress, everything, more 
                   <span className="text-muted-foreground">{progress.resolved
                     ? <>{copy.progressNote}{' '}<Text text={progress.resolved} /></> : copy.progressNoneNote}</span></span>
               </LocalizedLink></li>
-              {options.map(option => <li key={option.id}>
+              {listed.map(option => <li key={option.id}>
                 <LocalizedLink href={option.href} className={row} aria-current={option.current} onClick={close}>
                   <CheckIcon aria-hidden="true" className={cn('mt-0.5 size-4 shrink-0', !option.current && 'invisible')} />
                   <span className="font-medium"><Text text={option.label} /></span>
@@ -76,7 +98,14 @@ export function PositionControl({ copy, at, options, progress, everything, more 
                   <span className="text-muted-foreground">{copy.everythingNote}</span></span>
               </LocalizedLink></li>
             </ul>
-            {more ? <p className="mt-3 text-muted-foreground text-sm">{copy.moreChapters}</p> : null}
+            {load ? <div className="mt-3 grid gap-2">
+              <p className="text-muted-foreground text-sm">{words.chapterSearchUnavailable}</p>
+              <p role="status" className="text-muted-foreground text-sm">{cursor ? `${words.atLeast} ` : ''}
+                {new Intl.NumberFormat(locale).format(listed.length)} {words.results}</p>
+              {failed ? <p role="alert" className="text-sm">{words.unavailable}</p> : null}
+              {cursor ? <Button type="button" variant="outline" size="sm" disabled={loading}
+                onClick={() => void continueChoices()}>{loading ? words.loading : failed ? words.retry : words.more}</Button> : null}
+            </div> : more ? <p className="mt-3 text-muted-foreground text-sm">{copy.moreChapters}</p> : null}
           </SheetBody>
         </SheetContent>
       </Sheet>

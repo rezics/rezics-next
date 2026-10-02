@@ -8,6 +8,7 @@ import { materializeData } from 'native-i18n';
 import { direction } from '@rezics/main/language';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { browseMessages } from '../discover/browse-messages.ts';
 import { isolate } from '../language/untagged.ts';
 import { ProfileAvatar } from '../profile/profile-avatar.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
@@ -204,6 +205,8 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
               {other.members ? <span className="text-muted-foreground text-xs">{other.members}</span> : null}
             </LocalizedLink></li>)}
         </ul>
+        <LocalizedLink href="/discover?tab=communities" className="text-primary text-sm underline-offset-4 hover:underline">
+          {browseMessages[locale].seeAll}</LocalizedLink>
       </nav> : null}
     </div> : null}
     {children}

@@ -14,6 +14,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { FollowButton } from './follow-button.tsx';
 import type { HomeMessages } from './messages.ts';
 import type { TrendingWork } from './server.ts';
+import { browseMessages } from '../discover/browse-messages.ts';
 
 type T = ReturnType<typeof materializeData<HomeMessages>>;
 
@@ -109,6 +110,8 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
           </li>;
         })}
       </ul>
+      <LocalizedLink href="/discover?tab=communities" className="font-medium text-primary text-sm underline-offset-4 hover:underline">
+        {browseMessages[locale].seeAll}</LocalizedLink>
     </Module> : null}
     {data.ranking ? <details className="group rounded-2xl border border-border/60 bg-card px-4 py-3 text-sm">
       <summary className="cursor-pointer font-medium text-muted-foreground outline-none marker:text-muted-foreground

@@ -276,7 +276,7 @@ export const Volumes: Story = {
         await userEvent.clear(input);
         await userEvent.type(input, '番外篇');
       }
-      expect(name()).toHaveValue('番外篇');
+      await expect(name()).toHaveValue('番外篇');
     }, { timeout: 5000 });
     await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByRole('button', { name: /^番外篇/ }, { timeout: 5000 })).toBeVisible();
@@ -448,7 +448,10 @@ export const DetailsStale: Story = {
 function realms(options: Parameters<typeof storyMain>[0] = {}) {
   const main = storyMain(options);
   return { main, content: { tab: 'realms', history, submit: { texts: { ok: true, data: publishedTexts },
-    realms: { ok: true, data: realmOptions }, open: [ids.realms[1]!], main: main.main } } as WorkTabContent };
+    realms: { ok: true, data: realmOptions }, open: [ids.realms[1]!], main: main.main,
+    loadRealms: async ({ q }) => ({ items: realmOptions.filter(item => item.name.value.toLowerCase().includes(q.toLowerCase()))
+      .map(item => ({ value: item.id, label: item.name.value, realm: item, disabled: item.id === ids.realms[1] })),
+      nextCursor: null, complete: true }) } } as WorkTabContent };
 }
 
 /** Each Realm says who decides; one already reviewing the Work is not offered again. */
@@ -456,12 +459,12 @@ export const Realms: Story = {
   args: (() => { const setup = realms(); return { content: setup.content, main: setup.main }; })() as never,
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
-    const group = canvas.getByRole('group', { name: 'Realm' });
-    await expect(group).toHaveTextContent('Moderators review every submission');
-    await expect(group).toHaveTextContent('Submissions are accepted at once');
-    await expect(within(group).getByRole('radio', { name: /Chinese Web Fiction/ })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Find a community' }));
+    const choices = within(document.body);
+    await expect(await choices.findByRole('option', { name: /Chinese Web Fiction/ })).toHaveAttribute('data-disabled');
     await expect(canvas.getByText('The Realm reviews your published Simplified Chinese text.')).toBeInTheDocument();
-    await userEvent.click(within(group).getByRole('radio', { name: /Classic Literature/ }));
+    await userEvent.click(choices.getByRole('option', { name: /Classic Literature/ }));
+    await expect(canvas.getByText('Moderators review every submission')).toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Submit' }));
     await expect(await canvas.findByRole('status')).toHaveTextContent('Submitted to Classic Literature · 经典文学. It’s waiting for review.');
     await expect((args as unknown as { main: ReturnType<typeof storyMain> }).main.calls).toEqual(['submit']);
@@ -474,7 +477,8 @@ export const RealmOpen: Story = {
   args: (() => { const setup = realms({ submit: 'accepted' }); return { content: setup.content }; })() as never,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('radio', { name: /Open Shelf/ }));
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Find a community' }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: /Open Shelf/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Submit' }));
     await expect(await canvas.findByRole('status')).toHaveTextContent('Submitted to Open Shelf · 开放书架 and accepted.');
   },
@@ -484,7 +488,8 @@ export const RealmRefused: Story = {
   args: (() => { const setup = realms({ submit: 'denied' }); return { content: setup.content }; })() as never,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('radio', { name: /Classic Literature/ }));
+    await userEvent.click(canvas.getByRole('combobox', { name: 'Find a community' }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: /Classic Literature/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Submit' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('This identity can’t submit to this Realm.');
   },

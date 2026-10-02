@@ -7,6 +7,7 @@ import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
+import { BrowseReadError, discoveryApi, type ListPage, type RatingPopulation } from '../discover/api.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
@@ -37,6 +38,13 @@ export const reader = cache(async () => {
   const state = token ? await sessionAgentState() : null;
   const acting = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
   return { main: mainApiWithToken(acting ? token : undefined), actingSubject: acting, signedIn: Boolean(token) };
+});
+
+/** Main ranks rating populations by current votes and supplies the reader-community flag. */
+export const readRatingPopulations = cache(async (target: string, locale: UiLocale): Promise<Loaded<ListPage<RatingPopulation>>> => {
+  const { main, actingSubject } = await reader();
+  try { return { ok: true, data: await discoveryApi(main, locale, actingSubject).populations(idOf(target) ? target : iriOf(target), { limit: 20 }) }; }
+  catch (error) { return { ok: false, failure: error instanceof BrowseReadError && error.status === 409 ? 'moved' : 'unavailable' }; }
 });
 
 /** The session Agent the page reads as, for client components that write as it (reading progress). */

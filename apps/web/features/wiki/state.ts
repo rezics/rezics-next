@@ -57,8 +57,9 @@ export const loadPosition = cache(async (zone: string, mount: string, choiceKey:
   const own = choice.kind === 'default' ? chooser.data : await readChooser(first.id, undefined).then(read =>
     read.ok ? read.data : null);
   const progress = own && own.resolved !== 'start' && own.resolved !== 'all' ? own.resolved : null;
+  const positions = [...new Set([...items.map(item => item.occurrence), ...(at ? [at] : []), ...(progress ? [progress] : [])])];
   const [names, composed] = await Promise.all([namesOf([chooser.data.work, ...items.map(item => item.work)]),
-    Promise.all([...new Set(items.map(item => item.structure))].map(readLabels))]);
+    Promise.all([...new Set(items.map(item => item.structure))].map(structure => readLabels(structure, positions)))]);
   const labels = new Map(composed.flatMap(map => [...map]));
   return { choice, main, mode: choice.kind === 'default' ? 'default' : choice.kind === 'all' ? 'all' : 'chosen',
     work: chooser.data.work, chooser: chooser.data, names, labels, at, own: progress };
@@ -99,7 +100,7 @@ export function itemLabel(state: Pick<PositionState, 'chooser' | 'names' | 'labe
 /** The label of an occurrence in the chooser. */
 function labelOf(state: PositionState, occurrence: string | null, locale: string): ZoneText | null {
   const item = occurrence ? state.chooser.items.find(candidate => candidate.occurrence === occurrence) : undefined;
-  return item ? itemLabel(state, item, locale) : null;
+  return item ? itemLabel(state, item, locale) : occurrence ? occurrenceName(state, occurrence, locale) : null;
 }
 
 /** The label of the position the reads are up to. */

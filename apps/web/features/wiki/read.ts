@@ -31,32 +31,20 @@ export interface Chooser {
   items: ChooserItem[];
   /** The Work has more positions than this read listed. */
   more: boolean;
+  /** Continuation for the chooser; a preview is never the whole reading order. */
+  nextCursor?: string | null;
 }
 interface ChooserPage { resolved: string; items: ChooserItem[]; next: string | null }
 
-/**
- * At most this many pages of the chooser are read (Main's pages are 100 positions each): a story of a thousand
- * chapters lists every one, and a longer one continues under "Show everything".
- */
-const CHOOSER_PAGES = 10;
-
 /** The positions a reader may choose in a Work, in reading order, and where Main put them by default. */
-export const readChooser = cache(async (work: string, position: string | undefined): Promise<Loaded<Chooser>> => {
+export const readChooser = cache(async (work: string, position: string | undefined, cursor?: string): Promise<Loaded<Chooser>> => {
   const { main, actingSubject } = await reader();
-  const items: ChooserItem[] = [];
-  let resolved = 'start';
-  let cursor: string | undefined;
-  for (let page = 0; page < CHOOSER_PAGES; page++) {
-    const read = await settle(() => main.v1['reading-positions']({ work: work.slice(-36) }).get({ query: {
-      actingSubject, position, cursor, limit: 100 } }) as Promise<{ data: ChooserPage | null; error: { status: number } | null }>,
-    cursor);
-    if (!read.ok) return read;
-    resolved = read.data.resolved;
-    items.push(...read.data.items.map(({ occurrence, work: owner, structure, role }) => ({ occurrence, work: owner, structure, role })));
-    cursor = read.data.next ?? undefined;
-    if (!cursor) return { ok: true, data: { work, resolved, items, more: false } };
-  }
-  return { ok: true, data: { work, resolved, items, more: true } };
+  const read = await settle(() => main.v1['reading-positions']({ work: work.slice(-36) }).get({ query: {
+    actingSubject, position, cursor, limit: 50 } }) as Promise<{ data: ChooserPage | null; error: { status: number } | null }>, cursor);
+  if (!read.ok) return read;
+  if (read.data.next && read.data.next === cursor) return { ok: false, failure: 'unavailable' };
+  return { ok: true, data: { work, resolved: read.data.resolved, items: read.data.items,
+    more: read.data.next !== null, nextCursor: read.data.next } };
 });
 
 /** A claim's source passage and what Main permits of it at `position`; a withheld quotation arrives as null. */
@@ -72,15 +60,19 @@ export interface OccurrenceLabel { language: string; value: string }
 const LABEL_PAGES = 10;
 
 /** The labels of a composition's occurrences (`Chapter 3`), by occurrence IRI. A resource summary names a chapter after its Work. */
-export const readLabels = cache(async (structure: string): Promise<Map<string, OccurrenceLabel[]>> => {
+export const readLabels = cache(async (structure: string, needed?: readonly string[]): Promise<Map<string, OccurrenceLabel[]>> => {
   const { main, actingSubject } = await reader();
   const labels = new Map<string, OccurrenceLabel[]>();
   const id = structure.slice(-36);
   let after: string | undefined;
-  for (let page = 0; page < LABEL_PAGES; page++) {
+  for (let page = 0; needed || page < LABEL_PAGES; page++) {
     const read = await settle(() => main.v1.compositions({ id }).get({ query: { actingSubject, after, limit: 100 } }), after);
     if (!read.ok) break;
-    for (const item of read.data.occurrences) if (item.state === 'active') labels.set(item.occurrence, item.labels);
+    for (const item of read.data.occurrences) if (item.state === 'active' && (!needed || needed.includes(item.occurrence))) {
+      labels.set(item.occurrence, item.labels);
+    }
+    if (needed?.every(id => labels.has(id))) break;
+    if (read.data.next === after) break;
     after = read.data.next ?? undefined;
     if (!after) break;
   }
