@@ -22,7 +22,7 @@ describe.skipIf(!reviewUrl || !authPath)('G-941 account menu against the shared 
       // Loopback cookies are shared across ports. Sign in on the registered shared frontend, then
       // inspect this worktree's UI with that real session and the same backend.
       await page.goto(loginUrl);
-      await signInAtAccounts(page, `${loginUrl}/en`, member);
+      await signInAtAccounts(page, '/en', member);
       await page.goto(`${reviewUrl}/en`);
       const trigger = page.getByRole('button', { name: 'Account menu', exact: true });
       await expect(trigger).toHaveAttribute('data-hydrated', 'true', { timeout: 60_000 });
