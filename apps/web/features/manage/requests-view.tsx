@@ -19,6 +19,8 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
   const api = useMemo(() => provided ?? browserSpaceAccessApi(space, realm, actingSubject), [provided, space, realm, actingSubject]);
   const [page, setPage] = useState(initial);
   const [search, setSearch] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [cursorStale, setCursorStale] = useState(false);
   const [selected, setSelected] = useState<JoinRequest | null>(null);
   const [reason, setReason] = useState('');
   const [decision, setDecision] = useState<JoinDecision['decision']>('accepted');
@@ -35,14 +37,12 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
     void api.names(JSON.parse(members) as string[]).then(found => { if (alive) setNames(previous => ({ ...previous, ...found })); });
     return () => { alive = false; };
   }, [api, members]);
-  const shown = page.items.filter(item => `${names[item.member]?.label ?? ''} ${names[item.member]?.handle ?? ''} ${item.member} ${item.reason}`
-    .toLocaleLowerCase(locale).includes(search.toLocaleLowerCase(locale)));
-
-  async function load(more: boolean) {
+  async function load(more: boolean, q = appliedSearch) {
     if (busy) return;
     setBusy(true); setError(null);
-    const result = await api.requests(more ? page.nextCursor : null);
+    const result = await api.requests(more ? page.nextCursor : null, q);
     if (result.ok) {
+      setAppliedSearch(q); setCursorStale(false);
       setPage(previous => ({ ...result.data, items: more
         ? [...previous.items, ...result.data.items.filter(item => !previous.items.some(old => old.id === item.id))] : result.data.items }));
       if (!more) {
@@ -52,7 +52,10 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
         if (selected && !refreshed) setStatus(t.staleRequest);
       }
     }
-    else setError(result.failure === 'denied' ? t.denied : t.failed);
+    else {
+      setError(result.failure === 'stale' ? t.staleRequest : result.failure === 'denied' ? t.denied : t.failed);
+      if (result.failure === 'stale') setCursorStale(true);
+    }
     setBusy(false);
   }
   async function decide() {
@@ -66,6 +69,11 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
     if (result.ok) {
       setPage(previous => ({ ...previous, generation: result.data.generation, items: previous.items.filter(item => item.id !== selected.id) }));
       setSelected(null); setStatus(result.data.state === 'accepted' ? t.approved : t.decisionDeclined); setReason(''); intent.current = null;
+      // Every decision changes the inbox cursor context. Restart the applied
+      // search so continuation never reuses the pre-decision cursor.
+      const refreshed = await api.requests(null, appliedSearch);
+      if (refreshed.ok) { setPage(refreshed.data); setCursorStale(false); }
+      else { setCursorStale(true); setError(refreshed.failure === 'denied' ? t.denied : t.failed); }
     } else {
       setError(result.failure === 'stale' ? t.staleRequest : result.failure === 'denied' ? t.denied : t.failed);
       if (result.failure === 'stale') { setStale(true); intent.current = null; }
@@ -74,12 +82,15 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
   }
   return <section aria-labelledby="join-requests-title" className="grid max-w-3xl gap-4">
     <h2 id="join-requests-title" className="font-semibold text-xl">{t.requests}</h2>
-    <Field><FieldLabel>{t.search}</FieldLabel><Input type="search" value={search} maxLength={80}
+    <form className="grid gap-3" onSubmit={event => { event.preventDefault(); void load(false, search.trim()); }}>
+    <Field><FieldLabel>{t.search}</FieldLabel><Input type="search" value={search} maxLength={80} disabled={busy}
       onChange={event => setSearch(event.currentTarget.value)} /><p className="text-muted-foreground text-sm">{t.searchHelp}</p></Field>
+    <Button type="submit" className="w-fit" disabled={busy}>{t.searchSubmit}</Button></form>
+    {appliedSearch ? <p className="text-muted-foreground text-sm">{t.search}: <span dir="auto">{appliedSearch}</span></p> : null}
     <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => void load(false)}>{t.refresh}</Button></div>
     {status ? <p role="status">{status}</p> : null}
     {error && !selected ? <p role="alert">{error}</p> : null}
-    {shown.length ? <ul className="grid gap-3">{shown.map(item => <li key={item.id} className="grid gap-3 rounded-xl border border-border p-4">
+    {page.items.length ? <ul className="grid gap-3">{page.items.map(item => <li key={item.id} className="grid gap-3 rounded-xl border border-border p-4">
       <p dir="auto" className="break-words font-medium">{names[item.member]?.label ?? item.member}</p>
       {names[item.member]?.handle ? <p className="text-muted-foreground text-sm">@{names[item.member]?.handle}</p> : null}
       <time className="text-muted-foreground text-sm" dateTime={item.createdAt}>
@@ -89,8 +100,8 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
         <Button variant="outline" disabled={busy} onClick={() => {
           setSelected(item); setDecision('declined'); setReason(''); setError(null); setStale(false); intent.current = null;
         }}>{t.decline}</Button></div>
-    </li>)}</ul> : <p role="status">{search ? t.noMatch : t.empty}</p>}
-    {page.nextCursor ? <Button className="w-fit" variant="outline" isLoading={busy} disabled={busy}
+    </li>)}</ul> : <p role="status">{appliedSearch ? t.noMatch : t.empty}</p>}
+    {!page.complete && page.nextCursor ? <Button className="w-fit" variant="outline" isLoading={busy} disabled={busy || cursorStale}
       onClick={() => void load(true)}>{t.more}</Button> : null}
     <CommandDialog open={selected !== null} title={decision === 'accepted' ? t.approve : t.decline} confirm={decision === 'accepted' ? t.approve : t.decline} pending={busy} error={error}
       disabled={stale || !reason.trim()} cancel={t.cancel} onClose={() => setSelected(null)} onConfirm={() => void decide()}>

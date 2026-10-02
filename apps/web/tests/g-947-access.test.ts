@@ -38,11 +38,11 @@ test('G-947: one settings command carries all four independent choices and its r
 
 test('G-947: pending requests use the owner continuation and decisions cite its generations', async () => {
   const { main, calls } = client(call => call.method === 'GET'
-    ? ok({ generation: '12', items: [requestFixture], nextCursor: requestFixture.id })
+    ? ok({ generation: '12', items: [requestFixture], nextCursor: requestFixture.id, complete: false })
     : ok({ receiptId: 'receipt', replayed: false }));
   const api = spaceAccessApi(() => main, accessInitial.space, accessInitial.realm, accessActor);
   await api.requests(requestFixture.id);
-  expect(calls[0]!.query.get('after')).toBe(requestFixture.id);
+  expect(calls[0]!.query.get('cursor')).toBe(requestFixture.id);
   expect(calls[0]!.query.get('actingSubject')).toBe(accessActor);
   await api.decide(requestFixture.id, { actingSubject: accessActor, expectedGeneration: '12',
     expectedRequestGeneration: requestFixture.requestGeneration, decision: 'accepted', reason: 'Welcome' }, 'approval-intent');
@@ -73,7 +73,7 @@ test('G-947: a legacy settings address resolves the Realm to its distinct Space'
 });
 
 test('G-947: a request-only manager can open the legacy inbox without a settings grant', async () => {
-  const { main, calls } = client(call => call.path.endsWith('/join-requests') ? ok({ items: [], nextCursor: null }) : denied());
+  const { main, calls } = client(call => call.path.endsWith('/join-requests') ? ok({ items: [], nextCursor: null, complete: true }) : denied());
   expect(await readRequestsAtAddress(main, accessInitial.realm, accessActor)).toMatchObject({ ok: true, data: { page: { items: [] } } });
   expect(calls.some(call => call.path.endsWith('/settings'))).toBe(false);
 });

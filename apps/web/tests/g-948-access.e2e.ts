@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { accessActor, requestFixture, requestsInitial } from '../features/manage/settings-fixtures.ts';
+import { accessActor, requestFixture, requestsInitial, ownRequestFixture } from '../features/manage/settings-fixtures.ts';
 import { accessMessages } from '../features/manage/settings-messages.ts';
 
 // Manager-owned browser verification against its shared Storybook. The router
-// does not mount the outsider component yet. These journeys exercise the real
+// mounts the outsider component independently. These journeys exercise the real
 // typed BFF client with served-contract responses; backend acceptance is separate.
 const storybook = process.env.REZICS_STORYBOOK_URL ?? 'http://127.0.0.1:6006';
 async function openStory(page: Page, title: string, name: string) {
@@ -19,15 +19,21 @@ const receipt = (state: 'accepted' | 'declined' | 'withdrawn', generation = '13'
   generation, state, membershipId: null, membershipGeneration: null, replayed: false,
 });
 
-test('G-948: request, reload the last confirmed pending receipt, withdraw, and reload the withdrawal', async ({ page }) => {
+test('G-948: request, reload authoritative pending status, withdraw, and reload the withdrawal', async ({ page }) => {
   const commands: { path: string; body: unknown; key: string | undefined }[] = [];
+  let ownState: 'pending' | 'withdrawn' | null = null;
+  let ownReads = 0;
   await page.route('**/api/main/v1/**', async route => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
+    if (path.endsWith('/mine')) {
+      ownReads++; return route.fulfill({ json: ownState ? ownRequestFixture(ownState) : { items: [], nextCursor: null, complete: true } });
+    }
     if (path.endsWith('/basis')) return route.fulfill({ json: {
       policyRevision: '12', termsRevision: 'rules-3', membershipGeneration: '4', state: 'absent',
     } });
     commands.push({ path, body: request.postDataJSON() as unknown, key: request.headers()['idempotency-key'] });
+    ownState = path.endsWith('/withdraw') ? 'withdrawn' : 'pending';
     return route.fulfill({ json: path.endsWith('/withdraw') ? receipt('withdrawn', '12')
       : { requestId: requestFixture.id, requestGeneration: '0', state: 'pending', replayed: false } });
   });
@@ -39,8 +45,8 @@ test('G-948: request, reload the last confirmed pending receipt, withdraw, and r
     expectedPolicyRevision: '12', termsRevision: 'rules-3', reason: 'I accept the community rules.' });
   expect(commands[0]!.key).toBeTruthy();
   await page.reload();
-  await expect(page.getByText(accessMessages.en.lastKnownRequest, { exact: true })).toBeVisible();
   await expect(page.getByText(accessMessages.en.pending, { exact: true })).toBeVisible();
+  expect(ownReads).toBeGreaterThanOrEqual(3);
   await page.getByRole('button', { name: 'Withdraw request', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('textbox', { name: 'Reason' }).fill('Plans changed.');
@@ -58,6 +64,8 @@ test('G-948: a lost request response survives reload and retries its exact comma
   let basisReads = 0;
   await page.route('**/api/main/v1/**', async route => {
     const request = route.request();
+    if (new URL(request.url()).pathname.endsWith('/mine')) return route.fulfill({ json: commands.length > 1
+      ? ownRequestFixture('pending') : { items: [], nextCursor: null, complete: true } });
     if (new URL(request.url()).pathname.endsWith('/basis')) {
       basisReads++;
       return route.fulfill({ json: { policyRevision: '12', termsRevision: 'rules-3', membershipGeneration: '4', state: 'absent' } });
@@ -86,7 +94,7 @@ for (const decision of ['accepted', 'declined'] as const) {
       const request = route.request();
       const path = new URL(request.url()).pathname;
       if (path.includes('/agents/')) return route.fulfill({ json: { displayName: 'Lin Mei', handle: 'lin_mei' } });
-      if (request.method() === 'GET') return route.fulfill({ json: { ...requestsInitial, generation: '13', nextCursor: null } });
+      if (request.method() === 'GET') return route.fulfill({ json: { ...requestsInitial, generation: '13', nextCursor: null, complete: true } });
       commands.push({ body: request.postDataJSON() as unknown, key: request.headers()['idempotency-key'] });
       if (commands.length === 1) return route.fulfill({ status: 409, json: { code: 'stale_realm_management_basis' } });
       return route.fulfill({ json: receipt(decision, '14') });
@@ -131,6 +139,8 @@ test('G-948: changed admission terms require a rules reload and preserve the req
   let basisReads = 0;
   await page.route('**/api/main/v1/**', async route => {
     const request = route.request();
+    if (new URL(request.url()).pathname.endsWith('/mine')) return route.fulfill({ json: commands.length > 1
+      ? ownRequestFixture('pending') : { items: [], nextCursor: null, complete: true } });
     if (new URL(request.url()).pathname.endsWith('/basis')) return route.fulfill({ json: {
       policyRevision: basisReads++ === 0 ? '12' : '13', termsRevision: basisReads === 1 ? 'rules-3' : 'rules-4',
       membershipGeneration: '4', state: 'absent',
@@ -151,4 +161,67 @@ test('G-948: changed admission terms require a rules reload and preserve the req
   expect(commands[0]!.body).toMatchObject({ expectedPolicyRevision: '12', termsRevision: 'rules-3' });
   expect(commands[1]!.body).toMatchObject({ expectedPolicyRevision: '13', termsRevision: 'rules-4' });
   expect(commands[1]!.key).not.toBe(commands[0]!.key);
+});
+
+
+test('G-948: requester reload discovers a remote decline and offers a new request', async ({ page }) => {
+  let state: 'pending' | 'declined' = 'pending';
+  await page.route('**/api/main/v1/**', async route => {
+    expect(new URL(route.request().url()).pathname).toContain('/join-requests/mine');
+    return route.fulfill({ json: ownRequestFixture(state) });
+  });
+  await openStory(page, 'Space access/Join', 'Browser request');
+  await expect(page.getByText(accessMessages.en.pending, { exact: true })).toBeVisible();
+  state = 'declined';
+  await page.reload();
+  await expect(page.getByText(accessMessages.en.declined, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Withdraw request', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toBeVisible();
+});
+
+test('G-948: server search traverses matches beyond the loaded inbox and retains its query', async ({ page }) => {
+  const reads: { q: string | null; cursor: string | null }[] = [];
+  await page.route('**/api/main/v1/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes('/agents/')) return route.fulfill({ json: { displayName: '遠方の読者', handle: 'distant_reader' } });
+    reads.push({ q: url.searchParams.get('q'), cursor: url.searchParams.get('cursor') });
+    expect(url.searchParams.get('q')).toBe('遠方');
+    return route.fulfill({ json: url.searchParams.has('cursor') ? {
+      generation: '12', items: [{ ...requestFixture, id: '00000000-0000-4000-8000-000000000023', reason: 'Second matching page.' }],
+      nextCursor: null, complete: true,
+    } : { generation: '12', items: [{ ...requestFixture, id: '00000000-0000-4000-8000-000000000022', reason: 'Match outside the initial inbox.' }],
+      nextCursor: 'query-bound-cursor', complete: false } });
+  });
+  await openStory(page, 'Manage/Join requests', 'Browser inbox');
+  await page.getByRole('searchbox').fill('遠方');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.getByText('Match outside the initial inbox.')).toBeVisible();
+  await expect(page.getByText(requestFixture.reason)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Load more', exact: true }).click();
+  await expect(page.getByText('Second matching page.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
+  expect(reads).toEqual([{ q: '遠方', cursor: null }, { q: '遠方', cursor: 'query-bound-cursor' }]);
+});
+
+test('G-948: a committed request with a lost response is recovered by mine without resubmission', async ({ page }) => {
+  let submitted = false;
+  let commands = 0;
+  await page.route('**/api/main/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/mine')) return route.fulfill({ json: submitted ? ownRequestFixture('pending')
+      : { items: [], nextCursor: null, complete: true } });
+    if (path.endsWith('/basis')) return route.fulfill({ json: {
+      policyRevision: '12', termsRevision: 'rules-3', membershipGeneration: '4', state: 'absent',
+    } });
+    commands++; submitted = true;
+    return route.abort('failed');
+  });
+  await openStory(page, 'Space access/Join', 'Browser request');
+  await page.getByRole('textbox').fill('I accept the community rules.');
+  await page.getByRole('button', { name: 'Request to join', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText(accessMessages.en.failed);
+  await page.reload();
+  await expect(page.getByText(accessMessages.en.pending, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Request to join', exact: true })).toHaveCount(0);
+  expect(commands).toBe(1);
 });

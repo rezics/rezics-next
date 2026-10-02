@@ -18,6 +18,8 @@ export type ListingState = Ok<ReturnType<MainClient['v1']['agents']>['listing'][
 export type JoinBasis = Ok<Requests['basis']['get']>;
 export type RequestPage = Ok<Requests['get']>;
 export type JoinRequest = RequestPage['items'][number];
+export type OwnRequestPage = Ok<Requests['mine']['get']>;
+export type OwnJoinRequest = OwnRequestPage['items'][number];
 export type JoinCommand = Body<Requests['post']>;
 export type JoinReceipt = Ok<Requests['post']>;
 export type JoinDecision = Body<Request['decisions']['post']>;
@@ -30,7 +32,8 @@ const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
 export interface SpaceAccessApi {
   settings(): Promise<Outcome<SpaceSettingsView>>;
   save(command: SettingsCommand, key: string): Promise<Outcome<SpaceSettingsView>>;
-  requests(after: string | null): Promise<Outcome<RequestPage>>;
+  requests(cursor: string | null, q?: string): Promise<Outcome<RequestPage>>;
+  mine(cursor: string | null): Promise<Outcome<OwnRequestPage>>;
   names(iris: readonly string[]): Promise<Record<string, AgentSummary>>;
   decide(request: string, command: JoinDecision, key: string): Promise<Outcome<JoinDecisionReceipt>>;
   withdraw(request: string, command: JoinWithdraw, key: string): Promise<Outcome<JoinDecisionReceipt>>;
@@ -41,8 +44,10 @@ export function spaceAccessApi(main: () => MainClient, space: string, realm: str
   return {
     settings: () => send(() => main().v1.spaces({ space: uuidOf(space) }).settings.get({ query: { actingSubject } })),
     save: (command, key) => send(() => main().v1.spaces({ space: uuidOf(space) }).settings.put(command, keyed(key))),
-    requests: after => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests'].get({
-      query: { actingSubject, limit: 50, ...after ? { after } : {} } })),
+    requests: (cursor, q = '') => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests'].get({
+      query: { actingSubject, limit: 50, q, ...cursor ? { cursor } : {} } })),
+    mine: cursor => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests'].mine.get({
+      query: { actingSubject, limit: 50, ...cursor ? { cursor } : {} } })),
     names: iris => readAgents(main(), iris, actingSubject),
     decide: (request, command, key) => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests']({ request })
       .decisions.post(command, keyed(key))),

@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { RealmFrame } from './realm-frame.tsx';
 import { acting, header } from './fixtures.ts';
 import { messages } from './messages.ts';
 import { accessMessages } from './settings-messages.ts';
 import { RequestsView } from './requests-view.tsx';
-import { accessActor, accessFixtureApi, accessInitial, captureAccessStory, requestsInitial } from './settings-fixtures.ts';
+import { accessActor, accessFixtureApi, accessInitial, captureAccessStory, requestsInitial, requestFixture } from './settings-fixtures.ts';
 
 const meta = { title: 'Manage/Join requests', component: RequestsView,
   args: { initial: requestsInitial, space: accessInitial.space, realm: accessInitial.realm, actingSubject: accessActor,
@@ -23,12 +23,20 @@ export const German: Story = { args: { locale: 'de' }, globals: { locale: 'de' }
 export const French: Story = { args: { locale: 'fr' }, globals: { locale: 'fr' } };
 export const Spanish: Story = { args: { locale: 'es' }, globals: { locale: 'es' } };
 export const SearchAndContinue: Story = {
+  args: { api: accessFixtureApi({ requests: async (cursor, q) => {
+    await expect(q).toBe('Lin');
+    if (!cursor) return { ok: true, data: { ...requestsInitial, nextCursor: 'searched-cursor', complete: false } };
+    await expect(cursor).toBe('searched-cursor');
+    return { ok: true, data: { generation: '12', items: [{ ...requestFixture,
+      id: '00000000-0000-4000-8000-000000000022', reason: 'A matching request beyond the first page.' }], nextCursor: null, complete: true } };
+  } }) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.type(canvas.getByRole('searchbox'), 'next page');
-    await expect(canvas.getByText('No loaded requests match your search.')).toBeVisible();
+    await userEvent.type(canvas.getByRole('searchbox'), 'Lin');
+    await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Load more' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Load more' }));
-    await expect(await canvas.findByText('A request on the next page.')).toBeVisible();
+    await expect(await canvas.findByText('A matching request beyond the first page.')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   },
 };
@@ -78,14 +86,14 @@ export const Decline: Story = {
     await expect(await canvas.findByText('Request declined.')).toBeVisible();
   },
 };
-export const EmptyEnglish: Story = { args: { locale: 'en', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'en' } };
-export const EmptyTraditionalChinese: Story = { args: { locale: 'zh-Hant', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'zh-Hant' } };
-export const EmptySimplifiedChinese: Story = { args: { locale: 'zh-Hans', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'zh-Hans' } };
-export const EmptyJapanese: Story = { args: { locale: 'ja', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'ja' } };
-export const EmptyKorean: Story = { args: { locale: 'ko', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'ko' } };
-export const EmptyGerman: Story = { args: { locale: 'de', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'de' } };
-export const EmptyFrench: Story = { args: { locale: 'fr', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'fr' } };
-export const EmptySpanish: Story = { args: { locale: 'es', initial: { generation: '12', items: [], nextCursor: null } }, globals: { locale: 'es' } };
+export const EmptyEnglish: Story = { args: { locale: 'en', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'en' } };
+export const EmptyTraditionalChinese: Story = { args: { locale: 'zh-Hant', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'zh-Hant' } };
+export const EmptySimplifiedChinese: Story = { args: { locale: 'zh-Hans', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'zh-Hans' } };
+export const EmptyJapanese: Story = { args: { locale: 'ja', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'ja' } };
+export const EmptyKorean: Story = { args: { locale: 'ko', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'ko' } };
+export const EmptyGerman: Story = { args: { locale: 'de', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'de' } };
+export const EmptyFrench: Story = { args: { locale: 'fr', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'fr' } };
+export const EmptySpanish: Story = { args: { locale: 'es', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'es' } };
 
 async function decideInLocale(canvasElement: HTMLElement, locale: keyof typeof accessMessages, decline: boolean) {
   const t = accessMessages[locale];
@@ -175,4 +183,18 @@ export const BrowserRequestOnlyManager: Story = {
   name: 'Browser request-only manager',
   render: args => <RealmFrame realm={args.realm.slice(-36)} header={header} agent={{ ...acting, iri: args.actingSubject }}
     locale={args.locale} messages={messages}><RequestsView {...args} /></RealmFrame>,
+};
+
+export const StaleContinuation: Story = {
+  args: { api: accessFixtureApi({ requests: async cursor => cursor ? { ok: false, failure: 'stale' }
+    : { ok: true, data: { ...requestsInitial, nextCursor: null, complete: true } } }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Load more' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('The request or review basis changed. Refresh the list before deciding.');
+    await expect(canvas.getByRole('button', { name: 'Load more' })).toBeDisabled();
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh requests' }));
+    await waitFor(() => expect(canvas.queryByRole('alert')).not.toBeInTheDocument());
+    await expect(canvas.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  },
 };

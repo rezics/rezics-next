@@ -6,28 +6,28 @@ import { Textarea } from '@rezics/ui/textarea';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { CommandDialog } from '../manage/command-dialog.tsx';
-import { browserSpaceAccessApi, newKey, type JoinPage, type SpaceAccessApi } from '../manage/settings-api.ts';
+import { browserSpaceAccessApi, newKey, type JoinPage, type OwnJoinRequest, type SpaceAccessApi } from '../manage/settings-api.ts';
 import { accessMessages } from '../manage/settings-messages.ts';
 import { SpaceDiscovery } from './discovery.tsx';
-import { emptyRequestJournal, parseRequestJournal, requestStorageKey, type RequestJournal, type RequestReceipt } from './request-state.ts';
+import { emptyRequestJournal, journalAfterStatus, parseRequestJournal, readOwnRequest, requestStorageKey, type RequestJournal, type RequestReceipt } from './request-state.ts';
 
 type Props = { page: JoinPage; actingSubject: string | null; signInHref: string; locale: UiLocale;
-  state?: 'available' | RequestReceipt['state']; receipt?: RequestReceipt; api?: SpaceAccessApi; persist?: boolean };
+  api?: SpaceAccessApi; persist?: boolean };
 
-/** The router mounts Main's limited join page, and may supply fresh owner status
- * when that read is available. Identity changes remount all request/withdrawal state. */
+/** Main's limited join page plus its authenticated requester read. Identity
+ * changes remount all request/withdrawal state; browser receipts never supply status. */
 export function PrivateSpaceJoinPage(props: Props) {
   return <JoinFlow key={`${props.page.id}:${props.actingSubject ?? ''}`} {...props} />;
 }
-function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api: provided, persist = true }: Props) {
+function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, persist = true }: Props) {
   const t = accessMessages[locale];
   const api = useMemo(() => provided ?? browserSpaceAccessApi(page.space, page.id, actingSubject ?? ''),
     [provided, page.space, page.id, actingSubject]);
   const journal = useRef<RequestJournal>(emptyRequestJournal());
-  const [current, setCurrent] = useState<Props['state']>(receipt?.state ?? state ?? 'available');
-  const [knownReceipt, setKnownReceipt] = useState(receipt ?? null);
+  const [current, setCurrent] = useState<'available' | RequestReceipt['state'] | null>(null);
+  const [knownReceipt, setKnownReceipt] = useState<RequestReceipt | null>(null);
   const [ready, setReady] = useState(false);
-  const [lastKnown, setLastKnown] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(actingSubject !== null);
   const [reason, setReason] = useState('');
   const [withdrawReason, setWithdrawReason] = useState('');
   const [withdrawing, setWithdrawing] = useState(false);
@@ -41,21 +41,20 @@ function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api
     if (persist && storageKey && actingSubject) {
       try { saved = parseRequestJournal(localStorage.getItem(storageKey), actingSubject); } catch { /* storage unavailable */ }
     }
-    if (receipt) {
-      saved = { draftReason: '', receipt, requestIntent: null, withdrawIntent: null };
-      if (persist && storageKey) {
-        try { localStorage.setItem(storageKey, JSON.stringify(saved)); } catch { /* storage unavailable */ }
-      }
-    }
-    journal.current = saved;
-    setKnownReceipt(saved.receipt);
-    setCurrent(receipt?.state ?? state ?? saved.receipt?.state ?? 'available');
-    setLastKnown(!receipt && !state && saved.receipt !== null);
+    retain(saved);
     setReason(saved.draftReason || saved.requestIntent?.command.reason || '');
     setWithdrawReason(saved.withdrawIntent?.command.reason ?? '');
-    setWithdrawing(saved.withdrawIntent !== null);
-    setReady(true);
-  }, [persist, storageKey, actingSubject, receipt, state]);
+    if (!actingSubject) { setCurrent('available'); setReady(true); setStatusLoading(false); return; }
+    let alive = true;
+    setReady(false); setStatusLoading(true);
+    void readOwnRequest(api).then(result => {
+      if (!alive) return;
+      if (result.ok) acceptStatus(result.data);
+      else { setCurrent(null); setError(result.failure === 'denied' ? t.denied : t.failed); }
+      setStatusLoading(false);
+    });
+    return () => { alive = false; };
+  }, [persist, storageKey, actingSubject, api]);
 
   function retain(next: RequestJournal) {
     journal.current = next;
@@ -63,9 +62,24 @@ function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api
       try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* this session still retains the intent */ }
     }
   }
-  function confirmed(result: RequestReceipt) {
-    retain({ draftReason: '', receipt: result, requestIntent: null, withdrawIntent: null });
-    setKnownReceipt(result); setCurrent(result.state); setLastKnown(false); setStale(false); setReason('');
+  function acceptStatus(entry: OwnJoinRequest | null) {
+    const saved = journalAfterStatus(journal.current, entry);
+    retain(saved);
+    setKnownReceipt(entry ? { requestId: entry.id, requestGeneration: entry.requestGeneration, state: entry.state } : null);
+    setCurrent(entry?.state ?? 'available'); setReady(true);
+    setReason(saved.draftReason || saved.requestIntent?.command.reason || '');
+    setWithdrawReason(saved.withdrawIntent?.command.reason ?? '');
+    setWithdrawing(saved.withdrawIntent !== null);
+  }
+  async function refreshStatus(requireRequest = knownReceipt !== null) {
+    setReady(false); setStatusLoading(true); setError(null);
+    const result = await readOwnRequest(api);
+    if (result.ok && (result.data !== null || !requireRequest)) acceptStatus(result.data);
+    else {
+      setCurrent(null); setKnownReceipt(null); setWithdrawing(false);
+      setError(!result.ok && result.failure === 'denied' ? t.denied : t.failed);
+    }
+    setStatusLoading(false);
   }
   async function request() {
     if (!actingSubject || !ready || busy || stale || !reason.trim()) return;
@@ -81,7 +95,12 @@ function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api
     }
     const intent = journal.current.requestIntent!;
     const result = await api.request(intent.command, intent.key);
-    if (result.ok) confirmed(result.data);
+    if (result.ok) {
+      // A replayed submission receipt still says pending after a decision. Read
+      // the owner before presenting its current result.
+      retain({ ...journal.current, requestIntent: null });
+      await refreshStatus(true);
+    }
     else {
       setError(result.failure === 'denied' ? t.denied : result.failure === 'stale' ? t.joinChanged : t.failed);
       if (result.failure === 'stale') { setStale(true); retain({ ...journal.current, requestIntent: null }); }
@@ -97,10 +116,10 @@ function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api
     }
     const intent = journal.current.withdrawIntent!;
     const result = await api.withdraw(intent.request, intent.command, intent.key);
-    if (result.ok) { confirmed(result.data); setWithdrawing(false); setWithdrawReason(''); }
+    if (result.ok) { retain({ ...journal.current, withdrawIntent: null, draftReason: '' }); await refreshStatus(); }
     else {
-      setError(result.failure === 'stale' ? t.requestStatusUnavailable : result.failure === 'denied' ? t.denied : t.failed);
-      if (result.failure === 'stale') { setStale(true); retain({ ...journal.current, withdrawIntent: null }); }
+      setError(result.failure === 'denied' ? t.denied : t.failed);
+      if (result.failure === 'stale') { retain({ ...journal.current, withdrawIntent: null }); await refreshStatus(); }
     }
     setBusy(false);
   }
@@ -113,12 +132,12 @@ function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api
         <h3 lang={rule.title.language} dir="auto" className="break-words font-medium">{rule.title.value}</h3>
         <p lang={rule.body.language} dir="auto" className="whitespace-pre-wrap break-words text-sm">{rule.body.value}</p>
       </li>)}</ol></section> : null}
-    {lastKnown ? <p className="text-muted-foreground text-sm">{t.lastKnownRequest}</p> : null}
-    {current !== 'available' ? <p role="status">{current === 'pending' ? t.pending : current === 'declined' ? t.declined
+    {statusLoading ? <p role="status">{t.statusLoading}</p> : null}
+    {!statusLoading && current !== null && current !== 'available' ? <p role="status">{current === 'pending' ? t.pending : current === 'declined' ? t.declined
       : current === 'withdrawn' ? t.withdrawn : t.approved}</p> : null}
     {current === 'pending' && actingSubject && knownReceipt ? <Button className="w-fit" variant="outline" disabled={!ready || busy || stale}
       onClick={() => { setWithdrawing(true); setError(null); }}>{t.withdraw}</Button> : null}
-    {current !== 'pending' && current !== 'accepted' ? actingSubject ? <form className="grid gap-3"
+    {!statusLoading && current !== null && current !== 'pending' && current !== 'accepted' ? actingSubject ? <form className="grid gap-3"
       onSubmit={event => { event.preventDefault(); void request(); }}>
       <Field><FieldLabel>{t.joinReason}</FieldLabel><Textarea required maxLength={2000} value={reason} disabled={!ready || busy}
         onChange={event => {
@@ -127,8 +146,10 @@ function JoinFlow({ page, actingSubject, signInHref, locale, state, receipt, api
         }} /></Field>
       <Button type="submit" className="w-fit" isLoading={busy} disabled={!ready || busy || stale || !reason.trim()}>{t.requestJoin}</Button>
     </form> : <Button asChild className="w-fit"><a href={signInHref}>{t.signIn}</a></Button> : null}
+    {actingSubject ? <Button className="w-fit" variant="outline" disabled={busy || statusLoading}
+      onClick={() => void refreshStatus()}>{t.refreshStatus}</Button> : null}
     {error && !withdrawing ? <p role="alert">{error}</p> : null}
-    {stale && current !== 'pending' ? <Button className="w-fit" variant="outline"
+    {stale && current !== null && current !== 'pending' ? <Button className="w-fit" variant="outline"
       onClick={() => window.location.reload()}>{t.reviewRules}</Button> : null}
     <CommandDialog open={withdrawing} title={t.withdraw} confirm={t.withdraw} pending={busy} error={error}
       disabled={stale || !withdrawReason.trim()} cancel={t.cancel} onClose={() => setWithdrawing(false)} onConfirm={() => void withdraw()}>
