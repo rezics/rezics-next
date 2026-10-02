@@ -1,7 +1,9 @@
+import { accessMessages } from '../settings-messages.ts';
 import { asValue, insert, number, plural } from 'native-i18n';
 import type { ManageMessages } from '../messages.ts';
 
 export default {
+  access: accessMessages['ko'],
   // Workspace
   title: '관리',
   description: '운영을 돕는 커뮤니티: 대기 중인 항목, 소유자에게 전달된 사안, 함께 돕는 사람을 확인하세요.',

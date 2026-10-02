@@ -14,6 +14,7 @@ import { textAttributes, writingLanguage } from '../content-language/writing-lan
 import { uploadErrorText } from '../safety/upload-state.ts';
 import { AvatarFileField } from './avatar-file-field.tsx';
 import type { SettingsMessages } from './messages.ts';
+import { PersonListingControl } from './listing-control.tsx';
 
 export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operationKey }: {
   agent: string;
@@ -59,7 +60,7 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
     setBusy(false);
   }
 
-  return <form action={action} method="post" encType="multipart/form-data"
+  return <>{ownPerson ? <PersonListingControl agent={agent} locale={locale} /> : null}<form action={action} method="post" encType="multipart/form-data"
     data-hydrated={hydrated ? 'true' : undefined}
     onSubmit={event => void submit(event)} className="grid gap-4 border-border border-t pt-4">
     <div className="grid gap-1"><h2 className="font-medium">{t.publicProfile}</h2>
@@ -89,5 +90,5 @@ export function ProfileEditForm({ agent, profile, locale, t, ownPerson, operatio
     <input type="hidden" name="expectedHead" value={profile?.revision ?? ''} />
     <input type="hidden" name="key" value={operationKey} />
     <Button type="submit" className="w-fit" isLoading={busy} disabled={!profile || busy}>{t.saveProfile}</Button>
-  </form>;
+  </form></>;
 }

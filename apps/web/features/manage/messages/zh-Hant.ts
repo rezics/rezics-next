@@ -1,7 +1,9 @@
+import { accessMessages } from '../settings-messages.ts';
 import { asValue, insert, number, plural } from 'native-i18n';
 import type { ManageMessages } from '../messages.ts';
 
 export default {
+  access: accessMessages['zh-Hant'],
   title: '管理',
   description: '查看你協助管理的社群有哪些待處理事項、哪些項目已轉交，以及其他協助管理的人員。',
   actingAs: '目前使用身分',
