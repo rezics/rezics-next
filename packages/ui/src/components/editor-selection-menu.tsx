@@ -3,7 +3,7 @@
 import { isNodeSelection, type Editor as TiptapEditor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { CheckIcon, ChevronDownIcon, MoreHorizontalIcon } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Button } from './button.tsx';
 import {
   alignCommands, availableCommands, blockCommands, commandById, describeCommand, markCommands, tableCommands, useCommandState,
@@ -44,19 +44,38 @@ function Popout({ anchor, label, slot, children }: { anchor: RefObject<HTMLEleme
     className="absolute z-10 w-52 rounded-xl border border-border/60 bg-popover p-1.5 shadow-(--aura-shadow-float)">{children}</div>;
 }
 
-/** The caret end of the selection, where the pointer was released: the panel opens there like a context menu. */
-function selectionHead(editor: TiptapEditor) {
-  const caret = editor.view.coordsAtPos(editor.state.selection.head);
-  const rect = new DOMRect(caret.left, caret.top, 0, caret.bottom - caret.top);
-  return { getBoundingClientRect: () => rect, getClientRects: () => [rect] };
+/**
+ * The selection's line boxes. With Floating UI's `inline` middleware the panel sits over the first
+ * line of a multi-line selection rather than over the paragraph's whole bounding box.
+ */
+function selectionLines(editor: TiptapEditor) {
+  const { from, to } = editor.state.selection;
+  const start = editor.view.domAtPos(from), end = editor.view.domAtPos(to);
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  const lines = [...range.getClientRects()].filter(rect => rect.width > 0 || rect.height > 0);
+  const bounds = range.getBoundingClientRect();
+  return { getBoundingClientRect: () => bounds, getClientRects: () => lines.length ? lines : [bounds] };
+}
+
+/** Arrow keys move between the panel's buttons, and Escape returns to the text. */
+function moveFocus(event: ReactKeyboardEvent<HTMLElement>, editor: TiptapEditor) {
+  if (event.key === 'Escape') { event.preventDefault(); editor.commands.focus(); return; }
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+  if (!step || (event.target as HTMLElement).closest('input')) return;
+  const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
+  const index = buttons.indexOf(event.target as HTMLButtonElement);
+  if (index < 0) return;
+  event.preventDefault();
+  buttons[(index + step + buttons.length) % buttons.length]?.focus();
 }
 
 /**
- * The pointer's selection panel: a compact grid of icons that opens just below and after the
- * caret, as a context menu does, and flips or shifts to stay in view. Keyboard users reach the
- * same commands from the context menu.
+ * The pointer's selection panel: a compact grid of icons over the selection, where the eye
+ * already is, flipping below it near the top of the view. Alt+F10 moves keyboard focus into it.
  */
-export function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClose }: {
+export const SelectionMenu = memo(function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClose }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; blocks: boolean; io: CommandIO; linkRange: LinkRange | null; onLinkClose: () => void;
 }) {
   const state = useCommandState(editor);
@@ -68,15 +87,16 @@ export function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClo
     editor.on('selectionUpdate', close);
     return () => { editor.off('selectionUpdate', close); };
   }, [editor]);
-  const options = useMemo(() => ({ ...bubbleOptions, placement: 'bottom-start' as const, offset: 6, onHide: () => setView('main') }), []);
+  const options = useMemo(() => ({ ...bubbleOptions, placement: 'top' as const, inline: true, onHide: () => setView('main') }), []);
   const current = commandById(state.block);
   const row = (commands: readonly EditorCommand[]) => commands.map(command => <IconCommand key={command.id} editor={editor} command={command} labels={labels} io={io} state={state} />);
   const toggle = (next: View) => setView(view === next ? 'main' : next);
-  return <BubbleMenu editor={editor} pluginKey="rezicsSelectionMenu" updateDelay={80} options={options} getReferencedVirtualElement={() => selectionHead(editor)}
+  return <BubbleMenu editor={editor} pluginKey="rezicsSelectionMenu" updateDelay={80} options={options} getReferencedVirtualElement={() => selectionLines(editor)}
     shouldShow={({ editor: live, element, view: editorView, state: editorState }) => live.isEditable && !isNodeSelection(editorState.selection) && !editorState.selection.empty
       && (editorView.hasFocus() || element.contains(document.activeElement))}
     className="max-w-[calc(100vw-1rem)]" data-slot="editor-selection-menu">
-    <div ref={panel} role="group" aria-label={labels.formatting} className="relative w-fit max-w-full rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground shadow-(--aura-shadow-float)"
+    <div ref={panel} role="toolbar" aria-label={labels.formatting} className="relative w-fit max-w-full rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground shadow-(--aura-shadow-float)"
+      onKeyDown={event => moveFocus(event, editor)}
       onMouseDown={event => { if (!(event.target as HTMLElement).closest('input')) event.preventDefault(); }}>
       {linkRange ? <div className="w-64 max-w-full p-0.5"><LinkField editor={editor} labels={labels} range={linkRange} onClose={onLinkClose} /></div> : <>
         <Button size="sm" variant="ghost" className="w-full justify-start px-2" aria-haspopup="menu" aria-expanded={view === 'turn'} aria-label={`${labels.turnInto}: ${labels[current.label]}`}
@@ -91,7 +111,7 @@ export function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClo
         </div>
         {view === 'turn' ? <Popout anchor={panel} label={labels.turnInto} slot="editor-turn-into">
           {availableCommands(blockCommands, blocks).map(command => <Button key={command.id} role="menuitemradio" aria-checked={state.block === command.id} size="sm" variant="ghost" className="w-full justify-start"
-            onClick={() => { command.run(editor, { openDialog: () => {} }); setView('main'); }}>
+            onClick={() => { command.run(editor, io); setView('main'); }}>
             <command.icon aria-hidden="true" />{labels[command.label]}
             {state.block === command.id ? <CheckIcon aria-hidden="true" className="ms-auto" /> : null}
           </Button>)}
@@ -106,4 +126,4 @@ export function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClo
       </>}
     </div>
   </BubbleMenu>;
-}
+});

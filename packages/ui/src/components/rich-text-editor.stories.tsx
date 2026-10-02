@@ -2,9 +2,9 @@ import { fromPlainText, normalizeDocument, withDocumentIds, type DocumentSnapsho
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, settled } from '../stories/support.tsx';
 import { Button } from './button.tsx';
 import { DocumentBody } from './document-body.tsx';
+import type { ImageUploader } from './editor-image.tsx';
 import { RichTextEditor } from './rich-text-editor.tsx';
 
 const richDocument = normalizeDocument({ version: 'rezics-document-v1', profile: 'blocks', doc: withDocumentIds({ type: 'doc', content: [
@@ -20,17 +20,17 @@ const richDocument = normalizeDocument({ version: 'rezics-document-v1', profile:
   { type: 'extensionBlock', attrs: { definition: 'https://example.test/components/timeline', version: '1', payload: { format: 'EDTF', date: '2026-10-02', items: [1, 2] }, fallback: 'Timeline: 2 October 2026' } },
 ] }) });
 
-function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine' }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse' }) {
+function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine', preview = true, upload }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse'; preview?: boolean; upload?: ImageUploader }) {
   const [value, setValue] = useState(initial);
   const [changes, setChanges] = useState(0);
   return <div className="mx-auto flex max-w-4xl flex-col gap-6">
-    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode}
+    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode} onUploadImage={upload}
       onChange={next => { setValue(next); setChanges(count => count + 1); }} />
     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><output aria-label="Changes">{changes}</output> changes
       <Button variant="outline" size="sm" onClick={() => setValue(fromPlainText('Restored document.', initial.profile))}>Restore document</Button>
     </div>
-    <output aria-label="Document JSON" hidden>{JSON.stringify(value)}</output>
-    <div aria-label="Reading preview"><DocumentBody document={value} /></div>
+    {preview ? <><output aria-label="Document JSON" hidden>{JSON.stringify(value)}</output>
+      <div aria-label="Reading preview"><DocumentBody document={value} /></div></> : null}
   </div>;
 }
 
@@ -108,6 +108,23 @@ export const RubyAndLink: Story = {
   },
 };
 
+const longManuscript = fromPlainText(Array.from({ length: 400 }, (_, line) =>
+  `第${line + 1}段。末班车到站时，整座站台只有她一个人。雨从棚顶的缝隙落下来，在灯下拉成细线。`).join('\n'), 'blocks');
+
+/** A chapter-length document: typing must stay immediate however long the manuscript is. */
+export const LongManuscript: Story = {
+  render: () => <Example initial={longManuscript} contextual preview={false} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await userEvent.click(editor);
+    const started = performance.now();
+    await userEvent.type(editor, '她抬起头。', { skipClick: true });
+    await expect(performance.now() - started).toBeLessThan(2500);
+    await waitFor(() => expect(Number(canvas.getByLabelText('Changes').textContent)).toBeGreaterThan(0));
+  },
+};
+
 export const ReadOnly: Story = {
   render: () => <Example readOnly />,
   async play({ canvasElement }) {
@@ -151,7 +168,7 @@ export const ContextualForum: Story = {
     const editor = await canvas.findByRole('textbox', { name: 'Document' });
     await expect(canvasElement.querySelector('[data-slot="editor-toolbar"]')).toBeNull();
     await selectAll(editor);
-    const menu = await canvas.findByRole('group', { name: 'Format text' });
+    const menu = await canvas.findByRole('toolbar', { name: 'Format text' });
     await userEvent.click(within(menu).getByRole('button', { name: 'Bold' }));
     await expect(editor.querySelector('strong')).toHaveTextContent('A reply with formatting.');
     const bounds = menu.getBoundingClientRect();
@@ -169,7 +186,7 @@ export const SelectionPanel: Story = {
     const before = editor.querySelector('p')?.getAttribute('data-id');
     await expect(before).toBeTruthy();
     await selectAll(editor);
-    const panel = await canvas.findByRole('group', { name: 'Format text' });
+    const panel = await canvas.findByRole('toolbar', { name: 'Format text' });
     // Every row of the panel is visible at once, in fixed positions.
     for (const name of ['Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code', 'Spoiler', 'Clear formatting', 'More formatting'])
       await expect(within(panel).getByRole('button', { name })).toBeVisible();
@@ -210,7 +227,7 @@ export const LinkInPanel: Story = {
     const canvas = within(canvasElement);
     const editor = await canvas.findByRole('textbox', { name: 'Document' });
     await selectAll(editor);
-    const panel = await canvas.findByRole('group', { name: 'Format text' });
+    const panel = await canvas.findByRole('toolbar', { name: 'Format text' });
     await userEvent.click(within(panel).getByRole('button', { name: /^Link/ }));
     const field = await canvas.findByRole('textbox', { name: 'URL' });
     await expect(canvas.queryByRole('dialog')).toBeNull();
@@ -348,28 +365,108 @@ export const CompactTouchToolbar: Story = {
   },
 };
 
-export const ContextMenuFormatting: Story = {
+/** Right-click stays the browser's: spelling suggestions and paste work as everywhere else. */
+export const NativeContextMenu: Story = {
   render: () => <Example initial={fromPlainText('Preserve this selection.', 'text')} compact contextual />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const editor = await canvas.findByRole('textbox', { name: 'Document' });
-    await userEvent.click(editor);
-    await userEvent.keyboard('{Control>}a{/Control}');
+    await selectAll(editor);
     const { left, top, width, height } = editor.getBoundingClientRect();
-    await fireEvent.contextMenu(editor, { clientX: left + width / 2, clientY: top + height / 2 });
-    const page = within(canvasElement.ownerDocument.body);
-    const menu = await page.findByRole('menu', { name: 'Format text' });
-    await userEvent.click(within(menu).getByRole('menuitemcheckbox', { name: /^Italic/ }));
-    await expect(editor.querySelector('em')).toHaveTextContent('Preserve this selection.');
-    await dismissed('menu');
-    await userEvent.click(canvas.getByRole('button', { name: 'Format text' }));
-    await expect(await settled(await page.findByRole('menu', { name: 'Format text' }))).toBeVisible();
-    await userEvent.keyboard('{Escape}');
-    await dismissed('menu');
-    await userEvent.click(editor);
+    const opened = fireEvent.contextMenu(editor, { clientX: left + width / 2, clientY: top + height / 2 });
+    await expect(opened).toBe(true);
+    await expect(within(canvasElement.ownerDocument.body).queryByRole('menu')).toBeNull();
+  },
+};
+
+/** Alt+F10 reaches the selection panel from the keyboard; arrows move within it and Escape returns to the text. */
+export const KeyboardToolbar: Story = {
+  render: () => <Example initial={fromPlainText('Reach the toolbar by keyboard.', 'text')} compact contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await selectAll(editor);
+    const panel = await canvas.findByRole('toolbar', { name: 'Format text' });
     await userEvent.keyboard('{Alt>}{F10}{/Alt}');
-    await expect(await settled(await page.findByRole('menu', { name: 'Format text' }))).toBeVisible();
+    await expect(within(panel).getByRole('button', { name: /^Turn into/ })).toHaveFocus();
+    await userEvent.keyboard('{ArrowRight}');
+    await expect(within(panel).getByRole('button', { name: 'Bold' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(editor.querySelector('strong')).toHaveTextContent('Reach the toolbar by keyboard.');
     await userEvent.keyboard('{Escape}');
+    // Tiptap focuses on the next frame.
+    await waitFor(() => expect(editor).toHaveFocus());
+  },
+};
+
+/** The panel sits over the first line of the selection, centred on it, like other writing tools. */
+export const PanelPlacement: Story = {
+  render: () => <Example initial={fromPlainText(Array.from({ length: 8 }, (_, line) => `Line ${line + 1} of a short story.`).join('\n'), 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    const line = editor.querySelectorAll('p')[5]!;
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+    const panel = await canvas.findByRole('toolbar', { name: 'Format text' });
+    await waitFor(() => expect(panel.getBoundingClientRect().bottom).toBeLessThanOrEqual(range.getBoundingClientRect().top + 1));
+    const text = range.getBoundingClientRect(), box = panel.getBoundingClientRect();
+    await expect(Math.abs((box.left + box.right) / 2 - (text.left + text.right) / 2)).toBeLessThan(4);
+  },
+};
+
+/** Without an uploader an image comes from a link; the description is optional. */
+export const ImageFromLink: Story = {
+  render: () => <Example initial={fromPlainText('', 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await userEvent.click(editor);
+    await userEvent.keyboard('/image{Enter}');
+    const panel = await page.findByRole('dialog', { name: 'Image' });
+    await expect(within(panel).queryByRole('tab')).toBeNull();
+    await expect(within(panel).getByRole('button', { name: 'Embed image' })).toBeDisabled();
+    await userEvent.type(within(panel).getByRole('textbox', { name: 'URL' }), 'javascript:alert(1)');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Embed image' }));
+    await expect(within(panel).getByRole('alert')).toBeInTheDocument();
+    const field = within(panel).getByRole('textbox', { name: 'URL' });
+    await userEvent.clear(field);
+    await userEvent.type(field, 'https://example.test/rain.png');
+    await userEvent.type(within(panel).getByRole('textbox', { name: 'Description (optional)' }), 'Rain at the station');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Embed image' }));
+    await expect(editor.querySelector('img')).toHaveAttribute('src', 'https://example.test/rain.png');
+    await expect(editor.querySelector('img')).toHaveAttribute('alt', 'Rain at the station');
+    await expect(page.queryByRole('dialog', { name: 'Image' })).toBeNull();
+  },
+};
+
+const storyUpload = async (file: File) => ({ src: `/media/${encodeURIComponent(file.name)}` });
+
+/** With an uploader, Upload is the first tab; dropping image files on the text uploads them in place. */
+export const ImageUpload: Story = {
+  render: () => <Example initial={fromPlainText('Before the picture.', 'blocks')} contextual upload={storyUpload} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await userEvent.click(editor);
+    const end = document.createRange();
+    end.selectNodeContents(editor); end.collapse(false);
+    window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(end);
+    await userEvent.keyboard('{Enter}/image{Enter}');
+    const panel = await page.findByRole('dialog', { name: 'Image' });
+    await expect(within(panel).getByRole('tab', { name: 'Upload' })).toHaveAttribute('aria-selected', 'true');
+    await userEvent.upload(panel.querySelector('input[type=file]') as HTMLInputElement, new File(['x'], 'station.png', { type: 'image/png' }));
+    await waitFor(() => expect(editor.querySelector('img')).toHaveAttribute('src', '/media/station.png'));
+    await expect(editor).toHaveTextContent('Before the picture.');
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['y'], 'dropped.png', { type: 'image/png' }));
+    const { left, top, height } = (editor.querySelector('p') as HTMLElement).getBoundingClientRect();
+    editor.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, clientX: left + 4, clientY: top + height / 2, bubbles: true, cancelable: true }));
+    await waitFor(() => expect(editor.querySelectorAll('img')).toHaveLength(2));
   },
 };
 

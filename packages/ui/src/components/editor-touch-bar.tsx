@@ -2,7 +2,7 @@
 
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { ALargeSmallIcon, ChevronDownIcon, PlusIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from './drawer.tsx';
@@ -65,7 +65,7 @@ function Section({ heading, children, className }: { heading?: string; children:
  * writers get a bar resting on the keyboard for what they do most, and a drawer for everything else.
  * Buttons never take focus, so the keyboard stays up while a format is toggled.
  */
-export function TouchBar({ editor, labels, blocks, compact, io }: {
+export const TouchBar = memo(function TouchBar({ editor, labels, blocks, compact, io }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; blocks: boolean; compact: boolean; io: CommandIO;
 }) {
   const state = useCommandState(editor);
@@ -131,4 +131,4 @@ export function TouchBar({ editor, labels, blocks, compact, io }: {
       </DrawerContent>
     </Drawer>
   </>;
-}
+});

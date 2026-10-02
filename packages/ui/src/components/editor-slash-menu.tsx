@@ -2,7 +2,7 @@
 
 import { Extension, type Editor as TiptapEditor, type Range } from '@tiptap/core';
 import { Suggestion, type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion';
-import { type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { memo, type RefObject, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '../utils.ts';
 import { availableCommands, formatShortcut, insertCommands, type CommandIO, type EditorCommand } from './editor-commands.tsx';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
@@ -51,7 +51,7 @@ export function matchCommands(commands: readonly EditorCommand[], labels: RichTe
   return commands.map(command => ({ command, rank: rank(command) })).filter(entry => entry.rank < 2).sort((a, b) => a.rank - b.rank).map(entry => entry.command);
 }
 
-export function SlashMenu({ editor, labels, blocks, io, handlers }: {
+export const SlashMenu = memo(function SlashMenu({ editor, labels, blocks, io, handlers }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; blocks: boolean; io: CommandIO; handlers: RefObject<SlashHandlers>;
 }) {
   const [open, setOpen] = useState<Open | null>(null);
@@ -120,4 +120,4 @@ export function SlashMenu({ editor, labels, blocks, io, handlers }: {
       </div>;
     }) : <p className="px-2 py-1.5 text-sm text-muted-foreground">{labels.slashEmpty}</p>}
   </div>;
-}
+});

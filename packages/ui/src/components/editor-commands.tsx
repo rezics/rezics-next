@@ -12,12 +12,14 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
 
-export type DialogMode = 'link' | 'image' | 'ruby' | 'emphasis';
+export type DialogMode = 'link' | 'ruby' | 'emphasis';
 export type LabelKey = keyof RichTextEditorLabels;
 
 /** What a command needs from the surface that runs it. Surfaces differ in how they collect input, not in what a command does. */
 export interface CommandIO {
   openDialog: (mode: DialogMode) => void;
+  /** Opens image insertion at the caret. */
+  openImage: () => void;
   /** Surfaces with an inline link field edit there; the rest fall back to the dialog. */
   openLink?: () => void;
 }
@@ -139,7 +141,7 @@ export const alignCommands: readonly EditorCommand[] = [
 /** Blocks that are inserted rather than converted to; the slash menu and insert panel list them after the block types. */
 export const insertOnlyCommands: readonly EditorCommand[] = [
   { id: 'horizontalRule', label: 'horizontalRule', icon: MinusIcon, keywords: ['hr', 'divider', 'rule', 'line'], run: editor => { collapseToEnd(editor); run(editor).setHorizontalRule().run(); } },
-  { id: 'image', label: 'image', icon: ImageIcon, blocksOnly: true, keywords: ['picture', 'photo', 'img'], run: (editor, io) => { collapseToEnd(editor); io.openDialog('image'); } },
+  { id: 'image', label: 'image', icon: ImageIcon, blocksOnly: true, keywords: ['picture', 'photo', 'img'], run: (editor, io) => { collapseToEnd(editor); io.openImage(); } },
   { id: 'table', label: 'table', icon: TableIcon, blocksOnly: true, keywords: ['grid', 'rows', 'columns'], run: editor => { collapseToEnd(editor); run(editor).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); } },
 ];
 

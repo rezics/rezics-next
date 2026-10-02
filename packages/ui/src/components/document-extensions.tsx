@@ -6,7 +6,8 @@ import { TableKit } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle } from '@tiptap/extension-text-style';
 import UniqueID from '@tiptap/extension-unique-id';
-import { CharacterCount } from '@tiptap/extensions';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { Plugin } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { safeDocumentUrl } from './document-url.tsx';
 
@@ -82,7 +83,8 @@ const SafeImage = Image.extend({
   renderHTML({ HTMLAttributes }) {
     const src = safeDocumentUrl(HTMLAttributes.src, true);
     if (!src) return ['span', { 'data-image-unavailable': '' }, String(HTMLAttributes.alt ?? '')];
-    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src, referrerpolicy: 'no-referrer' })];
+    // An image without a description is decorative to assistive technology, not unlabelled.
+    return ['img', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { src, alt: HTMLAttributes.alt ?? '', referrerpolicy: 'no-referrer' })];
   },
 });
 
@@ -123,6 +125,43 @@ function embeddedComponent(inline: boolean, label: string) {
 }
 
 /** `emptyLineHint` labels empty top-level lines after the first, where a writer may not know a block can be inserted. */
+const blockLengths = new WeakMap<ProseMirrorNode, number>();
+
+/** Code points of text, counting each leaf such as a line break as one; top-level blocks are counted once and remembered. */
+export function documentLength(doc: ProseMirrorNode): number {
+  let total = 0;
+  doc.forEach(block => {
+    let length = blockLengths.get(block);
+    if (length === undefined) {
+      length = Array.from(block.textBetween(0, block.content.size, undefined, ' ')).length;
+      blockLengths.set(block, length);
+    }
+    total += length;
+  });
+  return total;
+}
+
+/**
+ * Refuses edits that would pass `limit` code points; a paste that would is trimmed to fit. Unchanged
+ * blocks keep their counted length, so the check costs the edit rather than the whole document.
+ */
+const LengthLimit = Extension.create<{ limit: number }>({
+  name: 'lengthLimit',
+  addOptions() { return { limit: Infinity }; },
+  addProseMirrorPlugins() {
+    const { limit } = this.options;
+    return [new Plugin({ filterTransaction: (transaction, state) => {
+      if (!transaction.docChanged) return true;
+      const before = documentLength(state.doc), after = documentLength(transaction.doc);
+      if (after <= limit || after <= before) return true;
+      if (before > limit || !transaction.getMeta('paste')) return false;
+      const head = transaction.selection.$head.pos;
+      transaction.deleteRange(Math.max(0, head - (after - limit)), head);
+      return documentLength(transaction.doc) <= limit;
+    } })];
+  },
+});
+
 export function documentExtensions({ placeholder = '', emptyLineHint, unknownComponentLabel, maxLength, blocks = true }: { placeholder?: string; emptyLineHint?: string; unknownComponentLabel: string; maxLength?: number; blocks?: boolean }) {
   return [
     StarterKit.configure({
@@ -136,7 +175,7 @@ export function documentExtensions({ placeholder = '', emptyLineHint, unknownCom
       embeddedComponent(false, unknownComponentLabel), embeddedComponent(true, unknownComponentLabel)] : []),
     TextAlign.configure({ types: ['paragraph', 'heading'] }),
     Placeholder.configure({ placeholder: ({ editor, pos }) => editor.isEmpty ? placeholder : emptyLineHint && editor.state.doc.resolve(pos).depth === 0 ? emptyLineHint : '' }),
-    CharacterCount.configure({ limit: maxLength, textCounter: text => Array.from(text).length }),
+    ...(maxLength ? [LengthLimit.configure({ limit: maxLength })] : []),
     UniqueID.configure({ types: [...blockTypes, 'extensionInline'], generateID: () => crypto.randomUUID() }),
   ];
 }

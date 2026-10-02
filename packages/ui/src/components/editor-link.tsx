@@ -4,7 +4,7 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { CheckIcon, ExternalLinkIcon, PencilIcon, UnlinkIcon, XIcon } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Button } from './button.tsx';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
 import { bubbleOptions } from './editor-surface.ts';
@@ -49,7 +49,7 @@ export function LinkField({ editor, labels, range, onClose }: { editor: TiptapEd
 }
 
 /** Appears while the caret rests inside a link: where it goes, and the three things to do with it. */
-export function LinkMenu({ editor, labels, linkRange, onEdit, onClose }: {
+export const LinkMenu = memo(function LinkMenu({ editor, labels, linkRange, onEdit, onClose }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; linkRange: LinkRange | null; onEdit: () => void; onClose: () => void;
 }) {
   const href = useEditorState({ editor, selector: ({ editor: current }) => String(current.getAttributes('link').href ?? '') });
@@ -68,4 +68,4 @@ export function LinkMenu({ editor, labels, linkRange, onEdit, onClose }: {
       </div>}
     </div>
   </BubbleMenu>;
-}
+});

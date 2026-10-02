@@ -4,7 +4,7 @@ export const richTextEditorLabels = {
   link: 'Link', unlink: 'Remove link', bulletList: 'Bullet list', orderedList: 'Numbered list', taskList: 'Checklist',
   quote: 'Quote', codeBlock: 'Code block', horizontalRule: 'Divider', undo: 'Undo', redo: 'Redo',
   table: 'Insert table', image: 'Image', ruby: 'Ruby annotation', emphasis: 'Emphasis marks',
-  apply: 'Apply', cancel: 'Cancel', remove: 'Remove', url: 'URL', imageAlt: 'Image description',
+  apply: 'Apply', cancel: 'Cancel', remove: 'Remove', url: 'URL', imageAlt: 'Description (optional)',
   annotation: 'Pronunciation', baseText: 'Base text', position: 'Position', over: 'Over', under: 'Under', interCharacter: 'Between characters',
   shape: 'Shape', dot: 'Dot', sesame: 'Sesame', circle: 'Circle', doubleCircle: 'Double circle', triangle: 'Triangle',
   fill: 'Fill', filled: 'Filled', open: 'Open', loading: 'Loading editor', unknownComponent: 'Embedded component',
@@ -13,7 +13,9 @@ export const richTextEditorLabels = {
   documentError: 'This change could not be saved. Undo it or reload the document.',
   spoiler: 'Spoiler', revealSpoiler: 'Reveal spoiler',
   formatting: 'Format text', moreFormatting: 'More formatting', advancedMode: 'Advanced tools', basicMode: 'Writing mode',
-  turnInto: 'Turn into', clearFormatting: 'Clear formatting', cut: 'Cut', copy: 'Copy', pastePlain: 'Paste as plain text',
+  turnInto: 'Turn into', clearFormatting: 'Clear formatting',
+  upload: 'Upload', uploadFile: 'Upload file', uploading: 'Uploading…', uploadFailed: 'The image could not be uploaded.',
+  imageLinkPlaceholder: 'Paste the image link…', embedImage: 'Embed image',
   slashHint: 'Type / to insert a block', slashEmpty: 'No matching blocks', openLink: 'Open link', editLink: 'Edit link', hideKeyboard: 'Hide keyboard',
 } satisfies Record<string, string>;
 export type RichTextEditorLabels = { [K in keyof typeof richTextEditorLabels]: string };
