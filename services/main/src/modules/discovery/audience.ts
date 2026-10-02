@@ -89,15 +89,18 @@ export class DiscoveryAudienceStore {
       const rows = (
         await client.query<{ id: string; following: boolean; membership: string | null }>(
           `
+        WITH identities AS (SELECT id,COALESCE(a.space,id) AS target
+          FROM unnest($3::text[]) id LEFT JOIN access.follow_space_alias a ON a.alias=id)
         SELECT wanted.id, EXISTS (SELECT 1 FROM access.follow f
-          WHERE f.principal_id=$1 AND f.target=wanted.id AND f.following) AS following,
+          WHERE f.principal_id=$1 AND f.following AND (f.target=wanted.target
+            OR f.target IN (SELECT alias FROM access.follow_space_alias WHERE space=wanted.target))) AS following,
           (SELECT m.generation::text FROM access.membership m
             JOIN access.authority_subject s ON s.id=m.member_subject AND s.active
             WHERE m.kind='realm' AND m.owner_subject=wanted.id AND m.member_subject=$2 AND m.state='joined'
               AND NOT EXISTS (SELECT 1 FROM access.membership_ban b WHERE b.kind='realm'
                 AND b.owner_subject=m.owner_subject AND b.member_subject=m.member_subject AND b.active
                 AND (b.expires_at IS NULL OR b.expires_at>clock_timestamp()))) AS membership
-        FROM unnest($3::text[]) AS wanted(id) ORDER BY wanted.id`,
+        FROM identities wanted ORDER BY wanted.id`,
           [owner, actor, ids],
         )
       ).rows;
