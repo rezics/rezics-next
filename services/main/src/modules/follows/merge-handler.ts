@@ -4,17 +4,18 @@ import { t } from 'elysia';
 import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { controlTransaction } from '../access/topology-control.ts';
+import { controlRead, controlTransaction } from '../access/topology-control.ts';
 import { canonicalCandidate } from '../editorial-review/contract.ts';
 import { checkMergeAuthority } from '../identity-merge/authority.ts';
 import { checkedItem, checkedOutcome, InvalidMerge, itemCommandKey, MERGE_COST, mergeDigest,
-  MergeConflict, type IdentityPlan, type ItemOutcome, type MergeHandler, type MergeItem,
+  MergeConflict, MergeUnavailable, type IdentityPlan, type ItemOutcome, type MergeHandler, type MergeItem,
   type MergeTask, type RecordedItem } from '../identity-merge/contract.ts';
 import { checkedTask } from '../identity-merge/journal.ts';
 import { targetRef } from '../target/contract.ts';
 import { defaultFollowLevel, followKind, followLevel, followSource } from './contract.ts';
 
-export interface FollowsMergeDependencies { accessPool: Pool; graph: Pick<FusekiClient, 'query'> }
+export interface FollowsMergeDependencies { accessPool: Pool; graph: Pick<FusekiClient, 'query'>;
+  authority?: typeof checkMergeAuthority }
 const uuid = t.String({ pattern: '^[0-9a-f-]{36}$' });
 const rowSchema = t.Object({ principal_id: uuid, target: targetRef, acting_subject: targetRef,
   kind: followKind, level: t.Optional(followLevel), source: t.Optional(followSource), pin_position: t.Optional(t.Nullable(t.Integer())),
@@ -60,7 +61,7 @@ async function put(client: PoolClient, row: Row) {
  * ordinary follows. A survivor slot, including an explicit unfollow, wins;
  * source-only follows move. Source rows retain a tombstone and fresh revision.
  * Unmerge checks both exact post-merge slots and leaves later edits ambiguous. */
-export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependencies): MergeHandler<FollowsMergeDependencies> {
+export function followsMergeHandler({ accessPool, graph, authority = checkMergeAuthority }: FollowsMergeDependencies): MergeHandler<FollowsMergeDependencies> {
   const inventory = async (plan: IdentityPlan, after: string | null, limit: number) =>
     (await accessPool.query<Row>(`SELECT ${columns} FROM access.follow
       WHERE target=$1 AND following AND ($2::uuid IS NULL OR principal_id > $2::uuid)
@@ -71,6 +72,38 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
     checkedTask(task); checkedItem(item);
     const cleanItem = { key: item.key, expectedHead: item.expectedHead, before: item.before };
     const digest = mergeDigest({ task, item: cleanItem, original: original ?? null });
+    const preflight = await controlRead(accessPool,async client => {
+      const receipt = (await client.query<{ task_key: string; request_digest: string; result: ItemOutcome }>(
+        'SELECT task_key,request_digest,result FROM access.follow_merge_receipt WHERE command_key=$1',[key])).rows[0];
+      const fence = (await client.query<{ generation: string }>(
+        'SELECT generation::text FROM access.recovery_fence WHERE id')).rows[0];
+      return { receipt,generation: fence!.generation };
+    });
+    if (preflight.receipt) {
+      if (preflight.receipt.task_key!==task.key || preflight.receipt.request_digest!==digest)
+        throw new MergeConflict('Follow receipt differs');
+      return checkedOutcome(preflight.receipt.result,key);
+    }
+    const facts = new Map<string,Awaited<ReturnType<FusekiClient['query']>>>();
+    const collecting: Pick<FusekiClient,'query'> = { query: async (sql,limit) => {
+      const id = JSON.stringify([sql,limit]);
+      if (!facts.has(id)) {
+        if (facts.size>=128) throw new MergeUnavailable('Follow merge graph budget exceeded');
+        facts.set(id,await graph.query(sql,limit));
+      }
+      return facts.get(id)!;
+    } };
+    // Each preflight statement commits independently. Graph I/O holds neither
+    // a Postgres transaction nor a scope gate; the effect repeats live SQL
+    // authority and CAS checks with these facts and the same recovery generation.
+    const probe = await accessPool.connect();
+    try { await authority(probe,task,collecting,owner); }
+    finally { probe.release(); }
+    const prepared: Pick<FusekiClient,'query'> = { query: async (sql,limit) => {
+      const fact = facts.get(JSON.stringify([sql,limit]));
+      if (!fact) throw new MergeUnavailable('Follow merge graph facts changed; retry');
+      return fact;
+    } };
     return controlTransaction(accessPool, async client => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [key]);
       const old = (await client.query<{ task_key: string; request_digest: string; result: ItemOutcome }>(
@@ -79,7 +112,10 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
         if (old.task_key !== task.key || old.request_digest !== digest) throw new MergeConflict('Follow receipt differs');
         return checkedOutcome(old.result, key);
       }
-      await checkMergeAuthority(client, task, graph, owner);
+      const generation = (await client.query<{ generation: string }>(
+        'SELECT generation::text FROM access.recovery_fence WHERE id')).rows[0]!.generation;
+      if (generation!==preflight.generation) throw new MergeUnavailable('Follow merge recovery changed');
+      await authority(client, task, prepared, owner);
       const saved = before(task, item);
       if (task.plan.operation !== (original ? 'unmerge' : 'merge')) throw new InvalidMerge('Follow operation differs');
       if (original && task.plan.operation === 'unmerge') {
@@ -115,7 +151,9 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
         }
       }
       if (next) {
-        await put(client, next.source); await put(client, next.survivor!);
+        // Release a moved slot before restoring one, including at the ceiling.
+        for (const row of [next.source,next.survivor!].sort((a,b) => Number(a.following)-Number(b.following)))
+          await put(client,row);
       }
       const result = checkedOutcome({ outcome, commandKey: key, receipt: `urn:rezics:follows:${key}`,
         afterHead: next ? mergeDigest(next) : null, after: next ? json(next) : { reason: 'follow-slots-edited' } }, key);
@@ -127,7 +165,7 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
   };
   // Optional metadata extends the existing frozen-journal protocol.
   return { owner, version: 'person-slot-v1', references: ['table:access.follow.target'],
-    cost: { page: MERGE_COST.page, callsPerItem: 128, bytesPerItem: MERGE_COST.itemBytes },
+    cost: { page: MERGE_COST.page, callsPerItem: 256, bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) {
       const rows = await inventory(plan, null, MERGE_COST.page + 1);
       return { owner, count: Math.min(rows.length, MERGE_COST.page), complete: rows.length <= MERGE_COST.page };
