@@ -343,6 +343,11 @@
       "file": "shapes/main-package-release-recommendation-v1.ttl"
     },
     {
+      "id": "name-registry-cleanup-v1",
+      "sha256": "72c16910157a5eeaafe965a11817f926259c09bc79ae7d21cdbc978646a380bf",
+      "file": "shapes/name-registry-cleanup-v1.ttl"
+    },
+    {
       "id": "native-agent-credit-v1",
       "sha256": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
       "file": "shapes/native-agent-credit-v1.ttl"
@@ -2912,6 +2917,16 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/RetiredNameProjection",
+      "routes": [
+        {
+          "profile": "name-registry-cleanup-v1",
+          "shape": "https://rezics.com/definition/name-registry-cleanup-v1/cleaned-shape",
+          "when": []
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/RightsDeclaration",
       "routes": [
         {
@@ -3492,6 +3507,7 @@
     "contexts/hub-item-v1.jsonld": "8f223f595f3dd58294b50e1e0d6d8e5b96977efa634b9ab0d8ce7d4f7f1c9205",
     "contexts/main-default-selection-v1.jsonld": "f08bbc6a41d97eef45c81812c1938ede21b1a8a4a5a34abbbfa07c9d04ec3cd3",
     "contexts/main-package-release-recommendation-v1.jsonld": "583eb256a54cade90585067b0cbb9659a6d2fb42052c0772f830de5c5f1a944a",
+    "contexts/name-registry-cleanup-v1.jsonld": "beb63423f81a42c509b6202832e13b0dd99fb98a907cccbf76d1c71a361d215c",
     "contexts/native-agent-credit-v1.jsonld": "5af722e5abc26a2dba37a9eaaec437dd11b20ad894f95c45c032862d58aea132",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b3ceb6ec3f789b15b77014d610facbb77100f46ed31bc7fb211b3963f08273a7",
@@ -3613,6 +3629,7 @@
     "shapes/hub-item-v1.ttl": "d5a9c3598792cac47e1301ef9704551df121e50988643d0c1274583436bb0da8",
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/main-package-release-recommendation-v1.ttl": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
+    "shapes/name-registry-cleanup-v1.ttl": "72c16910157a5eeaafe965a11817f926259c09bc79ae7d21cdbc978646a380bf",
     "shapes/native-agent-credit-v1.ttl": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
@@ -3695,9 +3712,9 @@
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "6ba944f7daf43ef84b4c8453a7bc3f0eedbab81859419bb236d4a3b10bbce86e",
-    "packages/model/src/generated/profiles.ts": "ab6a488d2cb9e176317760013405c763aa69f2a367a131894697c2eb5235fd1c",
-    "packages/model/src/generated/schemas.ts": "f4ea41b271fa6e82a173c6bab3c9a89d241e3c544101e6e537770b770f897262",
+    "packages/model/src/generated/arbitraries.ts": "5a90c24f2aef5bea5328e742fef9acf53e83e789e4ba7e8d53cae144771a8285",
+    "packages/model/src/generated/profiles.ts": "181121aa342d73a587feef4d13636b4c0b9d28000ca0324e54c4b98d287ec65b",
+    "packages/model/src/generated/schemas.ts": "fc0339f56ef2d1231d9228f8392e32795bd9e7f29afc188efe0c134d559eaa2b",
     "packages/model/src/generated/vocabulary.ts": "8f71e3c28889a74b5ba263534c3f6491ffde4a24a866c39fad53187a9830e767"
   }
 }

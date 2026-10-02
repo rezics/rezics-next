@@ -496,6 +496,16 @@ export const profileRegistry = {
       "recommendation"
     ]
   },
+  "name-registry-cleanup-v1": {
+    "sha256": "72c16910157a5eeaafe965a11817f926259c09bc79ae7d21cdbc978646a380bf",
+    "file": "shapes/name-registry-cleanup-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/name-registry-cleanup-v1/cleaned-shape"
+    ],
+    "focusRoles": [
+      "cleaned"
+    ]
+  },
   "native-agent-credit-v1": {
     "sha256": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
     "file": "shapes/native-agent-credit-v1.ttl",

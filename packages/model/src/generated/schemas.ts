@@ -366,6 +366,10 @@ export const MainPackageReleaseRecommendationV1RecommendationShapeSchema = Type.
 
 export type MainPackageReleaseRecommendationV1RecommendationShape = Static<typeof MainPackageReleaseRecommendationV1RecommendationShapeSchema>;
 
+export const NameRegistryCleanupV1CleanedShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:communityHandle": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "rv:routeSegment": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "rv:routeNamespace": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "rv:normalizedSlug": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
+
+export type NameRegistryCleanupV1CleanedShape = Static<typeof NameRegistryCleanupV1CleanedShapeSchema>;
+
 export const NativeAgentCreditV1CreditShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/NativeAgentCredit") }), "rv:work": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:agent": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:creditRevision": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "schema:roleName": Type.Array(Type.Union([Type.Literal("author"), Type.Literal("translator"), Type.Literal("editor")]), { minItems: 1, maxItems: 1 }), "rv:externalKey": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
 
 export type NativeAgentCreditV1CreditShape = Static<typeof NativeAgentCreditV1CreditShapeSchema>;
@@ -1278,6 +1282,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/main-default-selection-v1/selection-shape": MainDefaultSelectionV1SelectionShapeSchema,
   "https://rezics.com/definition/main-package-release-recommendation-v1/set-shape": MainPackageReleaseRecommendationV1SetShapeSchema,
   "https://rezics.com/definition/main-package-release-recommendation-v1/recommendation-shape": MainPackageReleaseRecommendationV1RecommendationShapeSchema,
+  "https://rezics.com/definition/name-registry-cleanup-v1/cleaned-shape": NameRegistryCleanupV1CleanedShapeSchema,
   "https://rezics.com/definition/native-agent-credit-v1/credit-shape": NativeAgentCreditV1CreditShapeSchema,
   "https://rezics.com/definition/native-agent-credit-v1/revision-shape": NativeAgentCreditV1RevisionShapeSchema,
   "https://rezics.com/definition/poll-allocation-v1/plan-shape": PollAllocationV1PlanShapeSchema,
