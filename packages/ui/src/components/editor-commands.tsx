@@ -41,6 +41,19 @@ export interface EditorCommand {
 
 const run = (editor: TiptapEditor) => editor.chain().focus();
 
+/** Whether anything in the selection carries a mark, so clearing formatting would change it. */
+function selectionHasMarks(editor: TiptapEditor): boolean {
+  const { from, to, empty } = editor.state.selection;
+  if (empty) return false;
+  let marked = false;
+  editor.state.doc.nodesBetween(from, to, node => {
+    if (marked) return false;
+    if (node.marks.length) marked = true;
+    return !marked;
+  });
+  return marked;
+}
+
 export function canAnnotateRuby(editor: TiptapEditor): boolean {
   const { $from, $to, from, to } = editor.state.selection;
   return editor.isActive('ruby') || ($from.sameParent($to) && editor.state.doc.slice(from, to).content.content.every(node => node.isText));
@@ -123,7 +136,7 @@ export const inlineCommands: readonly EditorCommand[] = [
   { id: 'link', label: 'link', icon: LinkIcon, shortcut: 'Mod-k', active: editor => editor.isActive('link'), run: (_editor, io) => (io.openLink ?? (() => io.openDialog('link')))() },
   { id: 'ruby', label: 'ruby', icon: LanguagesIcon, disabled: editor => !canAnnotateRuby(editor), run: (_editor, io) => io.openDialog('ruby') },
   { id: 'emphasis', label: 'emphasis', icon: SparklesIcon, active: editor => editor.isActive('textEmphasis'), run: (_editor, io) => io.openDialog('emphasis') },
-  { id: 'clearFormatting', label: 'clearFormatting', icon: RemoveFormattingIcon, disabled: editor => editor.state.selection.empty, run: editor => { run(editor).unsetAllMarks().run(); } },
+  { id: 'clearFormatting', label: 'clearFormatting', icon: RemoveFormattingIcon, disabled: editor => !selectionHasMarks(editor), run: editor => { run(editor).unsetAllMarks().run(); } },
 ];
 
 const alignment = (value: 'left' | 'center' | 'right' | 'justify', icon: LucideIcon): EditorCommand => ({
@@ -224,6 +237,14 @@ export const BlockActionShortcuts = Extension.create({
     };
   },
 });
+
+/**
+ * Discussion writing formats inline text and quotes, nothing about block structure: the selection
+ * bar shows these groups in one row, and touch shows them once text is selected.
+ */
+export const composeCommandGroups: readonly (readonly string[])[] = [
+  ['blockquote', 'spoiler'], ['bold', 'italic', 'underline', 'strike', 'code'], ['link'], ['clearFormatting'],
+];
 
 export const historyCommands: readonly EditorCommand[] = [
   { id: 'undo', label: 'undo', icon: UndoIcon, shortcut: 'Mod-z', disabled: editor => !editor.can().undo(), run: editor => { run(editor).undo().run(); } },

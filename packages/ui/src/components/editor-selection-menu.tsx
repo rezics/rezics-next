@@ -3,10 +3,10 @@
 import { isNodeSelection, type Editor as TiptapEditor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { ChevronDownIcon, MoreHorizontalIcon, TableIcon, Trash2Icon } from 'lucide-react';
-import { memo, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
+import { Fragment, memo, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { Button } from './button.tsx';
 import {
-  alignCommands, availableCommands, blockActionCommands, blockCommands, commandById, describeCommand, formatShortcut, markCommands, tableCommands, useCommandState,
+  alignCommands, availableCommands, blockActionCommands, blockCommands, commandById, composeCommandGroups, describeCommand, formatShortcut, markCommands, tableCommands, useCommandState,
   type CommandIO, type EditorCommand,
 } from './editor-commands.tsx';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
@@ -72,8 +72,10 @@ function selectedLength(editor: TiptapEditor): number {
  * already is, flipping below it near the top of the view. Block type opens a list; More opens the
  * actions on the blocks the selection touches. Alt+F10 moves keyboard focus into the panel.
  */
-export const SelectionMenu = memo(function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClose, container }: {
+export const SelectionMenu = memo(function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClose, container, compose = false }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; blocks: boolean; io: CommandIO; linkRange: LinkRange | null; onLinkClose: () => void;
+  /** Discussion writing: one row of inline formats and quote, without block type or block actions. */
+  compose?: boolean;
   /** Where the panel is placed: outside the document, so the document's own styles never reach it. */
   container: RefObject<HTMLElement | null>;
 }) {
@@ -103,7 +105,12 @@ export const SelectionMenu = memo(function SelectionMenu({ editor, labels, block
     <div role="toolbar" aria-label={labels.formatting} className="relative w-fit max-w-full rounded-xl border border-border/60 bg-popover p-1 text-popover-foreground shadow-(--aura-shadow-float)"
       onKeyDown={event => moveFocus(event, editor)}
       onMouseDown={event => { if (!(event.target as HTMLElement).closest('input')) event.preventDefault(); }}>
-      {linkRange ? <div className="w-64 max-w-full p-0.5"><LinkField editor={editor} labels={labels} range={linkRange} onClose={onLinkClose} /></div> : <>
+      {linkRange ? <div className="w-64 max-w-full p-0.5"><LinkField editor={editor} labels={labels} range={linkRange} onClose={onLinkClose} /></div> : compose ? <div className="flex items-center gap-0.5">
+        {composeCommandGroups.map((group, index) => <Fragment key={group.join()}>
+          {index ? <span aria-hidden="true" className="mx-0.5 h-5 w-px bg-border/60" /> : null}
+          {row(group.map(commandById))}
+        </Fragment>)}
+      </div> : <>
         <Menu positioning={{ placement: 'bottom-start' }} {...opened('turn')}>
           <MenuTrigger asChild><Button size="sm" variant="ghost" className="w-full justify-start px-2" aria-label={`${labels.turnInto}: ${labels[current.label]}`}>
             <current.icon aria-hidden="true" /><span className="min-w-0 flex-1 truncate text-start">{labels[current.label]}</span><ChevronDownIcon aria-hidden="true" />

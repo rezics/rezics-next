@@ -27,7 +27,7 @@ export interface BodyEditorProps extends Omit<
   legacyMarkdown?: boolean;
   /** Interface placeholder direction is independent from the manuscript's direction. */
   placeholderDirection?: 'ltr' | 'rtl';
-  /** Studio offers the complete toolbar; discussion writing uses contextual controls. */
+  /** Studio opens with the complete toolbar and can return to contextual controls; discussion writing uses contextual controls only. */
   allowAdvanced?: boolean;
 }
 
@@ -55,7 +55,8 @@ export function BodyEditor({
   }, [value, legacyMarkdown]);
   const upload = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
+  // Long-form writing starts with the complete toolbar; discussion composers never show it.
+  const [advanced, setAdvanced] = useState(allowAdvanced);
 
   function download(text: string, extension: string, mediaType: string) {
     const url = URL.createObjectURL(new Blob([text], { type: mediaType }));

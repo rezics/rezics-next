@@ -3,9 +3,9 @@
 import { normalizeDocument, serializeDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { EditorContent, useEditor } from '@tiptap/react';
-import { UnlinkIcon } from 'lucide-react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
+import { ImageIcon, UnlinkIcon } from 'lucide-react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from './dialog.tsx';
@@ -126,6 +126,20 @@ function Toolbar({ editor, labels, io, blocks }: { editor: TiptapEditor; labels:
     </div> : null}
   </div>;
 }
+
+/**
+ * What discussion writing keeps in view, like a chat app's attach button: inserting an image. It
+ * shows while the writer is in the field or it has content, so an idle reply box stays one line.
+ * Formatting appears only on a selection.
+ */
+const ComposeActions = memo(function ComposeActions({ editor, labels, io }: { editor: TiptapEditor; labels: RichTextEditorLabels; io: CommandIO }) {
+  const shown = useEditorState({ editor, selector: ({ editor: current }) => current.isFocused || !current.isEmpty });
+  if (!shown) return null;
+  return <div className="mt-1 flex items-center gap-1" data-slot="editor-compose-actions">
+    <Button type="button" size="icon-sm" variant="ghost" aria-label={labels.image} title={labels.image} onMouseDown={event => event.preventDefault()}
+      onClick={() => { editor.chain().focus().run(); io.openImage(); }}><ImageIcon aria-hidden="true" /></Button>
+  </div>;
+});
 
 /** A controlled Tiptap document editor. Initial hydration and controlled value updates never save a document. */
 export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', onUploadImage,
@@ -324,7 +338,8 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   const content = editor ? <EditorContent editor={editor} className={cn('rezics-document', compact ? 'document-editor-compact' : 'document-editor')} /> : null;
   return <div className={cn('min-w-0 rounded-2xl border border-border/60 bg-background', disabled && 'opacity-64', className)} data-slot="rich-text-editor" data-pointer={coarse ? 'coarse' : 'fine'} onKeyDown={keyboard}
     onCompositionEnd={() => { if (editor) requestAnimationFrame(() => { if (!editor.isDestroyed) publish(editor); }); }}>
-    {editor && editable && toolbarMode === 'full' ? <Toolbar editor={editor} labels={labels} io={io} blocks={blocks} /> : null}
+    {/* A row of every control fits a pointer's screen; a phone keeps its keyboard toolbar. */}
+    {editor && editable && toolbarMode === 'full' && !coarse ? <Toolbar editor={editor} labels={labels} io={io} blocks={blocks} /> : null}
     {snapshotError ? <p role="alert" className="px-4 py-2 text-sm text-destructive">{labels.documentError}</p> : null}
     {uploadFailed ? <p role="alert" className="px-4 py-2 text-sm text-destructive">{labels.uploadFailed}</p> : null}
     {uploads ? <p role="status" className="px-4 py-2 text-sm text-muted-foreground">{labels.uploading}</p> : null}
@@ -332,8 +347,9 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
       {editor ? <>
         {content}
         {editable ? <>
-          {!coarse ? <SelectionMenu editor={editor} labels={labels} blocks={blocks} io={io} linkRange={linkRange} onLinkClose={closeLink} container={surface} /> : null}
+          {!coarse ? <SelectionMenu editor={editor} labels={labels} blocks={blocks} io={io} linkRange={linkRange} onLinkClose={closeLink} container={surface} compose={compact} /> : null}
           <LinkMenu editor={editor} labels={labels} linkRange={linkRange} onEdit={editLink} onClose={closeLink} container={surface} />
+          {compact && blocks ? <ComposeActions editor={editor} labels={labels} io={io} /> : null}
           {coarse ? <TouchBar editor={editor} labels={labels} blocks={blocks} compact={compact} io={io} /> : null}
           {slashEnabled ? <SlashMenu editor={editor} labels={labels} blocks={blocks} io={io} handlers={slashHandlers} /> : null}
           {imageRequest ? <ImageInsert editor={editor} labels={labels} request={imageRequest} upload={onUploadImage} onClose={closeImage} /> : null}

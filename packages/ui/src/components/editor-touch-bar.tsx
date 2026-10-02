@@ -7,7 +7,7 @@ import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from './drawer.tsx';
 import {
-  alignCommands, availableCommands, blockActionCommands, blockCommands, commandById, describeCommand, historyCommands, inlineCommands, insertCommands, markCommands,
+  alignCommands, availableCommands, blockActionCommands, blockCommands, commandById, composeCommandGroups, describeCommand, historyCommands, inlineCommands, insertCommands, markCommands,
   tableCommands, useCommandState, type CommandIO, type EditorCommand,
 } from './editor-commands.tsx';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
@@ -63,7 +63,8 @@ function Section({ heading, children, className }: { heading?: string; children:
 /**
  * Phones select with handles and the system's own menu, so a floating panel would fight it. Touch
  * writers get a bar resting on the keyboard for what they do most, and a drawer for everything else.
- * Buttons never take focus, so the keyboard stays up while a format is toggled.
+ * Discussion writing shows no bar until text is selected, then the inline formats. Buttons never
+ * take focus, so the keyboard stays up while a format is toggled.
  */
 export const TouchBar = memo(function TouchBar({ editor, labels, blocks, compact, io }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; blocks: boolean; compact: boolean; io: CommandIO;
@@ -72,11 +73,13 @@ export const TouchBar = memo(function TouchBar({ editor, labels, blocks, compact
   const focused = useEditorFocus(editor);
   const [panel, setPanel] = useState<Panel | null>(null);
   const later = useRef<(() => void) | null>(null);
-  const visible = focused || panel !== null;
+  // Discussion writing has no standing toolbar: formats appear once text is selected, as a long press does in chat apps.
+  const visible = compact ? focused && !state.empty : focused || panel !== null;
   const inset = useKeyboardInset(visible);
   // The drawer is modal, so a command waits for it to leave; otherwise two focus traps contend for the caret.
   const pick = (command: EditorCommand) => { later.current = () => command.run(editor, io); setPanel(null); };
-  const quick = (compact ? ['bold', 'italic', 'link', 'spoiler', 'blockquote'] : ['bold', 'italic', 'strike', 'bulletList', 'taskList', 'blockquote', 'link']).map(commandById);
+  const quick = ['bold', 'italic', 'strike', 'bulletList', 'taskList', 'blockquote', 'link'].map(commandById);
+  const divider = (key: string) => <span key={key} aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border/60" />;
   const button = (command: EditorCommand) => <Button key={command.id} type="button" size="icon-sm" className="size-10 shrink-0" variant={state.isActive(command.id) ? 'soft' : 'ghost'}
     aria-label={labels[command.label]} title={describeCommand(command, labels)} aria-pressed={command.active ? state.isActive(command.id) : undefined}
     disabled={state.isDisabled(command.id)} onMouseDown={event => event.preventDefault()} onClick={() => command.run(editor, io)}>
@@ -87,13 +90,16 @@ export const TouchBar = memo(function TouchBar({ editor, labels, blocks, compact
     {visible && panel === null ? <div role="toolbar" aria-label={labels.toolbar} data-slot="editor-touch-bar" style={{ bottom: inset }}
       className={cn('fixed inset-x-0 z-40 flex items-center gap-1 border-t border-border/60 bg-popover px-2 text-popover-foreground', inset === 0 && 'pb-[env(safe-area-inset-bottom)]')}>
       <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1">
-        <Button type="button" size="icon-sm" variant="ghost" className="size-10 shrink-0" aria-label={labels.formatting} title={labels.formatting} aria-haspopup="dialog"
-          onMouseDown={event => event.preventDefault()} onClick={() => open('format')}><ALargeSmallIcon aria-hidden="true" /></Button>
-        {!compact ? <Button type="button" size="icon-sm" variant="ghost" className="size-10 shrink-0" aria-label={labels.insertBlock} title={labels.insertBlock} aria-haspopup="dialog"
-          onMouseDown={event => event.preventDefault()} onClick={() => open('insert')}><PlusIcon aria-hidden="true" /></Button> : null}
-        <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border/60" />
-        {quick.map(button)}
-        {!compact ? <><span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border/60" />{historyCommands.map(button)}</> : null}
+        {compact ? composeCommandGroups.flatMap((group, index) => [...(index ? [divider(`divider-${index}`)] : []), ...group.map(commandById).map(button)]) : <>
+          <Button type="button" size="icon-sm" variant="ghost" className="size-10 shrink-0" aria-label={labels.formatting} title={labels.formatting} aria-haspopup="dialog"
+            onMouseDown={event => event.preventDefault()} onClick={() => open('format')}><ALargeSmallIcon aria-hidden="true" /></Button>
+          <Button type="button" size="icon-sm" variant="ghost" className="size-10 shrink-0" aria-label={labels.insertBlock} title={labels.insertBlock} aria-haspopup="dialog"
+            onMouseDown={event => event.preventDefault()} onClick={() => open('insert')}><PlusIcon aria-hidden="true" /></Button>
+          {divider('drawers')}
+          {quick.map(button)}
+          {divider('history')}
+          {historyCommands.map(button)}
+        </>}
       </div>
       <Button type="button" size="icon-sm" variant="ghost" className="size-10 shrink-0" aria-label={labels.hideKeyboard} title={labels.hideKeyboard}
         onMouseDown={event => event.preventDefault()} onClick={() => editor.commands.blur()}><ChevronDownIcon aria-hidden="true" /></Button>
