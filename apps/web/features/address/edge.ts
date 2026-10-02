@@ -14,10 +14,11 @@ export async function beforePathNormalization(
   mainOrigin?: string,
 ): Promise<Response | null> {
   const url = new URL(request.url);
+  const path = addressPath(url.pathname);
   if (
     !['GET', 'HEAD'].includes(request.method) ||
     !url.pathname.endsWith('/') ||
-    (!addressPath(url.pathname) && withoutLocale(url.pathname).replace(/\/+$/, '') !== '/r')
+    (!path && withoutLocale(url.pathname).replace(/\/+$/, '') !== '/r')
   )
     return null;
   const incoming = new NextRequest(request);
@@ -56,7 +57,11 @@ export async function beforePathNormalization(
   if (decision.kind === 'error')
     return new Response(null, {
       status: decision.status,
-      headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' },
+      headers: {
+        'cache-control': 'no-store',
+        'x-robots-tag': 'noindex',
+        ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
+      },
     });
   return null;
 }

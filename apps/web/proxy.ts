@@ -103,7 +103,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (addressed.kind === 'error')
     return new NextResponse(null, {
       status: addressed.status,
-      headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' },
+      headers: {
+        'cache-control': 'no-store',
+        'x-robots-tag': 'noindex',
+        ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
+      },
     });
   if (
     (isPublicPagePath(pathname) || addressPath(pathname)) &&

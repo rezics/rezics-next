@@ -136,7 +136,7 @@ describe('G-952 community and site addresses', () => {
 });
 
 describe('G-952 private Space landing admission', () => {
-  test.each(['r', 'z'])(
+  test.each(['r', 'z', 'r-submit'])(
     '%s outsider reaches only Main’s limited request page and response discovery headers',
     async (surface) => {
       process.env.WEB_OAUTH_CLIENT_ID = 'g-952-test';
@@ -145,9 +145,11 @@ describe('G-952 private Space landing admission', () => {
         if (url.pathname === `/v1/realms/${realm}/join-page`) return Response.json(joinPageFixture);
         return absent();
       });
-      const response = await proxy(
-        new NextRequest(`https://rezics.test/en/${surface}/${uuidToSid(realm)}`),
-      );
+      const path =
+        surface === 'r-submit'
+          ? `/en/r/${uuidToSid(realm)}/submit`
+          : `/en/${surface}/${uuidToSid(realm)}`;
+      const response = await proxy(new NextRequest(new URL(path, 'https://rezics.test')));
       expect(response.status).toBe(200);
       expect(response.headers.get('x-robots-tag')).toBe('noindex');
       expect(response.headers.get('referrer-policy')).toBe('no-referrer');
@@ -188,6 +190,13 @@ describe('G-952 private Space landing admission', () => {
       );
       expect(response.status).toBe(404);
       expect(response.headers.get('x-robots-tag')).toBe('noindex');
+      expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+      const slash = await beforePathNormalization(
+        new Request(`https://rezics.test/en/${surface}/${uuidToSid(realm)}/`),
+      );
+      expect(slash?.status).toBe(404);
+      expect(slash?.headers.get('x-robots-tag')).toBe('noindex');
+      expect(slash?.headers.get('referrer-policy')).toBe('no-referrer');
     },
   );
 
