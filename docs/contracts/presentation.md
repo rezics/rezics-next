@@ -181,17 +181,25 @@ Writing starts with contextual controls, chosen by the device's primary input
 rather than the screen width. Every control is one entry in a shared command
 table, so surfaces differ in layout and never in what they can do.
 
-- **Pointer:** a selection panel with fixed rows (block type, marks, link, ruby,
-  emphasis, alignment, and table actions inside a table), and a right-click or
-  Alt+F10 / Shift+F10 menu with the same commands for keyboard use. Typing `/`
+- **Pointer:** a compact selection panel over the selection's first line (block
+  type, marks, link, ruby, emphasis, and alignment or table actions under More);
+  Alt+F10 moves keyboard focus into it. Right-click stays the browser's, so
+  spelling suggestions and paste behave as everywhere else; a second formatting
+  menu there would split one set of commands across two surfaces. Typing `/`
   opens a filtered block menu; the caret inside a link shows a small card to
   open, edit or remove it, and Ctrl/⌘+K edits a link in place.
+- **Images** open a small panel at the caret: upload a file where the surface
+  provides storage, or embed a link; the description is optional. Dropped or
+  pasted image files upload in place.
 - **Touch:** no floating panel, because the system's selection handles and menu
   occupy that place. A bar rests on the keyboard with the most used formats; a
   drawer holds block types, the remaining marks and insertion. Its buttons keep
   the keyboard open. Discussion composers offer only the short set.
 - Changing a block's type keeps the block's identity, and inserting a block
   never replaces selected text.
+- A keystroke costs the edit, not the document: unchanged blocks keep their
+  identity and are not converted, checked or serialized again, so a long
+  chapter types like a short reply on a slow device.
 
 Discussion composers stay compact. Studio exposes the complete toolbar and
 file import/export through an explicit advanced-mode toggle without changing
