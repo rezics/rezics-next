@@ -7,6 +7,8 @@ import { Switch } from '@rezics/ui/switch';
 import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { LanguagePicker } from '../onboarding/language-picker.tsx';
@@ -91,7 +93,7 @@ function Section({ id, title, help, children }: { id: string; title: string; hel
   </CardContent></Card>;
 }
 
-function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: boolean }) {
+function Notifications({ t, locale, preview = false }: { t: SettingsMessages; locale: UiLocale; preview?: boolean }) {
   const [choices, setChoices] = useState<NotificationChoice[] | null>(preview
     ? settingsNotificationTopics.flatMap(topic => (['inbox', 'email'] as const).map(channel => ({
       purpose: purposeOf(topic), topic, channel, state: 'enabled' as const, revision: null }))) : null);
@@ -120,6 +122,8 @@ function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: 
     setSaving('');
   };
   return <Section id="notifications" title={t.notificationsTitle} help={t.notificationsHelp}>
+    <a href={localizedPath('/following', locale)} className="w-fit text-primary text-sm underline-offset-4 hover:underline">
+      {relationshipMessages[locale].manage}</a>
     {choices ? <div className="grid gap-0">
       <div className="grid grid-cols-[minmax(0,1fr)_4rem_4rem] gap-2 border-b pb-2 text-muted-foreground text-xs
         sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
@@ -392,7 +396,7 @@ export function SettingsSections({ agent, locale, accountOrigin, t, preview = fa
   children?: ReactNode;
 }) {
   return <>
-    <Notifications t={t} preview={preview} />
+    <Notifications t={t} locale={locale} preview={preview} />
     {agent ? <PersonControls agent={agent} locale={locale} t={t} preview={preview}
       previewLanguages={previewLanguages} /> : null}
     <Display locale={locale} t={t} preview={preview} />

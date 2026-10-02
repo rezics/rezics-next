@@ -60,7 +60,7 @@ async function whenSettled(name: string) {
     const dialog = within(document.body).getByRole('dialog', { name });
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     const running = dialog.getAnimations({ subtree: true }).some(animation => animation.playState === 'running');
-    expect(running).toBe(false);
+    await expect(running).toBe(false);
   }, { timeout: 5000 });
 }
 
@@ -227,9 +227,8 @@ export const PhoneDark: Story = {
 };
 
 /**
- * Signed in: Manage first with the queue for a moderator, the Realms the
- * reader follows with a dot where there is activity they have not seen, and
- * the official Zones they do not follow yet; the bell and the navigation
+ * Signed in: relationships come before moderation; Official Zones are hidden
+ * once the reader follows anything; the bell and the navigation
  * carry the unread count.
  */
 export const Communities: Story = {
@@ -240,21 +239,18 @@ export const Communities: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
-    const realms = within(nav).getByRole('region', { name: 'Your Realms' });
-    await expect(within(realms).getByRole('link', { name: /^中文网络小说\s*, new posts$/ }))
+    const realms = within(nav).getByRole('region', { name: 'Communities and sites' });
+    await expect(await within(realms).findByRole('link', { name: /^中文网络小说\s*, new posts$/ }))
       .toHaveAttribute('href', `/en/r/${realm(1).slice(-36)}`);
     await expect(within(realms).getByText('中文网络小说')).toHaveAttribute('lang', 'zh-Hans');
     await expect(within(realms).getByRole('link', { name: 'Classic Literature' })).toBeVisible();
-    const official = within(nav).getByRole('region', { name: 'Official Zones' });
-    await expect(within(official).getByRole('link', { name: 'Fiction' })).toHaveAttribute('href', '/en/r/fiction');
-    // Books is followed, so it appears once, under Your Realms.
-    await expect(within(official).queryByRole('link', { name: 'Books' })).toBeNull();
+    await expect(within(nav).queryByRole('region', { name: 'Official Zones' })).toBeNull();
     await expect(within(realms).getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/r/books');
-    // Manage sits above the Realm lists, so it stays in view on a short screen, and opens the one Realm managed.
-    const manage = within(nav).getByRole('link', { name: /^Manage/ });
+    // Moderation follows the reader's pinned and community sections.
+    const manage = within(within(nav).getByRole('region', { name: 'Moderation' })).getByRole('link', { name: /^Manage/ });
     await expect(manage).toHaveTextContent('8 waiting');
     await expect(manage).toHaveAttribute('href', `/en/manage/r/${realm(2).slice(-36)}`);
-    await expect(manage.compareDocumentPosition(realms) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(realms.compareDocumentPosition(manage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(within(canvasElement.querySelector('header')!).getByRole('link', { name: 'Notifications, 3 unread' }))
       .toHaveAttribute('href', '/en/notifications');
     await expect(within(nav).getByRole('link', { name: /^Notifications/ })).toHaveTextContent('3');
@@ -288,7 +284,7 @@ export const CommunitiesChinese: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: '打开导航' }));
     const drawer = within(await within(document.body).findByRole('dialog'));
-    await expect(drawer.getByText('小说')).toHaveAttribute('lang', 'zh-Hans');
+    await expect(drawer.getByText('中文网络小说')).toHaveAttribute('lang', 'zh-Hans');
     await expect(drawer.getByText('图书')).toHaveAttribute('dir', 'ltr');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     // The drawer and the bottom bar share one name. The modal hides the bar on the next frame,
@@ -311,7 +307,7 @@ export const PhoneCommunities: Story = {
     await expect(within(bar).getByRole('link', { name: 'Notifications · Notifications, 99+ unread' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
     const drawer = within(await within(document.body).findByRole('dialog', { name: 'Menu' }, { timeout: 5000 }));
-    await waitFor(() => expect(drawer.getByRole('region', { name: 'Your Realms' })).toBeVisible());
+    await waitFor(() => expect(drawer.getByRole('region', { name: 'Communities and sites' })).toBeVisible());
     await whenSettled('Menu');
     await userEvent.click(drawer.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(within(document.body).queryByRole('dialog')).toBeNull(), { timeout: 5000 });

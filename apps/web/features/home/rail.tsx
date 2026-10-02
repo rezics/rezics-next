@@ -103,7 +103,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
               <span className="truncate text-muted-foreground text-xs">
                 {[reasonLabel(item, t), members].filter(Boolean).join(' · ')}</span>
             </span>
-            <FollowButton target={item.id} kind={item.kind} realm={item.realm}
+            <FollowButton target={item.id} kind={item.kind} realm={item.realm} name={item.name.value}
               label={t.followRealm({ realm: item.name.value })}
               followLabel={t.follow} followedLabel={t.followed} failedLabel={t.followOneFailed} />
           </li>;

@@ -220,7 +220,7 @@ export function ProposalPage({ initial, target, agents, actingSubject, now, loca
               onClick={() => open(control)}>{label(control.action, t)}</Button>)}
           </div> : <p className="text-muted-foreground text-sm">{t.actionsNone}</p>}
         </section>
-        <WatchToggle proposal={proposal.id} />
+        <WatchToggle proposal={proposal.id} actingSubject={actingSubject} />
       </aside>
     </div>
 
