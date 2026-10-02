@@ -50,7 +50,7 @@ export const RichPost: Story = {
     range.collapse(false);
     window.getSelection()?.removeAllRanges();
     window.getSelection()?.addRange(range);
-    await userEvent.type(editor, ' More to discuss.', { skipClick: true });
+    await userEvent.type(editor, ' More to discuss.', { skipClick: true, delay: 20 });
     await waitFor(() =>
       expect(canvas.getByLabelText('Plain text projection')).toHaveTextContent('More to discuss.'),
     );

@@ -220,6 +220,8 @@ export const ActionBarContent = (props: ActionBarContentProps) => {
           className={cn(actionBarPositionerVariants({ placement }))}
           data-placement={placement}
           data-slot="action-bar-positioner"
+          aria-hidden={!isOpen || undefined}
+          inert={!isOpen}
           style={{ '--gutter': gutter } as React.CSSProperties}
         >
           <ark.div

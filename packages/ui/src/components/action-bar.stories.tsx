@@ -135,7 +135,11 @@ export const CloseButton: Story = {
   async play({ canvasElement }) {
     const page = within(document.body);
     const toolbar = await page.findByRole('toolbar');
+    const positioner = toolbar.closest('[data-slot="action-bar-positioner"]')!;
     await userEvent.click(within(toolbar).getByRole('button', { name: 'Clear selection' }));
+    // Exit animation may keep the DOM mounted, but closed actions cannot retain focus.
+    await expect(positioner).toHaveAttribute('inert');
+    await expect(positioner).toHaveAttribute('aria-hidden', 'true');
     await waitFor(() => expect(page.queryByRole('toolbar')).not.toBeInTheDocument());
     await expect(
       within(canvasElement).getByRole('checkbox', { name: /Spoilers/ }),

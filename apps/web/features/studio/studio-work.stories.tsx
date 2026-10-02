@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
-import { expect, fireEvent, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, screen, userEvent as storybookUserEvent, waitFor, within } from 'storybook/test';
 import { detailsValues } from './details-api.ts';
 import type { DetailsState, SaveDetails } from './details-form.tsx';
 import { chapterVariant } from './content-api.ts';
@@ -15,6 +15,9 @@ import { StudioWork, type WorkTabContent } from './studio-work.tsx';
 import type { ContentsPage, MyText } from './types.ts';
 
 type Props = ComponentProps<typeof StudioWork>;
+
+// Let controlled inputs and menu focus settle between simulated keystrokes.
+const userEvent = storybookUserEvent.setup({ delay: 20 });
 
 const base = '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/00000000-0000-4000-8000-000000000101';
 
@@ -97,7 +100,10 @@ const meta = {
   component: StudioWork,
   parameters: { route: { pathname: base } },
   args: { agent: agents[0]!, work: serial, languages: ['zh-Hans'], content: chapters().content, locale: 'en', messages },
-  beforeEach() { localStorage.clear(); },
+  beforeEach({ args }) {
+    localStorage.clear();
+    (args as unknown as { main?: ReturnType<typeof storyMain> }).main?.reset();
+  },
   render: args => <StudioFrame agent={args.agent} agents={agents} session={args.agent} path="" locale={args.locale}
     messages={args.messages}><StudioWork {...args} /></StudioFrame>,
 } satisfies Meta<Props>;
@@ -324,11 +330,18 @@ export const DragAndDrop: Story = {
     const canvas = within(canvasElement);
     // A pointer presses the grip, moves past the lift threshold, then over the target, and lets go.
     const drag = async (source: HTMLElement, target: HTMLElement, clientY: number) => {
+      const offset = clientY - target.getBoundingClientRect().top;
+      source.scrollIntoView({ block: 'center' });
       const from = source.getBoundingClientRect();
       const x = from.left + from.width / 2, y = from.top + from.height / 2;
-      const to = target.getBoundingClientRect().left + 40;
       await fireEvent.pointerDown(source, { button: 0, pointerId: 1, clientX: x, clientY: y });
       await fireEvent.pointerMove(window, { pointerId: 1, clientX: x + 8, clientY: y + 8 });
+      // Hit testing uses viewport coordinates; the manager's iframe can be shorter
+      // than Vitest's viewport, so bring the drop target into view during the drag.
+      target.scrollIntoView({ block: 'center' });
+      const bounds = target.getBoundingClientRect();
+      const to = bounds.left + 40;
+      clientY = bounds.top + offset;
       await fireEvent.pointerMove(window, { pointerId: 1, clientX: to, clientY });
       await fireEvent.pointerUp(window, { pointerId: 1, clientX: to, clientY });
     };

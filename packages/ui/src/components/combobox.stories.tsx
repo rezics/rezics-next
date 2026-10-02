@@ -180,6 +180,7 @@ export const Keyboard: Story = {
     await userEvent.keyboard('{ArrowDown}{Enter}');
     await waitFor(() => expect(input).toHaveValue('银河英雄传说 · Legend of the Galactic Heroes'));
     await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(input).not.toHaveAttribute('aria-activedescendant'));
   },
 };
 

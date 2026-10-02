@@ -105,11 +105,11 @@ export const InlineLoaderRerender: Story = {
     await fireEvent.click(canvas.getByRole('button', { name: 'Re-render loader' }));
     await expect(canvas.getByLabelText('Loader revision')).toHaveTextContent('1');
     await expect(inlineRequests).toHaveBeenCalledTimes(requestsBeforeRerender);
-    await expect(page.getByText('At least 2')).toBeVisible();
+    await waitFor(() => expect(page.getByText('At least 2')).toBeVisible());
     await expect(input).toHaveValue('星');
     await expect(page.getByRole('option', { name: '星 page 1, loader 0' })).toBeVisible();
     await userEvent.click(page.getByRole('button', { name: 'Show more' }));
-    await expect(await page.findByText('3 results')).toBeVisible();
+    await waitFor(() => expect(page.getByText('3 results')).toBeVisible());
     await expect(inlineRequests).toHaveBeenLastCalledWith({ q: '星', cursor: '2' }, 1);
     await expect(page.getByRole('option', { name: '星 page 0, loader 0' })).toBeVisible();
     await expect(page.getByRole('option', { name: '星 page 2, loader 1' })).toBeVisible();
@@ -121,13 +121,13 @@ export const TenThousand: Story = {
     const canvas = within(canvasElement);
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(canvas.getByRole('combobox'));
-    await expect(await page.findByText('At least 40')).toBeVisible();
+    await waitFor(() => expect(page.getByText('At least 40')).toBeVisible());
     const popup = canvasElement.ownerDocument.querySelector<HTMLElement>(
       '[data-slot="combobox-list"]',
     )!;
     popup.scrollTop = popup.scrollHeight;
     await fireEvent.scroll(popup);
-    await expect(await page.findByText('At least 80')).toBeVisible();
+    await waitFor(() => expect(page.getByText('At least 80')).toBeVisible());
     await userEvent.click(page.getByRole('option', { name: /Work 75 / }));
     await expect(canvas.getByRole('button', { name: 'Remove Work 75' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Exclude Work 75' }));
@@ -157,6 +157,9 @@ export const Single: Story = {
     await userEvent.click(await page.findByRole('option', { name: /Work 3 / }));
     await expect(canvas.queryByRole('button', { name: 'Remove Work 2' })).not.toBeInTheDocument();
     await expect(canvas.getByRole('button', { name: 'Remove Work 3' })).toBeVisible();
+    const input = canvas.getByRole('combobox');
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(input).not.toHaveAttribute('aria-activedescendant'));
   },
 };
 export const Slow: Story = {
@@ -165,7 +168,7 @@ export const Slow: Story = {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('combobox'));
     await waitFor(() => expect(page.getByText('Loading…')).toBeVisible());
-    await expect(await page.findByText('At least 40')).toBeVisible();
+    await waitFor(() => expect(page.getByText('At least 40')).toBeVisible());
   },
 };
 export const Failing: Story = {
@@ -175,7 +178,7 @@ export const Failing: Story = {
     await userEvent.click(within(canvasElement).getByRole('combobox'));
     await expect(await page.findByRole('alert')).toHaveTextContent('Couldn’t load choices.');
     await userEvent.click(page.getByRole('button', { name: 'Try again' }));
-    await expect(await page.findByText('At least 40')).toBeVisible();
+    await waitFor(() => expect(page.getByText('At least 40')).toBeVisible());
   },
 };
 export const CjkComposition: Story = {
@@ -193,7 +196,7 @@ export const CjkComposition: Story = {
     await expect(canvas.queryByRole('button', { name: /移除/ })).not.toBeInTheDocument();
     await fireEvent.compositionEnd(input, { data: '银河' });
     await waitFor(() => expect(page.getAllByRole('option')).toHaveLength(1));
-    await expect(page.getByText('1 项结果')).toBeVisible();
+    await waitFor(() => expect(page.getByText('1 项结果')).toBeVisible());
     await userEvent.keyboard('{ArrowDown}{Enter}{Escape}');
     await expect(canvas.getByRole('button', { name: '移除银河英雄传说' })).toBeVisible();
   },

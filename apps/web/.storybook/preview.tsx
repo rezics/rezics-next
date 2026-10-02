@@ -1,5 +1,6 @@
 import type { Decorator, Preview } from '@storybook/react-vite';
 import { useLayoutEffect } from 'react';
+import { spyOn } from 'storybook/test';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 import { messages as shell } from '../features/shell/messages.ts';
 import shellZhHans from '../features/shell/messages/zh-Hans.ts';
@@ -44,6 +45,17 @@ const withDocument: Decorator = (Story, { globals, parameters }) => {
 };
 
 const preview: Preview = {
+  // The iframe owns Storybook's address. App history updates (e.g. a saved
+  // manuscript revision) belong to the route stand-in, just like next/router.
+  beforeEach() {
+    const original = window.history.replaceState.bind(window.history);
+    const replaceState = spyOn(window.history, 'replaceState').mockImplementation((data, unused, url) => {
+      // Anchors still exercise deep links, while pathname/query stay on the iframe.
+      const target = new URL(url ?? window.location.href, window.location.href);
+      original(data, unused, `${window.location.pathname}${window.location.search}${target.hash}`);
+    });
+    return () => replaceState.mockRestore();
+  },
   decorators: [withDocument],
   parameters: {
     layout: 'fullscreen',

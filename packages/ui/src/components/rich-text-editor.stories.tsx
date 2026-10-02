@@ -1,11 +1,15 @@
 import { fromPlainText, normalizeDocument, withDocumentIds, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, userEvent as storybookUserEvent, waitFor, within } from 'storybook/test';
 import { Button } from './button.tsx';
 import { DocumentBody } from './document-body.tsx';
 import type { ImageUploader } from './editor-image.tsx';
 import { RichTextEditor } from './rich-text-editor.tsx';
+
+// Simulated contenteditable input mutates DOM ranges. Give ProseMirror time to
+// reconcile each keystroke before the next one uses that range in the preview.
+const userEvent = storybookUserEvent.setup({ delay: 20 });
 
 const richDocument = normalizeDocument({ version: 'rezics-document-v1', profile: 'blocks', doc: withDocumentIds({ type: 'doc', content: [
   { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: '雨夜 — a working manuscript' }] },
@@ -127,6 +131,7 @@ export const StudioManuscript: Story = {
     range.selectNodeContents(editor.querySelector('h2') ?? editor); range.collapse(true);
     window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
     await userEvent.type(editor, 'Preface ', { skipClick: true });
+    await expect(within(editor).getByRole('heading', { level: 2 })).toHaveTextContent('Preface 雨夜 — a working manuscript');
     await expect(canvas.queryByRole('alert')).toBeNull();
     await expect(Number(canvas.getByLabelText('Changes').textContent)).toBeGreaterThan(0);
     const savedDocument = JSON.parse(canvas.getByLabelText('Document JSON').textContent ?? '{}') as DocumentSnapshot;
@@ -183,6 +188,7 @@ export const RubyAndLink: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Ruby annotation' }));
     const page = within(canvasElement.ownerDocument.body);
     const dialog = await page.findByRole('dialog', { name: 'Ruby annotation' }, { timeout: 3000 });
+    await waitFor(() => expect(within(dialog).getByRole('textbox', { name: 'Base text' })).toHaveFocus());
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Base text' }), '漢');
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Pronunciation' }), 'ㄏㄢˋ');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }));
@@ -330,7 +336,9 @@ export const BlockActions: Story = {
     const more = async () => {
       const panel = await canvas.findByRole('toolbar', { name: 'Format text' });
       await userEvent.click(within(panel).getByRole('button', { name: 'More formatting' }));
-      return within(await canvas.findByRole('menu', { name: 'More formatting' }));
+      const menu = await canvas.findByRole('menu', { name: 'More formatting' });
+      await waitFor(() => expect(menu).toHaveFocus());
+      return within(menu);
     };
     select(1);
     let menu = await more();
@@ -381,7 +389,12 @@ export const LinkPopover: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const editor = await canvas.findByRole('textbox', { name: 'Document' });
-    await userEvent.click(editor.querySelector('a') as HTMLElement);
+    // A synthetic click does not place a native caret in the preview iframe.
+    // Put it inside the link, the state that opens the link card.
+    editor.focus();
+    const range = document.createRange();
+    range.setStart(editor.querySelector('a')!.firstChild!, 1); range.collapse(true);
+    window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
     const menu = await canvas.findByRole('group', { name: 'Link' });
     await expect(within(menu).getByText('https://example.test/old')).toBeInTheDocument();
     await expect(within(menu).getByRole('link', { name: 'Open link' })).toHaveAttribute('rel', 'noopener noreferrer');
@@ -481,6 +494,8 @@ export const TouchRuby: Story = {
     const drawer = await page.findByRole('dialog');
     await userEvent.click(within(drawer).getByRole('button', { name: 'Ruby annotation' }));
     const dialog = await page.findByRole('dialog', { name: 'Ruby annotation' }, { timeout: 3000 });
+    // Wait for autofocus before typing in the other field, or it can steal later keystrokes.
+    await waitFor(() => expect(within(dialog).getByRole('textbox', { name: 'Base text' })).toHaveFocus());
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Pronunciation' }), 'ㄏㄢˋ');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }));
     await expect(editor.querySelector('ruby rt')).toHaveTextContent('ㄏㄢˋ');

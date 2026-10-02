@@ -255,12 +255,22 @@ export const ListChangedOnShowMore: Story = {
 
 /** Signed in with Main's reader state (G-285): shelve from a cover's corner. */
 export const ShelvingFromDiscover: Story = {
-  args: { signedIn: true, readerActions: memoryReaderActions() },
+  args: { signedIn: true },
+  // A rerun starts with an unshelved Work, just like the first run.
+  render: args => <DiscoverView {...args} readerActions={memoryReaderActions()} />,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const favorites = canvas.getByRole('region', { name: 'Readers’ favorites' });
     await userEvent.click(within(favorites).getByRole('button', { name: 'Shelve “Pride and Prejudice”' }));
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Want to read' }));
+    const choice = await screen.findByRole('menuitemradio', { name: 'Want to read' });
+    // Ark ignores simulated hover when its input modality is still keyboard.
+    // Exercise keyboard selection and wait for the selected menu item instead.
+    await waitFor(() => expect(choice.closest('[role="menu"]')).toHaveFocus());
+    for (let step = 0; step < 3 && !choice.hasAttribute('data-highlighted'); step++) {
+      await userEvent.keyboard('{ArrowDown}');
+    }
+    await waitFor(() => expect(choice).toHaveAttribute('data-highlighted'));
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(within(favorites).getByRole('button', { name: 'Shelve “Pride and Prejudice” · Want to read' }))
       .toBeVisible());
   },

@@ -188,6 +188,12 @@ export function storyMain(options: StoryMainOptions = {}) {
   const revisions = new Map<string, FixtureBody & { resource: string; variant: string }>();
   const structures = new Map<string, Outline>();
   const calls: string[] = [];
+  const backup = () => structuredClone({ sequence, texts, drafts, publications, selections, variants, revisions, structures });
+  let baseline: ReturnType<typeof backup> | undefined;
+  function restoreMap<K, V>(target: Map<K, V>, saved: Map<K, V>) {
+    target.clear();
+    for (const [key, value] of saved) target.set(key, value);
+  }
   const wait = () => new Promise(resolve => setTimeout(resolve, options.delayMs ?? 30));
   const offline = async () => {
     await wait();
@@ -414,6 +420,17 @@ export function storyMain(options: StoryMainOptions = {}) {
   return {
     main: main as unknown as MainClient,
     calls,
+    /** Capture seeded data on the first run; restore an isolated copy on every rerun. */
+    reset() {
+      baseline ??= backup();
+      const saved = structuredClone(baseline);
+      sequence = saved.sequence;
+      restoreMap(texts, saved.texts); restoreMap(drafts, saved.drafts);
+      restoreMap(publications, saved.publications); restoreMap(selections, saved.selections);
+      restoreMap(variants, saved.variants); restoreMap(revisions, saved.revisions);
+      restoreMap(structures, saved.structures);
+      calls.length = 0;
+    },
     /** Seeds an existing text and returns its head. */
     seed: (text: string, body: string | DocumentSnapshot, language: string, work: string) => recordText(text, seedBody(body), language, work),
     /** Seeds a chapter's draft and returns its head (a bare revision ID, as Content names them). */

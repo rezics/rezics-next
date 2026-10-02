@@ -8,6 +8,7 @@ import {
 import { Portal } from '@ark-ui/react/portal';
 import { CheckIcon, ChevronsUpDownIcon, XIcon } from 'lucide-react';
 import type React from 'react';
+import { useLayoutEffect } from 'react';
 import { tv, type VariantProps } from 'tailwind-variants';
 import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
@@ -18,6 +19,16 @@ export const useCombobox = useArkComboboxContext;
 
 export const ComboboxContext = ArkCombobox.Context;
 
+function ClosedHighlight() {
+  const { open, highlightedValue, clearHighlightValue } = useCombobox();
+  // A pointer event during popup exit can highlight an option after Ark clears
+  // it. Closed popups unmount their options, so that ID must not stay on the input.
+  useLayoutEffect(() => {
+    if (!open && highlightedValue !== null) clearHighlightValue();
+  }, [open, highlightedValue, clearHighlightValue]);
+  return null;
+}
+
 export const Combobox: ArkCombobox.RootComponent = (props) => {
   // Not composite: the popup is a dialog and ComboboxList is the listbox, so the list
   // wrapper and the empty message sit in valid places for assistive technology.
@@ -26,6 +37,7 @@ export const Combobox: ArkCombobox.RootComponent = (props) => {
     openOnClick = true,
     lazyMount = true,
     unmountOnExit = true,
+    children,
     ...rest
   } = props;
 
@@ -37,7 +49,10 @@ export const Combobox: ArkCombobox.RootComponent = (props) => {
       openOnClick={openOnClick}
       unmountOnExit={unmountOnExit}
       {...rest}
-    />
+    >
+      <ClosedHighlight />
+      {children}
+    </ArkCombobox.Root>
   );
 };
 

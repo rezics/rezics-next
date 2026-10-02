@@ -27,7 +27,7 @@ const meta = {
   title: 'Studio/Write',
   component: TextEditor,
   parameters: { route: { pathname: '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/x/write' } },
-  beforeEach() { localStorage.clear(); },
+  beforeEach({ args }) { localStorage.clear(); args.story?.reset(); },
   render: ({ story: _story, ...props }: TextEditorProps & { story?: ReturnType<typeof storyMain> }) => <TextEditor {...props} />,
 } satisfies Meta<TextEditorProps & { story?: ReturnType<typeof storyMain> }>;
 export default meta;
@@ -75,7 +75,7 @@ export const FirstLines: Story = {
     const canvas = within(canvasElement);
     const editor = canvas.getByRole('textbox', { name: 'Text' });
     await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
-    await userEvent.type(editor, '第一章 雨夜');
+    await userEvent.type(editor, '第一章 雨夜', { delay: 20 });
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
     await expect(args.story!.calls).toEqual(['create']);
     await expect(canvas.getByRole('button', { name: 'Publish' })).toBeEnabled();

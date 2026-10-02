@@ -26,7 +26,7 @@ const meta = {
   title: 'Studio/Chapter',
   component: ChapterEditor,
   parameters: { route: { pathname: '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/x/chapters/y' } },
-  beforeEach() { localStorage.clear(); },
+  beforeEach({ args }) { localStorage.clear(); args.story?.reset(); },
   render: ({ story: _story, ...props }: Args) => <ChapterEditor {...props} />,
 } satisfies Meta<Args>;
 export default meta;
@@ -56,7 +56,7 @@ export const FirstDraft: Story = {
     await expect(editor).toHaveAttribute('lang', 'zh-Hans');
     await expect(canvas.getByRole('link', { name: 'Back to the chapters' })).toHaveTextContent('雨夜书店');
     await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
-    await userEvent.type(editor, '末班车到站时，整座站台只有她一个人。');
+    await userEvent.type(editor, '末班车到站时，整座站台只有她一个人。', { delay: 20 });
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
     await expect(args.story!.calls).toEqual(['draft']);
     await expect(canvas.getByText('18 characters')).toBeInTheDocument();
