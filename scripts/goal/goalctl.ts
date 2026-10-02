@@ -367,7 +367,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
   }
   if (isCodex(engine)) {
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
-    const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? 'fast';
+    const tier = process.env.GOAL_CODEX_SERVICE_TIER ?? codexServiceTier();
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
@@ -377,6 +377,12 @@ export function launchCommand(options: { id: string; effort: string; session: st
   return ['claude', ['-p', prompt, '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
     '--output-format', 'json']];
+}
+
+/** The manager switches Codex between `fast` and `default` by writing this state file (fast when absent). */
+function codexServiceTier(): string {
+  const file = join(stateDir, 'codex-service-tier');
+  return existsSync(file) ? readFileSync(file, 'utf8').trim() : 'fast';
 }
 
 /** Where a task's brief lives in its worktree; shared worktrees hold one brief per task. */
