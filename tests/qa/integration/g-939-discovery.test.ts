@@ -799,6 +799,25 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     expect(
       memberPopulation.items.find((item) => item.id === community.realm)?.readerCommunity,
     ).toBe(true);
+    expect(memberPopulation.items[0]!.id).toBe(community.realm);
+    const joinedFirst = await home.json<Page>(
+      await call(
+        `/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}&limit=1&${acting}`,
+        undefined,
+        reader.token,
+      ),
+    );
+    expect(joinedFirst.items.map((item) => item.id)).toEqual([community.realm]);
+    expect(joinedFirst.complete).toBe(false);
+    const joinedNext = await home.json<Page>(
+      await call(
+        `/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}&limit=1&${acting}&cursor=${joinedFirst.nextCursor}`,
+        undefined,
+        reader.token,
+      ),
+    );
+    expect(joinedNext.items.map((item) => item.id)).toEqual([GLOBAL_RATING_POPULATION_OWNER]);
+    expect(joinedNext.complete).toBe(true);
     const populationFirst = await home.json<Page>(
       await call(`/v1/rating-populations?target=${encodeURIComponent(publicWork.work)}&limit=1`),
     );
@@ -1005,8 +1024,54 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     expect(targetPopulations.items.map((item) => [item.id, item.ratingCount])).toEqual([
       [community.realm, 1],
     ]);
-    // Suitability is Access state: no graph mutation or graph cursor movement
-    // can be relied on to keep aggregate Concept usage from leaking it.
+    await deps.homePersonal.preferences(
+      principal,
+      {
+        actingSubject: readerAgent,
+        expectedRevision: (await deps.homePersonal.read(principal, readerAgent)).revision,
+        preferences: { ...defaultPreferences, recommendations: true },
+      },
+      randomUUID(),
+    );
+    await refresh();
+    await home.json(
+      await call(
+        '/v1/spaces',
+        {
+          profile: 'space-realm-v1',
+          name: `${token} lag`,
+          language: 'en',
+          capabilities: ['realm'],
+          actingSubject: author.actor,
+        },
+        author.token,
+      ),
+      201,
+    );
+    const pinnedConcepts = await home.json<Page<{ id: string; usageCount: number }>>(
+      await call(`/v1/discovery/concepts?q=${token}%20urban`),
+    );
+    expect(pinnedConcepts.stale).toBe(true);
+    expect(pinnedConcepts.items.find((item) => item.id === child.concept)?.usageCount).toBe(1);
+    const filteredLag = await home.json<{ result: Page }>(
+      await call('/v1/query', {
+        profile: 'resource-list-v1',
+        context: 'global',
+        scope: { kind: 'all' },
+        sort: 'newest',
+        limit: 64,
+        filter: { all: [{ facet: 'concept', any: [child.concept] }] },
+      }),
+    );
+    expect(filteredLag.result.stale).toBe(true);
+    expect(filteredLag.result.items.map((item) => item.id)).toContain(publicWork.work);
+    const followedLag = await home.json<Page<{ id: string; page: Page }>>(
+      await call(`/v1/discovery/sections?section=popular&${acting}`, undefined, reader.token),
+    );
+    expect(followedLag.stale).toBe(true);
+    expect(followedLag.items[0]!.page.items.map((item) => item.id)).toEqual([publicWork.work]);
+    // Access suitability also makes the projection stale. Retain its values
+    // until a fresh generation replaces them.
     await author.grant(`work:edit:${publicWork.work}`, 'work.edit');
     await home.json(
       await call(
@@ -1021,13 +1086,13 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         'PUT',
       ),
     );
-    const lagging = await home.json<
-      Page<{ id: string; usageCount: number | null }> & { stale: boolean }
-    >(await call(`/v1/discovery/concepts?q=${token}%20urban`));
+    const lagging = await home.json<Page<{ id: string; usageCount: number }> & { stale: boolean }>(
+      await call(`/v1/discovery/concepts?q=${token}%20urban`),
+    );
     expect(lagging.stale).toBe(true);
-    expect(lagging.items.find((item) => item.id === child.concept)?.usageCount).toBeNull();
+    expect(lagging.items.find((item) => item.id === child.concept)?.usageCount).toBe(1);
     const laggingResources = await query(undefined, undefined, 64, `${token} public`);
-    expect(laggingResources.items).toEqual([]);
+    expect(laggingResources.items.map((item) => item.id)).toEqual([publicWork.work]);
     expect(laggingResources.stale).toBe(true);
     // Isolated Access fixture: historical restrictions on unrelated identities
     // must not become a global inventory limit on a bounded Concept page.
@@ -1048,8 +1113,10 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     const restricted = await home.json<Page<{ id: string; usageCount: number }>>(
       await call(`/v1/discovery/concepts?q=${token}%20urban`),
     );
-    expect(restricted.items.find((item) => item.id === child.concept)?.usageCount).toBe(0);
-    expect((await query(undefined, undefined, 64, `${token} public`)).items).toEqual([]);
+    expect(restricted.items.find((item) => item.id === child.concept)?.usageCount).toBe(1);
+    expect(
+      (await query(undefined, undefined, 64, `${token} public`)).items.map((item) => item.id),
+    ).toEqual([publicWork.work]);
   } finally {
     await home.stop();
   }

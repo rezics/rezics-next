@@ -130,8 +130,7 @@ final class PublicNameProjection {
         // Visibility and lifecycle transitions remove dependent public names in
         // the same transaction. Object-index walks stream the owning inventory.
         for (Node subject : Set.copyOf(resources)) {
-            for (String predicate : Set.of("space", "conceptRealm")) {
-                if (predicate.equals("conceptRealm") && publicRealm(data, subject)) continue;
+            for (String predicate : Set.of("space")) {
                 var dependents = data.find(CURRENT, Node.ANY, p(predicate), subject);
                 try { while (dependents.hasNext()) resources.add(dependents.next().getSubject()); }
                 finally { org.apache.jena.atlas.iterator.Iter.close(dependents); }
@@ -146,6 +145,13 @@ final class PublicNameProjection {
             }
             if (!has(data, subject, "schemeState", p("Retired"))) continue;
             var concepts = data.find(CURRENT, Node.ANY, uri("http://www.w3.org/2004/02/skos/core#inScheme"), subject);
+            try { while (concepts.hasNext()) resources.add(concepts.next().getSubject()); }
+            finally { org.apache.jena.atlas.iterator.Iter.close(concepts); }
+        }
+        // Space changes also restore/remove the vocabulary of its Realm. Walk
+        // the newly collected capabilities, not only the initial validation focus.
+        for (Node subject : Set.copyOf(resources)) {
+            var concepts = data.find(CURRENT, Node.ANY, p("conceptRealm"), subject);
             try { while (concepts.hasNext()) resources.add(concepts.next().getSubject()); }
             finally { org.apache.jena.atlas.iterator.Iter.close(concepts); }
         }

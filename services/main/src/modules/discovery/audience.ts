@@ -60,6 +60,28 @@ export class DiscoveryAudienceStore {
     });
   }
 
+  /** The picker prioritizes joined Realms without loading the membership
+   * population. Each seek returns at most 64 identities plus one lookahead. */
+  joinedRealms(principal: VerifiedPrincipal, actor: string, after: string, limit: number) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 64)
+      throw new WorkReadUnavailable('Reader community batch exceeds its bound');
+    return controlRead(this.pool, async (client) => {
+      await followPrincipal(client, principal, actor);
+      return (
+        await client.query<{ id: string }>(
+          `SELECT m.owner_subject AS id
+        FROM access.membership m JOIN access.authority_subject s ON s.id=m.member_subject AND s.active
+        WHERE m.kind='realm' AND m.member_subject=$1 AND m.state='joined' AND m.owner_subject>$2
+          AND NOT EXISTS (SELECT 1 FROM access.membership_ban b WHERE b.kind='realm'
+            AND b.owner_subject=m.owner_subject AND b.member_subject=m.member_subject AND b.active
+            AND (b.expires_at IS NULL OR b.expires_at>clock_timestamp()))
+        ORDER BY m.owner_subject LIMIT $3`,
+          [actor, after, limit + 1],
+        )
+      ).rows;
+    });
+  }
+
   flags(principal: VerifiedPrincipal, actor: string, ids: readonly string[]) {
     if (ids.length > 64) throw new WorkReadUnavailable('Reader candidate batch exceeds its bound');
     return controlRead(this.pool, async (client) => {

@@ -219,11 +219,11 @@ The run retained `g-727-launch-restore.json` with both commands' complete phase
 and budget evidence. These are medium-fixture command measurements on the shared
 QA host; the manager's integrated exclusive run owns launch RPO/RTO qualification.
 
-## Offline Lucene rebuild
+## Online public-name and rating-population backfill
 
 Public-name and rating-population projection upgrades do not need this offline
 rebuild when the existing text index is healthy. Deploy Fuseki command module
-`0.5.35`, apply Access migrations `997`–`999` through
+`0.5.35`, apply Access migrations `1007`–`1009` through
 `task ops:migrate -- <private-env-file>`, and deploy Main from the same release.
 Run `task search:names:backfill -- --batches 64` on the saved stack; repeat
 until its JSON result has `complete: true`. For an isolated persistent QA stack,
@@ -236,9 +236,28 @@ one policy batch and logs a failure without preventing startup. Legacy Agent
 names remain withheld until their Access policies are known, and rating reads
 flag an incomplete counter backfill as stale. Use `--restart` only to rescan the
 current epoch; it retains graph receipts and does not duplicate rating counts.
-Finally activate a fresh Discovery generation (`discovery-source-v3`) through
-its generation-build/advance/activation API. Until then reads flag stale usage
-counts and withhold outdated classification matches.
+
+## Discovery projection rebuild
+
+After backfill, activate a fresh Discovery generation (`discovery-source-v3`)
+through its generation-build/advance/activation API. Until then reads serve the
+pinned generation's values with `stale: true`. With `work:read` and the Access
+recommendation-management grant:
+
+1. POST `/v1/discovery/generation-builds` with an `Idempotency-Key`, profile
+   `discovery-generation-build-v1`, an `actingSubject`, and basis
+   `{ "scope": "global", "realm": null, "context": null }`.
+2. POST `/v1/discovery/generations/{generation}/advance` with `actingSubject` and
+   the returned `expectedCheckpoint`; repeat with each new checkpoint until
+   `complete: true`. A concurrent change to an old Work can return 409; restart
+   the build from a current cut.
+3. GET `/v1/discovery/generations/{generation}?actingSubject=...` for
+   `activeHeadRevision`. POST `/v1/discovery/generation-activations` with a new
+   `Idempotency-Key`, profile `discovery-generation-activation-v1`,
+   `actingSubject`, `generation`, and that value as `expectedHeadRevision`.
+4. Repeat for each used Realm basis, with `scope: "realm"` and its Realm IRI.
+
+## Offline Lucene rebuild
 
 Treat text as unavailable after uncertain index state, I/O failure, analyzer
 change, bulk RDF load or unqualified restore. Reconcile exact Content revisions,

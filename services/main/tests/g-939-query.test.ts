@@ -11,6 +11,7 @@ import {
   WorkReadInvalid,
   WorkReadMoved,
 } from '../src/modules/work/read-session.ts';
+import { knownBrowsePrefix, realmBrowseOrder } from '../src/modules/query/resources.ts';
 
 const base: ResourceListQuery = {
   profile: 'resource-list-v1',
@@ -65,4 +66,37 @@ test('G939: list continuations reject another filter, graph epoch, or changed gr
   expect(() =>
     decodeReadCursor(cursor, ['public', 'query'], { ...position, dataEpoch: 'restored' }),
   ).toThrow(WorkReadMoved);
+});
+
+test('G939: filtered mixed-kind windows stop before an unseen higher candidate, including order ties', () => {
+  const work = Array.from({ length: 130 }, (_, i) => ({
+    id: `w${String(i).padStart(3, '0')}`,
+    order: String(1000 - i),
+  }));
+  const realms = Array.from({ length: 70 }, (_, i) => ({
+    id: `r${String(i).padStart(3, '0')}`,
+    order: realmBrowseOrder(String(-(1200 - i))),
+  }));
+  const firstWork = work.slice(0, 64),
+    firstRealm = realms.slice(0, 64);
+  const first = knownBrowsePrefix(
+    [...firstWork, ...firstRealm],
+    [firstWork.at(-1)!, firstRealm.at(-1)!],
+  );
+  // If this entire Realm window is excluded, emitting Work 1000 now would
+  // wrongly precede the next Realm 1136. Refill it before emitting the Works.
+  expect(first).toEqual(firstRealm);
+  const second = knownBrowsePrefix([...firstWork, ...realms.slice(64)], [firstWork.at(-1)!]);
+  expect(second.slice(0, 6)).toEqual(realms.slice(64));
+  expect(second.slice(6)).toEqual(firstWork);
+  expect(realmBrowseOrder('1200')).toBe('1200');
+  expect(
+    knownBrowsePrefix(
+      [
+        { id: 'z', order: '10' },
+        { id: 'a', order: '10' },
+      ],
+      [{ id: 'b', order: '10' }],
+    ),
+  ).toEqual([{ id: 'a', order: '10' }]);
 });

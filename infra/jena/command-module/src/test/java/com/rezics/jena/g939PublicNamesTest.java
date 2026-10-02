@@ -76,6 +76,32 @@ public class g939PublicNamesTest {
                 assertFalse(data.contains(PUBLIC,nameUnit((Node)pair[0],(String)pair[1]),p("publicTitle"),Node.ANY));
         } finally { data.abort(); data.end(); data.close(); }
     }
+    @Test public void spacePolicyChangesRestoreItsRealmsConceptNames() {
+        var data=DatasetGraphFactory.createTxnMem();
+        data.begin(ReadWrite.WRITE);
+        try {
+            Node space=id(1),realm=id(2),concept=id(3);
+            name(data,space,"Space"); name(data,realm,"Realm");
+            data.add(CURRENT,space,p("realmCapability"),realm);
+            data.add(CURRENT,space,p("disclosure"),p("Public"));
+            data.add(CURRENT,realm,p("space"),space); data.add(CURRENT,realm,p("realmState"),p("Active"));
+            data.add(CURRENT,concept,RDF.type.asNode(),uri("http://www.w3.org/2004/02/skos/core#Concept"));
+            data.add(CURRENT,concept,p("conceptState"),p("Active")); data.add(CURRENT,concept,p("conceptRealm"),realm);
+            data.add(CURRENT,concept,uri("http://www.w3.org/2004/02/skos/core#prefLabel"),NodeFactory.createLiteralLang("Realm concept","en"));
+            var plan=new CommandPolicy.Plan(null,Set.of(),Set.of(space.getURI()),Set.of(),Set.of(),false,false,true);
+            for (String listing:List.of("listed","unlisted","listed")) {
+                data.deleteAny(CURRENT,space,p("listing"),Node.ANY);
+                data.add(CURRENT,space,p("listing"),NodeFactory.createLiteralString(listing));
+                PublicNameProjection.refresh(data,plan,"urn:receipt:listing",List.of(),List.of());
+                assertEquals(listing.equals("listed"),data.contains(PUBLIC,nameUnit(concept,"concept"),p("publicTitle"),Node.ANY));
+            }
+            for (String disclosure:List.of("Private","Public")) {
+                data.deleteAny(CURRENT,space,p("disclosure"),Node.ANY); data.add(CURRENT,space,p("disclosure"),p(disclosure));
+                PublicNameProjection.refresh(data,plan,"urn:receipt:disclosure",List.of(),List.of());
+                assertEquals(disclosure.equals("Public"),data.contains(PUBLIC,nameUnit(concept,"concept"),p("publicTitle"),Node.ANY));
+            }
+        } finally { data.abort(); data.end(); data.close(); }
+    }
     @Test public void moreThan64NamesAreSelectedDeterministicallyAndDeletedUnitsRefreshTheirWork() {
         var data=DatasetGraphFactory.createTxnMem();
         data.begin(ReadWrite.WRITE);

@@ -6,3 +6,7 @@ CREATE INDEX IF NOT EXISTS discovery_concept_membership
 CREATE INDEX IF NOT EXISTS discovery_topic_work
   ON access.discovery_entry (generation_id, work, term)
   WHERE work_type = '';
+-- Reader population priority is a keyset seek, not a sort of all memberships.
+CREATE INDEX IF NOT EXISTS reader_joined_realm_page
+  ON access.membership (member_subject, owner_subject)
+  WHERE kind = 'realm' AND state = 'joined';

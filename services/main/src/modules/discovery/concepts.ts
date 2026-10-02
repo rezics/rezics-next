@@ -33,7 +33,7 @@ export const conceptSearchItem = t.Object({
   id: readId,
   name: readName,
   broader: t.Array(t.Object({ id: readId, name: readName }), { maxItems: 16 }),
-  usageCount: t.Nullable(t.Integer({ minimum: 0 })),
+  usageCount: t.Integer({ minimum: 0 }),
   followed: t.Boolean(),
 });
 export const conceptSearchPage = t.Object({
@@ -347,10 +347,6 @@ export async function readConceptSearch(
     profile: 'concept-search-v1' as const,
     sourcePosition: session.position,
     stale,
-    ...listResult(
-      items.map((item) => ({ ...item, usageCount: stale ? null : item.usageCount })),
-      next,
-      prior.count,
-    ),
+    ...listResult(items, next, prior.count),
   };
 }

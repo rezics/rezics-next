@@ -50,6 +50,7 @@ export const discoverySectionsPage = t.Object({
   profile: t.Literal('discovery-sections-v1'),
   personalized: t.Boolean(),
   sourcePosition: readPosition,
+  stale: t.Boolean(),
 });
 export interface DiscoverySectionsQuery extends ListRequest {
   section?: 'popular' | 'communities' | 'sites';
@@ -108,10 +109,9 @@ export async function readDiscoverySections(
     .filter((_, index) => disclosed[index] === 'visible')
     .map((row) => row.concept!.value);
   const topicBasis = topics.length ? await conceptCountBasis(session) : null;
-  const topicSelection =
-    topicBasis && !topicBasis.active.stale
-      ? { generation: topicBasis.active.generation_id, concepts: topics }
-      : undefined;
+  const topicSelection = topicBasis
+    ? { generation: topicBasis.active.generation_id, concepts: topics }
+    : undefined;
   const languages = personalized ? reader!.signals.languages : [];
   const sections = input.section ? [input.section] : (['popular', 'communities', 'sites'] as const);
   const binding = [
@@ -159,10 +159,6 @@ export async function readDiscoverySections(
       if (section === 'popular') {
         if (!session.deps.recommendations)
           throw new WorkReadUnavailable('Public ranking owner is unavailable');
-        if (topics.length && !topicSelection) {
-          next = null;
-          break;
-        }
         const ranked = await session.deps.recommendations.page(
           { public: true, principal: null, actingSubject: null },
           {
@@ -308,10 +304,18 @@ export async function readDiscoverySections(
   }
   await fenceDiscoveryReader(session, reader, input.personalization !== false);
   if (index) await fenceLabelIndex(session, index);
+  const final = topicBasis
+    ? await session.deps.discovery!.active(
+        topicBasis.basis,
+        session.position,
+        topicBasis.active.generation_id,
+      )
+    : null;
   return {
     profile: 'discovery-sections-v1' as const,
     personalized,
     sourcePosition: session.position,
+    stale: !!(topicBasis?.active.stale || final?.stale),
     ...listResult(items, null),
   };
 }

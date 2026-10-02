@@ -41,7 +41,7 @@ export interface RatingPopulationsQuery extends ListRequest {
  * Reads never enumerate observation heads. One counter per Context/target is
  * summed into its population; legacy migration incompleteness is explicit. */
 export const RATING_POPULATIONS_COST = {
-  candidates: 65,
+  candidates: 512,
   page: 64,
   graphCalls: WORK_READ_COST.graphCalls,
   deadlineMs: WORK_READ_COST.deadlineMs,
@@ -70,7 +70,7 @@ export async function readRatingPopulations(
     limit = input.limit ?? 20;
   const index = q ? await labelIndexReady(session) : null;
   const binding = [
-    'rating-populations-v1',
+    'rating-populations-v2',
     target,
     main,
     q,
@@ -80,14 +80,23 @@ export async function readRatingPopulations(
     session.viewer,
   ];
   const cursor = decodeReadCursor(input.cursor, binding, session.position);
-  let prior: { count: string; seen: number } = { count: '0', seen: 0 };
+  let prior: { phase: 'joined' | 'count'; count: string; seen: number } = {
+    phase: reader ? 'joined' : 'count',
+    count: '0',
+    seen: 0,
+  };
   if (cursor) {
     try {
       prior = JSON.parse(cursor.order);
     } catch {
       throw new WorkReadInvalid('Rating population cursor is invalid');
     }
-    if (!/^\d+$/.test(prior.count) || !Number.isSafeInteger(prior.seen) || prior.seen < 0) {
+    if (
+      !['joined', 'count'].includes(prior.phase) ||
+      !/^\d+$/.test(prior.count) ||
+      !Number.isSafeInteger(prior.seen) ||
+      prior.seen < 0
+    ) {
       throw new WorkReadInvalid('Rating population cursor is invalid');
     }
   }
@@ -99,9 +108,11 @@ export async function readRatingPopulations(
     1,
   );
   const stale = projection[0]?.complete?.value !== 'true';
-  const rows = await session.query(
-    `SELECT ?population ?count WHERE {
+  const readCounts = (ask: number, after: string, count: string, joined?: string[]) =>
+    session.query(
+      `SELECT ?population ?count WHERE {
     { SELECT ?population (SUM(?availableCount) AS ?count) WHERE {
+      ${joined ? `VALUES ?population { ${joined.map(iri).join(' ')} }` : ''}
       GRAPH <urn:rezics:graph:rating-population-counts> {
         ?counter rv:populationTarget ${iri(main ?? target)} ; rv:populationContext ?context ;
           rv:availableRatingCount ?availableCount . FILTER(?availableCount > 0) }
@@ -132,21 +143,84 @@ export async function readRatingPopulations(
           ?contextReceipt a rv:OperationReceipt ; rv:ratingContextRevision ?contextHead ; rv:outcome rv:Succeeded } }
       } GROUP BY ?population HAVING(SUM(?availableCount)>0) }
       ${
-        cursor
-          ? `FILTER(?count < ${lit(prior.count)}^^<http://www.w3.org/2001/XMLSchema#integer>
-        || (?count = ${lit(prior.count)}^^<http://www.w3.org/2001/XMLSchema#integer>
-          && STR(?population) > ${lit(cursor.after)}))`
+        after
+          ? `FILTER(?count < ${lit(count)}^^<http://www.w3.org/2001/XMLSchema#integer>
+        || (?count = ${lit(count)}^^<http://www.w3.org/2001/XMLSchema#integer>
+          && STR(?population) > ${lit(after)}))`
           : ''
       }
-    } ORDER BY DESC(?count) STR(?population) LIMIT ${limit + 1}`,
-    limit + 1,
-  );
-  const page = rows.slice(0, limit),
+    } ORDER BY ${joined ? '' : 'DESC(?count)'} STR(?population) LIMIT ${ask + 1}`,
+      ask + 1,
+    );
+  type Position = { phase: 'joined' | 'count'; after: string; count: string };
+  const state: Position = { phase: prior.phase, after: cursor?.after ?? '', count: prior.count };
+  const selected: { row: Awaited<ReturnType<typeof readCounts>>[number]; position: Position }[] =
+    [];
+  let scanned = 0,
+    exhausted = false;
+  // Seek joined identities first; the second phase excludes joined candidates
+  // in bounded Access batches. The cursor retains the phase and its own key.
+  while (selected.length <= limit && scanned < RATING_POPULATIONS_COST.candidates) {
+    const ask = Math.min(64, RATING_POPULATIONS_COST.candidates - scanned);
+    if (state.phase === 'joined') {
+      const joined = await session.deps.discoveryAudience!.joinedRealms(
+        reader!.principal,
+        reader!.actor,
+        state.after,
+        ask,
+      );
+      const ids = joined.slice(0, ask).map((row) => row.id);
+      const counts = ids.length ? await readCounts(ask, '', '0', ids) : [];
+      const byId = new Map(counts.map((row) => [row.population!.value, row]));
+      for (const id of ids) {
+        state.after = id;
+        scanned++;
+        const row = byId.get(id);
+        if (row) selected.push({ row, position: { ...state } });
+        if (selected.length > limit) break;
+      }
+      if (selected.length > limit) break;
+      if (joined.length <= ask) Object.assign(state, { phase: 'count', after: '', count: '0' });
+    } else {
+      const rows = await readCounts(ask, state.after, state.count);
+      const window = rows.slice(0, ask);
+      const flags = reader
+        ? await session.deps.discoveryAudience!.flags(
+            reader.principal,
+            reader.actor,
+            window.map((row) => row.population!.value),
+          )
+        : new Map();
+      for (const row of window) {
+        state.after = row.population!.value;
+        state.count = row.count!.value;
+        scanned++;
+        if (!flags.get(state.after)?.community) selected.push({ row, position: { ...state } });
+        if (selected.length > limit) break;
+      }
+      if (selected.length > limit) break;
+      if (rows.length <= ask) {
+        exhausted = true;
+        break;
+      }
+    }
+  }
+  const page = selected.slice(0, limit).map((item) => item.row),
     ids = page.map((row) => row.population!.value);
   const realms = ids.filter((id) => id !== GLOBAL_RATING_POPULATION_OWNER);
   const flags = reader
     ? await session.deps.discoveryAudience!.flags(reader.principal, reader.actor, realms)
     : new Map();
+  if (
+    reader &&
+    selected
+      .slice(0, limit)
+      .some(
+        (item) =>
+          !!flags.get(item.row.population!.value)?.community !== (item.position.phase === 'joined'),
+      )
+  )
+    throw new WorkReadMoved('Reader communities changed');
   const summaries = new Map(
     (await session.summaries(realms)).map((summary) => [summary.reference, summary]),
   );
@@ -199,16 +273,15 @@ export async function readRatingPopulations(
   }
   await fenceDiscoveryReader(session, reader);
   if (index) await fenceLabelIndex(session, index);
-  const last = page.at(-1);
-  const next =
-    rows.length > limit && last
-      ? encodeReadCursor(
-          binding,
-          session.position,
-          last.population!.value,
-          JSON.stringify({ count: last.count!.value, seen: prior.seen + items.length }),
-        )
-      : null;
+  const last = selected.length > limit ? selected[limit - 1]!.position : state;
+  const next = !exhausted
+    ? encodeReadCursor(
+        binding,
+        session.position,
+        last.after,
+        JSON.stringify({ phase: last.phase, count: last.count, seen: prior.seen + items.length }),
+      )
+    : null;
   return {
     profile: 'rating-populations-v1' as const,
     target,

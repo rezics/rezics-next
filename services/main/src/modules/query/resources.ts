@@ -28,6 +28,7 @@ import {
 } from '../search/labels.ts';
 import type { ResourceCard, ResourceCondition, ResourceListPlan } from './resource-contract.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
+import type { DiscoveryReadGeneration } from '../discovery/store.ts';
 
 /** Ownership establishes the read path; descriptive rdf:type only filters it.
  * Public catalogue reads never use private grants, including a reader's own. */
@@ -110,6 +111,27 @@ interface Candidate {
   kind: ResourceCard['kind'];
   order: string;
 }
+const compareBrowse = (a: Pick<Candidate, 'id' | 'order'>, b: Pick<Candidate, 'id' | 'order'>) =>
+  BigInt(a.order) > BigInt(b.order)
+    ? -1
+    : BigInt(a.order) < BigInt(b.order)
+      ? 1
+      : a.id.localeCompare(b.id);
+/** A descending merge can emit only the prefix reached by every unfinished
+ * source. Otherwise a filtered window can expose a low row before an unseen
+ * higher row in another kind. Identity breaks ties at the same frontier. */
+export function knownBrowsePrefix<T extends Pick<Candidate, 'id' | 'order'>>(
+  candidates: T[],
+  unfinishedTails: readonly Pick<Candidate, 'id' | 'order'>[],
+) {
+  const frontier = [...unfinishedTails].sort(compareBrowse)[0];
+  return candidates
+    .sort(compareBrowse)
+    .filter((row) => !frontier || compareBrowse(row, frontier) <= 0);
+}
+/** Realm directory uses an ascending signed seek key. Browse uses the positive
+ * owner order shared with native name directories and Discovery Works. */
+export const realmBrowseOrder = (rank: string) => (rank.startsWith('-') ? rank.slice(1) : rank);
 interface PageCursor {
   after?: LabelAfter;
   seen: number;
@@ -239,13 +261,14 @@ export async function conceptResourceMatches(
   candidates: readonly Candidate[],
   conditions: readonly ResourceCondition[],
   realm?: string,
+  pinned?: DiscoveryReadGeneration,
 ) {
   const filters = conditions.filter((condition) => condition.facet === 'concept');
   if (!filters.length) return new Set(candidates.map((row) => row.id));
   const resolved = await resolveConcepts(session, [
     ...new Set(filters.flatMap((row) => row.values)),
   ]);
-  const { basis, active } = await conceptCountBasis(session, realm);
+  const active = pinned ?? (await conceptCountBasis(session, realm)).active;
   const works = candidates.filter((row) => row.kind === 'work').map((row) => row.id);
   const terms = [...new Set([...resolved.values()].flatMap((row) => row.interpretations))];
   const membership = await session.deps.discovery!.termMembership(active, works, terms);
@@ -283,8 +306,7 @@ export async function conceptResourceMatches(
       )
       .map((row) => row.id),
   );
-  const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
-  return active.stale || final.stale ? new Set<string>() : matched;
+  return matched;
 }
 
 export async function readResourceList(session: WorkReadSession, plan: ResourceListPlan) {
@@ -355,6 +377,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
   const { basis, active } = await conceptCountBasis(session, realm);
   const index = q ? await labelIndexReady(session) : null;
   let cache: (Candidate & { source: string; key: string })[] = [];
+  const tails = new Map<string, Candidate>();
   let fetched = 0;
   while (items.length < limit && scanned < QUERY_COST.candidateRows) {
     let candidates: (Candidate & { source: string; key: string })[] = [];
@@ -396,10 +419,23 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
       cache = [];
       more = true;
     } else {
-      for (const kind of kinds.filter((kind) => !state.done.includes(kind))) {
+      // Refill the frontier's kind first when only one bounded seek remains.
+      for (const kind of kinds
+        .filter((kind) => !state.done.includes(kind))
+        .sort((a, b) =>
+          tails.has(a) && tails.has(b)
+            ? compareBrowse(tails.get(a)!, tails.get(b)!)
+            : tails.has(a)
+              ? -1
+              : tails.has(b)
+                ? 1
+                : 0,
+        )) {
         if (fetched >= QUERY_COST.candidateRows) break;
         const sourceLimit = Math.min(64, QUERY_COST.candidateRows - fetched);
         const seek = state.seeks[kind];
+        const start = candidates.length;
+        let complete = false;
         if (kind === 'work') {
           const rows = await session.deps.discovery!.resourcePage(
             active,
@@ -407,6 +443,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
             seek ? { key: seek.key, work: seek.id } : undefined,
           );
           const window = rows.slice(0, sourceLimit);
+          complete = rows.length <= sourceLimit;
           candidates.push(
             ...window.map((row) => ({
               id: row.work,
@@ -463,6 +500,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
               sourceLimit,
               position.after,
             );
+            complete = !page.more;
             candidates.push(
               ...page.rows.map((row) => ({
                 id: row.id,
@@ -485,12 +523,13 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
             cursor: '',
             seek,
           });
+          complete = !page.next;
           candidates.push(
             ...page.rows.map((row) => ({
               id: row.realm,
               kind,
               summary: row.realm,
-              order: String(-BigInt(row.rank)),
+              order: realmBrowseOrder(row.rank),
               source: kind,
               key: `${page.position}:${row.rank}`,
             })),
@@ -504,6 +543,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
             sourceLimit,
             seek ? (JSON.parse(seek.key) as DirectoryAfter) : undefined,
           );
+          complete = !page.more;
           candidates.push(
             ...page.rows.map((row) => ({
               id: row.id,
@@ -516,19 +556,18 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
           );
           if (!page.rows.length) state.done.push(kind);
         }
+        const last = candidates.length > start ? candidates.at(-1)! : undefined;
+        if (last && !complete) tails.set(kind, last);
+        else tails.delete(kind);
         fetched += sourceLimit;
       }
-      candidates.sort((a, b) =>
-        BigInt(a.order) > BigInt(b.order)
-          ? -1
-          : BigInt(a.order) < BigInt(b.order)
-            ? 1
-            : a.id.localeCompare(b.id),
+      candidates = knownBrowsePrefix(
+        candidates,
+        [...tails].filter(([kind]) => !state.done.includes(kind)).map(([, tail]) => tail),
       );
       more = state.done.length < kinds.length;
     }
     if (!candidates.length) {
-      more = false;
       break;
     }
     const window = candidates.slice(0, Math.min(64, QUERY_COST.candidateRows - scanned));
@@ -580,7 +619,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
           (counts.get(row.id) ?? 0) === 0,
       );
     }
-    const matched = await conceptResourceMatches(session, projected, conditions, realm);
+    const matched = await conceptResourceMatches(session, projected, conditions, realm, active);
     const cards = new Map(
       (
         await resourceCards(

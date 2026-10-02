@@ -517,6 +517,18 @@
     ]
   },
   {
+    "operation": "GET /v1/realms/{realm}/join-requests",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-requests response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
     "operation": "GET /v1/realms/{realm}/members",
     "fields": [
       "request.cursor"
