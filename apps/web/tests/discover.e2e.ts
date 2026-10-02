@@ -1,60 +1,108 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
-// A fresh QA stack has no active discovery generation, and may or may not
-// have a standing rating question depending on which specs ran first. Earlier
-// browser cases may create Works, making a built generation out of date.
-
-const preparedOrListed = /being prepared|Nothing here yet|Couldn’t load|Readers’ favorites|Recently added/;
-
-test('discover shows shelves by meaning, scope only when chosen, and says honestly when lists are not ready', async ({ page }) => {
+test('Discover browses every resource type and keeps search in the selected tab', async ({
+  page,
+}) => {
   await page.goto('/en/discover');
-  await expect(page.getByRole('heading', { level: 1, name: 'Discover' })).toBeVisible();
-  const community = page.getByRole('navigation', { name: 'Whose picks' });
-  await expect(community.getByRole('link', { name: 'Everyone' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('main')).toContainText(preparedOrListed);
-  // Lists that cannot show are named once, never as a column of identical boxes.
-  expect(await page.locator('main').getByText(/being prepared/).count()).toBeLessThanOrEqual(1);
-  // The model's words stay out of a reader's page.
-  await expect(page.locator('main')).not.toContainText(/Global|Realm|Context/);
+  const main = page.locator('main');
+  await expect(main.getByRole('heading', { level: 1, name: 'Discover' })).toBeVisible();
+  await expect(main.getByRole('searchbox', { name: 'Search everything' })).toBeVisible();
+  await expect(main.getByRole('combobox', { name: 'Topics', exact: true })).toBeVisible();
+  const types = page.getByRole('navigation', { name: 'Type' });
+  await expect(types.getByRole('link', { name: 'All', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  // A fresh QA stack may have no Discovery generation; unavailable sections stay explicit.
+  await expect(main).toContainText(/Couldn’t load this list\.|No matches\.|results/);
+  for (const [tab, label] of [
+    ['works', 'Works'],
+    ['communities', 'Communities'],
+    ['sites', 'Sites'],
+    ['people', 'People'],
+    ['lists', 'Lists'],
+    ['topics', 'Topics'],
+  ] as const) {
+    await types.getByRole('link', { name: label, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/en/discover\\?tab=${tab}$`));
+    await expect(types.getByRole('link', { name: label, exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(main).toContainText(/Couldn’t load this list\.|No matches\.|results/);
+  }
+  await types.getByRole('link', { name: 'Works', exact: true }).click();
+  await main.getByRole('searchbox', { name: 'Search everything' }).fill('stars and stories');
+  await main.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect
+    .poll(() => Object.fromEntries(new URL(page.url()).searchParams))
+    .toEqual({ tab: 'works', q: 'stars and stories' });
+  await expect(types.getByRole('link', { name: 'Works', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
 
-  await page.getByRole('navigation', { name: 'Kind of work' }).getByRole('link', { name: 'Recipes' }).click();
-  await expect(page).toHaveURL(/\/en\/discover\?type=recipe$/);
-  await expect(page.getByRole('region', { name: 'Recipes to try' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Recently added' })).toHaveCount(0);
-
-  await community.getByRole('link', { name: 'Your ratings' }).click();
-  await expect(page).toHaveURL(/\/en\/discover\?scope=mine&type=recipe$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Your ratings' })).toBeVisible();
-  await expect(page.locator('main')).toContainText(/Ratings aren’t open here yet|Sign in to see works you rated/);
+  await page.goto('/en/r?q=readers');
+  await expect(page).toHaveURL(/\/en\/discover\?/);
+  const query = new URL(page.url()).searchParams;
+  expect(query.get('tab') ?? query.get('type')).toBe('communities');
+  expect(query.get('q')).toBe('readers');
+  await expect(types.getByRole('link', { name: 'Communities', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
 });
 
-test('Mine asks a signed-out reader to sign in; bad links and unknown communities are named', async ({ page }) => {
-  const context = randomUUID();
-  await page.goto(`/en/discover?scope=mine&context=${context}`);
-  await expect(page.getByRole('region', { name: 'Works you rated' })).toContainText('Sign in to see works you rated');
-  await expect(page.getByRole('link', { name: 'Sign in', exact: true }).first())
-    .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/discover?scope=mine&context=${context}`)}`);
-
-  await page.goto(`/en/discover?scope=realm&realm=${randomUUID()}`);
-  await expect(page.getByRole('heading', { name: 'This community isn’t public or doesn’t exist' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Browse everything' })).toHaveAttribute('href', '/en/discover');
-
-  await page.goto('/en/discover?type=podcast');
-  await expect(page.getByRole('heading', { name: 'This link doesn’t lead anywhere' })).toBeVisible();
+test('Discover refuses unsupported legacy filters and preserves an unavailable community scope', async ({
+  page,
+}) => {
+  for (const query of ['scope=mine', 'type=book', 'type=podcast', 'tab=unknown', 'ci=invalid']) {
+    await page.goto(`/en/discover?${query}`);
+    await expect(page.locator('main').getByRole('alert')).toHaveText(
+      'This link doesn’t lead anywhere',
+    );
+    await expect(
+      page.getByRole('link', { name: 'Browse everything', exact: true }),
+    ).toHaveAttribute('href', '/en/discover');
+  }
+  const realm = randomUUID();
+  await page.goto(`/en/discover?scope=realm&realm=${realm}`);
+  await expect(page.locator('main').getByRole('alert')).toContainText('Couldn’t load this list.');
+  expect(new URL(page.url()).searchParams.get('realm')).toBe(realm);
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeVisible();
 });
 
-test('discover fits a phone without horizontal overflow, in English and Chinese, light and dark', async ({ page, context }, info) => {
-  for (const [locale, heading] of [['en', 'Discover'], ['zh-Hans', '发现']] as const) {
+test('Discover fits desktop and phone widths in English and Chinese, light and dark', async ({
+  page,
+  context,
+}, info) => {
+  for (const [locale, heading] of [
+    ['en', 'Discover'],
+    ['zh-Hans', '发现'],
+  ] as const) {
     for (const theme of ['light', 'dark'] as const) {
-      await context.addCookies([{ name: 'rezics_theme', value: theme, url: new URL('/', info.project.use.baseURL).toString() }]);
-      for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      await context.addCookies([
+        {
+          name: 'rezics_theme',
+          value: theme,
+          url: new URL('/', info.project.use.baseURL).toString(),
+        },
+      ]);
+      for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 390, height: 844 },
+      ]) {
         await page.setViewportSize(viewport);
         await page.goto(`/${locale}/discover`);
         await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-        expect(overflow, `${locale} ${theme} ${viewport.width}`).toBe(false);
-        await page.screenshot({ path: info.outputPath(`discover-${locale}-${theme}-${viewport.width}.png`), fullPage: true });
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+          .toBe(false);
+        await page.screenshot({
+          path: info.outputPath(`discover-${locale}-${theme}-${viewport.width}.png`),
+          fullPage: true,
+        });
       }
     }
   }

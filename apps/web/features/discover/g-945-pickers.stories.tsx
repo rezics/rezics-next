@@ -17,9 +17,11 @@ import de from '../studio/messages/de.ts';
 import fr from '../studio/messages/fr.ts';
 import es from '../studio/messages/es.ts';
 import { TopicPicker, type TopicItem } from './topic-picker.tsx';
-import { browseId, fixturePage, fixtureTopicLoader, fixtureListLoader } from './browse-fixtures.ts';
+import { browseId, fixtureTopicLoader, fixtureListLoader } from './browse-fixtures.ts';
 import { PositionControl } from '../wiki/position-control.tsx';
 import { copyOf } from '../wiki/messages.ts';
+import { positionPickerPage } from '../wiki/position-picker.ts';
+import { browseMessages } from './browse-messages.ts';
 
 const translations = { en: {}, 'zh-Hant': zhHant, 'zh-Hans': zhHans, ja, ko, de, fr, es };
 const communities: RealmPickerItem[] = Array.from({ length: 2400 }, (_, index) => ({
@@ -31,11 +33,31 @@ const communities: RealmPickerItem[] = Array.from({ length: 2400 }, (_, index) =
     reviewMode: 'mandatory',
   },
 }));
+const positions = Array.from({ length: 2400 }, (_, index) => ({
+  occurrence: browseId(index + 1),
+  work: browseId(9999),
+  structure: browseId(9998),
+  revision: browseId(9997),
+  parent: browseId(9998),
+  segmentKey: 'main',
+  orderKey: String(index),
+  role: 'chapter' as const,
+  target: null,
+  labels: [{ value: `Chapter ${index + 1}`, language: 'en' }],
+  ordinal: index + 1,
+}));
 function Pickers({ locale, slow, fail }: { locale: UiLocale; slow?: boolean; fail?: boolean }) {
   const [value, setValue] = useState<EntityPickerSelection<TopicItem>[]>([]);
   const [loadTopics] = useState(() => fixtureTopicLoader({ slow, fail }));
   const [loadPopulations] = useState(() => fixtureListLoader(communities, { slow, fail }));
   const [loadRealms] = useState(() => fixtureListLoader(communities, { slow, fail }));
+  const [loadPositions] = useState(() =>
+    fixtureListLoader(
+      positionPickerPage({ items: positions, nextCursor: null, complete: true }, '', locale, null)
+        .items,
+      { slow, fail },
+    ),
+  );
   const [main] = useState(() => storyMain().main);
   return (
     <Providers>
@@ -85,23 +107,7 @@ function Pickers({ locale, slow, fail }: { locale: UiLocale; slow?: boolean; fai
           progress={{ href: '?position=mine', current: false, resolved: null }}
           everything={{ href: '?position=all', current: true }}
           more
-          nextCursor="20"
-          load={async (cursor) => {
-            const page = fixturePage(
-              Array.from({ length: 2400 }, (_, index) => ({
-                id: browseId(index + 1),
-                label: {
-                  value: `Chapter ${index + 1}`,
-                  lang: 'en',
-                  dir: 'ltr' as const,
-                },
-                href: `?position=${browseId(index + 1).slice(-36)}`,
-                current: false,
-              })),
-              Number(cursor),
-            );
-            return { items: page.items, nextCursor: page.nextCursor };
-          }}
+          load={loadPositions}
         />
       </div>
     </Providers>
@@ -129,6 +135,21 @@ export const Thousands: Story = {
     await userEvent.click(picker);
     await userEvent.click(await screen.findByRole('button', { name: 'Show more' }));
     await expect(await screen.findByRole('option', { name: 'Community 40' })).toBeVisible();
+  },
+};
+export const SearchWikiPosition: Story = {
+  async play({ canvasElement }) {
+    const bar = within(within(canvasElement).getByRole('region', { name: 'Reading position' }));
+    await userEvent.click(bar.getByRole('button', { name: 'Showing everything' }));
+    const search = await screen.findByRole('combobox', { name: browseMessages.en.searchChapters });
+    await userEvent.click(search);
+    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }));
+    await expect(await screen.findByRole('option', { name: 'Chapter 40' })).toBeVisible();
+    await userEvent.clear(search);
+    await userEvent.type(search, 'Chapter 2400');
+    await expect(await screen.findByRole('option', { name: 'Chapter 2400' })).toBeVisible();
+    await expect(screen.queryByRole('option', { name: 'Chapter 40' })).toBeNull();
+    await expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
   },
 };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' } };

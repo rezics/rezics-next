@@ -37,9 +37,7 @@ export const browseMessages = defineMessages({
     match: 'Match topics',
     matchAll: 'All',
     matchAny: 'Any',
-    browseChapters: 'Browse chapters',
-    chapterSearchUnavailable:
-      'Chapter search is not available yet. Browse the chapters in reading order.',
+    searchChapters: 'Search chapters',
   },
   'zh-Hant': {
     all: '全部',
@@ -77,8 +75,7 @@ export const browseMessages = defineMessages({
     match: '符合主題',
     matchAll: '全部',
     matchAny: '任一',
-    browseChapters: '瀏覽章節',
-    chapterSearchUnavailable: '目前無法搜尋章節。請依閱讀順序瀏覽章節。',
+    searchChapters: '搜尋章節',
   },
   'zh-Hans': {
     all: '全部',
@@ -116,8 +113,7 @@ export const browseMessages = defineMessages({
     match: '匹配主题',
     matchAll: '全部',
     matchAny: '任一',
-    browseChapters: '浏览章节',
-    chapterSearchUnavailable: '暂不支持章节搜索。请按阅读顺序浏览章节。',
+    searchChapters: '搜索章节',
   },
   ja: {
     all: 'すべて',
@@ -155,8 +151,7 @@ export const browseMessages = defineMessages({
     match: 'トピックの条件',
     matchAll: 'すべて',
     matchAny: 'いずれか',
-    browseChapters: '章を閲覧',
-    chapterSearchUnavailable: '章の検索はまだ利用できません。読む順番に章を閲覧してください。',
+    searchChapters: '章を検索',
   },
   ko: {
     all: '전체',
@@ -194,9 +189,7 @@ export const browseMessages = defineMessages({
     match: '주제 조건',
     matchAll: '모두',
     matchAny: '하나 이상',
-    browseChapters: '챕터 둘러보기',
-    chapterSearchUnavailable:
-      '챕터 검색은 아직 사용할 수 없습니다. 읽기 순서대로 챕터를 둘러보세요.',
+    searchChapters: '챕터 검색',
   },
   de: {
     all: 'Alle',
@@ -234,9 +227,7 @@ export const browseMessages = defineMessages({
     match: 'Themen abgleichen',
     matchAll: 'Alle',
     matchAny: 'Beliebige',
-    browseChapters: 'Kapitel durchsehen',
-    chapterSearchUnavailable:
-      'Die Kapitelsuche ist noch nicht verfügbar. Sieh die Kapitel in Lesereihenfolge durch.',
+    searchChapters: 'Kapitel suchen',
   },
   fr: {
     all: 'Tout',
@@ -274,9 +265,7 @@ export const browseMessages = defineMessages({
     match: 'Correspondance des sujets',
     matchAll: 'Tous',
     matchAny: 'Un ou plusieurs',
-    browseChapters: 'Parcourir les chapitres',
-    chapterSearchUnavailable:
-      'La recherche de chapitres n’est pas encore disponible. Parcourez-les dans l’ordre de lecture.',
+    searchChapters: 'Rechercher un chapitre',
   },
   es: {
     all: 'Todo',
@@ -314,8 +303,6 @@ export const browseMessages = defineMessages({
     match: 'Coincidencia de temas',
     matchAll: 'Todos',
     matchAny: 'Cualquiera',
-    browseChapters: 'Explorar capítulos',
-    chapterSearchUnavailable:
-      'La búsqueda de capítulos aún no está disponible. Explóralos en orden de lectura.',
+    searchChapters: 'Buscar capítulos',
   },
 });
