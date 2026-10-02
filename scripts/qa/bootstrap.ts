@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
@@ -17,7 +18,7 @@ async function migrateOwner(owner: 'access' | 'relay', dir: string) {
   const db = new Client({ connectionString: ownerUrls[owner] });
   await db.connect();
   try {
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: join(root, dir) })].sort()) {
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: join(root, dir) })].sort(compareMigrationPaths)) {
       await db.query(readFileSync(join(root, dir, file), 'utf8'));
     }
   } finally { await db.end(); }

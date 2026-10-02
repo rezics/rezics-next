@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { compareMigrationPaths, migrationVersion } from '../lib/migration-order.ts';
 import { Pool, type PoolClient } from 'pg';
 
 export const migrationDirectories = {
@@ -15,11 +16,11 @@ export function migrationRecords(root: string, owner: SchemaOwner) {
   const directory = migrationDirectories[owner];
   const files = readdirSync(join(root, directory))
     .filter((name) => name.endsWith('.sql'))
-    .sort();
+    .sort(compareMigrationPaths);
   const versions = new Set<number>();
   return files.map((name) => {
-    const version = Number(name.slice(0, 3));
-    if (!/^\d{3}_[a-z0-9_]+\.sql$/.test(name) || version < 1 || versions.has(version)) {
+    const version = migrationVersion(name);
+    if (versions.has(version)) {
       throw new Error(`Invalid ${owner} migration: ${name}`);
     }
     versions.add(version);

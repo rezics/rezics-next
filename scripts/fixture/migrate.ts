@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { Client, Pool } from 'pg';
 import { migrateContent } from '../../services/content/src/migrate.ts';
 import { root, run } from './stack.ts';
@@ -15,7 +16,7 @@ async function migrateTracked(url: string, directory: string): Promise<string[]>
   try {
     await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
       name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-    for (const file of readdirSync(join(root, directory)).filter(name => name.endsWith('.sql')).sort()) {
+    for (const file of readdirSync(join(root, directory)).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths)) {
       const key = `${directory}/${file}`;
       await client.query('BEGIN');
       try {

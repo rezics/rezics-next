@@ -176,7 +176,11 @@ export async function discloseInventory(env: WorkActivationEnvironment, targets:
         SELECT ?work ?head ?owningWork ?owningHead WHERE {
         VALUES ?work { ${batch.map(iri).join(' ')} }
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
-        OPTIONAL { {
+        OPTIONAL {
+          # OPTIONAL's right side is evaluated independently; bind the batch here
+          # so ownership lookup never scans unrelated chapter occurrences.
+          VALUES ?work { ${batch.map(iri).join(' ')} }
+          {
           { GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork }
             BIND(?work AS ?owningWork) }
           UNION { GRAPH ${iri(GRAPHS.current)} { ?work a ?ownerType ; rv:work ?owningWork .

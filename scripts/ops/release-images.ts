@@ -49,6 +49,7 @@ const runtimeWorkspaceRoots = [
 const runtimeArtifacts = [
   'scripts/ops/migrate.ts',
   'scripts/ops/production-env.ts',
+  'scripts/lib/migration-order.ts',
   'scripts/dev/release-manifest.ts',
   'scripts/dev/seed/open-library-fixtures.ts',
   'apps/web/features/config/env.ts',

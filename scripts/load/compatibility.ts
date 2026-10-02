@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { compareMigrationPaths } from '../lib/migration-order.ts';
 
 const fixed = [
   'generated/model/manifest.json',
@@ -24,7 +25,7 @@ export function loadCompatibility(root: string): { digest: string; files: Record
   const files: Record<string, string> = {};
   const paths = [...fixed, ...migrationDirectories.flatMap(directory =>
     readdirSync(join(root, directory)).filter(file => file.endsWith('.sql'))
-      .map(file => `${directory}/${file}`))].sort();
+      .map(file => `${directory}/${file}`))].sort(compareMigrationPaths);
   const overall = createHash('sha256');
   for (const path of paths) {
     const digest = createHash('sha256').update(readFileSync(join(root, path))).digest('hex');
@@ -43,8 +44,8 @@ export function compatibleLoadStorage(source: LoadCompatibility | undefined,
   if (!source?.files || !/^[0-9a-f]{64}$/.test(source.digest)) return false;
   const sourceFiles = Object.fromEntries(Object.entries(source.files)
     .filter(([path]) => !oldCodeOnlyInputs.has(path)));
-  const currentPaths = Object.keys(current.files).sort();
-  const sourcePaths = Object.keys(sourceFiles).sort();
+  const currentPaths = Object.keys(current.files).sort(compareMigrationPaths);
+  const sourcePaths = Object.keys(sourceFiles).sort(compareMigrationPaths);
   return currentPaths.length === sourcePaths.length
     && currentPaths.every((path, index) => path === sourcePaths[index]
       && sourceFiles[path] === current.files[path]);

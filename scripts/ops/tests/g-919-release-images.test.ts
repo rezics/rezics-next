@@ -50,6 +50,7 @@ function fixture() {
     'account',
     'content',
     'model',
+    'document',
     'zone-sdk',
     'direct',
     'leaf',
@@ -85,6 +86,7 @@ function fixture() {
   for (const path of [
     'scripts/ops/migrate.ts',
     'scripts/ops/production-env.ts',
+    'scripts/lib/migration-order.ts',
     'scripts/dev/seed/open-library-fixtures.ts',
     'apps/web/features/config/env.ts',
     'apps/accounts/features/config/env.ts',
@@ -135,6 +137,7 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
     '@test/account',
     '@test/content',
     '@test/direct',
+    '@test/document',
     '@test/leaf',
     '@test/main',
     '@test/model',
@@ -163,6 +166,7 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
   expect(existsSync(join(options.context, 'packages/dev/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'apps/frontend/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/openapi/main/public.json'))).toBe(true);
+  expect(existsSync(join(options.context, 'scripts/lib/migration-order.ts'))).toBe(true);
   expect(JSON.parse(readFileSync(join(options.context, 'release.json'), 'utf8'))).toEqual({
     sourceCommit: options.revision,
     base: 'test-base',

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { type Corpus, FIXTURE_FORMAT, IMPORT_SEQUENCE, sampleIndices, sha256, stable,
   workAt } from './corpus.ts';
 import type { FixtureOwner } from './owners/types.ts';
@@ -45,7 +46,7 @@ export interface FixtureManifest extends FixtureManifestCore {
 }
 
 function fileDigests(root: string, paths: string[]): Record<string, string> {
-  return Object.fromEntries(paths.sort().map(path => [path, sha256(readFileSync(join(root, path)))]));
+  return Object.fromEntries(paths.sort(compareMigrationPaths).map(path => [path, sha256(readFileSync(join(root, path)))]));
 }
 
 export function migrationInventory(root: string): Record<string, string> {
@@ -105,11 +106,11 @@ export function restoreCompatibility(manifest: FixtureManifestCore, current: {
   for (const [path, digest] of Object.entries(manifest.migrations)) {
     if (current.migrations[path] !== digest) reasons.push(`applied migration changed: ${path}`);
   }
-  for (const path of Object.keys(current.migrations).sort()) {
+  for (const path of Object.keys(current.migrations).sort(compareMigrationPaths)) {
     if (Object.hasOwn(manifest.migrations, path)) continue;
     const directory = path.slice(0, path.lastIndexOf('/'));
     const later = Object.keys(manifest.migrations).some(applied =>
-      applied.startsWith(`${directory}/`) && applied > path);
+      applied.startsWith(`${directory}/`) && compareMigrationPaths(applied, path) > 0);
     if (later) reasons.push(`migration inserted before applied files: ${path}`);
     else pendingMigrations.push(path);
   }

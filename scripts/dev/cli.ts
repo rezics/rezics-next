@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { createServer } from 'node:net';
+import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
@@ -335,7 +336,7 @@ async function migrateApps(apps: Record<string, string>): Promise<void> {
     ['ACCOUNT_RELAY_DATABASE_URL', 'services/main/migrations/relay'],
   ] as const) {
     const base = join(root, directory);
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: base })].sort()) {
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: base })].sort(compareMigrationPaths)) {
       await migrateSql(apps[database], join(base, file), `${directory}/${file}`);
     }
   }

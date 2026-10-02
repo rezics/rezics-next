@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
   renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { migrateOwners } from '../ops/migrate.ts';
 import { parseOptions, type StackOptions } from './config.ts';
 import { installRelease } from './install.ts';
@@ -17,7 +18,7 @@ const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'package.
   '.yarnrc.yml', 'yarn.lock',
   // Main imports this adapter even when local fixture fetching is disabled.
   'scripts/dev/seed/open-library-fixtures.ts', 'scripts/ops/migrate.ts',
-  'scripts/ops/production-env.ts', 'apps/web/features/config/env.ts',
+  'scripts/ops/production-env.ts', 'scripts/lib/migration-order.ts', 'apps/web/features/config/env.ts',
   'apps/accounts/features/config/env.ts'] as const;
 
 interface ArtifactManifest {
@@ -87,7 +88,7 @@ export function buildReleaseArtifact(): string {
   try {
     for (const path of inputs) copyInput(stage, path);
     for (const directory of migrationDirectories) {
-      for (const name of readdirSync(join(root, directory)).filter(name => name.endsWith('.sql')).sort()) {
+      for (const name of readdirSync(join(root, directory)).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths)) {
         copyInput(stage, join(directory, name));
       }
     }

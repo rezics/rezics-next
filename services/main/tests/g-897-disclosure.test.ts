@@ -45,8 +45,8 @@ function fixture() {
       epoch: term('epoch'), sequence: term('1'),
     }] } };
     if (query.includes('SELECT ?work ?head')) {
-      const refs = [...query.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)]
-        .map(match => match[0].slice(1, -1));
+      const refs = [...new Set([...query.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)]
+        .map(match => match[0].slice(1, -1)))];
       return { results: { bindings: refs.map(work => ({ work: term(work), head: term(id(11)),
         ...(work === id(2) ? { owningWork: term(id(1)), owningHead: term(id(11)) } : {}) })) } };
     }

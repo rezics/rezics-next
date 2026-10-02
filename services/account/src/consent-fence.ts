@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
+import { compareMigrationPaths } from '../../../scripts/lib/migration-order.ts';
 import type { Pool, PoolClient } from 'pg';
 import { currentInstallationIn } from './installations.ts';
 
@@ -76,8 +77,8 @@ const MIGRATION_DIRECTORY = new URL('../migrations/', import.meta.url);
  * Every idempotent Account migration is reapplied in file-name order in one
  * transaction; numbered files may leave gaps. */
 export async function installConsentRefreshFence(pool: Pool): Promise<void> {
-  const sql = readdirSync(MIGRATION_DIRECTORY).filter(file => /^\d{3}_[a-z0-9_]+\.sql$/.test(file))
-    .sort().map(file => readFileSync(new URL(file, MIGRATION_DIRECTORY), 'utf8'));
+  const sql = readdirSync(MIGRATION_DIRECTORY).filter(file => /^\d{3,}_[a-z0-9_]+\.sql$/.test(file))
+    .sort(compareMigrationPaths).map(file => readFileSync(new URL(file, MIGRATION_DIRECTORY), 'utf8'));
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

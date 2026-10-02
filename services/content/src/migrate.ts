@@ -1,18 +1,16 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { compareMigrationPaths, migrationVersion } from '../../../scripts/lib/migration-order.ts';
 import type { Pool } from 'pg';
 
 function migrations(): Array<{ version: number; sql: string }> {
   const directory = join(import.meta.dir, '../migrations');
-  const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort();
+  const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths);
   if (!files.length) throw new Error('Content migrations are missing');
   // Versions strictly increase; gaps are allowed because parallel owner work reserves number ranges.
   let previous = 0;
   return files.map(name => {
-    if (!/^\d{3}_[a-z0-9_]+\.sql$/.test(name)) {
-      throw new Error(`Content migration filename is invalid: ${name}`);
-    }
-    const version = Number(name.slice(0, 3));
+    const version = migrationVersion(name);
     if (version <= previous) throw new Error(`Content migration sequence repeats a version at ${name}`);
     previous = version;
     return { version, sql: readFileSync(join(directory, name), 'utf8') };
