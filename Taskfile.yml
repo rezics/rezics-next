@@ -363,7 +363,59 @@ tasks:
     cmds:
       - bun scripts/generate.ts --check
 
+  toolchain:inventory:
+    desc: Regenerate the toolchain inventory from manifests and root commands.
+    cmds:
+      - python3 scripts/documentation/toolchain_inventory.py --write
+
   # Data, load and operations
+
+  dataset:fetch:
+    desc: Explicitly capture complete real-world series into the external local dataset store.
+    cmds:
+      - bun scripts/datasets/cli.ts fetch {{.CLI_ARGS}}
+
+  dataset:verify:
+    desc: Verify an external dataset snapshot and all referenced local bytes without network access.
+    cmds:
+      - bun scripts/datasets/cli.ts verify {{.CLI_ARGS}}
+
+  dataset:import:
+    desc: Import a captured dataset through existing public APIs and write the Markdown URL index.
+    cmds:
+      - bun scripts/datasets/cli.ts import {{.CLI_ARGS}}
+
+  dataset:bootstrap-admin:
+    desc: Create and authorize the dedicated local dataset administrator without resetting existing data.
+    cmds:
+      - bun scripts/datasets/bootstrap-cli.ts {{.CLI_ARGS}}
+
+  dataset:bootstrap-model:
+    desc: Align the local fixture model generation with the current build while preserving all prior data and revisions.
+    cmds:
+      - bun scripts/datasets/model-bootstrap.ts {{.CLI_ARGS}}
+
+  dataset:test:
+    desc: Run the opt-in offline real-dataset conformance suite.
+    cmds:
+      - bun scripts/datasets/cli.ts test {{.CLI_ARGS}}
+
+  dataset:typecheck:
+    desc: Type-check the independent local dataset tools.
+    cmds:
+      - node_modules/.bin/tsc --noEmit -p scripts/datasets/tsconfig.json
+
+  dataset:check:
+    desc: Check the dataset tools types, lint and formatting without capturing or importing data.
+    cmds:
+      - task: dataset:typecheck
+      - node_modules/.bin/oxlint --format=unix scripts/datasets tests/qa/unit/dataset-*.test.ts
+      - node_modules/.bin/oxfmt --check scripts/datasets tests/qa/unit/dataset-*.test.ts
+
+  dataset:format:
+    desc: Format the local dataset tools and their unit tests.
+    cmds:
+      - node_modules/.bin/oxfmt scripts/datasets tests/qa/unit/dataset-*.test.ts
 
   fixture:build:
     desc: Build a deterministic background corpus into owner storage.

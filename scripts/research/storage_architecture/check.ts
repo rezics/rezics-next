@@ -10,6 +10,7 @@ const backendSources = [
   'packages/observability',
   'scripts/api',
   'scripts/dev',
+  'scripts/datasets',
   'scripts/fixtures',
   'scripts/goal',
   'scripts/load',
@@ -38,6 +39,7 @@ const commands: string[][] = [
     : []),
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/load/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/dev/tsconfig.json'],
+  ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/datasets/tsconfig.json'],
   ['bun', 'node_modules/typescript/bin/tsc', '--project', 'scripts/goal/tsconfig.json'],
   [
     'bun',
@@ -59,6 +61,7 @@ const commands: string[][] = [
     'scripts/load',
     'scripts/api',
     'scripts/fixtures',
+    'scripts/datasets',
     'scripts/documentation',
     'scripts/operations',
     'scripts/research',
