@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./address": "./src/address/index.ts",
+    "./address/sid": "./src/address/sid.ts",
+    "./address/slug": "./src/address/slug.ts",
+    "./address/names": "./src/address/names.ts"
   },
   "dependencies": {
     "@rezics/wiki-toolkit": "workspace:*",
