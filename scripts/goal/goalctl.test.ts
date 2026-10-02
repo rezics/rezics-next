@@ -42,6 +42,13 @@ describe('goalctl briefs', () => {
 describe('goalctl claims', () => {
   const parsed = parseBrief(brief);
 
+  test('Next.js dynamic folders in claims are literal directories', () => {
+    expect(pathsOverlap('apps/web/app/[locale]/[handle]/**', 'apps/web/app/[locale]/following/**')).toBe(false);
+    expect(pathsOverlap('apps/web/app/[locale]/[handle]/**', 'apps/web/app/[locale]/[handle]/page.tsx')).toBe(true);
+    expect(pathsOverlap('apps/web/app/[locale]/z/[[...path]]/**', 'apps/web/app/[locale]/z/**')).toBe(true);
+    expect(pathsOverlap('apps/web/app/[locale]/r/[realm]/[...path]/**', 'apps/web/app/[locale]/r/[realm]/about/**')).toBe(false);
+  });
+
   test('migration ranges compare numerically past 999', () => {
     expect(rangesOverlap('services/main/migrations/access:998-1002', 'services/main/migrations/access:1000-1003')).toBe(true);
     expect(rangesOverlap('services/main/migrations/access:990-999', 'services/main/migrations/access:1000-1003')).toBe(false);

@@ -157,6 +157,11 @@ function segmentRegex(segment: string): RegExp {
 // Route folders such as `[locale]` are claimed as `[[]locale]` or `\\[locale\\]`;
 // map those escaped brackets to stand-in characters so they compare as literals.
 function literalBrackets(segment: string): string {
+  // A whole Next.js dynamic folder (`[handle]`, `[...path]`, `[[...path]]`) names a
+  // literal directory; claims never use it as a one-character class.
+  if (/^\[\[?(?:\.\.\.)?[A-Za-z][\w-]*\]\]?$/.test(segment)) {
+    return segment.replaceAll('[', '\u0001').replaceAll(']', '\u0002');
+  }
   const escaped = segment.replace(/\[\[\]|\\\[/g, '\u0001').replace(/\[\]\]|\\\]/g, '\u0002');
   return escaped.includes('[') ? escaped : escaped.replaceAll(']', '\u0002');
 }
