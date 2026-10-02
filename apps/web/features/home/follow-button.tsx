@@ -5,7 +5,7 @@ import { useFeed } from '../feed/feed-context.tsx';
 
 /** Home uses the same relationship commands and state as headers, posts and the follows manager. */
 export function FollowButton({ target, kind, realm, label, followLabel, followedLabel, name }: {
-  target: string; kind: 'realm' | 'zone'; realm: string; label: string; followLabel: string; followedLabel: string;
+  target: string; kind: string; realm: string; label: string; followLabel: string; followedLabel: string;
   failedLabel: string;
   name?: string;
 }) {

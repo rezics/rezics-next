@@ -49,6 +49,12 @@ const meta = {
   args: { which: 'open', locale: 'en' },
   parameters: { route: { pathname: '/en/r/fiction' } },
   render: (args, { globals }) => <Page {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+  async afterEach(context) {
+    if (import.meta.env.VITE_G944_CAPTURE !== '1') return;
+    const { page } = await import('vitest/browser');
+    await document.fonts.ready;
+    await page.screenshot({ path: `../../../../.temp/g-944/screenshots/${context.id}.png` });
+  },
 } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -7,7 +7,7 @@ export function followedCommunity(item: Follow): Community | null {
   return { id: item.id, kind: item.kind === 'space' ? 'realm' : 'resource', person: item.kind === 'agent', realm: item.realm ?? undefined,
     name: item.name.value, language: item.name.language, direction: item.name.direction, icon: item.icon,
     href: item.href, activity: item.newSince?.state === 'new' || item.newSince?.state === 'more-unverified' ? 'new'
-      : item.newSince ? 'none' : 'unknown' };
+      : item.newSince?.state === 'none' ? 'none' : 'unknown' };
 }
 const joinedCommunity = (item: Membership): Community | null => !item.available || !item.name ? null
   : { id: item.space ?? item.realm, realm: item.realm, kind: 'realm', name: item.name.value, language: item.name.language,

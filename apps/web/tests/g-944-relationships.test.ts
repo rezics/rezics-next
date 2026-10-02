@@ -3,7 +3,7 @@ import { mainRelationships, RelationshipError } from '../features/relationships/
 import { fixtureFollow, memoryRelationships, target, actor } from '../features/relationships/fixtures.ts';
 import { relationshipSource } from '../features/relationships/list.ts';
 import { messages } from '../features/relationships/messages.ts';
-import { pinnedCommunities, spaceCommunities } from '../features/shell/communities-relationships.ts';
+import { followedCommunity, pinnedCommunities, spaceCommunities } from '../features/shell/communities-relationships.ts';
 import { uiLocales } from '../i18n/define.ts';
 
 function fakeMain() {
@@ -81,6 +81,9 @@ test('G-944: cancelled and superseded queries cannot publish old inventory resul
 });
 
 test('G-944: pinned traversal stops at the first unpinned row, and Spaces coalesce Realm/Zone membership without losing continuation', async () => {
+  const projecting = fixtureFollow(10);
+  projecting.newSince!.state = 'projecting';
+  expect(followedCommunity(projecting)?.activity).toBe('unknown');
   const rows = Array.from({ length: 45 }, (_, i) => ({ ...fixtureFollow(i + 10), pinPosition: i < 25 ? i : null }));
   const memory = memoryRelationships(rows);
   const pinned = await pinnedCommunities(memory.api, '', null);

@@ -48,7 +48,8 @@ function RelationshipsScene({ state, locale }: { state: State; locale: UiLocale 
     relationships: { actingSubject: signedIn ? actor : null, hasFollows: state === 'failed-read' ? null : memory.follows.size > 0,
       pinned: null, spaces: null } };
   return <AppShell locale={locale} messages={shellCopy[locale]} theme="light" navCollapsed={false} signedIn={signedIn}
-    account={<a href="/auth/start">{messages[locale].signIn}</a>} communities={<CommunityNav data={data} api={memory.api} />}>
+    account={signedIn ? <span lang="en" className="max-w-36 truncate text-sm">Ada Lovelace</span>
+      : <a href="/auth/start">{messages[locale].signIn}</a>} communities={<CommunityNav data={data} api={memory.api} />}>
     <FollowingManager locale={locale} signedIn={signedIn} actingSubject={actor} signInHref="/auth/start" api={memory.api} />
   </AppShell>;
 }
@@ -103,7 +104,7 @@ export const PhoneManager: Story = { globals: { viewport: { value: 'phone' } },
     await within(canvasElement).findByText('Community 29');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   } };
-export const PhoneManagerGerman: Story = { ...PhoneManager, args: { locale: 'de' } };
+export const PhoneManagerGerman: Story = { ...PhoneManager, args: { locale: 'de' }, globals: { locale: 'de', viewport: { value: 'phone' } } };
 export const BulkSelection: Story = {
   async play({ canvasElement }) {
     const inventory = within(within(canvasElement).getByRole('region', { name: 'Following' }));
@@ -162,10 +163,15 @@ export const SharedControls: Story = { render: () => <Controls />,
     await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: 'All' }));
     await expect(await canvas.findByRole('button', { name: 'Notifications: All' })).toBeVisible();
     await expect(lastMemory.follows.get(target(10))?.source).toBe('library');
+    await waitFor(() => expect(within(document.body).queryByRole('menu')).toBeNull());
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Relationship options · 中文网络小说' })).not.toBeDisabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Relationship options · 中文网络小说' }));
     const unpin = await within(document.body).findByRole('menuitem', { name: 'Unpin' });
     await waitFor(() => expect(unpin).toBeVisible());
-    await userEvent.click(unpin);
+    await waitFor(() => expect(within(document.body).getByRole('menu')).toHaveFocus());
+    await userEvent.keyboard('{ArrowDown}');
+    await waitFor(() => expect(unpin).toHaveAttribute('data-highlighted'));
+    await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(lastMemory.calls.filter(call => call.operation === 'batch')).toHaveLength(2));
     await waitFor(() => expect(lastMemory.follows.get(target(10))?.pinPosition).toBeNull());
     await expect(lastMemory.follows.get(target(10))?.source).toBe('library');
@@ -174,31 +180,31 @@ export const SharedControls: Story = { render: () => <Controls />,
     await userEvent.click(canvas.getByRole('button', { name: 'Watch' }));
     await expect(await canvas.findByRole('button', { name: 'Notifications: Participating' })).toBeVisible();
   } };
-export const SignedOutTraditionalChinese: Story = { args: { state: 'signed-out', locale: 'zh-Hant' } };
-export const EmptyTraditionalChinese: Story = { args: { state: 'empty', locale: 'zh-Hant' } };
-export const ThousandsTraditionalChinese: Story = { args: { state: 'thousands', locale: 'zh-Hant' } };
-export const FailedReadTraditionalChinese: Story = { args: { state: 'failed-read', locale: 'zh-Hant' } };
-export const SignedOutSimplifiedChinese: Story = { args: { state: 'signed-out', locale: 'zh-Hans' } };
-export const EmptySimplifiedChinese: Story = { args: { state: 'empty', locale: 'zh-Hans' } };
-export const ThousandsSimplifiedChinese: Story = { args: { state: 'thousands', locale: 'zh-Hans' } };
-export const FailedReadSimplifiedChinese: Story = { args: { state: 'failed-read', locale: 'zh-Hans' } };
-export const SignedOutJapanese: Story = { args: { state: 'signed-out', locale: 'ja' } };
-export const EmptyJapanese: Story = { args: { state: 'empty', locale: 'ja' } };
-export const ThousandsJapanese: Story = { args: { state: 'thousands', locale: 'ja' } };
-export const FailedReadJapanese: Story = { args: { state: 'failed-read', locale: 'ja' } };
-export const SignedOutKorean: Story = { args: { state: 'signed-out', locale: 'ko' } };
-export const EmptyKorean: Story = { args: { state: 'empty', locale: 'ko' } };
-export const ThousandsKorean: Story = { args: { state: 'thousands', locale: 'ko' } };
-export const FailedReadKorean: Story = { args: { state: 'failed-read', locale: 'ko' } };
-export const SignedOutGerman: Story = { args: { state: 'signed-out', locale: 'de' } };
-export const EmptyGerman: Story = { args: { state: 'empty', locale: 'de' } };
-export const ThousandsGerman: Story = { args: { state: 'thousands', locale: 'de' } };
-export const FailedReadGerman: Story = { args: { state: 'failed-read', locale: 'de' } };
-export const SignedOutFrench: Story = { args: { state: 'signed-out', locale: 'fr' } };
-export const EmptyFrench: Story = { args: { state: 'empty', locale: 'fr' } };
-export const ThousandsFrench: Story = { args: { state: 'thousands', locale: 'fr' } };
-export const FailedReadFrench: Story = { args: { state: 'failed-read', locale: 'fr' } };
-export const SignedOutSpanish: Story = { args: { state: 'signed-out', locale: 'es' } };
-export const EmptySpanish: Story = { args: { state: 'empty', locale: 'es' } };
-export const ThousandsSpanish: Story = { args: { state: 'thousands', locale: 'es' } };
-export const FailedReadSpanish: Story = { args: { state: 'failed-read', locale: 'es' } };
+export const SignedOutTraditionalChinese: Story = { args: { state: 'signed-out', locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
+export const EmptyTraditionalChinese: Story = { args: { state: 'empty', locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
+export const ThousandsTraditionalChinese: Story = { args: { state: 'thousands', locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
+export const FailedReadTraditionalChinese: Story = { args: { state: 'failed-read', locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
+export const SignedOutSimplifiedChinese: Story = { args: { state: 'signed-out', locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
+export const EmptySimplifiedChinese: Story = { args: { state: 'empty', locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
+export const ThousandsSimplifiedChinese: Story = { args: { state: 'thousands', locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
+export const FailedReadSimplifiedChinese: Story = { args: { state: 'failed-read', locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
+export const SignedOutJapanese: Story = { args: { state: 'signed-out', locale: 'ja' }, globals: { locale: 'ja' } };
+export const EmptyJapanese: Story = { args: { state: 'empty', locale: 'ja' }, globals: { locale: 'ja' } };
+export const ThousandsJapanese: Story = { args: { state: 'thousands', locale: 'ja' }, globals: { locale: 'ja' } };
+export const FailedReadJapanese: Story = { args: { state: 'failed-read', locale: 'ja' }, globals: { locale: 'ja' } };
+export const SignedOutKorean: Story = { args: { state: 'signed-out', locale: 'ko' }, globals: { locale: 'ko' } };
+export const EmptyKorean: Story = { args: { state: 'empty', locale: 'ko' }, globals: { locale: 'ko' } };
+export const ThousandsKorean: Story = { args: { state: 'thousands', locale: 'ko' }, globals: { locale: 'ko' } };
+export const FailedReadKorean: Story = { args: { state: 'failed-read', locale: 'ko' }, globals: { locale: 'ko' } };
+export const SignedOutGerman: Story = { args: { state: 'signed-out', locale: 'de' }, globals: { locale: 'de' } };
+export const EmptyGerman: Story = { args: { state: 'empty', locale: 'de' }, globals: { locale: 'de' } };
+export const ThousandsGerman: Story = { args: { state: 'thousands', locale: 'de' }, globals: { locale: 'de' } };
+export const FailedReadGerman: Story = { args: { state: 'failed-read', locale: 'de' }, globals: { locale: 'de' } };
+export const SignedOutFrench: Story = { args: { state: 'signed-out', locale: 'fr' }, globals: { locale: 'fr' } };
+export const EmptyFrench: Story = { args: { state: 'empty', locale: 'fr' }, globals: { locale: 'fr' } };
+export const ThousandsFrench: Story = { args: { state: 'thousands', locale: 'fr' }, globals: { locale: 'fr' } };
+export const FailedReadFrench: Story = { args: { state: 'failed-read', locale: 'fr' }, globals: { locale: 'fr' } };
+export const SignedOutSpanish: Story = { args: { state: 'signed-out', locale: 'es' }, globals: { locale: 'es' } };
+export const EmptySpanish: Story = { args: { state: 'empty', locale: 'es' }, globals: { locale: 'es' } };
+export const ThousandsSpanish: Story = { args: { state: 'thousands', locale: 'es' }, globals: { locale: 'es' } };
+export const FailedReadSpanish: Story = { args: { state: 'failed-read', locale: 'es' }, globals: { locale: 'es' } };
