@@ -7,6 +7,7 @@ import { READ_PREFIX, type WorkReadSession } from '../work/read-session.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { notificationWorkTitle } from '../notification/display.ts';
+import { relationshipEligible } from '../follows/recipients.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const hidden: SubjectResolution = { status: 'undisclosed' };
@@ -19,14 +20,10 @@ export const FEED_NOTIFICATION_COST = { sourceRows: 1, sourceReads: 2,
 export function feedNotificationSubjectReader(access: Pool, env: WorkActivationEnvironment,
   content: Pick<ContentCore, 'readExactBatch'>, reviews: ReaderReviews): NotificationSubjectReader {
   const eligible = async (principal: string, basis: string, work: string | null,
-    author: string, ref: string, revision: string): Promise<boolean> => {
+    author: string, ref: string, revision: string, language?: string | null): Promise<boolean> => {
     if (basis === 'followed-chapter-v1') {
       if (!work) return false;
-      const following = await access.query(`SELECT 1 FROM access.follow f
-        JOIN access.principal p ON p.id = f.principal_id AND p.active
-        WHERE f.principal_id = $1 AND f.following AND ((f.kind = 'work' AND f.target = $2)
-          OR (f.kind = 'agent' AND f.target = $3)) LIMIT 1`, [principal, work, author]);
-      return !!following.rowCount;
+      return relationshipEligible(access,principal,{ targets: [work,author], highlights: false,languages: language ? [language] : [] });
     }
     const represented = await access.query(`SELECT 1 FROM access.feed_post_vote_event e
       JOIN access.feed_vote v ON v.principal_id = e.voter_principal AND v.target = e.target
@@ -84,7 +81,7 @@ export function feedNotificationSubjectReader(access: Pool, env: WorkActivationE
     if (!after || after.actor !== current.actor || after.contentRevision !== current.contentRevision
       || after.work !== current.work || after.occurrence !== current.occurrence) return hidden;
     if (!await eligible(input.principalId, input.disclosureBasis, current.work,
-      author, input.ref, input.revision)) return hidden;
+      author, input.ref, input.revision,current.language)) return hidden;
     return { status: 'available', subject: { private: false, fields: {
       ...(current.work ? { linkTarget: current.work } : {}), ...(title ? { title } : {}) } } };
   } };

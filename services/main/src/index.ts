@@ -159,6 +159,9 @@ import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
 import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
 import { NotificationProducer, NotificationProducerWorker } from './modules/notification-producers/producer.ts';
+import { configureFollowGraph } from './modules/follows/recovery.ts';
+import { configureLibraryFollows } from './modules/library/follows.ts';
+import { resourceNotificationSubjectReader } from './modules/notification-producers/resources.ts';
 import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
 import { editorialNotificationSubjectReader } from './modules/notification-producers/editorial.ts';
 import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
@@ -314,6 +317,9 @@ notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, envi
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);
+const notificationResourceReader = resourceNotificationSubjectReader(pool, environment);
+notificationStore.registerReadSubjectReader('relationship-resource-v1', notificationResourceReader);
+notificationStore.registerReadSubjectReader('relationship-reply-v1', notificationSourceReader);
 const notificationEditorialReader = editorialNotificationSubjectReader(pool, environment);
 notificationStore.registerReadSubjectReader('editorial-proposal-v1', notificationEditorialReader);
 const notificationFeedReader = feedNotificationSubjectReader(pool, environment, content, new ReaderReviews(pool));
@@ -346,6 +352,8 @@ if (safetyAlerts) notificationDispatcher?.registerSubjectReader(SAFETY_ALERT_BAS
 notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 notificationDispatcher?.registerSubjectReader('editorial-proposal-v1', notificationEditorialReader);
+notificationDispatcher?.registerSubjectReader('relationship-resource-v1', notificationResourceReader);
+notificationDispatcher?.registerSubjectReader('relationship-reply-v1', notificationSourceReader);
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
 for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationFeedReader);
@@ -373,6 +381,8 @@ const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
 configureLibraryShelves(contentPool, pool, fuseki);
+configureFollowGraph(pool, fuseki);
+configureLibraryFollows(contentPool, pool);
 const libraryImport = new ReaderLibraryImportStore(contentPool, {
   sourceSearchesPerDay: config.MAIN_READER_IMPORT_SEARCHES_PER_DAY,
   acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,

@@ -90,6 +90,7 @@ export const state = (extra: Partial<ConceptState> = {}): ConceptState =>
   ({ concept: conceptUuid(1), scope: { kind: 'global' }, include: [], exclude: [], match: 'all', ...extra });
 
 export const follow = (followers: number, following: boolean | null = null): ConceptFollowState => ({
+  level: following === null ? null : 'off', source: following === null ? null : 'explicit', pinPosition: null,
   profile: 'follow-state-v1', target: { id: concepts.fantasy.id, kind: 'concept', name: concepts.fantasy.name,
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'concept-1', resourceType: 'concept' }, realm: null,
     href: `/concepts/${conceptUuid(1)}` }, following, revision: following ? '0192e0aa-0000-7000-8000-000000000001' : null,

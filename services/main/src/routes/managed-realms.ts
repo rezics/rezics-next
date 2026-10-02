@@ -15,6 +15,7 @@ export const openApiOperations = {
   '/v1/me/realm-invitations': { get: { bearer: true } },
   '/v1/realms/{realm}/joining': { get: { bearer: true } },
   '/v1/realms/{realm}/join': { post: { bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/leave': { post: { bearer: true,idempotencyKey: true } },
   '/v1/realms/{realm}/invitations': { post: { bearer: true,idempotencyKey: true } },
   '/v1/realms/{realm}/invitations/{invitation}/response': { post: { bearer: true,idempotencyKey: true } },
   '/v1/realms/{realm}/invitations/{invitation}/revoke': { post: { bearer: true,idempotencyKey: true } },
@@ -87,6 +88,14 @@ export function managedRealmRoutes(work: MainWorkDependencies) {
     .post('/v1/realms/:realm/invitations',{ params,body: invitationCommand,response: { 200: invitationResult,...problems } },async ({ request,params: path,body }) => {
       try { const principal = await work.account.verify(request,['governance:decide']);
         return Response.json(await joining().invite(principal,realmId(path.realm),body,key(request)),{ headers });
+      } catch (error) { return realmOperationError(error); }
+    })
+    .post('/v1/realms/:realm/leave',{ params,body: t.Object({ actingSubject: readId,
+      expectedMembershipGeneration: generation },{ additionalProperties: false }),
+    response: { 200: t.Object({ membershipId: readUuid, realm: readId, member: readId,
+      membershipGeneration: generation, replayed: t.Boolean() }),...problems } },async ({ request,params: path,body }) => {
+      try { const principal = await work.account.verify(request,['access:membership-consent']);
+        return Response.json(await joining().leave(principal,realmId(path.realm),body,key(request)),{ headers });
       } catch (error) { return realmOperationError(error); }
     })
     .post('/v1/realms/:realm/invitations/:invitation/response',{ params: t.Object({ realm: readUuid,invitation: readUuid }),

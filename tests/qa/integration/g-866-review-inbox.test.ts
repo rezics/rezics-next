@@ -379,7 +379,8 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
       message: 'Muted change request', actingSubject: reader,
     }, tokenB));
     await producer.runEditorialOnce();
-    expect((await inbox()).items).toHaveLength(beforeReplay);
+    // Watch Ignore preserves direct involvement in the author's own proposal.
+    expect((await inbox()).items).toHaveLength(beforeReplay + 1);
     await json(await subscription(proposal.proposal, 'participating', '2'));
     await json(await subscription(proposal.proposal, 'ignore', '1'), 409);
     await json(
@@ -470,7 +471,8 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         ),
       ),
     ).toMatchObject({ subscription: null });
-    await json(await subscription(withdrawn.proposal, 'participating', null, tokenB));
+    await json(await request('PUT',`/v1/me/proposal-subscriptions/${withdrawn.proposal}`,{
+      profile: 'proposal-subscription-v1', level: 'all', expectedRevision: null },tokenB));
     await producer.runEditorialOnce();
     await json(
       await request('POST', `/v1/editorial/proposals/${withdrawn.proposal}/withdrawal`, {
@@ -485,7 +487,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         (item) =>
           item.topic === 'proposal-withdrawn' &&
           item.proposal?.id === withdrawn.proposal &&
-          item.reason === 'manual',
+          item.reason === 'steward',
       ),
     ).toBe(true);
     const rejected = await newProposal();

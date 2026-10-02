@@ -7,6 +7,7 @@ import { changeRealmMember } from './realm-management-members.ts';
 import { membershipRoot, realmActor, realmIdPattern, realmKeyPattern, realmManager, realmTransaction } from './realm-management-authority.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale } from '../realm-admin/contract.ts';
 import { readRealmPolicy } from '../space/policy.ts';
+import { registerFollowSpace } from '../follows/targets.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { REALM_JOIN_COST, type InvitationCommand, type InvitationResponse, type SelfJoinCommand } from './realm-management-joining-contract.ts';
 
@@ -136,6 +137,9 @@ export class AccessRealmJoining {
 
   private async join(client: PoolClient, principal: VerifiedPrincipal, principalId: string, realm: string,
     input: SelfJoinCommand, key: string) {
+    const graph = await readRealmPolicy(this.env,realm);
+    if (!graph) throw new RealmAdminDenied('Realm Space is unavailable');
+    await registerFollowSpace(client,{ space: graph.space, realm, aliases: [graph.space,realm] });
     let consent;
     try { consent = await new AccessMembershipConsents(this.pool).issue({ principal,kind: 'realm',ownerSubject: realm,
       memberSubject: input.actingSubject,expectedGeneration: input.expectedMembershipGeneration,
@@ -169,6 +173,23 @@ export class AccessRealmJoining {
           throw new RealmAdminDenied('This Realm does not allow self-joining');
         }
         return this.join(client,principal,actor.id,realm,input,key);
+      });
+    });
+  }
+
+  leave(principal: VerifiedPrincipal, realm: string, input: { actingSubject: string; expectedMembershipGeneration: string }, key: string) {
+    return realmTransaction(this.pool,realm,true,async client => {
+      const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
+      await membershipRoot(client);
+      return this.receipt(client,actor.id,key,['leave',realm,input],async () => {
+        const current = await this.member(client,realm,input.actingSubject);
+        if (!current || current.state !== 'joined') throw new RealmAdminDenied('Membership is unavailable');
+        await changeRealmMember(client,realm,{ actingSubject: input.actingSubject, member: input.actingSubject,
+          expectedGeneration: '0', expectedMembershipGeneration: input.expectedMembershipGeneration,
+          reason: 'Member left the Space', action: 'remove', consent: null, durationSeconds: null },actor.id,randomUUID());
+        const member = (await this.member(client,realm,input.actingSubject))!;
+        await client.query('UPDATE access.realm_admin_revision SET generation=generation+1 WHERE realm=$1',[realm]);
+        return { membershipId: member.id,realm,member: input.actingSubject,membershipGeneration: member.generation,replayed: false };
       });
     });
   }

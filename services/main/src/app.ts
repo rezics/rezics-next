@@ -1,4 +1,5 @@
 import { safetyCaseRoutes } from './routes/safety-cases.ts';
+import { membershipsRoutes } from './routes/memberships.ts';
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import { httpTelemetry } from '@rezics/observability/elysia';
 import { mcpRoutes } from './routes/mcp.ts';
@@ -189,6 +190,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(reviewRoutes(work))
     .use(managedRealmRoutes(work))
     .use(resourceRelationRoutes(fuseki, work))
+    .use(membershipsRoutes(work))
     .use(studioRoutes(work));
 }
 

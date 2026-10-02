@@ -7,18 +7,38 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   publicWork, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import type { ResourceSummary } from '../media/summary.ts';
+import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
+import { targetSummaryReader } from '../target/resolve.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { AUTHOR_FOLLOW_KINDS, externalAuthorKey, FOLLOWS_COST, type followedAuthorsPage, type followsPage,
   type followTarget, type FollowKind } from './contract.ts';
-import type { FollowsStore } from './store.ts';
+import { followMetadata, type FollowRow, type FollowsStore } from './store.ts';
+import { followSpace } from './targets.ts';
+import { SavedFilterMissing } from '../saved-filter/store.ts';
 import { readNewSince } from '../feed/new-since.ts';
 import { inOrder } from '../feed/settled.ts';
 
 /** Must receive an anonymous session: a bearer never widens follow disclosure. */
 export async function readFollowTarget(session: WorkReadSession, target: string, kind: FollowKind,
-  summaries?: ReadonlyMap<string, ResourceSummary>): Promise<Static<typeof followTarget>> {
+  summaries?: ReadonlyMap<string, ResourceSummary>, reader?: { principal: VerifiedPrincipal; agent: string }): Promise<Static<typeof followTarget>> {
   if (session.principal) throw new WorkReadUnavailable('Public follow reader required');
   if (kind === 'external-author') return readExternalAuthorTarget(session, target);
+  if (kind === 'saved-view') {
+    if (!reader || !session.deps.savedFilters) throw new WorkReadMissing('Saved view is unavailable');
+    let view;
+    try { view = await session.deps.savedFilters.read(reader.principal,reader.agent,target.slice('urn:rezics:saved-view:'.length)); }
+    catch (error) { if (error instanceof SavedFilterMissing) throw new WorkReadMissing('Saved view is unavailable'); throw error; }
+    const concept = view.concept ? await readFollowTarget(session,view.concept,'concept') : null;
+    return { id: target, kind, name: view.name ? { value: view.name, language: 'und', direction: 'ltr', basis: 'fallback' }
+      : concept!.name, icon: concept?.icon ?? { kind: 'fallback', policy: 'avatar-fallback-v1', key: target, resourceType: 'saved-view' },
+    realm: null, href: `/?tab=${view.id}` };
+  }
+  if (kind === 'space') {
+    const space = await followSpace(session,target);
+    if (!space || space.space !== target) throw new WorkReadMissing('Space is unavailable');
+    const realm = await readFollowTarget(session,space.realm,'realm',summaries);
+    return { ...realm, id: target, kind };
+  }
   if (kind === 'agent') {
     const agent = await readAgent(session, target);
     return { id: target, kind, name: { value: agent.displayName, language: 'und', direction: 'ltr', basis: 'fallback' },
@@ -60,13 +80,19 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
     if (!rows[0]?.realm) throw new WorkReadMissing('Follow target is unavailable');
     summaryId = rows[0].realm.value;
   }
-  const summary = summaries?.get(summaryId) ?? (await session.summaries([summaryId]))[0];
+  const generic = !['work','realm','zone','concept'].includes(kind);
+  const summary = summaries?.get(summaryId) ?? (generic
+    ? (await readResourceSummaries(session.deps.environment,session.deps.media?.store,targetSummaryReader(session),
+      { resources: [summaryId], context: DEFAULT_MEDIA_CONTEXT, language: session.options.language ?? null,
+        includeCollections: true })).summaries[0]
+    : (await session.summaries([summaryId]))[0]);
   if (summary?.status !== 'available' || summary.disclosure !== 'public'
-    || summary.type !== (kind === 'zone' ? 'realm' : kind)) throw new WorkReadMissing('Follow target is unavailable');
+    || !generic && summary.type !== (kind === 'zone' ? 'realm' : kind)) throw new WorkReadMissing('Follow target is unavailable');
   return { id: target, kind, name: summary.name, icon: summary.avatar,
     realm: kind === 'zone' || kind === 'realm' ? summaryId : owner,
     href: kind === 'work' ? `/w/${target.slice(-36)}` : kind === 'concept' ? `/concepts/${target.slice(-36)}`
-      : `/r/${summaryId.slice(-36)}` };
+      : kind === 'realm' || kind === 'zone' ? `/r/${summaryId.slice(-36)}`
+        : kind === 'release' ? `/releases/${target.slice(-36)}` : target };
 }
 
 type FollowTarget = Static<typeof followTarget>;
@@ -105,44 +131,91 @@ export async function readFollowTargets(session: WorkReadSession, targets: reado
   return result;
 }
 
+async function spaceFollowTargets(session: WorkReadSession, spaces: readonly string[],
+  summaries?: ReadonlyMap<string, ResourceSummary>) {
+  const result = new Map<string, Static<typeof followTarget>>();
+  if (!spaces.length) return result;
+  const rows = await session.query(`SELECT ?space ?realm WHERE { VALUES ?space { ${spaces.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+      ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
+      FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+      FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
+    } } LIMIT ${spaces.length+1}`,spaces.length);
+  if (new Set(rows.map(row => row.space?.value)).size !== rows.length) throw new WorkReadUnavailable('Space identities are ambiguous');
+  const realms = await readFollowTargets(session,rows.map(row => row.realm!.value),'realm',summaries);
+  for (const row of rows) {
+    const realm = realms.get(row.realm!.value);
+    if (realm) result.set(row.space!.value,{ ...realm,id: row.space!.value,kind: 'space' });
+  }
+  return result;
+}
+
+const agentFollowTarget = (agent: import('../profiles/read.ts').AgentCard): Static<typeof followTarget> => ({
+  id: agent.id, kind: 'agent', name: { value: agent.displayName,language: 'und',direction: 'ltr',basis: 'fallback' },
+  icon: { kind: 'fallback',policy: 'avatar-fallback-v1',key: agent.id,resourceType: 'agent' },realm: null,href: agent.links.profile });
+
 export async function readFollows(session: WorkReadSession, store: FollowsStore,
-  principal: VerifiedPrincipal, agent: string, kind?: FollowKind, includeNewSince = false) {
+  principal: VerifiedPrincipal, agent: string, kind?: FollowKind, includeNewSince = false,
+  query: { q?: string; order?: 'recent' | 'pinned' } = {}) {
   const identity = await store.matches(principal, agent, []);
+  const activityRevision = await store.activityRevision();
+  const orderRevision = `${identity.revision ?? 'none'}:${activityRevision}`;
   const binding = ['follows-v1', identity.owner, agent, kind ?? null,
-    session.options.language ?? null];
+    session.options.language ?? null, query.q ?? null, query.order ?? 'recent'];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  if (cursor && cursor.order !== (identity.revision ?? 'none')) throw new WorkReadMoved('Follows changed');
+  if (cursor && cursor.order !== orderRevision) throw new WorkReadMoved('Follows changed');
   const limit = Math.min(session.options.limit ?? 20, FOLLOWS_COST.candidates);
-  const page = await store.read(principal, agent, cursor?.after ?? '', kind, limit);
+  const page = await store.manage(principal, agent, cursor?.after ?? null, kind, query.order ?? 'recent', limit);
   if (page.revision !== identity.revision) throw new WorkReadMoved('Follows changed');
   const items: Static<typeof followsPage>['items'] = [];
-  const unavailable = (row: { target: string; kind: FollowKind; revision: string }) => ({
+  const unavailable = (row: Pick<FollowRow, 'target' | 'kind' | 'revision' | 'level' | 'source' | 'pin_position'>) => ({
     id: row.target, kind: row.kind, available: false as const, revision: row.revision,
-    name: null, icon: null, realm: null, href: null });
+    ...followMetadata(row), name: null, icon: null, realm: null, href: null });
   const ids = page.rows.slice(0, limit).filter(row => ['work', 'realm', 'concept'].includes(row.kind))
     .map(row => row.target);
   const summaries = new Map((await session.summaries(ids)).map(summary => [summary.reference, summary]));
+  const spaces = page.rows.slice(0,limit).filter(row => row.kind==='space').map(row => row.target);
+  const agents = page.rows.slice(0,limit).filter(row => row.kind==='agent').map(row => row.target);
+  const [spaceTargets,agentTargets] = await Promise.all([spaceFollowTargets(session,spaces),readAgentCards(session,agents)]);
   for (const row of page.rows.slice(0, limit)) {
-    try { items.push({ ...await readFollowTarget(session, row.target, row.kind, summaries), available: true, revision: row.revision }); }
+    try {
+      const target = row.kind==='space' ? spaceTargets.get(row.target) : row.kind==='agent'
+        ? agentTargets.has(row.target) ? agentFollowTarget(agentTargets.get(row.target)!) : undefined
+        : await readFollowTarget(session,row.target,row.kind,summaries,{ principal,agent });
+      if (!target) throw new WorkReadMissing('Follow target is unavailable');
+      items.push({ ...target,
+      ...followMetadata(row), available: true, revision: row.revision }); }
     catch (error) { if (!(error instanceof WorkReadMissing)) throw error; items.push(unavailable(row)); }
   }
   const fenced = new Map((await session.summaries(ids)).map(summary => [summary.reference, summary]));
+  const [spaceFence,agentFence] = await Promise.all([spaceFollowTargets(session,spaces),readAgentCards(session,agents)]);
   for (const [index, item] of items.entries()) {
     if (!item.available) continue;
-    try { await readFollowTarget(session, item.id, item.kind, fenced); }
+    try {
+      const after = item.kind==='space' ? spaceFence.get(item.id) : item.kind==='agent'
+        ? agentFence.has(item.id) ? agentFollowTarget(agentFence.get(item.id)!) : undefined
+        : await readFollowTarget(session,item.id,item.kind,fenced,{ principal,agent });
+      if (!after) throw new WorkReadMissing('Follow target is unavailable');
+      if (JSON.stringify(after.name)!==JSON.stringify(item.name) || after.href!==item.href) throw new WorkReadMoved('Follow target changed');
+    }
     catch (error) {
       if (!(error instanceof WorkReadMissing)) throw error;
-      items[index] = unavailable({ ...item, target: item.id });
+      items[index] = unavailable({ ...item, target: item.id, pin_position: item.pinPosition });
     }
   }
   if (includeNewSince) {
     if (!session.deps.homePersonal || !session.deps.feed) throw new WorkReadUnavailable('New activity is unavailable');
     const watermarks = await session.deps.homePersonal.watermarks(principal, agent);
+    let verifiedScopes = 0;
     for (const [index, item] of items.entries()) {
-      if (!item.available || !['realm', 'zone'].includes(item.kind) || !item.realm) continue;
+      if (!item.available || !['realm', 'zone', 'space'].includes(item.kind) || !item.realm) continue;
       const watermark = watermarks.find(row => row.scope === `realm:${item.realm}`);
       if (!watermark || watermark.data_epoch !== session.position.dataEpoch) {
         items[index] = { ...item, newSince: { state: 'unvisited', count: null, updatedAt: null } };
+        continue;
+      }
+      if (verifiedScopes++ >= FOLLOWS_COST.newSinceScopes) {
+        items[index] = { ...item,newSince: { state: 'more-unverified',count: null,updatedAt: watermark.updated_at.toISOString() } };
         continue;
       }
       const head = await readNewSince(session, watermark.sequence,
@@ -154,9 +227,14 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
     }
   }
   if ((await store.matches(principal, agent, [])).revision !== page.revision) throw new WorkReadMoved('Follows changed');
+  if (await store.activityRevision() !== activityRevision) throw new WorkReadMoved('Follow activity changed');
   const last = page.rows[limit - 1];
-  return { profile: 'follows-v1' as const, ...pageResult(session, items,
-    page.rows.length > limit && last ? encodeReadCursor(binding, session.position, last.target, identity.revision ?? 'none') : null) };
+  const nextCursor = page.rows.length > limit && last ? encodeReadCursor(binding, session.position,
+    JSON.stringify({ key: last.order_key, target: last.target }), orderRevision) : null;
+  const search = query.q?.normalize('NFKC').toLocaleLowerCase();
+  return { profile: 'follows-v1' as const, ...pageResult(session, search
+    ? items.filter(item => item.available && item.name.value.normalize('NFKC').toLocaleLowerCase().includes(search)) : items,
+  nextCursor), complete: nextCursor === null };
 }
 
 type FollowedAuthor = Static<typeof followedAuthorsPage>['items'][number];

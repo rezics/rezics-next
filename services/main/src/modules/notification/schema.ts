@@ -107,17 +107,20 @@ export const notificationItemTriage = access.table(
   },
   (table) => [primaryKey({ columns: [table.principalId, table.itemId] })],
 );
-export const proposalSubscription = access.table(
-  'proposal_subscription',
+export const watch = access.table(
+  'watch',
   {
     principalId: uuid('principal_id').notNull(),
-    proposal: uuid('proposal').notNull(),
+    proposal: uuid('proposal'),
+    target: text('target').notNull(),
+    kind: text('kind', { enum: ['thread','proposal','release','collection'] }).notNull(),
     reason: text('reason', { enum: ['author', 'reviewer', 'steward', 'manual'] }).notNull(),
-    level: text('level', { enum: ['participating', 'ignore'] }).notNull(),
+    level: text('level', { enum: ['participating', 'all', 'ignore'] }).notNull(),
     revision: bigint('revision', { mode: 'bigint' }).notNull(),
   },
-  (table) => [primaryKey({ columns: [table.principalId, table.proposal] })],
+  (table) => [primaryKey({ columns: [table.principalId, table.target] })],
 );
+export const proposalSubscription = watch;
 export const notificationProposalContext = access.table('notification_proposal_context', {
   itemId: uuid('item_id').primaryKey(),
   proposal: uuid('proposal').notNull(),

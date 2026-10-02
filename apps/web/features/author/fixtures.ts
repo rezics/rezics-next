@@ -127,6 +127,7 @@ export function authorFollow(author: ExternalAuthor, followers: number, followin
   kind: 'exact' | 'lower-bound' = 'exact'): Loaded<AuthorFollowState> {
   const id = author.key.slice('/authors/'.length);
   return { ok: true, data: { profile: 'follow-state-v1', following,
+    level: following === null ? null : 'highlights', source: following === null ? null : 'explicit', pinPosition: null,
     revision: following ? '0192e0aa-0000-7000-8000-000000000001' : null,
     target: { id: `open-library:${id}`, kind: 'external-author',
       name: { value: author.name?.displayName ?? id, language: 'und', direction: 'ltr', basis: 'fallback' },

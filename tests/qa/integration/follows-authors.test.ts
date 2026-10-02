@@ -135,7 +135,7 @@ test('G-397 readers follow native and Open Library authors, hear of their new Wo
       // Talk about an author's Work is not their news: it answers to the followed Realm alone.
       const discussion = (await followingFeed(talk)).filter(item => item.target.work === discussed!.work);
       expect(discussion.length).toBeGreaterThan(0);
-      expect(discussion.every(item => item.reason.kind === 'followed' && item.reason.targetKind === 'realm')).toBe(true);
+      expect(discussion.every(item => item.reason.kind === 'followed' && item.reason.targetKind === 'space')).toBe(true);
 
       // Unfollowing both takes them out of the feed, the list and the count.
       await json(await follow(target, 'external-author', false, followed.revision));

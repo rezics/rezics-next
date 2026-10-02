@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import { realmAgentBanned } from './realm-ban.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
+import { prepareRealmFollow } from '../follows/recovery.ts';
 
 export class MembershipDenied extends Error {}
 export class MembershipConflict extends Error {}
@@ -345,6 +346,7 @@ export class AccessMemberships {
       } else {
         await this.manager(client, input.principal, input.kind, input.ownerSubject);
       }
+      if (input.kind === 'realm') await prepareRealmFollow(client,this.pool,input.ownerSubject);
       const policy = await client.query<Policy>(`SELECT revision, terms_revision, open
         FROM access.membership_policy WHERE kind = $1 AND owner_subject = $2 FOR SHARE`,
       [input.kind, input.ownerSubject]);

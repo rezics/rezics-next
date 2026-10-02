@@ -8,6 +8,10 @@ import { reviewNotification } from '../notification/producer-review.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { editorialNotification, EDITORIAL_NOTIFICATION_COST } from './editorial.ts';
 import type { EditorialEvent } from '../editorial-review/store.ts';
+import { relationshipRecipients, type RelationshipRecipients } from '../follows/recipients.ts';
+import { recoverSpaceFollows } from '../follows/recovery.ts';
+import { recoverLibraryFollows } from '../library/follows.ts';
+import { resourceNotification } from './resources.ts';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -67,18 +71,17 @@ export class NotificationProducer {
         FROM access.chapter_notification_event WHERE id = $1`, [event.event_id])).rows[0];
       if (!row) return null;
       const authors = new Set(await represented(this.access, row.author, null));
-      const followed = (await this.access.query<{ id: string }>(`SELECT DISTINCT p.id::text AS id
-        FROM access.follow f JOIN access.principal p ON p.id = f.principal_id AND p.active
-        WHERE f.following AND ((f.kind = 'work' AND f.target = $1)
-          OR (f.kind = 'agent' AND f.target = $2)) ORDER BY id LIMIT $3`,
-      [row.work, row.author, PRODUCER_COST.recipientsPerEvent + 1])).rows;
-      if (followed.length > PRODUCER_COST.recipientsPerEvent) throw new Error('chapter follower bound exceeded');
-      const recipients = followed.map(item => item.id).filter(id => !authors.has(id));
+      const language = (await this.content.query<{ language_tag: string | null }>(`SELECT v.language_tag
+        FROM content.revision r JOIN content.variant v ON v.id=r.variant_id WHERE r.id=$1`,
+      [row.content_revision.replace(/^urn:rezics:content:revision:/,'')])).rows[0]?.language_tag;
+      const relationshipPlan: RelationshipRecipients = { targets: [row.work,row.author],highlights: false,
+        except: [...authors],languages: language ? [language] : [] };
+      const recipients = (await relationshipRecipients(this.access,relationshipPlan)).filter(id => !authors.has(id));
       if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `chapter:${event.event_id}`,
         purpose: 'subscription', topic: 'followed-chapter',
         subject: { owner: 'graph', ref: row.activity, revision: row.content_revision },
-        disclosureBasis: 'followed-chapter-v1', recipients,
+        disclosureBasis: 'followed-chapter-v1', recipients, relationshipPlan,
         display: { kind: 'chapter', actorAgent: row.author, realm: null, groupKey: row.work } };
     }
     if (event.kind === 'feed_post_vote') {
@@ -268,6 +271,10 @@ export class NotificationProducer {
     }
   }
 
+  async runRelationshipRecoveryOnce(): Promise<number> {
+    return await recoverSpaceFollows(this.access,this.graph) + await recoverLibraryFollows(this.content,this.access);
+  }
+
   private async runOtherAccessOnce(): Promise<number> {
     const client = await this.access.connect();
     let count = 0;
@@ -286,7 +293,7 @@ export class NotificationProducer {
       [cursor.position, PRODUCER_COST.accessEventsPerTick])).rows;
       for (const event of events) {
         const notice = await this.accessNotification(event);
-        if (notice) await this.notifications.enqueue(notice);
+        if (notice && (await this.notifications.enqueue(notice))?.complete === false) { count++; break; }
         await client.query(`UPDATE access.notification_producer_cursor
           SET position = $2, updated_at = clock_timestamp() WHERE consumer = $1`,
         [cursorName, event.position]);
@@ -383,7 +390,7 @@ export class NotificationProducer {
       ).rows;
       for (const event of events) {
         const notice = await editorialNotification(this.access, event);
-        if (notice) await this.notifications.enqueue(notice);
+        if (notice && (await this.notifications.enqueue(notice))?.complete === false) break;
         await client.query(
           `UPDATE access.notification_producer_cursor SET position = $1,
           updated_at = clock_timestamp() WHERE consumer = 'editorial-notification-v1'`,
@@ -453,6 +460,21 @@ export class NotificationProducer {
         if (recipients.size) events.push(event('mention', [...recipients]));
       }
     }
+    const direct = [...new Set(events.filter(notice => notice.topic === 'reply').flatMap(notice => [...notice.recipients]))];
+    const participants = await represented(this.access,author as string,null,'agent.control');
+    const watchTargets = [root as string, ...typeof parent === 'string' ? [parent] : []];
+    if (participants.length) {
+      await this.access.query(`INSERT INTO access.watch_participation(principal_id,target)
+        SELECT id,target FROM unnest($1::uuid[]) id CROSS JOIN unnest($2::text[]) target ON CONFLICT DO NOTHING`, [participants,watchTargets]);
+      await this.access.query(`INSERT INTO access.watch(principal_id,target,kind,reason,level)
+        SELECT id,target,'thread','reviewer','participating' FROM unnest($1::uuid[]) id
+          CROSS JOIN unnest($2::text[]) target ON CONFLICT DO NOTHING`, [participants,watchTargets]);
+    }
+    const relationshipPlan: RelationshipRecipients = { targets: [realm as string,root as string,author as string],
+      highlights: false, watches: watchTargets,
+      except: [actor,...direct] };
+    const related = await relationshipRecipients(this.access,relationshipPlan);
+    if (related.length) events.push({ ...event('reply',related), disclosureBasis: 'relationship-reply-v1', relationshipPlan });
     return events;
   }
 
@@ -497,12 +519,20 @@ export class NotificationProducer {
       [cursor.data_epoch, batch.sequence, PRODUCER_COST.relayEventsPerBatch + 1])).rows;
       if (events.length !== batch.event_count) throw new Error('relay batch is incomplete');
       let produced = 0;
+      let pending = false;
       for (const event of events) {
-        for (const notice of await this.replyNotifications(event.envelope)) {
-          await this.notifications.enqueue(notice); produced++;
+        const resource = await resourceNotification(this.access,this.graph,event.envelope);
+        if (resource) {
+          const result = await this.notifications.enqueue(resource); produced++;
+          if (result?.complete === false) { pending = true; break; }
         }
+        for (const notice of await this.replyNotifications(event.envelope)) {
+          const result = await this.notifications.enqueue(notice); produced++;
+          if (result?.complete === false) { pending = true; break; }
+        }
+        if (pending) break;
       }
-      await client.query(`UPDATE relay.notification_producer_cursor SET sequence = $2,
+      if (!pending) await client.query(`UPDATE relay.notification_producer_cursor SET sequence = $2,
         updated_at = clock_timestamp() WHERE consumer = $1`, [cursorName, batch.sequence]);
       await client.query('COMMIT');
       return produced;
@@ -523,6 +553,7 @@ export class NotificationProducerWorker {
     const poll = () => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.notification.producer', async () => {
+        await this.producer.runRelationshipRecoveryOnce().catch(error => { console.warn('Relationship recovery paused',error); });
         const access = await this.producer.runAccessOnce();
         return access + await this.producer.runRelayOnce();
       }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' }))

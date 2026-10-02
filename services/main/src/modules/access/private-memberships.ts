@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { recordRealmHistoryAdmission } from '../realm-admin/history.ts';
 import type { VerifiedPrincipal } from './admission.ts';
+import { prepareRealmFollow } from '../follows/recovery.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale,
   MembershipUnavailable, type MembershipKind } from './memberships.ts';
 
@@ -279,6 +280,7 @@ export class AccessPrivateMemberships {
           termsRevision: saved.rows[0].terms_revision,
           authorityEpoch: prior.rows[0].result_authority_epoch, replayed: true };
       }
+      if (input.kind === 'realm') await prepareRealmFollow(client,this.pool,input.ownerSubject);
       const policy = await client.query<Policy>(`SELECT revision, terms_revision, open
         FROM access.membership_policy WHERE kind = $1 AND owner_subject = $2 FOR SHARE`,
       [input.kind, input.ownerSubject]);

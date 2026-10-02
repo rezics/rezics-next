@@ -7,7 +7,8 @@ import type { NotificationStore, ProposalSubscriptionReason } from './store.ts';
 export const DIGEST_COST = { candidatesPerDay: 50, daysPerTick: 1, intervalMs: 1_000 } as const;
 interface Day { principal_id: string; day: string; account_subject: string }
 interface Candidate { topic: string; purpose: string; subject_owner: string; subject_ref: string;
-  subject_revision: string | null; disclosure_basis: string; realm: string | null; proposal_reason: ProposalSubscriptionReason | null }
+    subject_revision: string | null; disclosure_basis: string; realm: string | null; proposal_reason: ProposalSubscriptionReason | null;
+    actor_agent: string | null; related_resource: string | null }
 
 export class NotificationDigestWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -37,21 +38,22 @@ export class NotificationDigestWorker {
       if (current?.active && current.account_issuer === this.issuer) {
         const candidates = (await this.access.query<Candidate>(
             `SELECT c.topic, c.purpose,
-          c.subject_owner, c.subject_ref, c.subject_revision, c.disclosure_basis, c.realm, c.proposal_reason
+          c.subject_owner, c.subject_ref, c.subject_revision, c.disclosure_basis, c.realm, c.proposal_reason,c.actor_agent,c.related_resource
           FROM access.notification_digest_candidate c
           JOIN access.notification_preference n ON n.principal_id = c.principal_id
             AND n.purpose = c.purpose AND n.topic = c.topic AND n.channel = 'email'
             AND n.state = 'enabled'
           WHERE c.principal_id = $1 AND c.day = $2
-            AND NOT EXISTS (SELECT 1 FROM access.proposal_subscription sub
+            AND NOT EXISTS (SELECT 1 FROM access.watch sub
               WHERE sub.principal_id = c.principal_id AND sub.proposal = c.proposal
-                AND sub.level = 'ignore' AND c.disclosure_basis = 'editorial-proposal-v1')
+                AND sub.level = 'ignore' AND c.proposal_reason = 'manual' AND c.disclosure_basis = 'editorial-proposal-v1')
           ORDER BY c.source_event, c.topic LIMIT $3`,
         [day.principal_id, day.day, DIGEST_COST.candidatesPerDay + 1])).rows;
         const inputs = candidates.map(candidate => ({ principalId: day.principal_id,
             owner: candidate.subject_owner, ref: candidate.subject_ref,
             revision: candidate.subject_revision, disclosureBasis: candidate.disclosure_basis,
-            realm: candidate.realm, recipientReason: candidate.proposal_reason }));
+            realm: candidate.realm, recipientReason: candidate.proposal_reason, topic: candidate.topic,
+            actorAgent: candidate.actor_agent, relatedResource: candidate.related_resource }));
         const disclosed = typeof this.notifications.resolveDigestSubjects === 'function'
           ? await this.notifications.resolveDigestSubjects(inputs)
           : await Promise.all(inputs.map(input => this.notifications.resolveDigestSubject(input)));

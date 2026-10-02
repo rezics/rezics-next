@@ -6,6 +6,8 @@ import { deliveryChannels, notificationKinds, notificationPurposes, optionalPurp
 import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.ts';
 import { discloseNotifications } from '../disclosure/notifications.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
+import { notificationRecipientAllowed } from './recipient-policy.ts';
+import { relationshipRecipientPage, type RelationshipRecipients } from '../follows/recipients.ts';
 
 export class NotificationInvalid extends Error {}
 export class NotificationDenied extends Error {}
@@ -63,6 +65,8 @@ export interface NotificationEvent {
   disclosureBasis: string;
   /** Access principal ids already resolved by the producer's current subscription read. */
   recipients: readonly string[];
+  /** Internal bounded fan-out plan; recipient page ACKs commit in Access. */
+  relationshipPlan?: RelationshipRecipients;
   /** Follow producers may use kind `follow`; current labels are read from their owners. */
   display?: NotificationDisplayContext;
   proposal?: {
@@ -105,6 +109,9 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'social', topic: 'mention' },
   { purpose: 'social', topic: 'post-vote' },
   { purpose: 'subscription', topic: 'followed-chapter' },
+  { purpose: 'subscription', topic: 'new-work' },
+  { purpose: 'subscription', topic: 'new-release' },
+  { purpose: 'subscription', topic: 'collection-change' },
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
   ...REVIEW_NOTIFICATION_TOPICS.map((topic) => ({ purpose: 'governance' as const, topic })),
@@ -213,7 +220,10 @@ export class NotificationStore {
   async resolveDigestSubjects(inputs: readonly Parameters<NotificationSubjectReader['resolve']>[0][]) {
     const subjects = await Promise.all(inputs.map(async input => {
       const resolver = this.readSubjects.get(input.disclosureBasis) ?? this.defaultReadSubject;
-      return { input, result: resolver ? await resolver.resolve(input) : { status: 'unavailable' as const } };
+      const allowed = !input.actorAgent && !input.realm || await notificationRecipientAllowed(this.pool,input.principalId,
+        input.actorAgent ?? null,input.realm ?? null,input.relatedResource ?? null);
+      return { input, result: !allowed ? { status: 'undisclosed' as const }
+        : resolver ? await resolver.resolve(input) : { status: 'unavailable' as const } };
     }));
     return discloseNotifications(this.pool, subjects, 'digest');
   }
@@ -265,7 +275,7 @@ export class NotificationStore {
    * per (source event, topic); deliveries are created only for currently
    * allowed channels and active endpoints and are rechecked again at delivery.
    */
-  async enqueue(event: NotificationEvent): Promise<EnqueuedItem[]> {
+  async enqueue(event: NotificationEvent): Promise<EnqueuedItem[] & { complete?: boolean }> {
     if (!(notificationPurposes as readonly string[]).includes(event.purpose) || !topicPattern.test(event.topic)
       || event.sourceEvent.length < 1 || event.sourceEvent.length > 256
       || event.subject.ref.length < 1 || event.subject.ref.length > 512
@@ -291,15 +301,27 @@ export class NotificationStore {
       throw new NotificationInvalid('notification event does not match its profile');
     }
     // Canonical order keeps concurrent producers from deadlocking on stream rows.
-    const recipients = [...event.recipients].sort();
+    let recipients = [...event.recipients].sort();
     return this.transaction(async client => {
-      const results: EnqueuedItem[] = [];
+      const results: EnqueuedItem[] & { complete?: boolean } = [];
+      let nextCursor: string | null = null;
+      if (event.relationshipPlan) {
+        await client.query(`INSERT INTO access.notification_recipient_progress(source_owner,source_event,topic)
+          VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[event.sourceOwner,event.sourceEvent,event.topic]);
+        const progress = (await client.query<{ after_principal: string | null; complete: boolean }>(`SELECT after_principal,complete
+          FROM access.notification_recipient_progress WHERE source_owner=$1 AND source_event=$2 AND topic=$3 FOR UPDATE`,
+        [event.sourceOwner,event.sourceEvent,event.topic])).rows[0]!;
+        if (progress.complete) return results;
+        const page = await relationshipRecipientPage(client,event.relationshipPlan,progress.after_principal);
+        recipients = page.items; nextCursor = page.nextCursor;
+        Object.defineProperty(results,'complete',{ value: nextCursor === null });
+      }
       for (const principalId of recipients) {
         // Recheck a mute inside intake, including a mute that raced the producer.
         if (event.proposal) {
-          const subscription = (await client.query<{ level: string }>(`SELECT level FROM access.proposal_subscription
+          const subscription = (await client.query<{ level: string }>(`SELECT level FROM access.watch
             WHERE principal_id = $1 AND proposal = $2 FOR SHARE`,[principalId,event.proposal.id])).rows[0];
-          if (subscription?.level === 'ignore') continue;
+          if (subscription?.level === 'ignore' && (event.proposal.reasons[principalId] ?? 'manual') === 'manual') continue;
         }
         const first = await client.query(`INSERT INTO access.notification_seen
           (principal_id, source_owner, source_event, topic)
@@ -335,12 +357,12 @@ export class NotificationStore {
             VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING`, [principalId]);
           await client.query(`INSERT INTO access.notification_digest_candidate (principal_id, day,
             source_owner, source_event, purpose, topic, subject_owner, subject_ref,
-            subject_revision, disclosure_basis, realm, proposal, proposal_reason)
-            VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            subject_revision, disclosure_basis, realm, proposal, proposal_reason, actor_agent, related_resource)
+            VALUES ($1, (clock_timestamp() AT TIME ZONE 'UTC')::date, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             ON CONFLICT DO NOTHING`, [principalId, event.sourceOwner, event.sourceEvent,
             event.purpose, event.topic, event.subject.owner, event.subject.ref,
             event.subject.revision, event.disclosureBasis, event.display?.realm ?? null, event.proposal?.id ?? null,
-            event.proposal?.reasons[principalId] ?? null]);
+            event.proposal ? event.proposal.reasons[principalId] ?? 'manual' : null,event.display?.actorAgent ?? null,event.display?.groupKey ?? null]);
         }
         if (active.rows[0]?.inbox !== true) continue;
         await client.query(`INSERT INTO access.notification_stream (principal_id, stream)
@@ -376,7 +398,7 @@ export class NotificationStore {
               itemId,
               event.proposal.id,
               event.proposal.revision,
-              event.proposal.reasons[principalId],
+              event.proposal.reasons[principalId] ?? 'manual',
             ],
           );
         if (event.display) await client.query(`INSERT INTO access.notification_display_context
@@ -410,6 +432,9 @@ export class NotificationStore {
         await client.query('SELECT pg_notify($1, $2)', [NOTIFICATION_REALTIME_CHANNEL,
           JSON.stringify({ principalId, generation: stream.generation, head: sequence })]);
       }
+      if (event.relationshipPlan) await client.query(`UPDATE access.notification_recipient_progress
+        SET after_principal=$4,complete=$5 WHERE source_owner=$1 AND source_event=$2 AND topic=$3`,
+      [event.sourceOwner,event.sourceEvent,event.topic,nextCursor,nextCursor === null]);
       return results;
     });
   }
@@ -630,12 +655,13 @@ export class NotificationStore {
     for (const item of result.items) {
       const { raw, ...base } = item;
       const resolver = this.readSubjects.get(raw.disclosure_basis) ?? this.defaultReadSubject;
-      if (!principalId || raw.state !== 'active' || !resolver) {
+      if (!principalId || raw.state !== 'active' || !resolver || (raw.actor_agent || raw.realm)
+        && !await notificationRecipientAllowed(this.pool,principalId,raw.actor_agent,raw.realm,raw.group_key)) {
         resolutions.push({ status: 'undisclosed' });
         items.push(base); continue; }
       const resolved = await resolver.resolve({ principalId, owner: raw.subject_owner,
         ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis,
-        realm: raw.realm, recipientReason: raw.reason })
+        realm: raw.realm, recipientReason: raw.reason, topic: raw.topic })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
       resolutions.push(resolved);
       if (resolved.status !== 'available') { items.push(base); continue; }
@@ -683,8 +709,9 @@ export class NotificationStore {
       const principalId = await this.reader(client, principal);
       if (!principalId) return { principalId, rows: [] };
       const rows = (await client.query<{ subject_owner: string; subject_ref: string;
-        subject_revision: string | null; disclosure_basis: string; realm: string | null; reason: ProposalSubscriptionReason | null }>(`SELECT i.subject_owner, i.subject_ref,
-          i.subject_revision, i.disclosure_basis, c.realm, pc.reason FROM access.notification_item i
+        subject_revision: string | null; disclosure_basis: string; realm: string | null; actor_agent: string | null; group_key: string | null;
+        reason: ProposalSubscriptionReason | null; topic: string }>(`SELECT i.subject_owner, i.subject_ref,
+          i.subject_revision, i.disclosure_basis, c.realm, c.actor_agent, c.group_key, pc.reason, i.topic FROM access.notification_item i
         JOIN access.notification_stream s ON s.principal_id = i.principal_id AND s.stream = i.stream
           AND s.generation = i.generation
         LEFT JOIN access.notification_read_watermark w ON w.principal_id = i.principal_id
@@ -703,7 +730,7 @@ export class NotificationStore {
       if (!resolver) continue;
       const resolved = await resolver.resolve({ principalId: principalId!, owner: row.subject_owner,
         ref: row.subject_ref, revision: row.subject_revision, disclosureBasis: row.disclosure_basis,
-        realm: row.realm, recipientReason: row.reason })
+        realm: row.realm, recipientReason: row.reason, topic: row.topic, actorAgent: row.actor_agent, relatedResource: row.group_key })
         .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
       subjects.push({ input: { principalId: principalId!, owner: row.subject_owner, ref: row.subject_ref,
         revision: row.subject_revision, disclosureBasis: row.disclosure_basis, realm: row.realm }, result: resolved });
@@ -824,11 +851,11 @@ export class NotificationStore {
       const row = (
         await client.query<{
           reason: ProposalSubscriptionReason;
-          level: 'participating' | 'ignore';
+          level: 'participating' | 'all' | 'ignore';
           revision: string;
         }>(
           `
-        SELECT reason,level,revision::text FROM access.proposal_subscription
+        SELECT reason,level,revision::text FROM access.watch
         WHERE principal_id = $1 AND proposal = $2`,
           [principalId, proposal],
         )
@@ -841,18 +868,18 @@ export class NotificationStore {
     principal: VerifiedPrincipal,
     proposal: string,
     input: {
-      level: 'participating' | 'ignore';
+      level: 'participating' | 'all' | 'ignore';
       expectedRevision: string | null;
     },
   ): Promise<{
     proposal: string;
-    level: 'participating' | 'ignore';
+    level: 'participating' | 'all' | 'ignore';
     reason: ProposalSubscriptionReason;
     revision: string;
   }> {
     if (
       !uuidPattern.test(proposal) ||
-      !['participating', 'ignore'].includes(input.level) ||
+      !['participating', 'all', 'ignore'].includes(input.level) ||
       (input.expectedRevision !== null && !/^[1-9][0-9]{0,18}$/.test(input.expectedRevision))
     ) {
       throw new NotificationInvalid('invalid proposal subscription');
@@ -867,7 +894,7 @@ export class NotificationStore {
       const current = (
         await client.query<{ reason: ProposalSubscriptionReason; revision: string }>(
           `
-        SELECT reason,revision::text FROM access.proposal_subscription
+        SELECT reason,revision::text FROM access.watch
         WHERE principal_id = $1 AND proposal = $2 FOR UPDATE`,
           [principalId, proposal],
         )
@@ -876,10 +903,10 @@ export class NotificationStore {
         throw new NotificationStale('subscription revision changed');
       const reason = current?.reason ?? 'manual',
         next = current ? (BigInt(current.revision) + 1n).toString() : '1';
-      if (current) await client.query(`UPDATE access.proposal_subscription
+      if (current) await client.query(`UPDATE access.watch
         SET level = $3,revision = $4 WHERE principal_id = $1 AND proposal = $2`,
       [principalId,proposal,input.level,next]);
-      else if (!(await client.query(`INSERT INTO access.proposal_subscription (principal_id,proposal,reason,level)
+      else if (!(await client.query(`INSERT INTO access.watch (principal_id,proposal,reason,level)
         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING principal_id`,
       [principalId,proposal,reason,input.level])).rowCount) {
         throw new NotificationStale('automatic subscription appeared');

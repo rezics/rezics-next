@@ -12,17 +12,18 @@ import { checkedItem, checkedOutcome, InvalidMerge, itemCommandKey, MERGE_COST, 
   type MergeTask, type RecordedItem } from '../identity-merge/contract.ts';
 import { checkedTask } from '../identity-merge/journal.ts';
 import { targetRef } from '../target/contract.ts';
+import { followKind, followLevel, followSource } from './contract.ts';
 
 export interface FollowsMergeDependencies { accessPool: Pool; graph: Pick<FusekiClient, 'query'> }
 const uuid = t.String({ pattern: '^[0-9a-f-]{36}$' });
 const rowSchema = t.Object({ principal_id: uuid, target: targetRef, acting_subject: targetRef,
-  kind: t.Union(['realm', 'zone', 'work', 'agent', 'external-author', 'concept'].map(kind => t.Literal(kind))),
+  kind: followKind, level: followLevel, source: followSource, pin_position: t.Nullable(t.Integer()),
   following: t.Boolean(), revision: uuid }, { additionalProperties: false });
 type Row = Static<typeof rowSchema>;
 const snapshotSchema = t.Object({ source: rowSchema, survivor: t.Nullable(rowSchema) }, { additionalProperties: false });
 type Snapshot = Static<typeof snapshotSchema>;
 const owner = 'follows';
-const columns = 'principal_id::text,target,kind,acting_subject,following,revision::text';
+const columns = 'principal_id::text,target,kind,acting_subject,following,revision::text,level,source,pin_position';
 const json = (value: unknown) => canonicalCandidate(value).candidate;
 
 function snapshot(source: Row, survivor: Row | null): MergeItem {
@@ -44,10 +45,11 @@ async function read(client: PoolClient, principal: string, source: string, survi
   return { source: rows.find(row => row.target === source)!, survivor: rows.find(row => row.target === survivor) ?? null };
 }
 async function put(client: PoolClient, row: Row) {
-  await client.query(`INSERT INTO access.follow (principal_id,target,kind,acting_subject,following,revision)
-    VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (principal_id,target) DO UPDATE SET
-      kind=EXCLUDED.kind,acting_subject=EXCLUDED.acting_subject,following=EXCLUDED.following,revision=EXCLUDED.revision`,
-  [row.principal_id, row.target, row.kind, row.acting_subject, row.following, row.revision]);
+  await client.query(`INSERT INTO access.follow (principal_id,target,kind,acting_subject,following,revision,level,source,pin_position)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (principal_id,target) DO UPDATE SET
+      kind=EXCLUDED.kind,acting_subject=EXCLUDED.acting_subject,following=EXCLUDED.following,revision=EXCLUDED.revision,
+      level=EXCLUDED.level,source=EXCLUDED.source,pin_position=EXCLUDED.pin_position`,
+  [row.principal_id,row.target,row.kind,row.acting_subject,row.following,row.revision,row.level,row.source,row.pin_position]);
 }
 
 /** The existing follow inventory lock serializes this native command with
@@ -110,9 +112,6 @@ export function followsMergeHandler({ accessPool, graph }: FollowsMergeDependenc
       }
       if (next) {
         await put(client, next.source); await put(client, next.survivor!);
-        const count = (slots: Snapshot) => Number(slots.source?.following ?? false) + Number(slots.survivor?.following ?? false);
-        await client.query(`UPDATE access.follow_inventory SET revision=$2,active_count=active_count+$3 WHERE principal_id=$1`,
-          [item.key, randomUUID(), count(next) - count(current)]);
       }
       const result = checkedOutcome({ outcome, commandKey: key, receipt: `urn:rezics:follows:${key}`,
         afterHead: next ? mergeDigest(next) : null, after: next ? json(next) : { reason: 'follow-slots-edited' } }, key);

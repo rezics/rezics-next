@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
-import { type FollowEntry, type FollowKind, settle, uuidOf } from '../feed/types.ts';
+import { type FollowEntry, settle, uuidOf } from '../feed/types.ts';
 import { type Community, type CommunityNavigation, type Managed, type Moderated, realmOf, realmSegment }
   from './communities.ts';
 
@@ -36,7 +36,7 @@ function community(item: Followed): Community {
  * One page of the reader's follows of a kind, with whether each has activity
  * the reader has not seen. `complete` is false when they follow more than a page.
  */
-export const readFollowed = cache(async (kind: Extract<FollowKind, 'realm' | 'zone'>):
+export const readFollowed = cache(async (kind: 'realm' | 'zone'):
   Promise<{ items: Community[]; complete: boolean } | null> => {
   const reader = await shellReader();
   if (!reader.actingSubject) return null;

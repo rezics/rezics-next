@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { discloseNotifications } from '../disclosure/notifications.ts';
+import { notificationRecipientAllowed } from './recipient-policy.ts';
 import type { Pool, PoolClient } from 'pg';
 import { NotificationConflict, NotificationInvalid, NotificationStore, NotificationUnavailable, normalizeNotificationError,
   requireAccessOpen, rollback, sha256,
@@ -16,6 +17,9 @@ export type SubjectResolution =
 export interface NotificationSubjectReader {
   resolve(input: { principalId: string; owner: string; ref: string; revision: string | null;
     disclosureBasis: string; realm?: string | null;
+    topic?: string;
+    actorAgent?: string | null;
+    relatedResource?: string | null;
     /** Durable recipient provenance; omitted when merely managing a subscription. */
     recipientReason?: ProposalSubscriptionReason | null }): Promise<SubjectResolution>;
 }
@@ -166,8 +170,9 @@ export class NotificationDispatcher {
         EXISTS (SELECT 1 FROM access.notification_preference n WHERE n.principal_id = p.id
           AND n.purpose = i.purpose AND n.topic = i.topic AND n.channel = d.channel
           AND n.state = 'disabled') AS disabled,
-        EXISTS (SELECT 1 FROM access.proposal_subscription sub WHERE sub.principal_id = p.id
+        EXISTS (SELECT 1 FROM access.watch sub WHERE sub.principal_id = p.id
           AND sub.proposal = pc.proposal AND sub.level = 'ignore'
+          AND pc.reason = 'manual'
           AND i.disclosure_basis = 'editorial-proposal-v1') AS muted
       FROM access.notification_delivery d
       JOIN access.notification_item i ON i.id = d.item_id
@@ -234,17 +239,20 @@ export class NotificationDispatcher {
     address: string | null; addressDigest: string; payload: Record<string, string>; disclosureDigest: string }> {
     const context = (await this.pool.query<{ subject_owner: string; subject_ref: string;
       subject_revision: string | null; disclosure_basis: string; address: string | null; address_digest: string;
-      lock_screen_disclosure: boolean; realm: string | null; reason: ProposalSubscriptionReason | null }>(`SELECT i.subject_owner, i.subject_ref, i.subject_revision,
-        i.disclosure_basis, e.address, e.address_digest, e.lock_screen_disclosure, c.realm, pc.reason
+      lock_screen_disclosure: boolean; realm: string | null; actor_agent: string | null; group_key: string | null;
+      reason: ProposalSubscriptionReason | null; topic: string }>(`SELECT i.subject_owner, i.subject_ref, i.subject_revision,
+        i.disclosure_basis, i.topic, e.address, e.address_digest, e.lock_screen_disclosure, c.realm, c.actor_agent, c.group_key, pc.reason
       FROM access.notification_delivery d JOIN access.notification_item i ON i.id = d.item_id
       JOIN access.notification_endpoint e ON e.id = d.endpoint_id
       LEFT JOIN access.notification_display_context c ON c.item_id = i.id
       LEFT JOIN access.notification_proposal_context pc ON pc.item_id = i.id WHERE d.id = $1`, [row.id])).rows[0];
     if (!context) return { kind: 'cancel', reason: 'ineligible' };
+    if ((context.actor_agent || context.realm) && !await notificationRecipientAllowed(this.pool,row.principal_id,
+      context.actor_agent,context.realm,context.group_key)) return { kind: 'cancel', reason: 'unsubscribed' };
     const subjectReader = this.scopedSubjects.get(context.disclosure_basis) ?? this.subjects;
     const input = { principalId: row.principal_id, owner: context.subject_owner,
       ref: context.subject_ref, revision: context.subject_revision, disclosureBasis: context.disclosure_basis,
-      realm: context.realm, recipientReason: context.reason };
+      realm: context.realm, recipientReason: context.reason, topic: context.topic };
     const [resolved] = await discloseNotifications(this.pool,
       [{ input, result: await subjectReader.resolve(input) }], row.channel);
     if (!resolved) return { kind: 'cancel', reason: 'undisclosed' };

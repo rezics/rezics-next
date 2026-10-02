@@ -9,6 +9,7 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { reviewSubject } from '../notification/producer-review.ts';
 import { notificationRealmDisplay, notificationRoleName, notificationWorkTitle }
   from '../notification/display.ts';
+import { relationshipEligible } from '../follows/recipients.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -86,11 +87,13 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       return checked.status === 'available' && JSON.stringify(checked.subject) === JSON.stringify(result.subject)
         ? presented : hidden;
     }
-    if (input.disclosureBasis === 'realm-reply-v1') {
+    if (input.disclosureBasis === 'realm-reply-v1' || input.disclosureBasis === 'relationship-reply-v1') {
       if (input.owner !== 'graph' || !native.test(input.ref) || !input.realm || !native.test(input.realm)
         || !input.revision?.startsWith('urn:rezics:content:revision:')) return hidden;
       const policy = await readRealmPolicy(env, input.realm);
       if (!policy) return hidden;
+      const relationship = input.disclosureBasis === 'relationship-reply-v1';
+      if (relationship && policy.visibility !== 'public') return hidden;
       const candidates = policy.visibility === 'private'
         ? await realmActors(access, input.principalId, input.realm) : [];
       if (policy.visibility === 'private' && !candidates.length) return hidden;
@@ -106,6 +109,10 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       if (!placement || `urn:rezics:content:revision:${placement.revisionId}` !== input.revision) return hidden;
       const reply = await replies.readCurrent(input.ref);
       if (!reply || reply.revisionId !== placement.revisionId) return { status: 'erased' };
+      const identity = await replies.readReply(input.ref);
+      const eligible = () => relationshipEligible(access,input.principalId,{ targets: [input.realm!,reply.rootTarget,reply.author],
+        highlights: false, watches: [reply.rootTarget, ...identity?.parentReply ? [identity.parentReply] : []] });
+      if (relationship && !await eligible()) return hidden;
       if (!await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)) return hidden;
       const result = await present({ status: 'available', subject: { private: policy.visibility !== 'public',
         fields: { linkTarget: input.ref, realm: input.realm, excerpt: reply.body.slice(0, 240) } } },
@@ -116,7 +123,8 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
       if (current?.placement !== placement.placement || current.revisionId !== placement.revisionId
         || currentReply?.revisionId !== placement.revisionId
         || JSON.stringify(await readRealmPolicy(env, input.realm)) !== JSON.stringify(policy)
-        || !await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)) return hidden;
+        || !await publicReplyRoot(env.fuseki, reply.rootTarget, reply.rootRevision)
+        || relationship && !await eligible()) return hidden;
       return result;
     }
     if (input.owner !== 'access' || !uuid.test(input.ref)) return hidden;

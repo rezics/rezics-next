@@ -30,7 +30,8 @@ async function produced(kind: 'chapter_published' | 'feed_post_vote', stale = fa
       ? [{ id: id(9) }] : [{ id: id(10) }] };
     throw new Error(`Unexpected Access read: ${sql}`);
   } } as unknown as Pool;
-  const producer = new NotificationProducer(access, null, {} as Pool, {} as never,
+  const content = { query: async () => ({ rows: [{ language_tag: 'en' }] }) } as unknown as Pool;
+  const producer = new NotificationProducer(access, null, content, {} as never,
     { enqueue: async (event: NotificationEvent) => { events.push(event); return []; } } as never, null);
   await producer.runAccessOnce();
   return events;

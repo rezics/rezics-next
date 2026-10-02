@@ -1,9 +1,10 @@
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, ControlUnavailable } from '../modules/access/topology-control.ts';
-import { batchFollowCommand, batchFollowResult, followCommand, followedAuthorsPage, followedAuthorsQuery,
+import { batchFollowCommand, batchFollowResult, followCommand, followKind, followTargetId, followedAuthorsPage, followedAuthorsQuery,
   followResult, followsPage, followsQuery, followState, type FollowKind } from '../modules/follows/contract.ts';
 import { readFollowedAuthors, readFollows, readFollowTarget } from '../modules/follows/read.ts';
+import { resolveFollowIdentity } from '../modules/follows/targets.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { workRead, WorkReadUnavailable } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -25,15 +26,21 @@ export const openApiOperations = {
   '/v1/me/follows/batch': { post: { bearer: true, idempotencyKey: true } },
   '/v1/follows/{id}': { get: { bearer: false } },
   '/v1/me/follows/authors': { get: { bearer: true } },
+  '/v1/me/follow-state': { get: { bearer: true } },
   '/v1/authors/open-library/{author}/follow': { get: { bearer: false } },
 } as const;
 
 const stateQuery = { language: t.Optional(readLanguage), actingSubject: t.Optional(readId) };
 
 export function followsRoutes(work: MainWorkDependencies) {
-  const canonicalWork = (request: Request, target: string, kind: FollowKind) => kind === 'work'
-    ? workRead(work, new Request(request.url), {}, async session => (await resolveTargets(session, [target], 'discussion'))[0]!.resource)
-    : Promise.resolve(target);
+  const describe = (request: Request, principal: import('../modules/access/admission.ts').VerifiedPrincipal, agent: string) =>
+    (target: string, hint?: string) => workRead(work,new Request(request.url),{},async session => {
+      const identity = await resolveFollowIdentity(session,target);
+      if (identity.kind === 'work') identity.target = (await resolveTargets(session,[identity.target],'discussion'))[0]!.resource;
+      await readFollowTarget(session,identity.target,identity.kind,undefined,{ principal,agent });
+      if (hint && hint!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(hint))) throw new ControlInvalid('Follow kind does not match target');
+      return identity;
+    });
   /** Followers of a target, and with a bearer whether the reader follows it. Only the count is public. */
   const state = async (request: Request, target: string, kind: FollowKind,
     query: { language?: string; actingSubject?: string }) => {
@@ -42,10 +49,13 @@ export function followsRoutes(work: MainWorkDependencies) {
       const principal = request.headers.has('authorization') ? await work.account.verify(request, ['follow:read']) : null;
       if (!!principal !== !!query.actingSubject) throw new ControlInvalid('Authentication and actingSubject are required together');
       return Response.json(await workRead(work, new Request(request.url), { language: query.language }, async session => {
-        const canonical = kind === 'work' ? (await resolveTargets(session,[target],'discussion'))[0]!.resource : target;
-        const described = await readFollowTarget(session, canonical, kind);
+        const identity = await resolveFollowIdentity(session,target);
+        const canonical = identity.kind === 'work' ? (await resolveTargets(session,[identity.target],'discussion'))[0]!.resource : identity.target;
+        const reader = principal ? { principal,agent: query.actingSubject! } : undefined;
+        const described = await readFollowTarget(session, canonical, identity.kind,undefined,reader);
+        if (kind!==identity.kind && !(identity.kind==='space' && ['realm','zone'].includes(kind))) throw new ControlInvalid('Follow kind does not match target');
         const current = await work.follows!.state(described.id, principal ? { principal, agent: query.actingSubject! } : undefined);
-        await readFollowTarget(session, described.id, kind);
+        await readFollowTarget(session, described.id, identity.kind,undefined,reader);
         return { profile: 'follow-state-v1' as const, target: described, ...current };
       }), { headers: homeHeaders });
     } catch (error) { return homeError(error); }
@@ -58,7 +68,7 @@ export function followsRoutes(work: MainWorkDependencies) {
           const principal = await work.account.verify(request, ['follow:read']);
           return Response.json(await workRead(work, new Request(request.url), { ...query, actingSubject: undefined },
             session => readFollows(session, work.follows!, principal, query.actingSubject, query.kind,
-              query.include === 'newSince')), { headers: homeHeaders });
+              query.include === 'newSince', query)), { headers: homeHeaders });
         } catch (error) { return homeError(error); }
       })
     .get('/v1/me/follows/authors', { query: followedAuthorsQuery,
@@ -72,11 +82,13 @@ export function followsRoutes(work: MainWorkDependencies) {
       } catch (error) { return homeError(error); }
     })
     .get('/v1/follows/:id', { params: t.Object({ id: readUuid }),
-      query: t.Object({ kind: t.Union([t.Literal('realm'), t.Literal('zone'), t.Literal('work'), t.Literal('agent'),
-        t.Literal('concept')]),
+      query: t.Object({ kind: followKind,
         ...stateQuery }, { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
       response: { 200: followState, ...workReadProblems },
     }, ({ request, params, query }) => state(request, `https://rezics.com/id/${params.id}`, query.kind, query))
+    .get('/v1/me/follow-state', { query: t.Object({ target: followTargetId, kind: followKind,
+      language: t.Optional(readLanguage), actingSubject: readId }, { additionalProperties: false }),
+    response: { 200: followState, ...workReadProblems } }, ({ request,query }) => state(request,query.target,query.kind,query))
     .get('/v1/authors/open-library/:author/follow', {
       params: t.Object({ author: t.String({ pattern: '^OL[1-9][0-9]{0,11}A$' }) }),
       query: t.Object(stateQuery, { additionalProperties: false }), detail: { security: [{}, { bearerAuth: [] }] },
@@ -87,11 +99,8 @@ export function followsRoutes(work: MainWorkDependencies) {
         try {
           if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
           const principal = await work.account.verify(request, ['follow:write']);
-          const target = await canonicalWork(request, body.target, body.kind);
-          const result = await work.follows.set(principal, { ...body, target }, request.headers.get('idempotency-key') ?? '',
-            () => workRead(work, new Request(request.url), {}, async session => {
-              await readFollowTarget(session, target, body.kind);
-            }));
+          const result = await work.follows.set(principal, body, request.headers.get('idempotency-key') ?? '',
+            describe(request,principal,body.actingSubject));
           return Response.json(result, { headers: homeHeaders });
         } catch (error) { return homeError(error); }
       })
@@ -101,10 +110,8 @@ export function followsRoutes(work: MainWorkDependencies) {
       try {
         if (!work.follows) throw new WorkReadUnavailable('Follows are unavailable');
         const principal = await work.account.verify(request, ['follow:write']);
-        const targets = await Promise.all(body.targets.map(async item => ({ ...item, target: await canonicalWork(request, item.target, item.kind) })));
-        return Response.json(await work.follows.batch(principal, { ...body, targets },
-          request.headers.get('idempotency-key') ?? '', (target, kind) => workRead(work,
-            new Request(request.url), {}, async session => { await readFollowTarget(session, target, kind); })),
+        return Response.json(await work.follows.batch(principal, body,
+          request.headers.get('idempotency-key') ?? '', describe(request,principal,body.actingSubject)),
         { headers: homeHeaders });
       } catch (error) { return homeError(error); }
     });

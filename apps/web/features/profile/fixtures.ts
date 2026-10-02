@@ -85,6 +85,7 @@ export function publicLibrary(own = false): LibraryView {
 export function followState(followers: number, following: boolean | null = null,
   kind: 'exact' | 'lower-bound' = 'exact'): FollowState {
   return { profile: 'follow-state-v1', following, revision: following === null ? null : '0192e0aa-0000-7000-8000-000000000001',
+    level: following === null ? null : 'highlights', source: following === null ? null : 'explicit', pinPosition: null,
     target: { id: storyId(1), kind: 'agent', name: name('Lin Mei 林梅', 'und'),
       icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: storyId(1), resourceType: 'agent' },
       realm: null, href: '/@lin_mei' },
