@@ -177,9 +177,24 @@ The [editor stories](../../packages/ui/src/components/rich-text-editor.stories.t
 and Studio stories exercise formatting, restore, conflicts and publication.
 Browser tests do not substitute for physical CJK IME testing on phones.
 
-Writing starts with contextual controls: a selection menu for inline formatting,
-a right-click/keyboard formatting menu, and separate block insertion controls.
+Writing starts with contextual controls, chosen by the device's primary input
+rather than the screen width. Every control is one entry in a shared command
+table, so surfaces differ in layout and never in what they can do.
+
+- **Pointer:** a selection panel with fixed rows (block type, marks, link, ruby,
+  emphasis, alignment, and table actions inside a table), and a right-click or
+  Alt+F10 / Shift+F10 menu with the same commands for keyboard use. Typing `/`
+  opens a filtered block menu; the caret inside a link shows a small card to
+  open, edit or remove it, and Ctrl/⌘+K edits a link in place.
+- **Touch:** no floating panel, because the system's selection handles and menu
+  occupy that place. A bar rests on the keyboard with the most used formats; a
+  drawer holds block types, the remaining marks and insertion. Its buttons keep
+  the keyboard open. Discussion composers offer only the short set.
+- Changing a block's type keeps the block's identity, and inserting a block
+  never replaces selected text.
+
 Discussion composers stay compact. Studio exposes the complete toolbar and
 file import/export through an explicit advanced-mode toggle without changing
 the saved document or recreating the editor. The reason is to keep writing and
-replying direct while leaving specialist formatting discoverable.
+replying direct while leaving specialist formatting discoverable, and to stop
+the same command from being missing on one surface and present on another.
