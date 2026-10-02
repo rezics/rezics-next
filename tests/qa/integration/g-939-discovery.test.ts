@@ -289,6 +289,16 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
     }`)
       ).boolean,
     ).toBe(false);
+    // Thousands of Concept alias documents share publicTitle, but must never
+    // consume the existing Work collector's candidate bound or continuation.
+    const workSearch = await home.json<{
+      results: { work: string }[];
+      count: { value: number; precision: string };
+      next: string | null;
+    }>(await call(`/v1/search/catalogue?q=${token}&limit=64`));
+    expect(workSearch.results.map((item) => item.work)).toEqual([publicWork.work]);
+    expect(workSearch.count).toEqual({ value: 1, precision: 'exact' });
+    expect(workSearch.next).toBeNull();
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     const refresh = async () => {
       let row = await home.json<{

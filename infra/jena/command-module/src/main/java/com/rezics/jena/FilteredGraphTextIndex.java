@@ -126,6 +126,10 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField,
                     PublicNameProjection.PREFIX + (scope.names().equals("all") ? "" : scope.names() + ":"))),
                     BooleanClause.Occur.FILTER).build();
+            else query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                // Public resource names must not consume the Work candidate budget.
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX)),
+                    BooleanClause.Occur.MUST_NOT).build();
             if (names && scope.resources() != null) {
                 if (scope.resources().size() > 64) throw new TextIndexException("name candidate bound exceeded");
                 List<org.apache.lucene.util.BytesRef> units = new ArrayList<>();
