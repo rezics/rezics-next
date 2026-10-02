@@ -1,9 +1,12 @@
+import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { seriesWorks, zoneFor } from '../official-zone-stories/release-fixtures.ts';
 import { RealmPageStory } from '../realm/story-page.tsx';
 import type { PlacedModule } from './zone-home.tsx';
+
+const notice = 'Series and volumes from the shared catalogue.';
 
 /** Collection previews still render when no official package is active, as on the local seeded homes. */
 function Home({ slug, state, locale }: {
@@ -13,8 +16,8 @@ function Home({ slug, state, locale }: {
   const modules: PlacedModule[] = [
     { module: { id: 'notice', type: 'announcement', title: 'Series and volumes from the shared catalogue.',
       layout: 'covers', rail: false, shuffle: false, more: null },
-    state: { state: 'ready', data: { text: { value: 'Series and volumes from the shared catalogue.',
-      lang: 'en', dir: 'ltr' }, href: null } } },
+    state: { state: 'ready', data: { text: { value: notice, lang: 'en', dir: direction('en', notice) },
+      href: null } } },
     { module: { id: 'catalogue', type: 'shelf', title: zone.name.value, layout: 'covers', rail: false,
       shuffle: false, more: `/r/${slug}/catalogue` }, state: state === 'ready'
       ? { state, data: { tabs: [{ id: 'catalogue', label: zone.name.value, items: seriesWorks }] } }
