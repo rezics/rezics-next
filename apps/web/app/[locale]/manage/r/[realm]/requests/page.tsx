@@ -23,6 +23,6 @@ export default async function JoinRequestsRoute({ params }: { params: Promise<{ 
     return <ManageFailure failure={failure === 'stale' ? 'moved' : failure === 'conflict' || failure === 'pending' ? 'unavailable' : failure}
       locale={locale} messages={messages} signInHref={signInHref} retryHref={localizedPath(href, locale)} />;
   }
-  return <RequestsView initial={requests.data.page} space={requests.data.space} realm={requests.data.realm}
+  return <RequestsView key={`${requests.data.realm}:${actingSubject}`} initial={requests.data.page} space={requests.data.space} realm={requests.data.realm}
     actingSubject={actingSubject} locale={locale} />;
 }

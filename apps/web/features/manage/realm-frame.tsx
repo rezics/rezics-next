@@ -7,7 +7,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { agentShort } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Thumb } from './parts.tsx';
-import { RealmTabs } from './realm-tabs.tsx';
+import { AccessRealmTabs } from './settings-navigation.tsx';
 import type { RealmHeader } from './types.ts';
 import { accessMessages } from './settings-messages.ts';
 
@@ -26,11 +26,11 @@ export function ActingAs({ agent, locale, messages }: { agent: AgentOption; loca
  * Every Realm management page: the Realm, who is acting, and the sections.
  * The Realm's name is the page's one <h1>; each section titles itself with <h2>.
  */
-export function RealmFrame({ realm, address = realm, header, agent, locale, messages, children }: {
+export function RealmFrame({ realm, address = realm, header, agent, locale, messages, children, settingsAllowed }: {
   realm: string;
   /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
   address?: string;
-  header: RealmHeader | null; agent: AgentOption; locale: UiLocale; messages: ManageMessages; children: ReactNode;
+  header: RealmHeader | null; agent: AgentOption; locale: UiLocale; messages: ManageMessages; children: ReactNode; settingsAllowed?: boolean;
 }) {
   const t = materializeData(messages, { locale });
   const fallback = t.realmFallback({ id: realm.slice(0, 8) });
@@ -50,7 +50,7 @@ export function RealmFrame({ realm, address = realm, header, agent, locale, mess
           <h1 className="min-w-0 break-words font-semibold text-2xl tracking-tight sm:text-3xl">
             {header ? <Named name={header.name} /> : fallback}</h1>
         </div>
-        <RealmTabs realm={address} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
+        <AccessRealmTabs realm={realm} address={address} actor={agent.iri} settingsAllowed={settingsAllowed} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
           roles: t.tabRoles, settings: t.tabSettings }} />
         <LocalizedLink href={`/manage/r/${address}/requests`} className="w-fit rounded-md pb-3 text-primary text-sm underline-offset-4 hover:underline">
           {accessMessages[locale].requests}</LocalizedLink>

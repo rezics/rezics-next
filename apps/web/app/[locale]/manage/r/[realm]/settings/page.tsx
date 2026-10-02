@@ -30,7 +30,7 @@ export default async function RealmSettingsRoute({ params }: { params: Promise<{
   const settings = await readSettings(main, capability, actingSubject);
   if (!settings.ok) return <ManageFailure failure={settings.failure} locale={locale} messages={messages}
     signInHref={signInHref} retryHref={localizedPath(realmHref(address, 'settings'), locale)} />;
-  return <div className="grid gap-8"><SettingsAccess initial={access.data} actingSubject={actingSubject} locale={locale} />
-    <SettingsView realm={capability}
+  return <div className="grid gap-8"><SettingsAccess key={`access:${capability}:${actingSubject}`} initial={access.data} actingSubject={actingSubject} locale={locale} />
+    <SettingsView key={`rules:${capability}:${actingSubject}`} realm={capability}
       actingSubject={actingSubject} initial={settings.data} locale={locale} messages={messages} /></div>;
 }

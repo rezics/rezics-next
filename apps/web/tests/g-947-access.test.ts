@@ -36,39 +36,19 @@ test('G-947: one settings command carries all four independent choices and its r
   }
 });
 
-test('G-947: pending requests use the owner continuation and approval replays the same membership command', async () => {
-  let attempt = 0;
-  const { main, calls } = client(call => {
-    if (call.path.endsWith('/join-requests')) return ok({ items: [requestFixture], nextCursor: requestFixture.id });
-    if (call.method === 'GET') return ok({ generation: String(12 + attempt), items: [], nextCursor: null });
-    if (attempt++ === 0) throw new Error('Response lost after commit');
-    return ok({ receiptId: 'receipt', replayed: true });
-  });
+test('G-947: pending requests use the owner continuation and decisions cite its generations', async () => {
+  const { main, calls } = client(call => call.method === 'GET'
+    ? ok({ generation: '12', items: [requestFixture], nextCursor: requestFixture.id })
+    : ok({ receiptId: 'receipt', replayed: false }));
   const api = spaceAccessApi(() => main, accessInitial.space, accessInitial.realm, accessActor);
   await api.requests(requestFixture.id);
   expect(calls[0]!.query.get('after')).toBe(requestFixture.id);
   expect(calls[0]!.query.get('actingSubject')).toBe(accessActor);
-  expect(await api.approve(requestFixture, 'Welcome', 'approval-intent')).toEqual({ ok: false, failure: 'unavailable' });
-  expect((await api.approve(requestFixture, 'Welcome', 'approval-intent')).ok).toBe(true);
-  const commands = calls.filter(call => call.method === 'POST');
-  expect(commands).toHaveLength(2);
-  expect(commands[1]).toEqual(commands[0]);
-  expect(commands[0]!.body).toMatchObject({ action: 'add', consent: requestFixture.consent,
-    expectedMembershipGeneration: requestFixture.membershipGeneration, expectedGeneration: '12' });
-  expect(calls.filter(call => call.method === 'GET' && call.path.endsWith('/members'))).toHaveLength(1);
-});
-
-test('G-947: a refused stale approval can refresh its management generation', async () => {
-  let generation = '12';
-  const { main, calls } = client(call => {
-    if (call.method === 'GET') return ok({ generation, items: [], nextCursor: null });
-    generation = '13';
-    return Response.json({ code: 'stale_realm_management_basis' }, { status: 409 });
-  });
-  const api = spaceAccessApi(() => main, accessInitial.space, accessInitial.realm, accessActor);
-  expect(await api.approve(requestFixture, 'Welcome', 'first')).toMatchObject({ ok: false, failure: 'stale' });
-  await api.approve(requestFixture, 'Welcome', 'second');
-  expect(calls.filter(call => call.method === 'POST').map(call => call.body.expectedGeneration)).toEqual(['12', '13']);
+  await api.decide(requestFixture.id, { actingSubject: accessActor, expectedGeneration: '12',
+    expectedRequestGeneration: requestFixture.requestGeneration, decision: 'accepted', reason: 'Welcome' }, 'approval-intent');
+  expect(calls[1]).toMatchObject({ path: `/v1/realms/${accessInitial.realm.slice(-36)}/join-requests/${requestFixture.id}/decisions`,
+    method: 'POST', key: 'approval-intent', body: { decision: 'accepted', expectedRequestGeneration: '0', expectedGeneration: '12' } });
+  expect(calls.some(call => call.path.endsWith('/members') || call.path.endsWith('/settings'))).toBe(false);
 });
 
 test('G-947: listing is separate from profile content and reports version conflicts', async () => {
@@ -99,7 +79,7 @@ test('G-947: a request-only manager can open the legacy inbox without a settings
 });
 
 test('G-947: join submission preserves policy, membership and terms revisions', async () => {
-  const { main, calls } = client(() => ok({ requestId: requestFixture.id, state: 'pending', expiresAt: '2026-10-09T08:00:00Z', replayed: false }));
+  const { main, calls } = client(() => ok({ requestId: requestFixture.id, state: 'pending', requestGeneration: '0', replayed: false }));
   const api = spaceAccessApi(() => main, accessInitial.space, accessInitial.realm, accessActor);
   const command = { actingSubject: accessActor, expectedMembershipGeneration: '4', expectedPolicyRevision: '12',
     termsRevision: 'rules-3', reason: 'I agree to the rules.' };

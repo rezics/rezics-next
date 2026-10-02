@@ -22,7 +22,7 @@ export const French: Story = { args: { locale: 'fr' }, globals: { locale: 'fr' }
 export const Spanish: Story = { args: { locale: 'es' }, globals: { locale: 'es' } };
 export const ManagementFrame: Story = {
   render: args => <RealmFrame realm={args.initial.realm.slice(-36)} address={args.initial.space.slice(-36)}
-    header={header} agent={acting} locale={args.locale} messages={messages}><SettingsAccess {...args} /></RealmFrame>,
+    header={header} agent={acting} settingsAllowed={true} locale={args.locale} messages={messages}><SettingsAccess {...args} /></RealmFrame>,
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'Join requests' })).toHaveAttribute('href',
       `/en/manage/r/${accessInitial.space.slice(-36)}/requests`);
