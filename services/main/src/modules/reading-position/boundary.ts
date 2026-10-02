@@ -6,8 +6,10 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { parseStoredRelease } from '../release/schema.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
-import { REVELATION_COST, pageReadingPositions, type Revelation } from './store.ts';
+import { REVELATION_COST, type Revelation } from './store.ts';
 import { READING_POSITION_COST } from './contract.ts';
+import { ReadingPositionTraversal } from './traversal.ts';
+import { chooserPosition } from './chooser-position.ts';
 export { READING_POSITION_COST } from './contract.ts';
 
 /** Linear in the selected composition, never the wiki/catalogue inventory.
@@ -312,28 +314,21 @@ export class ReadingBoundary {
     }
   }
   async chooser(work: string, limit: number, after?: string, q?: string) {
-    const composition = await this.composition(work);
-    const disclosed = new Set<string>();
-    const resources = [...new Set([...composition.works,
-      ...composition.occurrences.flatMap(item => item.target && NATIVE_ID.test(item.target) ? [item.target] : [])])];
-    for (let at = 0; at < resources.length; at += 24) {
-      const targets = await disclosureSummaries(this.session, resources.slice(at, at + 24));
-      if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
-        throw new WorkReadMoved('Reading composition changed');
+    const disclosed = async (resources: string[]) => {
+      const available = new Set<string>();
+      for (let at = 0; at < resources.length; at += 24) {
+        const targets = await disclosureSummaries(this.session, resources.slice(at, at + 24));
+        if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
+          throw new WorkReadMoved('Reading composition changed');
+        }
+        for (const target of targets.summaries) if (target.status === 'available') available.add(target.reference);
       }
-      targets.summaries.forEach(target => { if (target.status === 'available') disclosed.add(target.reference); });
-    }
-    const items = composition.occurrences.filter(item => disclosed.has(item.work)
-      && !(item.role === 'part' && item.target && !disclosed.has(item.target)))
-      // Book composition keeps the placement when its native target is hidden,
-      // but withholds its labels and target before search, as its owner read does.
-      .map(item => item.target && NATIVE_ID.test(item.target) && !disclosed.has(item.target)
-        ? { ...item, target: null, labels: [] } : item);
-    const page = pageReadingPositions(items, { limit, after, q });
-    const resolved = this.selection === 'all' ? 'all' : await this.position(work) ?? 'start';
-    if (resolved !== 'all' && resolved !== 'start' && !items.some(item => item.occurrence === resolved)) {
-      throw new WorkReadMissing('Reading position is unavailable');
-    }
+      return available;
+    };
+    const traversal = new ReadingPositionTraversal(this.session, work, disclosed);
+    const page = await traversal.page({ limit, after, q });
+    const resolved = await chooserPosition(this.session, traversal, this.selection,
+      this.selection === 'mine' && await this.ownReader());
     await this.fence();
     return { work, resolved, ...page };
   }

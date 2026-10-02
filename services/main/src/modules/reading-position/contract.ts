@@ -1,8 +1,9 @@
 import { t } from 'elysia';
 import { readId, readPosition } from '../work/read-contract.ts';
 
-/** Linear in the selected composition; graph calls are batched per Work level,
- * never per chapter. Search, disclosure and ordering precede the page bound. */
+/** Legacy wiki-boundary budgets, retained in the served cost metadata.
+ * The chooser uses READING_CHOOSER_COST's bounded seeks; occurrences is not a
+ * chooser inventory ceiling. Search and ordering run before each store limit. */
 export const READING_POSITION_COST = { occurrences: 10_000, workDepth: 16, workBatch: 50,
   queryBytes: 4 * 1024 * 1024, chooserPage: 100, chooserQueryChars: 200, labels: 16,
   sessionPages: 32, releasePins: 4096 } as const;
