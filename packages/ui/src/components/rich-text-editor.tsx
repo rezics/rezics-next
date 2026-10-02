@@ -12,7 +12,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '.
 import { documentExtensions } from './document-extensions.tsx';
 import { safeDocumentUrl } from './document-url.tsx';
 import {
-  alignCommands, availableCommands, blockCommands, commandById, describeCommand, historyCommands, markCommands, tableCommands, useCommandState,
+  alignCommands, availableCommands, BlockActionShortcuts, blockCommands, commandById, describeCommand, historyCommands, markCommands, tableCommands, useCommandState,
   type CommandIO, type DialogMode, type EditorCommand,
 } from './editor-commands.tsx';
 import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.tsx';
@@ -163,6 +163,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   const selection = useRef<Selection>({ from: 0, to: 0 });
   const extensions = useMemo(() => [
     ...documentExtensions({ placeholder, emptyLineHint: slashEnabled ? labels.slashHint : undefined, unknownComponentLabel: labels.unknownComponent, maxLength, blocks }),
+    BlockActionShortcuts,
     ...(slashEnabled ? [slashExtension(slashHandlers)] : []),
   ], [placeholder, slashEnabled, labels.slashHint, labels.unknownComponent, maxLength, blocks]);
   function publish(current: TiptapEditor) {
@@ -202,6 +203,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
       },
     },
   }, [value.profile]);
+  const surface = useRef<HTMLDivElement>(null);
   const editorRef = useRef(editor);
   editorRef.current = editor;
   // With dependencies, Tiptap never reapplies options after creation; the view's attributes follow the props here.
@@ -326,12 +328,12 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
     {snapshotError ? <p role="alert" className="px-4 py-2 text-sm text-destructive">{labels.documentError}</p> : null}
     {uploadFailed ? <p role="alert" className="px-4 py-2 text-sm text-destructive">{labels.uploadFailed}</p> : null}
     {uploads ? <p role="status" className="px-4 py-2 text-sm text-muted-foreground">{labels.uploading}</p> : null}
-    <div className={cn('relative px-4 py-3 sm:px-6', !compact && 'min-h-[50dvh]')}>
+    <div ref={surface} className={cn('relative px-4 py-3 sm:px-6', !compact && 'min-h-[50dvh]')}>
       {editor ? <>
         {content}
         {editable ? <>
-          {!coarse ? <SelectionMenu editor={editor} labels={labels} blocks={blocks} io={io} linkRange={linkRange} onLinkClose={closeLink} /> : null}
-          <LinkMenu editor={editor} labels={labels} linkRange={linkRange} onEdit={editLink} onClose={closeLink} />
+          {!coarse ? <SelectionMenu editor={editor} labels={labels} blocks={blocks} io={io} linkRange={linkRange} onLinkClose={closeLink} container={surface} /> : null}
+          <LinkMenu editor={editor} labels={labels} linkRange={linkRange} onEdit={editLink} onClose={closeLink} container={surface} />
           {coarse ? <TouchBar editor={editor} labels={labels} blocks={blocks} compact={compact} io={io} /> : null}
           {slashEnabled ? <SlashMenu editor={editor} labels={labels} blocks={blocks} io={io} handlers={slashHandlers} /> : null}
           {imageRequest ? <ImageInsert editor={editor} labels={labels} request={imageRequest} upload={onUploadImage} onClose={closeImage} /> : null}

@@ -193,31 +193,77 @@ export const SelectionPanel: Story = {
     await expect(within(panel).getByRole('button', { name: /^Link/ })).toBeVisible();
     await expect(within(panel).getByRole('button', { name: /^Ruby annotation/ })).toBeVisible();
     await expect(within(panel).getByRole('button', { name: /^Emphasis marks/ })).toBeVisible();
-    // A compact grid, not a column of rows, and it opens at the caret end like a context menu.
+    // A compact grid, not a column of rows.
     await expect(panel.getBoundingClientRect().height).toBeLessThan(130);
-    await userEvent.click(within(panel).getByRole('button', { name: 'More formatting' }));
-    const more = within(await canvas.findByRole('menu', { name: 'More formatting' }));
-    await expect(more.getByRole('button', { name: 'Center' })).toBeVisible();
-    await userEvent.click(more.getByRole('button', { name: 'Center' }));
-    await expect(editor.querySelector('p')).toHaveStyle({ textAlign: 'center' });
-    await userEvent.click(within(panel).getByRole('button', { name: /^Turn into/ }));
-    const listEl = await canvas.findByRole('menu', { name: 'Turn into' });
+    const trigger = within(panel).getByRole('button', { name: /^Turn into/ });
+    await userEvent.click(trigger);
+    const listEl = await canvas.findByRole('menu', { name: /^Turn into/ });
     const list = within(listEl);
     await expect(list.getAllByRole('menuitemradio')).toHaveLength(9);
-    await expect(list.getByRole('menuitemradio', { name: 'Paragraph' })).toHaveAttribute('aria-checked', 'true');
-    const rect = (canvas.getByRole('menu', { name: 'Turn into' })).getBoundingClientRect();
+    await expect(list.getByRole('menuitemradio', { name: /^Paragraph/ })).toHaveAttribute('aria-checked', 'true');
+    const rect = (canvas.getByRole('menu', { name: /^Turn into/ })).getBoundingClientRect();
     await expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
-    await userEvent.click(list.getByRole('menuitemradio', { name: 'Heading 2' }));
+    await userEvent.click(list.getByRole('menuitemradio', { name: /^Heading 2/ }));
+    await waitFor(() => expect(editor.querySelector('h2')).toBeInTheDocument());
+    await waitFor(() => expect(editor).toHaveFocus());
     await expect(editor.querySelector('h2')).toHaveTextContent('Turn this line into something else.');
     // The block keeps its identity when its type changes.
     await expect(editor.querySelector('h2')?.getAttribute('data-id')).toBe(before);
     await userEvent.click(within(panel).getByRole('button', { name: 'Italic' }));
     await expect(editor.querySelector('h2 em')).toBeInTheDocument();
     await userEvent.click(within(panel).getByRole('button', { name: /^Turn into/ }));
-    const second = await canvas.findByRole('menu', { name: 'Turn into' });
-    await userEvent.click(await within(second).findByRole('menuitemradio', { name: 'Bullet list' }));
+    const second = await canvas.findByRole('menu', { name: /^Turn into/ });
+    await userEvent.click(await within(second).findByRole('menuitemradio', { name: /^Bullet list/ }));
+    await waitFor(() => expect(editor.querySelector('ul li p')).toBeInTheDocument());
     await expect(editor.querySelector('ul li p')).toHaveTextContent('Turn this line into something else.');
     await expect(editor.querySelector('h2')).toBeNull();
+    await waitFor(() => expect(editor).toHaveFocus());
+    await userEvent.click(within(panel).getByRole('button', { name: 'More formatting' }));
+    const more = within(await canvas.findByRole('menu', { name: 'More formatting' }));
+    await userEvent.click(more.getByRole('menuitem', { name: 'Alignment' }));
+    await userEvent.click(within(await canvas.findByRole('menu', { name: 'Alignment' })).getByRole('menuitemradio', { name: 'Center' }));
+    await waitFor(() => expect(editor.querySelector('li p')).toHaveStyle({ textAlign: 'center' }));
+  },
+};
+
+/** More acts on the blocks the selection touches: move, duplicate and delete, each with its key. */
+export const BlockActions: Story = {
+  render: () => <Example initial={fromPlainText('First line.\nSecond line.\nThird line.', 'blocks')} contextual />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    const lines = () => [...editor.querySelectorAll('p')].map(line => line.textContent);
+    const select = (index: number) => {
+      editor.focus();
+      const range = document.createRange();
+      range.selectNodeContents(editor.querySelectorAll('p')[index]!);
+      window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+    };
+    const more = async () => {
+      const panel = await canvas.findByRole('toolbar', { name: 'Format text' });
+      await userEvent.click(within(panel).getByRole('button', { name: 'More formatting' }));
+      return within(await canvas.findByRole('menu', { name: 'More formatting' }));
+    };
+    select(1);
+    let menu = await more();
+    await expect(menu.getByText('Characters selected: 12')).toBeInTheDocument();
+    await userEvent.click(menu.getByRole('menuitem', { name: /^Move up/ }));
+    await waitFor(() => expect(lines()).toEqual(['Second line.', 'First line.', 'Third line.']));
+    // The selection moves with its block, so the move repeats from the keyboard.
+    await waitFor(() => expect(editor).toHaveFocus());
+    await userEvent.keyboard('{Control>}{Shift>}{ArrowDown}{/Shift}{/Control}');
+    await expect(lines()).toEqual(['First line.', 'Second line.', 'Third line.']);
+    select(1);
+    menu = await more();
+    await userEvent.click(menu.getByRole('menuitem', { name: /^Duplicate/ }));
+    await waitFor(() => expect(lines()).toEqual(['First line.', 'Second line.', 'Second line.', 'Third line.']));
+    const ids = [...editor.querySelectorAll('p')].map(line => line.getAttribute('data-id'));
+    await expect(new Set(ids).size).toBe(4);
+    select(2);
+    menu = await more();
+    await userEvent.click(menu.getByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(lines()).toEqual(['First line.', 'Second line.', 'Third line.']));
+    await expect(canvas.queryByRole('alert')).toBeNull();
   },
 };
 

@@ -16,6 +16,8 @@ export const richTextEditorLabels = {
   turnInto: 'Turn into', clearFormatting: 'Clear formatting',
   upload: 'Upload', uploadFile: 'Upload file', uploading: 'Uploading…', uploadFailed: 'The image could not be uploaded.',
   imageLinkPlaceholder: 'Paste the image link…', embedImage: 'Embed image',
+  block: 'Block', duplicate: 'Duplicate', moveUp: 'Move up', moveDown: 'Move down', deleteBlock: 'Delete', tableMenu: 'Table',
+  selectedCharacters: 'Characters selected: {count}',
   slashHint: 'Type / to insert a block', slashEmpty: 'No matching blocks', openLink: 'Open link', editLink: 'Edit link', hideKeyboard: 'Hide keyboard',
 } satisfies Record<string, string>;
 export type RichTextEditorLabels = { [K in keyof typeof richTextEditorLabels]: string };

@@ -7,7 +7,7 @@ import { cn } from '../utils.ts';
 import { Button } from './button.tsx';
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from './drawer.tsx';
 import {
-  alignCommands, availableCommands, blockCommands, commandById, describeCommand, historyCommands, inlineCommands, insertCommands, markCommands,
+  alignCommands, availableCommands, blockActionCommands, blockCommands, commandById, describeCommand, historyCommands, inlineCommands, insertCommands, markCommands,
   tableCommands, useCommandState, type CommandIO, type EditorCommand,
 } from './editor-commands.tsx';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
@@ -119,7 +119,10 @@ export const TouchBar = memo(function TouchBar({ editor, labels, blocks, compact
               {alignCommands.map(command => <Button key={command.id} type="button" variant={state.isActive(command.id) ? 'soft' : 'outline'} className="h-11" aria-label={labels[command.label]}
                 aria-pressed={state.isActive(command.id)} onClick={() => pick(command)}><command.icon aria-hidden="true" /></Button>)}
             </Section>
-            {blocks && state.inTable ? <Section heading={labels.table} className="grid gap-1">
+            <Section heading={labels.block} className="grid grid-cols-4 gap-2">
+              {blockActionCommands.map(command => <Tile key={command.id} editor={editor} command={command} labels={labels} state={state} onPick={pick} />)}
+            </Section>
+            {blocks && state.inTable ? <Section heading={labels.tableMenu} className="grid gap-1">
               {tableCommands.map(command => <Button key={command.id} type="button" variant="ghost" className="h-11 w-full justify-start" onClick={() => pick(command)}><command.icon aria-hidden="true" />{labels[command.label]}</Button>)}
             </Section> : null}
           </> : null}

@@ -1,11 +1,11 @@
 'use client';
 
-import type { Editor as TiptapEditor } from '@tiptap/core';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { Selection } from '@tiptap/pm/state';
+import { Extension, type Editor as TiptapEditor } from '@tiptap/core';
+import { Fragment, type NodeRange, type Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { Selection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { useEditorState } from '@tiptap/react';
 import {
-  AlignCenterIcon, AlignJustifyIcon, AlignLeftIcon, AlignRightIcon, BetweenHorizontalStartIcon, BetweenVerticalStartIcon, BoldIcon, Columns3Icon, CodeIcon, CodeXmlIcon, EyeOffIcon, Heading1Icon, Heading2Icon, Heading3Icon,
+  AlignCenterIcon, AlignJustifyIcon, AlignLeftIcon, AlignRightIcon, ArrowDownIcon, ArrowUpIcon, CopyPlusIcon, BetweenHorizontalStartIcon, BetweenVerticalStartIcon, BoldIcon, Columns3Icon, CodeIcon, CodeXmlIcon, EyeOffIcon, Heading1Icon, Heading2Icon, Heading3Icon,
   ImageIcon, ItalicIcon, LanguagesIcon, LinkIcon, ListChecksIcon, ListIcon, ListOrderedIcon, MinusIcon, PilcrowIcon, QuoteIcon, RedoIcon,
   RemoveFormattingIcon, Rows3Icon, SparklesIcon, StrikethroughIcon, TableIcon, Trash2Icon, UnderlineIcon, UndoIcon,
 } from 'lucide-react';
@@ -155,13 +155,83 @@ export const tableCommands: readonly EditorCommand[] = [
   { id: 'deleteTable', label: 'deleteTable', icon: Trash2Icon, run: editor => { run(editor).deleteTable().run(); } },
 ];
 
+const listTypes = new Set(['bulletList', 'orderedList', 'taskList']);
+
+/** The blocks the selection touches, as siblings: list items within a list, otherwise top-level blocks such as a whole table. */
+export function selectedBlocks(state: EditorState): NodeRange | null {
+  const { $from, $to } = state.selection;
+  return $from.blockRange($to, node => node.type.name === 'doc' || listTypes.has(node.type.name));
+}
+
+/** A copy whose identifiable nodes are new units; the editor assigns their identities. */
+function freshCopy(fragment: Fragment): Fragment {
+  const nodes: ProseMirrorNode[] = [];
+  fragment.forEach(node => {
+    nodes.push(node.isText ? node : node.type.create('id' in node.attrs ? { ...node.attrs, id: null } : node.attrs, freshCopy(node.content), node.marks));
+  });
+  return Fragment.from(nodes);
+}
+
+type BlockAction = (tr: Transaction, range: NodeRange, state: EditorState) => boolean;
+
+const blockActions: Record<'duplicate' | 'moveUp' | 'moveDown' | 'delete', BlockAction> = {
+  duplicate: (tr, range, state) => { tr.insert(range.end, freshCopy(state.doc.slice(range.start, range.end).content)); return true; },
+  moveUp: (tr, range) => {
+    if (range.startIndex === 0) return false;
+    const previous = range.parent.child(range.startIndex - 1);
+    tr.delete(range.start - previous.nodeSize, range.start).insert(range.end - previous.nodeSize, previous);
+    return true;
+  },
+  moveDown: (tr, range) => {
+    if (range.endIndex >= range.parent.childCount) return false;
+    const next = range.parent.child(range.endIndex);
+    tr.delete(range.end, range.end + next.nodeSize).insert(range.start, next);
+    return true;
+  },
+  delete: (tr, range, state) => {
+    // A document always keeps one block to write in.
+    if (range.depth === 0 && range.startIndex === 0 && range.endIndex === range.parent.childCount) tr.replaceWith(range.start, range.end, state.schema.nodes.paragraph!.create());
+    else tr.deleteRange(range.start, range.end);
+    return true;
+  },
+};
+
+function runBlockAction(editor: TiptapEditor, action: keyof typeof blockActions): boolean {
+  return run(editor).command(({ tr, state }) => {
+    const range = selectedBlocks(state);
+    return range ? blockActions[action](tr, range, state) : false;
+  }).run();
+}
+
+/** Acts on whole blocks: the paragraphs, list items or tables the selection touches. */
+export const blockActionCommands: readonly EditorCommand[] = [
+  { id: 'duplicateBlock', label: 'duplicate', icon: CopyPlusIcon, shortcut: 'Mod-d', run: editor => { runBlockAction(editor, 'duplicate'); } },
+  { id: 'moveBlockUp', label: 'moveUp', icon: ArrowUpIcon, shortcut: 'Mod-Shift-ArrowUp', run: editor => { runBlockAction(editor, 'moveUp'); },
+    disabled: editor => (selectedBlocks(editor.state)?.startIndex ?? 0) === 0 },
+  { id: 'moveBlockDown', label: 'moveDown', icon: ArrowDownIcon, shortcut: 'Mod-Shift-ArrowDown', run: editor => { runBlockAction(editor, 'moveDown'); },
+    disabled: editor => { const range = selectedBlocks(editor.state); return !range || range.endIndex >= range.parent.childCount; } },
+  { id: 'deleteBlock', label: 'deleteBlock', icon: Trash2Icon, run: editor => { runBlockAction(editor, 'delete'); } },
+];
+
+/** Keyboard shortcuts for the block actions, so the menu teaches keys that work. */
+export const BlockActionShortcuts = Extension.create({
+  name: 'blockActionShortcuts',
+  addKeyboardShortcuts() {
+    return {
+      'Mod-d': () => runBlockAction(this.editor, 'duplicate'),
+      'Mod-Shift-ArrowUp': () => runBlockAction(this.editor, 'moveUp'),
+      'Mod-Shift-ArrowDown': () => runBlockAction(this.editor, 'moveDown'),
+    };
+  },
+});
+
 export const historyCommands: readonly EditorCommand[] = [
   { id: 'undo', label: 'undo', icon: UndoIcon, shortcut: 'Mod-z', disabled: editor => !editor.can().undo(), run: editor => { run(editor).undo().run(); } },
   { id: 'redo', label: 'redo', icon: RedoIcon, shortcut: 'Mod-Shift-z', disabled: editor => !editor.can().redo(), run: editor => { run(editor).redo().run(); } },
 ];
 
 const everyCommand: readonly EditorCommand[] = [
-  ...markCommands, ...blockCommands, ...inlineCommands, ...alignCommands, ...insertOnlyCommands, ...tableCommands, ...historyCommands,
+  ...markCommands, ...blockCommands, ...inlineCommands, ...alignCommands, ...insertOnlyCommands, ...tableCommands, ...blockActionCommands, ...historyCommands,
 ];
 
 const byId = new Map(everyCommand.map(command => [command.id, command]));
@@ -205,7 +275,7 @@ const isApple = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test
 export function formatShortcut(shortcut: string | undefined): string | undefined {
   if (!shortcut) return undefined;
   const apple = isApple();
-  const parts = shortcut.split('-').map(part => part === 'Mod' ? (apple ? '⌘' : 'Ctrl') : part === 'Shift' ? (apple ? '⇧' : 'Shift') : part === 'Alt' ? (apple ? '⌥' : 'Alt') : part.toUpperCase());
+  const parts = shortcut.split('-').map(part => part === 'Mod' ? (apple ? '⌘' : 'Ctrl') : part === 'Shift' ? (apple ? '⇧' : 'Shift') : part === 'Alt' ? (apple ? '⌥' : 'Alt') : part === 'ArrowUp' ? '↑' : part === 'ArrowDown' ? '↓' : part.toUpperCase());
   return apple ? parts.join('') : parts.join('+');
 }
 

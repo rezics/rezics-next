@@ -4,7 +4,7 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { CheckIcon, ExternalLinkIcon, PencilIcon, UnlinkIcon, XIcon } from 'lucide-react';
-import { memo, useState } from 'react';
+import { memo, useState, type RefObject } from 'react';
 import { Button } from './button.tsx';
 import type { RichTextEditorLabels } from './editor-labels.tsx';
 import { bubbleOptions } from './editor-surface.ts';
@@ -49,12 +49,15 @@ export function LinkField({ editor, labels, range, onClose }: { editor: TiptapEd
 }
 
 /** Appears while the caret rests inside a link: where it goes, and the three things to do with it. */
-export const LinkMenu = memo(function LinkMenu({ editor, labels, linkRange, onEdit, onClose }: {
+export const LinkMenu = memo(function LinkMenu({ editor, labels, linkRange, onEdit, onClose, container }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; linkRange: LinkRange | null; onEdit: () => void; onClose: () => void;
+  /** Where the card is placed: outside the document, so the document's own styles never reach it. */
+  container: RefObject<HTMLElement | null>;
 }) {
   const href = useEditorState({ editor, selector: ({ editor: current }) => String(current.getAttributes('link').href ?? '') });
   const safe = safeDocumentUrl(href);
   return <BubbleMenu editor={editor} pluginKey="rezicsLinkMenu" updateDelay={80} options={{ ...bubbleOptions, placement: 'bottom' }}
+    appendTo={() => container.current ?? editor.view.dom.parentElement ?? document.body}
     shouldShow={({ editor: current, element, view, state }) => current.isEditable && state.selection.empty && current.isActive('link')
       && (view.hasFocus() || element.contains(document.activeElement))}
     className="max-w-[calc(100vw-1rem)]" data-slot="editor-link-menu">

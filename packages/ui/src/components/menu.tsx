@@ -75,11 +75,15 @@ export const menuContentVariants = tv({
   ],
 });
 
-export const MenuContent = (props: MenuContentProps) => {
-  const { className, children, ...rest } = props;
+/**
+ * `inline` keeps the menu inside its container instead of the document body, for menus opened from
+ * a floating surface that must keep focus within itself, such as the editor's selection panel.
+ */
+export const MenuContent = (props: MenuContentProps & { inline?: boolean }) => {
+  const { className, children, inline = false, ...rest } = props;
 
   return (
-    <Portal>
+    <Portal disabled={inline}>
       <MenuPositioner>
         <ArkMenu.Content
           className={cn(menuContentVariants(), className)}
@@ -270,11 +274,13 @@ export const MenuSub = (props: React.ComponentProps<typeof Menu>) => (
   <Menu data-slot="menu-sub" {...props} />
 );
 
-export const MenuSubContent = (props: React.ComponentProps<typeof ArkMenu.Content>) => {
-  const { className, ...rest } = props;
+export const MenuSubContent = (
+  props: React.ComponentProps<typeof ArkMenu.Content> & { inline?: boolean },
+) => {
+  const { className, inline = false, ...rest } = props;
 
   return (
-    <Portal>
+    <Portal disabled={inline}>
       <MenuPositioner data-slot="menu-sub-positioner">
         <ArkMenu.Content
           className={cn(menuContentVariants(), className)}
