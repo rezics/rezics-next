@@ -1,5 +1,5 @@
--- One person/target slot. Explicit choices win over automatic Join/Library
--- changes, including an explicit unfollow. Page size is independent of budget.
+-- One person/target slot. A new Join renews interest; recovery and Library
+-- preserve later explicit choices. Page size is independent of budget.
 ALTER TABLE access.follow DROP CONSTRAINT follow_kind_check;
 ALTER TABLE access.follow ADD CONSTRAINT follow_kind_check CHECK (length(kind) BETWEEN 1 AND 2048),
   ADD COLUMN level text NOT NULL DEFAULT 'highlights' CHECK (level IN ('all','highlights','off')),
@@ -42,14 +42,18 @@ CREATE TRIGGER follow_inventory_change AFTER INSERT OR UPDATE OR DELETE ON acces
   FOR EACH ROW EXECUTE FUNCTION access.follow_inventory_change();
 
 CREATE FUNCTION access.automatic_follow(who uuid, actor text, resource text, resource_kind text,
-  origin text, enabled boolean, search_name text DEFAULT NULL) RETURNS boolean LANGUAGE plpgsql AS $$
+  origin text, enabled boolean, search_name text DEFAULT NULL, new_episode boolean DEFAULT false) RETURNS boolean LANGUAGE plpgsql AS $$
 BEGIN
   INSERT INTO access.follow_inventory(principal_id,revision) VALUES(who,gen_random_uuid()) ON CONFLICT DO NOTHING;
   PERFORM 1 FROM access.follow_inventory WHERE principal_id=who FOR UPDATE;
   IF enabled THEN
-    IF EXISTS(SELECT 1 FROM access.follow WHERE principal_id=who AND source='explicit'
+    IF NOT (origin='join' AND new_episode) AND EXISTS(SELECT 1 FROM access.follow WHERE principal_id=who AND source='explicit'
       AND (target=resource OR target IN (SELECT alias FROM access.follow_space_alias WHERE space=resource)))
       THEN RETURN true; END IF;
+    IF origin='join' AND new_episode THEN
+      DELETE FROM access.follow WHERE principal_id=who AND target<>resource
+        AND target IN (SELECT alias FROM access.follow_space_alias WHERE space=resource);
+    END IF;
     -- Automatic interest spends available budget; admission is never rejected.
     IF (SELECT active_count FROM access.follow_inventory WHERE principal_id=who)>=10000
       AND NOT EXISTS(SELECT 1 FROM access.follow WHERE principal_id=who AND target=resource AND following)
@@ -60,7 +64,7 @@ BEGIN
         COALESCE(search_name,(SELECT name_key FROM access.follow_space_alias WHERE alias=resource)))
       ON CONFLICT(principal_id,target) DO UPDATE SET following=true,revision=gen_random_uuid(),
         changed_at=clock_timestamp(),source=EXCLUDED.source
-      WHERE access.follow.source<>'explicit' AND NOT access.follow.following;
+      WHERE (origin='join' AND new_episode) OR access.follow.source<>'explicit' AND NOT access.follow.following;
   ELSE
     UPDATE access.follow SET following=false,revision=gen_random_uuid(),changed_at=clock_timestamp(),pin_position=NULL
       WHERE principal_id=who AND target=resource AND source=origin AND following;
@@ -69,7 +73,7 @@ BEGIN
 END $$;
 
 CREATE FUNCTION access.membership_follow() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE who uuid; actor text; resource text; joined boolean;
+DECLARE who uuid; actor text; resource text; joined boolean; new_episode boolean := false;
 BEGIN
   IF NEW.kind <> 'realm' THEN RETURN NULL; END IF;
   IF TG_TABLE_NAME='private_membership' THEN
@@ -90,7 +94,11 @@ BEGIN
     WHERE m.kind='realm' AND m.owner_subject=NEW.owner_subject AND m.state='joined' AND a.principal_id=who)
     OR EXISTS(SELECT 1 FROM access.private_membership m WHERE m.kind='realm'
       AND m.owner_subject=NEW.owner_subject AND m.state='joined' AND m.principal_id=who);
-  PERFORM access.automatic_follow(who,actor,resource,'space','join',joined);
+  IF NEW.state='joined' THEN
+    IF TG_OP='INSERT' THEN new_episode:=true;
+    ELSE new_episode:=OLD.state<>'joined'; END IF;
+  END IF;
+  PERFORM access.automatic_follow(who,actor,resource,'space','join',joined,NULL,new_episode);
   RETURN NULL;
 END $$;
 CREATE TRIGGER membership_follow AFTER INSERT OR UPDATE OF state ON access.membership

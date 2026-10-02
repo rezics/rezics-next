@@ -116,7 +116,7 @@ export async function editorialNotification(
     )
   ).rows;
   if (recipients.length > 256) throw new Error('editorial recipient bound exceeded');
-  const relationshipPlan: RelationshipRecipients = { targets: [row.resource===row.work ? null : row.resource,row.context,event.actor].filter((id): id is string => !!id),
+  const relationshipPlan: RelationshipRecipients = { targets: [row.resource===row.work ? null : row.resource,row.context].filter((id): id is string => !!id),
     highlights: ['proposal-decided','proposal-reverted'].includes(topic),
     watches: [`urn:rezics:proposal:${event.proposal}`],
     direct: recipients.filter(item => ['author','reviewer'].includes(item.reason)).map(item => item.principal_id),

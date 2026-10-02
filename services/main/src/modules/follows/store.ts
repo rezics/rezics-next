@@ -431,6 +431,10 @@ export class FollowsStore {
           WHERE target=f.target OR target IN (SELECT alias FROM access.follow_space_alias WHERE space=f.target)) a ON true
         WHERE f.principal_id=$1 AND f.following
         AND ($2::text IS NULL OR f.kind=$2 OR $2 IN ('realm','zone') AND f.kind='space')
+        AND ($2 IS DISTINCT FROM 'realm' OR NOT EXISTS(SELECT 1 FROM access.follow_space_alias zone
+          WHERE zone.space=COALESCE(s.space,f.target) AND zone.alias<>zone.space AND zone.alias<>zone.realm))
+        AND ($2 IS DISTINCT FROM 'zone' OR EXISTS(SELECT 1 FROM access.follow_space_alias zone
+          WHERE zone.space=COALESCE(s.space,f.target) AND zone.alias<>zone.space AND zone.alias<>zone.realm))
         AND ($6::text IS NULL OR access.follow_space_notifying(f.principal_id,f.target)
           AND strpos(lower(normalize(COALESCE(view.name,f.name_key,s.name_key,agent.display_name,''),NFKC)),$6)>0)
         AND ($3::numeric IS NULL OR (${expression},f.target)>($3::numeric,$4::text))

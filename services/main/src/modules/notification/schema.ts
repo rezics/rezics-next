@@ -116,6 +116,8 @@ export const watch = access.table(
     kind: text('kind', { enum: ['thread','proposal','release','collection'] }).notNull(),
     reason: text('reason', { enum: ['author', 'reviewer', 'steward', 'manual'] }).notNull(),
     level: text('level', { enum: ['participating', 'all', 'ignore'] }).notNull(),
+    manualChoice: boolean('manual_choice').notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
     revision: bigint('revision', { mode: 'bigint' }).notNull(),
   },
   (table) => [primaryKey({ columns: [table.principalId, table.target] })],

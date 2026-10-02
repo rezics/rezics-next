@@ -273,6 +273,9 @@ export class NotificationProducer {
 
   async runRelationshipRecoveryOnce(): Promise<number> {
     // Bounded expiry batches; no feed writer or global head is involved.
+    await this.access.query(`DELETE FROM access.watch WHERE (principal_id,target) IN
+      (SELECT principal_id,target FROM access.watch WHERE kind='thread' AND reason<>'manual' AND NOT manual_choice
+        AND changed_at<clock_timestamp()-interval '90 days' ORDER BY changed_at,principal_id,target LIMIT 256)`);
     await this.access.query(`DELETE FROM access.follow_activity WHERE target IN
       (SELECT target FROM access.follow_activity WHERE activity_at<clock_timestamp()-interval '90 days'
         ORDER BY activity_at,target LIMIT 256)`);

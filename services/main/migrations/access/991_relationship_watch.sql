@@ -7,22 +7,36 @@ ALTER TABLE access.watch DROP CONSTRAINT proposal_subscription_pkey,
   ALTER COLUMN proposal DROP NOT NULL,
   ADD COLUMN target text,
   ADD COLUMN kind text NOT NULL DEFAULT 'proposal' CHECK(kind IN ('thread','proposal','release','collection')),
+  ADD COLUMN manual_choice boolean NOT NULL DEFAULT false,
+  ADD COLUMN changed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ADD CONSTRAINT watch_level_check CHECK(level IN ('participating','all','ignore'));
 UPDATE access.watch SET target='urn:rezics:proposal:' || proposal::text;
 -- A manual proposal subscription meant all lifecycle updates; retain that
 -- intent in the general Watch vocabulary rather than inventing participation.
 UPDATE access.watch SET level='all' WHERE reason='manual' AND level='participating';
+UPDATE access.watch SET manual_choice=true WHERE reason='manual' OR level IN ('all','ignore');
 ALTER TABLE access.watch ALTER COLUMN target SET NOT NULL,
   ADD PRIMARY KEY(principal_id,target),
   ADD CONSTRAINT watch_proposal_identity CHECK((kind='proposal')=(proposal IS NOT NULL)
     AND (proposal IS NULL OR target='urn:rezics:proposal:' || proposal::text));
 CREATE INDEX watch_target_recipients ON access.watch(target,principal_id);
+CREATE INDEX watch_automatic_thread_retention ON access.watch(changed_at,principal_id,target)
+  WHERE kind='thread' AND reason<>'manual' AND NOT manual_choice;
 CREATE TABLE access.watch_participation(principal_id uuid NOT NULL REFERENCES access.principal(id),
   target text NOT NULL,PRIMARY KEY(principal_id,target));
 INSERT INTO access.watch_participation(principal_id,target)
   SELECT principal_id,target FROM access.watch WHERE reason IN ('author','reviewer');
+ALTER TABLE access.watch_participation ADD CONSTRAINT watch_participation_watch
+  FOREIGN KEY(principal_id,target) REFERENCES access.watch(principal_id,target) ON DELETE CASCADE;
 CREATE FUNCTION access.guard_watch() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP='DELETE' THEN
+    IF OLD.kind='thread' AND OLD.reason<>'manual' AND NOT OLD.manual_choice
+      AND OLD.changed_at<clock_timestamp()-interval '90 days' THEN RETURN OLD; END IF;
+    RAISE EXCEPTION 'manual watches are retained' USING ERRCODE='23514';
+  END IF;
+  IF NEW.reason='manual' THEN NEW.manual_choice:=true; END IF;
+  IF TG_OP='UPDATE' THEN NEW.changed_at:=clock_timestamp(); END IF;
   IF TG_OP='INSERT' THEN
     PERFORM pg_advisory_xact_lock(hashtextextended('watch-budget:' || NEW.principal_id::text,0));
     IF (SELECT count(*) FROM access.watch WHERE principal_id=NEW.principal_id)>=10000
@@ -30,7 +44,7 @@ BEGIN
         AND (target=NEW.target OR proposal=NEW.proposal)) THEN RETURN NULL; END IF;
   END IF;
   IF TG_OP='INSERT' AND NEW.proposal IS NOT NULL THEN NEW.target:='urn:rezics:proposal:' || NEW.proposal::text; END IF;
-  IF TG_OP='DELETE' OR TG_OP='INSERT' AND NEW.revision<>1 OR TG_OP='UPDATE' AND
+  IF TG_OP='INSERT' AND NEW.revision<>1 OR TG_OP='UPDATE' AND
     (NEW.principal_id<>OLD.principal_id OR NEW.target<>OLD.target OR NEW.kind<>OLD.kind
       OR NEW.reason<>OLD.reason OR NEW.revision<>OLD.revision+1) THEN
     RAISE EXCEPTION 'watch identity is stable and revision advances once' USING ERRCODE='23514';

@@ -904,7 +904,7 @@ export class NotificationStore {
         next = current ? (BigInt(current.revision) + 1n).toString() : '1';
       const level = reason === 'manual' && input.level === 'participating' ? 'all' : input.level;
       if (current) await client.query(`UPDATE access.watch
-        SET level = $3,revision = $4 WHERE principal_id = $1 AND proposal = $2`,
+        SET level = $3,revision = $4,manual_choice=true WHERE principal_id = $1 AND proposal = $2`,
       [principalId,proposal,level,next]);
       else if (!(await client.query(`INSERT INTO access.watch (principal_id,proposal,reason,level)
         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING principal_id`,

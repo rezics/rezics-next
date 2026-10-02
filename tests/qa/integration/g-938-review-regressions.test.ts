@@ -11,6 +11,9 @@ import { publicTargetRead } from '../../../services/main/src/modules/target/reso
 import { relationshipEligible, relationshipRecipients } from '../../../services/main/src/modules/follows/recipients.ts';
 import { recoverLibraryFollows, configureLibraryFollows } from '../../../services/main/src/modules/library/follows.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
+import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
+import { WatchStore } from '../../../services/main/src/modules/notification/watch.ts';
 
 type Page = { items: Array<{ id: string; available: boolean; name: { value: string } | null; source: string }>;
   nextCursor: string | null; complete: boolean };
@@ -42,7 +45,8 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
     expect(joined.membershipGeneration).toBe('1');
     expect([200,409]).toContain(explicit.status);
     let state = await home.deps.follows.state(space.space,{ principal,agent: reader });
-    if (explicit.status===409) await json(await follow(space.space,state.revision));
+    expect(state.following).toBe(true);
+    if (state.source!=='explicit') await json(await follow(space.space,state.revision));
     state = await home.deps.follows.state(space.space,{ principal,agent: reader });
     expect(state).toMatchObject({ following: true,source: 'explicit' });
     // Source is intent: a level-only single command does not turn Join into explicit.
@@ -96,7 +100,9 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
       await call('GET',`/v1/me/memberships?actingSubject=${encodeURIComponent(reader)}&q=Private`,undefined,home.reader.token));
     expect(memberships.items).toMatchObject([{ realm: space.realm,available: true,name: { value: 'Private review Space' } }]);
     const sidebar = await json<Page>(await call('GET',`/v1/me/follows?actingSubject=${encodeURIComponent(reader)}&kind=realm`,undefined,home.reader.token));
-    expect(sidebar.items).toContainEqual(expect.objectContaining({ id: space.realm,kind: 'realm',available: true }));
+    expect(sidebar.items.map(item => item.id)).not.toContain(space.realm);
+    const zones = await json<Page>(await call('GET',`/v1/me/follows?actingSubject=${encodeURIComponent(reader)}&kind=zone`,undefined,home.reader.token));
+    expect(zones.items).toContainEqual(expect.objectContaining({ id: zone,kind: 'zone',available: true }));
     const budgetSpace = await json<{ space: string; realm: string }>(await call('POST','/v1/spaces',{
       profile: 'space-realm-v1',name: 'Budget Space',capabilities: ['realm'],actingSubject: owner },home.author.token),201);
     await admin.initialize(ownerPrincipal,budgetSpace.realm,owner,stack.env);
@@ -118,6 +124,35 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
     await stack.publicWork(owner,['en'],'Feed activity between membership pages');
     await home.project();
     expect((await json<{ items: unknown[] }>(await call('GET',`${membershipUrl}&cursor=${encodeURIComponent(first.nextCursor)}`,undefined,home.reader.token))).items).toHaveLength(1);
+  } finally { await home.stop(); }
+},180_000);
+
+test('G-938 recovery expires automatic thread Watches and retains manual choices', async () => {
+  const home = await startHomeStack('g-938-watch-retention');
+  try {
+    const actor = await home.provision('Watch retention reader',home.reader.token);
+    const targets = Array.from({ length: 4 },() => `https://rezics.com/id/${randomUUID()}`);
+    await home.stack.accessPool.query(`INSERT INTO access.watch(principal_id,target,kind,reason,level,manual_choice,changed_at)
+      VALUES($1,$2,'thread','reviewer','participating',false,now()-interval '91 days'),
+      ($1,$3,'thread','manual','all',false,now()-interval '91 days'),
+      ($1,$4,'thread','reviewer','ignore',true,now()-interval '91 days'),
+      ($1,$5,'thread','reviewer','participating',false,now())`,[home.reader.principalId,...targets]);
+    await home.stack.accessPool.query('INSERT INTO access.watch_participation(principal_id,target) VALUES($1,$2)',
+      [home.reader.principalId,targets[0]]);
+    await new WatchStore(home.stack.accessPool).set({ ...home.reader.principal,emailVerified: true },
+      { actingSubject: actor,target: targets[3]!,kind: 'thread',level: 'all',expectedRevision: '1' },randomUUID(),async () => {});
+    expect((await home.stack.accessPool.query('SELECT manual_choice FROM access.watch WHERE principal_id=$1 AND target=$2',
+      [home.reader.principalId,targets[3]])).rows[0]).toEqual({ manual_choice: true });
+    const producer = new NotificationProducer(home.stack.accessPool,null,home.stack.contentPool,home.stack.fuseki,
+      new NotificationStore(home.stack.accessPool),null);
+    await producer.runRelationshipRecoveryOnce();
+    const retained = (await home.stack.accessPool.query<{ target: string }>(
+      'SELECT target FROM access.watch WHERE principal_id=$1 ORDER BY target',[home.reader.principalId])).rows.map(row => row.target);
+    expect(retained.sort()).toEqual(targets.slice(1).sort());
+    expect((await home.stack.accessPool.query('SELECT 1 FROM access.watch_participation WHERE principal_id=$1 AND target=$2',
+      [home.reader.principalId,targets[0]])).rowCount).toBe(0);
+    await expect(home.stack.accessPool.query('DELETE FROM access.watch WHERE principal_id=$1 AND target=$2',
+      [home.reader.principalId,targets[1]])).rejects.toThrow('manual watches are retained');
   } finally { await home.stop(); }
 },180_000);
 

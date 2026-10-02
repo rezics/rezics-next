@@ -119,7 +119,7 @@ export class WatchStore {
         input.kind === 'proposal' ? input.target.slice('urn:rezics:proposal:'.length) : null;
       if (current)
         await client.query(
-          'UPDATE access.watch SET level=$3,revision=$4 WHERE principal_id=$1 AND target=$2',
+          'UPDATE access.watch SET level=$3,revision=$4,manual_choice=true WHERE principal_id=$1 AND target=$2',
           [owner, input.target, input.level, next],
         );
       else if (
