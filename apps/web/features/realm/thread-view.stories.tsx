@@ -135,8 +135,9 @@ export const ReplyInline: Story = {
     const box = within(daniel).getByRole('textbox', { name: 'Reply to Daniel Chen 陈丹尼' });
     await userEvent.type(box, 'Mr. Bennet is funnier on a second read.');
     await userEvent.click(within(box.closest('form')!).getByRole('button', { name: 'Reply' }));
+    // The reply travels as a document snapshot; its text is what the writer typed.
     await waitFor(() => expect(args.api!.calls).toEqual([
-      `reply:${storyReply(2).slice(-12)}:Mr. Bennet is funnier on a second read.`]));
+      expect.stringMatching(new RegExp(`^reply:${storyReply(2).slice(-12)}:.*Mr\\. Bennet is funnier on a second read\\.`))]));
     await expect(within(daniel).queryByRole('textbox')).toBeNull();
   },
 };
@@ -161,7 +162,7 @@ export const ReplyFailed: Story = {
     await userEvent.type(box, 'Lost on the way');
     await userEvent.click(canvas.getByRole('button', { name: 'Comment' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('it won’t post twice');
-    await expect(box).toHaveAttribute('readonly');
+    await expect(box).toHaveAttribute('aria-readonly', 'true');
   },
 };
 
