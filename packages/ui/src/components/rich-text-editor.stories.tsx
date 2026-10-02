@@ -171,10 +171,18 @@ export const SelectionPanel: Story = {
     await selectAll(editor);
     const panel = await canvas.findByRole('group', { name: 'Format text' });
     // Every row of the panel is visible at once, in fixed positions.
-    for (const name of ['Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code', 'Spoiler', 'Clear formatting', 'Left', 'Center'])
+    for (const name of ['Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code', 'Spoiler', 'Clear formatting', 'More formatting'])
       await expect(within(panel).getByRole('button', { name })).toBeVisible();
     await expect(within(panel).getByRole('button', { name: /^Link/ })).toBeVisible();
     await expect(within(panel).getByRole('button', { name: /^Ruby annotation/ })).toBeVisible();
+    await expect(within(panel).getByRole('button', { name: /^Emphasis marks/ })).toBeVisible();
+    // A compact grid, not a column of rows, and it opens at the caret end like a context menu.
+    await expect(panel.getBoundingClientRect().height).toBeLessThan(130);
+    await userEvent.click(within(panel).getByRole('button', { name: 'More formatting' }));
+    const more = within(await canvas.findByRole('menu', { name: 'More formatting' }));
+    await expect(more.getByRole('button', { name: 'Center' })).toBeVisible();
+    await userEvent.click(more.getByRole('button', { name: 'Center' }));
+    await expect(editor.querySelector('p')).toHaveStyle({ textAlign: 'center' });
     await userEvent.click(within(panel).getByRole('button', { name: /^Turn into/ }));
     const listEl = await canvas.findByRole('menu', { name: 'Turn into' });
     const list = within(listEl);
