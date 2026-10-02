@@ -72,10 +72,12 @@ function selectedLength(editor: TiptapEditor): number {
  * already is, flipping below it near the top of the view. Block type opens a list; More opens the
  * actions on the blocks the selection touches. Alt+F10 moves keyboard focus into the panel.
  */
-export const SelectionMenu = memo(function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClose, container, compose = false }: {
+export const SelectionMenu = memo(function SelectionMenu({ editor, labels, blocks, io, linkRange, onLinkClose, container, compose = false, below = false }: {
   editor: TiptapEditor; labels: RichTextEditorLabels; blocks: boolean; io: CommandIO; linkRange: LinkRange | null; onLinkClose: () => void;
   /** Discussion writing: one row of inline formats and quote, without block type or block actions. */
   compose?: boolean;
+  /** Under the selection, as on touch screens, where the system's own selection menu sits above it. */
+  below?: boolean;
   /** Where the panel is placed: outside the document, so the document's own styles never reach it. */
   container: RefObject<HTMLElement | null>;
 }) {
@@ -87,7 +89,7 @@ export const SelectionMenu = memo(function SelectionMenu({ editor, labels, block
     editor.on('selectionUpdate', close);
     return () => { editor.off('selectionUpdate', close); };
   }, [editor]);
-  const options = useMemo(() => ({ ...bubbleOptions, placement: 'top' as const, inline: true, onHide: () => setMenu(null) }), []);
+  const options = useMemo(() => ({ ...bubbleOptions, placement: below ? 'bottom' as const : 'top' as const, offset: below ? 16 : 8, inline: true, onHide: () => setMenu(null) }), [below]);
   const current = commandById(state.block);
   const row = (commands: readonly EditorCommand[]) => commands.map(command => <IconCommand key={command.id} editor={editor} command={command} labels={labels} io={io} state={state} />);
   // A menu returns focus to its trigger as it closes; the command runs after that, so the caret ends in the text.

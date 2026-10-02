@@ -23,11 +23,11 @@ const richDocument = normalizeDocument({ version: 'rezics-document-v1', profile:
 /** Like the web app's stand-in: a chosen image stays in the page as a blob address until reload. */
 const pageImageUpload: ImageUploader = async file => ({ src: URL.createObjectURL(file) });
 
-function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine', preview = true, upload = pageImageUpload }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse'; preview?: boolean; upload?: ImageUploader | null }) {
+function Example({ initial = richDocument, readOnly = false, compact = false, contextual = false, pointerMode = 'fine', preview = true, upload = pageImageUpload, keyboardBar = false }: { initial?: DocumentSnapshot; readOnly?: boolean; compact?: boolean; contextual?: boolean; pointerMode?: 'fine' | 'coarse'; preview?: boolean; upload?: ImageUploader | null; keyboardBar?: boolean }) {
   const [value, setValue] = useState(initial);
   const [changes, setChanges] = useState(0);
   return <div className="mx-auto flex max-w-4xl flex-col gap-6">
-    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode} onUploadImage={upload ?? undefined}
+    <RichTextEditor label="Document" lang="zh-Hant" value={value} placeholder="Start writing…" readOnly={readOnly} compact={compact} toolbarMode={contextual ? 'contextual' : 'full'} pointerMode={pointerMode} onUploadImage={upload ?? undefined} discussionKeyboardBar={keyboardBar}
       onChange={next => { setValue(next); setChanges(count => count + 1); }} />
     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><output aria-label="Changes">{changes}</output> changes
       <Button variant="outline" size="sm" onClick={() => setValue(fromPlainText('Restored document.', initial.profile))}>Restore document</Button>
@@ -74,7 +74,7 @@ export const ForumReply: Story = {
   },
 };
 
-/** On a phone, a reply shows no toolbar until text is selected; then the same formats rest on the keyboard. */
+/** On a phone a reply formats the same way as on a desktop; the bar sits under the selection, clear of the system's menu. */
 export const ForumReplyPhone: Story = {
   render: () => <Example initial={fromPlainText('Reply from a phone.', 'blocks')} compact contextual pointerMode="coarse" />,
   globals: { viewport: { value: 'phone' } },
@@ -84,6 +84,27 @@ export const ForumReplyPhone: Story = {
     const editor = await canvas.findByRole('textbox', { name: 'Document' });
     await userEvent.click(editor);
     await expect(await canvas.findByRole('button', { name: 'Image' })).toBeVisible();
+    await expect(page.queryByRole('toolbar', { name: 'Text formatting' })).toBeNull();
+    await selectText(editor);
+    const bar = await canvas.findByRole('toolbar', { name: 'Format text' });
+    const text = (editor.querySelector('p') as HTMLElement).getBoundingClientRect();
+    await waitFor(() => expect(bar.getBoundingClientRect().top).toBeGreaterThanOrEqual(text.bottom));
+    await expect(bar.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+    await userEvent.click(within(bar).getByRole('button', { name: 'Bold' }));
+    await expect(editor.querySelector('strong')).toHaveTextContent('Reply from a phone.');
+  },
+};
+
+/** Disabled, kept for comparison on real phones: the reply's formats on a bar resting on the keyboard once text is selected. */
+export const DisabledForumReplyPhoneKeyboardBar: Story = {
+  name: 'Disabled: Forum Reply Phone (keyboard bar)',
+  render: () => <Example initial={fromPlainText('Reply from a phone.', 'blocks')} compact contextual pointerMode="coarse" keyboardBar />,
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const editor = await canvas.findByRole('textbox', { name: 'Document' });
+    await userEvent.click(editor);
     await expect(page.queryByRole('toolbar', { name: 'Text formatting' })).toBeNull();
     await selectText(editor);
     const bar = await page.findByRole('toolbar', { name: 'Text formatting' });

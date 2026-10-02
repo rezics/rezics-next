@@ -210,8 +210,10 @@ table, so surfaces differ in layout and never in what they can do.
 
 Discussion writing (forum posts and replies) follows chat apps such as Telegram:
 nothing stands in view but an image button while writing, and selecting text
-shows one row of formats (quote and spoiler, inline marks, link, clear). On a
-phone that row rests on the keyboard only while text is selected. Block type,
+shows one row of formats (quote and spoiler, inline marks, link, clear). A phone
+uses the same row, opened under the selection because the system's selection
+menu sits above it. A keyboard-resting variant is kept, disabled, for comparison
+on real phones. Block type,
 block actions and the slash menu belong to long-form writing; Markdown shortcuts
 still work. Studio opens with the complete toolbar on a pointer's screen and can
 return to contextual controls, keeping file import/export beside it; a phone

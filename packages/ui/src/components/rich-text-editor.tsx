@@ -42,6 +42,12 @@ export interface RichTextEditorProps {
   toolbarMode?: 'contextual' | 'full';
   /** Which controls to offer. `auto` follows the device's primary input; stories and tests force one. */
   pointerMode?: PointerMode;
+  /**
+   * Disabled by default: discussion writing on a phone used to show its formats on a bar resting on
+   * the keyboard. It now uses the selection bar on every device; this keeps the keyboard bar
+   * available for comparison on real phones.
+   */
+  discussionKeyboardBar?: boolean;
   /** Stores an image file and returns its address. Without it, images are embedded from links only. */
   onUploadImage?: ImageUploader;
   disabled?: boolean;
@@ -142,7 +148,7 @@ const ComposeActions = memo(function ComposeActions({ editor, labels, io }: { ed
 });
 
 /** A controlled Tiptap document editor. Initial hydration and controlled value updates never save a document. */
-export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', onUploadImage,
+export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage,
   disabled = false, readOnly = false, autoFocus = false, maxLength, onBlur, onFocus, onSave, onKeyDown, onSnapshotError }: RichTextEditorProps) {
   const labels = useMemo(() => ({ ...richTextEditorLabels, ...labelOverrides }), [labelOverrides]);
   const lastEmitted = useRef<DocumentSnapshot | null>(null);
@@ -347,10 +353,11 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
       {editor ? <>
         {content}
         {editable ? <>
-          {!coarse ? <SelectionMenu editor={editor} labels={labels} blocks={blocks} io={io} linkRange={linkRange} onLinkClose={closeLink} container={surface} compose={compact} /> : null}
+          {/* Discussion writing selects and formats the same way on every device; long-form writing on a phone uses the keyboard toolbar. */}
+          {!coarse || (compact && !discussionKeyboardBar) ? <SelectionMenu editor={editor} labels={labels} blocks={blocks} io={io} linkRange={linkRange} onLinkClose={closeLink} container={surface} compose={compact} below={coarse} /> : null}
           <LinkMenu editor={editor} labels={labels} linkRange={linkRange} onEdit={editLink} onClose={closeLink} container={surface} />
           {compact && blocks ? <ComposeActions editor={editor} labels={labels} io={io} /> : null}
-          {coarse ? <TouchBar editor={editor} labels={labels} blocks={blocks} compact={compact} io={io} /> : null}
+          {coarse && (!compact || discussionKeyboardBar) ? <TouchBar editor={editor} labels={labels} blocks={blocks} compact={compact} io={io} /> : null}
           {slashEnabled ? <SlashMenu editor={editor} labels={labels} blocks={blocks} io={io} handlers={slashHandlers} /> : null}
           {imageRequest ? <ImageInsert editor={editor} labels={labels} request={imageRequest} upload={onUploadImage} onClose={closeImage} /> : null}
         </> : null}
