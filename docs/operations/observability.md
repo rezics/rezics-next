@@ -11,7 +11,16 @@ Main, Account and Main relay share
 preloads it before `pg` imports, through the Task commands, AppHost and release
 entrypoint. Content runs inside Main and shares its service resource. Aspire's
 `withOtlpExporter(HttpProtobuf)` injects its endpoint and secret headers. An
-absent endpoint or `OTEL_SDK_DISABLED=true` disables the SDK. Supported settings
+authenticated loopback HTTP listener on an Aspire-assigned port is used for
+development OTLP: Bun 1.4.2 rejects Aspire's self-signed development leaf even
+when explicitly trusted, matching [Aspire issue #17455](https://github.com/microsoft/aspire/issues/17455).
+The dashboard and resource service retain HTTPS; application TLS verification
+stays enabled. The local runtime check must verify dashboard ingestion, because
+an HTTP protobuf sink alone cannot qualify Aspire's transport.
+After `task dev`, run `task observability:aspire-smoke`: it performs read-only
+liveness requests with unique W3C parents, checks the corresponding server spans
+and startup logs in the dashboard, and checks that OTLP rejects missing API keys.
+An absent endpoint or `OTEL_SDK_DISABLED=true` disables the SDK. Supported settings
 come from the [common spec](../../packages/observability/src/config.ts) and the
 generated Main and Account `.env.example` files. Production examples use a
 parent-based 10% root trace sample; metrics and logs remain independent.

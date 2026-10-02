@@ -34,7 +34,13 @@ const env = Object.fromEntries(readFileSync(envFile, 'utf8').split('\n').filter(
   .map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
 const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$|^OTEL_EXPORTER_OTLP_HEADERS$/;
 
-const builder = await createBuilder();
+// Bun rejects Aspire's self-signed leaf certificate even with an explicit CA
+// (microsoft/aspire#17455). Keep OTLP on an authenticated loopback HTTP endpoint;
+// port 0 is allocated by Aspire. The dashboard and resource service retain HTTPS.
+const builder = await createBuilder({
+  allowUnsecuredTransport: true,
+  args: [...process.argv.slice(2), '--ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL=http://127.0.0.1:0'],
+});
 const parameters = new Map<string, ReturnType<typeof builder.addParameter>>();
 function secret(name: string) {
   let parameter = parameters.get(name);

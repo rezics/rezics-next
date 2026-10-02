@@ -356,6 +356,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task ui:typecheck` | Type-check Rezics UI. |
 | `task goal` | Run goalctl from the repository root. Sets GOAL_MAX_WORKERS to 5 when it is unset. |
 | `task observability:typecheck` | Type-check the shared telemetry runtime and probes. |
+| `task observability:aspire-smoke` | Verify real server spans, structured logs and OTLP authentication against the running backend AppHost. |
 | `task observability:check` | Validate the pinned observability Compose and Collector configurations with disposable local secrets. |
 | `task observability:smoke` | Exercise OTLP ingestion and Perses provisioning on an isolated disposable local observability stack. |
 | `task check` | Run every static gate (types, generated contracts, docs, lint, format, code shape, catalogs, unused files, imports). |

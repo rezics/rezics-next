@@ -276,6 +276,11 @@ tasks:
       - bun node_modules/typescript/bin/tsc --project packages/observability/tsconfig.json
       - bun node_modules/typescript/bin/tsc --project scripts/observability/tsconfig.json
 
+  observability:aspire-smoke:
+    desc: Verify real server spans, structured logs and OTLP authentication against the running backend AppHost.
+    cmds:
+      - bun scripts/observability/aspire-smoke.ts
+
   observability:check:
     desc: Validate the pinned observability Compose and Collector configurations with disposable local secrets.
     cmds:
