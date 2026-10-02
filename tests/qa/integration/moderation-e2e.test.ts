@@ -417,8 +417,9 @@ test('G314 roster: bounded public pages, consent revocation and membership episo
     const generation = (await json<{ generation: string }>(await s.read(s.owner,`${s.root}/roles`))).generation;
     await json(await s.call(s.owner,'POST',`${s.root}/members`,{ actingSubject: s.owner.actor,expectedGeneration: generation,
       member: person.actor,expectedMembershipGeneration: '1',action: 'remove',reason: 'Remove old episode',consent: null,durationSeconds: null }),201);
+    const policy = await json<{ policyRevision: string }>(await s.read(person,`${s.root}/joining`));
     await json(await s.call(person,'POST',`${s.root}/join`,{ actingSubject: person.actor,expectedMembershipGeneration: '2',
-      expectedPolicyRevision: '0',termsRevision: 'realm-membership-v1',listed: false }));
+      expectedPolicyRevision: policy.policyRevision,termsRevision: 'realm-membership-v1',listed: false }));
     expect(await json(await s.call(null,'GET',`${s.root}/roster?featured=true`))).toEqual({ items: [],nextCursor: null });
     expect((await s.call(person,'PUT',`${s.root}/roster/listing`,{
       actingSubject: person.actor,expectedMembershipGeneration: '1',listed: true })).status).toBe(409);
