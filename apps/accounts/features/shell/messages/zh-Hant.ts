@@ -1,4 +1,7 @@
+import { refusalMessages } from '../../api/refusal-messages.ts';
 export default {
+  policyReviewUnavailable: "暫時無法顯示最新政策。請重新整理頁面後重試。",
+  ...refusalMessages['zh-Hant'],
   productName: 'REZICS 帳戶',
   brandLabel: '帳戶',
   homeLink: 'REZICS 帳戶首頁',

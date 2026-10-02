@@ -1,12 +1,12 @@
 'use client';
 
+import { Checkbox } from '@rezics/ui/checkbox';
 import { Button } from '@rezics/ui/button';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
 import { Skeleton } from '@rezics/ui/skeleton';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/table';
 import { cn } from '@rezics/ui/utils';
 import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, CheckIcon, EllipsisIcon, MinusIcon } from 'lucide-react';
-import { useEffect, useRef } from 'react';
 import type { AdminAction, AdminUser, DirectoryColumn } from '../api/types.ts';
 import { availableActions, type ActionTarget } from '../actions/actions.ts';
 import { RoleBadge, StatusBadge } from '../badges.tsx';
@@ -22,11 +22,8 @@ export const toTarget = (user: AdminUser): ActionTarget => ({ id: user.id, name:
 
 function SelectBox({ checked, indeterminate, label, onChange }: { checked: boolean; indeterminate?: boolean; label: string;
   onChange(checked: boolean): void }) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (ref.current) ref.current.indeterminate = !!indeterminate; }, [indeterminate]);
-  // A native checkbox: it takes an accessible name without visible text.
-  return <input ref={ref} type="checkbox" checked={checked} aria-label={label} onChange={event => onChange(event.currentTarget.checked)}
-    className="size-4 cursor-pointer rounded accent-primary align-middle outline-none focus-visible:ring-[3px] focus-visible:ring-ring/32" />;
+  return <Checkbox checked={indeterminate ? 'indeterminate' : checked} aria-label={label}
+    onCheckedChange={({ checked }) => onChange(checked === true)} />;
 }
 
 const cellPadding = 'px-3 py-2.5 group-data-[density=compact]/admin:py-1';
@@ -93,7 +90,7 @@ export function DirectoryTable({ users, columns, loading, sort, direction, onSor
         const actions = availableActions(toTarget(user), me);
         const label = user.name || user.email;
         return <TableRow key={user.id} data-state={selected.has(user.id) ? 'selected' : undefined} data-active={index === active || undefined}
-          onClick={event => { if (!(event.target as HTMLElement).closest('a,button,input')) onActive(index); }}
+          onClick={event => { if (!(event.target as HTMLElement).closest('a,button,input,label')) onActive(index); }}
           className="data-active:shadow-[inset_3px_0_0_var(--color-primary)] data-[state=selected]:bg-primary/[0.03]">
           <TableCell className={cn(cellPadding, 'ps-4')}><SelectBox checked={selected.has(user.id)} label={t.selectUser({ name: label })}
             onChange={value => onSelect([user.id], value)} /></TableCell>

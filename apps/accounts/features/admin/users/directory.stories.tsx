@@ -1,3 +1,4 @@
+import { chooseOption } from '../../shell/select.fixture.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { UserDirectory } from './directory.tsx';
@@ -133,7 +134,7 @@ export const KeyboardAndBulk: Story = {
     await expect(within(dialog).getByText(/— Ada Lovelace/)).toBeVisible();
     await expect(within(dialog).getByText('1 is already in that state and is left out')).toBeVisible();
     await expect(within(dialog).getByText(/Nothing changes for 10 seconds/)).toBeVisible();
-    await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'spam');
+    await chooseOption(within(dialog).getByRole('combobox', { name: 'Reason' }), 'spam');
     await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Coordinated spam wave');
     await typist.type(within(dialog).getByLabelText('Type 1 to confirm'), '1');
     await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
@@ -166,7 +167,7 @@ export const UndoWindow: Story = {
     await userEvent.click(within(table).getByRole('checkbox', { name: `Select ${hedy.name}` }));
     await userEvent.click(within(canvas.getByRole('toolbar')).getByRole('button', { name: 'Sign out everywhere…' }));
     const form = await openDialog('alertdialog', 'Sign 2 users out everywhere?');
-    await userEvent.selectOptions(within(form).getByLabelText('Reason'), 'support');
+    await chooseOption(within(form).getByRole('combobox', { name: 'Reason' }), 'support');
     await typist.type(within(form).getByLabelText('Details for the audit log'), 'Asked to sign out');
     await userEvent.click(within(form).getByRole('button', { name: 'Sign out everywhere' }));
     const job = await openDialog('dialog', 'Sign 2 users out everywhere?');

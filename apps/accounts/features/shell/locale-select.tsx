@@ -1,6 +1,6 @@
 'use client';
 
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { useAccountClient } from '../api/account-client.tsx';
 import { useLocale, useTranslation } from '../../i18n/client.ts';
 import { localeNames, uiLocales } from '../../i18n/locale.ts';
@@ -11,12 +11,11 @@ export function LocaleSelect() {
   const { t } = useTranslation('common');
   const locale = useLocale();
   const { navigate } = useAccountClient();
-  return <NativeSelect aria-label={t.language} value={locale.current} size="md" className="min-w-36"
-    onChange={event => {
+  return <ChoiceSelect label={t.language} value={locale.current} size="md" className="min-w-36"
+    options={uiLocales.map(value => ({ value, label: localeNames[value], lang: value }))}
+    onValueChange={value => {
       const url = new URL(window.location.href);
-      url.searchParams.set('hl', event.currentTarget.value);
+      url.searchParams.set('hl', value);
       navigate(url.toString());
-    }}>
-    {uiLocales.map(value => <option key={value} value={value} lang={value}>{localeNames[value]}</option>)}
-  </NativeSelect>;
+    }} />;
 }

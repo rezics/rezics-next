@@ -5,6 +5,7 @@ import { Button } from '@rezics/ui/button';
 import { type FormEvent, useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { FailureKind } from '../api/errors.ts';
+import { failureText } from '../account/failure-text.ts';
 import { AuthHeading } from '../shell/auth-frame.tsx';
 import { AuthOutcome } from './auth-outcome.tsx';
 import { EmailField, emailPattern } from './fields.tsx';
@@ -16,6 +17,7 @@ import { Turnstile } from './turnstile.tsx';
 export function RecoveryForm({ email: initial = '', carry = '', turnstileSiteKey }: { email?: string; carry?: string;
   turnstileSiteKey?: string }) {
   const { t } = useTranslation('auth');
+  const common = useTranslation('common').t;
   const { api } = useAccountClient();
   const [email, setEmail] = useState(initial);
   const [error, setError] = useState('');
@@ -32,7 +34,7 @@ export function RecoveryForm({ email: initial = '', carry = '', turnstileSiteKey
     const value = email.trim();
     if (!value) return setError(t.emailRequired);
     if (!emailPattern.test(value)) return setError(t.emailInvalid);
-    if (!captchaToken) return setOutcome('unavailable');
+    if (!captchaToken) return setCaptchaFailed(true);
     setBusy(true);
     setOutcome(undefined);
     const result = await api.requestPasswordReset(value, captchaToken);
@@ -53,7 +55,7 @@ export function RecoveryForm({ email: initial = '', carry = '', turnstileSiteKey
   return <>
     <AuthHeading title={t.recoveryTitle} subtitle={t.recoveryBody} />
     {outcome || captchaFailed ? <Alert role="alert" variant="destructive" className="mb-6"><AlertDescription>
-      {captchaFailed ? t.challengeUnavailable : outcome === 'rate-limited' ? t.tooManyAttempts : t.unavailable}</AlertDescription></Alert> : null}
+      {captchaFailed ? t.challengeUnavailable : outcome ? failureText(outcome, common) : t.challengeUnavailable}</AlertDescription></Alert> : null}
     <form noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-6">
       <EmailField label={t.emailLabel} value={email} error={error} autoFocus disabled={busy}
         onChange={value => { setEmail(value); setError(''); }} />

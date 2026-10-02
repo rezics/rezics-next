@@ -183,7 +183,7 @@ export const browserAccountApi: AccountApi = {
     } catch { return { ok: false, kind: 'unavailable', status: 0 }; }
     await response.body?.cancel();
     return response.ok ? { ok: true, data: undefined }
-      : { ok: false, kind: response.status === 400 ? 'invalid-token' : response.status >= 500 ? 'unavailable' : 'failed',
+      : { ok: false, kind: response.status === 400 ? 'invalid-token' : classifyFailure(response.status, null),
         status: response.status };
   },
   async requestPasswordReset(email, captchaToken) {

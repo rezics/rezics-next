@@ -35,14 +35,14 @@ export const CouldNotSave: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Accept and continue' }));
-    await expect(await canvas.findByRole('alert')).toHaveTextContent('We couldn’t save your acceptance.');
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('We could not reach the REZICS Account service.');
   },
 };
 
 export const Unavailable: Story = {
   render: () => <PoliciesUnavailable />,
   async play({ canvasElement }) {
-    await expect(await within(canvasElement).findByText(/sign-up is paused/)).toBeVisible();
+    await expect(await within(canvasElement).findByText(/Reload this page to try again/)).toBeVisible();
   },
 };
 export const Dark: Story = { globals: dark };
@@ -53,5 +53,41 @@ export const Chinese: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: '我们的政策已更新' })).toBeVisible();
     await expect(canvas.getByText('政策以英文发布，以英文文本为准。')).toBeVisible();
+  },
+};
+
+const signedOut = fn(async () => ({ ok: true as const, data: undefined }));
+const declined = fn();
+export const DeclineAndSignOut: Story = {
+  args: { signIn: '/sign-in?client_id=reader&policy_declined=1' },
+  parameters: { account: { navigate: declined, api: { signOut: signedOut } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Decline and sign out' }));
+    await expect(signedOut).toHaveBeenCalledOnce();
+    await expect(declined).toHaveBeenCalledWith('/sign-in?client_id=reader&policy_declined=1');
+  },
+};
+
+const stayed = fn();
+export const DeclineCouldNotSignOut: Story = {
+  parameters: { account: { navigate: stayed,
+    api: { signOut: async () => ({ ok: false, kind: 'unavailable', status: 503 }) } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Decline and sign out' }));
+    await expect(await canvas.findByRole('alert')).toBeVisible();
+    await expect(stayed).not.toHaveBeenCalled();
+    await expect(canvas.getByRole('button', { name: 'Decline and sign out' })).toBeEnabled();
+  },
+};
+
+export const PoliciesChangedAgain: Story = {
+  parameters: { account: { api: {
+    acceptPolicies: async () => ({ ok: false, kind: 'policy-acceptance-required', status: 409 }) } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Accept and continue' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Reload the page');
   },
 };

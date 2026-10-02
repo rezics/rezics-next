@@ -33,5 +33,5 @@ export default async function SignInPage({ searchParams }: { searchParams: PageS
     : <SignInFlow next={next} oauthQuery={oauthQuery} carry={carry} appName={appName}
       reauthEmail={reauth ? signedIn?.user.email : undefined}
       turnstileSiteKey={enrollmentSiteKey()}
-      notice={query.get('deleted') === '1' ? 'deleted' : undefined} />}</AuthFrame>;
+      notice={query.get('policy_declined') === '1' ? 'policy-declined' : query.get('deleted') === '1' ? 'deleted' : undefined} />}</AuthFrame>;
 }

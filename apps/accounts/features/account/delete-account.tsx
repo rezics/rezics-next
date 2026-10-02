@@ -7,6 +7,7 @@ import { Field, FieldContent, FieldError, FieldLabel } from '@rezics/ui/field';
 import { DownloadIcon } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { SectionHeading } from './account-shell.tsx';
+import { failureText } from './failure-text.ts';
 import { focusedPaths, sectionPaths } from './sections.ts';
 import { useStepUp } from './step-up.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
@@ -30,6 +31,7 @@ function Step({ number, title, children }: { number: number; title: string; chil
  * the delete-user flow only with its Access deletion fence. */
 export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean }) {
   const { t } = useTranslation('account');
+  const common = useTranslation('common').t;
   const showLabel = useTranslation('auth').t.showPassword;
   const { api, navigate } = useAccountClient();
   const stepUp = useStepUp();
@@ -53,7 +55,7 @@ export function DeleteAccount({ hasPassword = true }: { hasPassword?: boolean })
     if (result.kind === 'cancelled') return;
     if (result.kind === 'invalid-credentials') return setErrors({ password: t.wrongCurrentPassword });
     setFailure(result.kind === 'conflict' ? t.deleteBlocked : result.kind === 'not-enabled'
-      ? t.deleteNotAvailable : t.deleteRetry);
+      ? t.deleteNotAvailable : result.kind === 'unavailable' ? t.deleteRetry : failureText(result.kind, common));
   }
 
   return <>

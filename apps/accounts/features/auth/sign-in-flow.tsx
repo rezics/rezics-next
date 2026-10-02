@@ -1,6 +1,7 @@
 'use client';
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
+import { Checkbox } from '@rezics/ui/checkbox';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
@@ -12,6 +13,8 @@ import { AuthHeading } from '../shell/auth-frame.tsx';
 import { autofocus, CodeField, EmailField, emailPattern, PasswordField } from './fields.tsx';
 import { autofillSupported, passkeysSupported } from './webauthn.ts';
 import { useTranslation } from '../../i18n/client.ts';
+import { acceptanceAfterSignIn } from './policies.ts';
+import { failureText } from '../account/failure-text.ts';
 import { authorizationAfterCreate } from './auth-query.ts';
 import { Turnstile } from './turnstile.tsx';
 
@@ -26,7 +29,7 @@ export interface SignInFlowProps {
   carry?: string;
   /** Re-authentication of the signed-in account before a sensitive page. */
   reauthEmail?: string;
-  notice?: 'deleted';
+  notice?: 'deleted' | 'policy-declined';
   turnstileSiteKey?: string;
 }
 
@@ -35,9 +38,10 @@ type Notice = FailureKind | 'verification-sent' | 'passkey-failed' | 'two-factor
 
 /** Identifier first, then password, as Google does, with passkeys offered in
  * the email field's autofill and as a button. Neither step reveals whether an
- * account exists: every failure after the password is the same. */
+ * account exists. Policy refusals keep the authorization's continuation. */
 export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail, notice: initial, turnstileSiteKey }: SignInFlowProps) {
   const { t } = useTranslation('auth');
+  const common = useTranslation('common').t;
   const { api, navigate } = useAccountClient();
   const [step, setStep] = useState<Step>(reauthEmail ? 'password' : 'email');
   const [email, setEmail] = useState(reauthEmail ?? '');
@@ -57,7 +61,12 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
   const autofill = useRef<AbortController>(undefined);
   const suffix = carry ? `?${carry}` : '';
 
-  const finish = (redirect?: string) => navigate(authorizationAfterCreate(oauthQuery) ?? redirect ?? next);
+  const finish = (redirect?: string) => navigate(authorizationAfterCreate(oauthQuery) ?? redirect
+    ?? (oauthQuery ? next : acceptanceAfterSignIn(undefined, next, carry)));
+  const refusal = (kind: FailureKind) => {
+    if (kind === 'policy-acceptance-required') return navigate(acceptanceAfterSignIn(oauthQuery, next, carry));
+    setNotice(kind);
+  };
   // Offer this account's passkeys in the email field's autofill while it shows.
   useEffect(() => {
     setPasskeys(passkeysSupported());
@@ -69,7 +78,8 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
       const result = await api.signInWithPasskey({ oauthQuery, conditional: true, signal: controller.signal });
       if (controller.signal.aborted) return;
       if (result.ok) return finish(result.data.redirect);
-      if (result.kind !== 'cancelled') setNotice(result.kind === 'invalid-credentials' ? 'passkey-failed' : result.kind);
+      if (result.kind === 'invalid-credentials') setNotice('passkey-failed');
+      else if (result.kind !== 'cancelled') refusal(result.kind);
     });
     return () => controller.abort();
     // Restarted only when the email step shows again, not on every render.
@@ -93,7 +103,8 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
     const result = await api.signInWithPasskey({ oauthQuery });
     if (result.ok) return finish(result.data.redirect);
     setBusy(undefined);
-    if (result.kind !== 'cancelled') setNotice(result.kind === 'invalid-credentials' ? 'passkey-failed' : result.kind);
+    if (result.kind === 'invalid-credentials') setNotice('passkey-failed');
+    else if (result.kind !== 'cancelled') refusal(result.kind);
   }
 
   async function submitPassword(event: FormEvent) {
@@ -112,7 +123,7 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
     if (result.ok) return finish(result.data.redirect);
     setBusy(undefined);
     if (result.kind === 'invalid-credentials') setPasswordError(t.wrongPassword);
-    else { setNotice(result.kind); if (result.kind === 'email-not-verified') setVerificationRequired(true); }
+    else { refusal(result.kind); if (result.kind === 'email-not-verified') setVerificationRequired(true); }
   }
 
   async function submitCode(event: FormEvent) {
@@ -131,11 +142,11 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
       return setCodeError(backup ? t.backupCodeWrong : t.codeWrong);
     }
     if (result.kind === 'stale') { setStep('password'); return setNotice('two-factor-expired'); }
-    setNotice(result.kind);
+    refusal(result.kind);
   }
 
   async function resendVerification() {
-    if (!captchaToken) return setNotice('unavailable');
+    if (!captchaToken) return setNotice('challenge-unavailable');
     setBusy('resend');
     const result = await api.sendVerificationEmail(email, captchaToken);
     setCaptchaToken(undefined);
@@ -146,11 +157,9 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
 
   const message = (kind: Notice) => kind === 'verification-sent' ? t.verificationSent({ email })
     : kind === 'challenge-unavailable' ? t.challengeUnavailable
-    : kind === 'email-not-verified' ? t.emailNotVerified
-      : kind === 'rate-limited' ? t.tooManyAttempts
-        : kind === 'expired-request' ? t.requestExpired
-          : kind === 'passkey-failed' ? t.passkeyFailed
-            : kind === 'two-factor-expired' ? t.twoFactorExpired : t.unavailable;
+      : kind === 'passkey-failed' ? t.passkeyFailed
+        : kind === 'two-factor-expired' ? t.twoFactorExpired
+          : kind === 'unavailable' ? t.unavailable : failureText(kind, common);
   const subtitle = step === 'two-factor' ? backup ? t.backupCodeSubtitle : t.twoFactorSubtitle
     : step === 'email' ? appName ? t.signInToApp({ app: appName }) : oauthQuery ? t.signInForApp : t.signInSubtitle
       : reauthEmail ? t.reauthSubtitle : undefined;
@@ -173,6 +182,8 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
       : step === 'two-factor' ? t.twoFactorTitle : t.welcome} subtitle={subtitle}>{accountChip}</AuthHeading>
     {initial === 'deleted' && step === 'email' ? <Alert variant="success" className="mb-6">
       <CircleCheckIcon aria-hidden="true" /><AlertDescription>{t.deletedNotice}</AlertDescription></Alert> : null}
+    {initial === 'policy-declined' ? <Alert className="mb-6" role="status">
+      <AlertDescription>{common.policyDeclined}</AlertDescription></Alert> : null}
     {notice ? <Alert role="alert" variant={notice === 'verification-sent' ? 'success' : 'destructive'}
       className="mb-6">
       <AlertDescription>{message(notice)}
@@ -221,10 +232,8 @@ export function SignInFlow({ next, oauthQuery, appName, carry = '', reauthEmail,
             <FieldError>{codeError}</FieldError>
           </Field> : <CodeField label={t.codeLabel} value={code} error={codeError} autoFocus disabled={!!busy}
             onChange={value => { setCode(value); setCodeError(''); }} />}
-          <label className="flex w-fit items-center gap-3 text-sm font-medium">
-            <input type="checkbox" className="size-4 accent-primary" checked={trustDevice} disabled={!!busy}
-              onChange={event => setTrustDevice(event.currentTarget.checked)} />
-            {t.trustDevice}</label>
+          <Checkbox className="w-fit text-sm font-medium" checked={trustDevice} disabled={!!busy}
+            onCheckedChange={({ checked }) => setTrustDevice(checked === true)}>{t.trustDevice}</Checkbox>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Button type="button" variant="link" className="px-0" disabled={!!busy}
               onClick={() => { setBackup(!backup); setCode(''); setCodeError(''); }}>

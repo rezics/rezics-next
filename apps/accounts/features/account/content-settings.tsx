@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Switch } from '@rezics/ui/switch';
 import { SettingsCard, SettingsRow } from './account-shell.tsx';
 import { useAccountClient } from '../api/account-client.tsx';
@@ -89,11 +89,9 @@ export function ContentSettings({ initial }: { initial: Read<ContentPreferences>
             max={new Date().toISOString().slice(0, 10)} value={birth} disabled={busy}
             onChange={event => setBirth(event.currentTarget.value)} /></Field>
         <Field><FieldLabel htmlFor="birth-country">{t.birthdayCountry}</FieldLabel>
-          <NativeSelect id="birth-country" value={country} disabled={busy}
-            onChange={event => setCountry(event.currentTarget.value)}>
-            <option value="">{t.birthdayCountryUnknown}</option>
-            {regions.map(region => <option key={region.code} value={region.code}>{region.name}</option>)}
-          </NativeSelect></Field>
+          <ChoiceSelect id="birth-country" label={t.birthdayCountry} value={country} disabled={busy}
+            onValueChange={setCountry} options={[{ value: '', label: t.birthdayCountryUnknown },
+              ...regions.map(region => ({ value: region.code, label: region.name }))]} /></Field>
         <p className="text-sm text-muted-foreground">{t.birthdayPrivacy}</p>
         <div className="flex justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={() => {

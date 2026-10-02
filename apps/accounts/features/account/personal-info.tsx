@@ -5,7 +5,7 @@ import type { ContentPreferences } from '../api/content-preferences.ts';
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Badge } from '@rezics/ui/badge';
 import { Button } from '@rezics/ui/button';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { SectionHeading, SettingsCard, SettingsRow } from './account-shell.tsx';
 import { useStepUp } from './step-up.tsx';
@@ -58,10 +58,9 @@ function LanguageRow({ chosen }: { chosen: AccountLocale | null }) {
     navigate(url.toString());
   }
   return <SettingsRow label={t.language}>
-    <NativeSelect aria-label={t.language} value={value} size="md" className="w-full max-w-60" disabled={busy}
-      onChange={event => void choose(event.currentTarget.value as AccountLocale)}>
-      {uiLocales.map(item => <option key={item} value={item} lang={item}>{localeNames[item]}</option>)}
-    </NativeSelect>
+    <ChoiceSelect label={t.language} value={value} size="md" className="max-w-60" disabled={busy}
+      onValueChange={value => void choose(value as AccountLocale)}
+      options={uiLocales.map(value => ({ value, label: localeNames[value], lang: value }))} />
     <p className="mt-2 text-sm text-muted-foreground">{t.languageHelp}</p>
     {failure ? <Alert role="alert" variant="destructive" className="mt-3"><AlertDescription>{failure}</AlertDescription></Alert> : null}
   </SettingsRow>;
@@ -89,21 +88,18 @@ function DisplayRows({ initial }: { initial: Read<DisplayPreferences> }) {
   }
   return <>
     <SettingsRow label={t.displayMode}>
-      {choice ? <NativeSelect aria-label={t.displayMode} value={choice.displayMode} size="md"
-        className="w-full max-w-60" disabled={busy}
-        onChange={event => void choose({ displayMode: event.currentTarget.value as DisplayPreferences['displayMode'],
-          showZoneThemes: choice!.showZoneThemes })}>
-        <option value="system">{t.modeSystem}</option><option value="light">{t.modeLight}</option>
-        <option value="dark">{t.modeDark}</option>
-      </NativeSelect> : <span className="text-sm text-muted-foreground">{common.unavailableBody}</span>}
+      {choice ? <ChoiceSelect label={t.displayMode} value={choice.displayMode} size="md"
+        className="max-w-60" disabled={busy}
+        onValueChange={value => void choose({ displayMode: value as DisplayPreferences['displayMode'],
+          showZoneThemes: choice!.showZoneThemes })}
+        options={[{ value: 'system', label: t.modeSystem }, { value: 'light', label: t.modeLight },
+          { value: 'dark', label: t.modeDark }]} /> : <span className="text-sm text-muted-foreground">{common.unavailableBody}</span>}
     </SettingsRow>
     <SettingsRow label={t.showZoneThemes}>
-      {choice ? <NativeSelect aria-label={t.showZoneThemes} value={choice.showZoneThemes ? 'yes' : 'no'} size="md"
-        className="w-full max-w-60" disabled={busy}
-        onChange={event => void choose({ displayMode: choice!.displayMode,
-          showZoneThemes: event.currentTarget.value === 'yes' })}>
-        <option value="yes">{t.yes}</option><option value="no">{t.no}</option>
-      </NativeSelect> : <span className="text-sm text-muted-foreground">—</span>}
+      {choice ? <ChoiceSelect label={t.showZoneThemes} value={choice.showZoneThemes ? 'yes' : 'no'} size="md"
+        className="max-w-60" disabled={busy}
+        onValueChange={value => void choose({ displayMode: choice!.displayMode, showZoneThemes: value === 'yes' })}
+        options={[{ value: 'yes', label: t.yes }, { value: 'no', label: t.no }]} /> : <span className="text-sm text-muted-foreground">—</span>}
       {failure ? <Alert role="alert" variant="destructive" className="mt-3"><AlertDescription>{failure}</AlertDescription></Alert> : null}
     </SettingsRow>
   </>;

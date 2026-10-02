@@ -13,12 +13,16 @@ export type FailureKind = 'invalid-credentials' | 'email-not-verified' | 'rate-l
   | 'cancelled'
   // Registration declarations and content qualification.
   | 'minimum-age-confirmation-required' | 'invalid-birth-date' | 'birth-date-required' | 'age-ineligible' | 'market-restricted' | 'market-unavailable'
-  | 'policy-acceptance-required';
+  | 'policy-acceptance-required' | 'denied' | 'invalid-request' | 'not-found'
+  | 'account-suspended' | 'password-reset-required' | 'account-unavailable';
 
 interface Failure { ok: false; kind: FailureKind; status: number; minimumAge?: number }
 export type Result<T> = { ok: true; data: T } | Failure;
 
 const byCode: Record<string, FailureKind> = {
+  ACCOUNT_UNAVAILABLE: 'account-unavailable',
+  INVALID_ORIGIN: 'invalid-request',
+  FORBIDDEN: 'denied',
   INVALID_EMAIL_OR_PASSWORD: 'invalid-credentials',
   INVALID_PASSWORD: 'invalid-credentials',
   CREDENTIAL_ACCOUNT_NOT_FOUND: 'invalid-credentials',
@@ -49,6 +53,15 @@ const byCode: Record<string, FailureKind> = {
 
 // The Account service's own routes answer `{ error: <code> }`.
 const byError: Record<string, FailureKind> = {
+  forbidden: 'denied',
+  invalid_origin: 'invalid-request',
+  invalid_request: 'invalid-request',
+  not_found: 'not-found',
+  conflict: 'conflict',
+  rate_limited: 'rate-limited',
+  temporarily_unavailable: 'unavailable',
+  account_suspended: 'account-suspended',
+  password_reset_required: 'password-reset-required',
   step_up_required: 'step-up-required',
   last_sign_in_method: 'last-method',
   stale_request: 'stale',
@@ -80,11 +93,11 @@ export function classifyFailure(status: number, body: unknown): FailureKind {
   const message = typeof record.message === 'string' ? record.message : '';
   if (status === 429) return 'rate-limited';
   if (status >= 500) return 'unavailable';
-  const reason = typeof record.reason === 'string' ? record.reason : error;
+  const reason = typeof record.reason === 'string' ? record.reason : code ?? error;
   if (reason && byReason[reason]) return byReason[reason];
   if (code && byCode[code]) return byCode[code];
+  if (error === 'invalid_signature') return 'expired-request';
   if (error && byError[error]) return byError[error];
-  if (error === 'invalid_signature' || error === 'invalid_request' && status === 400) return 'expired-request';
   if (/isn't enabled|is disabled/i.test(message)) return 'not-enabled';
   if (status === 404) return 'not-enabled';
   if (status === 401) return 'unauthenticated';

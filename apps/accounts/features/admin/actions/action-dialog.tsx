@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Progress, ProgressTrack, ProgressRange } from '@rezics/ui/progress';
 import { Textarea } from '@rezics/ui/textarea';
 import { toast } from '@rezics/ui/toast';
@@ -137,10 +137,10 @@ function ActionForm({ request, onClose, onDone }: { request: ActionRequest; onCl
           {action === 'suspend' ? <div className="grid gap-4 sm:grid-cols-2">
             <Field disabled={pending}>
               <FieldLabel>{t.duration}</FieldLabel>
-              <NativeSelect value={duration} className="w-full" onChange={event => setDuration(event.currentTarget.value as Duration)}>
-                {(['day', 'week', 'month', 'quarter', 'indefinite', 'custom'] as const).map(value =>
-                  <option key={value} value={value}>{t.durations[value]}</option>)}
-              </NativeSelect>
+              <ChoiceSelect value={duration} label={t.duration} disabled={pending} portalled={false}
+                onValueChange={value => setDuration(value as Duration)}
+                options={(['day', 'week', 'month', 'quarter', 'indefinite', 'custom'] as const)
+                  .map(value => ({ value, label: t.durations[value] }))} />
             </Field>
             {duration === 'custom' ? <Field invalid={showErrors && end === null} disabled={pending}>
               <FieldLabel>{t.endsOn}</FieldLabel>

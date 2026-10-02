@@ -1,3 +1,4 @@
+import { chooseOption } from '../../shell/select.fixture.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { UserPage } from './user-page.tsx';
@@ -121,10 +122,10 @@ export const SuspendWithFriction: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
     await waitFor(() => expect(within(dialog).getByText('That doesn’t match.')).toBeVisible());
     await expect(act).not.toHaveBeenCalled();
-    await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'abuse');
+    await chooseOption(within(dialog).getByRole('combobox', { name: 'Reason' }), 'abuse');
     await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Harassment report #1190');
     await typist.type(within(dialog).getByLabelText('Message to the user (optional)'), 'We received reports of harassment.');
-    await userEvent.selectOptions(within(dialog).getByLabelText('Duration'), 'month');
+    await chooseOption(within(dialog).getByRole('combobox', { name: 'Duration' }), 'month');
     await typist.type(within(dialog).getByLabelText('Type radia@example.test to confirm'), 'radia@example.test');
     await typist.type(within(dialog).getByLabelText('Your password'), 'correct horse');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Suspend' }));
@@ -150,7 +151,7 @@ export const StepUpThenRetry: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Sign out everywhere…' }));
     const dialog = await openDialog('alertdialog', 'Sign Radia Perlman out everywhere?');
     await expect(within(dialog).queryByLabelText('Your password')).toBeNull();
-    await userEvent.selectOptions(within(dialog).getByLabelText('Reason'), 'user-request');
+    await chooseOption(within(dialog).getByRole('combobox', { name: 'Reason' }), 'user-request');
     await typist.type(within(dialog).getByLabelText('Details for the audit log'), 'Lost a laptop');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Sign out everywhere' }));
     await expect(await within(dialog).findByText('Confirm it’s you to continue.', {}, { timeout: 5_000 })).toBeVisible();

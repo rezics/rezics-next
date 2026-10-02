@@ -40,6 +40,7 @@ export const AddStaffMember: Story = {
     await userEvent.click(findButton);
     const role = await openDialog('alertdialog', 'Change the role of Ada Lovelace');
     await expect(within(role).getByRole('radio', { name: /^Support/ })).toBeChecked();
+    await waitFor(() => expect(within(role).getByRole('radio', { name: /^Support/ })).toHaveFocus());
     await typist.type(within(role).getByLabelText('Why (for the audit log)'), 'Joins the support rotation');
     await userEvent.click(within(role).getByRole('button', { name: 'Change role' }));
     await waitFor(() => expect(setRole).toHaveBeenCalledWith('u-ada', 'support', 'Joins the support rotation'), { timeout: 5_000 });

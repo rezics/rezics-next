@@ -1,12 +1,16 @@
 id: no-native-select
 language: Tsx
 severity: error
-message: Web controls use the styled @rezics/ui Select or Menu.
+message: Web and Accounts controls use the styled @rezics/ui Select or Menu.
 files:
   - apps/web/**/*.js
   - apps/web/**/*.jsx
   - apps/web/**/*.ts
   - apps/web/**/*.tsx
+  - apps/accounts/**/*.js
+  - apps/accounts/**/*.jsx
+  - apps/accounts/**/*.ts
+  - apps/accounts/**/*.tsx
 rule:
   any:
     - kind: jsx_opening_element

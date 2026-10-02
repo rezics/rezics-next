@@ -1,3 +1,4 @@
+import { chooseOption } from '../../shell/select.fixture.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { AuditExplorer } from './audit-explorer.tsx';
@@ -28,7 +29,7 @@ export const Explore: Story = {
     await expect(await canvas.findByRole('rowheader', { name: 'status' })).toBeVisible();
     await expect(canvas.getByText('suspended')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Copy link' })).toBeVisible();
-    await userEvent.selectOptions(canvas.getByLabelText('Outcome'), 'failed');
+    await chooseOption(canvas.getByRole('combobox', { name: 'Outcome' }), 'failed');
     await waitFor(() => expect(audit).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed', from: expect.stringMatching(/^\d{4}-/) })));
     await waitFor(() => expect(replaceUrl).toHaveBeenLastCalledWith('/admin/audit?outcome=failed'), { timeout: 5_000 });
     await waitFor(() => expect(within(canvas.getByRole('table')).getAllByRole('button', { name: 'Details' })).toHaveLength(1));
@@ -61,7 +62,7 @@ export const SearchTheLog: Story = {
     await waitFor(() => expect(searched).toHaveBeenLastCalledWith(expect.objectContaining({ requestId: '6d1f3c1e-3b7a-4f5e-9a51-2f6c0a1d7e11' })));
     // A single record found by its request opens straight to its details.
     await expect(await canvas.findByRole('rowheader', { name: 'status' })).toBeVisible();
-    await userEvent.selectOptions(canvas.getByLabelText('Reason'), 'abuse');
+    await chooseOption(canvas.getByRole('combobox', { name: 'Reason' }), 'abuse');
     await waitFor(() => expect(searched).toHaveBeenLastCalledWith(expect.objectContaining({ reasonCode: 'abuse' })));
   },
 };
@@ -73,7 +74,7 @@ export const CustomDates: Story = {
   parameters: { admin: { section: 'audit', api: { audit: custom }, client: { replaceUrl: customUrl } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByLabelText('Period'), 'custom');
+    await chooseOption(await canvas.findByRole('combobox', { name: 'Period' }), 'custom');
     const from = canvas.getByLabelText('From (UTC)');
     await userEvent.clear(from);
     await userEvent.type(from, '2026-09-01');

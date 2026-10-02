@@ -143,7 +143,7 @@ export const ConfirmWithPasskeyAndCode: Story = {
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Sign out everywhere else' }));
     const dialog = await screen.findByRole('dialog', { name: 'Confirm it’s you' });
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Use your passkey' }));
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Use your passkey' }));
     await expect(await within(dialog).findByRole('alert')).toHaveTextContent('That passkey couldn’t confirm it’s you.');
     await expect(within(dialog).getByRole('textbox', { name: 'Code from your authenticator app' })).toBeVisible();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));

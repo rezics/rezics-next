@@ -6,3 +6,4 @@ invalid:
   - "const x = <select name='scope'><option value='all'>All</option></select>;"
   - "const x = <select name='scope' />;"
   - "import { NativeSelect } from '@rezics/ui/native-select';"
+  - 'function AccountsLanguage() { return <select aria-label="Language"><option>English</option></select>; }'

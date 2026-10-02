@@ -3,6 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { Field, FieldError, FieldLabel } from '@rezics/ui/field';
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 import { Textarea } from '@rezics/ui/textarea';
 import { toast } from '@rezics/ui/toast';
 import { cn } from '@rezics/ui/utils';
@@ -33,11 +34,11 @@ export function RoleForm({ target, onCancel, onDone, onPending }: { target: Role
   const { t } = useTranslation('admin');
   const { api } = useAdminClient();
   const [choice, setChoice] = useState<Choice>(target.role ?? 'support');
-  const current = useRef<HTMLInputElement>(null);
+  const current = useRef<HTMLLabelElement>(null);
   // Focus starts on the current choice: the dialog picks it (data-autofocus),
   // and this moves it there when the form replaces the find step.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => current.current?.focus());
+    const frame = requestAnimationFrame(() => current.current?.querySelector<HTMLInputElement>('input')?.focus());
     return () => cancelAnimationFrame(frame);
   }, []);
   const [reason, setReason] = useState('');
@@ -66,17 +67,19 @@ export function RoleForm({ target, onCancel, onDone, onPending }: { target: Role
   return <form className="contents" noValidate onSubmit={event => { event.preventDefault(); void submit(); }}>
         <DialogHeader title={t.roleTitle({ name: label })} />
         <DialogBody className="flex flex-col gap-4">
-          <fieldset className="flex flex-col gap-2" disabled={pending}>
-            <legend className="mb-2 text-sm font-medium">{t.newRole}</legend>
-            {choices.map(value => <label key={value} className={cn('flex cursor-pointer gap-3 rounded-2xl border px-4 py-3 text-sm transition-colors',
-              choice === value ? 'border-primary/40 bg-primary/5' : 'border-border/60 hover:bg-accent/40')}>
-              <input type="radio" name="role" value={value} checked={choice === value} onChange={() => setChoice(value)}
+          <fieldset disabled={pending}>
+            <legend className="mb-2 text-sm font-medium" id="new-role-label">{t.newRole}</legend>
+            <RadioGroup name="role" value={choice} disabled={pending} aria-labelledby="new-role-label"
+              onValueChange={({ value }) => setChoice(value as Choice)} className="gap-2">
+              {choices.map(value => <RadioGroupItem key={value} value={value}
                 ref={value === (target.role ?? 'support') ? current : undefined}
                 data-autofocus={value === (target.role ?? 'support') || undefined}
-                className="mt-0.5 size-4 accent-primary" />
-              <span><span className="block font-medium">{value === 'none' ? t.removeRole : t.roles[value]}</span>
+                className={cn('cursor-pointer gap-3 rounded-2xl border px-4 py-3 text-sm transition-colors',
+                  choice === value ? 'border-primary/40 bg-primary/5' : 'border-border/60 hover:bg-accent/40')}>
+                <span><span className="block font-medium">{value === 'none' ? t.removeRole : t.roles[value]}</span>
                 <span className="block text-muted-foreground">{t.roleConsequence[value]}</span></span>
-            </label>)}
+              </RadioGroupItem>)}
+            </RadioGroup>
           </fieldset>
           <Field invalid={showErrors && reason.trim().length < 3} disabled={pending} required>
             <FieldLabel>{t.roleReason}</FieldLabel>

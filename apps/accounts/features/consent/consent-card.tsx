@@ -7,6 +7,8 @@ import { AppWindowIcon, BookOpenIcon, InfinityIcon, KeyRoundIcon, UserRoundIcon 
 import { useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { FailureKind } from '../api/errors.ts';
+import { failureText } from '../account/failure-text.ts';
+import { acceptanceAfterSignIn } from '../auth/policies.ts';
 import { groupScopes, type ScopeGroup } from './scopes.ts';
 import { type AvatarUser, UserAvatar } from '../shell/user-avatar.tsx';
 import { useTranslation } from '../../i18n/client.ts';
@@ -23,6 +25,7 @@ const groupTitles = { identity: 'groupIdentity', works: 'groupWorks', other: 'gr
 export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { app: ConsentApp | null;
   user: AvatarUser; scopes: string[]; oauthQuery: string; descriptions?: Readonly<Record<string, string>> }) {
   const { t } = useTranslation('consent');
+  const common = useTranslation('common').t;
   const { api, navigate } = useAccountClient();
   const [busy, setBusy] = useState<'allow' | 'deny' | 'switch'>();
   const [failure, setFailure] = useState<FailureKind>();
@@ -35,12 +38,14 @@ export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { a
     const result = await api.consent(accept, oauthQuery);
     if (result.ok) return navigate(result.data.redirect);
     setBusy(undefined);
+    if (result.kind === 'policy-acceptance-required') return navigate(acceptanceAfterSignIn(oauthQuery, '/', oauthQuery));
     setFailure(result.kind);
   }
 
   async function switchAccount() {
     setBusy('switch');
-    await api.signOut();
+    const result = await api.signOut();
+    if (!result.ok && result.kind !== 'unauthenticated') { setBusy(undefined); setFailure(result.kind); return; }
     // The signed request stays valid for the next account until it expires.
     navigate(`/sign-in?${oauthQuery}`);
   }
@@ -92,7 +97,7 @@ export function ConsentCard({ app, user, scopes, oauthQuery, descriptions }: { a
           target="_blank" rel="noreferrer">{t.appTerms}</a> : null}</span> : null}</p>
     {failure ? <Alert role="alert" variant="destructive"><AlertDescription>
       {failure === 'expired-request' ? t.expired : failure === 'unauthenticated' ? t.signedOutBody
-        : t.unavailable}</AlertDescription></Alert> : null}
+        : failure === 'unavailable' ? t.unavailable : failureText(failure, common)}</AlertDescription></Alert> : null}
     <div className="flex flex-wrap justify-end gap-3">
       <Button variant="outline" size="lg" disabled={!!busy} isLoading={busy === 'deny'}
         onClick={() => void answer(false)}>{t.deny}</Button>

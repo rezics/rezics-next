@@ -3,7 +3,7 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { PasswordInput, PasswordInputGroup, PasswordInputInput, PasswordInputTrigger } from '@rezics/ui/password-input';
 import { Textarea } from '@rezics/ui/textarea';
 import { CircleAlertIcon } from 'lucide-react';
@@ -134,11 +134,10 @@ export function ReasonFields({ codes, value, onChange, required, withMessage, di
   return <>
     <Field id={`reason-code${id}`} invalid={codeMissing} disabled={disabled} required={required}>
       <FieldLabel>{t.reasonCode}</FieldLabel>
-      <NativeSelect value={value.code} className="w-full" onChange={event => onChange({ ...value,
-        code: event.currentTarget.value as ReasonCode | '' })}>
-        <option value="">{t.reasonCodePlaceholder}</option>
-        {codes.map(code => <option key={code} value={code}>{t.reasonCodes[code]}</option>)}
-      </NativeSelect>
+      <ChoiceSelect value={value.code} label={t.reasonCode} disabled={disabled} portalled={false}
+        onValueChange={code => onChange({ ...value, code: code as ReasonCode | '' })}
+        options={[{ value: '', label: t.reasonCodePlaceholder },
+          ...codes.map(code => ({ value: code, label: t.reasonCodes[code] }))]} />
       <FieldError>{t.reasonCodePlaceholder}</FieldError>
     </Field>
     <Field id={`reason-detail${id}`} invalid={detailShort} disabled={disabled} required={required}>

@@ -52,3 +52,28 @@ export function acceptanceContinuation(value: string | null | undefined): string
   const path = safeReturnPath(value);
   return /^\/(?:api\/auth\/)?oauth2\/authorize\?/.test(path) ? path : '/';
 }
+
+/** Credential verification has finished; resume PKCE without asking for it again.
+ * Keep every app parameter, including repeated resource indicators and state. */
+export function acceptanceAfterSignIn(oauthQuery: string | undefined, next: string, carry = ''): string {
+  const resume = new URLSearchParams(oauthQuery);
+  if (oauthQuery) {
+    const prompts = (resume.get('prompt') ?? '').split(' ').filter(value => value && value !== 'login' && value !== 'create');
+    if (prompts.length) resume.set('prompt', prompts.join(' '));
+    else resume.delete('prompt');
+    for (const field of ['sig', 'ba_param', 'ba_iat', 'exp', 'max_age', 'ba_pl']) resume.delete(field);
+  }
+  const back = new URLSearchParams(carry);
+  back.set('policy_declined', '1');
+  back.set('sign_in', '1');
+  const query = new URLSearchParams({ ...(oauthQuery
+    ? { continue: `/api/auth/oauth2/authorize?${resume}` } : { next: safeReturnPath(next) }),
+    return: `/sign-in?${back}` });
+  return `/accept-policies?${query}`;
+}
+
+/** A declined acceptance returns to the sign-in form, carrying only a safe local path. */
+export function acceptanceSignInPath(value: string | null): string {
+  const path = safeReturnPath(value);
+  return path.startsWith('/sign-in?') ? path : '/sign-in?policy_declined=1';
+}

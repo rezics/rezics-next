@@ -1,3 +1,4 @@
+import { chooseOption } from '../shell/select.fixture.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { PersonalInfo } from './personal-info.tsx';
@@ -22,9 +23,9 @@ export const Details: Story = {
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Personal info' })).toBeVisible();
     await expect(canvas.getByText('Ada Lovelace', { selector: 'span' })).toBeVisible();
     await expect(canvas.getByText('Verified')).toBeVisible();
-    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
-    await expect(canvas.getByRole('combobox', { name: 'Display mode' })).toHaveValue('system');
-    await expect(canvas.getByRole('combobox', { name: 'Show Zone themes' })).toHaveValue('yes');
+    await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
+    await expect(canvas.getByRole('combobox', { name: 'Display mode' })).toHaveTextContent('Match system');
+    await expect(canvas.getByRole('combobox', { name: 'Show Zone themes' })).toHaveTextContent('Show');
     await expect(canvas.queryByText('Coming soon')).toBeNull();
   },
 };
@@ -35,9 +36,9 @@ export const ChooseDisplay: Story = {
   parameters: { account: { api: { setDisplayPreferences: savedDisplay } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Display mode' }), 'dark');
+    await chooseOption(canvas.getByRole('combobox', { name: 'Display mode' }), 'dark');
     await expect(savedDisplay).toHaveBeenCalledWith({ revision: 0, displayMode: 'dark', showZoneThemes: true });
-    await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Show Zone themes' }), 'no');
+    await chooseOption(canvas.getByRole('combobox', { name: 'Show Zone themes' }), 'no');
     await expect(savedDisplay).toHaveBeenCalledWith({ revision: 1, displayMode: 'dark', showZoneThemes: false });
   },
 };
@@ -57,7 +58,7 @@ export const ChooseLanguage: Story = {
   parameters: { account: { navigate: reloaded, api: { setLocale: chosen } } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.selectOptions(await canvas.findByRole('combobox', { name: 'Language' }), 'zh-Hans');
+    await chooseOption(await canvas.findByRole('combobox', { name: 'Language' }), 'zh-Hans');
     // Stored on the account, then remembered in this browser through ?hl=.
     await expect(chosen).toHaveBeenCalledWith('zh-Hans');
     await waitFor(() => expect(reloaded).toHaveBeenCalledWith(expect.stringContaining('hl=zh-Hans')));
@@ -112,7 +113,7 @@ export const ChangeEmailNotAvailable: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Change email' }));
     await userEvent.type(canvas.getByRole('textbox', { name: 'New email' }), 'ada@new.example');
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
-    await expect(await canvas.findByRole('alert')).toHaveTextContent('Not available yet');
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('This option is not enabled.');
   },
 };
 
@@ -140,7 +141,7 @@ export const Chinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: '个人信息' })).toBeVisible();
-    await expect(canvas.getByRole('combobox', { name: '语言' })).toHaveValue('zh-Hans');
+    await expect(canvas.getByRole('combobox', { name: '语言' })).toHaveTextContent('简体中文');
   },
 };
 
@@ -150,8 +151,9 @@ export const JapaneseFallback: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: '個人情報' })).toBeVisible();
     const language = canvas.getByRole('combobox', { name: '言語' });
-    await expect(language).toHaveValue('ja');
-    const options = within(language).getAllByRole('option');
+    await expect(language).toHaveTextContent('日本語');
+    await userEvent.click(language);
+    const options = within(document.body).getAllByRole('option');
     await expect(options.map(option => option.textContent?.trim()))
       .toEqual(['English', '繁體中文', '简体中文', '日本語', '한국어', 'Deutsch', 'Français', 'Español']);
   },

@@ -1,4 +1,7 @@
+import { refusalMessages } from '../../api/refusal-messages.ts';
 export default {
+  policyReviewUnavailable: "We can’t show the current policies right now. Reload this page to try again.",
+  ...refusalMessages['en'],
   productName: 'REZICS Account',
   brandLabel: 'Account',
   homeLink: 'REZICS Account home',

@@ -5,6 +5,7 @@ import { Button } from '@rezics/ui/button';
 import { type FormEvent, useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { FailureKind } from '../api/errors.ts';
+import { failureText } from '../account/failure-text.ts';
 import { AuthHeading } from '../shell/auth-frame.tsx';
 import { AuthOutcome } from './auth-outcome.tsx';
 import { PasswordField, passwordLength } from './fields.tsx';
@@ -14,6 +15,7 @@ import { useTranslation } from '../../i18n/client.ts';
  * when the link is invalid or expired. */
 export function ResetPasswordForm({ token }: { token?: string }) {
   const { t } = useTranslation('auth');
+  const common = useTranslation('common').t;
   const { api } = useAccountClient();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -49,7 +51,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
   return <>
     <AuthHeading title={t.resetTitle} subtitle={t.resetBody} />
     {outcome ? <Alert role="alert" variant="destructive" className="mb-6"><AlertDescription>
-      {outcome === 'rate-limited' ? t.tooManyAttempts : t.unavailable}</AlertDescription></Alert> : null}
+      {failureText(outcome, common)}</AlertDescription></Alert> : null}
     <form method="post" noValidate onSubmit={event => void submit(event)} className="flex flex-col gap-5">
       <PasswordField label={t.newPasswordLabel} value={password} error={errors.password} autoFocus
         autoComplete="new-password" visibilityLabel={t.showPassword} disabled={busy}

@@ -49,7 +49,7 @@ export const Password: Story = {
       .toHaveAttribute('href', '/forgot-password?email=ada%40example.test');
     await userEvent.type(canvas.getByLabelText('Enter your password'), 'correct horse');
     await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
-    await expect(continued).toHaveBeenCalledWith('/security');
+    await expect(continued).toHaveBeenCalledWith('/accept-policies?next=%2Fsecurity&return=%2Fsign-in%3Fpolicy_declined%3D1%26sign_in%3D1');
   },
 };
 
@@ -112,7 +112,7 @@ export const TwoStepVerification: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
     await expect(verified).toHaveBeenLastCalledWith({ code: 'k3Hx7-Qm2pW', method: 'backup-code', trustDevice: true,
       oauthQuery: undefined });
-    await waitFor(() => expect(afterCode).toHaveBeenCalledWith('/security'));
+    await waitFor(() => expect(afterCode).toHaveBeenCalledWith('/accept-policies?next=%2Fsecurity&return=%2Fsign-in%3Fpolicy_declined%3D1%26sign_in%3D1'));
   },
 };
 
@@ -198,5 +198,78 @@ export const Chinese: Story = {
     await userEvent.click(canvas.getByRole('button', { name: '下一步' }));
     await expect(canvas.getByRole('heading', { level: 1, name: '欢迎' })).toBeVisible();
     await expect(canvas.getByLabelText('输入您的密码')).toBeVisible();
+  },
+};
+
+const policyNavigation = fn();
+const policyOAuth = 'client_id=reader&state=keep-me&code_challenge=pkce&prompt=login&sig=abc&ba_param=client_id';
+export const PoliciesChanged: Story = {
+  args: { oauthQuery: policyOAuth, carry: policyOAuth },
+  parameters: { account: { navigate: policyNavigation,
+    api: { signIn: async () => ({ ok: false, kind: 'policy-acceptance-required', status: 403 }) } } },
+  async play({ canvasElement }) {
+    const canvas = await toPassword(canvasElement);
+    await userEvent.type(canvas.getByLabelText('Enter your password'), 'correct horse');
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(policyNavigation).toHaveBeenCalled());
+    const target = new URL(policyNavigation.mock.calls.at(-1)![0], 'https://accounts.test');
+    await expect(target.pathname).toBe('/accept-policies');
+    const resume = new URL(target.searchParams.get('continue')!, target.origin);
+    await expect(resume.searchParams.get('state')).toBe('keep-me');
+    await expect(resume.searchParams.get('code_challenge')).toBe('pkce');
+    await expect(resume.searchParams.has('prompt')).toBe(false);
+    await expect(canvas.getByLabelText('Enter your password')).toHaveValue('');
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  },
+};
+
+export const AccountBlocked: Story = {
+  parameters: { account: { api: { signIn: async () => ({ ok: false, kind: 'account-unavailable', status: 403 }) } } },
+  async play({ canvasElement }) {
+    const canvas = await toPassword(canvasElement);
+    await userEvent.type(canvas.getByLabelText('Enter your password'), 'correct horse');
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await expect(await canvas.findByRole('alert')).toHaveTextContent('Sign-in is blocked for this account.');
+    await expect(canvas.getByRole('link', { name: 'Forgot password?' })).toBeVisible();
+  },
+};
+
+export const PoliciesDeclined: Story = {
+  args: { notice: 'policy-declined' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('status')).toHaveTextContent('have been signed out');
+    await expect(canvas.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+  },
+};
+
+const passkeyPolicies = fn();
+export const PasskeyPoliciesChanged: Story = {
+  args: { oauthQuery: policyOAuth, carry: policyOAuth },
+  parameters: { account: { navigate: passkeyPolicies, api: {
+    signInWithPasskey: async ({ conditional, signal }: { conditional?: boolean; signal?: AbortSignal }) => conditional
+      ? pendingAutofill(signal) : { ok: false, kind: 'policy-acceptance-required', status: 403 },
+  } } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: 'Sign in with a passkey' }));
+    await waitFor(() => expect(passkeyPolicies).toHaveBeenCalledWith(expect.stringMatching(/^\/accept-policies\?/)));
+  },
+};
+
+const twoFactorPolicies = fn();
+export const TwoFactorPoliciesChanged: Story = {
+  args: { oauthQuery: policyOAuth, carry: policyOAuth },
+  parameters: { account: { navigate: twoFactorPolicies, api: {
+    signIn: async () => ({ ok: true, data: { twoFactor: true } }),
+    verifyTwoFactor: async () => ({ ok: false, kind: 'policy-acceptance-required', status: 403 }),
+  } } },
+  async play({ canvasElement }) {
+    const canvas = await toPassword(canvasElement);
+    await userEvent.type(canvas.getByLabelText('Enter your password'), 'correct horse');
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await userEvent.type(await canvas.findByRole('textbox', { name: 'Enter code' }), '123456');
+    await userEvent.click(canvas.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(twoFactorPolicies).toHaveBeenCalledWith(expect.stringMatching(/^\/accept-policies\?/)));
   },
 };

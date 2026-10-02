@@ -1,4 +1,7 @@
+import { refusalMessages } from '../../api/refusal-messages.ts';
 export default {
+  policyReviewUnavailable: "Die aktuellen Richtlinien können gerade nicht angezeigt werden. Lade die Seite neu und versuche es erneut.",
+  ...refusalMessages['de'],
   productName: 'REZICS Account',
   brandLabel: 'Account',
   homeLink: 'Startseite von REZICS Account',

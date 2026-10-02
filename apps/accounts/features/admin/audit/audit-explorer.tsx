@@ -7,7 +7,7 @@ import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { Kbd } from '@rezics/ui/kbd';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
-import { NativeSelect } from '@rezics/ui/native-select';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@rezics/ui/table';
 import { toast } from '@rezics/ui/toast';
 import { cn } from '@rezics/ui/utils';
@@ -212,13 +212,11 @@ export function AuditExplorer({ initialState, initial, names }: { initialState: 
       <p id="audit-search-help" className="sr-only">{t.auditSearch.help}</p>
       <div className="flex flex-wrap items-end gap-3">
         <Field className="w-auto"><FieldLabel>{t.range}</FieldLabel>
-          <NativeSelect value={state.range} onChange={event => {
-            const range = event.currentTarget.value as Range;
+          <ChoiceSelect label={t.range} value={state.range} onValueChange={value => {
+            const range = value as Range;
             update(range === 'custom' ? { range, from: state.from ?? utcDay(new Date(Date.now() - 7 * 86_400_000).toISOString()),
               to: state.to ?? utcDay(new Date().toISOString()) } : { range, from: null, to: null });
-          }}>
-            {ranges.map(range => <option key={range} value={range}>{range === 'custom' ? t.auditSearch.custom : t.ranges[range]}</option>)}
-          </NativeSelect></Field>
+          }} options={ranges.map(range => ({ value: range, label: range === 'custom' ? t.auditSearch.custom : t.ranges[range] }))} /></Field>
         {state.range === 'custom' ? <>
           <Field className="w-auto"><FieldLabel>{t.auditSearch.from}</FieldLabel>
             <Input type="date" value={state.from ?? ''} max={state.to ?? undefined} onChange={event => update({ from: event.currentTarget.value || null })} /></Field>
@@ -226,19 +224,14 @@ export function AuditExplorer({ initialState, initial, names }: { initialState: 
             <Input type="date" value={state.to ?? ''} min={state.from ?? undefined} onChange={event => update({ to: event.currentTarget.value || null })} /></Field>
         </> : null}
         <Field className="w-auto"><FieldLabel>{t.action}</FieldLabel>
-          <NativeSelect value={state.action ?? ''} onChange={event => update({ action: event.currentTarget.value || null })}>
-            <option value="">{t.anyAction}</option>
-            {actions.map(action => <option key={action} value={action}>{actionLabel(action, t)}</option>)}</NativeSelect></Field>
+          <ChoiceSelect label={t.action} value={state.action ?? ''} onValueChange={value => update({ action: value || null })}
+            options={[{ value: '', label: t.anyAction }, ...actions.map(action => ({ value: action, label: actionLabel(action, t) }))]} /></Field>
         <Field className="w-auto"><FieldLabel>{t.outcome}</FieldLabel>
-          <NativeSelect value={state.outcome ?? ''} onChange={event => update({ outcome: (event.currentTarget.value || null) as Outcome | null })}>
-            <option value="">{t.anyOutcome}</option>
-            {(['succeeded', 'failed', 'attempted'] as const).map(outcome => <option key={outcome} value={outcome}>{t.outcomes[outcome]}</option>)}
-          </NativeSelect></Field>
+          <ChoiceSelect label={t.outcome} value={state.outcome ?? ''} onValueChange={value => update({ outcome: (value || null) as Outcome | null })}
+            options={[{ value: '', label: t.anyOutcome }, ...(['succeeded', 'failed', 'attempted'] as const).map(outcome => ({ value: outcome, label: t.outcomes[outcome] }))]} /></Field>
         <Field className="w-auto"><FieldLabel>{t.reasonCode}</FieldLabel>
-          <NativeSelect value={state.reason ?? ''} onChange={event => update({ reason: (event.currentTarget.value || null) as ReasonCode | null })}>
-            <option value="">{t.auditSearch.anyReason}</option>
-            {reasonCodes.map(code => <option key={code} value={code}>{t.reasonCodes[code]}</option>)}
-          </NativeSelect></Field>
+          <ChoiceSelect label={t.reasonCode} value={state.reason ?? ''} onValueChange={value => update({ reason: (value || null) as ReasonCode | null })}
+            options={[{ value: '', label: t.auditSearch.anyReason }, ...reasonCodes.map(code => ({ value: code, label: t.reasonCodes[code] }))]} /></Field>
       </div>
       {chips.length ? <ul aria-label={t.auditSearch.filters} className="flex flex-wrap gap-1.5">{chips.map(chip => <li key={chip.remove}>
         <span className="inline-flex h-8 items-center gap-1 rounded-full border border-primary/25 bg-primary/8 ps-3 pe-1 text-sm text-primary">

@@ -5,6 +5,7 @@ import { Button } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { FingerprintIcon } from 'lucide-react';
 import { createContext, type FormEvent, type ReactNode, useCallback, useContext, useRef, useState } from 'react';
+import { failureText } from './failure-text.ts';
 import { dialogForm } from './dialog-form.ts';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { Result } from '../api/errors.ts';
@@ -32,6 +33,7 @@ export function useStepUp(): Run {
 export function StepUpProvider({ methods, children }: { methods: StepUpMethods; children: ReactNode }) {
   const { t } = useTranslation('account');
   const auth = useTranslation('auth').t;
+  const common = useTranslation('common').t;
   const { api } = useAccountClient();
   const [open, setOpen] = useState(false);
   const pending = useRef<(confirmed: boolean) => void>(undefined);
@@ -68,7 +70,7 @@ export function StepUpProvider({ methods, children }: { methods: StepUpMethods; 
     if (result.kind === 'cancelled') return;
     setError(result.kind === 'invalid-credentials' ? method === 'passkey' ? t.stepUpPasskeyFailed
       : methods.totp ? t.stepUpWrongWithCode : t.wrongCurrentPassword
-      : result.kind === 'rate-limited' ? auth.tooManyAttempts : t.stepUpUnavailable);
+      : result.kind === 'rate-limited' ? auth.tooManyAttempts : result.kind === 'unavailable' ? t.stepUpUnavailable : failureText(result.kind, common));
   };
   async function withPassword(event: FormEvent) {
     event.preventDefault();

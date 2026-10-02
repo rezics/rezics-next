@@ -130,6 +130,9 @@ export function Devices({ devices }: { devices: DevicesView }) {
     setBusy(key);
     setFailure('');
     setSignedOut(false);
+    // A denied action may open the identity check; close this confirmation
+    // first so two modal layers do not hide the recovery controls.
+    setConfirming(false);
     const result = await stepUp(action);
     setBusy(undefined);
     setConfirming(false);

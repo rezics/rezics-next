@@ -10,3 +10,5 @@ invalid:
   - 'const x = <input name="spoiler" type="checkbox" />;'
   - "const x = <input type={'checkbox'} />;"
   - 'const x = <input type="radio"></input>;'
+  - 'function AccountsTrustDevice() { return <input type="checkbox" disabled={busy} checked={trustDevice} />; }'
+  - 'function AccountsRole() { return <input type={"radio"} value="support" />; }'

@@ -1,4 +1,7 @@
+import { refusalMessages } from '../../api/refusal-messages.ts';
 export default {
+  policyReviewUnavailable: "현재 정책을 표시할 수 없습니다. 페이지를 새로 고쳐 다시 시도하세요.",
+  ...refusalMessages['ko'],
   productName: 'REZICS Account',
   brandLabel: 'Account',
   homeLink: 'REZICS Account 홈',

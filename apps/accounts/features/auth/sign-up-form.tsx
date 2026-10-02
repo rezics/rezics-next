@@ -7,6 +7,7 @@ import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from '@
 import { type FormEvent, useState } from 'react';
 import { useAccountClient } from '../api/account-client.tsx';
 import type { FailureKind } from '../api/errors.ts';
+import { failureText } from '../account/failure-text.ts';
 import { AuthHeading } from '../shell/auth-frame.tsx';
 import { EmailField, emailPattern, NameField, PasswordField, passwordLength } from './fields.tsx';
 import { AuthOutcome } from './auth-outcome.tsx';
@@ -27,6 +28,7 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
   country }: { next: string; oauthQuery?: string; carry?: string; appName?: string | null;
   turnstileSiteKey?: string; policies?: PolicyVersion[]; aboutOrigin?: string; country?: string | null }) {
   const { t } = useTranslation('auth');
+  const common = useTranslation('common').t;
   // The account keeps the language it was created in, for its pages and emails.
   const locale = useLocale().current as AccountLocale;
   const { api, navigate } = useAccountClient();
@@ -63,7 +65,8 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
     setFailure(undefined);
     setRefusal(undefined);
     if (Object.values(found).some(Boolean)) return;
-    if (!captchaToken || !policies) return setFailure('unavailable');
+    if (!captchaToken) return setCaptchaFailed(true);
+    if (!policies) return;
     setBusy(true);
     const result = await api.signUp({ name: values.name.trim(), email, password: values.password, locale, oauthQuery,
       carry, captchaToken, minimumAgeConfirmed: accepted,
@@ -89,10 +92,9 @@ export function SignUpForm({ next, oauthQuery, carry = '', appName, turnstileSit
   const refusalMessage = !refusal ? undefined
     : refusal === 'market-unavailable' ? t.refusedMarket({ region: region ?? t.yourRegion })
       : refusal === 'minimum-age-confirmation-required' ? t.acceptRequired
-        : refusal === 'policy-acceptance-required' ? t.policiesChanged : t.signUpFailed;
-  const failureMessage = captchaFailed ? t.challengeUnavailable : failure === 'rate-limited' ? t.tooManyAttempts
-    : failure === 'expired-request' ? t.requestExpired
-      : failure === 'unavailable' || failure === 'not-enabled' ? t.unavailable : t.signUpFailed;
+        : refusal === 'policy-acceptance-required' ? t.policiesChanged : failureText(refusal, common);
+  const failureMessage = captchaFailed ? t.challengeUnavailable
+    : failure === 'failed' ? t.signUpFailed : failure ? failureText(failure, common) : undefined;
   return <>
     <AuthHeading title={t.signUpTitle} subtitle={appName && appName !== 'REZICS'
       ? t.signUpForApp({ app: appName }) : t.signUpSubtitle} />

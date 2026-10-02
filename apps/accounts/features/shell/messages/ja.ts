@@ -1,4 +1,7 @@
+import { refusalMessages } from '../../api/refusal-messages.ts';
 export default {
+  policyReviewUnavailable: "現在のポリシーを表示できません。ページを再読み込みして再試行してください。",
+  ...refusalMessages['ja'],
   productName: 'REZICS アカウント',
   brandLabel: 'アカウント',
   homeLink: 'REZICS アカウントのホーム',

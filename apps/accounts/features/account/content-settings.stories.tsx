@@ -1,3 +1,4 @@
+import { chooseOption } from '../shell/select.fixture.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within, fireEvent } from 'storybook/test';
 import { ContentSettings } from './content-settings.tsx';
@@ -41,8 +42,8 @@ export const BirthdayFromAnotherFlow: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Edit · Birthday' }));
-    fireEvent.change(canvas.getByLabelText('Birthday'), { target: { value: '1990-01-01' } });
-    await userEvent.selectOptions(canvas.getByLabelText('Country or region'), 'US');
+    await fireEvent.change(canvas.getByLabelText('Birthday'), { target: { value: '1990-01-01' } });
+    await chooseOption(canvas.getByRole('combobox', { name: 'Country or region' }), 'US');
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await expect(learned).toHaveBeenCalledWith({ expectedRevision: 0, birthDate: '1990-01-01', country: 'US' });
     await expect(canvas.getByRole('switch', { name: 'R15' })).toBeChecked();
