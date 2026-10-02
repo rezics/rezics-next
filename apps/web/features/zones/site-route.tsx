@@ -43,7 +43,7 @@ import { DocumentPage, DocumentUnavailable, IndexPage, PageNotAvailable } from '
 import { ZoneEntityPage } from './site-entity.tsx';
 import type { SiteCrumb } from './site-navigation.tsx';
 import { workBase, workTabOf, ZoneWorkPage } from './site-work.tsx';
-import { addressKey, spaceHref, zoneMemberHref } from '../address/path.ts';
+import { addressKey, siteMemberTarget, spaceHref, zoneMemberHref } from '../address/path.ts';
 import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
@@ -485,9 +485,12 @@ async function standaloneSite(
             href: zoneMemberHref(
               ref,
               read.mount.segment,
-              'address' in item
-                ? (item.address as import('../address/path.ts').AddressTarget)
-                : item.id,
+              siteMemberTarget(
+                item.id,
+                'address' in item
+                  ? (item.address as import('@rezics/model/address').CanonicalAddress)
+                  : undefined,
+              ),
             ),
           }))}
         />

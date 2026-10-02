@@ -4,8 +4,15 @@ import { NextRequest } from 'next/server';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { proxy } from '../proxy.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
-import { resourceHref, spaceHref, threadHref, zoneMemberHref } from '../features/address/path.ts';
+import {
+  resourceHref,
+  siteMemberTarget,
+  spaceHref,
+  threadHref,
+  zoneMemberHref,
+} from '../features/address/path.ts';
 import { decideAddress } from '../features/address/redirect.ts';
+import { beforePathNormalization } from '../features/address/edge.ts';
 import { privateDiscovery, readSpacePage, realmDiscovery } from '../features/address/space-read.ts';
 import { joinPageFixture } from '../features/manage/settings-fixtures.ts';
 import {
@@ -73,6 +80,17 @@ describe('G-952 community and site addresses', () => {
     );
     expect(tabOf('/en/z/books/about')).toBeNull();
     expect(realmRefFromPageUrl('https://rezics.test/en/z/books/missing')).toBe('books');
+  });
+
+  test('a global Work name never masquerades as a name in a mounted Zone route', () => {
+    const global = { prefix: '/w/' as const, key: 'Spring-story', slugSource: 'Spring story' };
+    expect(zoneMemberHref('books', 'catalogue', siteMemberTarget(iri(work), global))).toBe(
+      `/z/books/catalogue/${uuidToSid(work)}`,
+    );
+    const mounted = { ...global, prefix: '/z/books/catalogue/' as const, key: '春の物語' };
+    expect(zoneMemberHref('books', 'catalogue', siteMemberTarget(iri(work), mounted))).toBe(
+      '/z/books/catalogue/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E',
+    );
   });
 
   test('legacy Space and reply UUIDs normalize together, keeping selections and anchors, then pass', async () => {
@@ -212,6 +230,31 @@ describe('G-952 private Space landing admission', () => {
 });
 
 describe('G-952 discovery policy on both surfaces', () => {
+  test('both proxy and Worker preserve unlisted policy on the one canonical redirect', async () => {
+    process.env.WEB_OAUTH_CLIENT_ID = 'g-952-test';
+    serve((url) =>
+      url.pathname === '/v1/addresses/resolve'
+        ? Response.json(address)
+        : Response.json({
+            profile: 'realm-read-v1',
+            id: iri(realm),
+            visibility: 'public',
+            listing: 'unlisted',
+            discovery: joinPageFixture.discovery,
+          }),
+    );
+    const old = `https://rezics.test/en/z/${space}/?language=sv`;
+    const responses = [
+      await proxy(new NextRequest(old)),
+      await beforePathNormalization(new Request(old)),
+    ];
+    for (const response of responses) {
+      expect(response?.status).toBe(301);
+      expect(response?.headers.get('location')).toBe('https://rezics.test/en/z/books?language=sv');
+      expect(response?.headers.get('x-robots-tag')).toBe('noindex');
+      expect(response?.headers.get('referrer-policy')).toBe('no-referrer');
+    }
+  });
   test.each(['r', 'z'])(
     '%s unlisted canonical response carries both HTTP policies',
     async (surface) => {

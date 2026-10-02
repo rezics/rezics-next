@@ -144,6 +144,12 @@ export const identityHref = (prefix: '/a/' | '/w/' | '/e/' | '/concepts/', id: s
 
 export type AddressTarget = string | CanonicalAddress;
 
+/** A global Work name is not a name in a Zone mount. Only its owning route
+ * can supply that policy; an identity decoration remains valid in either scope. */
+export function siteMemberTarget(id: string, address?: CanonicalAddress): AddressTarget {
+  return address && (address.prefix.startsWith('/z/') || isSid(address.key)) ? address : id;
+}
+
 /** Summaries carry Main's policy; callers with only an identity use its short form. */
 export function targetKey(target: AddressTarget): string {
   if (typeof target !== 'string') return addressKey(target);

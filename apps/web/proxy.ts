@@ -21,7 +21,7 @@ import {
   resolveLocale,
 } from './i18n/locale.ts';
 import { isZonePage, ZONE_NONCE_HEADER, zoneCsp, zoneNonce } from './features/zones/csp.ts';
-import { ADDRESS_HEADER, readAddress } from './features/address/client.ts';
+import { ADDRESS_HEADER, readAddress, type ResolvedAddress } from './features/address/client.ts';
 import { addressPath } from './features/address/path.ts';
 import { decideAddress } from './features/address/redirect.ts';
 import { displayLanguages } from './i18n/display-languages.ts';
@@ -42,19 +42,22 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       request.headers.get('accept-language'),
     );
   const pageRequest = request.method === 'GET' || request.method === 'HEAD';
+  let spaceAddress: ResolvedAddress | undefined;
   let addressed = pageRequest
-    ? await decideAddress(new URL(request.url), locale, (lookup) =>
-        readAddress(lookup, displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(',')),
-      )
+    ? await decideAddress(new URL(request.url), locale, async (lookup) => {
+        const read = await readAddress(
+          lookup,
+          displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
+        );
+        if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
+        return read;
+      })
     : { kind: 'pass' as const };
   const path = pageRequest ? addressPath(pathname) : null;
   let discoveryHeaders: Record<string, string> = {};
   // Resolve denied Space reads through Main's limited landing page. A missing
   // resolver answer alone neither admits a page nor invents its capabilities.
-  if (
-    path?.lookup.scope === 'space' &&
-    (addressed.kind === 'pass' || (addressed.kind === 'error' && addressed.status === 404))
-  ) {
+  if (path?.lookup.scope === 'space' && (addressed.kind !== 'error' || addressed.status === 404)) {
     const token = request.cookies.get(ACCESS_COOKIE)?.value;
     let actingSubject: string | undefined;
     if (token && addressed.kind === 'error') {
@@ -80,7 +83,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     const page = await readSpacePage(
       path.lookup.key,
       displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
-      { address: 'data' in addressed ? addressed.data : undefined, token, actingSubject },
+      { address: spaceAddress, token, actingSubject },
     );
     if (page.kind === 'join' || page.kind === 'realm') {
       const discovery =
@@ -90,7 +93,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     } else if (page.kind === 'unavailable') addressed = { kind: 'error', status: 503 };
   }
   if (addressed.kind === 'redirect') {
-    return NextResponse.redirect(new URL(addressed.location, request.url), addressed.status);
+    const response = NextResponse.redirect(
+      new URL(addressed.location, request.url),
+      addressed.status,
+    );
+    for (const [name, value] of Object.entries(discoveryHeaders)) response.headers.set(name, value);
+    return response;
   }
   if (addressed.kind === 'error')
     return new NextResponse(null, {

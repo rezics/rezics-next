@@ -1,7 +1,7 @@
 import type { ZoneDecision, ZoneImage, ZonePerson, ZoneText, ZoneWork } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
-import { resourceHref } from '../address/path.ts';
+import { resourceHref, siteMemberTarget } from '../address/path.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { profileHref } from '../profile/route.ts';
 import { authorHref } from '../author/route.ts';
@@ -87,7 +87,7 @@ export function workLink(
     : realmWorkHref(
         context.ref,
         // /w inside a site always uses identity; a mounted route may select names.
-        mount ? (address ?? work) : work,
+        mount ? siteMemberTarget(work, address) : work,
         mount,
         tab,
       );
