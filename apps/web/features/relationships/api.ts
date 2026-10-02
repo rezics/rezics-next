@@ -31,6 +31,8 @@ export function mainRelationships(actingSubject: string, options: {
   const actor = { actingSubject };
   const realmPath = (realm: string) => `/v1/realms/${encodeURIComponent(realm.slice(-36))}`;
   return {
+    // G-938 c27c388 has manager-only membership changes, with no recipient Leave command.
+    canLeave: false,
     follows: query => request<EntityPickerPage<Follow>>('/v1/me/follows', { ...actor, limit: 20, ...query }),
     memberships: query => request<EntityPickerPage<Membership>>('/v1/me/memberships', { ...actor, limit: 20, ...query }),
     state: (target, kind) => request<FollowState>('/v1/me/follow-state', { ...actor, target, kind }),
@@ -42,8 +44,7 @@ export function mainRelationships(actingSubject: string, options: {
     join: (realm, policy, listed, key) => request(`${realmPath(realm)}/join`, undefined,
       { ...actor, expectedMembershipGeneration: policy.membershipGeneration,
         expectedPolicyRevision: policy.policyRevision, termsRevision: policy.termsRevision, listed }, 'POST', key),
-    leave: (realm, expectedMembershipGeneration, key) => request(`${realmPath(realm)}/leave`, undefined,
-      { ...actor, expectedMembershipGeneration }, 'POST', key),
+    leave: () => Promise.reject(new RelationshipError(501)),
     mute: (target, kind, muted, key) => request('/v1/me/mutes', undefined,
       { ...actor, target, kind, strength: muted ? 'mute' : 'clear' }, 'PUT', key),
     block: (target, blocked, key) => request('/v1/me/blocked-people', undefined, { ...actor, target, blocked }, 'PUT', key),

@@ -35,20 +35,21 @@ test('G-944: the pending Main adapter preserves cursor, search, arbitrary kinds,
   expect(main.requests[2]!.body?.targets).toEqual([{ target: target(10), expectedRevision: 'r10', level: 'off', pinPosition: null }]);
 });
 
-test('G-944: Join is one server command, Leave sends its generation, Watch has its own levels, negative relations stay separate', async () => {
+test('G-944: Join is one command; missing recipient Leave is explicit; Watch and negative relationships stay separate', async () => {
   const main = fakeMain();
   const policy = { policyRevision: '3', membershipGeneration: '0', termsRevision: 'rules-7', selfJoin: true, open: true, state: 'absent' as const };
   await main.api.join(target(10), policy, false, 'join-key');
   expect(main.requests).toHaveLength(1);
   expect(main.requests[0]!.path).toEndWith('/join');
   expect(main.requests[0]!.body).toEqual({ actingSubject: actor, expectedMembershipGeneration: '0', expectedPolicyRevision: '3', termsRevision: 'rules-7', listed: false });
-  await main.api.leave(target(10), '1');
-  expect(main.requests[1]!.body).toEqual({ actingSubject: actor, expectedMembershipGeneration: '1' });
+  expect(main.api.canLeave).toBe(false);
+  await expect(main.api.leave(target(10), '1')).rejects.toBeInstanceOf(RelationshipError);
+  expect(main.requests).toHaveLength(1);
   await main.api.setWatch('urn:rezics:proposal:00000000-0000-4000-8000-000000000002', 'proposal', 'participating', null);
-  expect(main.requests[2]!.body?.level).toBe('participating');
+  expect(main.requests[1]!.body?.level).toBe('participating');
   await main.api.mute(target(10), 'realm', true);
   await main.api.block(target(11), true);
-  expect(main.requests.slice(3).map(item => item.path)).toEqual(['/api/main/v1/me/mutes', '/api/main/v1/me/blocked-people']);
+  expect(main.requests.slice(2).map(item => item.path)).toEqual(['/api/main/v1/me/mutes', '/api/main/v1/me/blocked-people']);
   main.fail();
   await expect(main.api.memberships()).rejects.toBeInstanceOf(RelationshipError);
 });
@@ -92,6 +93,8 @@ test('G-944: pinned traversal stops at the first unpinned row, and Spaces coales
   expect(tail.items).toHaveLength(5); expect(tail.complete).toBe(true);
   const realm = rows[0]!.realm!;
   await memory.api.join(realm, await memory.api.joining(realm), false);
+  // Older membership episodes can name only the Realm; the Space follow must still be shown once.
+  memory.member.get(realm)!.space = null;
   const spaces = await spaceCommunities(memory.api, '', null);
   expect(spaces.items.filter(item => item.id === rows[0]!.id)).toHaveLength(1);
   expect(spaces.complete).toBe(false);

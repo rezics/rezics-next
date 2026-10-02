@@ -66,7 +66,11 @@ export function mainMembershipActions(realm: string, actingSubject: string): Ext
 }
 
 /** Realm membership supplies admission and consent; the shared control owns its follow, level and pin. */
-export function RealmMembership({ realm, realmName, initial, signedIn, actingSubject, signInHref, rulesHref,
+export function RealmMembership(props: Parameters<typeof RealmMembershipState>[0]) {
+  return <RealmMembershipState key={`${props.realm}:${props.signedIn}:${props.actingSubject ?? "guest"}`} {...props} />;
+}
+
+function RealmMembershipState({ realm, realmName, initial, signedIn, actingSubject, signInHref, rulesHref,
   actions, locale, messages, className, relationshipApi }: {
   realm: string; realmName: string; initial: Membership | null; signedIn: boolean; actingSubject?: string | null;
   signInHref: string; rulesHref: string; actions?: MembershipActions; locale: UiLocale; messages: RealmMessages; className?: string;
@@ -95,7 +99,7 @@ export function RealmMembership({ realm, realmName, initial, signedIn, actingSub
     <RelationshipControl target={realm} kind="realm" realm={realm} name={realmName} locale={locale}
       signedIn={signedIn} actingSubject={adapter.kind === 'unavailable' ? null : actingSubject}
       signInHref={adapter.kind === 'signed-out' ? adapter.signInHref : signInHref} api={adapter.kind === 'ready' ? api : undefined} initial={follow}
-      membership={offer === 'joined' ? { joined: true, leave: () => {
+      membership={offer === 'joined' ? { joined: true, leave: api.canLeave ? () => {
         if (!state.policy || !window.confirm(copy.confirmLeave + '\n' + copy.leaveHelp)) return;
         void api.leave(realm, state.policy.membershipGeneration).then(async () => {
           const fresh = adapter.kind === 'ready' ? await adapter.refresh() : null;
@@ -108,10 +112,11 @@ export function RealmMembership({ realm, realmName, initial, signedIn, actingSub
             setNotice(copy.stale);
           } else setNotice(copy.failed);
         });
-      } } : offer === 'join' || !signedIn ? { joined: false, join: () => setJoining(true) } : undefined}
+      } : undefined } : offer === 'join' || !signedIn ? { joined: false, join: () => setJoining(true) } : undefined}
       onChange={fresh => setState(previous => ({ ...previous, following: fresh.following, followRevision: fresh.revision,
         level: fresh.level, source: fresh.source, pinPosition: fresh.pinPosition }))} />
     {notice ? <p role="status" className="basis-full text-sm">{notice}</p> : null}
+    {offer === 'joined' && !api.canLeave ? <p role="status" className="basis-full text-muted-foreground text-xs">{copy.leaveUnavailable}</p> : null}
     {state.policy && adapter.kind === 'ready' ? <JoinDialog open={joining} realmName={realmName}
       rulesHref={rulesHref} locale={locale} messages={{ ...messages, joinDenied: copy.joinDenied }} onClose={() => setJoining(false)}
       join={async listed => {

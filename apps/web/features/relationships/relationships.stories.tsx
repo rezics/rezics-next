@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Button } from '@rezics/ui/button';
+import { RealmMembership, type MembershipActions } from '../realm/membership.tsx';
+import { messages as realmMessages } from '../realm/messages.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { AppShell } from '../shell/app-shell.tsx';
 import { CommunityNav } from '../shell/community-nav.tsx';
@@ -208,3 +211,43 @@ export const SignedOutSpanish: Story = { args: { state: 'signed-out', locale: 'e
 export const EmptySpanish: Story = { args: { state: 'empty', locale: 'es' }, globals: { locale: 'es' } };
 export const ThousandsSpanish: Story = { args: { state: 'thousands', locale: 'es' }, globals: { locale: 'es' } };
 export const FailedReadSpanish: Story = { args: { state: 'failed-read', locale: 'es' }, globals: { locale: 'es' } };
+
+/** Soft navigation must replace the command adapter together with the target's consent and state. */
+function SwitchingCommunity() {
+  const [number, setNumber] = useState(10);
+  const memory = useMemo(() => memoryRelationships(), []);
+  lastMemory = memory;
+  const realm = target(number);
+  const policy = { policyRevision: '3', termsRevision: 'rules-7', selfJoin: true, open: true,
+    membershipGeneration: '0', state: 'absent' as const };
+  const actions: MembershipActions = { kind: 'ready',
+    async join(basis, listed) { await memory.api.join(realm, basis, listed); return { kind: 'joined' }; },
+    async follow(following, expectedRevision) {
+      const receipt = await memory.api.set({ target: realm, following, expectedRevision });
+      return { kind: 'saved', following: receipt.following, revision: receipt.revision };
+    },
+    async refresh() {
+      const [current, follow] = await Promise.all([memory.api.joining(realm), memory.api.state(realm, 'realm')]);
+      return { policy: current, following: follow.following, followRevision: follow.revision,
+        level: follow.level, source: follow.source, pinPosition: follow.pinPosition };
+    },
+  };
+  return <div className="grid max-w-lg gap-4 p-6">
+    <Button onClick={() => setNumber(20)}>Next community</Button>
+    <RealmMembership realm={realm} realmName={number === 10 ? 'First community' : 'Second community'}
+      initial={{ policy, following: false, followRevision: null }} signedIn actingSubject={actor}
+      signInHref="/auth/start" rulesHref={`/r/${realm.slice(-36)}/about`} locale="en" messages={realmMessages}
+      actions={actions} relationshipApi={memory.api} />
+  </div>;
+}
+export const TargetChange: Story = { render: () => <SwitchingCommunity />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Next community' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Join · Second community' }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    await userEvent.click(dialog.getByRole('button', { name: 'Join' }));
+    await expect(await canvas.findByRole('button', { name: /Joined · Second community/ })).toBeVisible();
+    await expect(lastMemory.calls.filter(call => call.operation === 'join').map(call => (call.body as { realm: string }).realm))
+      .toEqual([target(20)]);
+  } };

@@ -45,6 +45,7 @@ export function memoryRelationships(initial: Follow[] = [], failure?: 'read' | '
     });
   };
   const api: RelationshipsApi = {
+    canLeave: true,
     async follows(query = {}) {
       if (unavailable === 'read') throw new RelationshipError(503);
       let items = [...follows.values()].filter(item => (!query.kind || item.kind === query.kind)

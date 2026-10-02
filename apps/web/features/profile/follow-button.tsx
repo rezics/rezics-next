@@ -40,7 +40,11 @@ export function mainFollowActions(target: string, actingSubject: string,
 }
 
 /** Follow and follower count use the same relationship control as every other resource. */
-export function FollowControl({ target, kind = 'agent', name, following, revision, followers, signedIn, actingSubject,
+export function FollowControl(props: Parameters<typeof FollowControlState>[0]) {
+  return <FollowControlState key={`${props.target}:${props.signedIn}:${props.actingSubject ?? "guest"}`} {...props} />;
+}
+
+function FollowControlState({ target, kind = 'agent', name, following, revision, followers, signedIn, actingSubject,
   signInHref, actions, locale, messages, className }: {
   target: string; kind?: string; name: string; following: boolean | null; revision: string | null;
   followers: FollowerCount | null; signedIn: boolean; actingSubject?: string | null; signInHref: string;

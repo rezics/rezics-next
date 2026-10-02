@@ -7,7 +7,8 @@ export function followedCommunity(item: Follow): Community | null {
   return { id: item.id, kind: item.kind === 'space' ? 'realm' : 'resource', person: item.kind === 'agent', realm: item.realm ?? undefined,
     name: item.name.value, language: item.name.language, direction: item.name.direction, icon: item.icon,
     href: item.href, activity: item.newSince?.state === 'new' || item.newSince?.state === 'more-unverified' ? 'new'
-      : item.newSince?.state === 'none' ? 'none' : 'unknown' };
+      : item.newSince?.state === 'none' ? 'none' : 'unknown',
+    ...(item.newSince?.count ? { count: item.newSince.count } : {}) };
 }
 const joinedCommunity = (item: Membership): Community | null => !item.available || !item.name ? null
   : { id: item.space ?? item.realm, realm: item.realm, kind: 'realm', name: item.name.value, language: item.name.language,
@@ -33,7 +34,7 @@ export async function spaceCommunities(api: RelationshipsApi, q: string, cursor:
     throw new Error('Incomplete relationship page without continuation');
   const items = new Map<string, Community>();
   for (const item of follows.items.map(followedCommunity).concat(memberships.items.map(joinedCommunity)))
-    if (item && !items.has(item.id)) items.set(item.id, item);
+    if (item && !items.has(item.realm ?? item.id)) items.set(item.realm ?? item.id, item);
   const complete = follows.complete && memberships.complete;
   return { items: [...items.values()], complete, nextCursor: complete ? null
     : JSON.stringify({ follows: follows.complete ? null : follows.nextCursor, memberships: memberships.complete ? null : memberships.nextCursor }) };

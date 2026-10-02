@@ -1,4 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
+import { relationshipsChanged } from '../relationships/events.ts';
 import type { MainClient } from '../discover/types.ts';
 import { mainTrackingApi, type TrackingApi } from '../tracking/api.ts';
 import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-actions.tsx';
@@ -61,7 +62,7 @@ export async function readReaderSeed(main: MainClient, actingSubject: string, wo
 export function shelfFollowing(tracking: TrackingApi, changed: (work: string) => void): TrackingApi {
   const after = <T extends { ok: boolean }>(written: T & { data?: { target: { work: string | null } } }): T => {
     const work = written.ok ? written.data?.target.work : null;
-    if (work) changed(work);
+    if (work) { changed(work); relationshipsChanged(); }
     return written;
   };
   return { ...tracking,
@@ -147,6 +148,7 @@ export function createReaderStore({ actingSubject, seed = {}, ratingTarget, main
       if (!response.data) return false;
       entries.set(work, { ...(entries.get(work) ?? base), status: response.data.status, version: response.data.version });
       notify();
+      relationshipsChanged();
       return true;
     },
     rate: ratingTarget ? async (work: string, value: number | null) => {

@@ -47,7 +47,7 @@ function CommunityList({ initial, load, collapsed, avatarQuery, onNavigate, titl
       if (!initial) throw new Error('Relationship read unavailable');
       return { items: initial.items.filter(item => item.name.toLocaleLowerCase().includes(query.q.toLocaleLowerCase())),
         nextCursor: null, complete: true };
-    }, item => item.id, item => item.name);
+    }, item => item.kind === 'realm' ? item.realm ?? item.id : item.id, item => item.name);
   }, [initial, load]);
   const state = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot);
   useEffect(() => {

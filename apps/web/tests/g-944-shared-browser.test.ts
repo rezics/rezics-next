@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { chromium, expect as visible } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { people } from '../../../scripts/dev/seed/plan.ts';
+import { mainRelationships } from '../features/relationships/api.ts';
 import { actor } from '../features/relationships/fixtures.ts';
 import type { FollowState, JoinPolicy } from '../features/relationships/types.ts';
 
@@ -13,6 +14,7 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
   const mainOrigin = process.env.MAIN_ORIGIN ?? 'http://127.0.0.1:3001';
   const probe = await fetch(`${mainOrigin}/v1/me/memberships?actingSubject=${encodeURIComponent(actor)}`);
   expect(probe.status, 'G-938 memberships must be served before this journey can run').not.toBe(404);
+  expect(mainRelationships(actor).canLeave, 'The committed Main contract needs a recipient-authorized Leave command before this journey can run').toBe(true);
   const route = process.env.REZICS_G944_REALM;
   if (!route) throw new Error('Set REZICS_G944_REALM to an open, unjoined test Space after G-938 is merged; no seeded membership is removed by setup');
   const person = people.find(item => item.id === (process.env.REZICS_G944_MEMBER_ID ?? 'daniel'))!;
@@ -24,6 +26,14 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
       const context = await browser.newContext({ baseURL, viewport: { width, height: 860 } });
       const page = await context.newPage();
       let cleanup: { realm: string; subject: string } | null = null;
+      const main = (subject: string) => mainRelationships(subject, { origin: `${baseURL}/api/main`,
+        headers: { origin: new URL(baseURL).origin, 'x-rezics-page-url': page.url() },
+        fetch: (async (input, init) => {
+          const response = await context.request.fetch(String(input), { method: init?.method, data: init?.body ? String(init.body) : undefined,
+            headers: Object.fromEntries(new Headers(init?.headers)) });
+          return new Response(await response.text(), { status: response.status(), headers: response.headers() });
+        }) as typeof fetch,
+      });
       try {
         await signInAtAccounts(page, `/en/r/${route}`, person);
         await visible(page.getByRole('button', { name: 'Account menu' })).toHaveAttribute('data-hydrated', 'true');
@@ -36,14 +46,15 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
         const joining = await context.request.get(`/api/main/v1/realms/${realm.slice(-36)}/joining?${basisQuery}`);
         const policy = await joining.json() as JoinPolicy;
         expect(policy.selfJoin && policy.open && policy.state !== 'joined', 'Use an open test Space without an existing membership').toBe(true);
-        const readState = async () => (await (await context.request.get(`/api/main/v1/me/follow-state?target=${encodeURIComponent(realm)}&kind=realm&${basisQuery}`)).json()) as FollowState;
+        const readState = () => main(subject).state(realm, 'realm');
         const before = await readState();
         expect(before.following, 'Use an unfollowed test Space so this journey leaves no preexisting relation changed').toBe(false);
         cleanup = { realm, subject };
         await control.getByRole('button', { name: /^Relationship options/ }).click();
         await page.getByRole('menuitem', { name: 'Follow independently of membership' }).click();
-        await visible(control.getByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();
-        await control.getByRole('button', { name: 'Notifications: Highlights' }).click();
+        const bell = control.getByRole('button', { name: /^Notifications:/ });
+        await visible(bell).toBeVisible();
+        await bell.click();
         await page.getByRole('menuitemradio', { name: 'All', exact: true }).click();
         await visible(control.getByRole('button', { name: 'Notifications: All' })).toBeVisible();
         await control.getByRole('button', { name: /^Relationship options/ }).click();
@@ -73,20 +84,11 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
       } finally {
         if (cleanup) {
           const { realm, subject } = cleanup;
-          const query = `actingSubject=${encodeURIComponent(subject)}`;
-          const headers = { origin: new URL(baseURL).origin, 'idempotency-key': crypto.randomUUID() };
-          const policy = await (await context.request.get(`/api/main/v1/realms/${realm.slice(-36)}/joining?${query}`)).json() as JoinPolicy;
-          if (policy.state === 'joined') {
-            const response = await context.request.post(`/api/main/v1/realms/${realm.slice(-36)}/leave`, {
-              headers, data: { actingSubject: subject, expectedMembershipGeneration: policy.membershipGeneration } });
-            expect(response.ok(), 'The journey must remove only its own membership').toBe(true);
-          }
-          const state = await (await context.request.get(`/api/main/v1/me/follow-state?target=${encodeURIComponent(realm)}&kind=realm&${query}`)).json() as FollowState;
-          if (state.following) {
-            const response = await context.request.post('/api/main/v1/follows', { headers: { ...headers, 'idempotency-key': crypto.randomUUID() },
-              data: { profile: 'follow-command-v1', actingSubject: subject, target: realm, following: false, expectedRevision: state.revision } });
-            expect(response.ok(), 'The journey must remove only its own follow').toBe(true);
-          }
+          const api = main(subject);
+          const policy = await api.joining(realm);
+          if (policy.state === 'joined') await api.leave(realm, policy.membershipGeneration);
+          const state = await api.state(realm, 'realm');
+          if (state.following) await api.set({ target: realm, following: false, expectedRevision: state.revision });
         }
         await context.close();
       }

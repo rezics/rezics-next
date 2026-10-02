@@ -9,7 +9,11 @@ import { messages } from './messages.ts';
 import type { RelationshipsApi, Watch, Level } from './types.ts';
 
 /** Watch is a per-thread override. Its levels stay distinct from Follow's levels at the API boundary. */
-export function RelationshipWatch({ target, kind, locale, signedIn, actingSubject, api: supplied }: {
+export function RelationshipWatch(props: Parameters<typeof RelationshipWatchState>[0]) {
+  return <RelationshipWatchState key={`${props.target}:${props.kind}:${props.signedIn}:${props.actingSubject ?? 'guest'}`} {...props} />;
+}
+
+function RelationshipWatchState({ target, kind, locale, signedIn, actingSubject, api: supplied }: {
   target: string; kind: string; locale: UiLocale; signedIn: boolean; actingSubject?: string; api?: RelationshipsApi;
 }) {
   const t = messages[locale];

@@ -33,7 +33,11 @@ export function NotificationMenu({ locale, level, busy, onChange, watch = false 
 }
 
 /** Follow/Join, its delivery level and separate negative relationships share one control on every surface. */
-export function RelationshipControl({ target, kind, name, locale, signedIn, actingSubject, signInHref,
+export function RelationshipControl(props: Parameters<typeof RelationshipControlState>[0]) {
+  return <RelationshipControlState key={`${props.target}:${props.kind}:${props.signedIn}:${props.actingSubject ?? "guest"}`} {...props} />;
+}
+
+function RelationshipControlState({ target, kind, name, locale, signedIn, actingSubject, signInHref,
   initial, api: supplied, membership, realm, onChange, className, compact = false, followLabel, followingLabel, followAccessibleLabel }: {
   target: string; kind: string; name: string; locale: UiLocale; signedIn: boolean; actingSubject?: string | null;
   signInHref: string; initial?: FollowState | null; api?: RelationshipsApi; realm?: string | null;
@@ -115,15 +119,17 @@ export function RelationshipControl({ target, kind, name, locale, signedIn, acti
     : state?.following ? followingLabel ?? t.following : followLabel ?? t.follow;
   if (!signedIn) return <a href={signInHref} aria-label={followAccessibleLabel ? `${followAccessibleLabel} · ${t.signIn}` : undefined}
     className={cn(buttonVariants({ pill: true, size: compact ? 'xs' : 'sm' }), className)}>
-    <PlusIcon aria-hidden="true" />{primary}<span className="sr-only"> · {name} · {t.signIn}</span></a>;
+    <PlusIcon aria-hidden="true" />{membership ? t.join : followLabel ?? t.follow}<span className="sr-only"> · {name} · {t.signIn}</span></a>;
   if (!api) return <p role="status" className="text-muted-foreground text-sm">{t.unknown}</p>;
   return <div className={cn('flex min-w-0 flex-wrap items-center gap-1.5', className)} data-relationship={target}>
     <Button type="button" pill size={compact ? 'xs' : 'sm'} variant={state?.following || membership?.joined ? 'outline' : 'default'}
       aria-label={!state?.following && !membership ? followAccessibleLabel : undefined}
-      isLoading={busy} disabled={busy || !membership?.join && !membership?.joined && state?.following == null}
+      isLoading={busy} disabled={busy || membership?.joined && !membership.leave
+        || !membership?.join && !membership?.joined && state?.following == null}
       onClick={() => membership?.joined ? membership.leave?.() : membership?.join ? membership.join() : void write({ following: !state?.following })}>
       {state?.following || membership?.joined ? <CheckIcon aria-hidden="true" /> : <PlusIcon aria-hidden="true" />}
-      {primary}<span className="sr-only"> · {name}{membership?.joined ? ` · ${t.leave}` : state?.following && !membership?.join ? ` · ${t.unfollow}` : ''}</span>
+      {primary}<span className="sr-only"> · {name}{membership?.joined && membership.leave ? ` · ${t.leave}`
+        : state?.following && !membership?.joined && !membership?.join ? ` · ${t.unfollow}` : ''}</span>
     </Button>
     {state?.following && state.level ? <NotificationMenu locale={locale} level={state.level} busy={busy}
       onChange={level => void write({ level })} /> : null}

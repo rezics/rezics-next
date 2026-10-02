@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { CommunityIcon } from '../shell/community-icon.tsx';
+import { labelOfType } from '../catalogue/types.ts';
 import { mainRelationships, RelationshipError } from './api.ts';
 import { RelationshipControl } from './control.tsx';
 import { observeRelationships } from './events.ts';
@@ -14,7 +15,7 @@ import { relationshipSource } from './list.ts';
 import { messages } from './messages.ts';
 import type { Follow, FollowEdit, Level, Membership, Order, RelationshipsApi } from './types.ts';
 
-const selectClass = 'h-10 min-w-0 rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const selectClass = 'h-10 min-w-0 max-w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /** A selection names exact targets across pages; it never means the unseen remainder of a query. */
 export function FollowingManager({ locale, signedIn, actingSubject, signInHref, api: supplied }: {
@@ -116,7 +117,7 @@ export function FollowingManager({ locale, signedIn, actingSubject, signInHref, 
       <label className="grid min-w-0 gap-1 text-sm">{t.search}<Input type="search" value={q} maxLength={80}
         onChange={event => setQ(event.target.value)} /></label>
       {view === 'follows' ? <label className="grid min-w-0 gap-1 text-sm">{t.type}
-        <select className={selectClass} value={kind} onChange={event => setKind(event.target.value)}>
+        <select className={`${selectClass} sm:max-w-64`} value={kind} onChange={event => setKind(event.target.value)}>
           <option value="">{t.allTypes}</option>{kinds.map(value => <option key={value} value={value}>{kindLabel(value, locale)}</option>)}
         </select></label> : null}
       <label className="grid min-w-0 gap-1 text-sm">{t.sort}<select className={selectClass} value={order}
@@ -148,18 +149,24 @@ export function FollowingManager({ locale, signedIn, actingSubject, signInHref, 
             if (details.checked === true) next.set(item.id, item); else next.delete(item.id); return next; })} />
         <CommunityIcon icon={item.icon} name={item.label} person={item.kind === 'agent'} />
         <div className="min-w-0 flex-1"><ResourceName item={item} locale={locale} fallback={t.unavailableTarget} />
-          <p className="text-muted-foreground text-xs">{kindLabel(item.kind, locale)}</p></div>
+          <p className="break-words text-muted-foreground text-xs">{kindLabel(item.kind, locale)}</p></div>
         <RelationshipControl target={item.id} kind={item.kind} name={item.label} locale={locale} signedIn actingSubject={actingSubject}
           signInHref={signInHref} api={api} realm={item.realm}
           className="col-span-3 ms-auto sm:col-auto sm:ms-0"
           initial={{ following: true, revision: item.revision, level: item.level, source: item.source, pinPosition: item.pinPosition }} />
-        {item.pinPosition !== null ? <label className="col-span-3 flex items-center gap-2 text-xs sm:col-auto">{t.pinOrder}<Input type="number" min={0} max={9999}
-          className="w-20" defaultValue={item.pinPosition} aria-label={`${t.pinOrder} · ${item.label}`} disabled={busy}
+        {item.pinPosition !== null ? <label className="col-span-3 flex items-center gap-2 text-xs sm:col-auto">{t.pinOrder}<Input type="number" min={1} max={10000}
+          className="w-20" defaultValue={item.pinPosition + 1} aria-label={`${t.pinOrder} · ${item.label}`} disabled={busy}
           onBlur={event => {
-            const value = Number(event.target.value);
-            if (!Number.isInteger(value) || value < 0 || value > 9999 || value === item.pinPosition) return;
+            const value = Number(event.target.value) - 1;
+            if (event.target.value === '' || !Number.isInteger(value) || value < 0 || value > 9999) {
+              event.target.value = String(item.pinPosition! + 1); return;
+            }
+            if (value === item.pinPosition) return;
             void api.batch([{ target: item.id, expectedRevision: item.revision, pinPosition: value }])
-              .catch(() => setNotice(t.failed));
+              .catch(error => {
+                setNotice(error instanceof RelationshipError && error.status === 409 ? t.stale : t.failed);
+                if (error instanceof RelationshipError && error.status === 409) void source.search(q);
+              });
           }} /></label> : null}
       </li>) : memberships.items.map(item => <MembershipRow key={item.membershipId} item={item} locale={locale} api={api}
         actingSubject={actingSubject} signInHref={signInHref} refresh={() => void membershipSource.search(q)} />)}
@@ -189,7 +196,7 @@ function MembershipRow({ item, locale, api, actingSubject, signInHref, refresh }
       <p className="text-muted-foreground text-xs">{t.joined}{item.level ? ` · ${t[item.level]}` : ''}</p></div>
     <RelationshipControl target={item.space ?? item.realm} kind="space" realm={item.realm}
       name={item.name?.value ?? t.unavailableTarget} locale={locale} signedIn actingSubject={actingSubject}
-      signInHref={signInHref} api={api} initial={null} membership={{ joined: true, leave: () => {
+      signInHref={signInHref} api={api} initial={null} membership={{ joined: true, leave: api.canLeave ? () => {
       if (busy) return;
       if (!window.confirm(`${t.confirmLeave}\n${t.leaveHelp}`)) return;
       setBusy(true); setNotice(null);
@@ -198,7 +205,8 @@ function MembershipRow({ item, locale, api, actingSubject, signInHref, refresh }
         if (error instanceof RelationshipError && error.status === 409) refresh();
       })
         .finally(() => setBusy(false));
-    } }} />
+    } : undefined }} />
+    {!api.canLeave ? <p role="status" className="text-muted-foreground text-xs">{t.leaveUnavailable}</p> : null}
     {notice ? <p role="status" className="text-sm">{notice}</p> : null}
   </li>;
 }
@@ -208,5 +216,5 @@ export function kindLabel(kind: string, locale: UiLocale): string {
   const t = messages[locale];
   const labels: Record<string, string> = { space: t.communities, agent: t.people, work: t.works,
     concept: t.concepts, collection: t.collections, 'saved-view': t.savedViews, 'external-author': t.catalogueAuthors };
-  return labels[kind] ?? kind;
+  return labels[kind] ?? labelOfType(kind, locale, 'other') ?? kind;
 }

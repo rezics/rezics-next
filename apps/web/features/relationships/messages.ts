@@ -73,7 +73,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "Catalogue authors",
     "unsupported": "Not available for this resource",
     "emptyPins": "Pin a followed resource to keep it here.",
-    "emptySpaces": "Your joined and followed communities appear here."
+    "emptySpaces": "Your joined and followed communities appear here.",
+    "leaveUnavailable": "Leaving isn’t available yet."
   },
   "zh-Hant": {
     "follow": "追蹤",
@@ -147,7 +148,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "目錄作者",
     "unsupported": "此資源不支援此操作",
     "emptyPins": "將追蹤的資源置頂，即可在此快速找到。",
-    "emptySpaces": "已加入和追蹤的社群會顯示在此。"
+    "emptySpaces": "已加入和追蹤的社群會顯示在此。",
+    "leaveUnavailable": "目前尚無法離開社群。"
   },
   "zh-Hans": {
     "follow": "关注",
@@ -221,7 +223,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "目录作者",
     "unsupported": "此资源不支持此操作",
     "emptyPins": "将关注的资源置顶，即可在此快速找到。",
-    "emptySpaces": "已加入和关注的社区会显示在此。"
+    "emptySpaces": "已加入和关注的社区会显示在此。",
+    "leaveUnavailable": "目前尚无法离开社区。"
   },
   "ja": {
     "follow": "フォロー",
@@ -295,7 +298,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "カタログの著者",
     "unsupported": "このリソースでは利用できません",
     "emptyPins": "フォローしたリソースをピン留めすると、ここに表示されます。",
-    "emptySpaces": "参加またはフォローしたコミュニティがここに表示されます。"
+    "emptySpaces": "参加またはフォローしたコミュニティがここに表示されます。",
+    "leaveUnavailable": "退会機能はまだ利用できません。"
   },
   "ko": {
     "follow": "팔로우",
@@ -369,7 +373,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "카탈로그 저자",
     "unsupported": "이 리소스에서는 사용할 수 없습니다",
     "emptyPins": "팔로우한 리소스를 고정하면 여기에 표시됩니다.",
-    "emptySpaces": "가입하거나 팔로우한 커뮤니티가 여기에 표시됩니다."
+    "emptySpaces": "가입하거나 팔로우한 커뮤니티가 여기에 표시됩니다.",
+    "leaveUnavailable": "아직 탈퇴 기능을 사용할 수 없습니다."
   },
   "de": {
     "follow": "Folgen",
@@ -443,7 +448,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "Katalogautoren",
     "unsupported": "Für diese Ressource nicht verfügbar",
     "emptyPins": "Hefte eine gefolgte Ressource an, um sie hier zu finden.",
-    "emptySpaces": "Beigetretene und gefolgte Communitys erscheinen hier."
+    "emptySpaces": "Beigetretene und gefolgte Communitys erscheinen hier.",
+    "leaveUnavailable": "Verlassen ist noch nicht verfügbar."
   },
   "fr": {
     "follow": "Suivre",
@@ -517,7 +523,8 @@ export const messages = defineMessages({
     "catalogueAuthors": "Auteurs du catalogue",
     "unsupported": "Indisponible pour cette ressource",
     "emptyPins": "Épinglez une ressource suivie pour la retrouver ici.",
-    "emptySpaces": "Les communautés rejointes et suivies apparaissent ici."
+    "emptySpaces": "Les communautés rejointes et suivies apparaissent ici.",
+    "leaveUnavailable": "Il n’est pas encore possible de quitter la communauté."
   },
   "es": {
     "follow": "Seguir",
@@ -591,6 +598,7 @@ export const messages = defineMessages({
     "catalogueAuthors": "Autores del catálogo",
     "unsupported": "No disponible para este recurso",
     "emptyPins": "Fija un recurso que sigues para encontrarlo aquí.",
-    "emptySpaces": "Tus comunidades seguidas y con membresía aparecen aquí."
+    "emptySpaces": "Tus comunidades seguidas y con membresía aparecen aquí.",
+    "leaveUnavailable": "Todavía no está disponible la opción de salir."
   }
 });

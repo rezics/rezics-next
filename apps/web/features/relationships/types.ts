@@ -36,6 +36,8 @@ export interface FollowEdit {
 }
 export interface Watch { level: WatchLevel; revision: string; reason: string }
 export interface RelationshipsApi {
+  /** Availability of a recipient-authorized Leave command, independent of a particular reader's permission. */
+  canLeave: boolean;
   follows(query?: ListQuery): Promise<EntityPickerPage<Follow>>;
   memberships(query?: Omit<ListQuery, 'kind' | 'include'>): Promise<EntityPickerPage<Membership>>;
   state(target: string, kind: string): Promise<FollowState>;
