@@ -205,7 +205,7 @@ export const BeforeHandle: Story = {
       ...session,
       agent: {
         status: 'selected',
-        agent: { ...agents[0]!, handle: 'agent-b8df6385-cec9-4fa0-8b89-71def5fa82b5' },
+        agent: { ...agents[0]!, handle: null },
       },
     },
   },

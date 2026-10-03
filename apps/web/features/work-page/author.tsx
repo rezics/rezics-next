@@ -12,7 +12,7 @@ import { workHref } from './route.ts';
 import type { AgentWorksPage, Loaded } from './types.ts';
 
 export type WorkAuthor =
-  | { kind: 'agent'; name: string; handle: string; works: Loaded<AgentWorksPage> }
+  | { kind: 'agent'; name: string; handle: string | null; agent?: string; works: Loaded<AgentWorksPage> }
   | { kind: 'external'; name: string; key: string; years: string | null; works: Loaded<AuthorWorksPage> };
 
 /**
@@ -32,11 +32,11 @@ export function AuthorSection({ author, work, avatarQuery, locale, messages }: {
     id: item.id, href: workHref(item.id.slice(-36)), title: item.title, cover: item.cover,
     kind: coverKindOf(item.types),
     authors: [{ name: author.name, href: author.kind === 'agent'
-      ? authorHref({ kind: 'agent', handle: author.handle })
+      ? authorHref(author)
       : authorHref({ kind: 'external', key: author.key }) }], rating: null }));
   return <section aria-labelledby="work-author" className="grid min-w-0 gap-6 border-border/70 border-t pt-8">
     <h2 id="work-author" className="font-semibold text-xl tracking-tight">{t.aboutAuthor}</h2>
-    <Link href={author.kind === 'agent' ? authorHref({ kind: 'agent', handle: author.handle })
+    <Link href={author.kind === 'agent' ? authorHref(author)
       : authorHref({ kind: 'external', key: author.key })}
       className="flex w-fit items-center gap-4 rounded-full pe-4 outline-none
       hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
@@ -45,7 +45,7 @@ export function AuthorSection({ author, work, avatarQuery, locale, messages }: {
           {initials(author.name)}</span></span>
       <span className="grid min-w-0">
         <span className="truncate font-medium font-work-title text-lg">{author.name}</span>
-        {author.kind === 'agent' ? <span className="truncate text-muted-foreground text-sm">@{author.handle}</span>
+        {author.kind === 'agent' ? author.handle ? <span className="truncate text-muted-foreground text-sm">@{author.handle}</span> : null
           : author.years ? <span className="truncate text-muted-foreground text-sm">{author.years}</span> : null}
       </span>
     </Link>

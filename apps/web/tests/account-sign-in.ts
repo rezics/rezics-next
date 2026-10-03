@@ -1,11 +1,15 @@
 import { expect, type Page } from '@playwright/test';
+import { i18n, matchUiLocaleTag } from '../../accounts/i18n/locale.ts';
 
 /** Complete the browser redirect on the public Accounts origin. */
 export async function signInAtAccounts(
   page: Page,
   next: string,
   member: { email: string; password: string },
+  onboard = false,
 ): Promise<void> {
+  const finished = (url: URL) =>
+    url.pathname === next || (onboard && url.pathname === '/en/onboarding');
   // Dispose an auth/start document reached by an expired-session navigation
   // before its mount effect can compete with this sign-in.
   await page.goto('about:blank');
@@ -15,7 +19,7 @@ export async function signInAtAccounts(
   const loopback = new Set(['localhost', '127.0.0.1', '[::1]']);
   await page.waitForURL(
     (url) =>
-      url.pathname === next ||
+      finished(url) ||
       url.pathname.endsWith('/identity/failed') ||
       (url.pathname === '/sign-in' &&
         (url.origin === accountOrigin ||
@@ -23,30 +27,36 @@ export async function signInAtAccounts(
             loopback.has(accounts.hostname) &&
             url.protocol === accounts.protocol &&
             url.port === accounts.port))),
+    { waitUntil: 'commit' },
   );
   if (new URL(page.url()).pathname.endsWith('/identity/failed'))
     throw new Error('Account sign-in failed');
-  if (new URL(page.url()).pathname === next) return;
+  if (finished(new URL(page.url()))) return;
   await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  const email = page.getByRole('textbox', { name: 'Email', exact: true });
+  const locale = matchUiLocaleTag(await page.locator('html').getAttribute('lang') ?? undefined) ?? 'en';
+  const { t: auth } = await i18n.getTranslation('auth', [locale]);
+  const email = page.getByRole('textbox', { name: auth.emailLabel, exact: true });
   await email.fill('');
   // Native key events keep the controlled form's value aligned during the
   // Accounts app's first hydration, as typing in its component stories does.
   await email.pressSequentially(member.email);
   await expect(email).toHaveValue(member.email);
-  await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByLabel('Enter your password').fill(member.password);
-  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: auth.next, exact: true }).click();
+  await page.getByLabel(auth.passwordLabel, { exact: true }).fill(member.password);
+  await page.getByRole('button', { name: auth.next, exact: true }).click();
   // Synthetic demo accounts may predate the current local policy revisions.
-  const accept = page.getByRole('button', { name: 'Accept and continue', exact: true });
+  const accept = page.getByRole('button', { name: auth.acceptButton, exact: true });
   await Promise.race([
-    page.waitForURL(next, { timeout: 60_000 }),
+    // The redirect commits the authenticated cookies; feature journeys wait
+    // for their own UI readiness instead of unrelated document resources.
+    page.waitForURL(finished, { timeout: 60_000, waitUntil: 'commit' }),
     accept.waitFor({ state: 'visible', timeout: 60_000 }),
   ]);
   if (await accept.isVisible()) {
     await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
     await accept.click();
   }
-  // OAuth crosses Accounts and the Worker; use the same loaded-host allowance as hydration.
-  await expect(page).toHaveURL(next, { timeout: 60_000 });
+  // Playwright's predicate URL matcher also waits for document load. Assert
+  // the committed redirect directly; later feature checks own UI readiness.
+  await expect.poll(() => finished(new URL(page.url())), { timeout: 60_000 }).toBe(true);
 }

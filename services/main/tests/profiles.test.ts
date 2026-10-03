@@ -12,7 +12,7 @@ test('G238: immutable handle allocation is injective, canonical and independent 
   expect(new Set(handles).size).toBe(ids.length);
   handles.forEach((handle, index) => expect(agentForHandle(handle)).toBe(ids[index]!));
   expect(allocateAgentHandle(ids[0]!)).toBe(handles[0]!);
-  expect(agentForHandle(handles[0]!.toUpperCase())).toBeNull();
+  expect(agentForHandle(handles[0]!.toUpperCase())).toBe(ids[0]!);
   expect(agentForHandle('a-display-name')).toBeNull();
   expect(() => allocateAgentHandle('private-account')).toThrow();
 });
@@ -47,7 +47,7 @@ test('G238: profiles and library have concrete web-style treaty response types',
   const consume = async () => {
     const id = '00000000-0000-4000-8000-000000000001';
     const agent = await client.v1.agents({ id }).get();
-    const handle: string | undefined = agent.data?.handle;
+    const handle: string | null | undefined = agent.data?.handle;
     const visible: boolean | undefined = agent.data?.library.statusShelvesVisible;
     const resolved = await client.v1.handles({ handle: `agent-${id}` }).get();
     const name: string | undefined = resolved.data?.displayName;

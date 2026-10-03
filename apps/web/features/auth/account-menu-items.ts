@@ -9,10 +9,10 @@ export type AccountMenuEntry =
 
 /** One order and one set of destinations for the desktop menu and phone sheet. */
 export function accountMenuSections(session: Session, t: AuthMessages): AccountMenuEntry[][] {
-  const handle = session.agent.status === 'selected' ? session.agent.agent.handle : null;
+  const agent = session.agent.status === 'selected' ? session.agent.agent : null;
   return [
     [
-      { id: 'profile', label: t.profile, href: handle ? profileHref(handle) : '/settings#profile' },
+      { id: 'profile', label: t.profile, href: agent ? profileHref({ id: agent.iri, handle: agent.handle }) : '/settings#profile' },
       { id: 'library', label: t.library, href: '/library' },
       { id: 'studio', label: t.studio, href: '/studio' },
       { id: 'notifications', label: t.notifications, href: '/notifications' },

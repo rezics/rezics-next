@@ -40,7 +40,7 @@ function coverWork(item: FeedItem, title: string, lang: string | undefined): Cov
   return { id: item.target.work ?? item.target.id, title: { ...item.target.title, value: title,
     language: lang ?? item.target.title.language }, cover: item.target.cover, kind: coverKindOf(item.target.types),
   authors: item.authors.flatMap(author => author.displayName ? [{ name: author.displayName,
-    href: author.handle ? authorHref({ ...author, kind: 'agent', handle: author.handle })
+    href: author.participantKind === 'agent' ? authorHref({ kind: 'agent', handle: author.handle, agent: author.agent })
       : author.provider === 'open-library' && author.key
         ? authorHref({ kind: 'external', key: author.key }) : null }] : []) };
 }
@@ -142,7 +142,7 @@ function Authors({ authors }: { authors: FeedItem['authors'] }) {
   const marker = '\u2063';
   const [before = '', after = ''] = t.writtenBy({ names: marker }).split(marker);
   return <span className="block truncate">{before}{named.map((author, index) => {
-    const href = author.handle ? authorHref({ ...author, kind: 'agent', handle: author.handle })
+    const href = author.participantKind === 'agent' ? authorHref({ kind: 'agent', handle: author.handle, agent: author.agent })
       : author.provider === 'open-library' && author.key ? authorHref({ kind: 'external', key: author.key }) : null;
     return <span key={author.id}>{index ? separator : null}{href
       ? <LocalizedLink href={href} className={cn(rowLink, 'text-foreground')}>{author.displayName}</LocalizedLink>

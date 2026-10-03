@@ -198,12 +198,12 @@ export class AgentPublicProfiles {
       const operation = `urn:rezics:operation:agent-profile:${hash(receipt)}`;
       const event = `urn:rezics:event:${hash(receipt)}`;
       const batch = `urn:rezics:outbox:${hash(receipt)}`;
-      const model = localizedName ? 'agent-profile-v2' : 'agent-profile-v1';
+      const model = 'agent-profile-address-v1';
       const modelIri = `https://rezics.com/definition/${model}`;
       const nameLiterals = localizedName && Object.entries(localizedName.labels)
         .map(([language, value]) => `${lit(value)}@${language}`).join(', ');
       const localizedTriples = localizedName
-        ? ` ; rv:profileNameFormat rv:LocalizedNameV2 ;
+        ? ` ; rv:profileNameFormat rv:LocalizedNameAddressV1 ;
             rv:originalNameLanguage ${lit(localizedName.original)} ;
             rv:localizedName ${nameLiterals}` : '';
       const initial = input.expectedHead === (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?base WHERE {
@@ -215,19 +215,21 @@ export class AgentPublicProfiles {
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ?oldName .
             ${expected} ${iri(input.agent)} rv:profileBio ?oldBio .
             ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar .
+            ${iri(input.agent)} rv:profileHandle ?oldHandle .
             ${iri(input.agent)} rv:localizedName ?oldLocalizedName .
             ${iri(input.agent)} rv:originalNameLanguage ?oldOriginalNameLanguage .
             ${iri(input.agent)} rv:profileNameFormat ?oldNameFormat . } }
         INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} rdfs:label ${lit(input.displayName)} ;
-            rv:publicProfileHead ${iri(revision)}
+            rv:publicProfileHead ${iri(revision)} ; rv:profileStateFormat rv:AddressedAgentProfileV1
             ${input.bio ? `; rv:profileBio ${lit(input.bio.text)}@${input.bio.language}` : ''}
-            ${localizedTriples}
+            ${localizedTriples || '; rv:profileNameFormat rv:PlainNameAddressV1'}
             ${input.avatarSelection ? `; rv:profileAvatarSelection ${lit(input.avatarSelection)}` : ''} . }
           GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:AgentPublicProfileRevision, rv:RevisionAnchor ;
             rv:component ${iri(input.agent)} ; rv:operation ${iri(operation)} ;
             rv:predecessor ${iri(input.expectedHead)} ;
-            ${localizedName ? `rv:originalNameLanguage ${lit(localizedName.original)} ;
+            ${localizedName ? `rv:profileNameFormat rv:LocalizedNameAddressV1 ;
+              rv:originalNameLanguage ${lit(localizedName.original)} ;
               rv:localizedName ${nameLiterals} ;` : ''}
             rv:modelRevision ${iri(modelIri)} ;
             rv:shapeRevision ${iri(modelIri)} ;
@@ -250,6 +252,7 @@ export class AgentPublicProfiles {
           GRAPH ${iri(GRAPHS.current)} { ${iri(input.agent)} a rv:Agent ; rv:head ?base ;
             rdfs:label ?oldName . OPTIONAL { ${iri(input.agent)} rv:profileBio ?oldBio }
             OPTIONAL { ${iri(input.agent)} rv:profileAvatarSelection ?oldAvatar }
+            OPTIONAL { ${iri(input.agent)} rv:profileHandle ?oldHandle }
             OPTIONAL { ${iri(input.agent)} rv:localizedName ?oldLocalizedName }
             OPTIONAL { ${iri(input.agent)} rv:originalNameLanguage ?oldOriginalNameLanguage }
             OPTIONAL { ${iri(input.agent)} rv:profileNameFormat ?oldNameFormat }
@@ -263,8 +266,11 @@ export class AgentPublicProfiles {
           BIND(?n + 1 AS ?next) }`;
       const validations = await profileValidations(this.env.fuseki, model, [{
         shape: `${modelIri}/profile-shape`, focus: [input.agent], graphs: [GRAPHS.current] },
-        ...(localizedName ? [{ shape: `${modelIri}/revision-shape`,
-          focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] }] : [])]);
+        { shape: `${modelIri}/revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
+        ...(localizedName ? [
+          { shape: `${modelIri}/localized-profile-shape`, focus: [input.agent], graphs: [GRAPHS.current] },
+          { shape: `${modelIri}/localized-revision-shape`, focus: [revision], graphs: [GRAPHS.current, GRAPHS.revisions] },
+        ] : [])]);
       let command: CommandResult | undefined;
       try { command = await this.env.fuseki.commandWithReceipt({ receipt, digest, update,
         validations, deadlineMs: 10_000 }); }

@@ -75,12 +75,12 @@ export function ProfileSettings({ agent, profile, locale, error, updated, accoun
             <AvatarFallback>{initials(name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0"><strong className="block truncate">{name}</strong>
-            <span className="text-muted-foreground text-sm">@{agent.handle}</span></div>
+            {agent.handle ? <span className="text-muted-foreground text-sm">@{agent.handle}</span> : null}</div>
         </div>
         <ProfileEditForm agent={agent.iri} profile={profile} locale={locale} t={t}
           ownPerson={ownPerson} operationKey={crypto.randomUUID()} />
       </CardContent></Card>
-      <Card><CardContent className="grid gap-5 p-6">
+      <Card id="handle"><CardContent className="grid gap-5 p-6">
         <div className="grid gap-1"><h2 className="font-semibold text-xl">{t.handleTitle}</h2>
           <p className="text-muted-foreground text-sm">{t.handleHelp}</p></div>
         <HandleField action={localizedPath('/settings/handle', locale)}

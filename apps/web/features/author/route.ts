@@ -32,9 +32,11 @@ export function externalAuthorFollow(key: string): string {
  * author page of someone Open Library lists. Work pages, cards and search
  * results link author names through this.
  */
-export function authorHref(credit: Pick<AuthorCredit, 'kind'> & ({ kind: 'agent'; handle: string; address?: AddressTarget }
+export function authorHref(credit: Pick<AuthorCredit, 'kind'> & ({ kind: 'agent'; handle: string | null;
+  agent?: string; id?: string; address?: AddressTarget }
   | { kind: 'external'; key: string })): string {
-  return credit.kind === 'agent' ? profileHref(credit) : openLibraryAuthorHref(credit.key);
+  return credit.kind === 'agent' ? profileHref({ ...credit, id: credit.agent ?? credit.id })
+    : openLibraryAuthorHref(credit.key);
 }
 
 /** A Main cursor from the URL, or undefined when absent or malformed. */

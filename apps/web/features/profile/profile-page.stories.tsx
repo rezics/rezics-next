@@ -49,6 +49,29 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const UnnamedPerson: Story = {
+  args: { profile: storyProfile({ handle: null }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: 'Lin Mei 林梅' })).toBeVisible();
+    await expect(canvas.queryByText(/^@/)).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('link', { name: 'Choose a handle' })).not.toBeInTheDocument();
+    const works = within(canvas.getByRole('region', { name: 'Works by Lin Mei 林梅' }));
+    await expect(works.getAllByRole('link', { name: 'Lin Mei 林梅' })[0]).toHaveAttribute(
+      'href', localizedPath(profileHref({ id: storyId(1), handle: null }), 'en'));
+  },
+};
+
+export const UnnamedOwner: Story = {
+  args: { profile: storyProfile({ handle: null }), reader: { signedIn: true, actingSubject: storyId(1), seed: {} } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Choose a handle' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Choose a handle' })).toHaveAttribute('href', '/en/settings#handle');
+    await expect(canvas.queryByText(/^@/)).not.toBeInTheDocument();
+  },
+};
+
 /** An author who also reads in public: works first, as Goodreads leads an author page with their books. */
 export const Author: Story = {
   async play({ canvasElement }) {

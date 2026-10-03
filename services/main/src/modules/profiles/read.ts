@@ -1,6 +1,7 @@
 import type { Static } from 'typebox';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
-import { allocateAgentHandle, agentForHandle } from '../agent/handle.ts';
+import { agentAddress, agentForHandle } from '../agent/handle.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
 import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import {
   decodeReadCursor,
@@ -32,7 +33,6 @@ export function field(row: ReadRow, key: string): string {
 }
 export const publicAgent = (agent: string) => `GRAPH ${iri(GRAPHS.current)} {
   ${agent} a rv:Agent ; rv:head ?agentHead ; rv:agentKind ?agentKind ; rdfs:label ?displayName .
-  OPTIONAL { ${agent} rv:profileHandle ?savedHandle }
   OPTIONAL { ${agent} rv:profileDisclosure ?profileDisclosure }
   FILTER(!BOUND(?profileDisclosure) || ?profileDisclosure = rv:Public)
   FILTER NOT EXISTS { ${agent} a rv:AgentTombstone }
@@ -40,10 +40,7 @@ export const publicAgent = (agent: string) => `GRAPH ${iri(GRAPHS.current)} {
   FILTER NOT EXISTS { ${agent} rv:profileDisclosure rv:Private } }
   GRAPH ${iri(GRAPHS.revisions)} { ?agentHead a rv:RevisionAnchor ; rv:component ${agent} ;
     rv:modelRevision <https://rezics.com/definition/agent-provision-v1> .
-    FILTER NOT EXISTS { ?agentHead a rv:ErasedRevision } }
-  BIND(COALESCE(?savedHandle, CONCAT("agent-", STRAFTER(STR(${agent}), "https://rezics.com/id/"))) AS ?handle)`;
-// The original provision profile already declares every Agent public. Legacy
-// heads use the same injective address allocation without writing during a GET.
+    FILTER NOT EXISTS { ?agentHead a rv:ErasedRevision } }`;
 
 export async function readAgent(session: WorkReadSession, agent: string) {
   const owner = profileAccess(session);
@@ -101,8 +98,7 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     !kind ||
     !displayName ||
     displayName.length > 200 ||
-    (row.profileHead && !row.predecessor) ||
-    field(row, 'handle') !== allocateAgentHandle(agent)
+    (row.profileHead && !row.predecessor)
   )
     throw new WorkReadUnavailable('Agent profile is ambiguous');
   const revision = row.profileHead?.value ?? field(row, 'agentHead');
@@ -132,12 +128,13 @@ export async function readAgent(session: WorkReadSession, agent: string) {
   }
   const library = await owner.visibility.read(agent);
   const listing = await owner.listing.read(agent);
-  let currentHandle: string;
+  let currentHandle: string | null;
   try {
-    currentHandle = (await session.deps.agentHandles?.current(agent)) ?? field(row, 'handle');
+    currentHandle = (await session.deps.agentHandles?.current(agent)) ?? null;
   } catch {
     throw new WorkReadUnavailable('Agent handle owner is unavailable');
   }
+  const address = agentAddress(agent, currentHandle);
   const path = `/v1/agents/${agent.slice(-36)}`;
   const ownerVisible =
     library.visibility !== 'public' &&
@@ -173,13 +170,14 @@ export async function readAgent(session: WorkReadSession, agent: string) {
     avatarSelection,
     avatarUrl: avatarSelection ? `/v1/media/avatars/${avatarSelection}` : null,
     handle: currentHandle,
+    address,
     disclosure: 'public' as const,
     listing: listing.listing,
     discovery: pageDiscoveryPolicy('public', listing.listing),
     sourcePosition: session.position,
     library: { visibility: library.visibility, statusShelvesVisible: statusShelves !== null },
     links: {
-      profile: `/@${currentHandle}`,
+      profile: `${address.prefix}${address.key}`,
       works: `${path}/works`,
       collections: `${path}/collections`,
       ...(statusShelves ? { statusShelves } : {}),
@@ -191,7 +189,8 @@ export interface AgentCard {
   id: string;
   displayName: string;
   displayNameInfo?: DisplayName;
-  handle: string;
+  handle: string | null;
+  address: CanonicalAddress;
   links: { profile: string };
 }
 
@@ -264,8 +263,7 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
         !kinds.has(field(row, 'agentKind')) ||
         !displayName ||
         displayName.length > 200 ||
-        (row.profileHead && !row.predecessor) ||
-        field(row, 'handle') !== allocateAgentHandle(agent)
+        (row.profileHead && !row.predecessor)
       )
         throw new WorkReadUnavailable('Agent profile is ambiguous');
       if (
@@ -276,8 +274,10 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
       ) {
         throw new WorkReadUnavailable('Agent bio is invalid');
       }
-      const handle = handles.get(agent) ?? field(row, 'handle');
-      cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` },
+      const handle = handles.get(agent) ?? null;
+      const address = agentAddress(agent, handle);
+      cards.set(agent, { id: agent, displayName, handle, address,
+        links: { profile: `${address.prefix}${address.key}` },
         ...(names ? { displayNameInfo: selectDisplayName(names, session.displayLanguages)! } : {}) });
     } catch (error) {
       if (mode !== 'preview' || !(error instanceof WorkReadUnavailable)) throw error;

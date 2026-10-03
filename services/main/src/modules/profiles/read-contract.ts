@@ -1,12 +1,12 @@
 import { t } from 'elysia';
 import { readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
 import { discoveryRating } from '../discovery/contract.ts';
-import { AGENT_HANDLE_PATTERN } from '../agent/handle.ts';
 import { VANITY_HANDLE_PATTERN } from '../agent/vanity.ts';
+import { canonicalAddress } from '../address/schema.ts';
 import { pageDiscovery } from '../realm-reads/read-contract.ts';
 import { resourceListing } from '../realm-admin/contract.ts';
 
-export const profileHandle = t.String({ pattern: `^(?:${AGENT_HANDLE_PATTERN.slice(1, -1)}|${VANITY_HANDLE_PATTERN.slice(1, -1)})$` });
+export const profileHandle = t.Nullable(t.String({ pattern: VANITY_HANDLE_PATTERN }));
 export const agentRevision = t.String({ pattern:
   '^https://rezics\\.com/id/[0-9a-f-]{36}(?:-agent-revision)?$' });
 export const creditRole = t.Union([t.Literal('author'), t.Literal('translator'), t.Literal('editor')]);
@@ -22,6 +22,7 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
   avatarSelection: t.Nullable(t.String()), avatarUrl: t.Nullable(t.String()),
   kind: t.Union([t.Literal('person'), t.Literal('organization'), t.Literal('service')]),
   handle: profileHandle, disclosure: t.Literal('public'), sourcePosition: readPosition,
+  address: t.Optional(canonicalAddress),
   listing: t.Optional(resourceListing), discovery: t.Optional(pageDiscovery),
   library: t.Object({ visibility: t.Union([t.Literal('public'), t.Literal('followers'), t.Literal('private')]),
     statusShelvesVisible: t.Boolean() }),

@@ -3,6 +3,7 @@ import type { Static } from 'typebox';
 import { creditItem, pageFields, pageQuery, readId, readName, readPosition, readScope, readUuid, scopeQuery, workCard } from '../work/read-contract.ts';
 import '../types/registry.ts';
 import { registryWorkType } from '../types/contract.ts';
+import { canonicalAddress } from '../address/schema.ts';
 
 /** Per GET: one B-tree seek + P+1 projected candidates, two Work summary batches,
  * up to two Concept summary batches and graph/Access position fences. Build work
@@ -29,7 +30,8 @@ export const discoveryRating = t.Object({ context: readId, count: t.Integer({ mi
 export const discoveryCredit = t.Union([creditItem, t.Object({ id: readId, role: t.Literal('author'),
   participantKind: t.Literal('agent'), provider: t.Null(), key: t.Null(), ordinal: t.Null(),
   agent: readId, displayName: t.String({ minLength: 1, maxLength: 200 }),
-  handle: t.String({ minLength: 1, maxLength: 100 }) })]);
+  handle: t.Nullable(t.String({ minLength: 1, maxLength: 30 })),
+  address: t.Optional(canonicalAddress) })]);
 export type DiscoveryCredit = Static<typeof discoveryCredit>;
 export type ProjectedCredit = Static<typeof creditItem> | {
   id: string; role: 'author'; participantKind: 'agent'; provider: null; key: null; ordinal: null;

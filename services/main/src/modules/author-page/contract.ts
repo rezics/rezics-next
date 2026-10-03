@@ -27,7 +27,7 @@ const count = t.Object({ value: t.Integer({ minimum: 0 }),
 export const authorCredit = t.Union([
   t.Object({ kind: t.Literal('external'), provider: t.Literal('open-library'),
     key: t.String({ pattern: authorKeyPattern }), displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })) }),
-  t.Object({ kind: t.Literal('agent'), agent: readId, handle: t.String({ minLength: 1, maxLength: 100 }),
+  t.Object({ kind: t.Literal('agent'), agent: readId, handle: t.Nullable(t.String({ minLength: 1, maxLength: 30 })),
     displayName: t.String({ minLength: 1, maxLength: 200 }) }),
 ]);
 export const authorWork = t.Object({ id: readId, title: readName, cover: readAvatar,

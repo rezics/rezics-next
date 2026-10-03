@@ -96,7 +96,7 @@ async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
   const t = materializeData(messages, { locale });
   const authors = [
     ...(agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
-      .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle }) })) : []),
+      .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent }) })) : []),
     ...(externalCredits.ok ? externalCredits.data.items.filter(credit => credit.role === 'author')
       .sort((a, b) => a.ordinal - b.ordinal).map(credit => ({
         name: credit.displayName ?? t.openLibraryAuthor({ key: credit.key.replace(/^\/authors\//, '') }),
@@ -224,7 +224,7 @@ async function Author({ id, locale, messages }: Common & { id: string }) {
   const native = agents.ok ? agents.data.items.find(credit => credit.role === 'author') : undefined;
   if (native) {
     const [works, { avatarQuery }] = await Promise.all([readAgentWorks(native.agent, locale), browseReader()]);
-    return <AuthorSection author={{ kind: 'agent', name: native.displayName, handle: native.handle, works }}
+    return <AuthorSection author={{ kind: 'agent', name: native.displayName, handle: native.handle, agent: native.agent, works }}
       work={id} avatarQuery={avatarQuery} locale={locale} messages={messages} />;
   }
   const credit = external.ok ? [...external.data.items].filter(item => item.role === 'author')

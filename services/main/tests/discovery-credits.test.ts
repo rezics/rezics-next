@@ -23,7 +23,8 @@ test('discovery projects native and source credits with bounded order, then reso
   expect(credits[1]).toMatchObject({ participantKind: 'external-reference', key: '/authors/OL1A',
     displayName: null });
   const named = await namedDiscoveryCredits(session, credits);
-  expect(named.get(id(2))).toEqual({ displayName: 'Jane Austen', handle: 'jane-austen' });
+  expect(named.get(id(2))).toEqual({ displayName: 'Jane Austen', handle: 'jane-austen',
+    address: { prefix: '/@', key: 'jane-austen', slugSource: '' } });
   expect(queried[0]).toContain('ORDER BY ?ordinal STR(?id) LIMIT 3');
   expect(queried[1]).toContain('profileDisclosure rv:Private');
 });

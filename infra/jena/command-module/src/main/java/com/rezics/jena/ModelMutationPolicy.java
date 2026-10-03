@@ -25,7 +25,9 @@ final class ModelMutationPolicy {
     private static final Node RECEIPTS = NodeFactory.createURI(CommandPolicy.RECEIPTS);
 
     record Subject(Node graph, CanonicalPolicy.Selection selection, Map<String, Set<Node>> selectors,
-                   Set<Node> types, Map<String, Set<Node>> releaseBasis) {}
+                   Set<Node> types, Map<String, Set<Node>> mutationBasis) {
+        Map<String, Set<Node>> releaseBasis() { return mutationBasis; }
+    }
     record Snapshot(Map<String, Subject> current, Map<String, Subject> revisions) {}
 
     static Snapshot capture(ProfileRegistry profiles, DatasetGraph data, CommandPolicy.Plan plan) {
@@ -46,13 +48,19 @@ final class ModelMutationPolicy {
             if (!revision && selected != null && selected.type().equals(RV + "RouteBinding"))
                 selectors.put(RV + "routeRevision", values(data, graph, node,
                     NodeFactory.createURI(RV + "routeRevision")));
-            Map<String, Set<Node>> releaseBasis = !revision && selected != null
+            Map<String, Set<Node>> mutationBasis = !revision && selected != null
                 && selected.type().equals(RV + "Release") ? Map.of(
                     "releaseHead", values(data, graph, node, NodeFactory.createURI(RV + "releaseHead")),
                     "work", values(data, graph, node, NodeFactory.createURI(RV + "work")),
                     "releaseKind", values(data, graph, node, NodeFactory.createURI(RV + "releaseKind"))) : Map.of();
+            if (!revision && selected != null && selected.type().equals(RV + "Agent")) {
+                Set<Node> heads = values(data, graph, node, NodeFactory.createURI(RV + "publicProfileHead"));
+                if (heads.isEmpty()) heads = values(data, graph, node, NodeFactory.createURI(RV + "head"));
+                mutationBasis = Map.of("profileHead", heads,
+                    "agentKind", values(data, graph, node, NodeFactory.createURI(RV + "agentKind")));
+            }
             result.put(name, new Subject(graph, selected, Map.copyOf(selectors),
-                values(data, graph, node, RDF.type.asNode()), releaseBasis));
+                values(data, graph, node, RDF.type.asNode()), mutationBasis));
         }
         return Map.copyOf(result);
     }
@@ -117,6 +125,8 @@ final class ModelMutationPolicy {
         boolean changed = before.selectors().entrySet().stream().anyMatch(entry ->
             !entry.getValue().equals(values(data, before.graph(), node, NodeFactory.createURI(entry.getKey()))));
         if (changed) {
+            if (agentAddressProfileUpgrade(data, receipt, name, before))
+                return CanonicalPolicy.validate(profiles, data, name, false);
             if (agentNameUpgrade(data, receipt, name, before))
                 return CanonicalPolicy.validate(profiles, data, name, false);
             if (releaseCoverageUpgrade(data, receipt, name, before))
@@ -159,10 +169,10 @@ final class ModelMutationPolicy {
         Node prior = expected.iterator().next();
         Set<Node> works = values(data, CURRENT, release, NodeFactory.createURI(RV + "work"));
         if (!head.isURI() || !prior.isURI() || head.equals(prior)
-            || !expected.equals(before.releaseBasis().get("releaseHead"))
-            || works.size() != 1 || !works.equals(before.releaseBasis().get("work"))
+            || !expected.equals(before.mutationBasis().get("releaseHead"))
+            || works.size() != 1 || !works.equals(before.mutationBasis().get("work"))
             || !values(data, CURRENT, release, NodeFactory.createURI(RV + "releaseKind"))
-                .equals(before.releaseBasis().get("releaseKind"))) return false;
+                .equals(before.mutationBasis().get("releaseKind"))) return false;
         Node work = works.iterator().next();
         return values(data, CURRENT, release, NodeFactory.createURI(RV + "definitionProfile")).equals(Set.of(v3))
             && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "work"), work)
@@ -177,6 +187,46 @@ final class ModelMutationPolicy {
             && data.contains(REVISIONS, head, NodeFactory.createURI(RV + "modelRevision"), v3)
             && data.contains(REVISIONS, head, NodeFactory.createURI(RV + "shapeRevision"), v3)
             && data.contains(REVISIONS, prior, NodeFactory.createURI(RV + "component"), release);
+    }
+
+    /** A receipted profile CAS upgrades legacy state or adds translated labels.
+     * The predecessor and Agent kind are frozen; translated state cannot downgrade. */
+    static boolean agentAddressProfileUpgrade(DatasetGraph data, String receipt,
+                                               String name, Subject before) {
+        if (!before.graph().equals(CURRENT) || before.selection() == null
+            || !before.selection().type().equals(RV + "Agent")
+            || !receipt.startsWith("urn:rezics:receipt:agent-profile:")) return false;
+        Node agent = NodeFactory.createURI(name);
+        Set<Node> prior = before.selectors().getOrDefault(RV + "profileNameFormat", Set.of());
+        Node plain = NodeFactory.createURI(RV + "PlainNameAddressV1");
+        Node localized = NodeFactory.createURI(RV + "LocalizedNameAddressV1");
+        Node legacyLocalized = NodeFactory.createURI(RV + "LocalizedNameV2");
+        if (!prior.isEmpty() && !prior.equals(Set.of(plain)) && !prior.equals(Set.of(localized))
+            && !prior.equals(Set.of(legacyLocalized))) return false;
+        Set<Node> target = values(data, CURRENT, agent, NodeFactory.createURI(RV + "profileNameFormat"));
+        if (!target.equals(Set.of(plain)) && !target.equals(Set.of(localized))) return false;
+        if ((prior.equals(Set.of(localized)) || prior.equals(Set.of(legacyLocalized)))
+            && !target.equals(Set.of(localized))) return false;
+        Set<Node> heads = before.mutationBasis().getOrDefault("profileHead", Set.of());
+        if (heads.size() != 1 || !values(data, CURRENT, agent, NodeFactory.createURI(RV + "agentKind"))
+                .equals(before.mutationBasis().get("agentKind"))) return false;
+        Node own = NodeFactory.createURI(receipt);
+        Set<Node> revisions = values(data, RECEIPTS, own, NodeFactory.createURI(RV + "profileRevision"));
+        if (revisions.size() != 1) return false;
+        Node revision = revisions.iterator().next();
+        Node model = NodeFactory.createURI("https://rezics.com/definition/agent-profile-address-v1");
+        if (!revision.isURI() || !heads.iterator().next().isURI()) return false;
+        return values(data, CURRENT, agent, NodeFactory.createURI(RV + "publicProfileHead")).equals(Set.of(revision))
+            && values(data, REVISIONS, revision, NodeFactory.createURI(RV + "predecessor")).equals(heads)
+            && data.contains(REVISIONS, revision, NodeFactory.createURI(RV + "component"), agent)
+            && data.contains(REVISIONS, revision, NodeFactory.createURI(RV + "modelRevision"), model)
+            && data.contains(REVISIONS, revision, NodeFactory.createURI(RV + "shapeRevision"), model)
+            && data.contains(CURRENT, agent, NodeFactory.createURI(RV + "profileStateFormat"),
+                NodeFactory.createURI(RV + "AddressedAgentProfileV1"))
+            && !data.contains(CURRENT, agent, NodeFactory.createURI(RV + "profileHandle"), Node.ANY)
+            && data.contains(RECEIPTS, own, RDF.type.asNode(), NodeFactory.createURI(RV + "OperationReceipt"))
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "agent"), agent)
+            && data.contains(RECEIPTS, own, NodeFactory.createURI(RV + "outcome"), NodeFactory.createURI(RV + "Succeeded"));
     }
 
     /** An Agent's first localized profile advances the current shape selector with

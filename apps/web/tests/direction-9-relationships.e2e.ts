@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   expect,
@@ -44,7 +43,6 @@ const views = [
   { name: 'phone', viewport: { width: 390, height: 844 } },
 ] as const;
 type Locale = (typeof locales)[number];
-type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
 type Inventory<T> = { items: T[]; nextCursor: string | null; complete: boolean };
 const run = process.env.REZICS_QA_RUN_ID ?? `g-1000-${Date.now()}`;
 const browserHealth = new WeakMap<
@@ -55,41 +53,21 @@ const browserHealth = new WeakMap<
     responses: { path: string; status: number; navigation: boolean }[];
   }
 >();
-let memberState: StorageState | undefined;
 let fixture: DirectionFixture;
 let setupContext: BrowserContext;
 let setupApi: PublicCommands;
 let setupActor: string;
 
-function authStatePath(origin: string, member: { email: string }) {
-  const key = createHash('sha256').update(`${origin}:${member.email}`).digest('hex');
-  const directory = resolve('.temp/direction-9/auth');
-  mkdirSync(directory, { recursive: true });
-  return resolve(directory, `${key}.json`);
-}
-
 async function authenticate(page: Page, member: { email: string; password: string }) {
   const next = '/en/settings';
   page.setDefaultTimeout(30_000);
-  await page.goto(next, { waitUntil: 'domcontentloaded' });
-  const sessionActor = async () =>
-    selectedSessionAgent(
-      { get: (path, options) => page.request.get(path, { ...options, timeout: 10_000 }) },
-      await page.context().cookies(),
-    );
-  try {
-    await sessionActor();
-  } catch {
-    await signInAtAccounts(page, next, member);
-  }
-  await expect(page).toHaveURL(next);
-  const actor = await sessionActor();
-  writeFileSync(
-    authStatePath(String(process.env.REZICS_WEB_E2E_BASE_URL), member),
-    JSON.stringify(await page.context().storageState()),
-    { mode: 0o600 },
+  // A fresh context owns its own rotating refresh token. A 401 after sign-in
+  // remains a failure, rather than being hidden by an authentication retry.
+  await signInAtAccounts(page, next, member);
+  return await selectedSessionAgent(
+    { get: (path, options) => page.request.get(path, { ...options, timeout: 10_000 }) },
+    await page.context().cookies(),
   );
-  return actor;
 }
 
 async function evidence(page: Page, info: TestInfo, step: string) {
@@ -256,11 +234,7 @@ async function checkManager(
     await expect(membership.getByText(`${t.joined} · ${t[level]}`, { exact: true })).toBeVisible();
 }
 
-const test = base.extend({
-  storageState: async ({}, use) => {
-    await use(memberState);
-  },
-});
+const test = base;
 
 test.beforeAll(async ({ browser }, info) => {
   test.setTimeout(120_000);
@@ -273,12 +247,8 @@ test.beforeAll(async ({ browser }, info) => {
   const auth = credentials();
   const contexts: BrowserContext[] = [];
   async function signedIn(member: { email: string; password: string }) {
-    const path = authStatePath(String(info.project.use.baseURL), member);
     const context = await browser.newContext({
       baseURL: info.project.use.baseURL,
-      // Exercise the imported Accounts helper once with a fresh reader session;
-      // administrator setup may reuse its independently refreshed cache.
-      ...(member.email !== auth.member.email && existsSync(path) ? { storageState: path } : {}),
     });
     contexts.push(context);
     const page = await context.newPage();
@@ -328,7 +298,6 @@ test.beforeAll(async ({ browser }, info) => {
         (value) => value.open && value.selfJoin,
       );
     }
-    memberState = await member.context.storageState();
     expect(performance.now() - start, 'fixture setup completes within two minutes').toBeLessThan(
       120_000,
     );
@@ -379,11 +348,11 @@ for (const [localeIndex, locale] of locales.entries())
               navigation,
             });
         });
-        // The full matrix can outlive an access token. Navigate/refresh this
-        // context before its first public setup read, as the main suite does.
+        // The full matrix can outlive an access token. Give each journey an
+        // independent session before its first public setup read.
         expect(
           await authenticate(page, credentials().member),
-          'the refreshed session retains the fixture Agent',
+          'the independent session retains the fixture Agent',
         ).toBe(fixture.actor);
       });
       test.afterEach(async ({ page }, info) => {
@@ -403,7 +372,9 @@ for (const [localeIndex, locale] of locales.entries())
         const t = messages[locale];
         const api = new PublicCommands(page.request);
         const href = `/${locale}${spaceHref(space.space, 'community')}`;
-        const control = page.locator(`[data-relationship="${space.realm}"]`);
+        const control = page
+          .locator(`[data-relationship="${space.realm}"]`)
+          .filter({ visible: true });
         async function community() {
           const response = await page.goto(href);
           expect(response?.status(), `${locale}: canonical community renders`).toBe(200);
@@ -411,6 +382,7 @@ for (const [localeIndex, locale] of locales.entries())
             page.getByRole('heading', { level: 1, name: space.name, exact: true }),
           ).toBeVisible();
           await hydrated(page, locale);
+          await expect(control, 'one visible relationship control per Space').toHaveCount(1);
           await expect(
             control,
             'relationship controls have attached their handlers',

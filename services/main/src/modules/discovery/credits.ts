@@ -1,7 +1,8 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { publicAgent } from '../profiles/read.ts';
-import { allocateAgentHandle } from '../agent/handle.ts';
+import { agentAddress } from '../agent/handle.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
 import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
@@ -49,7 +50,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
   if (agents.length > maxWorks * DISCOVERY_COST.primaryCredits) {
     throw new WorkReadUnavailable('Discovery Agent credit batch is out of bounds');
   }
-  if (!agents.length) return new Map<string, { displayName: string; handle: string }>();
+  if (!agents.length) return new Map<string, { displayName: string; handle: string | null; address?: CanonicalAddress }>();
   const rows = await session.query(`SELECT ?agent ?displayName ?handle WHERE {
     VALUES ?agent { ${agents.map(iri).join(' ')} }
     ${publicAgent('?agent')}
@@ -59,7 +60,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
       || !row.displayName.value || row.displayName.value.length > 200))) {
     throw new WorkReadUnavailable('Discovery Agent names are ambiguous');
   }
-  const named = new Map<string, { displayName: string; handle: string }>();
+  const named = new Map<string, { displayName: string; handle: string | null; address?: CanonicalAddress }>();
   const seen = new Set<string>(), damaged = new Set<string>();
   for (const row of rows) {
     if (preview && (!row.agent || !row.displayName || !agents.includes(row.agent.value)
@@ -69,11 +70,12 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     }
     const agent = row.agent!.value;
     seen.add(agent);
-    const readHandle = async () => await session.deps.agentHandles?.current(agent)
-      ?? row.handle?.value ?? allocateAgentHandle(agent);
-    const handle = preview ? await optionalPreview(session, readHandle) : await readHandle();
-    if (handle === null) continue;
-    named.set(agent, { displayName: row.displayName!.value, handle });
+    // Null is a complete unnamed profile, not an unavailable preview.
+    const readName = async () => ({ handle: await session.deps.agentHandles?.current(agent) ?? null });
+    const name = preview ? await optionalPreview(session, readName) : await readName();
+    if (name === null) continue;
+    named.set(agent, { displayName: row.displayName!.value, handle: name.handle,
+      address: agentAddress(agent, name.handle) });
   }
   for (const agent of damaged) named.delete(agent);
   return named;

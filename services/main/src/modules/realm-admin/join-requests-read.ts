@@ -44,7 +44,7 @@ export function decodeRequestCursor(cursor: string, binding: string): string {
  * GIN candidate rechecks cost O(matches), bounded by the transaction's SQL
  * deadline. strpos treats %, _ and backslash literally (no pattern language).
  * https://www.postgresql.org/docs/18/functions-matching.html (2026-10-02).
- * Native handles use the immutable Agent identity, with no Account name/link.
+ * Exact sid, UUID and retained names resolve to the immutable Agent identity.
  */
 export const JOIN_REQUEST_SEARCH_SQL = `WITH query AS MATERIALIZED (
   SELECT access.realm_member_search_key($3) AS text

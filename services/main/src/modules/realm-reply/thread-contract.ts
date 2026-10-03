@@ -17,7 +17,7 @@ export const threadSort = t.Union([t.Literal('best'), t.Literal('new'), t.Litera
 export const threadWindow = t.Union([t.Literal('week'), t.Literal('month'), t.Literal('all')]);
 
 /** A reply's author; null when their profile is not public, so the reply shows without a name. */
-const threadAuthor = t.Nullable(t.Object({ id: readId, name: t.String(), handle: t.String() }));
+const threadAuthor = t.Nullable(t.Object({ id: readId, name: t.String(), handle: t.Nullable(t.String()) }));
 /** Net score and the reader's vote, from Home's projection. `open` is false where it takes no vote. */
 const threadVote = t.Object({ score: t.Integer(), value: t.Union([t.Literal(-1), t.Literal(0), t.Literal(1)]),
   revision: t.Nullable(readUuid), open: t.Boolean() });

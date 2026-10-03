@@ -1,6 +1,7 @@
 package com.rezics.jena;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -109,6 +110,55 @@ public class ModelMutationPolicyTest {
                 "urn:rezics:receipt:agent-profile:probe", before));
             assertTrue(broken.contains(RV + "agentKind"));
             assertTrue(!broken.contains("reverse dependency footprint"));
+        } finally { data.abort(); data.end(); }
+    }
+
+    @Test public void addressedAgentProfileUpgradeRequiresItsCasReceiptAndPreservesKind() {
+        ProfileRegistry profiles = ProfileRegistry.load(Path.of("src/test/resources/agent-identity"));
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String agent = "https://rezics.com/id/00000000-0000-4000-8000-0000000000a1";
+            String receipt = "urn:rezics:receipt:agent-profile:probe";
+            Node node = uri(agent), prior = uri("urn:probe:prior"), revision = uri("urn:probe:next"), own = uri(receipt);
+            Node current = uri(CommandPolicy.CURRENT), revisions = uri(CommandPolicy.REVISIONS), receipts = uri(CommandPolicy.RECEIPTS);
+            Node model = uri("https://rezics.com/definition/agent-profile-address-v1");
+            data.add(current, node, RDF.type.asNode(), uri(RV + "Agent"));
+            data.add(current, node, uri(RV + "agentKind"), uri(RV + "PersonAgent"));
+            data.add(current, node, uri(RV + "head"), prior);
+            CommandPolicy.Plan plan = new CommandPolicy.Plan(null, Set.of(CommandPolicy.CURRENT),
+                Set.of(agent), Set.of(), Set.of(), false, false, true);
+            var before = ModelMutationPolicy.capture(profiles, data, plan).current().get(agent);
+            data.add(current, node, uri(RV + "publicProfileHead"), revision);
+            data.add(current, node, uri(RV + "profileNameFormat"), uri(RV + "PlainNameAddressV1"));
+            data.add(current, node, uri(RV + "profileStateFormat"), uri(RV + "AddressedAgentProfileV1"));
+            data.add(revisions, revision, uri(RV + "predecessor"), prior);
+            data.add(revisions, revision, uri(RV + "component"), node);
+            data.add(revisions, revision, uri(RV + "modelRevision"), model);
+            data.add(revisions, revision, uri(RV + "shapeRevision"), model);
+            data.add(receipts, own, RDF.type.asNode(), uri(RV + "OperationReceipt"));
+            data.add(receipts, own, uri(RV + "agent"), node);
+            data.add(receipts, own, uri(RV + "profileRevision"), revision);
+            data.add(receipts, own, uri(RV + "outcome"), uri(RV + "Succeeded"));
+            assertTrue(ModelMutationPolicy.agentAddressProfileUpgrade(data, receipt, agent, before));
+            assertFalse(ModelMutationPolicy.agentAddressProfileUpgrade(data, "urn:probe:unrelated", agent, before));
+            for (String field : new String[] { "predecessor", "component", "modelRevision", "shapeRevision" }) {
+                Node value = field.equals("predecessor") ? prior : field.equals("component") ? node : model;
+                data.delete(revisions, revision, uri(RV + field), value);
+                assertFalse(ModelMutationPolicy.agentAddressProfileUpgrade(data, receipt, agent, before));
+                data.add(revisions, revision, uri(RV + field), value);
+            }
+            data.delete(current, node, uri(RV + "agentKind"), uri(RV + "PersonAgent"));
+            data.add(current, node, uri(RV + "agentKind"), uri(RV + "ServiceAgent"));
+            assertFalse(ModelMutationPolicy.agentAddressProfileUpgrade(data, receipt, agent, before));
+            data.delete(current, node, uri(RV + "agentKind"), uri(RV + "ServiceAgent"));
+            data.add(current, node, uri(RV + "agentKind"), uri(RV + "PersonAgent"));
+            var translated = new ModelMutationPolicy.Subject(before.graph(), before.selection(),
+                Map.of(RV + "profileNameFormat", Set.of(uri(RV + "LocalizedNameV2"))), before.types(), before.mutationBasis());
+            assertFalse(ModelMutationPolicy.agentAddressProfileUpgrade(data, receipt, agent, translated));
+            data.delete(current, node, uri(RV + "profileNameFormat"), uri(RV + "PlainNameAddressV1"));
+            data.add(current, node, uri(RV + "profileNameFormat"), uri(RV + "LocalizedNameAddressV1"));
+            assertTrue(ModelMutationPolicy.agentAddressProfileUpgrade(data, receipt, agent, translated));
         } finally { data.abort(); data.end(); }
     }
 

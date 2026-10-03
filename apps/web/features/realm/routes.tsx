@@ -408,13 +408,13 @@ export function RealmAboutRoute(props: RealmRouteProps) {
     const person = (agent: {
       id: string;
       displayName: string;
-      handle: string;
+      handle: string | null;
       kind: AboutPerson['kind'];
       avatarUrl: string | null;
     }): AboutPerson => ({
       id: agent.id,
       name: agent.displayName,
-      href: profileHref(agent.handle),
+      href: profileHref(agent),
       kind: agent.kind,
       avatarUrl: agent.avatarUrl,
     });

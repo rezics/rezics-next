@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { uuidToSid } from '@rezics/model/address';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -80,6 +81,8 @@ test('Realm member search: names, live handles and CJK match within the authoriz
     expect(await found('_')).toEqual([s.agents[4]!]);
     expect(await found('\\')).toEqual([]);
     expect(await found(s.agents[0]!)).toEqual([s.agents[0]!]);
+    expect(await found(uuidToSid(s.agents[0]!.slice(-36)))).toEqual([s.agents[0]!]);
+    expect(await found(s.agents[0]!.slice(-36))).toEqual([s.agents[0]!]);
     expect(await found(`@agent-${s.agents[0]!.slice(-36)}`)).toEqual([s.agents[0]!]);
     const names = new NameRegistry(s.stack.accessPool);
     const change = async (name: string,expectedRevision: string | null) => s.stack.access.withOwnerAuthority({
@@ -93,7 +96,7 @@ test('Realm member search: names, live handles and CJK match within the authoriz
       WHERE scope = 'agent' AND key = $1`, [handle]);
     const renamed = `new_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
     await change(renamed,claimed.revision);
-    expect(await found(handle)).toEqual([]);
+    expect(await found(handle)).toEqual([s.agents[0]!]);
     expect(await found(renamed)).toEqual([s.agents[0]!]);
     const first = await s.read('王', { limit: 1 });
     expect(first.body.items).toHaveLength(1);

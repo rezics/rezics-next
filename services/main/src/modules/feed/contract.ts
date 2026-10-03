@@ -21,7 +21,7 @@ export const feedReason = t.Union([
   t.Object({ kind: t.Literal('trending-in-realm'), realm: readId }),
   t.Object({ kind: t.Literal('editorial'), selection: readId }),
 ]);
-const actor = t.Object({ id: readId, name: t.String(), handle: t.String() });
+const actor = t.Object({ id: readId, name: t.String(), handle: t.Nullable(t.String()) });
 export const feedActivityReason = t.Union([
   t.Object({ kind: t.Literal('new-work'), actor: readId }),
   t.Object({ kind: t.Literal('added-to-rezics'), actor: readId }),

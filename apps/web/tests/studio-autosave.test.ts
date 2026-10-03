@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { uuidToSid } from '@rezics/model/address';
 import type { AgentOption } from '../features/auth/acting-identity.ts';
 import { resolveStudioAgent, studioHref } from '../features/studio/agent.ts';
 import { DraftAutosave, type SaveOutcome } from '../features/studio/autosave.ts';
@@ -298,8 +299,8 @@ describe('Studio Agent addresses', () => {
     },
   ];
 
-  test('an Agent is addressed by its handle, or by Main’s agent-<uuid> handle while it has none', () => {
-    expect(studioHref(agents[0]!)).toBe(`/studio/@agent-${head(1)}`);
+  test('an Agent is addressed by its chosen handle or opaque sid while it has none', () => {
+    expect(studioHref(agents[0]!)).toBe(`/studio/@${uuidToSid(head(1))}`);
     expect(studioHref(agents[1]!, '/new')).toBe('/studio/@moonlit/new');
   });
 

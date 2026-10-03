@@ -111,8 +111,8 @@ export function zoneWork(
 ): ZoneWork {
   const credit = card.primaryCredits?.find((item) => item.displayName);
   const author = credit?.displayName;
-  const href = credit?.handle
-    ? authorHref({ kind: 'agent', handle: credit.handle })
+  const href = credit?.agent
+    ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
     : credit?.provider === 'open-library' && credit.key
       ? authorHref({ kind: 'external', key: credit.key })
       : null;
@@ -169,8 +169,8 @@ export function zonePeople(
         person: {
           id,
           name: zoneContentText(credit.displayName),
-          href: credit.handle
-            ? profileHref(credit.handle)
+          href: credit.agent
+            ? profileHref({ handle: credit.handle, id: credit.agent })
             : credit.provider === 'open-library' && credit.key
               ? authorHref({ kind: 'external', key: credit.key })
               : `/search?${new URLSearchParams({ q: credit.displayName })}`,

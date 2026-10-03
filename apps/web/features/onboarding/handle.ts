@@ -9,7 +9,7 @@ export function normalizedHandle(value: string): string | null {
 }
 
 export function currentVanityHandle(handle: string | null): string | null {
-  return handle && !/^agent-[0-9a-f-]{36}$/.test(handle) ? handle : null;
+  return handle;
 }
 
 /** A handle offered from the typed public name and nothing else (never

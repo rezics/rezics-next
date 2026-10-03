@@ -52,8 +52,8 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
       font-work-title text-foreground/85 text-lg sm:text-2xl">
       <span className="sr-only">{authors.length + external.length > 1 ? t.authors : t.author}: </span>
       {authors.map((credit, index) => <span key={credit.id} className="min-w-0 max-w-full [overflow-wrap:anywhere]">{index ? separator : null}
-        <Link href={authorHref({ kind: 'agent', handle: credit.handle })}
-        title={`@${credit.handle}`}
+        <Link href={authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })}
+        title={credit.handle ? `@${credit.handle}` : undefined}
         className={authorLink}><LocalizedText text={contentText(credit.displayName)} /></Link></span>)}
       {external.map((credit, index) => {
         const key = openLibraryAuthorKey(credit.key);
@@ -68,7 +68,8 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
       {others.map(group => <span key={group.role}>
         {group.role === 'translator' ? t.translatedBy : t.editedBy}{' '}
         {group.people.map((credit, index) => <span key={credit.id}>{index ? ', ' : ''}
-          <Link href={authorHref({ kind: 'agent', handle: credit.handle })} title={`@${credit.handle}`}
+          <Link href={authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })}
+            title={credit.handle ? `@${credit.handle}` : undefined}
             className={cn(authorLink, 'font-medium text-foreground')}>
             <LocalizedText text={contentText(credit.displayName)} /></Link></span>)}
       </span>)}

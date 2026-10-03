@@ -23,7 +23,7 @@ export interface DiscussionPost {
   realm: FeedItem['realm'];
   /** Who the meta line leads with, as Home decides it; elsewhere the Realm, where it is shown. */
   lead?: MetaLead;
-  author: { name: string; handle: string } | null;
+  author: { id: string; name: string; handle: string | null } | null;
   time: string;
   /** A discussion's title, its author's first line as Main reads it; a reply has none. */
   title: string | null;

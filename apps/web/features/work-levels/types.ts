@@ -38,7 +38,7 @@ export interface NameText { value: string; language: string; direction: 'ltr' | 
 export type { Loaded, ReadFailure } from '../work-page/types.ts';
 
 /** Contributors by Agent IRI, as the profile link needs them: the public name and the handle. */
-export type People = ReadonlyMap<string, { name: string; handle: string }>;
+export type People = ReadonlyMap<string, { name: string; handle: string | null }>;
 
 /** Names by resource IRI, from Main's summary batch; absent when Main did not answer for it. */
 export type Names = ReadonlyMap<string, Summary>;

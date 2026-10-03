@@ -1,11 +1,9 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   expect,
-  test as base,
+  test,
   type Browser,
-  type BrowserContext,
   type Page,
   type TestInfo,
 } from '@playwright/test';
@@ -24,6 +22,7 @@ import { messages as shellEnglish } from '../features/shell/messages.ts';
 import shellChinese from '../features/shell/messages/zh-Hant.ts';
 import { copyOf as wikiCopy } from '../features/wiki/messages.ts';
 import { localeNames } from '../i18n/define.ts';
+import { signInAtAccounts } from './account-sign-in.ts';
 import {
   credentials,
   setupCredentials,
@@ -52,17 +51,6 @@ const views = [
 const locales = ['en', 'zh-Hant'] as const;
 type Locale = (typeof locales)[number];
 const run = process.env.REZICS_QA_RUN_ID ?? `shared-${Date.now()}`;
-type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
-let memberState: StorageState | undefined;
-let operatorState: StorageState | undefined;
-
-function authStatePath(origin: string, member: { email: string }) {
-  const key = createHash('sha256').update(`${origin}:${member.email}`).digest('hex');
-  const directory = resolve('.temp/direction-9/auth');
-  mkdirSync(directory, { recursive: true });
-  return resolve(directory, `${key}.json`);
-}
-
 async function screenshot(page: Page, info: TestInfo, step: string) {
   const directory = resolve(
     '.temp/direction-9',
@@ -115,86 +103,15 @@ async function selectActor(page: Page, actor: string, next: string) {
   await page.goto(next);
 }
 
-/** Local Aspire advertises 127.0.0.1 even when the caller names localhost. */
-function atAccounts(url: URL) {
-  const accounts = new URL(process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004');
-  const loopback = new Set(['localhost', '127.0.0.1', '[::1]']);
-  return (
-    url.origin === accounts.origin ||
-    (loopback.has(url.hostname) &&
-      loopback.has(accounts.hostname) &&
-      url.protocol === accounts.protocol &&
-      url.port === accounts.port)
-  );
-}
-
-async function signInAtAccounts(
+/** Each context signs in independently: rotating refresh tokens cannot be copied. */
+async function authenticate(
   page: Page,
   next: string,
   member: { email: string; password: string },
   onboard = false,
 ) {
   page.setDefaultTimeout(30_000);
-  const statePath = authStatePath(String(process.env.REZICS_WEB_E2E_BASE_URL), member);
-  const cachedKey = (await page.context().cookies()).find(
-    (cookie) => cookie.name === 'rezics_session_key',
-  )?.value;
-  if (cachedKey) {
-    // Navigation refreshes an expired access token before the BFF read; an
-    // Account cookie may also finish OAuth without showing a password form.
-    await page.goto(next);
-    const current = await page.request.get('/api/main/v1/me/session-agent', {
-      timeout: 10_000,
-      headers: { 'x-session-key': cachedKey },
-    });
-    if (current.status() === 200) {
-      await expect(page).toHaveURL(next);
-      writeFileSync(statePath, JSON.stringify(await page.context().storageState()), {
-        mode: 0o600,
-      });
-      return;
-    }
-  }
-  const finished = (url: URL) =>
-    url.pathname === next || (onboard && url.pathname === '/en/onboarding');
-  // A rejected cached session can have reached /auth/start through settings.
-  // Dispose that document before its mount effect starts a competing redirect.
-  await page.goto('about:blank');
-  // This page immediately replaces itself with /auth/authorize after mounting.
-  // Its load event can be aborted by that expected navigation.
-  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`, { waitUntil: 'commit' });
-  await page.waitForURL(
-    (url) =>
-      (atAccounts(url) && url.pathname === '/sign-in') ||
-      finished(url) ||
-      url.pathname.endsWith('/identity/failed'),
-    {
-      timeout: 30_000,
-    },
-  );
-  if (new URL(page.url()).pathname.endsWith('/identity/failed'))
-    throw new Error(
-      `Fixture sign-in failed (${new URL(page.url()).searchParams.get('reason') ?? 'unknown'})`,
-    );
-  if (new URL(page.url()).pathname === '/sign-in') {
-    await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-    const email = page.getByRole('textbox', { name: 'Email', exact: true });
-    await email.fill(member.email);
-    await expect(email).toHaveValue(member.email);
-    await page.getByRole('button', { name: 'Next', exact: true }).click();
-    await page.getByLabel('Enter your password').fill(member.password);
-    await page.getByRole('button', { name: 'Next', exact: true }).click();
-    const accept = page.getByRole('button', { name: 'Accept and continue', exact: true });
-    await Promise.race([
-      page.waitForURL(finished, { timeout: 30_000 }),
-      accept.waitFor({ state: 'visible', timeout: 30_000 }),
-    ]);
-    if (await accept.isVisible()) {
-      await page.locator('html[data-hydrated]').waitFor({ timeout: 30_000 });
-      await accept.click();
-    }
-    await page.waitForURL(finished, { timeout: 30_000 });
-  }
+  await signInAtAccounts(page, next, member, onboard);
   if (new URL(page.url()).pathname === '/en/onboarding') {
     const sessionKey = (await page.context().cookies()).find(
       (cookie) => cookie.name === 'rezics_session_key',
@@ -212,12 +129,11 @@ async function signInAtAccounts(
     await selectActor(page, person.agent, next);
   }
   await expect(page).toHaveURL(next);
-  writeFileSync(statePath, JSON.stringify(await page.context().storageState()), { mode: 0o600 });
 }
 
 /** The fixture's second Account may not have published a Main Person yet. */
 async function signInManager(page: Page) {
-  await signInAtAccounts(page, '/en/settings', credentials().operator, true);
+  await authenticate(page, '/en/settings', credentials().operator, true);
 }
 
 async function setupCommands<T>(
@@ -226,14 +142,12 @@ async function setupCommands<T>(
   action: (api: PublicCommands) => Promise<T>,
 ) {
   const administrator = setupCredentials() ?? credentials().operator;
-  const path = authStatePath(String(info.project.use.baseURL), administrator);
   const context = await browser.newContext({
     baseURL: info.project.use.baseURL,
-    ...(existsSync(path) ? { storageState: path } : {}),
   });
   try {
     const page = await context.newPage();
-    await signInAtAccounts(page, '/en/settings', administrator, true);
+    await authenticate(page, '/en/settings', administrator, true);
     return await action(new PublicCommands(context.request));
   } finally {
     await context.close();
@@ -321,26 +235,15 @@ async function walkAddress(
 
 // Setup is API-only after real sign-in; no SQL, in-process app, seeded IDs or
 // mocked routes can make a browser acceptance journey pass.
-const test = base.extend({
-  storageState: async ({}, use) => {
-    await use(memberState);
-  },
-});
 let fixture: DirectionFixture;
 test.beforeAll(async ({ browser }, info) => {
   test.setTimeout(120_000);
   const start = performance.now();
   const administrator = setupCredentials();
-  const options = (member: { email: string }) => {
-    const path = authStatePath(String(info.project.use.baseURL), member);
-    return {
-      baseURL: info.project.use.baseURL,
-      ...(existsSync(path) ? { storageState: path } : {}),
-    };
-  };
-  const context = await browser.newContext(options(credentials().member));
-  const managerContext = await browser.newContext(options(credentials().operator));
-  const setupContext = await browser.newContext(options(administrator ?? credentials().operator));
+  const options = { baseURL: info.project.use.baseURL };
+  const context = await browser.newContext(options);
+  const managerContext = await browser.newContext(options);
+  const setupContext = await browser.newContext(options);
   const api = new PublicCommands(context.request);
   const managerApi = new PublicCommands(managerContext.request);
   try {
@@ -353,16 +256,14 @@ test.beforeAll(async ({ browser }, info) => {
     ).not.toBe(credentials().member.email);
     await phase('real Account sign-in', () =>
       // One at a time: parallel first sign-ins race the Accounts dev server's first compile.
-      signInAtAccounts(page, '/en/settings', credentials().member).then(() =>
+      authenticate(page, '/en/settings', credentials().member).then(() =>
         signInManager(managerPage),
       ),
     );
     if (administrator && setupPage)
       await phase('administrator Account sign-in', () =>
-        signInAtAccounts(setupPage, '/en/settings', administrator, true),
+        authenticate(setupPage, '/en/settings', administrator, true),
       );
-    memberState = await context.storageState();
-    operatorState = await managerContext.storageState();
     const sessionKey = (await context.cookies()).find(
       (cookie) => cookie.name === 'rezics_session_key',
     )?.value;
@@ -448,12 +349,9 @@ for (const locale of locales)
         test.setTimeout(180_000);
         page.setDefaultTimeout(30_000);
         page.setDefaultNavigationTimeout(30_000);
-        await signInAtAccounts(page, `/${locale}/settings`, credentials().member);
+        await authenticate(page, `/${locale}/settings`, credentials().member);
       });
       test.afterEach(async ({ page }, info) => {
-        // Account rotates refresh tokens. Carry the latest session into the
-        // next journey instead of replaying beforeAll's consumed refresh token.
-        memberState = await page.context().storageState();
         if (info.status !== info.expectedStatus) await screenshot(page, info, 'failure');
       });
 
@@ -754,14 +652,12 @@ for (const locale of locales)
 
       test('rating scope: choose a population past page one', async ({ page, browser }, info) => {
         const administrator = setupCredentials() ?? credentials().operator;
-        const path = authStatePath(String(info.project.use.baseURL), administrator);
         const setupContext = await browser.newContext({
           baseURL: info.project.use.baseURL,
-          storageState: path,
         });
         try {
           const setupPage = await setupContext.newPage();
-          await signInAtAccounts(setupPage, '/en/settings', administrator, true);
+          await authenticate(setupPage, '/en/settings', administrator, true);
           await seedRatingPopulations(new PublicCommands(setupContext.request), fixture);
         } finally {
           await setupContext.close();
@@ -889,13 +785,10 @@ for (const locale of locales)
         const anonymous = await browser.newContext({
           baseURL: info.project.use.baseURL,
           viewport: view.viewport,
-          // Playwright applies the project's member storageState to new contexts.
-          storageState: { cookies: [], origins: [] },
         });
         const managerContext = await browser.newContext({
           baseURL: info.project.use.baseURL,
           viewport: view.viewport,
-          storageState: operatorState,
         });
         try {
           const outsider = await anonymous.newPage();
@@ -922,6 +815,10 @@ for (const locale of locales)
           await screenshot(page, info, 'private-request-pending');
           const manager = await managerContext.newPage();
           manager.setDefaultTimeout(30_000);
+          await signInManager(manager);
+          // Exercise access expiry without waiting five minutes. Only this
+          // context owns the refresh token, so its first BFF read must rotate it.
+          await managerContext.clearCookies({ name: 'rezics_access' });
           // Select the fixture's manager before loading its scoped requests.
           await phase(`${locale} ${view.name} manager selection`, () =>
             selectActor(
@@ -930,6 +827,10 @@ for (const locale of locales)
               `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
             ),
           );
+          expect(
+            (await managerContext.cookies()).some((cookie) => cookie.name === 'rezics_access'),
+            'an independent manager session refreshes before Agent selection',
+          ).toBe(true);
           await screenshot(manager, info, 'private-manager-before-decision');
           await phase(`${locale} ${view.name} manager approval`, async () => {
             await manager.getByRole('button', { name: t.approve, exact: true }).click();

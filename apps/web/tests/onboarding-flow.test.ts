@@ -67,11 +67,11 @@ test('a stalled or unavailable onboarding operation remains recoverable', async 
     .toEqual({ kind: 'unavailable' });
 });
 
-test('handle entry normalizes case and treats the native address as no chosen handle', () => {
+test('handle entry normalizes case and preserves the explicit absent handle', () => {
   expect(normalizedHandle(' Ada_1 ')).toBe('ada_1');
   expect(normalizedHandle('ab')).toBeNull();
   expect(normalizedHandle('bad-handle')).toBe('bad-handle');
-  expect(currentVanityHandle('agent-00000000-0000-4000-8000-000000000001')).toBeNull();
+  expect(currentVanityHandle(null)).toBeNull();
   expect(currentVanityHandle('ada_1')).toBe('ada_1');
 });
 

@@ -87,8 +87,8 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
     cover: named?.get(match.work)?.avatar ?? (mediaCover(match.cover) ? match.cover! : null),
     authors: (match.primaryCredits ?? []).flatMap(credit => {
       if (!credit.displayName) return [];
-      const href = credit.participantKind === 'agent' ? credit.handle
-        ? authorHref({ kind: 'agent', handle: credit.handle }) : null
+      const href = credit.participantKind === 'agent'
+        ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
         : credit.provider === 'open-library' && credit.key
           ? authorHref({ kind: 'external', key: credit.key }) : null;
       return [{ name: credit.displayName, href }];

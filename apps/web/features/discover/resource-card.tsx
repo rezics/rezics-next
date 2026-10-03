@@ -29,7 +29,7 @@ export function resourceWork(item: ResourceCard, scope: BrowseScope = { kind: 'g
   const details = item.work;
   const authors = (details?.primaryCredits ?? []).flatMap(credit => credit.displayName
     ? [{ name: credit.displayName, href: credit.participantKind === 'agent'
-      ? credit.handle ? authorHref({ kind: 'agent', handle: credit.handle }) : null
+      ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
       : authorHref({ kind: 'external', key: credit.key }) }] : []);
   // Unnamed credits still count, but names already displayed need no redundant total.
   const remaining = Math.max(0, (details?.creditCount.value ?? 0) - authors.length);
