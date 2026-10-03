@@ -40,6 +40,7 @@ export function WorkRow({ work, headingLevel = 2, avatarQuery, locale, shelf = '
       </Heading>
       {otherLanguageTitle(work.title, locale) ? <p className="sr-only">{t.fallbackTitle}</p> : null}
       {work.authors.length ? <p className="text-muted-foreground"><AuthorNames authors={work.authors} /></p> : null}
+      {work.creditSummary ? <p className="text-muted-foreground text-xs">{work.creditSummary}</p> : null}
       {work.rating ? <RatingInline rating={work.rating} locale={locale} /> : null}
       {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
         className="line-clamp-2 text-pretty text-muted-foreground">{work.tagline.value}</p> : null}

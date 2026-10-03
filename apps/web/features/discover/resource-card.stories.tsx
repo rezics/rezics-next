@@ -35,7 +35,8 @@ export const WorkLatin: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Jane Austen' })).toHaveAttribute('href',
       canonicalHref({ prefix: '/@', key: 'jane-austen', slugSource: '' }, 'en'));
-    await expect(canvas.getByText('At least 3 author credits')).toBeVisible();
+    await expect(canvas.queryByText(/author credits/)).toBeNull();
+    await expect(canvas.queryByText(/more$/)).toBeNull();
     await expect(canvas.getByText('4.25')).toBeVisible();
   },
 };
@@ -66,7 +67,7 @@ const cjk = { globals: { locale: 'zh-Hans' },
     if (args.item.kind === 'work') {
       await expect(canvas.getByRole('link', { name: '林美玲' })).toHaveAttribute('href',
         canonicalHref({ prefix: '/@', key: 'lin-mei', slugSource: '' }, 'zh-Hans'));
-      await expect(canvas.getByText('至少 3 条作者署名')).toBeVisible();
+      await expect(canvas.queryByText(/条作者署名|另有/)).toBeNull();
       await expect(canvas.getByText('4.25')).toBeVisible();
     }
   },
