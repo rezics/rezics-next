@@ -830,20 +830,23 @@ for (const locale of locales)
           await expect(page.getByText(t.pending, { exact: true })).toBeVisible();
           await screenshot(page, info, 'private-request-pending');
           const manager = await managerContext.newPage();
+          manager.setDefaultTimeout(30_000);
           // Select the fixture's manager before loading its scoped requests.
-          await selectActor(
-            manager,
-            fixture.manager,
-            `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
-          );
-          await manager.getByRole('button', { name: t.approve, exact: true }).click();
-          const dialog = manager.getByRole('dialog');
-          await dialog
-            .getByRole('textbox', { name: t.reason, exact: true })
-            .fill('Reviewed for Direction 9 acceptance.');
-          await dialog.getByRole('button', { name: t.approve, exact: true }).click();
-          await expect(manager.getByText(t.approved, { exact: true })).toBeVisible();
-          await screenshot(manager, info, 'private-manager-approved');
+          await phase(`${locale} ${view.name} manager selection`, () => selectActor(
+            manager, fixture.manager, `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
+          ));
+          await screenshot(manager, info, 'private-manager-before-decision');
+          await phase(`${locale} ${view.name} manager approval`, async () => {
+            await manager.getByRole('button', { name: t.approve, exact: true }).click();
+            const dialog = manager.getByRole('dialog');
+            await expect(dialog).toBeVisible();
+            await dialog
+              .getByRole('textbox', { name: t.reason, exact: true })
+              .fill('Reviewed for Direction 9 acceptance.');
+            await dialog.getByRole('button', { name: t.approve, exact: true }).click();
+            await expect(manager.getByText(t.approved, { exact: true })).toBeVisible();
+            await screenshot(manager, info, 'private-manager-approved');
+          });
           await page.reload();
           const own = await ownRequests(new PublicCommands(page.request), fixture, privateSpace);
           expect(own.filter((item) => !previous.has(item.id)).map((item) => item.state)).toEqual([
