@@ -25,7 +25,6 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   if (summary?.status !== 'available' || summary.type !== 'realm') {
     throw new WorkReadMissing('Realm is unavailable');
   }
-  await readRealmBasis(session, realm);
   const path = `/v1/realms/${realm.slice(-36)}`;
   const published = await readCurrentProfile(session.deps.environment, realm);
   const selected = (value: { original: string; labels: Record<string, string> }
@@ -70,6 +69,8 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   }
   const count = profile?.count.kind === 'exact'
     ? await session.deps.access.publicRealmCount!(realm) : profile?.count ?? { kind: 'unknown' as const, value: null };
+  // Recheck live disclosure after all profile, media and governance hydration.
+  // The enclosing read also fences the graph position and private membership.
   const policy = await session.realm(realm);
   return { profile: 'realm-read-v1' as const, ...basis,
     name: profile ? selected(profile.name) : summary.name, icon,

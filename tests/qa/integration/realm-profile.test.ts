@@ -5,6 +5,7 @@ import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activat
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { REALM_PROFILE_COST } from '../../../services/main/src/modules/realm-profile/schema.ts';
+import { deliverRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 
 const short = (id: string) => id.slice(-36);
 async function response<T>(result: Response, expected: number): Promise<T> {
@@ -139,5 +140,24 @@ test('Realm public profile: manager admission, CAS, media, moderator choice and 
       await stack.call('GET', root), 200);
     expect(after.moderators).toEqual({ kind: 'known', items: [] });
     expect(JSON.stringify(after)).not.toContain(outsider.actor);
+    // A visibility change after summary hydration still gates the final
+    // profile, even when its retained publication was read while public.
+    const nativeQuery = stack.fuseki.query.bind(stack.fuseki);
+    let privatized = false;
+    stack.fuseki.query = async (sparql, maxBytes) => {
+      const result = await nativeQuery(sparql, maxBytes);
+      if (!privatized && sparql.includes('SELECT ?revision ?payload ?model WHERE')) {
+        privatized = true;
+        await deliverRealmPolicy(stack.env, { realm, receipt_id: randomUUID(), generation: '1',
+          visibility: 'private', review_mode: 'mandatory' });
+      }
+      return result;
+    };
+    try {
+      const withheld = await stack.call('GET', root);
+      expect(withheld.status).toBe(404);
+      expect(privatized).toBe(true);
+      expect(await withheld.text()).not.toContain('Readers Guild');
+    } finally { stack.fuseki.query = nativeQuery; }
   } finally { await stack.stop(); }
 }, 120_000);

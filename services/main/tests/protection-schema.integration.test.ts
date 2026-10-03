@@ -172,12 +172,15 @@ test('G-052 protection schema: empty install and upgrade from the current Conten
     'content.protection_revision', 'content.correction_proposal', 'content.correction_decision',
     'content.correction_application']) name`);
   expect(tables.rows.every(row => row.name)).toBe(true);
-  expect(await actions(fresh)).toEqual(expect.arrayContaining(['correction.decide', 'correction.propose', 'protection.change']));
+  const freshActions = await actions(fresh);
+  expect(freshActions).toEqual(expect.arrayContaining(['correction.decide', 'correction.propose', 'protection.change']));
 
   const upgraded = await upgradedOwner('protection_upgrade');
-  // Actions admitted by every earlier migration survive; existing targets read as explicitly absent.
-  expect(await actions(upgraded.pool)).toEqual([...new Set([...upgraded.before,
-    'correction.decide', 'correction.propose', 'protection.change'])].sort());
+  // Upgrade and fresh install reach the same complete head, including later receipt actions.
+  // Every pre-protection action must also survive independently of that comparison.
+  const upgradedActions = await actions(upgraded.pool);
+  expect(upgradedActions).toEqual(freshActions);
+  expect(upgradedActions).toEqual(expect.arrayContaining(upgraded.before));
   expect(await heads(upgraded.pool, upgraded.variant.id)).toEqual({ draft_head: upgraded.head, protection_head: null });
   const second = await upgraded.content.saveDraft({ operationId: `save-${randomUUID()}`, variant: upgraded.variant,
     expectedHead: upgraded.head, model: 'content-shape-v1', sourceRevision: null, provenance: { editor: 'test' },

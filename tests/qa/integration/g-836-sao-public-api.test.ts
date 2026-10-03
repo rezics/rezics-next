@@ -126,12 +126,18 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
       { profile: 'agent-provision-v1',kind: 'person',displayName: name },token),201)).agent;
     const actorA = await agent('SAO reader',f.account.tokenA), actorB = await agent('SAO reader and reviewer',tokenB),actorC = await agent('Second human reviewer',tokenC);
     const principalC = (await f.accessPool.query<{ id: string }>('SELECT id FROM access.principal WHERE account_issuer=$1 AND account_subject=$2',[f.account.issuer,third.user.id])).rows[0]!.id;
-    for (const [principal,actor] of [[f.otherPrincipal,actorB],[principalC,actorC]])
+    for (const [principal,actor] of [[f.principalId,actorA],[f.otherPrincipal,actorB],[principalC,actorC]])
       await grant(principal!,actor!,'editorial:review:urn:rezics:context:global','work.review');
     const source = await f.adoptWork(await f.propose('OL836101W',[],'Sword Art Online 1 — Aincrad'));
     const survivor = await f.adoptWork(await f.propose('OL836102W',[],'ソードアート・オンライン 1 アインクラッド'));
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(source.work)} rv:catalogueVisible true . ${iri(survivor.work)} rv:catalogueVisible true } }`);
+    // Reviewed merge admission probes ordinary edit authority for both owners.
+    // Catalogue review eligibility alone cannot supply those owner permits.
+    const editPair = async (principal: string,actor: string) => {
+      for (const work of [source.work,survivor.work]) await grant(principal,actor,`work:edit:${work}`,'work.edit');
+    };
+    for (const [principal,actor] of [[f.principalId,actorA],[f.otherPrincipal,actorB],[principalC,actorC]]) await editPair(principal!,actor!);
     for (const work of [source.work,survivor.work]) await f.grant(`work:read:${work}`,'work.read');
     await f.grant(`address:claim:${source.work}`,'address.claim');
     const slug = `sao-836-${randomUUID().slice(0,8)}`;
@@ -144,8 +150,13 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     await status(source.work,actorA,'read',f.account.tokenA); await status(survivor.work,actorA,'want-to-read',f.account.tokenA);
     await status(source.work,actorB,'read',tokenB);
     const follow = (work: string,actor: string,following: boolean,token: string,expectedRevision: string | null = null) => call('POST','/v1/follows',
-      { profile: 'follow-command-v1',target: work,kind: 'work',actingSubject: actor,following,expectedRevision },token).then(r => json(r));
-    await follow(source.work,actorA,true,f.account.tokenA); await follow(survivor.work,actorA,false,f.account.tokenA); await follow(source.work,actorB,true,tokenB);
+      { profile: 'follow-command-v1',target: work,kind: 'work',actingSubject: actor,following,expectedRevision },token).then(r => json<{ revision: string }>(r));
+    await follow(source.work,actorA,true,f.account.tokenA);
+    // An explicit survivor opt-out retains a real follow's revision; removing
+    // a nonexistent follow is rejected by the current management API.
+    const survivorFollow = await follow(survivor.work,actorA,true,f.account.tokenA);
+    await follow(survivor.work,actorA,false,f.account.tokenA,survivorFollow.revision);
+    await follow(source.work,actorB,true,tokenB);
     await grant(f.principalId,actorA,GLOBAL_CONTEXT_SCOPE,'rating.context.create');
     const context = (await json<{ context: string }>(await call('POST','/v1/global-rating-contexts',
       { profile: 'global-rating-standing-context-v1',question: 'How good was SAO volume 1?',actingSubject: actorA }),201)).context;
@@ -209,8 +220,21 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     expect((await invalid({ ...candidate,survivor: candidate.source })).status).toBe(400);
     expect((await invalid({ ...candidate,operation: 'split' })).status).toBe(400);
     const stale = { ...candidate,source: { ...candidate.source,revision: nativeId() } };
-    expect((await invalid(stale,[{ component: source.work,head: stale.source.revision },originalHeads[1]!])).status).toBe(409);
+    await json(await invalid(stale,[{ component: source.work,head: stale.source.revision },originalHeads[1]!]),409);
     const proposed = await propose(candidate);
+    // The library delivery cursor pins a native Content slot version. Watch
+    // targets and participation pin exact proposals, not standing Work slots.
+    // Discovery must classify these new columns without moving their evidence.
+    await f.accessPool.query('INSERT INTO access.library_follow_position(agent,work,version) VALUES ($1,$2,1)',[actorA,source.work]);
+    await expect(f.accessPool.query(`INSERT INTO access.watch(principal_id,target,kind,reason,level,revision)
+      VALUES ($1,$2,'work','manual','all',1)`,[f.principalId,source.work])).rejects.toMatchObject({ code: '23514' });
+    const retainedReferences = async () => Promise.all([
+      f.accessPool.query('SELECT to_jsonb(p) AS row FROM access.library_follow_position p WHERE agent=$1 AND work=$2',[actorA,source.work]),
+      f.accessPool.query('SELECT to_jsonb(w) AS row FROM access.watch w WHERE target=$1 ORDER BY principal_id',[`urn:rezics:proposal:${proposed.proposal}`]),
+      f.accessPool.query('SELECT to_jsonb(p) AS row FROM access.watch_participation p WHERE target=$1 ORDER BY principal_id',[`urn:rezics:proposal:${proposed.proposal}`]),
+    ]).then(results => results.map(result => result.rows));
+    const retainedBefore = await retainedReferences();
+    for (const rows of retainedBefore) expect(rows.length).toBeGreaterThan(0);
     const preview = await json<{ revision: { before: { owners: Array<{ owner: string; count: number }> } } }>(await call('GET',path(proposed.proposal),undefined,null));
     expect(Object.fromEntries(preview.revision.before.owners.map(owner => [owner.owner,owner.count])))
       .toMatchObject({ library: 2,follows: 2,rating: 5,review: 2 });
@@ -231,9 +255,11 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     expect((await json<{ blocker: { code: string } }>(await decide(proposed.proposal,actorB,tokenB),409)).blocker.code).toBe('required_approvals');
     const bot = (await json<{ agent: string }>(await call('POST','/v1/agents',{ profile: 'agent-provision-v1',kind: 'service',displayName: 'Reviewer bot' },tokenB),201)).agent;
     await grant(f.otherPrincipal,bot,'editorial:review:urn:rezics:context:global','work.review');
+    await editPair(f.otherPrincipal,bot);
     expect((await approve(proposed.proposal,bot,tokenB)).status).toBe(403);
     const dependent = await agent('Same operator second Agent',tokenB);
     await grant(f.otherPrincipal,dependent,'editorial:review:urn:rezics:context:global','work.review');
+    await editPair(f.otherPrincipal,dependent);
     await json(await approve(proposed.proposal,dependent,tokenB));
     expect((await json<{ blocker: { code: string } }>(await decide(proposed.proposal,dependent,tokenB),409)).blocker.code).toBe('required_approvals');
     loseLibraryAcknowledgement = true;
@@ -248,6 +274,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     app = createMainApp(f.env.fuseki,{ ...deps,editorialReview: new EditorialReviewStore(mergeAccessPool,modules) });
     const merged = await finish(proposed.proposal,applyKey);
     expect(merged.outcome).toBe('applied'); expect(merged.receipt?.commands).toHaveLength(5);
+    for (const [index,rows] of (await retainedReferences()).entries()) expect(rows).toEqual(expect.arrayContaining(retainedBefore[index]!));
     const identityEvent = async (command: Command,operation: string) => {
       const rows = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?epoch ?sequence WHERE {
         GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:mergeTask ${lit(command.receipt!.operationKey)} ; rv:dataEpoch ?epoch ; rv:sequence ?sequence }
@@ -290,6 +317,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     await json(await approve(reverse.proposal,actorB,tokenB));
     const unmerged = await finish(reverse.proposal);
     expect(unmerged.outcome).toBe('applied');
+    for (const [index,rows] of (await retainedReferences()).entries()) expect(rows).toEqual(expect.arrayContaining(retainedBefore[index]!));
     await identityEvent(unmerged,'unmerge');
     expect(unmerged.receipt?.owner).toMatchObject({ outcomes: { ambiguous: 1 } });
     expect(await json(await call('GET',oldId,undefined,null))).toMatchObject({ status: 'available' });

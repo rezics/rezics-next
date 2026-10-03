@@ -1,0 +1,42 @@
+id: numeric-migration-order
+language: TypeScript
+severity: error
+message: SQL migration inventories use the shared numeric order.
+rule:
+  all:
+    - pattern: $FILES.sort()
+    - regex: '\.sql|\b(?:migrations|sqlFiles)\b'
+---
+id: complete-migration-version
+language: TypeScript
+severity: error
+message: Parse the complete migration version with migrationVersion.
+rule:
+  pattern: $FILE.slice(0, 3)
+constraints:
+  FILE:
+    regex: '^(?:file|name|filename|migration)$'
+---
+id: complete-migration-filename
+language: TypeScript
+severity: error
+message: SQL migration filenames accept versions beyond three digits.
+rule:
+  kind: regex
+  regex: '\\d\{3\}.*\.sql'
+---
+id: numeric-migration-head
+language: TypeScript
+severity: error
+message: Compare migration heads with complete numeric versions.
+rule:
+  any:
+    - pattern: $FILE < $HEAD
+    - pattern: $FILE <= $HEAD
+    - pattern: $FILE > $HEAD
+    - pattern: $FILE >= $HEAD
+constraints:
+  FILE:
+    regex: '^(?:file|name)$'
+  HEAD:
+    regex: '^(?:[''"]\d{3,}.*[''"]|OWN|SOLO|migration)$'

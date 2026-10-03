@@ -33,4 +33,7 @@ export const PERSON_STATE_MERGE_EXCLUSIONS: Readonly<Record<string,string>> = {
   'table:access.feed_vote.target': 'A vote names an exact activity, not a standing Work rating.',
   'table:access.home_exclusion.target': 'Private recommendation exclusions retain the named identity; preference reconciliation is deferred.',
   'table:access.interaction_mute_preference.target': 'Interaction mute targets are Agents and Realms, never Works.',
+  'table:access.library_follow_position.work': 'Derived follow delivery cursor pins the version of its original Content library slot; moved slots reconcile through their own versions.',
+  'table:access.watch.target': 'Watches name exact threads, proposals, releases or Collections, never a standing Work slot.',
+  'table:access.watch_participation.target': 'Participation is evidence for the same exact watched thread, proposal, release or Collection, not a Work preference.',
 };

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import type { CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
-import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
+import type { CommandOutcome, OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { propertyRevelationRecord } from '../../../services/main/src/modules/reading-position/store.ts';
 import { WikiQuotationStore } from '../../../services/main/src/modules/wiki/quotation.ts';
 import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
@@ -97,6 +97,31 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
       if (result.receipt) return result.receipt;
     }
     throw new Error('Bundle did not finish its bounded deliveries');
+  };
+  const refuse = async (proposal: string,revision: number,suffix: string,token = steward.token,actor = steward.actor) => {
+    const key = randomUUID();
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const response = await decide(proposal,revision,key,token,actor);
+      if (response.status === 202) { await json<Command>(response,202); continue; }
+      const refusal = await json<{ blocker: { code: string; key: string; reason: string } }>(response,409);
+      expect(refusal.blocker).toEqual({ code: 'owner_command_refused',
+        key: `wiki:${proposal}:${revision}:${suffix}`,reason: 'owner_rejected' });
+      expect(await json(await decide(proposal,revision,key,token,actor),409)).toMatchObject(refusal);
+      // Refused items are durable, but cannot produce an applied decision or
+      // allow later items to overtake them, including after a store restart.
+      deps.editorialReview = new EditorialReviewStore(f.accessPool); app = createMainApp(graph,deps);
+      const recovered = await json<{ proposal: { decision: null }; blockers: unknown[] }>(await call('POST',
+        path(proposal,'/recovery'),{ profile: 'editorial-proposal-recover-v1' },null));
+      expect(recovered.proposal.decision).toBeNull();
+      expect(recovered.blockers).toContainEqual(refusal.blocker);
+      expect((await f.accessPool.query(`SELECT o.outcome,o.owner_receipt FROM access.editorial_application_outcome o
+        JOIN access.editorial_application a ON a.id = o.application WHERE a.proposal = $1`,[proposal])).rows)
+        .toEqual([{ outcome: 'cancelled',owner_receipt: null }]);
+      return (await f.accessPool.query<{ outcome: CommandOutcome }>(`SELECT o.outcome FROM access.editorial_command_outcome o
+        JOIN access.editorial_application a ON a.id = o.application WHERE a.proposal = $1 ORDER BY o.position`,[proposal])).rows
+        .map(row => row.outcome);
+    }
+    throw new Error('Bundle refusal did not finish its bounded deliveries');
   };
   const proposalFor = async (bundle: WikiExtraction) => {
     const rows = (await f.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE { GRAPH <${GRAPHS.current}> {
@@ -297,27 +322,42 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     for (const component of [elizabeth,jane]) await otherSteward.grant(`semantic:edit:${component}`,'semantic.change');
     await otherSteward.grant(`relation:edit:${relationship}`,'relation.change');
     await otherSteward.grant(`statement:speak:${otherSteward.actor}`,'statement.withdraw');
-    const retracted = await apply(reversal.proposal,1,randomUUID(),otherSteward.token,otherSteward.actor);
-    expect(retracted.commands!.find(command => command.key.endsWith(':retract-claim:0'))?.outcome).toBe('rejected');
+    const refusedRetraction = await refuse(reversal.proposal,1,'retract-claim:0',otherSteward.token,otherSteward.actor);
+    expect(refusedRetraction.at(-1)).toMatchObject({ outcome: 'rejected' });
+    expect(refusedRetraction.some(command => /:retract-claim:1$|:retract-entity:/.test(command.key))).toBe(false);
     expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { <${statement}> <${RV}statementState> <${RV}Active> } }`)).boolean).toBe(true);
-    expect((await call('GET',`/v1/resources/${short(elizabeth)}/page?position=all`,undefined,null)).status).toBe(404);
+    expect((await call('GET',`/v1/resources/${short(elizabeth)}/page?position=all`,undefined,null)).status).toBe(200);
     expect((await f.contentPool.query('SELECT id FROM wiki.evidence WHERE id = ANY($1::text[])',[quoteIds])).rowCount).toBe(2);
+    // Successful compensation still reaches every owner when the original
+    // personal speaker withdraws their own statement.
+    const compensating = await setup(true), compensatingProposal = await proposalFor(compensating.bundle);
+    const compensatingReceipt = await apply(compensatingProposal.proposal,1);
+    for (const entity of ['elizabeth','jane']) await steward.grant(
+      `semantic:edit:${outcomeResult(compensatingReceipt,`entity:${entity}`).component}`,'semantic.change');
+    await steward.grant(`relation:edit:${outcomeResult(compensatingReceipt,'claim:1').component}`,'relation.change');
+    const compensation = await json<Command>(await call('POST',path(compensatingProposal.proposal,'/reversal'),{
+      profile: 'editorial-proposal-revert-v1',evidence: [],actingSubject: holder.actor }),201);
+    const compensated = await apply(compensation.proposal,1);
+    expect(compensated.commands!.map(command => command.outcome)).toEqual(compensated.commands!.map(() => 'applied'));
+    expect(compensated.commands!.find(command => command.key.endsWith(':retract-claim:0'))?.outcome).toBe('applied');
+    expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> {
+      <${outcomeResult(compensatingReceipt,'claim:0').component}> <${RV}statementState> <${RV}Withdrawn> } }`)).boolean).toBe(true);
+    expect((await call('GET',`/v1/resources/${short(outcomeResult(compensatingReceipt,'entity:elizabeth').component)}/page?position=all`,undefined,null)).status).toBe(404);
+    const compensatedEvidence = (compensatingReceipt.owner as { evidence: string[] }).evidence;
+    expect((await f.contentPool.query('SELECT id FROM wiki.evidence WHERE id = ANY($1::text[])',[compensatedEvidence])).rowCount).toBe(2);
     const rejected = await setup(true), rejectedProposal = await proposalFor(rejected.bundle);
     rejectEntity = 1;
-    const rejectedReceipt = await apply(rejectedProposal.proposal,1);
-    const outcomes = new Map(rejectedReceipt.commands!.map(command => [command.key.split(':').slice(3).join(':'),command.outcome]));
-    expect(outcomes.get('entity:elizabeth')).toBe('rejected');
-    expect(outcomes.get('entity:jane')).toBe('applied');
-    expect(outcomes.get('claim:0')).toBe('dependency_rejected');
-    expect(outcomes.get('claim:1')).toBe('dependency_rejected');
-    expect(outcomes.get('members:characters:0')).toBe('applied');
+    const rejectedOutcomes = await refuse(rejectedProposal.proposal,1,'entity:elizabeth');
+    expect(rejectedOutcomes.map(command => [command.key.split(':').slice(3).join(':'),command.outcome]))
+      .toEqual([['evidence','applied'],['entity:elizabeth','rejected']]);
+    expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { ?entity <${RV}semanticWork> <${rejected.work.work}> } }`)).boolean).toBe(false);
     // Claim rechecks the Work mandate for creation as well as target edits;
     // losing it after registration cannot publish a Work link or any record.
     const revoked = await setup(true), revokedProposal = await proposalFor(revoked.bundle), beforeRevocation = semanticWrites;
     revokeAtClaim = revoked.work.work;
-    const revokedReceipt = await apply(revokedProposal.proposal,1);
-    expect(revokedReceipt.commands!.find(command => command.key.endsWith(':entity:elizabeth'))?.outcome).toBe('rejected');
-    expect(revokedReceipt.commands!.filter(command => command.outcome === 'applied')).toHaveLength(1);
+    const revokedOutcomes = await refuse(revokedProposal.proposal,1,'entity:elizabeth');
+    expect(revokedOutcomes.map(command => [command.key.split(':').slice(3).join(':'),command.outcome]))
+      .toEqual([['evidence','applied'],['entity:elizabeth','rejected']]);
     expect(semanticWrites).toBe(beforeRevocation);
     expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { ?entity <${RV}semanticWork> <${revoked.work.work}> } }`)).boolean).toBe(false);
     // Distinct incoming passages cannot race past the Work-wide allowance.
