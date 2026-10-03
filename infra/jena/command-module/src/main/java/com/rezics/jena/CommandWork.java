@@ -26,7 +26,7 @@ final class CommandWork implements AutoCloseable, TextDatasetChanges {
         CURRENT.set(this);
         for (String name : java.util.List.of("current_adds", "current_deletes", "current_literal_bytes",
             "revisions_adds", "revisions_deletes", "revisions_literal_bytes", "other_adds", "other_deletes",
-            "other_literal_bytes", "max_literal_bytes", "text_adds", "text_updates", "text_deletes", "validation_focuses"))
+            "other_literal_bytes", "max_literal_bytes", "text_adds", "text_updates", "text_deletes", "validation_focuses", "durable_commits"))
             counts.put(name, 0L);
     }
     void phase(String next) {

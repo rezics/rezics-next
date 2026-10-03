@@ -3,6 +3,7 @@ package com.rezics.jena;
 import org.apache.jena.atlas.json.JSON;
 import org.apache.jena.atlas.json.JsonValue;
 import org.apache.jena.atlas.json.JsonObject;
+import org.apache.jena.atlas.json.JsonArray;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -32,7 +33,7 @@ import org.apache.jena.update.UpdateAction;
 final class CommandService extends ActionService {
     private static final String RV = "https://rezics.com/vocab/";
     private static final String SH = "http://www.w3.org/ns/shacl#";
-    private static final int MAX_REQUEST = 2_000_000;
+    private static final int MAX_REQUEST = 16_000_000;
     private final ProfileRegistry profiles;
     private final byte[] maintenanceCapability;
     private final byte[] admittedCapability;
@@ -49,10 +50,13 @@ final class CommandService extends ActionService {
         System.getenv().getOrDefault("FUSEKI_BASE", "."), "databases/rezics/lucene.uncertain"));
 
     CommandService(ProfileRegistry profiles) {
+        this(profiles, capability("FUSEKI_MAINTENANCE_TOKEN"), capability("FUSEKI_COMMAND_TOKEN"), capability("FUSEKI_TITLE_ADMISSION_KEY"));
+    }
+    CommandService(ProfileRegistry profiles, byte[] maintenance, byte[] admitted, byte[] title) {
         this.profiles = profiles;
-        this.maintenanceCapability = capability("FUSEKI_MAINTENANCE_TOKEN");
-        this.admittedCapability = capability("FUSEKI_COMMAND_TOKEN");
-        this.titleAdmissionKey = capability("FUSEKI_TITLE_ADMISSION_KEY");
+        this.maintenanceCapability = maintenance;
+        this.admittedCapability = admitted;
+        this.titleAdmissionKey = title;
         if (MessageDigest.isEqual(titleAdmissionKey, admittedCapability) || MessageDigest.isEqual(titleAdmissionKey, maintenanceCapability))
             throw new IllegalStateException("title admission key must be independently provisioned");
     }
@@ -108,6 +112,40 @@ final class CommandService extends ActionService {
             byte[] bytes = action.getRequestInputStream().readNBytes(MAX_REQUEST + 1);
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            if (body.get("items") != null) {
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                JsonArray items = body.get("items").getAsArray();
+                if (items.isEmpty() || items.size() > 128) throw new IllegalArgumentException("invalid bulk size");
+                List<BulkItem> commands = new ArrayList<>();
+                java.util.Set<String> receipts = new java.util.HashSet<>();
+                for (JsonValue value : items) {
+                    JsonObject item = value.getAsObject();
+                    String receipt = iri(ProfileRegistry.required(item, "receipt"));
+                    String digest = ProfileRegistry.required(item, "digest");
+                    String update = ProfileRegistry.required(item, "update");
+                    if (CommandPolicy.maintenanceReceipt(receipt) || !receipts.add(receipt))
+                        throw new IllegalArgumentException("bulk receipt not admitted");
+                    CommandPolicy.Plan plan = CommandPolicy.parse(update, receipt);
+                    // Public import batches cannot smuggle recovery, arbitrary
+                    // text writes or another command family into their writer.
+                    if (!catalogueImport(plan, receipt) || plan.bootstrap() || plan.rebuild()
+                        || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH)
+                        || plan.graphs().contains(CommandPolicy.PRIVATE_SEARCH))
+                        throw new IllegalArgumentException("bulk requires catalogue import commands");
+                    String cancellation = ProfileRegistry.required(item, "cancellation");
+                    commands.add(new BulkItem(receipt, digest, update, plan,
+                        parseValidations(item.get("validations")), cancellation,
+                        CommandPolicy.parse(cancellation, receipt)));
+                }
+                Map<String, Object> result = runBulk(action.getDataService().getDataset(), commands,
+                    System.nanoTime() + 30_000_000_000L);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
+            if (bytes.length > 2_000_000) throw new IllegalArgumentException("single request too large");
             String receipt = iri(ProfileRegistry.required(body, "receipt"));
             byte[] required = CommandPolicy.maintenanceReceipt(receipt)
                 ? maintenanceCapability : admittedCapability;
@@ -230,6 +268,82 @@ final class CommandService extends ActionService {
         }
     }
 
+    private static boolean catalogueImport(CommandPolicy.Plan plan, String receipt) {
+        if (!(plan.request().getOperations().getFirst() instanceof org.apache.jena.sparql.modify.request.UpdateModify modify)) return false;
+        return modify.getInsertQuads().stream().anyMatch(quad ->
+            quad.getGraph().getURI().equals(CommandPolicy.RECEIPTS)
+            && quad.getSubject().getURI().equals(receipt)
+            && quad.getPredicate().getURI().equals(RV + "commandFamily")
+            && quad.getObject().isLiteral()
+            && quad.getObject().getLiteralLexicalForm().equals("work-catalogue-import-v1"));
+    }
+
+    record BulkItem(String receipt, String digest, String update, CommandPolicy.Plan plan,
+                    List<Validation> validations, String cancellation, CommandPolicy.Plan cancellationPlan) {}
+
+    /** One real transaction, with independently validated, discardable items.
+     * A process/commit failure loses the whole physical batch; receipt replay
+     * reconciles it. Validation/CAS failures cancel only their own admission. */
+    Map<String, Object> runBulk(DatasetGraph dataset, List<BulkItem> items, long deadline) {
+        synchronized (dataset) {
+            dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
+            boolean commit = false, changed = false;
+            boolean tracksIndex = SearchDeltaJournal.canTrackCommit(dataset);
+            if (tracksIndex) {
+                publicSearchWriteEpoch.incrementAndGet();
+                SearchDeltaJournal.fenceBeforeWrite(dataset);
+            }
+            List<Map<String, Object>> results = new ArrayList<>();
+            var batchDelta = tracksIndex ? new SearchDeltaJournal.Capture(dataset, false) : null;
+            try {
+                for (BulkItem item : items) {
+                    if (System.nanoTime() >= deadline) {
+                        results.add(Map.of("status", "deadline")); continue;
+                    }
+                    CommandOverlay staged = new CommandOverlay(batchDelta == null ? dataset : batchDelta.observed());
+                    SearchDeltaJournal.Capture delta = null;
+                    Map<String, Object> result = evaluate(staged, item.receipt(), item.digest(), item.update(),
+                        null, item.plan(), item.validations(), deadline, delta);
+                    if (Set.of("invalid", "guard-unmatched").contains(result.get("status"))) {
+                        // No RDF or Lucene change from the failed candidate has
+                        // escaped. Seal its admission at the next logical position.
+                        staged = new CommandOverlay(batchDelta == null ? dataset : batchDelta.observed());
+                        delta = null;
+                        String cancellation = item.cancellation().replace("\"candidate-failed\"",
+                            "\"" + ("invalid".equals(result.get("status")) ? "invalid" : "stale") + "\"");
+                        var cancelled = evaluate(staged, item.receipt(), item.digest(), cancellation, null,
+                            CommandPolicy.parse(cancellation, item.receipt()), List.of(), deadline, delta);
+                        if (!"committed".equals(cancelled.get("status"))) result = cancelled;
+                    }
+                    if ("committed".equals(result.get("status")) || "invalid".equals(result.get("status"))
+                        || "guard-unmatched".equals(result.get("status"))) {
+                        changed |= staged.changed();
+                        staged.apply();
+                    }
+                    results.add(result);
+                }
+                if (changed) {
+                    // One journal entry per physical commit, so a large names-only
+                    // import cannot evict the qualified baseline with item entries.
+                    if (batchDelta != null) SearchDeltaJournal.append(dataset, batchDelta, publicSearchWriteEpoch.get() + 1);
+                    CommandWork.enter("commit");
+                    dataset.commit(); commit = true;
+                    CommandWork.count("durable_commits", 1);
+                }
+                return Map.of("items", results);
+            } finally {
+                try { if (!commit) dataset.abort(); }
+                finally {
+                    try {
+                        dataset.end();
+                        if (commit && tracksIndex && !Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset,
+                            -1, publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
+                    } finally { if (tracksIndex) publicSearchWriteEpoch.incrementAndGet(); }
+                }
+            }
+        }
+    }
+
     private Map<String, Object> runSerialized(DatasetGraph dataset, String receipt, String digest, String update,
                                              JsonValue titleAdmission, CommandPolicy.Plan plan,
                                              List<Validation> validations, long deadline) {
@@ -249,6 +363,44 @@ final class CommandService extends ActionService {
             ? new SearchDeltaJournal.Capture(dataset, touchesPublicIndex && plan.rebuild()) : null;
         boolean commit = false;
         try {
+            Map<String, Object> result = evaluate(dataset, receipt, digest, update, titleAdmission, plan, validations, deadline, delta);
+            if (!"committed".equals(result.get("status"))) return result;
+            CommandWork.enter("commit");
+            dataset.commit(); commit = true;
+            CommandWork.count("durable_commits", 1);
+            return result;
+        } finally {
+            try {
+                if (!commit) dataset.abort();
+            } finally {
+                try {
+                    dataset.end();
+                    CommandWork.enter("qualification");
+                    if (commit && tracksIndex) {
+                        // Keep the odd process epoch and native writer monitor until
+                        // qualification completes, so no later native write races it.
+                        try {
+                            if (plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"))
+                                SearchDeltaJournal.qualify(dataset);
+                            else if (touchesPublicIndex && plan.rebuild()) SearchDeltaJournal.invalidate(dataset);
+                            else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
+                                publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
+                        } catch (RuntimeException unavailable) {
+                            // Close reads without changing an already committed result.
+                            SearchDeltaJournal.invalidate(dataset);
+                        }
+                    }
+                } finally {
+                    if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
+                    if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
+                }
+            }
+        }
+    }
+    private Map<String, Object> evaluate(DatasetGraph dataset, String receipt, String digest, String update,
+                                        JsonValue titleAdmission, CommandPolicy.Plan plan, List<Validation> validations,
+                                        long deadline, SearchDeltaJournal.Capture delta) {
+        boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
             String existing = receiptValue(dataset, receipt, "requestDigest");
             if (existing != null) return existing.equals(digest) ? committed(dataset, receipt) : Map.of("status", "conflict");
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
@@ -308,11 +460,14 @@ final class CommandService extends ActionService {
             if (sourceBinding != null) return invalid(sourceBinding);
             String erasureInvariant = ErasurePolicy.check(dataset, plan);
             if (erasureInvariant != null) return invalid(erasureInvariant);
-            Map<String, List<Validation>> grouped = new LinkedHashMap<>();
-            for (Validation entry : validations) grouped.computeIfAbsent(entry.profileId(), ignored -> new ArrayList<>()).add(entry);
+            // Several independently bound instances of one profile may share a
+            // compound command. Every instance still requires its complete roles.
+            record Instance(String profile, Map<String, String> binding) {}
+            Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
+            for (Validation entry : validations) grouped.computeIfAbsent(new Instance(entry.profileId(), entry.binding()), ignored -> new ArrayList<>()).add(entry);
             for (var group : grouped.entrySet()) {
-                String report = BindingPolicy.check(dataset, group.getKey(),
-                    profiles.get(group.getKey()).binding(), group.getValue());
+                String report = BindingPolicy.check(dataset, group.getKey().profile(),
+                    profiles.get(group.getKey().profile()).binding(), group.getValue());
                 if (report != null) return invalid(report);
             }
             for (Validation validation : validations) {
@@ -344,37 +499,9 @@ final class CommandService extends ActionService {
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
                 else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
             }
-            CommandWork.enter("commit");
-            dataset.commit(); commit = true;
-            return result;
-        } finally {
-            try {
-                if (!commit) dataset.abort();
-            } finally {
-                try {
-                    dataset.end();
-                    CommandWork.enter("qualification");
-                    if (commit && tracksIndex) {
-                        // Keep the odd process epoch and native writer monitor until
-                        // qualification completes, so no later native write races it.
-                        try {
-                            if (plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"))
-                                SearchDeltaJournal.qualify(dataset);
-                            else if (touchesPublicIndex && plan.rebuild()) SearchDeltaJournal.invalidate(dataset);
-                            else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
-                                publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
-                        } catch (RuntimeException unavailable) {
-                            // Close reads without changing an already committed result.
-                            SearchDeltaJournal.invalidate(dataset);
-                        }
-                    }
-                } finally {
-                    if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
-                    if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
-                }
-            }
-        }
+        return result;
     }
+
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
                                               List<Validation> validations, Set<String> retiredCoverage) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()

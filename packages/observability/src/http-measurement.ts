@@ -41,6 +41,7 @@ export const commandCounters = [
   'text_updates',
   'text_deletes',
   'validation_focuses',
+  'durable_commits',
 ] as const;
 
 export function fusekiCommandWork(headers: Headers): Record<string, number> {

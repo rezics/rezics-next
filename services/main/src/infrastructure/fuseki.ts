@@ -51,6 +51,10 @@ export interface CommandEnvelope {
 }
 
 export interface CommandPosition { datasetId: string; dataEpoch: string; sequence: string }
+export interface CatalogueBulkEnvelope extends CommandEnvelope {
+  /** A normal guarded cancellation, sharing the item's receipt identity. */
+  cancellation: string;
+}
 export type CommandResult =
   | { status: 'committed'; position: CommandPosition }
   | { status: 'guard-unmatched' | 'conflict' | 'unknown-profile' | 'deadline' }
@@ -247,6 +251,27 @@ export class FusekiClient {
       throw new CommandOutcomeUnknown(`Fuseki command returned ${response.status}`);
     }
     return result;
+  }
+
+  /** Catalogue items have independent receipts and savepoints inside one native
+   * durable transaction. A lost batch response must be reconciled per receipt. */
+  async catalogueBatch(items: readonly CatalogueBulkEnvelope[]): Promise<CommandResult[]> {
+    if (items.length < 1 || items.length > 128 || new Set(items.map(item => item.receipt)).size !== items.length)
+      throw new Error('Invalid catalogue batch');
+    const body = JSON.stringify({ items });
+    if (Buffer.byteLength(body) > 16_000_000) throw new Error('Catalogue batch exceeds native byte bound');
+    const response = await fetch(new URL('command', this.baseUrl), {
+      method: 'POST', headers: { 'content-type': 'application/json',
+        ...(this.commandCapability ? { authorization: `Bearer ${this.commandCapability}` } : {}) },
+      body, signal: AbortSignal.timeout(35_000),
+    });
+    if (response.status === 403) throw new CommandForbidden('Fuseki command capability rejected');
+    if (!response.ok) throw new CommandOutcomeUnknown(`Fuseki catalogue batch returned ${response.status}`);
+    const result = await boundedJson<{ items: CommandResult[] }>(response, 65_536);
+    if (!Array.isArray(result.items) || result.items.length !== items.length
+      || result.items.some(item => !['committed', 'invalid', 'guard-unmatched', 'conflict', 'deadline', 'unknown-profile'].includes(item.status)))
+      throw new CommandOutcomeUnknown('Malformed catalogue batch result');
+    return result.items;
   }
 
   /** Resolve this command's receipt, never the dataset head, after an uncertain response. */
