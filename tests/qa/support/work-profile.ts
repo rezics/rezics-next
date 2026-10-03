@@ -1,4 +1,8 @@
 import { randomBytes } from 'node:crypto';
+import {
+  commandCounters,
+  commandPhases,
+} from '../../../packages/observability/src/http-measurement.ts';
 import { attributes, decode } from '../../../packages/observability/tests/otlp.ts';
 
 export interface WorkSpan {
@@ -172,6 +176,9 @@ export interface WorkProfile {
     sentBytes: number | null;
     receivedBytes: number | null;
     engineMs: number | null;
+    /** Nested native phase times and mutation counts; absent on query calls.
+     * Numeric native fields survive reports that omit the full span inventory. */
+    nativeWork: Record<string, number> | null;
   }[];
   postgres: { spanId: string; service: string; operation: string | null; durationMs: number }[];
   /** Missing byte/engine attributes remain unknown, never a measured zero. */
@@ -323,6 +330,17 @@ export function summarizeWorkProfile(
             ? numeric(span, 'http.response.body.size')
             : null,
         engineMs: numeric(span, 'rezics.fuseki.engine_ms'),
+        nativeWork:
+          span.attributes['rezics.fuseki.commit_ms'] === undefined
+            ? null
+            : Object.fromEntries(
+                [...commandPhases.map((name) => `${name}_ms`), ...commandCounters].flatMap(
+                  (name) => {
+                    const value = numeric(span, `rezics.fuseki.${name}`);
+                    return value === null ? [] : [[name, value]];
+                  },
+                ),
+              ),
       };
     }),
     postgres: statements.map((span) => ({

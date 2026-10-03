@@ -155,28 +155,38 @@ final class PublicNameProjection {
             try { while (concepts.hasNext()) resources.add(concepts.next().getSubject()); }
             finally { org.apache.jena.atlas.iterator.Iter.close(concepts); }
         }
-        for (Node resource : resources) refresh(data, resource);
+        for (Node resource : resources) refresh(data, resource,
+            plan.current().contains(resource.getURI()) || changes.stream().anyMatch(change ->
+                resource.equals(change.work()) || data.contains(PUBLIC, uri(change.unit()), p("work"), resource))
+            || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"));
     }
-    static void refresh(DatasetGraph data, Node resource) {
+    static void refresh(DatasetGraph data, Node resource) { refresh(data, resource, true); }
+    private static void refresh(DatasetGraph data, Node resource, boolean changed) {
+        Set<Quad> prior = new LinkedHashSet<>(), desired = new LinkedHashSet<>();
         String suffix = resource.getURI().substring("https://rezics.com/id/".length());
-        Node oldCreated = null;
+        Node oldCreated = null, oldUpdated = null;
         var directories = data.find(PUBLIC, Node.ANY, p("nameDirectoryResource"), resource);
         Set<Node> oldDirectories = new LinkedHashSet<>();
         try { while (directories.hasNext()) oldDirectories.add(directories.next().getSubject()); }
         finally { org.apache.jena.atlas.iterator.Iter.close(directories); }
-        for (Node directory : oldDirectories) data.deleteAny(PUBLIC, directory, Node.ANY, Node.ANY);
+        for (Node directory : oldDirectories) collect(data, directory, prior);
         for (String value : Set.of("concept", "realm", "site", "agent", "collection", "space", "work"))
         {
             Node oldUnit = uri(PREFIX + value + ":" + suffix);
             var created = data.find(PUBLIC, oldUnit, p("createdOrder"), Node.ANY);
             try { if (created.hasNext()) oldCreated = created.next().getObject(); }
             finally { org.apache.jena.atlas.iterator.Iter.close(created); }
-            data.deleteAny(PUBLIC, oldUnit, Node.ANY, Node.ANY);
+            var updated = data.find(PUBLIC, oldUnit, p("updatedOrder"), Node.ANY);
+            try { if (updated.hasNext()) oldUpdated = updated.next().getObject(); }
+            finally { org.apache.jena.atlas.iterator.Iter.close(updated); }
+            collect(data, oldUnit, prior);
         }
         String kind = kind(data, resource);
-        if (kind == null) return;
+        if (kind == null) { apply(data, prior, desired); return; }
         Node source = Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
-        if (source == null || has(data, source, "protectionHead", Node.ANY)) return;
+        if (source == null || has(data, source, "protectionHead", Node.ANY)) {
+            apply(data, prior, desired); return;
+        }
         Node unit = uri(PREFIX + kind + ":" + suffix);
         java.util.NavigableSet<Node> names = new java.util.TreeSet<>(java.util.Comparator.comparing(
             org.apache.jena.riot.out.NodeFmtLib::strNT));
@@ -201,32 +211,45 @@ final class PublicNameProjection {
                 finally { org.apache.jena.atlas.iterator.Iter.close(titles); }
             } } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
         }
-        for (Node name : names) data.add(new Quad(PUBLIC, unit, p("publicTitle"), name));
+        for (Node name : names) desired.add(new Quad(PUBLIC, unit, p("publicTitle"), name));
         if (!names.isEmpty()) {
-            data.add(new Quad(PUBLIC, unit, RDF.type.asNode(), p("PublicNameMatchUnit")));
-            data.add(new Quad(PUBLIC, unit, p("resource"), resource));
-            data.add(new Quad(PUBLIC, unit, p("disclosure"), p("Public")));
+            desired.add(new Quad(PUBLIC, unit, RDF.type.asNode(), p("PublicNameMatchUnit")));
+            desired.add(new Quad(PUBLIC, unit, p("resource"), resource));
+            desired.add(new Quad(PUBLIC, unit, p("disclosure"), p("Public")));
             var sequences = data.find(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("sequence"), Node.ANY);
             try { if (sequences.hasNext()) {
                 String sequence = sequences.next().getObject().getLiteralLexicalForm();
                 Node rank = NodeFactory.createLiteralByValue(new java.math.BigInteger("32000000000000000000000000000000")
                     .add(new java.math.BigInteger(sequence)), org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
-                data.add(new Quad(PUBLIC, unit, p("updatedOrder"), rank));
-                data.add(new Quad(PUBLIC, unit, p("createdOrder"), oldCreated == null ? rank : oldCreated));
-                directory(data, resource, kind, "newest", oldCreated == null ? rank : oldCreated);
-                directory(data, resource, kind, "updated", rank);
+                Node updatedRank = !changed && oldUpdated != null ? oldUpdated : rank;
+                desired.add(new Quad(PUBLIC, unit, p("updatedOrder"), updatedRank));
+                desired.add(new Quad(PUBLIC, unit, p("createdOrder"), oldCreated == null ? rank : oldCreated));
+                directory(desired, resource, kind, "newest", oldCreated == null ? rank : oldCreated);
+                directory(desired, resource, kind, "updated", updatedRank);
             } } finally { org.apache.jena.atlas.iterator.Iter.close(sequences); }
         }
+        apply(data, prior, desired);
+    }
+    private static void collect(DatasetGraph data, Node subject, Set<Quad> result) {
+        var quads = data.find(PUBLIC, subject, Node.ANY, Node.ANY);
+        try { while (quads.hasNext()) result.add(quads.next()); }
+        finally { org.apache.jena.atlas.iterator.Iter.close(quads); }
+    }
+    /** Preserve unchanged name documents and directory entries. In particular,
+     * validating a Work during classification does not rewrite its names. */
+    private static void apply(DatasetGraph data, Set<Quad> prior, Set<Quad> desired) {
+        for (Quad quad : prior) if (!desired.contains(quad)) data.delete(quad);
+        for (Quad quad : desired) if (!prior.contains(quad)) data.add(quad);
     }
     /** Ordered projection keys use the existing indexed entity field. Lucene's
      * term dictionary can seek by kind/order without sorting name documents. */
-    private static void directory(DatasetGraph data, Node resource, String kind, String order, Node rank) {
+    private static void directory(Set<Quad> desired, Node resource, String kind, String order, Node rank) {
         java.math.BigInteger value = new java.math.BigInteger(rank.getLiteralLexicalForm());
         String reverse = String.format(java.util.Locale.ROOT, "%040d", java.math.BigInteger.TEN.pow(40)
             .subtract(java.math.BigInteger.ONE).subtract(value));
         Node unit = uri(DIRECTORY + kind + ":" + order + ":" + reverse + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
-        data.add(new Quad(PUBLIC, unit, p("nameDirectoryResource"), resource));
-        data.add(new Quad(PUBLIC, unit, p("nameDirectoryOrder"), rank));
-        data.add(new Quad(PUBLIC, unit, p("publicTitle"), NodeFactory.createLiteralString("rezicspublicdirectory")));
+        desired.add(new Quad(PUBLIC, unit, p("nameDirectoryResource"), resource));
+        desired.add(new Quad(PUBLIC, unit, p("nameDirectoryOrder"), rank));
+        desired.add(new Quad(PUBLIC, unit, p("publicTitle"), NodeFactory.createLiteralString("rezicspublicdirectory")));
     }
 }

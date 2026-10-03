@@ -14,6 +14,7 @@ export function scalePreparationBudgetMs(startedAt: number, now = Date.now()): n
  * retain tmpfs. Opt-in recipes still choose scale storage before their test starts. */
 export const scaleIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/g-1031-catalogue-write.test.ts',
+  'tests/qa/integration/g-1035-catalogue-write.test.ts',
   'tests/qa/integration/g-1032-catalogue-preparation.test.ts',
 ]);
 

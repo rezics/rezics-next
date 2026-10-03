@@ -22,10 +22,8 @@ import org.apache.jena.fuseki.server.Operation;
 import org.apache.jena.fuseki.server.DataService;
 import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.rdf.model.Model;
-import org.apache.jena.rdf.model.ModelFactory;
 import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.ResourceFactory;
-import org.apache.jena.shacl.ShaclValidator;
 import org.apache.jena.shacl.Shapes;
 import org.apache.jena.shacl.ValidationReport;
 import org.apache.jena.sparql.core.DatasetGraph;
@@ -106,7 +104,7 @@ final class CommandService extends ActionService {
         if (!"application/json".equalsIgnoreCase(action.getRequestContentType())) {
             respond(action, 415, Map.of("status", "bad-request", "message", "application/json required")); return;
         }
-        try {
+        try (CommandWork work = new CommandWork()) {
             byte[] bytes = action.getRequestInputStream().readNBytes(MAX_REQUEST + 1);
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
@@ -124,7 +122,11 @@ final class CommandService extends ActionService {
             CommandPolicy.Plan plan = CommandPolicy.parse(update, receipt);
             List<Validation> validations = parseValidations(body.get("validations"));
             long deadline = System.nanoTime() + deadlineMs * 1_000_000L;
-            respond(action, 200, run(action.getDataService().getDataset(), receipt, digest, update, body.get("titleAdmission"), plan, validations, deadline));
+            CommandWork.enter("queue");
+            Map<String, Object> result = run(action.getDataService().getDataset(), receipt, digest, update, body.get("titleAdmission"), plan, validations, deadline);
+            action.getResponse().setHeader("Server-Timing", work.serverTiming());
+            action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+            respond(action, 200, result);
         } catch (UnknownProfile ex) {
             respond(action, 200, Map.of("status", "unknown-profile"));
         } catch (IllegalArgumentException ex) {
@@ -232,6 +234,7 @@ final class CommandService extends ActionService {
                                              JsonValue titleAdmission, CommandPolicy.Plan plan,
                                              List<Validation> validations, long deadline) {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
+        CommandWork.enter("preflight");
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
         boolean touchesPrivateIndex = plan.graphs().contains(CommandPolicy.PRIVATE_SEARCH);
         // Every text-wrapper commit can publish a merge or a mapped field in
@@ -271,7 +274,9 @@ final class CommandService extends ActionService {
             var releaseCoverage = ReleaseCoveragePolicy.capture(dataset, model);
             java.util.Map<String, ReleasePolicy.Prior> releases = ReleasePolicy.capture(dataset, plan);
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
-            UpdateAction.execute(plan.request(), DatasetFactory.wrap(occurrenceLabels.observed(delta == null ? dataset : delta.observed())));
+            CommandWork.enter("update");
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(occurrenceLabels.observed(delta == null ? dataset : delta.observed()))));
+            CommandWork.enter("invariants");
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
             if (!stored.equals(digest)) return Map.of("status", "conflict");
@@ -320,8 +325,10 @@ final class CommandService extends ActionService {
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
-            PublicNameProjection.refresh(delta == null ? dataset : delta.observed(), plan, receipt, validations, delta == null ? List.of() : delta.changes());
-            RatingPopulationProjection.refresh(dataset, plan, receipt, validations);
+            CommandWork.enter("projections");
+            PublicNameProjection.refresh(CommandWork.observe(delta == null ? dataset : delta.observed()), plan, receipt, validations, delta == null ? List.of() : delta.changes());
+            RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
+            CommandWork.enter("journal");
             if (delta != null) {
                 if (touchesPublicIndex && !plan.bootstrap() && !plan.rebuild()
                     && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {
@@ -337,6 +344,7 @@ final class CommandService extends ActionService {
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
                 else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
             }
+            CommandWork.enter("commit");
             dataset.commit(); commit = true;
             return result;
         } finally {
@@ -345,6 +353,7 @@ final class CommandService extends ActionService {
             } finally {
                 try {
                     dataset.end();
+                    CommandWork.enter("qualification");
                     if (commit && tracksIndex) {
                         // Keep the odd process epoch and native writer monitor until
                         // qualification completes, so no later native write races it.
@@ -708,13 +717,22 @@ final class CommandService extends ActionService {
         return Map.of("status", "invalid", "report", report);
     }
     static Map<String, Object> validateOne(DatasetGraph dataset, Validation validation) {
-        Model shapes = ModelFactory.createDefaultModel().add(validation.profile().shapes());
-        for (String focus : validation.focus()) {
-            shapes.createResource(validation.shape())
-                .addProperty(shapes.createProperty(SH, "targetNode"), shapes.createResource(focus));
-        }
+        return CommandWork.timed("validation", () -> validateFocused(dataset, validation));
+    }
+    private static Map<String, Object> validateFocused(DatasetGraph dataset, Validation validation) {
+        CommandWork.count("validation_focuses", validation.focus().size());
         Graph union = SelectedGraphUnion.readOnly(dataset, validation.graphs());
-        ValidationReport report = ShaclValidator.get().validate(Shapes.parse(shapes.getGraph()), union);
+        Shapes shapes = validation.profile().compiled();
+        var shape = shapes.getShape(NodeFactory.createURI(validation.shape()));
+        if (shape == null) throw new IllegalArgumentException("validation shape missing from compiled profile");
+        var context = org.apache.jena.shacl.engine.ValidationContext.create(shapes, union);
+        // Registry profiles have no population targets. Apply the selected
+        // immutable shape directly to the changed nodes, including SPARQL and
+        // nested constraints, without copying/reparsing it for each focus.
+        for (String focus : validation.focus())
+            org.apache.jena.shacl.validation.ValidationProc.execValidateShape(context, union,
+                shape, NodeFactory.createURI(focus));
+        ValidationReport report = context.generateReport();
         if (!report.conforms()) return Map.of("status", "invalid", "report", boundedReport(report.getModel()));
         return null;
     }
