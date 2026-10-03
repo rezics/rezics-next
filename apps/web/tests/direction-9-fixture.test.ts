@@ -411,7 +411,7 @@ describe('Direction 9 public fixture commands', () => {
           json: async () =>
             path.includes('/concepts?')
               ? { items: [{ concept: iri(), label: 'Published topic' }] }
-              : path.includes('/concepts/')
+              : path.includes('/api/main/v1/concepts/')
                 ? { name: { value: 'Published topic' } }
                 : { generation: '0', roles: [] },
         }),

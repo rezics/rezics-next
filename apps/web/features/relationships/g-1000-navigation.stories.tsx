@@ -10,6 +10,8 @@ import shellHant from '../shell/messages/zh-Hant.ts';
 import { RelationshipControl } from './control.tsx';
 import { actor, fixtureFollow, memoryRelationships, target } from './fixtures.ts';
 import { messages } from './messages.ts';
+import { spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 
 type Mode = 'pin' | 'unfollow' | 'follow';
 let current: ReturnType<typeof memoryRelationships>;
@@ -80,7 +82,7 @@ const meta = {
   component: Scene,
   args: { mode: 'pin' },
   globals: { locale: 'zh-Hant', viewport: { value: 'phone' } },
-  parameters: { route: { pathname: '/zh-Hant/r/community' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('community', 'community'), 'zh-Hant') } },
   async afterEach(context) {
     if (import.meta.env.VITE_G1000_CAPTURE !== '1') return;
     const { page } = await import('vitest/browser');

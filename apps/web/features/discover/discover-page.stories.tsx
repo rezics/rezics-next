@@ -11,6 +11,8 @@ import {
 } from './browse-fixtures.ts';
 import { emptyBrowse, type BrowseState } from './browse-state.ts';
 import { DiscoverView } from './discover-view.tsx';
+import { spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 
 function props(locale: UiLocale, state: BrowseState = emptyBrowse) {
   return {
@@ -112,7 +114,8 @@ export const Communities: Story = {
     const page = fixturePage(browseResources.filter((item) => item.kind === 'realm'));
     const links = within(communities.getByRole('list')).getAllByRole('link');
     await expect(links).toHaveLength(page.items.length);
-    await expect(links.every((link) => link.getAttribute('href')?.startsWith('/en/r/'))).toBe(true);
+    for (const [index, item] of page.items.entries())
+      await expect(links[index]).toHaveAttribute('href', localizedPath(spaceHref(item.id, 'community'), 'en'));
     // Topic suggestions also use a list, but are outside the results region.
     await expect(canvas.getByRole('region', { name: 'Conditions' }).querySelector('ul')).not.toBeNull();
   },
