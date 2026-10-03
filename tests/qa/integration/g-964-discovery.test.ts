@@ -69,8 +69,12 @@ test('G-964: query, name search and Discover page only listed public Spaces; sug
     let built = await h.json<{ generation: string; checkpoint: string; complete: boolean }>(await call('/v1/discovery/generation-builds',
       { profile: 'discovery-generation-build-v1', actingSubject: owner.actor, basis: { scope: 'global', realm: null, context: null } },
       'POST', owner.token));
-    for (let n = 0; !built.complete && n < 30; n++) built = await h.json(await call(`/v1/discovery/generations/${built.generation}/advance`,
-      { actingSubject: owner.actor, expectedCheckpoint: built.checkpoint }, 'POST', owner.token));
+    while (!built.complete) {
+      const checkpoint = built.checkpoint;
+      built = await h.json(await call(`/v1/discovery/generations/${built.generation}/advance`,
+        { actingSubject: owner.actor, expectedCheckpoint: built.checkpoint }, 'POST', owner.token));
+      expect(built.complete || built.checkpoint !== checkpoint).toBe(true);
+    }
     expect(built.complete).toBe(true);
     const head = await h.json<{ activeHeadRevision: string | null }>(await call(
       `/v1/discovery/generations/${built.generation}?actingSubject=${encodeURIComponent(owner.actor)}`, undefined, 'GET', owner.token));
