@@ -82962,6 +82962,18 @@
                             "maxItems": 8,
                             "type": "array"
                           },
+                          "unavailablePreviews": {
+                            "items": {
+                              "enum": [
+                                "serial",
+                                "credits",
+                                "rating"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
                           "verification": {
                             "enum": [
                               "unverified",
@@ -319120,7 +319132,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -319204,6 +319217,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -321057,7 +321082,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -321141,6 +321167,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -323003,7 +323041,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -323090,6 +323129,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -325100,7 +325151,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -325184,6 +325236,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -327208,7 +327272,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -327295,6 +327360,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -329335,7 +329412,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -329422,6 +329500,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -334158,7 +334248,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -334242,6 +334333,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -334906,7 +335009,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -334990,6 +335094,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -335666,7 +335782,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -335753,6 +335870,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -336574,7 +336703,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -336658,6 +336788,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -337492,7 +337634,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -337579,6 +337722,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -338429,7 +338584,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -338516,6 +338672,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -340821,7 +340989,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -340905,6 +341074,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -341569,7 +341750,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -341653,6 +341835,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -342329,7 +342523,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -342416,6 +342611,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -343237,7 +343444,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -343321,6 +343529,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -344155,7 +344375,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -344242,6 +344463,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -345092,7 +345325,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -345179,6 +345413,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -346707,7 +346953,8 @@
                                       "available",
                                       "unrated",
                                       "no-context",
-                                      "context-required"
+                                      "context-required",
+                                      "unavailable"
                                     ],
                                     "type": "string"
                                   },
@@ -346791,6 +347038,18 @@
                                   },
                                   "types": {
                                     "items": {
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  },
+                                  "unavailablePreviews": {
+                                    "items": {
+                                      "enum": [
+                                        "serial",
+                                        "credits",
+                                        "rating"
+                                      ],
                                       "type": "string"
                                     },
                                     "maxItems": 3,
@@ -347565,6 +347824,18 @@
                                       "type": "string"
                                     },
                                     "maxItems": 8,
+                                    "type": "array"
+                                  },
+                                  "unavailablePreviews": {
+                                    "items": {
+                                      "enum": [
+                                        "serial",
+                                        "credits",
+                                        "rating"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
                                     "type": "array"
                                   },
                                   "verification": {
@@ -443176,7 +443447,8 @@
                               "available",
                               "unrated",
                               "no-context",
-                              "context-required"
+                              "context-required",
+                              "unavailable"
                             ],
                             "type": "string"
                           },
@@ -443260,6 +443532,18 @@
                           },
                           "types": {
                             "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
+                          "unavailablePreviews": {
+                            "items": {
+                              "enum": [
+                                "serial",
+                                "credits",
+                                "rating"
+                              ],
                               "type": "string"
                             },
                             "maxItems": 3,
@@ -508433,6 +508717,18 @@
                               "type": "string"
                             },
                             "maxItems": 8,
+                            "type": "array"
+                          },
+                          "unavailablePreviews": {
+                            "items": {
+                              "enum": [
+                                "serial",
+                                "credits",
+                                "rating"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 3,
                             "type": "array"
                           },
                           "verification": {
