@@ -44,6 +44,30 @@ export function withinBudget(key: string): boolean {
   return key.length <= STRUCTURE_LIMITS.orderKeyBytes;
 }
 
+/** Advance an eight-digit tick at an open boundary, reserving the remaining
+ * 24 digits for later interior splits. Repeated appends/prepends do not halve
+ * the remaining gap and force a rewrite of all sibling segments. */
+export function segmentKeyBetween(low: string | null, high: string | null): string {
+  // Stage pages admit zero-padded lexicographic keys, including trailing zeros.
+  const fraction = (key: string | null) => key === null ? null : key.replace(/0+$/, '') || null;
+  if (low === null && high === null || low !== null && high !== null) {
+    const candidate = keyBetween(fraction(low), fraction(high));
+    if (low !== null && candidate <= low || high !== null && candidate >= high) {
+      throw new OrderKeyInvalid('segment interval needs a local rebalance');
+    }
+    return candidate;
+  }
+  const bound = (low ?? high)!;
+  if (!/^[0-9a-z]+$/.test(bound)) throw new OrderKeyInvalid('invalid segment key');
+  const width = STRUCTURE_LIMITS.orderKeyBytes;
+  let value = 0n;
+  for (const character of bound.padEnd(width, '0')) value = value * 36n + BigInt(digit(character));
+  const step = 36n ** BigInt(width - 8);
+  value += low === null ? -step : step;
+  if (value > 0n && value < 36n ** BigInt(width)) return value.toString(36).padStart(width, '0').replace(/0+$/, '');
+  throw new OrderKeyInvalid('segment boundary needs a local rebalance');
+}
+
 /** `count` evenly spaced short keys, used by a bounded segment rebalance. */
 export function evenKeys(count: number): string[] {
   if (!Number.isInteger(count) || count < 1) throw new OrderKeyInvalid('rebalance needs at least one key');

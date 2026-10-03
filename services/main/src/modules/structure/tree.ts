@@ -188,23 +188,28 @@ export class StructureTree<T> {
   }
 
   /** Ordered entries with from <= key < to, stopping after `limit`. */
-  async range(root: TreeRoot, from: string, to: string, limit: number, cost: TreeCost): Promise<T[]> {
+  async range(root: TreeRoot, from: string, to: string, limit: number, cost: TreeCost,
+    reverse = false): Promise<T[]> {
     const out: T[] = [];
     const visit = async (page: string): Promise<void> => {
       const node = await this.load(page, cost);
       if (node.level === 0) {
-        for (const entry of node.entries as T[]) {
+        const entries = node.entries as T[];
+        for (const entry of reverse ? entries.slice().reverse() : entries) {
           const key = this.keyOf(entry);
-          if (out.length >= limit || key >= to) return;
-          if (key >= from) out.push(entry);
+          if (out.length >= limit || (reverse ? key < from : key >= to)) return;
+          if (key >= from && key < to) out.push(entry);
         }
         return;
       }
       const children = node.entries as Child[];
-      for (const [index, child] of children.entries()) {
-        if (out.length >= limit || child.first >= to) return;
+      for (let step = 0; step < children.length; step++) {
+        const index = reverse ? children.length - step - 1 : step;
+        const child = children[index]!;
+        if (out.length >= limit) return;
+        if (child.first >= to) { if (reverse) continue; return; }
         const next = children[index + 1];
-        if (next && next.first <= from) continue;
+        if (next && next.first <= from) { if (reverse) return; continue; }
         await visit(child.page);
       }
     };

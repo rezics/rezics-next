@@ -158,7 +158,16 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
       operations: volumes.map((volume, index) => ({ op: 'insert', role: 'part', parent: root.structure, position: 'last',
         target: volume.work, displayLabel: String(index + 1), inclusion: 'required' })) }));
     const chapter = await createWork('G954 published chapter content', ['https://schema.org/DigitalDocument']);
+    const originalCanRead = stack.access.canReadWork.bind(stack.access);
+    let targetChecks = 0;
+    stack.access.canReadWork = async (...args) => {
+      if (args[2] === chapter.work) targetChecks++;
+      return originalCanRead(...args);
+    };
     const expected: string[] = [];
+    const buildStarted = performance.now();
+    const timings: Array<{ volume: number; uploadMs: number; sealMs: number; activateMs: number;
+      sealQueries: number; activateQueries: number; targetChecks: number }> = [];
     for (const [volumeIndex, volume] of volumes.entries()) {
       expected.push(root.occurrences[volumeIndex]!);
       const base = await json<Composition>(await call('POST', '/v1/compositions', { profile: 'book-composition',
@@ -166,6 +175,7 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
       const path = `/v1/compositions/${short(base.structure)}/stages`;
       const stage = await json<StructureStage>(await call('POST', path,
         { expectedHead: base.revision, actingSubject: member.actor }), 201);
+      const uploadStarted = performance.now();
       for (let offset = 0, page = 0; offset < 3500; offset += 256, page++) {
         const entries = Array.from({ length: Math.min(256, 3500 - offset) }, (_, index) => {
           const local = offset + index, global = volumeIndex * 3500 + local + 1;
@@ -180,11 +190,21 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
         await json(await call('PUT', `${path}/${stage.id}/pages/${page}`, { actingSubject: member.actor,
           holder: stage.holder, fence: stage.fence, entries }));
       }
+      const sealStarted = performance.now(), sealQueries = stack.fuseki.queries;
+      const checksBefore = targetChecks;
       await json(await call('POST', `${path}/${stage.id}/seal`,
         { actingSubject: member.actor, holder: stage.holder, fence: stage.fence }));
+      const activateStarted = performance.now(), activateQueries = stack.fuseki.queries;
       const activated = await json<StructureStage>(await call('POST', `${path}/${stage.id}/activate`, { actingSubject: member.actor }));
       expect(activated.status).toBe('activated'); expect(activated.placementCount).toBe(3500);
+      expect(targetChecks - checksBefore).toBe(2);
+      timings.push({ volume: volumeIndex + 1, uploadMs: sealStarted - uploadStarted,
+        sealMs: activateStarted - sealStarted, activateMs: performance.now() - activateStarted,
+        sealQueries: activateQueries - sealQueries, activateQueries: stack.fuseki.queries - activateQueries,
+        targetChecks: targetChecks - checksBefore });
     }
+    console.log('G1014: 10503-occurrence API build', JSON.stringify({ timings,
+      buildMs: performance.now() - buildStarted, millisecondsPerOccurrence: (performance.now() - buildStarted) / 10_500 }));
     expect(expected).toHaveLength(10_503);
     expect(Date.now() - started).toBeLessThan(600_000);
     const read = (query: Record<string, string> = {}) => app.handle(new Request(
@@ -214,5 +234,6 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
       matches.push(...resumed.items); searchedCursor = resumed.nextCursor;
     }
     expect(matches.some(item => item.ordinal > 3000 && item.labels.some(label => label.value.includes('10001')))).toBe(true);
+    console.log('G1014: 10503-occurrence journey', JSON.stringify({ elapsedMs: Date.now() - started }));
   } finally { await stack.stop(); }
 }, 600_000);

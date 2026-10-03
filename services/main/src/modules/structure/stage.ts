@@ -188,6 +188,9 @@ export class StructureStageStore {
     if (byId.size !== records.length) throw new StructureStageInvalid('stage repeats an occurrence');
     const segments = new Map<string, number>();
     const order = new Map<string, OrderEntry>();
+    // Authorization belongs to this seal request, not each use of the target.
+    // Activation makes a fresh decision so revocation between requests is seen.
+    const readableTargets = new Set<string>();
     for (const record of records) {
       checkOccurrenceRecord(record, 'book-composition');
       if (record.state !== 'active') continue;
@@ -205,8 +208,9 @@ export class StructureStageStore {
       if (chain.size > deepestLevel(book, record.role)) {
         throw new StructureStageInvalid('stage nests deeper than a Book allows');
       }
-      if (record.target && !await input.canReadTarget(record.target)) {
-        throw new StructureStageUnavailable('staged target is undisclosed');
+      if (record.target && !readableTargets.has(record.target)) {
+        if (!await input.canReadTarget(record.target)) throw new StructureStageUnavailable('staged target is undisclosed');
+        readableTargets.add(record.target);
       }
       const segment = `${record.parent}\0${record.segmentKey}`;
       segments.set(segment, (segments.get(segment) ?? 0) + 1);

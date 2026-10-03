@@ -16,12 +16,12 @@ import { BOOK_DIVISIONS, InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MAN
   type StructureProfile } from './format.ts';
 import { COMPOSITION_PROFILE, CompositionCorrupt, CompositionUnavailable, NATIVE_ID, ROLE_IRI,
   derivedId, orderTreeKey, placementIri, placementRecord, readCompositionHeader,
-  readPlacements, readPublishedVariants, readSegments, recordTreeKey, structureIri,
+  readPlacements, readPublishedVariants, readSegment, readSegments, recordTreeKey, structureIri,
   type CompositionHeader, type Label, type PlacementState, type SegmentState, type Selection }
   from './graph.ts';
 import { deepestLevel, isCatalogTarget, structureProfileFor, structureProfileForAction,
   type StructureProfileRegistration } from './profiles.ts';
-import { evenKeys, keyBetween, withinBudget } from './order-key.ts';
+import { OrderKeyInvalid, evenKeys, keyBetween, segmentKeyBetween, withinBudget } from './order-key.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, StructureTree, newCost,
   type TreeCost } from './tree.ts';
 
@@ -707,12 +707,15 @@ class Working {
   readonly originalSegments = new Map<string, string | null>();
   private readonly parentSegments = new Map<string, string[]>();
   private readonly members = new Map<string, string[]>();
+  private readonly indexedSegments = new Map<string, string>();
+  private readonly soughtSegments = new Map<string, SegmentState | null>();
   private allocated = 0;
   activeDelta = 0;
   rebalanced = 0;
 
   constructor(private readonly env: WorkActivationEnvironment, readonly header: CompositionHeader,
-    private readonly seed: string, readonly revision: string) {}
+    private readonly seed: string, readonly revision: string,
+    private readonly manifest: StructureManifest, private readonly cost: TreeCost) {}
 
   private remember(state: PlacementState): void {
     if (!this.placements.has(state.occurrence)) {
@@ -734,6 +737,7 @@ class Working {
     if (!this.segments.has(segment.segment)) {
       this.segments.set(segment.segment, segment);
       this.originalSegments.set(segment.segment, JSON.stringify(segment));
+      this.indexedSegments.set(`${segment.parent}\0${segment.key}`, segment.segment);
     }
   }
 
@@ -760,7 +764,8 @@ class Working {
     if (!ids) {
       const loaded = await readSegments(this.env, this.header.generation, [parent]);
       for (const segment of loaded) this.rememberSegment(segment);
-      ids = loaded.map(segment => segment.segment);
+      ids = [...this.segments.values()].filter(segment => segment.parent === parent)
+        .sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0).map(segment => segment.segment);
       this.parentSegments.set(parent, ids);
     }
     return ids;
@@ -770,6 +775,65 @@ class Working {
     const segment = this.segments.get(id);
     if (!segment) throw new CompositionCorrupt('order segment is not loaded');
     return segment;
+  }
+
+  async loadSegment(id: string): Promise<SegmentState> {
+    if (!this.segments.has(id)) this.rememberSegment(await readSegment(this.env, this.header.generation, { segment: id }));
+    return this.segment(id);
+  }
+
+  private async indexedSegment(entry: OrderEntry): Promise<SegmentState> {
+    const key = `${entry.parent}\0${entry.segmentKey}`;
+    let id = this.indexedSegments.get(key);
+    if (!id) {
+      const segment = await readSegment(this.env, this.header.generation, { occurrence: entry.occurrence });
+      if (segment.parent !== entry.parent || segment.key !== entry.segmentKey) {
+        throw new StructureObjectCorrupt('composition segment differs from its retained order');
+      }
+      this.rememberSegment(segment);
+      id = segment.segment;
+      this.indexedSegments.set(key, id);
+    }
+    return this.segment(id);
+  }
+
+  /** Immutable index seeks plus pending changes select one boundary/neighbor.
+   * Only segment keys rewritten in this command can need a repeated seek. */
+  async seekSegment(parent: string, key: string | null, reverse: boolean): Promise<SegmentState | undefined> {
+    const prefix = `${parent}\u0001`, upper = `${parent}\u0002`;
+    let from = !reverse && key !== null ? `${prefix}${key}\u0002` : prefix;
+    let to = reverse && key !== null ? `${prefix}${key}` : upper;
+    const seekKey = `${parent}\0${key ?? ''}\0${reverse}`;
+    let stored = this.soughtSegments.get(seekKey) ?? undefined;
+    while (!this.soughtSegments.has(seekKey)) {
+      const [entry] = await orderTree(structureObjects(this.env)).range(this.manifest.order,
+        from, to, 1, this.cost, reverse);
+      if (!entry) { this.soughtSegments.set(seekKey, null); break; }
+      const segment = await this.indexedSegment(entry);
+      if (segment.key === entry.segmentKey) {
+        stored = segment; this.soughtSegments.set(seekKey, segment); break;
+      }
+      if (reverse) to = `${prefix}${entry.segmentKey}`;
+      else from = `${prefix}${entry.segmentKey}\u0002`;
+    }
+    for (const segment of this.segments.values()) {
+      if (segment.parent !== parent || key !== null && (reverse ? segment.key >= key : segment.key <= key)) continue;
+      if (!stored || (reverse ? segment.key > stored.key : segment.key < stored.key)) stored = segment;
+    }
+    return stored;
+  }
+
+  invalidateSegmentSeeks(): void { this.soughtSegments.clear(); }
+
+  async hasChildren(parent: string): Promise<boolean> {
+    if ([...this.placements.values()].some(state => state.active && state.parent === parent)) return true;
+    const entries = await orderTree(structureObjects(this.env)).range(this.manifest.order,
+      `${parent}\u0001`, `${parent}\u0002`, MAX_OPERATIONS + 1, this.cost);
+    for (const entry of entries) {
+      const pending = this.placements.get(entry.occurrence);
+      if (!pending || pending.active && pending.parent === parent) return true;
+    }
+    return false;
   }
 
   async membersOf(id: string): Promise<string[]> {
@@ -791,31 +855,38 @@ class Working {
     this.segments.set(segment.segment, segment);
     this.originalSegments.set(segment.segment, null);
     this.members.set(segment.segment, []);
-    const ids = this.parentSegments.get(parent)!;
-    ids.splice(after === undefined ? ids.length : ids.indexOf(after) + 1, 0, segment.segment);
+    const ids = this.parentSegments.get(parent);
+    if (ids) ids.splice(after === undefined ? ids.length : ids.indexOf(after) + 1, 0, segment.segment);
     return segment;
   }
 }
 
-async function rebalanceSegmentKeys(w: Working, parent: string): Promise<void> {
-  const ids = await w.segmentsOf(parent);
-  const keys = evenKeys(ids.length);
-  for (const [index, id] of ids.entries()) {
-    const segment = w.segment(id);
-    segment.key = keys[index]!;
-    for (const occurrence of await w.membersOf(id)) (await w.get(occurrence))!.segmentKey = segment.key;
+async function rebalanceSegmentKeys(w: Working, segment: SegmentState): Promise<void> {
+  const previous = await w.seekSegment(segment.parent, segment.key, true);
+  const next = await w.seekSegment(segment.parent, segment.key, false);
+  let key: string;
+  try {
+    key = segmentKeyBetween(previous?.key ?? null, next?.key ?? null);
+    if (!withinBudget(key) || !withinBudget(segmentKeyBetween(key, next?.key ?? null))) throw new OrderKeyInvalid('dense interval');
+  } catch (error) {
+    if (!(error instanceof OrderKeyInvalid)) throw error;
+    throw new CompositionConflict('dense segment keys require staged replacement');
   }
+  segment.key = key;
+  w.invalidateSegmentSeeks();
+  for (const occurrence of await w.membersOf(segment.segment)) (await w.get(occurrence))!.segmentKey = key;
 }
 
-/** Move the upper half of a full segment into a new neighbour; at most 256 uses change. */
+/** Move the upper half of a full segment into a new neighbour; at most 32 uses change. */
 async function split(w: Working, segment: SegmentState): Promise<void> {
   const members = await w.membersOf(segment.segment);
-  const ids = await w.segmentsOf(segment.parent);
-  const next = ids[ids.indexOf(segment.segment) + 1];
-  let key = keyBetween(segment.key, next ? w.segment(next).key : null);
-  if (!withinBudget(key)) {
-    await rebalanceSegmentKeys(w, segment.parent);
-    key = keyBetween(segment.key, next ? w.segment(next).key : null);
+  const next = await w.seekSegment(segment.parent, segment.key, false);
+  let key: string | null;
+  try { key = segmentKeyBetween(segment.key, next?.key ?? null); }
+  catch (error) { if (!(error instanceof OrderKeyInvalid)) throw error; key = null; }
+  if (key === null || !withinBudget(key)) {
+    await rebalanceSegmentKeys(w, segment);
+    key = segmentKeyBetween(segment.key, next?.key ?? null);
   }
   const created = w.newSegment(segment.parent, key, segment.segment);
   const upper = members.splice(Math.floor(members.length / 2));
@@ -831,18 +902,16 @@ async function split(w: Working, segment: SegmentState): Promise<void> {
 }
 
 async function locate(w: Working, parent: string, position: Position): Promise<{ segment: SegmentState; index: number }> {
-  const ids = await w.segmentsOf(parent);
   if (typeof position === 'object') {
     const sibling = await w.get(position.after);
     if (!sibling?.active || sibling.parent !== parent) {
       throw new CompositionConflict('position sibling is not an active child of the parent');
     }
-    await w.segmentsOf(parent);
-    const segment = w.segment(sibling.segment!);
+    const segment = await w.loadSegment(sibling.segment!);
     return { segment, index: (await w.membersOf(segment.segment)).indexOf(sibling.occurrence) + 1 };
   }
-  if (!ids.length) return { segment: w.newSegment(parent, keyBetween(null, null)), index: 0 };
-  const segment = w.segment(position === 'first' ? ids[0]! : ids.at(-1)!);
+  const found = await w.seekSegment(parent, null, position === 'last');
+  const segment = found ?? w.newSegment(parent, segmentKeyBetween(null, null));
   return { segment, index: position === 'first' ? 0 : (await w.membersOf(segment.segment)).length };
 }
 
@@ -855,23 +924,24 @@ async function place(w: Working, state: PlacementState, parent: string, position
   const members = await w.membersOf(at.segment.segment);
   const key = async (index: number) => index >= 0 && index < members.length
     ? (await w.get(members[index]!))!.orderKey! : null;
-  const candidate = keyBetween(await key(at.index - 1), await key(at.index));
+  let candidate: string | null;
+  try { candidate = keyBetween(await key(at.index - 1), await key(at.index)); }
+  catch (error) { if (!(error instanceof OrderKeyInvalid)) throw error; candidate = null; }
   members.splice(at.index, 0, state.occurrence);
   at.segment.count++;
   Object.assign(state, { active: true, parent, segment: at.segment.segment,
-    segmentKey: at.segment.key, orderKey: candidate });
+    segmentKey: at.segment.key });
   delete state.removedBy;
-  if (!withinBudget(candidate)) {
+  if (candidate === null || !withinBudget(candidate)) {
     // Bounded local rebalance: only this segment's keys are rewritten.
     const keys = evenKeys(members.length);
     for (const [index, occurrence] of members.entries()) (await w.get(occurrence))!.orderKey = keys[index]!;
     w.rebalanced += members.length;
-  }
+  } else state.orderKey = candidate;
 }
 
 async function unplace(w: Working, state: PlacementState): Promise<void> {
-  await w.segmentsOf(state.parent);
-  const segment = w.segment(state.segment!);
+  const segment = await w.loadSegment(state.segment!);
   const members = await w.membersOf(segment.segment);
   members.splice(members.indexOf(state.occurrence), 1);
   segment.count--;
@@ -950,9 +1020,7 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
     return;
   }
   if (operation.op === 'remove') {
-    for (const id of await w.segmentsOf(state.occurrence)) {
-      if (w.segment(id).count > 0) throw new CompositionConflict('a group with children cannot be removed');
-    }
+    if (await w.hasChildren(state.occurrence)) throw new CompositionConflict('a group with children cannot be removed');
     await unplace(w, state);
     state.active = false;
     state.tombstone = true;
@@ -1112,7 +1180,10 @@ export async function changeComposition(env: WorkActivationEnvironment,
       FILTER(?head != ${iri(intent.expectedHead)})`);
     return { terminal: await settled(env, intent.admission), committed: false, occurrences };
   }
-  const w = new Working(env, header, `${intent.admission.id}\0composition`, revision);
+  const objects = structureObjects(env);
+  const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0, rebalanced: 0 };
+  const manifest = await readManifest(objects, header, cost);
+  const w = new Working(env, header, `${intent.admission.id}\0composition`, revision, manifest, cost);
   const profile = structureProfileFor(header.profile);
   let targetInvariant: { guard: string; rejection: string; invalid?: boolean } | undefined;
   try {
@@ -1125,10 +1196,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     await sealRejection(env, intent.admission, 'composition.change', 'TopologyConflict', headGuard);
     return { terminal: await settled(env, intent.admission), committed: false, occurrences };
   }
-  const objects = structureObjects(env);
-  const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0,
-    rebalanced: w.rebalanced };
-  const manifest = await readManifest(objects, header, cost);
+  cost.rebalanced = w.rebalanced;
   const records = new Map<string, OccurrenceRecord | null>();
   const order = new Map<string, OrderEntry | null>();
   const deletes: string[] = [];
@@ -1624,6 +1692,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   }
   const byOccurrence = new Map(records.map(record => [record.occurrence, record]));
   const orderKeys = new Set(ordered.map(orderTreeKey));
+  const readableTargets = new Set<string>();
   for (const record of records) {
     try { checkOccurrenceRecord(record, header.profile, registration.catalogTargetTypes,
       registration.selectionRequiredRoles ?? registration.targetRoles, registration.selectionOptionalRoles); }
@@ -1636,10 +1705,15 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       && (!orderKeys.has(orderTreeKey(record as OrderEntry))
         || record.parent !== header.structure
           && (byOccurrence.get(record.parent)?.role !== 'group'
-            || byOccurrence.get(record.parent)?.state !== 'active'))
-      || record.target && !isCatalogTarget(registration, record.target)
-        && record.state === 'active' && !await intent.canReadTarget(record.target)) {
+            || byOccurrence.get(record.parent)?.state !== 'active'))) {
       throw new CompositionConflict('restored Structure has an unavailable or undisclosed dependency');
+    }
+    if (record.target && !isCatalogTarget(registration, record.target)
+      && record.state === 'active' && !readableTargets.has(record.target)) {
+      if (!await intent.canReadTarget(record.target)) {
+        throw new CompositionConflict('restored Structure has an unavailable or undisclosed dependency');
+      }
+      readableTargets.add(record.target);
     }
   }
   const active = records.filter(record => record.state === 'active');
