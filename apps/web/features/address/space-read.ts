@@ -2,6 +2,7 @@ import type { Discovery, JoinPage } from '../manage/settings-api.ts';
 import type { RealmHeader } from '../realm/types.ts';
 import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
+import { serverRead, serverDeadline } from '../api/server-read.ts';
 import type { ResolvedAddress } from './client.ts';
 import { parseAddressSegment } from './path.ts';
 
@@ -27,15 +28,21 @@ export async function readSpacePage(
   const origin = options.origin ?? serviceOrigin('MAIN_ORIGIN');
   const headers = { 'accept-language': languages, 'x-rezics-display-languages': languages };
   const read = async (path: string, personal = false) =>
-    fetch(`${origin}${path}`, {
-      headers: await mainReadHeaders({
-        ...headers,
-        ...(personal && options.token ? { authorization: `Bearer ${options.token}` } : {}),
-      }, options.incoming),
-      redirect: 'manual',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(10_000),
-    });
+    serverRead(
+      `${origin}${path}`,
+      {
+        headers: await mainReadHeaders(
+          {
+            ...headers,
+            ...(personal && options.token ? { authorization: `Bearer ${options.token}` } : {}),
+          },
+          options.incoming,
+        ),
+        redirect: 'manual',
+        cache: 'no-store',
+      },
+      { deadlineAt: await serverDeadline(options.incoming) },
+    );
   try {
     let realm = options.address?.capabilities?.realm?.slice(-36);
     if (options.address && !realm) return { kind: 'missing' };
