@@ -131,7 +131,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-832-lexicon.test.ts',
   'tests/qa/integration/g-840-catalogue.test.ts',
   'tests/qa/integration/g-894-progress-summary.test.ts',
-  'tests/qa/integration/g-904-derived.test.ts',
   // Release traversal probes own their complete global publication and owner inventory.
   'tests/qa/integration/g-851-release-query.test.ts',
   // Suitability's complete resource reads require matching global Rating Context and Access histories.
