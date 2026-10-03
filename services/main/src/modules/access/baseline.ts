@@ -213,7 +213,15 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
         FILTER NOT EXISTS { <urn:rezics:content:revision:${sourceRevision}> a rv:ErasedRevision }
       }`;
   }
-  else if (target.kind === 'rating') pattern = `GRAPH ${current} { ${globalContextPattern(target.id)} }`;
+  else if (target.kind === 'rating') pattern = `GRAPH ${current} {
+    { ${globalContextPattern(target.id)} } UNION {
+      ${resource} a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?ratingRealm ;
+        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+        rv:ratingPopulationPolicy <https://rezics.com/definition/rating-account-principal-population-v1> .
+      ?ratingRealm a rv:Realm ; rv:realmState rv:Active ; rv:ratingContext ${resource} ; rv:space ?ratingSpace .
+      ?ratingSpace a rv:Space ; rv:realmCapability ?ratingRealm ; rv:disclosure rv:Public .
+    }
+  }`;
   else if (target.kind === 'contribution') pattern = `GRAPH ${current} {
     ${resource} a rv:TextContribution ; rv:author ${iri(actingSubject)} ; rv:work ?work .
     } ${unerased('?work')}`;

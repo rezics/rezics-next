@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { checked, publishedWiki } from './g-929-wiki-support.ts';
+import { checked, publishedWiki, wikiSuitability } from './g-929-wiki-support.ts';
 import type { WikiHistory } from '../../../services/main/src/modules/wiki/history.ts';
 import { DisclosureUnavailable } from '../../../services/main/src/modules/disclosure/read.ts';
+import { ControlUnavailable } from '../../../services/main/src/modules/access/topology-control.ts';
 import { readWikiExport } from '../../../services/main/src/modules/export/wiki.ts';
 import {
   ExportSourceNotFound,
@@ -227,14 +228,18 @@ test('G929: current exact record, name and pin removals precede history and expo
   }
 }, 180_000);
 
-test('G929: scoped and pinned history/export preserve controls and withhold a rated Work on every page', async () => {
+test('G929: scoped and pinned history/export retain category presentation and enforce removal on every page', async () => {
   const wiki = await publishedWiki();
   try {
     const permitted = await history(wiki);
     expect(permitted.claims).toHaveLength(1);
     expect(JSON.stringify(permitted)).toContain('Secret royal heir');
-    for (const scope of scopes(wiki, permitted))
-      expect((await history(wiki, scope)).work).toBe(wiki.work.work);
+    const permittedScopes = new Map<string, History>();
+    for (const scope of scopes(wiki, permitted)) {
+      const shown = await history(wiki, scope);
+      expect(shown.work).toBe(wiki.work.work);
+      permittedScopes.set(scope, shown);
+    }
     const first = await history(wiki, `${pin(permitted)}&limit=1`);
     expect(first.nextCursor).not.toBeNull();
     const exported = await checked<{ manifestId: string; plan: unknown }>(
@@ -259,6 +264,52 @@ test('G929: scoped and pinned history/export preserve controls and withhold a ra
       ).claims,
     ).toEqual([]);
     const assessment = await rate(wiki, wiki.work.work, ['r18']);
+    // Maintainer revision 2026-10-02: ratings govern interactive presentation,
+    // while current Access and governance still fence all history/export scopes.
+    const presentation = await wikiSuitability(wiki);
+    expect(presentation.viewer.age).toBe('unknown');
+    expect(presentation.items[0]?.assessment).toMatchObject({
+      status: 'assessed',
+      revision: assessment.assessment.revision,
+      labels: ['r18'],
+    });
+    expect(presentation.items[0]?.eligible).toBe(false);
+    expect(presentation.items[0]?.reasons).toContain('age_unknown');
+    for (const scope of scopes(wiki, permitted))
+      expect(await history(wiki, scope)).toEqual(permittedScopes.get(scope));
+    expect((await history(wiki, pin(permitted))).claims).toEqual(permitted.claims);
+    expect(
+      await checked<History>(
+        await wiki.call(
+          'GET',
+          path(wiki, `${pin(permitted)}&limit=1&cursor=${first.nextCursor}`),
+          undefined,
+          wiki.reader.token,
+        ),
+      ),
+    ).toMatchObject({ work: wiki.work.work });
+    for (const scope of [undefined, { entity: wiki.entity }, { section: 'characters' as const }])
+      expect(
+        JSON.stringify(await checked(await exportWiki(wiki, permitted, scope), 201)),
+      ).toContain('Royal identity');
+    expect(
+      JSON.stringify(
+        await checked(
+          await wiki.call(
+            'GET',
+            `/v1/exports/${exported.manifestId}`,
+            undefined,
+            wiki.reader.token,
+          ),
+        ),
+      ),
+    ).toContain('Royal identity');
+    const head = (
+      await wiki.f.fuseki.query(
+        `SELECT ?head WHERE { GRAPH <${GRAPHS.current}> { <${wiki.work.work}> <${RV}head> ?head } }`,
+      )
+    ).results!.bindings[0]!.head!.value;
+    const release = await removal(wiki, wiki.work.work, 'title', head);
     const missing = await absent(
       await wiki.call(
         'GET',
@@ -284,7 +335,7 @@ test('G929: scoped and pinned history/export preserve controls and withhold a ra
     await absent(
       await wiki.call('GET', `/v1/exports/${exported.manifestId}`, undefined, wiki.reader.token),
     );
-    await rate(wiki, wiki.work.work, [], assessment.assessment.revision);
+    await release();
     expect((await history(wiki, pin(permitted))).claims).toEqual(permitted.claims);
     expect((await exportWiki(wiki, permitted)).status).toBe(201);
     await wiki.f.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [
@@ -358,6 +409,18 @@ test('G929: restricted references disappear before pagination, including pinned 
       `semantic:read:${reference}`,
     ]);
     await rate(wiki, reference, ['r18g']);
+    const presentation = await wikiSuitability(wiki, [reference]);
+    expect(presentation.items[0]?.assessment).toMatchObject({
+      status: 'assessed',
+      labels: ['r18g'],
+    });
+    expect(presentation.items[0]?.eligible).toBe(false);
+    expect(presentation.items[0]?.reasons).toContain('grotesque_opt_in_required');
+    expect((await history(wiki, pin(permitted))).claims).toEqual(permitted.claims);
+    expect(JSON.stringify(await checked(await exportWiki(wiki, permitted), 201))).toContain(
+      'Hidden witness',
+    );
+    await removal(wiki, reference, 'record', wiki.reference!.revision);
     expect((await history(wiki, pin(permitted))).claims).toHaveLength(1);
     expect(JSON.stringify(await checked(await exportWiki(wiki, permitted), 201))).not.toContain(
       'Hidden witness',
@@ -392,13 +455,27 @@ test('G929: exact erased pins and current removal cannot be recovered through hi
   }
 }, 180_000);
 
-test('G929: assessment outage and revocation during hydration/export planning fail closed', async () => {
+test('G929: assessment/disclosure outages and Access revocation during hydration fail closed', async () => {
   const wiki = await publishedWiki();
   const disclosure = wiki.governance.disclosure.read.bind(wiki.governance.disclosure);
+  const suitability = wiki.deps.suitability!.read.bind(wiki.deps.suitability);
   try {
     const permitted = await history(wiki);
+    wiki.deps.suitability!.read = async () => {
+      throw new ControlUnavailable('Assessment owner unavailable');
+    };
+    await absent(
+      await wiki.call(
+        'POST',
+        '/v1/suitability/reads',
+        { targets: [wiki.work.work], actingSubject: wiki.reader.actor },
+        wiki.reader.token,
+      ),
+      503,
+    );
+    wiki.deps.suitability!.read = suitability;
     wiki.governance.disclosure.read = async () => {
-      throw new DisclosureUnavailable('Assessment owner unavailable');
+      throw new DisclosureUnavailable('Disclosure owner unavailable');
     };
     for (const scope of scopes(wiki, permitted))
       await absent(await wiki.call('GET', path(wiki, scope), undefined, wiki.reader.token), 503);
@@ -407,13 +484,16 @@ test('G929: assessment outage and revocation during hydration/export planning fa
     // The quote owner pauses after the initial admission without moving Fuseki.
     const withheld = wiki.deps.wikiEvidence!.withheld.bind(wiki.deps.wikiEvidence);
     wiki.deps.wikiEvidence!.withheld = async (...args) => {
-      await rate(wiki, wiki.work.work, ['r18']);
+      await wiki.f.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [
+        `work:read:${wiki.work.work}`,
+      ]);
       wiki.deps.wikiEvidence!.withheld = withheld;
       return withheld(...args);
     };
     await absent(await wiki.call('GET', path(wiki), undefined, wiki.reader.token));
   } finally {
     wiki.governance.disclosure.read = disclosure;
+    wiki.deps.suitability!.read = suitability;
     await wiki.f.stop();
   }
 }, 180_000);
@@ -435,7 +515,6 @@ test('G929: export uses its own disclosure channel and fences an asynchronous ri
     await absent(await exportWiki(wiki, permitted));
     expect(channels).toContain('export');
     wiki.governance.disclosure.read = disclosure;
-    let ratedRevision: string | null = null;
     await expect(
       readWikiExport(
         wiki.deps,
@@ -446,13 +525,18 @@ test('G929: export uses its own disclosure channel and fences an asynchronous ri
         permitted.sourcePosition,
         'quotation',
         async () => {
-          ratedRevision = (await rate(wiki, wiki.work.work, ['r18'])).assessment.revision;
+          await wiki.f.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [
+            `work:read:${wiki.work.work}`,
+          ]);
           return [];
         },
       ),
     ).rejects.toBeInstanceOf(ExportSourceNotFound);
     // A changed derivative during rights planning also invalidates a manifest.
-    await rate(wiki, wiki.work.work, [], ratedRevision);
+    await wiki.f.accessPool.query('UPDATE access.scope_gate SET open=true WHERE id=$1', [
+      `work:read:${wiki.work.work}`,
+    ]);
+    await wiki.holder.grant(`semantic:read:${wiki.entity}`, 'semantic.read');
     await expect(
       readWikiExport(
         wiki.deps,
@@ -463,7 +547,9 @@ test('G929: export uses its own disclosure channel and fences an asynchronous ri
         permitted.sourcePosition,
         'quotation',
         async () => {
-          await rate(wiki, wiki.entity, ['r18']);
+          await wiki.f.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [
+            `semantic:read:${wiki.entity}`,
+          ]);
           return [];
         },
       ),

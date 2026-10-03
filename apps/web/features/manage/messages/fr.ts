@@ -261,6 +261,7 @@ export default {
   permMembers: 'Gérer les membres', permMembersHelp: 'Ajouter, retirer et bannir des personnes.',
   permRules: 'Publier les règles', permRulesHelp: 'Publier de nouvelles versions des règles de la communauté.',
   permSettings: 'Modifier les paramètres', permSettingsHelp: 'Choisir qui peut contribuer et modifier les autres paramètres de la communauté.',
+  permRatings: 'Configurer les évaluations', permRatingsHelp: 'Créer des questions d’évaluation et choisir comment cette communauté regroupe les notes.',
   permRoles: 'Gérer les rôles', permRolesHelp: 'Créer des rôles, modifier leurs permissions et les attribuer.',
   permReview: 'Examiner les contributions', permReviewHelp: 'Approuver, refuser ou renvoyer les œuvres et les chapitres proposés à la communauté.',
   permAdopt: 'Adopter dans la communauté', permAdoptHelp: 'Ajouter les œuvres acceptées à la collection de la communauté et publier sa sélection.',

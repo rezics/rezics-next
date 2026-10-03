@@ -323,9 +323,9 @@ test('P0.8: Content publication validates exact current/revision foci and recipr
 test('P0.8: admitted public eligibility binds current head, rights, scope and receipt', async () => {
   const run = async (name: string, change: { rights?: string; scope?: string;
     receiptAdmission?: string; omitVariant?: boolean; omitDecision?: boolean } = {}) => {
-    const base = await seedContentSearchBase(`eligibility-${name}`, false);
-    const {variant, work, publication, eligibility, epoch} = base;
-    const receipt = `${base.id}:receipt`;
+    const fixture = await seedContentSearchBase(`eligibility-${name}`, false);
+    const {variant, work, publication, eligibility, epoch} = fixture;
+    const receipt = `${fixture.id}:receipt`;
     const admission = '00000000-0000-4000-8000-000000000003';
     const scope = change.scope ?? `content:search-eligibility:${variant}`;
     const fields = `<${rv}variant> <${variant}> ; <${rv}resource> <${work}> ;

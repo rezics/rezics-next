@@ -3,7 +3,7 @@ import type { RealmPermission, RoleImpact } from './types.ts';
 // Realm permissions in the order people think about them, each with a plain
 // name and what it lets someone do (`realmPermissions` in realm-admin/contract.ts).
 export const permissionOrder = ['governance.moderate', 'review.decide', 'publication.adopt', 'realm.members.manage',
-  'governance.rule.publish', 'realm.settings.manage', 'realm.roles.manage'] as const satisfies readonly RealmPermission[];
+  'governance.rule.publish', 'realm.settings.manage', 'rating.configure', 'realm.roles.manage'] as const satisfies readonly RealmPermission[];
 
 /** Message keys for each permission's name and description. */
 export const permissionText = {
@@ -14,6 +14,7 @@ export const permissionText = {
   'governance.rule.publish': { name: 'permRules', help: 'permRulesHelp' },
   'realm.settings.manage': { name: 'permSettings', help: 'permSettingsHelp' },
   'realm.roles.manage': { name: 'permRoles', help: 'permRolesHelp' },
+  'rating.configure': { name: 'permRatings', help: 'permRatingsHelp' },
 } as const satisfies Record<RealmPermission, { name: string; help: string }>;
 
 export const sortPermissions = (permissions: readonly RealmPermission[]) =>

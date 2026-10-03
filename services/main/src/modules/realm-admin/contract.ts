@@ -11,9 +11,9 @@ import { localizedCommunityRule, MAX_RULES } from '../realm-profile/schema.ts';
 // https://support.reddithelp.com/hc/en-us/articles/15484464549524-User-Management-banning-and-muting
 // (consulted 2026-09-28); Access remains the enforcement authority here.
 export const REALM_ADMIN_COST = { page: 50, roles: 32, assignments: 200,
-  permissions: 7, grantRows: 4096, statementTimeoutMs: 5000, lockTimeoutMs: 2000 } as const;
+  permissions: 8, grantRows: 4096, statementTimeoutMs: 5000, lockTimeoutMs: 2000 } as const;
 export const realmPermissions = ['governance.moderate', 'governance.rule.publish',
-  'realm.members.manage', 'realm.roles.manage', 'realm.settings.manage', 'review.decide', 'publication.adopt'] as const;
+  'realm.members.manage', 'realm.roles.manage', 'realm.settings.manage', 'review.decide', 'publication.adopt', 'rating.configure'] as const;
 export type RealmPermission = typeof realmPermissions[number];
 export const spaceVisibility = t.Union([t.Literal('public'), t.Literal('private')]);
 export const resourceListing = t.Union([t.Literal('listed'), t.Literal('unlisted')]);
@@ -21,7 +21,7 @@ export const realmHistory = t.Union([t.Literal('everything'), t.Literal('from-ad
 export const realmAdmission = t.Union([t.Literal('open'), t.Literal('request'), t.Literal('invitation')]);
 export const realmPermission = t.Union([t.Literal('governance.moderate'), t.Literal('governance.rule.publish'),
   t.Literal('realm.members.manage'), t.Literal('realm.roles.manage'), t.Literal('realm.settings.manage'),
-  t.Literal('review.decide'), t.Literal('publication.adopt')]);
+  t.Literal('review.decide'), t.Literal('publication.adopt'), t.Literal('rating.configure')]);
 export const generation = t.String({ pattern: '^(0|[1-9][0-9]{0,17})$' });
 export const reason = t.String({ minLength: 1, maxLength: 2000 });
 export const commandFields = { actingSubject: readId, expectedGeneration: generation, reason };

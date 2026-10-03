@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import type { Static } from 'typebox';
+import type { readsResult } from '../../../services/main/src/modules/suitability/contract.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
@@ -28,6 +30,22 @@ export async function checked<T>(response: Response, status = 200): Promise<T> {
   if (response.status !== status)
     throw new Error(`Expected ${status}, got ${response.status}: ${body}`);
   return JSON.parse(body) as T;
+}
+
+/** Interactive history/export retain identities for the shared presentation
+ * assessment read; category eligibility never supplies Access authority. */
+export async function wikiSuitability(
+  wiki: Awaited<ReturnType<typeof publishedWiki>>,
+  targets = [wiki.work.work],
+) {
+  return checked<Static<typeof readsResult>>(
+    await wiki.call(
+      'POST',
+      '/v1/suitability/reads',
+      { targets, actingSubject: wiki.reader.actor },
+      wiki.reader.token,
+    ),
+  );
 }
 
 /** Real reviewed publication, graph owners and disclosure store. Account only

@@ -32,6 +32,7 @@ import { platformAdministratorAction, platformAdministratorTargetAllowed, platfo
 import { controlTransaction,requirePrincipal,requireMandate,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
+import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof } from './realm-roles-rating.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {
@@ -973,6 +974,26 @@ export class AccessAdmissionRegistry {
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
 
+      const ratingConfiguration = ['rating.context.create', 'rating.context.policy.set'].includes(request.action);
+      const savedRating = existing && ratingConfiguration ? await savedRealmRatingProof(client, existing.id) : null;
+      if (existing && savedRating) {
+        if (existing.request_digest !== request.requestDigest || existing.acting_subject !== request.actingSubject
+          || existing.authority_path !== authorityPath || existing.scope_id !== request.scope) {
+          throw new AdmissionConflict('idempotency key belongs to a different intent');
+        }
+        const dispatchEligible = ['registered', 'claimed'].includes(existing.state) && existing.eligible
+          && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
+          && !!await realmRatingProof(client, this.baselineGraph, principalId, request.actingSubject,
+            request.action, request.scope, savedRating);
+        if (!transaction) await client.query('COMMIT');
+        return { id: existing.id, principalId, actingSubject: existing.acting_subject,
+          authorityPath: existing.authority_path, scope: existing.scope_id, action: existing.action,
+          idempotencyKey: existing.idempotency_key, requestDigest: existing.request_digest,
+          authorityEpoch: existing.authority_epoch, registeredAt: existing.registered_at.toISOString(),
+          expiresAt: existing.expires_at.toISOString(), state: existing.state as RegisteredAdmission['state'],
+          dispatchEligible, replayed: true };
+      }
+
       const savedAdministrator = existing ? await savedPlatformAdministratorProof(client, existing.id) : null;
       if (existing && savedAdministrator) {
         if (existing.request_digest !== request.requestDigest
@@ -1110,7 +1131,10 @@ export class AccessAdmissionRegistry {
         throw new AdmissionDenied('media protection requires the platform administrator proof');
       }
       const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request, principalId) : null;
-      if (administrator || baseline) {
+      const rating = !existing && authorityPath === 'represented-agent' && ratingConfiguration
+        ? await realmRatingProof(client, this.baselineGraph, principalId, request.actingSubject,
+          request.action, request.scope) : null;
+      if (administrator || baseline || rating) {
         // A named grant source with its own pinned proof, recorded below in the
         // same transaction as the ordinary admission, receipt and audit outbox.
       } else if (authorityPath === 'direct-principal') {
@@ -1268,6 +1292,7 @@ export class AccessAdmissionRegistry {
         if (request.action === 'space.create') await reserveBaselineSpace(client, principalId, id, request.requestDigest);
       }
       if (administrator) await savePlatformAdministratorProof(client, id, administrator);
+      if (rating) await saveRealmRatingProof(client, id, rating);
       if (publishingProof?.path) await saveInvitedWorkProof(client, id, principalId,
         principal.enforcement_epoch, request.actingSubject, publishingProof);
       await client.query(
@@ -1348,6 +1373,12 @@ export class AccessAdmissionRegistry {
       if (principal.rows[0]?.active !== true) throw new AdmissionDenied('principal dispatch is fenced');
       await requirePlatformParticipation(client, row.principal_id);
       await requireRealmParticipation(client, row.scope_id, row.action, row.principal_id, row.acting_subject);
+      const rating = ['rating.context.create', 'rating.context.policy.set'].includes(row.action)
+        ? await savedRealmRatingProof(client, row.id) : null;
+      if (rating && !await realmRatingProof(client, this.baselineGraph, row.principal_id, row.acting_subject,
+        row.action, row.scope_id, rating)) {
+        throw new AdmissionDenied('Realm rating authority changed before claim');
+      }
       await checkEditorialAdmission(client, row.id,this.baselineGraph,this.pool, {
         principal: accountPrincipal ?? { issuer: principal.rows[0]!.account_issuer, subject: principal.rows[0]!.account_subject },
         actingSubject: row.acting_subject, action: row.action, scope: row.scope_id,

@@ -312,6 +312,10 @@ export class RealmReplyContentStore {
       JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
       JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
       WHERE p.id = $1 AND d.realm = $2 AND d.revision_id = $3 AND d.outcome = 'approved'
+        -- Origin and exact review share one current owner read. A Realm-local
+        -- reply can never be disclosed through another Realm's placement.
+        AND NOT EXISTS (SELECT 1 FROM content.reply_author origin
+          WHERE origin.reply = p.id AND origin.origin_realm IS NOT NULL AND origin.origin_realm <> $2)
         AND r.availability = 'available' AND ($4::uuid IS NULL OR d.id = $4)
         AND ($5::text IS NULL OR EXISTS (
           SELECT 1 FROM content.realm_placement_preparation placement

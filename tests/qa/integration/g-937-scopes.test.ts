@@ -88,16 +88,24 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
     expect(
       (
         await f.accessPool.query(
-          'SELECT handle,agent_id,state,claimed_at,retired_until,skeleton FROM access.agent_handle WHERE handle = $1',
+          "SELECT scope,key,holder,state FROM access.name_registry WHERE scope = 'agent' AND key = $1",
           [renamed.key],
         )
       ).rows[0],
-    ).toMatchObject({ handle: renamed.key, agent_id: f.actor, state: 'current' });
+    ).toEqual({ scope: 'agent', key: renamed.key, holder: f.actor, state: 'current' });
+    // The Agent handle bridge was removed by migration 1024. Permanent
+    // ownership is guarded by the canonical registry, including for SQL writers.
     await expect(
-      f.accessPool.query("UPDATE access.agent_handle SET state = 'retired' WHERE handle = $1", [
-        renamed.key,
+      f.accessPool.query("UPDATE access.name_registry SET holder = $2 WHERE scope = 'agent' AND key = $1", [
+        renamed.key, foreign,
       ]),
-    ).rejects.toThrow();
+    ).rejects.toThrow('Name ownership is permanent');
+    await expect(
+      f.accessPool.query("DELETE FROM access.name_registry WHERE scope = 'agent' AND key = $1", [renamed.key]),
+    ).rejects.toThrow('Name ownership is permanent');
+    await expect(
+      f.accessPool.query('DELETE FROM access.name_history WHERE revision = $1', [renamed.revision]),
+    ).rejects.toThrow('Name history is immutable');
     await f.nativeFuseki
       .update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(f.actor)} rv:profileDisclosure rv:Public } };
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(f.actor)} rv:profileDisclosure rv:Private } }`);

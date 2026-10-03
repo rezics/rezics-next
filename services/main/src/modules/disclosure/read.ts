@@ -47,8 +47,9 @@ const suitabilityChannel = (channel: DisclosureChannel) =>
 const usesSuitabilityDefault = (channel: DisclosureChannel) =>
   ['digest', 'preview', 'seo', 'sitemap', 'email', 'push'].includes(channel);
 
-/** One indexed owner query evaluates governance fences. Noninteractive delivery
- * also reads the direct target/parent suitability heads; no descendants are traversed.
+/** One indexed owner query evaluates governance and strong Work read fences.
+ * Noninteractive delivery also reads the direct target/parent suitability heads;
+ * no descendants are traversed.
  * The recovery fence is held through evaluation; no policy result is cached.
  * Revocation fences future disclosure; independent bytes already delivered cannot be recalled. */
 export class DisclosureStore implements DisclosureReader {
@@ -95,7 +96,9 @@ export class DisclosureStore implements DisclosureReader {
                   OR (e.owner = 'graph' AND e.resource = wanted.work
                     AND (wanted.owner <> 'graph' OR wanted.work <> wanted.resource)
                     AND e.component IN ('title', 'name', 'record', 'publication')
-                    AND (e.revision IS NULL OR wanted."workRevision" IS NULL OR e.revision = wanted."workRevision")))) AS restricted,
+                    AND (e.revision IS NULL OR wanted."workRevision" IS NULL OR e.revision = wanted."workRevision"))))
+              OR EXISTS (SELECT 1 FROM access.scope_gate gate
+                WHERE gate.id = 'work:read:' || wanted.work AND NOT gate.open) AS restricted,
             ${suitabilityDefault ? `COALESCE((SELECT jsonb_agg(head.labels) FROM
               (SELECT DISTINCT ref FROM unnest(ARRAY[wanted.resource, wanted.work]) AS refs(ref)
                 WHERE ref IS NOT NULL) refs

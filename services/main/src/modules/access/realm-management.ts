@@ -66,7 +66,7 @@ export class AccessRealmManagement {
 
   /** One-time owner enrollment from the server-read successful creation receipt.
    * Replaying enrollment can never recreate a subsequently revoked grant.
-   * Cost: one exact graph read (8 KiB), one admission probe and ten grant rows. */
+   * Cost: one exact graph read (8 KiB), one admission probe and eleven grant rows. */
   async initialize(principal: VerifiedPrincipal, realm: string, actor: string, env: WorkActivationEnvironment) {
     if (!native.test(realm) || !native.test(actor)) throw new RealmAdminInvalid('Invalid Realm owner');
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt ?admission WHERE {

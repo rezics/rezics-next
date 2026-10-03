@@ -44,8 +44,8 @@ test('G-908: 10 and 100 Collection members use the same graph query count with b
       `/v1/collections/${collection.slice(-36)}/changes`, { actingSubject: actor, expectedHead: head,
         operations: [{ op: 'insert', role: 'member', parent: created.structure, position: 'last', target: other.work }] },
       home.author.token));
-    // Owner-state fixture: restriction is evaluated by the real shared disclosure
-    // store, including for a signed reader with command authority over the Work.
+    // Interactive reads retain rated catalogue members; clients apply category
+    // presentation. Ratings do not replace the service's private/removal gates.
     const assessment = randomUUID();
     await home.stack.accessPool.query(`INSERT INTO access.suitability_assessment
       (id,target,labels,basis,assessor,principal_id,revision_number,authority_proof,idempotency_key,request_digest)
@@ -56,9 +56,15 @@ test('G-908: 10 and 100 Collection members use the same graph query count with b
       const query = new URLSearchParams({ limit: '100', ...(signed ? { actingSubject: actor } : {}) });
       const page = await home.json<{ occurrences: { occurrence: string; target: string }[]; next: string | null }>(
         await home.call('GET', `${path}?${query}`, undefined, signed ? home.author.token : undefined));
-      expect(page.occurrences.map(row => row.occurrence)).toEqual(changed.occurrences);
-      expect(page.occurrences.map(row => row.target)).toEqual([other.work]);
-      expect(page.next).toBeNull();
+      expect(page.occurrences.map(row => row.occurrence)).toEqual(expected);
+      expect(page.occurrences.every(row => row.target === target.work)).toBe(true);
+      expect(page.next).not.toBeNull();
+      const last = await home.json<{ occurrences: { occurrence: string; target: string }[]; next: string | null }>(
+        await home.call('GET', `${path}?${query}&after=${encodeURIComponent(page.next!)}`,
+          undefined, signed ? home.author.token : undefined));
+      expect(last.occurrences.map(row => row.occurrence)).toEqual(changed.occurrences);
+      expect(last.occurrences.map(row => row.target)).toEqual([other.work]);
+      expect(last.next).toBeNull();
     }
     await home.stack.accessPool.query(`INSERT INTO access.suitability_assessment
       (id,target,labels,basis,assessor,principal_id,predecessor,predecessor_number,revision_number,
