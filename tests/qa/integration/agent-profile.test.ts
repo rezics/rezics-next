@@ -198,6 +198,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     const image = await call('GET', pictured.avatarUrl as string);
     expect(image.status).toBe(200);
     expect(sha(new Uint8Array(await image.arrayBuffer()))).toBe(sha(bytes));
+    expect((await call('GET', pictured.avatarUrl as string, owner.token)).status).toBe(200);
     const graph = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       SELECT ?event WHERE { GRAPH <urn:rezics:graph:outbox> {
         ?event a rv:AgentPublicProfileChangedEvent ; rv:agent <${agent}> . } } LIMIT 2`);
@@ -245,6 +246,9 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       bio: null, avatarSelection: null, avatarUrl: null });
     expect((await notificationAgent(agent))?.avatar).toBeNull();
     expect((await call('GET', `/v1/media/avatars/${selection.selection}`)).status).toBe(404);
+    expect((await call('GET', `/v1/media/avatars/${selection.selection}`, owner.token)).status).toBe(404);
+    expect((await call('GET', `/v1/media/avatars/${selection.selection}?actingSubject=${encodeURIComponent(agent)}`,
+      owner.token)).status).toBe(404);
     const fanOut = async (target: string) => {
       const triples = Array.from({ length: 300 }, (_, index) =>
         `<urn:rezics:probe:agent-dependent:${target.slice(-8)}:${index}> <https://rezics.com/vocab/author> <${target}> .`).join('\n');

@@ -516,6 +516,18 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     expect((await read([character.component], false)).status).toBe(404);
     expect((await write(nativeId(), [], null, 'platform')).status).toBe(404);
     expect((await write(work.mainVersion, [], null, 'platform')).status).toBe(422);
+    // Retained erasure evidence for another resource must not hide a known
+    // unsupported grain. Batched integration runs already contain such rows.
+    const unrelatedErasure = nativeId();
+    await f.env.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:revisions> {
+      <${unrelatedErasure}> a <https://rezics.com/vocab/ErasedRevision> } }`);
+    try {
+      expect((await write(work.mainVersion, [], null, 'platform')).status).toBe(422);
+      expect((await read([work.work])).status).toBe(200);
+    } finally {
+      await f.env.fuseki.update(`DELETE DATA { GRAPH <urn:rezics:graph:revisions> {
+        <${unrelatedErasure}> a <https://rezics.com/vocab/ErasedRevision> } }`);
+    }
     expect(
       (
         await call(
