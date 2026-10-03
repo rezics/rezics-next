@@ -14,7 +14,6 @@ import { uuidToSid } from '@rezics/model/address';
 import { materializeData } from 'native-i18n';
 import { canonicalHref, type Surface } from '../features/address/path.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
-import { AGENT_COOKIE } from '../features/auth/cookies.ts';
 import { messages as authMessages } from '../features/auth/messages.ts';
 import { browseMessages } from '../features/discover/browse-messages.ts';
 import { accessMessages } from '../features/manage/settings-messages.ts';
@@ -40,6 +39,7 @@ import {
   resetSubmission,
   prepareSubmissionReview,
   short,
+  selectedSessionAgent,
   type DirectionFixture,
 } from './direction-9-fixture.ts';
 
@@ -225,14 +225,11 @@ async function setupCommands(
 }
 
 async function address(page: Page, scope: string, holder: string, locale: Locale) {
-  const selectedAgent = (await page.context().cookies()).find(
-    cookie => cookie.name === AGENT_COOKIE,
-  )?.value;
-  const actingSubject = selectedAgent ? decodeURIComponent(selectedAgent) : undefined;
+  const actingSubject = await selectedSessionAgent(page.request, await page.context().cookies());
   expect(actingSubject, 'authenticated address reads carry the selected Agent').toBeTruthy();
   const response = await page.request.get(
     `/api/main/v1/addresses/resolve?${new URLSearchParams({
-      scope, key: short(holder), actingSubject: actingSubject!,
+      scope, key: short(holder), actingSubject,
     })}`,
     {
       headers: { 'accept-language': locale, 'x-rezics-display-languages': locale },
@@ -643,17 +640,27 @@ for (const locale of locales)
         await page.goto(`/${locale}/discover?tab=communities`);
         const communityLinks = page
           .getByRole('main')
+          .getByRole('region', { name: t.communities, exact: true })
           .getByRole('list')
           .getByRole('link');
         await expect(communityLinks.first()).toBeVisible();
-        const firstNames = await communityLinks.allTextContents();
+        // Conditions has its own suggestion list that repeats on every page.
+        // Resource destinations carry identity; different communities may share a name.
+        const destinations = () => communityLinks.evaluateAll(
+          (links) => links.map((link) => link.getAttribute('href')),
+        );
+        const firstLinks = await destinations();
+        expect(firstLinks.every((href) => href !== null)).toBe(true);
+        expect(new Set(firstLinks).size).toBe(firstLinks.length);
         await page.getByRole('link', { name: t.more, exact: true }).click();
         await expect.poll(() => new URL(page.url()).searchParams.get('cursor')).toBeTruthy();
         // The address can change before the streamed destination list arrives.
         await expect(async () => {
-          const secondNames = await communityLinks.allTextContents();
-          expect(secondNames.length).toBeGreaterThan(0);
-          expect(secondNames.some((name) => firstNames.includes(name))).toBe(false);
+          const secondLinks = await destinations();
+          expect(secondLinks.length).toBeGreaterThan(0);
+          expect(secondLinks.every((href) => href !== null)).toBe(true);
+          expect(new Set(secondLinks).size).toBe(secondLinks.length);
+          expect(secondLinks.some((href) => firstLinks.includes(href))).toBe(false);
         }).toPass({ timeout: 30_000 });
         await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
         await expect(
@@ -797,7 +804,10 @@ for (const locale of locales)
           await expect(outsider.locator('meta[name="robots"]')).toHaveAttribute(
             'content', /(?:^|[,\s])noindex(?:[,\s]|$)/,
           );
-          await expect(outsider.getByRole('link', { name: t.signIn, exact: true })).toBeVisible();
+          const signIn = outsider.getByRole('link', { name: t.signIn, exact: true });
+          await expect(signIn).toBeVisible();
+          const signInHref = await signIn.getAttribute('href');
+          expect(new URL(signInHref!, outsider.url()).searchParams.get('next')).toBe(path);
           await screenshot(outsider, info, 'private-outsider-join-page');
           await page.goto(path);
           await page
