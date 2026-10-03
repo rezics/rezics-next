@@ -7,6 +7,8 @@ import {
   resetAdmission,
   resetSubmission,
   seedDirection,
+  seedRatingPopulations,
+  prepareSubmissionReview,
   type DirectionFixture,
   type PublicRequest,
 } from './direction-9-fixture.ts';
@@ -238,6 +240,27 @@ describe('Direction 9 public fixture commands', () => {
     });
   });
 
+  test('a fresh requester has no intent to reset when the private owner returns 404', async () => {
+    const api = new PublicCommands({
+      get: async (path) => ({
+        status: () => (path.includes('/mine?') ? 404 : 200),
+        json: async () => ({ state: 'absent', membershipGeneration: '0', policyRevision: '0' }),
+      }),
+      fetch: async () => {
+        throw new Error('fresh admission must not write');
+      },
+    });
+    expect(
+      (
+        await resetAdmission(api, { actor: 'actor' } as DirectionFixture, {
+          space: 'space',
+          realm: 'realm',
+          name: 'private',
+        })
+      ).size,
+    ).toBe(0);
+  });
+
   test('submission reset withdraws only this journey’s pending Work in its Realm', async () => {
     const writes: string[] = [];
     const api = new PublicCommands({
@@ -265,74 +288,158 @@ describe('Direction 9 public fixture commands', () => {
     expect(writes).toEqual(['/api/main/v1/realms/realm/submissions/mine/withdrawals']);
   });
 
-  test('shared-dataset recipe isolates four admission journeys and exceeds both picker windows', async () => {
-    const commands: { path: string; data: Record<string, unknown> }[] = [];
-    const iri = () => `https://rezics.com/id/${randomUUID()}`;
-    const actor = iri();
+  test('submission preparation makes review reversible and preserves unrelated Realm settings', async () => {
+    const calls: unknown[] = [];
+    const settings = {
+      visibility: 'public',
+      whoMaySubmit: 'granted',
+      rules: [],
+      reviewMode: 'open',
+      reviewRequired: false,
+    };
     const api = new PublicCommands({
-      get: async (path) => ({
+      get: async () => ({
         status: () => 200,
-        json: async () =>
-          path.includes('/concepts?')
-            ? { items: [{ concept: iri(), label: 'Published topic' }] }
-            : path.includes('/concepts/')
-              ? { name: { value: 'Published topic' } }
-              : { generation: '0' },
+        json: async () => ({ generation: '7', settings, ruleBasis: { revision: '4' } }),
       }),
-      fetch: async (path, options) => {
-        const data = options.data as Record<string, unknown>;
-        commands.push({ path, data });
-        return {
-          status: () => 201,
-          json: async () => ({
-            agent: iri(),
-            concept: iri(),
-            space: iri(),
-            realm: iri(),
-            work: iri(),
-            mainVersion: iri(),
-            contribution: iri(),
-            draftRevision: iri(),
-            publicationDecision: iri(),
-            context: iri(),
-            structure: iri(),
-            revision: iri(),
-            occurrences: Array.from({ length: 16 }, iri),
-          }),
-        };
+      fetch: async (_path, options) => {
+        calls.push(options);
+        return { status: () => 200, json: async () => ({}) };
       },
     });
-    const fixture = await seedDirection(api, actor, api);
-    expect(commands.length).toBeLessThan(120);
-    expect(commands.some((command) => command.path.endsWith('/classification-vocabulary'))).toBe(
-      false,
-    );
-    expect(new Set(fixture.privateSpaces.map((space) => space.realm)).size).toBe(4);
-    const settings = commands.filter((command) => command.path.endsWith('/settings'));
-    expect(
-      settings.filter(
-        (command) => (command.data.settings as { visibility: string }).visibility === 'private',
-      ),
-    ).toHaveLength(4);
-    expect(
-      settings.filter(
-        (command) => (command.data.settings as { listing: string }).listing === 'unlisted',
-      ),
-    ).toHaveLength(1);
-    expect(fixture.spaces.length - settings.length).toBeGreaterThan(20);
-    expect(commands.filter((command) => command.path.endsWith('/rating-observations')).length).toBe(
-      21,
-    );
-    const chapters = commands.filter(
-      (command) => command.path.includes('/compositions/') && command.path.endsWith('/changes'),
-    );
-    expect(chapters).toHaveLength(4);
-    expect(chapters.flatMap((command) => command.data.operations as unknown[])).toHaveLength(51);
-    expect(fixture.laterChapter.name).toContain('遠方 chapter 51');
-    expect(commands.every((command) => command.path.startsWith('/api/main/v1/'))).toBe(true);
-    expect(
-      commands.filter((command) => command.path.endsWith('/contribution-publications')),
-    ).toHaveLength(2);
-    expect(commands.filter((command) => command.path.endsWith('/zones'))).toHaveLength(1);
+    await prepareSubmissionReview(api, { owner: 'owner' } as DirectionFixture, {
+      space: 'space',
+      realm: 'realm',
+      name: 'community',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      method: 'PUT',
+      data: {
+        actingSubject: 'owner',
+        expectedGeneration: '7',
+        expectedRulesRevision: '4',
+        settings: { ...settings, reviewMode: 'mandatory', reviewRequired: true },
+      },
+    });
   });
+
+  for (const administrator of [false, true])
+    test(`shared-dataset recipe isolates four admission journeys and exceeds both picker windows (${administrator ? 'administrator setup' : 'owner setup'})`, async () => {
+      const commands: { path: string; data: Record<string, unknown> }[] = [];
+      const iri = () => `https://rezics.com/id/${randomUUID()}`;
+      const actor = iri();
+      const api = new PublicCommands({
+        get: async (path) => ({
+          status: () => 200,
+          json: async () =>
+            path.includes('/concepts?')
+              ? { items: [{ concept: iri(), label: 'Published topic' }] }
+              : path.includes('/concepts/')
+                ? { name: { value: 'Published topic' } }
+                : { generation: '0', roles: [] },
+        }),
+        fetch: async (path, options) => {
+          const data = options.data as Record<string, unknown>;
+          commands.push({ path, data });
+          return {
+            status: () => 201,
+            json: async () => ({
+              agent: iri(),
+              concept: iri(),
+              space: iri(),
+              realm: iri(),
+              work: iri(),
+              mainVersion: iri(),
+              contribution: iri(),
+              draftRevision: iri(),
+              publicationDecision: iri(),
+              context: iri(),
+              structure: iri(),
+              revision: iri(),
+              occurrences: Array.from({ length: 16 }, iri),
+              digest: 'a'.repeat(64),
+              generation: '1',
+            }),
+          };
+        },
+      });
+      const owner = iri();
+      const fixture = await seedDirection(
+        api,
+        actor,
+        api,
+        undefined,
+        administrator ? { api, actor: owner } : undefined,
+      );
+      await seedRatingPopulations(api, fixture);
+      expect(
+        commands.filter(
+          (command) => command.data.actingSubject === (administrator ? owner : fixture.manager),
+        ).length,
+      ).toBeLessThan(120);
+      expect(commands.some((command) => command.path.endsWith('/classification-vocabulary'))).toBe(
+        false,
+      );
+      expect(new Set(fixture.privateSpaces.map((space) => space.realm)).size).toBe(4);
+      expect(commands.filter((command) => command.path.endsWith('/management'))).toHaveLength(26);
+      const settings = commands.filter((command) => command.path.endsWith('/settings'));
+      expect(
+        settings.filter(
+          (command) => (command.data.settings as { visibility: string }).visibility === 'private',
+        ),
+      ).toHaveLength(4);
+      expect(
+        settings.filter(
+          (command) => (command.data.settings as { listing: string }).listing === 'unlisted',
+        ),
+      ).toHaveLength(1);
+      expect(fixture.spaces.length - settings.length).toBeGreaterThan(20);
+      expect(
+        commands.filter((command) => command.path.endsWith('/rating-observations')).length,
+      ).toBe(21);
+      const chapters = commands.filter(
+        (command) => command.path.includes('/compositions/') && command.path.endsWith('/changes'),
+      );
+      expect(chapters).toHaveLength(4);
+      expect(chapters.flatMap((command) => command.data.operations as unknown[])).toHaveLength(51);
+      expect(fixture.laterChapter.name).toContain('遠方 chapter 51');
+      expect(commands.every((command) => command.path.startsWith('/api/main/v1/'))).toBe(true);
+      expect(
+        commands.filter((command) => command.path.endsWith('/contribution-publications')),
+      ).toHaveLength(2);
+      expect(commands.filter((command) => command.path.endsWith('/zones'))).toHaveLength(1);
+      if (administrator) {
+        expect(
+          commands
+            .filter((command) =>
+              ['/spaces', '/rating-contexts', '/rating-observations', '/zones'].some((path) =>
+                command.path.endsWith(path),
+              ),
+            )
+            .every((command) => command.data.actingSubject === owner),
+        ).toBe(true);
+        const assignments = commands.filter(
+          (command) =>
+            command.path.endsWith('/role-changes') &&
+            (command.data.change as { kind: string }).kind === 'assignment',
+        );
+        expect(assignments).toHaveLength(4);
+        expect(
+          assignments.every(
+            (command) => (command.data.change as { member: string }).member === fixture.manager,
+          ),
+        ).toBe(true);
+        expect(
+          commands
+            .filter((command) => command.path.endsWith('/role-changes'))
+            .every((command) => command.data.impactDigest === 'a'.repeat(64)),
+        ).toBe(true);
+        expect(
+          commands
+            .filter((command) => command.path.endsWith('/works'))
+            .every((command) => command.data.actingSubject === actor),
+        ).toBe(true);
+      }
+    });
 });

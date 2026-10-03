@@ -125,6 +125,17 @@ export function credentials(): Credentials {
   return JSON.parse(readFileSync(path, 'utf8')) as Credentials;
 }
 
+/** Privilege is restricted to setup; every reader/requester still uses member. */
+export function setupCredentials(): Credentials['member'] | null {
+  const path = process.env.REZICS_DIRECTION_9_ADMIN_PRIVATE_PATH;
+  return path ? (JSON.parse(readFileSync(path, 'utf8')) as Credentials['member']) : null;
+}
+
+export interface SetupPrincipal {
+  api: PublicCommands;
+  actor: string;
+}
+
 export interface SpaceRecord {
   space: string;
   realm: string;
@@ -139,6 +150,7 @@ export interface WorkRecord {
 }
 export interface DirectionFixture {
   actor: string;
+  owner: string;
   manager: string;
   namedPerson: string;
   unnamedPerson: string;
@@ -157,7 +169,7 @@ export interface DirectionFixture {
 }
 
 export const short = (iri: string) => iri.slice(-36);
-export const fixtureName = 'direction-9-v2';
+export const fixtureName = 'direction-9-v3';
 export const populationCount = 21;
 export const chapterCount = 51;
 const spaceCount = populationCount + 5; // Four private journeys and one unlisted Space.
@@ -202,6 +214,7 @@ export async function seedDirection(
   actor: string,
   managerApi: PublicCommands,
   name = fixtureName,
+  setup?: SetupPrincipal,
 ): Promise<DirectionFixture> {
   const suffix = createHash('sha256').update(`${name}:${actor}`).digest('hex').slice(0, 10);
   api = api.reusable(`${name}:${actor}:member`);
@@ -221,6 +234,8 @@ export async function seedDirection(
       person(`Direction 9 unnamed reader ${suffix}`),
     ]),
   );
+  const owner = setup?.actor ?? manager;
+  const ownerApi = setup?.api.reusable(`${name}:${actor}:administrator`) ?? managerApi;
   const personHandle = `d9-reader-${suffix}`;
   const claim = (scope: string, holder: string, name: string, actingSubject = manager) =>
     (actingSubject === manager ? managerApi : api).write('/addresses/claims', {
@@ -255,21 +270,37 @@ export async function seedDirection(
       names: { en: names[0]!.name.value, 'zh-Hant': names[1]!.name.value },
     };
   });
-  const spaces = await phase('spaces', () =>
-    parallel(Array.from({ length: spaceCount }), async (_, index): Promise<SpaceRecord> => {
-      const name = `Direction 9 ${suffix} community ${String(index + 1).padStart(2, '0')}`;
-      const handle = index === 1 ? undefined : `d9-${suffix}-${index + 1}`;
-      const record = await managerApi.write<{ space: string; realm: string }>('/spaces', {
-        profile: 'space-realm-v2',
-        name,
-        language: 'en',
-        capabilities: ['realm'],
-        ...(handle ? { handle } : {}),
-        topics: [topic.concept],
-        actingSubject: manager,
-      });
-      return { ...record, name, ...(handle ? { handle } : {}) };
-    }),
+  const [spaceResult, workResult] = await Promise.allSettled([
+    phase('spaces', () =>
+      parallel(Array.from({ length: spaceCount }), async (_, index): Promise<SpaceRecord> => {
+        const name = `Direction 9 ${suffix} community ${String(index + 1).padStart(2, '0')}`;
+        const handle = index === 1 ? undefined : `d9-${suffix}-${index + 1}`;
+        const record = await ownerApi.write<{ space: string; realm: string }>('/spaces', {
+          profile: 'space-realm-v2',
+          name,
+          language: 'en',
+          capabilities: ['realm'],
+          ...(handle ? { handle } : {}),
+          topics: [topic.concept],
+          actingSubject: owner,
+        });
+        return { ...record, name, ...(handle ? { handle } : {}) };
+      }),
+    ),
+    phase('published Works', () =>
+      parallel([`Direction 9 Work ${suffix}`, `Direction 9 story ${suffix}`], (title) =>
+        createWork(title, 'https://schema.org/Book'),
+      ),
+    ),
+  ] as const);
+  if (spaceResult.status === 'rejected') throw spaceResult.reason;
+  if (workResult.status === 'rejected') throw workResult.reason;
+  const spaces = spaceResult.value;
+  const [work, story] = workResult.value;
+  await phase('Realm owner enrollment', () =>
+    parallel(spaces, (space) =>
+      ownerApi.write(`/realms/${short(space.realm)}/management`, { actingSubject: owner }),
+    ),
   );
   const named = spaces[0]!,
     unnamed = spaces[1]!,
@@ -284,8 +315,8 @@ export async function seedDirection(
         admission: isUnlisted ? 'open' : 'request',
         history: 'everything',
       };
-      const current = await managerApi.read<{ generation: string; settings: typeof settings }>(
-        `/spaces/${short(space.space)}/settings?actingSubject=${encodeURIComponent(manager)}`,
+      const current = await ownerApi.read<{ generation: string; settings: typeof settings }>(
+        `/spaces/${short(space.space)}/settings?actingSubject=${encodeURIComponent(owner)}`,
       );
       if (
         Object.entries(settings).every(
@@ -293,10 +324,10 @@ export async function seedDirection(
         )
       )
         return;
-      await managerApi.write(
+      await ownerApi.write(
         `/spaces/${short(space.space)}/settings`,
         {
-          actingSubject: manager,
+          actingSubject: owner,
           expectedGeneration: current.generation,
           reason: 'Direction 9 acceptance fixture',
           settings,
@@ -305,7 +336,58 @@ export async function seedDirection(
       );
     }),
   );
-  const createWork = async (title: string, type: string): Promise<WorkRecord> => {
+  if (setup)
+    await phase('private admission managers', () =>
+      parallel(privateSpaces, async (space) => {
+        const hash = createHash('sha256')
+          .update(`${name}:${space.realm}:admission-role`)
+          .digest('hex');
+        const roleId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+        const roles = await ownerApi.read<{ generation: string; roles: { id: string }[] }>(
+          `/realms/${short(space.realm)}/roles?actingSubject=${encodeURIComponent(owner)}`,
+        );
+        const change = async (expectedGeneration: string, value: unknown) => {
+          const impact = await ownerApi.write<{ digest: string }>(
+            `/realms/${short(space.realm)}/role-impact`,
+            {
+              actingSubject: owner,
+              expectedGeneration,
+              reason: 'Direction 9 admission fixture',
+              change: value,
+            },
+          );
+          return ownerApi.write<{ generation: string }>(
+            `/realms/${short(space.realm)}/role-changes`,
+            {
+              actingSubject: owner,
+              expectedGeneration,
+              reason: 'Direction 9 admission fixture',
+              change: value,
+              impactDigest: impact.digest,
+            },
+          );
+        };
+        let generation = roles.generation;
+        if (!roles.roles.some((role) => role.id === roleId)) {
+          generation = (
+            await change(generation, {
+              kind: 'role',
+              roleId,
+              name: 'Direction 9 admissions',
+              permissions: ['realm.members.manage'],
+            })
+          ).generation;
+        }
+        await change(generation, {
+          kind: 'assignment',
+          roleId,
+          member: manager,
+          assigned: true,
+          validUntil: '2026-12-31T00:00:00.000Z',
+        });
+      }),
+    );
+  async function createWork(title: string, type: string): Promise<WorkRecord> {
     const work = await api.write<{ work: string; mainVersion: string }>('/works', {
       profile: 'metadata-only-v1',
       authoring: 'own-work',
@@ -351,39 +433,7 @@ export async function seedDirection(
       contribution: contribution.contribution,
       publicationDecision: published.publicationDecision,
     };
-  };
-  const [work, story] = await phase('published Works', () =>
-    Promise.all([
-      createWork(`Direction 9 Work ${suffix}`, 'https://schema.org/CreativeWork'),
-      createWork(`Direction 9 story ${suffix}`, 'https://schema.org/Book'),
-    ]),
-  );
-  await phase('addresses', () =>
-    Promise.all([claim('work', work.work, `d9-work-${suffix}`, actor)]),
-  );
-
-  await phase('21 rating populations', () =>
-    parallel(
-      spaces.filter((space) => !privateSpaces.includes(space) && space !== unlisted),
-      async (space) => {
-        const context = await managerApi.write<{ context: string }>('/rating-contexts', {
-          profile: 'realm-standing-rating-context-v1',
-          realm: space.realm,
-          question: 'How much did you enjoy this Work?',
-          actingSubject: manager,
-        });
-        await managerApi.write('/rating-observations', {
-          profile: 'realm-standing-rating-observation-v1',
-          context: context.context,
-          work: work.work,
-          mainVersion: work.mainVersion,
-          expectedRevisionHead: null,
-          value: 8,
-          actingSubject: manager,
-        });
-      },
-    ),
-  );
+  }
   const later = await phase('chapters', async () => {
     const composition = await api.write<{ structure: string; revision: string }>('/compositions', {
       profile: 'book-composition',
@@ -406,7 +456,7 @@ export async function seedDirection(
             parent: composition.structure,
             role: 'chapter',
             position: 'last',
-            target: 'https://schema.org/DigitalDocument',
+            target: work.work,
             label: {
               value: offset + index + 1 === chapterCount ? name : `Chapter ${offset + index + 1}`,
               language: 'en',
@@ -423,24 +473,25 @@ export async function seedDirection(
   const zoneHash = createHash('sha256').update(`${name}:${actor}:zone`).digest('hex');
   const zone = `https://rezics.com/id/${zoneHash.slice(0, 8)}-${zoneHash.slice(8, 12)}-4${zoneHash.slice(13, 16)}-a${zoneHash.slice(17, 20)}-${zoneHash.slice(20, 32)}`;
   await phase('site mount', async () => {
-    const site = await managerApi.write<{ revision: string }>('/zones', {
+    const site = await ownerApi.write<{ revision: string }>('/zones', {
       zone,
       space: named.space,
       name: named.name,
       language: 'en',
       disclosure: 'public',
-      actingSubject: manager,
+      actingSubject: owner,
     });
-    await managerApi.write(`/zones/${short(zone)}/mounts`, {
+    await ownerApi.write(`/zones/${short(zone)}/mounts`, {
       expectedHead: site.revision,
       target: story.work,
       routeSegment: 'story',
       disclosure: 'public',
-      actingSubject: manager,
+      actingSubject: owner,
     });
   });
   return {
     actor,
+    owner,
     manager,
     namedPerson,
     unnamedPerson,
@@ -457,6 +508,37 @@ export async function seedDirection(
     topic,
     laterChapter: later,
   };
+}
+
+/** A rating setup failure belongs to the rating journey, not the other seven. */
+export async function seedRatingPopulations(api: PublicCommands, fixture: DirectionFixture) {
+  api = api.reusable(`${fixtureName}:${fixture.actor}:administrator`);
+  await phase('21 rating populations', () =>
+    parallel(
+      fixture.spaces.filter(
+        (space) =>
+          !fixture.privateSpaces.some((privateSpace) => privateSpace.space === space.space) &&
+          space.space !== fixture.unlisted.space,
+      ),
+      async (space) => {
+        const context = await api.write<{ context: string }>('/rating-contexts', {
+          profile: 'realm-standing-rating-context-v1',
+          realm: space.realm,
+          question: 'How much did you enjoy this Work?',
+          actingSubject: fixture.owner,
+        });
+        await api.write('/rating-observations', {
+          profile: 'realm-standing-rating-observation-v1',
+          context: context.context,
+          work: fixture.work.work,
+          mainVersion: fixture.work.mainVersion,
+          expectedRevisionHead: null,
+          value: 8,
+          actingSubject: fixture.owner,
+        });
+      },
+    ),
+  );
 }
 
 export interface FixtureStore {
@@ -486,18 +568,19 @@ export async function directionFixture(
   actor: string,
   managerApi: PublicCommands,
   store: FixtureStore,
+  setup?: SetupPrincipal,
 ): Promise<DirectionFixture> {
   const cached = store.load();
   if (cached?.actor === actor) {
-    const existing = await api.find<{ holder: string }>(
-      `/addresses/resolve?${new URLSearchParams({ scope: 'work', key: short(cached.work.work) })}`,
+    const existing = await api.find<unknown>(
+      `/works/${short(cached.work.work)}?${new URLSearchParams({ actingSubject: cached.actor })}`,
     );
-    if (existing?.holder === cached.work.work) {
+    if (existing !== null) {
       console.log(`[direction-9 setup] reuse ${fixtureName}: ${short(cached.work.work)}`);
       return cached;
     }
   }
-  const fixture = await seedDirection(api, actor, managerApi);
+  const fixture = await seedDirection(api, actor, managerApi, fixtureName, setup);
   // Save before readiness checks so a delayed projection never recreates records.
   store.save(fixture);
   console.log(`[direction-9 setup] created ${fixtureName}: ${short(fixture.work.work)}`);
@@ -517,7 +600,7 @@ export async function readyDirection(
       );
     } else if (projection === 'chapters') {
       await api.until<{ items: { occurrence: string }[] }>(
-        `/reading-positions/${short(fixture.story.work)}?${new URLSearchParams({ q: fixture.laterChapter.name })}`,
+        `/reading-positions/${short(fixture.story.work)}?${new URLSearchParams({ q: fixture.laterChapter.name, actingSubject: fixture.actor })}`,
         (page) => page.items.some((item) => item.occurrence === fixture.laterChapter.occurrence),
       );
     } else {
@@ -559,13 +642,14 @@ export async function ownRequests(
   const items: OwnRequest[] = [];
   let cursor: string | null = null;
   do {
-    const page: OwnRequests = await api.read(
-      `/realms/${short(space.realm)}/join-requests/mine?${new URLSearchParams({
-        actingSubject: fixture.actor,
-        limit: '50',
-        ...(cursor ? { cursor } : {}),
-      })}`,
+    const query = new URLSearchParams({ actingSubject: fixture.actor, limit: '50' });
+    if (cursor) query.set('cursor', cursor);
+    const page: OwnRequests | null = await api.find<OwnRequests>(
+      `/realms/${short(space.realm)}/join-requests/mine?${query}`,
     );
+    // The private owner deliberately returns 404 until this requester has an
+    // intent. A fresh journey has no pending request or history to reset.
+    if (page === null) return items;
     items.push(...page.items);
     cursor = page.nextCursor;
   } while (cursor);
@@ -637,4 +721,31 @@ export async function resetSubmission(
       expectedRevision: submission.revision,
     });
   }
+}
+
+/** Pending review is the reversible submission state; accepted custody persists. */
+export async function prepareSubmissionReview(
+  api: PublicCommands,
+  fixture: DirectionFixture,
+  space: SpaceRecord,
+) {
+  const current = await api.read<{
+    generation: string;
+    settings: Record<string, unknown> & { reviewMode?: string; reviewRequired: boolean };
+    ruleBasis: { revision: string | null };
+  }>(
+    `/realms/${short(space.realm)}/settings?${new URLSearchParams({ actingSubject: fixture.owner })}`,
+  );
+  if (current.settings.reviewRequired && current.settings.reviewMode === 'mandatory') return;
+  await api.write(
+    `/realms/${short(space.realm)}/settings`,
+    {
+      actingSubject: fixture.owner,
+      expectedGeneration: current.generation,
+      expectedRulesRevision: current.ruleBasis.revision,
+      reason: 'Direction 9 repeatable submission review',
+      settings: { ...current.settings, reviewRequired: true, reviewMode: 'mandatory' },
+    },
+    'PUT',
+  );
 }
