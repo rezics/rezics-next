@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
 import type { WikiDelta } from '../../../services/main/src/modules/wiki/delta.ts';
 import type { WikiExtraction } from '../../../services/main/src/modules/wiki/protocol.ts';
+import { EDITORIAL_NOTIFICATION_COST } from '../../../services/main/src/modules/notification-producers/editorial.ts';
 import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import {
   type Command,
@@ -41,6 +42,11 @@ test('CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revi
   try {
     const work = await L.catalogueWork('Sagan om ringen', SV);
     const base = (description: string) => header('Sagan om ringen', SV, description);
+
+    // Earlier journeys can leave more than one producer page before this
+    // proposal. Inbox preparation must reach it without increasing tick size.
+    for (let n = 0; n < EDITORIAL_NOTIFICATION_COST.eventsPerTick + 1; n++)
+      await correction(work, holder, base(`Tidigare förslag ${n}`));
 
     // Propose: the contributor holds no review authority, so the correction waits for an independent reviewer.
     const created = await correction(work, holder, base('Första beskrivningen'));

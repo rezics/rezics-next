@@ -11,6 +11,7 @@ import { selectMainDefault, mainSelectionDigest } from '../../../services/main/s
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
 import { SerialStatisticsProjection } from '../../../services/main/src/modules/work/serial-projection.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { startMediaStack } from './media-support.ts';
 
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
@@ -57,9 +58,19 @@ test('G657: registry Facets drive Fiction browse and Query; removed and unsuppor
     } LIMIT 1`)).results!.bindings;
     const sequence = rows[0]!.sequence!.value;
     const generation = randomUUID();
-    await relay.query(`INSERT INTO relay.delivered_batch
-      (data_epoch, sequence, batch_id, routing_epoch, event_count) VALUES ($1,$2,$3,$4,0)`,
-    [stack.env.lineage.dataEpoch, sequence, `urn:rezics:outbox:${randomUUID()}`, stack.env.lineage.routingEpoch]);
+    const deliver = async () => {
+      const consumer = `g657-facets-${randomUUID()}`;
+      await initializeRelayCheckpoint(relay, consumer, stack.env.lineage.dataEpoch);
+      let delivered = '0';
+      while (BigInt(delivered) < BigInt(sequence)) {
+        const batch = await relayMainOutboxOnce(stack.fuseki, relay, consumer);
+        if (!batch) throw new Error('Facet fixture relay did not reach its graph cut');
+        delivered = batch.sequence;
+      }
+    };
+    // Retain the actual graph headers and events. A fabricated zero-event
+    // header at this shared epoch would poison a later Home relay consumer.
+    await deliver();
     await stack.accessPool.query(`INSERT INTO access.serial_stats_checkpoint
       (singleton, generation, graph_epoch, sequence) VALUES (true,$1,$2,$3)
       ON CONFLICT (singleton) DO UPDATE SET generation = $1, graph_epoch = $2, sequence = $3`,
@@ -128,5 +139,8 @@ test('G657: registry Facets drive Fiction browse and Query; removed and unsuppor
     expect(unknownGlobal.status).toBe(422);
     expect(await unknownGlobal.json()).toMatchObject({ code: 'invalid_query' });
     expect(stack.fuseki.queries).toBe(before);
+    // Another consumer can replay this fixture's retained cut, as Home does
+    // when its journey follows this file in the same integration shard.
+    await deliver();
   } finally { await relay.end(); await stack.stop(); }
 }, 120_000);

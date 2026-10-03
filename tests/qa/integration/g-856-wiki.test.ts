@@ -182,7 +182,21 @@ test('G856: English and Finnish Pride editions extract the same character throug
     expect(await mcp('wiki_validate', { actingSubject: actor, bundle: english })).toMatchObject({
       status: 'acceptable',
     });
-    const apply = async (bundle: WikiExtraction) => {
+    const decision = (proposal: string, key = randomUUID()) => call(
+      'POST',
+      `/v1/editorial/proposals/${proposal}/decisions`,
+      {
+        profile: 'editorial-proposal-decide-v1',
+        revision: 1,
+        outcome: 'applied',
+        approve: true,
+        message: 'Verified the exact local passage and alignment',
+        actingSubject: steward.actor,
+      },
+      steward.token,
+      key,
+    );
+    const apply = async (bundle: WikiExtraction, beforeApply?: (proposal: string) => Promise<void>) => {
       const header = await json<{ revision: string }>(
         await call(
           'GET',
@@ -218,22 +232,10 @@ test('G856: English and Finnish Pride editions extract the same character throug
       );
       expect(submitted.status).toBe(201);
       const proposal = submitted.body as { proposal: string };
+      await beforeApply?.(proposal.proposal);
       const key = randomUUID();
       for (let attempt = 0; attempt < 40; attempt++) {
-        const response = await call(
-          'POST',
-          `/v1/editorial/proposals/${proposal.proposal}/decisions`,
-          {
-            profile: 'editorial-proposal-decide-v1',
-            revision: 1,
-            outcome: 'applied',
-            approve: true,
-            message: 'Verified the exact local passage and alignment',
-            actingSubject: steward.actor,
-          },
-          steward.token,
-          key,
-        );
+        const response = await decision(proposal.proposal, key);
         const result = await json<{ receipt?: OwnerReceipt }>(
           response,
           response.status === 202 ? 202 : 200,
@@ -361,7 +363,20 @@ test('G856: English and Finnish Pride editions extract the same character throug
       status: 'acceptable',
       entities: [{ action: 'reuse' }],
     });
-    await apply(finnish);
+    const second = await apply(finnish, async proposal => {
+      // Review authority and semantic creation do not grant edits to a reused
+      // Resource. The ordinary owner preflight must deny before any delivery.
+      const scope = `semantic:edit:${character}`;
+      expect(await json(await decision(proposal), 403)).toMatchObject({
+        code: 'editorial_owner_authority_required',
+        blocker: { code: 'owner_authority_required', action: 'semantic.change', scope },
+      });
+      expect((await f.accessPool.query('SELECT 1 FROM access.editorial_application WHERE proposal = $1',
+        [proposal])).rows).toEqual([]);
+      await steward.grant(scope, 'semantic.change');
+    });
+    expect(second.commands!.find(row => row.key.endsWith(':entity:mr-bennet'))!.result)
+      .toMatchObject({ component: character });
     const facts = await json<{ groups: { items: { kind: string; statement?: string }[] }[] }>(
       await call('GET', `/v1/resources/${short(character)}/statements?position=all`),
     );
