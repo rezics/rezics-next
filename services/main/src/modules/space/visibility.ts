@@ -64,9 +64,18 @@ export async function readResourceVisibility(env: WorkActivationEnvironment, tar
   const history = row.history?.value ?? 'everything', admission = row.admission?.value ?? 'invitation';
   if (!['listed','unlisted'].includes(listing) || !['everything','from-admission'].includes(history)
     || !['open','request','invitation'].includes(admission)) throw new Error('Resource visibility policy is invalid');
-  const spaceReadable = disclosure === `${RV}Public` || !!(row.realm && await reader.realmReadProof?.(row.realm.value));
+  // A Zone-only Space has no Realm membership to prove. Its own Access read
+  // authority guards both private identities; a Space with a Realm keeps the
+  // independent membership fence before any Zone grant can matter.
+  const membershipReadable = disclosure === `${RV}Public`
+    || !!(row.realm && await reader.realmReadProof?.(row.realm.value));
+  const zoneOnlyPrivate = !row.realm && !!row.zoneDisclosure && disclosure === `${RV}Private`;
+  const needsZoneAuthority = row.zoneDisclosure?.value === `${RV}Private` || zoneOnlyPrivate;
+  const zoneAuthority = (membershipReadable || zoneOnlyPrivate) && needsZoneAuthority
+    && await reader.zoneReadable?.(target) === true;
+  const spaceReadable = membershipReadable || zoneOnlyPrivate && zoneAuthority;
   const readable = agent ? visibility === 'public' && (await reader.agentReadable?.(target) ?? true)
-    : spaceReadable && (row.zoneDisclosure?.value !== `${RV}Private` || await reader.zoneReadable?.(target) === true);
+    : spaceReadable && (row.zoneDisclosure?.value !== `${RV}Private` || zoneAuthority);
   const discovery = pageDiscoveryPolicy(visibility, listing as ResourceListing);
   return { readable, findable: readable && discovery.indexable, visibility,
     listing: listing as ResourceListing, history: history as RealmHistory, admission: admission as RealmAdmission,

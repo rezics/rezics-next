@@ -7,7 +7,7 @@ const target = new RegExp(`^(${[
   'content:comment', 'content:draft', 'content:publish', 'content:search-eligibility',
   'statement:speak', 'publication:select', 'publication:adopt', 'publication:reject',
   'classification:context', 'classification:decide', 'reply:create', 'reply:place', 'review:decide',
-  'submission:submit', 'media:owner', 'media:avatar', 'semantic:edit',
+  'submission:submit', 'media:owner', 'media:avatar', 'semantic:edit', 'zone:edit',
 ].join('|')}):${native}$`);
 
 /** Only installed scope families can be derived. A gate is a fence, not a

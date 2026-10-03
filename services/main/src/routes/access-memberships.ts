@@ -4,6 +4,7 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupGeneration, groupUuid } from './shared.ts';
+import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
 
 const membershipCommon = { profile: t.Literal('access-membership-change-v1'),
   kind: t.Union([t.Literal('org'), t.Literal('realm')]),
@@ -311,13 +312,21 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
       response: { 200: membershipChangeResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['access:manage']);
+        let principal;
+        let selfLeaveOnly = false;
+        try { principal = await work.account.verify(request, ['access:manage']); }
+        catch (error) {
+          if (!(error instanceof AccountAssertionInsufficientScope)
+            || body.kind !== 'realm' || body.action !== 'leave') throw error;
+          principal = await work.account.verify(request, ['access:membership-consent']);
+          selfLeaveOnly = true;
+        }
         if (!work.memberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
         const key = request.headers.get('idempotency-key');
         if (!key || key.length > 128 || key.includes('\0')) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
         }
-        const result = await work.memberships.change({ ...body, principal, historyEnvironment: work.environment,
+        const result = await work.memberships.change({ ...body, principal, selfLeaveOnly, historyEnvironment: work.environment,
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });

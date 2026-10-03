@@ -7,16 +7,33 @@ import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { NameInvalid, NameConflict, NameUnavailable } from '../address/registry.ts';
 import { createRealmSpace, readSpaceCreationReceipt, sealRealmSpaceAdmission,
   spaceCreationDigest, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
+import { createZoneSpace, zoneSpaceCreationDigest, type CreateZoneSpaceInput } from './create-zone.ts';
 
-export async function createAdmittedRealmSpace(
+type Account = Pick<AccountAssertionVerifier, 'verify'>;
+type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
+  & Partial<Pick<AccessAdmissionRegistry, 'withOwnerAuthority'>>;
+
+export function createAdmittedRealmSpace(env: WorkActivationEnvironment, account: Account,
+  access: Access, request: Request, input: CreateRealmSpaceInput & { idempotencyKey: string }) {
+  return createAdmittedSpace(env, account, access, request, { capability: 'realm', input });
+}
+
+export function createAdmittedZoneSpace(env: WorkActivationEnvironment, account: Account,
+  access: Access, request: Request, input: CreateZoneSpaceInput & { idempotencyKey: string }) {
+  return createAdmittedSpace(env, account, access, request, { capability: 'zone', input });
+}
+
+async function createAdmittedSpace(
   env: WorkActivationEnvironment,
-  account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'withOwnerAuthority'>>,
+  account: Account,
+  access: Access,
   request: Request,
-  input: CreateRealmSpaceInput & { idempotencyKey: string },
+  creation: { capability: 'realm'; input: CreateRealmSpaceInput & { idempotencyKey: string } }
+    | { capability: 'zone'; input: CreateZoneSpaceInput & { idempotencyKey: string } },
 ): Promise<SpaceCreationReceipt & { replayed: boolean }> {
-  const digest = spaceCreationDigest(input);
+  const { input } = creation;
+  const digest = creation.capability === 'realm'
+    ? spaceCreationDigest(creation.input) : zoneSpaceCreationDigest(creation.input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['space:create']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
@@ -35,7 +52,7 @@ export async function createAdmittedRealmSpace(
         await sealRealmSpaceAdmission(env, admission);
       } else {
         try {
-          await validateTopics(env,input.topics ?? []);
+          if (creation.capability === 'realm') await validateTopics(env, creation.input.topics ?? []);
           if (input.handle) {
             if (!env.addresses || !access.withOwnerAuthority) throw new NameUnavailable('Space name registry is unavailable');
             await access.withOwnerAuthority({ principal,actingSubject: input.actingSubject,
@@ -44,7 +61,8 @@ export async function createAdmittedRealmSpace(
                 operation: 'claim',name: input.handle,expectedRevision: null,idempotencyKey: `space-name:${admission.id}`,
               },input.actingSubject,admission.id));
           }
-          await createRealmSpace(env, admission, input);
+          if (creation.capability === 'realm') await createRealmSpace(env, admission, creation.input);
+          else await createZoneSpace(env, admission, creation.input);
         }
         catch (error) {
           if (error instanceof NameUnavailable) throw error;

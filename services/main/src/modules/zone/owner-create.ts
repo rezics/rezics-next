@@ -99,8 +99,7 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
             rv:captureCoverage rv:${input.capture.coverage === 'complete' ? 'Complete' : 'Partial'} .` : ''}`;
       const prerequisite = input.kind === 'zone'
         ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.space!)} a rv:Space ;
-            rv:owner ${iri(input.actingSubject)} ; rv:realmCapability ?realm .
-            ?realm a rv:Realm ; rv:realmState rv:Active . }
+            rv:owner ${iri(input.actingSubject)} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
             ${iri(input.space!)} rv:zoneCapability ?priorZone . } }`
         : '';
@@ -157,9 +156,15 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
         def.profile, [{ shape: `${profile}/${input.kind === 'definition'
           ? 'definition-shape' : 'collection-shape'}`, focus: [input.owner],
           graphs: [GRAPHS.current, GRAPHS.revisions] }]));
-      if (input.kind === 'zone') validations.push(...await profileValidations(env.fuseki,
-        'space-realm-v1', [{ shape: 'https://rezics.com/definition/space-realm-v1/space-shape',
+      if (input.kind === 'zone') {
+        const hasRealm = (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+          GRAPH ${iri(GRAPHS.current)} { ${iri(input.space!)} rv:realmCapability ?realm }
+        }`, 1024)).boolean === true;
+        const spaceProfile = hasRealm ? 'space-realm-v1' : 'space-zone-v1';
+        validations.push(...await profileValidations(env.fuseki, spaceProfile, [{
+          shape: `https://rezics.com/definition/${spaceProfile}/space-shape`,
           focus: [input.space!], graphs: [GRAPHS.current] }]));
+      }
       try { await validatedCommand(env, { receipt, digest: input.requestDigest,
         update, validations, deadlineMs: 10_000 }, admission); }
       catch { /* A lost graph response is resolved by the durable receipt below. */ }
