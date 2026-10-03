@@ -141,6 +141,9 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
       await selectMainDefault(stack.env, stack.admission(member.actor, `publication:select:${created.mainVersion}`,
         'publication.select', mainSelectionDigest(selection)), selection);
       await member.grant(`work:edit:${created.work}`, 'work.edit');
+      // A public publication admits anonymous discovery; inserting a Work
+      // part still requires this editor's explicit target-read authority.
+      await member.grant(`work:read:${created.work}`, 'work.read');
       return created;
     };
     const series = await createWork('G954 long composed story');

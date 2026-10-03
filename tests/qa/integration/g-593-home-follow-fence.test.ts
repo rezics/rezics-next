@@ -32,8 +32,10 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
       const page = await workRead(home.deps, publicRequest, {}, session =>
         readFeed(session, { scope: 'all', sort }, reader));
       expect(page.items.length).toBeGreaterThanOrEqual(5);
+      // Realm follows are stored against their owning Space; card reasons use
+      // that canonical target rather than the submitted capability alias.
       expect(page.items.some(item => item.reason.kind === 'followed'
-        && [seeded.realm.realm, seeded.works[1]!.work].includes(item.reason.target))).toBe(true);
+        && [seeded.realm.space, seeded.works[1]!.work].includes(item.reason.target))).toBe(true);
       expect(calls).toHaveLength(2);
       expect(calls[0]).toBeGreaterThan(0);
       expect(calls[1]).toBe(0);
