@@ -35631,6 +35631,13 @@
                       "maxItems": 20,
                       "type": "array"
                     },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
+                      "type": "string"
+                    },
                     "nextCursor": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -35657,6 +35664,8 @@
                   },
                   "required": [
                     "items",
+                    "listing",
+                    "discovery",
                     "nextCursor",
                     "sourcePosition",
                     "count"
@@ -39028,6 +39037,42 @@
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
+                    "discovery": {
+                      "properties": {
+                        "indexable": {
+                          "type": "boolean"
+                        },
+                        "referrerPolicy": {
+                          "~elyTyp": 7,
+                          "const": "no-referrer",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "robots": {
+                          "enum": [
+                            "index",
+                            "noindex"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "indexable",
+                        "robots",
+                        "referrerPolicy"
+                      ],
+                      "type": "object"
+                    },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
+                      "type": "string"
+                    },
                     "profile": {
                       "const": "agent-status-shelves-v1",
                       "type": "string"
@@ -39085,6 +39130,8 @@
                   "required": [
                     "profile",
                     "agent",
+                    "listing",
+                    "discovery",
                     "statusShelves",
                     "sourcePosition"
                   ],
@@ -39530,6 +39577,35 @@
                       ],
                       "type": "object"
                     },
+                    "discovery": {
+                      "properties": {
+                        "indexable": {
+                          "type": "boolean"
+                        },
+                        "referrerPolicy": {
+                          "~elyTyp": 7,
+                          "const": "no-referrer",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "robots": {
+                          "enum": [
+                            "index",
+                            "noindex"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "indexable",
+                        "robots",
+                        "referrerPolicy"
+                      ],
+                      "type": "object"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -39686,6 +39762,13 @@
                       "maxItems": 20,
                       "type": "array"
                     },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
+                      "type": "string"
+                    },
                     "nextCursor": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -39729,6 +39812,8 @@
                   "required": [
                     "profile",
                     "agent",
+                    "listing",
+                    "discovery",
                     "status",
                     "statusCount",
                     "items",
@@ -40449,6 +40534,13 @@
                       "maxItems": 20,
                       "type": "array"
                     },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
+                      "type": "string"
+                    },
                     "nextCursor": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -40475,6 +40567,8 @@
                   },
                   "required": [
                     "items",
+                    "listing",
+                    "discovery",
                     "nextCursor",
                     "sourcePosition",
                     "count"
@@ -168348,6 +168442,35 @@
                       ],
                       "type": "object"
                     },
+                    "discovery": {
+                      "properties": {
+                        "indexable": {
+                          "type": "boolean"
+                        },
+                        "referrerPolicy": {
+                          "~elyTyp": 7,
+                          "const": "no-referrer",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "robots": {
+                          "enum": [
+                            "index",
+                            "noindex"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "indexable",
+                        "robots",
+                        "referrerPolicy"
+                      ],
+                      "type": "object"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -168527,6 +168650,13 @@
                       "maxItems": 20,
                       "type": "array"
                     },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
+                      "type": "string"
+                    },
                     "nextCursor": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -168553,6 +168683,8 @@
                   },
                   "required": [
                     "items",
+                    "listing",
+                    "discovery",
                     "nextCursor",
                     "sourcePosition",
                     "count"
@@ -185732,7 +185864,7 @@
                         ],
                         "type": "object"
                       },
-                      "maxItems": 24,
+                      "maxItems": 39,
                       "type": "array"
                     },
                     "profile": {
@@ -187349,6 +187481,7 @@
                                   "review_helpful",
                                   "realm_invitation",
                                   "chapter",
+                                  "new_work",
                                   "post_vote"
                                 ],
                                 "type": "string"
@@ -187407,6 +187540,14 @@
                                       "null"
                                     ]
                                   },
+                                  "href": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
                                   "language": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -187432,6 +187573,14 @@
                                     ]
                                   },
                                   "title": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "topicName": {
                                     "~elyTyp": 7,
                                     "nullable": true,
                                     "type": [
@@ -193562,6 +193711,35 @@
                       ],
                       "type": "object"
                     },
+                    "discovery": {
+                      "properties": {
+                        "indexable": {
+                          "type": "boolean"
+                        },
+                        "referrerPolicy": {
+                          "~elyTyp": 7,
+                          "const": "no-referrer",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "robots": {
+                          "enum": [
+                            "index",
+                            "noindex"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "indexable",
+                        "robots",
+                        "referrerPolicy"
+                      ],
+                      "type": "object"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -193785,6 +193963,13 @@
                       "maxItems": 20,
                       "type": "array"
                     },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
+                      "type": "string"
+                    },
                     "nextCursor": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -193811,6 +193996,8 @@
                   },
                   "required": [
                     "items",
+                    "listing",
+                    "discovery",
                     "nextCursor",
                     "sourcePosition",
                     "count"
@@ -474833,6 +475020,66 @@
                         "minItems": 1,
                         "prefixItems": [
                           {
+                            "const": "zone",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "handle": {
+                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$",
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "listing": {
+                        "enum": [
+                          "listed",
+                          "unlisted"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-zone-v1",
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "enum": [
+                          "public",
+                          "private"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
                             "const": "realm",
                             "type": "string"
                           }
@@ -474924,6 +475171,66 @@
             "application/x-www-form-urlencoded": {
               "schema": {
                 "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
+                            "const": "zone",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "handle": {
+                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$",
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "listing": {
+                        "enum": [
+                          "listed",
+                          "unlisted"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-zone-v1",
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "enum": [
+                          "public",
+                          "private"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
                   {
                     "additionalProperties": false,
                     "properties": {
@@ -475039,6 +475346,66 @@
                         "minItems": 1,
                         "prefixItems": [
                           {
+                            "const": "zone",
+                            "type": "string"
+                          }
+                        ],
+                        "type": "array"
+                      },
+                      "handle": {
+                        "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$",
+                        "type": "string"
+                      },
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "listing": {
+                        "enum": [
+                          "listed",
+                          "unlisted"
+                        ],
+                        "type": "string"
+                      },
+                      "name": {
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "space-zone-v1",
+                        "type": "string"
+                      },
+                      "visibility": {
+                        "enum": [
+                          "public",
+                          "private"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "name",
+                      "capabilities",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "capabilities": {
+                        "items": false,
+                        "minItems": 1,
+                        "prefixItems": [
+                          {
                             "const": "realm",
                             "type": "string"
                           }
@@ -475135,69 +475502,152 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "capabilities": {
-                      "items": false,
-                      "minItems": 1,
-                      "prefixItems": [
-                        {
-                          "const": "realm",
-                          "type": "string"
-                        }
-                      ],
-                      "type": "array"
-                    },
-                    "owner": {
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "realmRevision": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "capabilities": {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "realm",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "owner": {
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "realm": {
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "realmRevision": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "type": "string"
+                        },
+                        "spaceRevision": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "space",
+                        "realm",
+                        "spaceRevision",
+                        "realmRevision",
+                        "owner",
+                        "capabilities",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "space": {
-                      "type": "string"
-                    },
-                    "spaceRevision": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "capabilities": {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "zone",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "navigation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "navigationRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "owner": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "spaceRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zone": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zoneRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "space",
+                        "zone",
+                        "spaceRevision",
+                        "zoneRevision",
+                        "navigation",
+                        "navigationRevision",
+                        "owner",
+                        "capabilities",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "space",
-                    "realm",
-                    "spaceRevision",
-                    "realmRevision",
-                    "owner",
-                    "capabilities",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -475207,69 +475657,152 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "capabilities": {
-                      "items": false,
-                      "minItems": 1,
-                      "prefixItems": [
-                        {
-                          "const": "realm",
-                          "type": "string"
-                        }
-                      ],
-                      "type": "array"
-                    },
-                    "owner": {
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "realmRevision": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "capabilities": {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "realm",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "owner": {
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "realm": {
                           "type": "string"
                         },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
+                        "realmRevision": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "type": "string"
+                        },
+                        "spaceRevision": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "space",
+                        "realm",
+                        "spaceRevision",
+                        "realmRevision",
+                        "owner",
+                        "capabilities",
+                        "sourcePosition",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "space": {
-                      "type": "string"
-                    },
-                    "spaceRevision": {
-                      "type": "string"
+                    {
+                      "properties": {
+                        "capabilities": {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "zone",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "navigation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "navigationRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "owner": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "spaceRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zone": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zoneRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "space",
+                        "zone",
+                        "spaceRevision",
+                        "zoneRevision",
+                        "navigation",
+                        "navigationRevision",
+                        "owner",
+                        "capabilities",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "space",
-                    "realm",
-                    "spaceRevision",
-                    "realmRevision",
-                    "owner",
-                    "capabilities",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -475584,76 +476117,161 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "capabilities": {
-                      "items": false,
-                      "minItems": 1,
-                      "prefixItems": [
-                        {
-                          "const": "realm",
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "capabilities": {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "realm",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "membershipPolicy": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "owner": {
+                          "type": "string"
+                        },
+                        "realm": {
+                          "type": "string"
+                        },
+                        "realmRevision": {
+                          "type": "string"
+                        },
+                        "reviewPolicy": {
+                          "type": "string"
+                        },
+                        "selectionPolicy": {
+                          "type": "string"
+                        },
+                        "space": {
+                          "type": "string"
+                        },
+                        "spaceRevision": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "active",
                           "type": "string"
                         }
+                      },
+                      "required": [
+                        "space",
+                        "realm",
+                        "owner",
+                        "name",
+                        "language",
+                        "direction",
+                        "capabilities",
+                        "state",
+                        "spaceRevision",
+                        "realmRevision",
+                        "selectionPolicy",
+                        "membershipPolicy",
+                        "reviewPolicy"
                       ],
-                      "type": "array"
+                      "type": "object"
                     },
-                    "direction": {
-                      "enum": [
-                        "ltr",
-                        "rtl"
+                    {
+                      "properties": {
+                        "capabilities": {
+                          "items": false,
+                          "minItems": 1,
+                          "prefixItems": [
+                            {
+                              "const": "zone",
+                              "type": "string"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "direction": {
+                          "enum": [
+                            "ltr",
+                            "rtl"
+                          ],
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "listing": {
+                          "enum": [
+                            "listed",
+                            "unlisted"
+                          ],
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "owner": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "spaceRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "active",
+                          "type": "string"
+                        },
+                        "visibility": {
+                          "enum": [
+                            "public",
+                            "private"
+                          ],
+                          "type": "string"
+                        },
+                        "zone": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zoneRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "space",
+                        "zone",
+                        "owner",
+                        "name",
+                        "language",
+                        "direction",
+                        "capabilities",
+                        "state",
+                        "spaceRevision",
+                        "zoneRevision",
+                        "visibility",
+                        "listing"
                       ],
-                      "type": "string"
-                    },
-                    "language": {
-                      "type": "string"
-                    },
-                    "membershipPolicy": {
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "owner": {
-                      "type": "string"
-                    },
-                    "realm": {
-                      "type": "string"
-                    },
-                    "realmRevision": {
-                      "type": "string"
-                    },
-                    "reviewPolicy": {
-                      "type": "string"
-                    },
-                    "selectionPolicy": {
-                      "type": "string"
-                    },
-                    "space": {
-                      "type": "string"
-                    },
-                    "spaceRevision": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "const": "active",
-                      "type": "string"
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "space",
-                    "realm",
-                    "owner",
-                    "name",
-                    "language",
-                    "direction",
-                    "capabilities",
-                    "state",
-                    "spaceRevision",
-                    "realmRevision",
-                    "selectionPolicy",
-                    "membershipPolicy",
-                    "reviewPolicy"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -547451,6 +548069,35 @@
                       ],
                       "type": "string"
                     },
+                    "discovery": {
+                      "properties": {
+                        "indexable": {
+                          "type": "boolean"
+                        },
+                        "referrerPolicy": {
+                          "~elyTyp": 7,
+                          "const": "no-referrer",
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "robots": {
+                          "enum": [
+                            "index",
+                            "noindex"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "indexable",
+                        "robots",
+                        "referrerPolicy"
+                      ],
+                      "type": "object"
+                    },
                     "execution": {
                       "anyOf": [
                         {
@@ -547671,6 +548318,13 @@
                     },
                     "language": {
                       "minLength": 1,
+                      "type": "string"
+                    },
+                    "listing": {
+                      "enum": [
+                        "listed",
+                        "unlisted"
+                      ],
                       "type": "string"
                     },
                     "moduleData": {
@@ -548372,6 +549026,8 @@
                   },
                   "required": [
                     "profile",
+                    "listing",
+                    "discovery",
                     "name",
                     "language",
                     "direction",
@@ -550475,12 +551131,48 @@
                           ],
                           "type": "string"
                         },
+                        "discovery": {
+                          "properties": {
+                            "indexable": {
+                              "type": "boolean"
+                            },
+                            "referrerPolicy": {
+                              "~elyTyp": 7,
+                              "const": "no-referrer",
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "robots": {
+                              "enum": [
+                                "index",
+                                "noindex"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "indexable",
+                            "robots",
+                            "referrerPolicy"
+                          ],
+                          "type": "object"
+                        },
                         "kind": {
                           "const": "home",
                           "type": "string"
                         },
                         "language": {
                           "minLength": 1,
+                          "type": "string"
+                        },
+                        "listing": {
+                          "enum": [
+                            "listed",
+                            "unlisted"
+                          ],
                           "type": "string"
                         },
                         "name": {
@@ -550535,6 +551227,8 @@
                         "profile",
                         "zone",
                         "path",
+                        "listing",
+                        "discovery",
                         "name",
                         "language",
                         "direction",
@@ -550617,12 +551311,48 @@
                           ],
                           "type": "string"
                         },
+                        "discovery": {
+                          "properties": {
+                            "indexable": {
+                              "type": "boolean"
+                            },
+                            "referrerPolicy": {
+                              "~elyTyp": 7,
+                              "const": "no-referrer",
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "robots": {
+                              "enum": [
+                                "index",
+                                "noindex"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "indexable",
+                            "robots",
+                            "referrerPolicy"
+                          ],
+                          "type": "object"
+                        },
                         "kind": {
                           "const": "document",
                           "type": "string"
                         },
                         "language": {
                           "minLength": 1,
+                          "type": "string"
+                        },
+                        "listing": {
+                          "enum": [
+                            "listed",
+                            "unlisted"
+                          ],
                           "type": "string"
                         },
                         "mount": {
@@ -550772,6 +551502,8 @@
                         "profile",
                         "zone",
                         "path",
+                        "listing",
+                        "discovery",
                         "name",
                         "language",
                         "direction",
@@ -550859,6 +551591,35 @@
                             "rtl"
                           ],
                           "type": "string"
+                        },
+                        "discovery": {
+                          "properties": {
+                            "indexable": {
+                              "type": "boolean"
+                            },
+                            "referrerPolicy": {
+                              "~elyTyp": 7,
+                              "const": "no-referrer",
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "robots": {
+                              "enum": [
+                                "index",
+                                "noindex"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "indexable",
+                            "robots",
+                            "referrerPolicy"
+                          ],
+                          "type": "object"
                         },
                         "items": {
                           "items": {
@@ -551196,6 +551957,13 @@
                           "minLength": 1,
                           "type": "string"
                         },
+                        "listing": {
+                          "enum": [
+                            "listed",
+                            "unlisted"
+                          ],
+                          "type": "string"
+                        },
                         "mount": {
                           "properties": {
                             "occurrence": {
@@ -551277,6 +552045,8 @@
                         "profile",
                         "zone",
                         "path",
+                        "listing",
+                        "discovery",
                         "name",
                         "language",
                         "direction",
@@ -551372,12 +552142,48 @@
                           ],
                           "type": "string"
                         },
+                        "discovery": {
+                          "properties": {
+                            "indexable": {
+                              "type": "boolean"
+                            },
+                            "referrerPolicy": {
+                              "~elyTyp": 7,
+                              "const": "no-referrer",
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "robots": {
+                              "enum": [
+                                "index",
+                                "noindex"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "indexable",
+                            "robots",
+                            "referrerPolicy"
+                          ],
+                          "type": "object"
+                        },
                         "kind": {
                           "const": "detail",
                           "type": "string"
                         },
                         "language": {
                           "minLength": 1,
+                          "type": "string"
+                        },
+                        "listing": {
+                          "enum": [
+                            "listed",
+                            "unlisted"
+                          ],
                           "type": "string"
                         },
                         "mount": {
@@ -551540,6 +552346,8 @@
                         "profile",
                         "zone",
                         "path",
+                        "listing",
+                        "discovery",
                         "name",
                         "language",
                         "direction",

@@ -1,0 +1,51 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "rdfs": {
+      "@id": "http://www.w3.org/2000/01/rdf-schema#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rdfs:label": {
+      "@id": "http://www.w3.org/2000/01/rdf-schema#label"
+    },
+    "rv:definitionProfile": {
+      "@id": "https://rezics.com/vocab/definitionProfile",
+      "@type": "@id"
+    },
+    "rv:disclosure": {
+      "@id": "https://rezics.com/vocab/disclosure",
+      "@type": "@id"
+    },
+    "rv:head": {
+      "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:listing": {
+      "@id": "https://rezics.com/vocab/listing",
+      "@type": "@id"
+    },
+    "rv:owner": {
+      "@id": "https://rezics.com/vocab/owner",
+      "@type": "@id"
+    },
+    "rv:zoneCapability": {
+      "@id": "https://rezics.com/vocab/zoneCapability",
+      "@type": "@id"
+    }
+  }
+}
