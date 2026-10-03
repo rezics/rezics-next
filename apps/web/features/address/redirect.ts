@@ -17,7 +17,7 @@ export type AddressDecision =
 type Resolver = (lookup: AddressLookup) => Promise<AddressRead>;
 const error = (read: Exclude<AddressRead, { kind: 'resolved' }>): AddressDecision => ({
   kind: 'error',
-  status: read.kind === 'retired' ? 410 : read.kind === 'missing' ? 404 : read.status ?? 503,
+  status: read.kind === 'retired' ? 410 : read.kind === 'missing' ? 404 : (read.status ?? 503),
   ...(read.kind === 'unavailable' && read.retryAfter ? { retryAfter: read.retryAfter } : {}),
 });
 
@@ -41,6 +41,19 @@ export async function decideAddress(
   const read = await resolve(path.lookup);
   if (read.kind !== 'resolved') return error(read);
   const data = read.data;
+  // Before the site router split, /r also held Zone capability identities.
+  // That admitted identity still names the site when its Space has a Realm;
+  // ordinary Space addresses and Realm identities keep the community surface.
+  const identity = parseAddressSegment(path.lookup.key);
+  if (
+    path.lookup.scope === 'space' &&
+    path.surface === 'community' &&
+    identity &&
+    identity.kind !== 'name' &&
+    data.holder !== `https://rezics.com/id/${identity.id}` &&
+    data.capabilities?.zone === `https://rezics.com/id/${identity.id}`
+  )
+    path.surface = 'site';
   if (path.surface && !data.capabilities?.[path.surface === 'community' ? 'realm' : 'zone']) {
     // Legacy /r home of a site without a community still opens its site.
     if (path.surface === 'community' && !path.tail.length && data.capabilities?.zone)
