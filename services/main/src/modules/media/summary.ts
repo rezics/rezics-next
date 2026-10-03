@@ -103,7 +103,8 @@ export interface SummaryBatch {
 }
 
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
-  public: boolean; labels: Map<string, string>; localizedName?: LocalizedText }
+  public: boolean; labels: Map<string, string>; localizedName?: LocalizedText;
+  profileAvatarSelections?: Set<string> }
 
 /** Current profile payloads for a bounded Realm summary batch, one graph call. */
 async function realmProfileNames(env: WorkActivationEnvironment, realms: readonly string[]) {
@@ -229,7 +230,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
@@ -284,6 +285,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           UNION { ?r a rv:Zone ; rv:space ?zoneSpace . FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
             ?zoneSpace rdfs:label ?label }
         } }
+        OPTIONAL { FILTER(?type = "agent") GRAPH ${iri(GRAPHS.current)} {
+          ?r rv:profileAvatarSelection ?profileAvatarSelection } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r schema:name ?label } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r rv:collectionNameHead ?nameHead }
           OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?nameHead a rv:CollectionNameRevision ;
@@ -352,6 +355,10 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     // Agent provisioning records a plain display name. Keep its language
     // unknown rather than discarding the public profile or guessing a tag.
     if (label && (tag || row.type === 'agent')) row.labels.set(tag?.toLowerCase() ?? '', label.value);
+    if (row.type === 'agent' && binding.profileAvatarSelection) {
+      row.profileAvatarSelections ??= new Set();
+      row.profileAvatarSelections.add(binding.profileAvatarSelection.value);
+    }
     if (row.type === 'collection') {
       if (label) row.labels.set(tag?.toLowerCase() || 'en', label.value);
       if (binding.nameHead) {
@@ -552,6 +559,12 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
     cost.mediaQueries = 1;
     avatars = hydrated.rows;
     mediaGeneration = `${hydrated.generation.dataEpoch}:${hydrated.generation.sequence}`;
+    // Agent profiles adopt media selections explicitly. Summaries follow the
+    // same current reference as the profile read and avatar delivery route.
+    for (const [reference, row] of readable) {
+      if (row.type === 'agent' && (row.profileAvatarSelections?.size !== 1
+        || !row.profileAvatarSelections.has(avatars.get(reference)?.selection ?? ''))) avatars.delete(reference);
+    }
   }
   // Hydrated names/images cannot outlive a disclosure or membership change.
   const fencedNames = await readPublicRealmNames(env, realms, new Set(realmProofs.keys()));

@@ -45,6 +45,8 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
           ...(language ? { 'accept-language': language } : {}),
           ...(body ? { 'content-type': 'application/json', 'idempotency-key': key } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const summary = async (resource: string) => (await json(await call('POST', '/v1/resources/summaries',
+      undefined, { profile: 'resource-summary-batch-v1', resources: [resource] }), 200)).summaries as Json[];
     const created = await json(await call('POST', '/v1/agents', owner.token,
       { profile: 'agent-provision-v1', kind: 'person', displayName: 'Initial Name' }), 201);
     const agent = created.agent as string;
@@ -186,6 +188,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     const notificationAgent = currentNotificationAgentReader(stack.fuseki, stack.env.lineage,
       stack.media.store);
     expect((await notificationAgent(agent))?.avatar).toBeNull();
+    expect((await summary(agent))[0]).toMatchObject({ status: 'available', avatar: { kind: 'fallback' } });
     const beforeProfileQueries = stack.fuseki.queries;
     const withAvatar = await json(await call('PUT', `${path}/profile`, owner.token, {
       ...body(saved.revision as string, winner.name), avatarSelection: selection.selection,
@@ -194,6 +197,8 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     const pictured = await json(await call('GET', path), 200);
     expect(pictured).toMatchObject({ revision: withAvatar.revision,
       avatarSelection: selection.selection, avatarUrl: `/v1/media/avatars/${selection.selection}` });
+    expect((await summary(agent))[0]).toMatchObject({ status: 'available',
+      avatar: { kind: 'image', selection: selection.selection } });
     expect((await notificationAgent(agent))?.avatar).toBe(pictured.avatarUrl);
     const image = await call('GET', pictured.avatarUrl as string);
     expect(image.status).toBe(200);
@@ -245,6 +250,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     expect((await json(await call('GET', path), 200))).toMatchObject({ revision: cleared.revision,
       bio: null, avatarSelection: null, avatarUrl: null });
     expect((await notificationAgent(agent))?.avatar).toBeNull();
+    expect((await summary(agent))[0]).toMatchObject({ status: 'available', avatar: { kind: 'fallback' } });
     expect((await call('GET', `/v1/media/avatars/${selection.selection}`)).status).toBe(404);
     expect((await call('GET', `/v1/media/avatars/${selection.selection}`, owner.token)).status).toBe(404);
     expect((await call('GET', `/v1/media/avatars/${selection.selection}?actingSubject=${encodeURIComponent(agent)}`,
