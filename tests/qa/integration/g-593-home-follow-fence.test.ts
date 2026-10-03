@@ -3,9 +3,22 @@ import { randomUUID } from 'node:crypto';
 import { readFeed } from '../../../services/main/src/modules/feed/read.ts';
 import { WorkReadMoved, WorkReadSession, workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { seedHome, startHomeStack } from './feed-read-support.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 test('G-593: All matches followed cards once and fences their inventory; Following keeps its cursor head', async () => {
-  const home = await startHomeStack('g-593-follow-fence');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    // The projection inventory belongs to this file, and its relay starts
+    // immediately before this file's commands rather than replaying the shard.
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack('g-593-follow-fence', { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
   const matches = home.deps.follows.matches.bind(home.deps.follows);
   try {
     const seeded = await seedHome(home);
@@ -69,6 +82,6 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
     }
   } finally {
     home.deps.follows.matches = matches;
-    await home.stop();
+    try { await home.stop(); } finally { await databases.close(); }
   }
 }, 120_000);

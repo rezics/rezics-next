@@ -47,8 +47,10 @@ const lookup = t.Object(
   },
   { additionalProperties: false },
 );
-const viewerLookup = t.Object({ ...lookup.properties, actingSubject: t.Optional(holder) },
-  { additionalProperties: false });
+const viewerLookup = t.Object(
+  { ...lookup.properties, actingSubject: t.Optional(holder) },
+  { additionalProperties: false },
+);
 const state = t.Union([t.Literal('current'), t.Literal('redirect'), t.Literal('retired')]);
 const resolved = t.Union([
   t.Object(
@@ -208,12 +210,42 @@ export function addressRoutes(work: MainWorkDependencies) {
       async ({ request, query }) => {
         try {
           const result = (
-            await resolveAddresses(work, request, [
-              { ...query, scope: query.scope as AddressScope },
-            ], query.actingSubject)
+            await resolveAddresses(
+              work,
+              request,
+              [{ ...query, scope: query.scope as AddressScope }],
+              query.actingSubject,
+            )
           )[0]!;
           if (result.status === 'unavailable')
             return problem(404, 'address_not_found', 'Address is unavailable');
+          if (
+            result.status === 'resolved' &&
+            !request.headers.has('authorization') &&
+            !query.actingSubject
+          ) {
+            // A lookup revision alone misses renames of its canonical successor
+            // and language-dependent slugs. Include the admitted representation.
+            const body = JSON.stringify(result);
+            const digest = new Bun.CryptoHasher('sha256').update(body).digest('hex');
+            const etag = `"address-${result.revision ?? 'identity'}-${digest}"`;
+            const headers = {
+              'cache-control': 'public, max-age=30, must-revalidate',
+              vary: 'Authorization, Accept-Language, X-Rezics-Display-Languages',
+              etag,
+            };
+            // RFC 9110 §13.1.2: GET validators use weak comparison, including
+            // a list of tags; visibility is checked before any 304 is returned.
+            const condition = request.headers.get('if-none-match');
+            if (
+              condition?.trim() === '*' ||
+              condition?.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag)
+            )
+              return new Response(null, { status: 304, headers });
+            return new Response(body, {
+              headers: { ...headers, 'content-type': 'application/json' },
+            });
+          }
           return Response.json(result, {
             status: result.status === 'retired' ? 410 : 200,
             headers: { 'cache-control': 'no-store' },
@@ -227,7 +259,10 @@ export function addressRoutes(work: MainWorkDependencies) {
       '/v1/addresses/resolutions',
       {
         body: t.Object(
-          { lookups: t.Array(lookup, { minItems: 1, maxItems: NAME_COST.batch }), actingSubject: t.Optional(holder) },
+          {
+            lookups: t.Array(lookup, { minItems: 1, maxItems: NAME_COST.batch }),
+            actingSubject: t.Optional(holder),
+          },
           { additionalProperties: false },
         ),
         response: { 200: t.Object({ results: t.Array(resolved) }), ...readProblems },
@@ -235,7 +270,14 @@ export function addressRoutes(work: MainWorkDependencies) {
       async ({ request, body }) => {
         try {
           return Response.json(
-            { results: await resolveAddresses(work, request, body.lookups as AddressLookup[], body.actingSubject) },
+            {
+              results: await resolveAddresses(
+                work,
+                request,
+                body.lookups as AddressLookup[],
+                body.actingSubject,
+              ),
+            },
             { headers: { 'cache-control': 'no-store' } },
           );
         } catch (error) {
@@ -284,7 +326,9 @@ export function addressRoutes(work: MainWorkDependencies) {
       },
       async ({ request, query, params }) => {
         try {
-          const current = (await resolveAddresses(work, request, [query as AddressLookup], query.actingSubject))[0]!;
+          const current = (
+            await resolveAddresses(work, request, [query as AddressLookup], query.actingSubject)
+          )[0]!;
           if (current.status === 'unavailable')
             return problem(404, 'address_not_found', 'Address is unavailable');
           const registry = work.environment.addresses!;

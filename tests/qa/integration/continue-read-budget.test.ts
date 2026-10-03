@@ -2,9 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { HOME_READ_BUDGET, meterStatements, seedHome, startHomeStack } from './feed-read-support.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 test('G407: Continue seeks the next chapter in a 60-chapter Book within its read budget', async () => {
-  const home = await startHomeStack('continue-long-book');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    // Pools capture these file-owned databases during startup; restore the
+    // process environment before commands or another file can use it.
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack('continue-long-book', { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
   try {
     const seeded = await seedHome(home);
     const work = seeded.works[2]!.work;
@@ -62,5 +75,5 @@ test('G407: Continue seeks the next chapter in a 60-chapter Book within its read
       }
       expect(meter.violations).toEqual([]);
     } finally { meter.restore(); }
-  } finally { await home.stop(); }
+  } finally { try { await home.stop(); } finally { await databases.close(); } }
 }, 300_000);

@@ -136,6 +136,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-904-derived.test.ts',
   // Release traversal probes own their complete global publication and owner inventory.
   'tests/qa/integration/g-851-release-query.test.ts',
+  // Suitability's complete resource reads require matching global Rating Context and Access histories.
+  'tests/qa/integration/g-897-suitability.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
