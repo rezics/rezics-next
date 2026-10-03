@@ -102,8 +102,12 @@ test('G954: 1000-chapter chooser searches CJK and chapter numbers before paging 
     const denied = await read({ q: 'Private' }, false, hidden.work);
     const absent = await read({ q: 'Private' }, false, missing);
     expect(denied.status).toBe(404); expect(await denied.json()).toEqual(await absent.json());
-    expect((await read({ q: 'x'.repeat(201) })).status).toBe(422);
-    expect((await read({ limit: '1.5' })).status).toBe(422);
+    // Query schema failures use Main's shared 400 response, as catalogue list reads do.
+    const overlong = 'x'.repeat(201);
+    expect(await json(await call('GET', `/v1/search/catalogue?q=${overlong}`, undefined, false), 400))
+      .toMatchObject({ code: 'invalid_request' });
+    expect(await json(await read({ q: overlong }), 400)).toMatchObject({ code: 'invalid_request' });
+    expect(await json(await read({ limit: '1.5' }), 400)).toMatchObject({ code: 'invalid_request' });
     active = false; expect((await read({ q: '重逢' }, true)).status).toBe(401);
     active = true;
     await json(await call('POST', `/v1/compositions/${short(composition.structure)}/changes`, {
@@ -130,8 +134,7 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
     const call = (method: string, path: string, body?: object) => app.handle(new Request(`http://main.local${path}`, {
       method, headers: { authorization: `Bearer ${member.token}`, 'idempotency-key': randomUUID(),
         ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));
-    const createWork = async (title: string) => {
-      const semanticTypes = ['https://schema.org/Book'];
+    const createWork = async (title: string, semanticTypes = ['https://schema.org/Book']) => {
       const created = await activateMetadataWork(stack.env, { title, semanticTypes,
         admission: stack.admission(member.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes)) });
       const text = await stack.contribution(created.work, member.actor, 'en', title);
@@ -154,6 +157,7 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
       profile: 'work-composition', expectedHead: root.revision, actingSubject: member.actor,
       operations: volumes.map((volume, index) => ({ op: 'insert', role: 'part', parent: root.structure, position: 'last',
         target: volume.work, displayLabel: String(index + 1), inclusion: 'required' })) }));
+    const chapter = await createWork('G954 published chapter content', ['https://schema.org/DigitalDocument']);
     const expected: string[] = [];
     for (const [volumeIndex, volume] of volumes.entries()) {
       expected.push(root.occurrences[volumeIndex]!);
@@ -169,7 +173,7 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
           return { occurrence, state: 'active', parent: base.structure,
             segmentKey: Math.floor(local / 32).toString(36).padStart(4, '0'),
             orderKey: (local % 32).toString(36).padStart(2, '0'), role: 'chapter',
-            target: 'https://schema.org/DigitalDocument', introducedBy: stage.revision,
+            target: chapter.work, selection: { mode: 'follow-context' }, introducedBy: stage.revision,
             labels: [{ value: global === 10500 ? '重逢' : `Chapter ${global}`,
               language: global === 10500 ? 'yue' : 'en' }] };
         });
