@@ -3,7 +3,7 @@ import { Elysia } from 'elysia';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
 import { rateLimitBudgets, rateLimitFamily } from '../src/modules/rate-limit/budgets.ts';
 
-test('G937: verified callers consume address budgets instead of the signed-in search exemption', async () => {
+test('G937: verified address misses consume budgets instead of the signed-in search exemption', async () => {
   const seen: { family: string; maximum: number }[] = [];
   const app = new Elysia()
     .use(
@@ -33,7 +33,7 @@ test('G937: verified callers consume address budgets instead of the signed-in se
         },
       ),
     )
-    .get('/v1/addresses/resolve', () => 'resource');
+    .get('/v1/addresses/resolve', () => new Response(null, { status: 404 }));
   const response = await app.handle(
     new Request('http://localhost/v1/addresses/resolve', {
       headers: { authorization: 'Bearer member' },
