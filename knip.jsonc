@@ -39,7 +39,9 @@
         // are imported by filesystem discovery rather than static import edges.
         "src/modules/editorial-review/*-adapter.ts",
         "src/modules/*/merge-handler.ts",
-        "tests/g-865-*-fixture.ts"
+        "tests/g-865-*-fixture.ts",
+        // Tests spawn isolated process fixtures by path rather than importing them.
+        "tests/**/*-child.ts"
       ],
       "project": ["src/**/*.ts", "tests/**/*.ts"],
       // Consumed by the root OpenAPI generator, Eden type gate and remote MCP QA client.
@@ -109,8 +111,8 @@
       "entry": [
         "src/*.ts",
         "tests/**/*.test.ts",
-        "tests/runtime-child.ts",
-        "tests/worker-sampling-child.ts"
+        // Telemetry initializes in isolated child processes before owner imports.
+        "tests/**/*-child.ts"
       ],
       "project": ["src/**/*.ts", "tests/**/*.ts"]
     },

@@ -20,6 +20,7 @@ class SearchFuseki extends FusekiClient {
   instanceId = '11111111-1111-4111-8111-111111111111';
   publicSearchWriteEpoch = '0';
   contentAudits = 0;
+  occurrenceLabelsPending = false;
   constructor() { super('http://127.0.0.1:1/rezics'); }
   override async commandHealth() {
     return { moduleVersion: 'test', instanceId: this.instanceId,
@@ -30,6 +31,10 @@ class SearchFuseki extends FusekiClient {
   override async query(sparql: string): Promise<SparqlResult> {
     if (!this.available) throw new Error('graph unavailable');
     if (sparql.includes('ASK {')) return { boolean: true };
+    if (sparql.includes('SELECT ?generation WHERE') && sparql.includes('"occurrence-lucene-v1"')) {
+      return { results: { bindings: this.occurrenceLabelsPending
+        ? [{ generation: binding('urn:rezics:generation:1') }] : [] } };
+    }
     if (sparql.includes('?probeScore')) {
       return { results: { bindings: [{ epoch: binding(graphEpoch), sequence: binding('7'),
         generation: binding(generation), population: binding('1') }] } };
@@ -87,7 +92,22 @@ test('SEARCH19: Content phrase route returns a typed complete result at both sou
     total: 1, population: 1, graphPosition: { dataEpoch: graphEpoch, sequence: '7' },
     contentPosition: contentPosition('2'), indexGeneration: generation,
     results: [{ matchUnit: 'urn:rezics:match:1', score: 2.5 }] });
-  expect((await run.readiness()).status).toBe(200);
+  const readiness = await run.readiness();
+  expect(readiness.status).toBe(200);
+  expect(await readiness.json()).toEqual({ status: 'ready', dataEpoch: graphEpoch,
+    sequence: '7', indexGeneration: generation,
+    occurrenceLabels: { status: 'current', pending: { value: 0, kind: 'at-least' } } });
+});
+
+test('SEARCH19: Content readiness reports occurrence label lag without hiding a complete Content result', async () => {
+  const run = fixture();
+  run.fuseki.occurrenceLabelsPending = true;
+  expect((await run.search('needle')).status).toBe(200);
+  const readiness = await run.readiness();
+  expect(readiness.status).toBe(200);
+  expect(await readiness.json()).toEqual({ status: 'indexing', dataEpoch: graphEpoch,
+    sequence: '7', indexGeneration: generation,
+    occurrenceLabels: { status: 'indexing', pending: { value: 1, kind: 'at-least' } } });
 });
 
 test('SEARCH15/SEARCH19: Content inventory is reaudited after JVM restart or public write rollback', async () => {

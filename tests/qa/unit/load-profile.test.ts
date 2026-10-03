@@ -152,13 +152,16 @@ test('SEARCH18: meter captures the product query sent to Fuseki and counts wire 
   const meter = startFusekiMeter(`http://127.0.0.1:${upstream.port}/rezics/`);
   try {
     meter.beginCapture();
-    const sparql = 'ASK { ?s ?p ?o }';
+    const sparql = 'ASK { ?s ?p "针é" }';
     const result = await fetch(`${meter.url}query`, { method: 'POST',
       headers: { 'content-type': 'application/sparql-query' }, body: sparql });
     expect(result.status).toBe(200);
     const bytes = await result.arrayBuffer();
-    expect(meter.endCapture()).toEqual([{ path: '/rezics/query', sparql }]);
-    expect(meter.snapshot()).toEqual({ calls: 1, sentBytes: sparql.length,
+    // Captures also retain result evidence; the wire contract is the exact query and path.
+    expect(meter.endCapture().map(({ path, sparql }) => ({ path, sparql })))
+      .toEqual([{ path: '/rezics/query', sparql }]);
+    expect(JSON.parse(new TextDecoder().decode(bytes))).toEqual({ boolean: true });
+    expect(meter.snapshot()).toEqual({ calls: 1, sentBytes: new TextEncoder().encode(sparql).byteLength,
       receivedBytes: bytes.byteLength, errors: 0 });
   } finally {
     await meter.stop();
