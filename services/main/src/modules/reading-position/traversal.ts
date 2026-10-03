@@ -5,10 +5,12 @@ import { WorkReadInvalid, WorkReadMissing, WorkReadUnavailable, type WorkReadSes
 import type { ReadingOccurrence } from './boundary.ts';
 import { READING_POSITION_COST } from './contract.ts';
 import { normalizePositionQuery } from './store.ts';
+import { ReadingOrderIndex, readingOrderRead } from './immutable-order.ts';
 
 /** Bounded results and live traversal state, independent of chapter inventory.
- * Each seek returns <=101 placements, with <=16 labels each. Ordinals sum stored
- * segment counts and count at most 32 earlier placements in the local segment.
+ * Each seek returns <=101 placements, with <=16 labels each. Configured stores
+ * use immutable counted trees for ranges, numeric rank and ordinals. Graph-only
+ * adapters retain the prior projection path; substring search still scans labels.
  * Traversal retains only the ancestor stack and the current seek's candidates.
  * The surrounding Work read bounds graph calls, bytes and elapsed time. */
 export const READING_CHOOSER_COST = { probe: 101, contextDepth: 16, workBatch: 50 } as const;
@@ -57,7 +59,10 @@ export class ReadingPositionTraversal {
   private readonly metadata = new Map<string, Promise<ReadingWork>>();
   private readonly records = new Map<string, ReadingOccurrence | null>();
   private readonly paths = new Map<string, Promise<ReadingFrame[] | null>>();
-  constructor(readonly session: WorkReadSession, readonly root: string, private readonly disclose: Disclose) {}
+  private readonly order: ReadingOrderIndex | null;
+  constructor(readonly session: WorkReadSession, readonly root: string, private readonly disclose: Disclose) {
+    this.order = session.deps?.structureObjects ? new ReadingOrderIndex(session, session.deps.structureObjects) : null;
+  }
 
   async requireWork(work: string) {
     if (!(await this.disclose([work])).has(work)) throw new WorkReadMissing('Work is unavailable');
@@ -69,7 +74,7 @@ export class ReadingPositionTraversal {
   private async readMetadata(work: string): Promise<ReadingWork> {
     const rows = await this.session.query(`# reading-position:work
       SELECT ?work ?structure ?revision ?generation WHERE {
-        BIND(${iri(work)} AS ?work) GRAPH ${current} { ?work rv:mainVersion ?main .
+        BIND(${iri(work)} AS ?work) GRAPH ${current} { ${iri(work)} rv:mainVersion ?main .
           OPTIONAL { ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?profile ;
             rv:structureHead ?revision ; rv:selectedGeneration ?generation .
             FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
@@ -108,10 +113,11 @@ export class ReadingPositionTraversal {
     }
   }
 
-  /** Numeric selection seeks the requested sibling ordinal in the owner store.
-   * Its offset is the search operand; page continuation always uses order keys. */
+  /** Numeric selection descends counted immutable subtrees. Projection-only
+   * adapters retain their legacy offset; continuation always uses order keys. */
   private async numbered(meta: ReadingWork, parent: string, q: string): Promise<string | null> {
     if (!/^[1-9]\d*$/.test(q) || !Number.isSafeInteger(Number(q)) || Number(q) > STRUCTURE_LIMITS.maxPlacements) return null;
+    if (this.order) return readingOrderRead(() => this.order!.numbered(meta, parent, Number(q)));
     const rows = await this.session.query(`# reading-position:number
       SELECT ?occurrence WHERE { GRAPH ${current} { ${placementPattern(iri(meta.generation!), parent)} } }
       ORDER BY ?segmentKey ?orderKey ?occurrence LIMIT 1 OFFSET ${Number(q) - 1}`, 1);
@@ -121,6 +127,10 @@ export class ReadingPositionTraversal {
   private async range(meta: ReadingWork, parent: string, after: ReadingOccurrence | undefined,
     q: string, reverse = false, probe: number = READING_CHOOSER_COST.probe): Promise<Candidate[]> {
     if (!meta.structure) return [];
+    if (!q && this.order) {
+      const items = await readingOrderRead(() => this.order!.range(meta, parent, after, reverse, probe));
+      return items.map(item => ({ item, matches: true }));
+    }
     const numbered = q ? await this.numbered(meta, parent, q) : null;
     // ARQ provides XPath scalar functions, including Unicode normalization:
     // https://jena.apache.org/documentation/query/library-function.html
@@ -173,6 +183,12 @@ export class ReadingPositionTraversal {
 
   private async ordinals(meta: ReadingWork, items: ReadingOccurrence[]) {
     if (!items.length) return;
+    if (this.order) {
+      await readingOrderRead(async () => {
+        for (const item of items) item.ordinal = await this.order!.ordinal(meta, item);
+      });
+      return;
+    }
     const values = `VALUES (?occurrence ?parent ?segmentKey ?orderKey) {
       ${items.map(item => `(${iri(item.occurrence)} ${iri(item.parent)} ${lit(item.segmentKey)} ${lit(item.orderKey)})`).join(' ')} }`;
     const segments = new Map(items.map(item => [`${item.parent}\0${item.segmentKey}`, item]));
@@ -209,7 +225,8 @@ export class ReadingPositionTraversal {
     if (wanted.length) {
       const rows = await this.session.query(`# reading-position:records
         SELECT ?work ?structure ?revision ?occurrence ?parent ?segmentKey ?orderKey ?role ?target WHERE {
-          VALUES ?occurrence { ${wanted.map(iri).join(' ')} } GRAPH ${current} {
+          GRAPH ${current} { VALUES ?occurrence { ${wanted.map(iri).join(' ')} }
+            ?occurrence rv:structure ?structure .
             ?work rv:mainVersion ?main . ?structure a rv:Structure ; rv:structureOf ?main ;
               rv:structureProfile ?profile ; rv:structureHead ?revision ; rv:selectedGeneration ?generation .
             FILTER(?profile IN (rv:WorkComposition, rv:BookComposition)) ?generation rv:generationState rv:Active .
@@ -306,7 +323,9 @@ export class ReadingPositionTraversal {
     while (frames.length && items.length <= input.limit) {
       this.session.checkDeadline();
       const frame = frames.at(-1)!, owner = await this.metadataFor(frame.work);
-      const candidates = await this.range(owner, frame.parent, frame.after, q);
+      const probe = this.order ? Math.min(READING_CHOOSER_COST.probe, input.limit - items.length + 1)
+        : READING_CHOOSER_COST.probe;
+      const candidates = await this.range(owner, frame.parent, frame.after, q, false, probe);
       const targets = [...new Set(candidates.flatMap(row => row.item.target && NATIVE_ID.test(row.item.target) ? [row.item.target] : []))];
       const disclosed = await this.disclose(targets);
       let descended = false;
@@ -321,7 +340,7 @@ export class ReadingPositionTraversal {
         const child = await this.child(item, frames);
         if (child) { frames.push(child); descended = true; break; }
       }
-      if (!descended && candidates.length < READING_CHOOSER_COST.probe) frames.pop();
+      if (!descended && candidates.length < probe) frames.pop();
     }
     const complete = items.length <= input.limit;
     items.splice(input.limit);
