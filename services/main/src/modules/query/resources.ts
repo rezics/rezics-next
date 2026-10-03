@@ -26,7 +26,13 @@ import {
   type LabelAfter,
   type DirectoryAfter,
 } from '../search/labels.ts';
-import type { ResourceCard, ResourceCondition, ResourceListPlan } from './resource-contract.ts';
+import {
+  RESOURCE_LIST_COST,
+  type ResourceCard,
+  type ResourceCondition,
+  type ResourceListPlan,
+} from './resource-contract.ts';
+import { searchGraphSnapshot } from '../search/snapshot-state.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import type { DiscoveryReadGeneration } from '../discovery/store.ts';
 import { DISCOVERY_CONDITION_COST } from '../discovery/store.ts';
@@ -115,7 +121,17 @@ interface Candidate {
   summary: string;
   kind: ResourceCard['kind'];
   order: string;
+  types?: string[];
+  head?: string;
 }
+const resourceDisclosureTarget = (row: Candidate) => ({
+  owner: 'graph' as const,
+  resource: row.id,
+  component: 'name' as const,
+  ...(row.kind === 'work' && row.head
+    ? { work: row.id, workRevision: row.head, revision: row.head }
+    : {}),
+});
 const compareBrowse = (a: Pick<Candidate, 'id' | 'order'>, b: Pick<Candidate, 'id' | 'order'>) =>
   BigInt(a.order) > BigInt(b.order)
     ? -1
@@ -143,9 +159,15 @@ interface PageCursor {
   seeks?: Record<string, { id: string; key: string }>;
   done?: string[];
 }
-/** Hydrate through the shared summary/Agent owners, then recheck disclosure at delivery. */
-export async function resourceCards(session: WorkReadSession, candidates: readonly Candidate[],
-  limit = candidates.length) {
+/** Hydrate through the shared summary/Agent owners, then recheck disclosure at
+ * delivery. Window mode delegates preview hydration and the final search fence
+ * to the enclosing read, after it has selected the delivered page. */
+export async function resourceCards(
+  session: WorkReadSession,
+  candidates: readonly Candidate[],
+  limit = candidates.length,
+  mode: 'page' | 'window' = 'page',
+) {
   const agents = candidates.filter((row) => row.kind === 'agent').map((row) => row.id);
   if (agents.length && (!session.deps.personPreferences || !session.deps.profiles)) {
     throw new WorkReadUnavailable('Agent profile owner is unavailable');
@@ -179,11 +201,13 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
     ...new Set(candidates.filter((row) => row.kind !== 'agent').map((row) => row.summary)),
   ];
   const media = session.deps.media?.store;
-  const summaryMedia = media ? {
-    async avatarRows(targets: readonly string[], context: string) {
-      return optionalPreview(session, () => media.avatarRows(targets, context));
-    },
-  } : undefined;
+  const summaryMedia = media
+    ? {
+        async avatarRows(targets: readonly string[], context: string) {
+          return optionalPreview(session, () => media.avatarRows(targets, context));
+        },
+      }
+    : undefined;
   const readSummaries = () =>
     readResourceSummaries(
       session.deps.environment,
@@ -205,28 +229,28 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
   )
     throw new WorkReadMoved('Resources changed');
   const currentAgents = await visibleAgents();
-  const decisions = await session.disclosure(
-    candidates.map((row) => ({
-      owner: 'graph' as const,
-      resource: row.id,
-      component: 'name' as const,
-    })),
-    'search',
-  );
+  const decisions =
+    mode === 'page'
+      ? await session.disclosure(candidates.map(resourceDisclosureTarget), 'search')
+      : candidates.map(() => 'visible' as const);
   const byId = new Map((summaries?.summaries ?? []).map((summary) => [summary.reference, summary]));
-  const types = candidates.length
-    ? await session.query(
-        `SELECT DISTINCT ?r ?type WHERE {
+  const types =
+    candidates.length && candidates.some((row) => !row.types)
+      ? await session.query(
+          `SELECT DISTINCT ?r ?type WHERE {
     VALUES ?r { ${candidates.map((row) => iri(row.id)).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { { ?r a ?type } UNION { ?r rv:space ?typedSpace . ?typedSpace a ?type } }
     } LIMIT ${candidates.length * 64 + 1}`,
-        candidates.length * 64,
-      )
-    : [];
+          candidates.length * 64,
+        )
+      : [];
   const items = candidates.flatMap((row, index): ResourceCard[] => {
     if (decisions[index] !== 'visible') return [];
     const resourceTypes = [
-      ...new Set(types.filter((type) => type.r?.value === row.id).map((type) => type.type!.value)),
+      ...new Set(
+        row.types ??
+          types.filter((type) => type.r?.value === row.id).map((type) => type.type!.value),
+      ),
     ];
     if (resourceTypes.length > 64) throw new WorkReadUnavailable('Resource has too many types');
     if (row.kind === 'agent') {
@@ -269,8 +293,20 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
   // denied prefix makes one-card pages repeat all owner reads one at a time.
   // Credits/ratings are optional page previews and never decide membership.
   const page = items.slice(0, limit);
-  const workCards = await resourceWorkCards(session, page.filter(item => item.kind === 'work').map(item => item.id));
-  return page.map(item => item.kind === 'work' ? { ...item, work: workCards.get(item.id)! } : item);
+  if (mode === 'window') return page;
+  const workCards = await resourceWorkCards(
+    session,
+    page.filter((item) => item.kind === 'work').map((item) => item.id),
+  );
+  const enriched = page.map((item) =>
+    item.kind === 'work' ? { ...item, work: workCards.get(item.id)! } : item,
+  );
+  const descriptorById = new Map(candidates.map((row) => [row.id, row]));
+  const delivery = await session.disclosure(
+    page.map((item) => resourceDisclosureTarget(descriptorById.get(item.id)!)),
+    'search',
+  );
+  return enriched.filter((_, index) => delivery[index] === 'visible');
 }
 
 /** Match accepted Concept interpretations through the existing Discovery owner. */
@@ -284,21 +320,22 @@ export async function conceptResourceMatches(
 ) {
   const filters = conditions.filter((condition) => condition.facet === 'concept');
   if (!filters.length) return new Set(candidates.map((row) => row.id));
-  const resolved = prepared ?? await resolveConcepts(session, [
-    ...new Set(filters.flatMap((row) => row.values)),
-  ]);
+  const resolved =
+    prepared ??
+    (await resolveConcepts(session, [...new Set(filters.flatMap((row) => row.values))]));
   const active = pinned ?? (await conceptCountBasis(session, realm)).active;
   const works = candidates.filter((row) => row.kind === 'work').map((row) => row.id);
   const terms = [...new Set([...resolved.values()].flatMap((row) => row.interpretations))];
   const membership = await session.deps.discovery!.termMembership(active, works, terms);
-  const topics = candidates.length
+  const topicCandidates = candidates.filter((row) => row.kind !== 'work');
+  const topics = topicCandidates.length
     ? await session.query(
         `SELECT ?r ?concept WHERE {
-    VALUES ?r { ${candidates.map((row) => iri(row.id)).join(' ')} }
+    VALUES ?r { ${topicCandidates.map((row) => iri(row.id)).join(' ')} }
     VALUES ?concept { ${[...resolved.keys()].map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?r rv:topic ?concept }
-  } LIMIT ${candidates.length * Math.max(1, resolved.size) + 1}`,
-        candidates.length * Math.max(1, resolved.size),
+  } LIMIT ${topicCandidates.length * Math.max(1, resolved.size) + 1}`,
+        topicCandidates.length * Math.max(1, resolved.size),
       )
     : [];
   const workTerms = new Map<string, Set<string>>();
@@ -319,9 +356,10 @@ export async function conceptResourceMatches(
         filters.every((condition) => {
           const flags = condition.values.map((concept) =>
             candidate.kind === 'work'
-              ? (resolved.get(concept)?.interpretations ?? [])
-                .some(term => workTerms.get(candidate.id)?.has(term))
-              : resourceTopics.get(candidate.id)?.has(concept) ?? false,
+              ? (resolved.get(concept)?.interpretations ?? []).some((term) =>
+                  workTerms.get(candidate.id)?.has(term),
+                )
+              : (resourceTopics.get(candidate.id)?.has(concept) ?? false),
           );
           return condition.operator === 'all'
             ? flags.every(Boolean)
@@ -336,6 +374,34 @@ export async function conceptResourceMatches(
 }
 
 export async function readResourceList(session: WorkReadSession, plan: ResourceListPlan) {
+  const kinds = resourceTypeKinds(plan.conditions, admittedTypes);
+  const index =
+    kinds.length &&
+    (plan.input.q?.trim() || kinds.some((kind) => !['work', 'realm'].includes(kind)))
+      ? await labelIndexReady(session)
+      : null;
+  // One native qualification per request. The uncached instance fence below
+  // and WorkReadSession's final graph read own this scope; it cannot escape the
+  // operation or survive a retry. Remote SPARQL calls are separate snapshots.
+  // https://jena.apache.org/documentation/rdfconnection/#remote-transactions
+  const read = () => readResourceListAtPosition(session, plan, index);
+  return index
+    ? searchGraphSnapshot.run(
+        {
+          clients: new Set([session.deps.environment.fuseki]),
+          lineage: session.deps.environment.lineage,
+          position: index,
+        },
+        read,
+      )
+    : read();
+}
+
+async function readResourceListAtPosition(
+  session: WorkReadSession,
+  plan: ResourceListPlan,
+  index: Awaited<ReturnType<typeof labelIndexReady>> | null,
+) {
   const { input, conditions } = plan;
   const limit = input.limit ?? 20,
     q = input.q?.trim() ?? '';
@@ -365,8 +431,10 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
   }
   const state = { ...prior, seeks: { ...prior.seeks }, done: [...(prior.done ?? [])] };
   const items: ResourceCard[] = [];
+  const descriptors = new Map<string, Candidate>();
   let scanned = 0,
-    more = false;
+    more = false,
+    windows = 0;
   const population = `${publicResources()} ${resourceConditions(conditions, realm)}
     ${
       realm
@@ -378,35 +446,63 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
   const { basis, active } = await conceptCountBasis(session, realm);
   // Meaning is pinned by this read's graph position. Resolve chips once, rather
   // than repeating the same definition read for every rejected candidate window.
-  const selectedConcepts = [...new Set(conditions.filter(row => row.facet === 'concept')
-    .flatMap(row => row.values))];
+  const selectedConcepts = [
+    ...new Set(conditions.filter((row) => row.facet === 'concept').flatMap((row) => row.values)),
+  ];
   const resolvedConcepts = selectedConcepts.length
-    ? await resolveConcepts(session, selectedConcepts) : undefined;
-  const positiveConcepts = [...new Set(conditions.filter(row => row.facet === 'concept' && row.operator !== 'none')
-    .flatMap(row => row.values))];
+    ? await resolveConcepts(session, selectedConcepts)
+    : undefined;
+  const positiveConcepts = [
+    ...new Set(
+      conditions
+        .filter((row) => row.facet === 'concept' && row.operator !== 'none')
+        .flatMap((row) => row.values),
+    ),
+  ];
   const positiveCounts = positiveConcepts.length
-    ? await session.deps.discovery!.conceptCounts(active, positiveConcepts) : [];
-  const drive = resourceWorkDrive(conditions, resolvedConcepts ?? new Map(),
-    new Map(positiveCounts.map(row => [row.concept, Number(row.work_count)])), DISCOVERY_CONDITION_COST.driveTerms);
+    ? await session.deps.discovery!.conceptCounts(active, positiveConcepts)
+    : [];
+  const drive = resourceWorkDrive(
+    conditions,
+    resolvedConcepts ?? new Map(),
+    new Map(positiveCounts.map((row) => [row.concept, Number(row.work_count)])),
+    DISCOVERY_CONDITION_COST.driveTerms,
+  );
   const type = !active.stale ? resourceWorkType(conditions, admittedTypes) : undefined;
   // A small, complete Work posting set can constrain the native collector.
   // A 65th key proves incompleteness, so keep the existing ranked path then;
   // never rank a recent sample as though it were the complete type relation.
-  const typed = !active.stale && kinds.length === 1 && kinds[0] === 'work'
-    && (type || drive[0] !== '') && q && input.sort === 'relevance'
-    ? await session.deps.discovery!.resourcePage(active, 64, undefined, drive[0] === '' ? undefined : drive, type) : undefined;
-  const rankedResources = typed && typed.length <= 64 ? typed.map(row => row.work) : undefined;
-  const index = q && kinds.length ? await labelIndexReady(session) : null;
+  const typed =
+    !active.stale &&
+    kinds.length === 1 &&
+    kinds[0] === 'work' &&
+    (type || drive[0] !== '') &&
+    q &&
+    input.sort === 'relevance'
+      ? await session.deps.discovery!.resourcePage(
+          active,
+          64,
+          undefined,
+          drive[0] === '' ? undefined : drive,
+          type,
+        )
+      : undefined;
+  const rankedResources = typed && typed.length <= 64 ? typed.map((row) => row.work) : undefined;
   let cache: (Candidate & { source: string; key: string })[] = [];
   const tails = new Map<string, Candidate>();
   let fetched = 0;
-  while (kinds.length && items.length < limit && scanned < QUERY_COST.candidateRows) {
+  while (
+    kinds.length &&
+    items.length < limit &&
+    scanned < RESOURCE_LIST_COST.candidates &&
+    windows++ < RESOURCE_LIST_COST.windows
+  ) {
     let candidates: (Candidate & { source: string; key: string })[] = [];
     if (q && input.sort === 'relevance') {
       const page = await indexedLabels(
         session,
         q,
-        Math.min(64, QUERY_COST.candidateRows - scanned),
+        Math.min(64, RESOURCE_LIST_COST.candidates - scanned),
         state.after,
         kinds.length === 1 ? kinds[0] : 'all',
         rankedResources,
@@ -587,18 +683,25 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
     if (!candidates.length) {
       break;
     }
-    const window = candidates.slice(0, Math.min(64, QUERY_COST.candidateRows - scanned));
+    const window = candidates.slice(0, Math.min(64, RESOURCE_LIST_COST.candidates - scanned));
     if (!(q && input.sort === 'relevance')) cache = candidates.slice(window.length);
     const rows = window.length
       ? await session.query(
-          `SELECT DISTINCT ?r ?kind ?summary WHERE {
+          `SELECT DISTINCT ?r ?kind ?summary ?resourceType ?workHead WHERE {
       VALUES ?r { ${window
         .filter((row) => row.summary)
         .map((row) => iri(row.id))
         .join(' ')} } ${population}
       ${q && input.sort !== 'relevance' ? indexedNameMatch('?r', q) : ''}
-    } LIMIT ${window.length + 1}`,
-          window.length,
+      GRAPH ${iri(GRAPHS.current)} { { ?r a ?resourceType }
+        UNION { ?r rv:space ?typedSpace . ?typedSpace a ?resourceType } }
+      OPTIONAL { VALUES ?r { ${window
+        .filter((row) => row.summary)
+        .map((row) => iri(row.id))
+        .join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?r rv:head ?workHead } }
+    } LIMIT ${window.length * RESOURCE_LIST_COST.types + 1}`,
+          window.length * RESOURCE_LIST_COST.types,
         )
       : [];
     const admitted = window.flatMap((candidate) => {
@@ -609,6 +712,14 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
               ...candidate,
               kind: row.kind!.value as Candidate['kind'],
               summary: row.summary!.value,
+              types: [
+                ...new Set(
+                  rows
+                    .filter((row) => row.r!.value === candidate.id)
+                    .map((row) => row.resourceType!.value),
+                ),
+              ],
+              head: row.workHead?.value,
             },
           ]
         : [];
@@ -636,15 +747,21 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
           (counts.get(row.id) ?? 0) === 0,
       );
     }
-    const matched = await conceptResourceMatches(session, projected, conditions, realm, active, resolvedConcepts);
-    const eligible = projected.filter(row => matched.has(row.id));
+    const matched = await conceptResourceMatches(
+      session,
+      projected,
+      conditions,
+      realm,
+      active,
+      resolvedConcepts,
+    );
+    const eligible = projected.filter((row) => matched.has(row.id));
+    for (const candidate of eligible) descriptors.set(candidate.id, candidate);
     const cards = new Map(
-      (
-        await resourceCards(
-          session,
-          eligible, limit - items.length,
-        )
-      ).map((card) => [card.id, card]),
+      (await resourceCards(session, eligible, limit - items.length, 'window')).map((card) => [
+        card.id,
+        card,
+      ]),
     );
     let examined = 0;
     for (const candidate of window) {
@@ -659,9 +776,24 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
     more ||= examined < window.length || window.length < candidates.length;
     if (!more || (!cache.length && fetched >= QUERY_COST.candidateRows)) break;
   }
+  const previews = await resourceWorkCards(
+    session,
+    items.filter((item) => item.kind === 'work').map((item) => item.id),
+  );
+  const enriched = items.map((item) =>
+    item.kind === 'work' ? { ...item, work: previews.get(item.id)! } : item,
+  );
+  // SQL-only removal/Work fences can move while a later window or an optional
+  // preview is read. Recheck the delivered page, without reopening per-Work
+  // head queries: the session's final graph fence pins the admitted heads.
+  const delivery = await session.disclosure(
+    items.map((item) => resourceDisclosureTarget(descriptors.get(item.id)!)),
+    'search',
+  );
+  const visible = enriched.filter((_, index) => delivery[index] === 'visible');
   const final = await session.deps.discovery!.active(basis, session.position, active.generation_id);
   if (index) await fenceLabelIndex(session, index);
-  state.seen += items.length;
+  state.seen += visible.length;
   const next = more
     ? encodeReadCursor(binding, session.position, items.at(-1)?.id ?? '', JSON.stringify(state))
     : null;
@@ -669,6 +801,6 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
     profile: 'resource-list-v1' as const,
     sourcePosition: session.position,
     stale: active.stale || final.stale,
-    ...listResult(items, next, prior.seen),
+    ...listResult(visible, next, prior.seen),
   };
 }
