@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { waitForFocus } from '../test/focus.ts';
 import { FieldDescription, FieldLegend, FieldSet, FieldSetError } from './field.tsx';
 import { RadioGroup, RadioGroupItem, RadioGroupLabel } from './radio-group.tsx';
 
@@ -52,7 +53,9 @@ export const Default: Story = {
     await expect(canvas.getByRole('radio', { name: 'Unmarked spoilers' })).toBeChecked();
     await userEvent.click(canvas.getByRole('radio', { name: 'Spam or advertising' }));
     await expect(canvas.getByRole('radio', { name: 'Spam or advertising' })).toBeChecked();
+    await waitForFocus(canvas.getByRole('radio', { name: 'Spam or advertising' }));
     await userEvent.keyboard('{ArrowDown}');
+    await waitForFocus(canvas.getByRole('radio', { name: 'Unmarked spoilers' }));
     await expect(canvas.getByRole('radio', { name: 'Unmarked spoilers' })).toBeChecked();
     await expect(canvas.getByRole('radio', { name: 'Unmarked spoilers' })).toHaveFocus();
   },

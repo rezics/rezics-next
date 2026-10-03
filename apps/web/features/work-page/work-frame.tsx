@@ -8,6 +8,7 @@ import { RateWork, type ReaderActions, ReaderActionsProvider, ShelfButton } from
 import type { RatingTarget, ReaderSeed } from '../catalogue/reader-store.ts';
 import { coverKindOf, type CatalogueAuthor } from '../catalogue/work.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
+import { RelationshipControl } from '../relationships/control.tsx';
 import { ReportAction } from '../safety/report-action.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
@@ -92,6 +93,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
             {primary}
             {status}
             <RateWork work={work.id} locale={locale} className="sm:mt-2" />
+            <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
+              signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} />
             <ReportAction target={work.id} kind="work" />
           </div>
         </div>
@@ -119,6 +122,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
           {status}
           <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
           <RateWork work={work.id} locale={locale} className="mt-1" />
+          <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
+            signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} />
           <ReportAction target={work.id} kind="work" />
         </div>
       </div>

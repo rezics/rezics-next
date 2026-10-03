@@ -10,6 +10,7 @@ import { messages as authMessages } from '../features/auth/messages.ts';
 import { browseMessages } from '../features/discover/browse-messages.ts';
 import { accessMessages } from '../features/manage/settings-messages.ts';
 import { messages as realmMessages } from '../features/realm/messages.ts';
+import realmChinese from '../features/realm/messages/zh-Hant.ts';
 import { messages as studioMessages } from '../features/studio/messages.ts';
 import studioChinese from '../features/studio/messages/zh-Hant.ts';
 import { messages as shellEnglish } from '../features/shell/messages.ts';
@@ -545,7 +546,7 @@ for (const locale of locales)
             `/realms/${short(privateSpace.realm)}/join-requests/mine?actingSubject=${encodeURIComponent(fixture.actor)}`,
           );
           expect(own.items.map((item) => item.state)).toEqual(['accepted']);
-          const realm = materializeData(realmMessages[locale], { locale });
+          const realm = materializeData(locale === 'en' ? realmMessages : realmChinese, { locale });
           await expect(page.getByRole('button', { name: realm.joined, exact: true })).toBeVisible();
           await expect(page.getByText(t.pending, { exact: true })).toHaveCount(0);
           await screenshot(page, info, 'private-requester-reloaded');

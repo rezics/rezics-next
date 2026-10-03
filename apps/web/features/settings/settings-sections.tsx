@@ -7,6 +7,8 @@ import { Switch } from '@rezics/ui/switch';
 import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { LanguagePicker } from '../onboarding/language-picker.tsx';
@@ -18,16 +20,18 @@ type Channel = 'inbox' | 'email';
 type NotificationChoice = { purpose: 'social' | 'subscription' | 'governance'; topic: string;
   channel: Channel; state: 'enabled' | 'disabled'; revision: string | null };
 
-/** Topics with an active producer, in the preferences API's order. A label is required for each. */
+/** Known producer topics. The live list follows Main's response; the preview includes every labeled topic. */
 export const settingsNotificationTopics = [
-  'reply', 'mention', 'post-vote', 'followed-chapter', 'review-helpful', 'review',
+  'reply', 'mention', 'post-vote', 'followed-chapter', 'new-work', 'new-release', 'collection-change', 'review-helpful', 'review',
   'review-requested', 'changes-requested', 'proposal-revised', 'proposal-decided',
   'proposal-withdrawn', 'proposal-reverted',
 ] as const;
 type SettingsNotificationTopic = (typeof settingsNotificationTopics)[number];
 export const notificationTopicLabel: Record<SettingsNotificationTopic, keyof SettingsMessages> = {
   reply: 'notificationReply', mention: 'notificationMention', 'post-vote': 'notificationPostVote',
-  'followed-chapter': 'notificationFollowedChapter', 'review-helpful': 'notificationReviewHelpful',
+  'followed-chapter': 'notificationFollowedChapter',
+  'new-work': 'notificationNewWork', 'new-release': 'notificationNewRelease', 'collection-change': 'notificationCollectionChange',
+  'review-helpful': 'notificationReviewHelpful',
   review: 'notificationReview', 'review-requested': 'notificationReviewRequested',
   'changes-requested': 'notificationChangesRequested', 'proposal-revised': 'notificationProposalRevised',
   'proposal-decided': 'notificationProposalDecided', 'proposal-withdrawn': 'notificationProposalWithdrawn',
@@ -49,7 +53,7 @@ export function topicsShown(items: readonly { topic: string }[]): string[] {
 const governanceTopics = new Set<string>(['review-requested', 'changes-requested', 'proposal-revised',
   'proposal-decided', 'proposal-withdrawn', 'proposal-reverted']);
 function purposeOf(topic: string): NotificationChoice['purpose'] {
-  if (topic === 'followed-chapter') return 'subscription';
+  if (['followed-chapter', 'new-work', 'new-release', 'collection-change'].includes(topic)) return 'subscription';
   return governanceTopics.has(topic) ? 'governance' : 'social';
 }
 function labelFor(topic: string, t: SettingsMessages): string {
@@ -91,7 +95,7 @@ function Section({ id, title, help, children }: { id: string; title: string; hel
   </CardContent></Card>;
 }
 
-function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: boolean }) {
+export function NotificationPreferences({ t, locale, preview = false }: { t: SettingsMessages; locale: UiLocale; preview?: boolean }) {
   const [choices, setChoices] = useState<NotificationChoice[] | null>(preview
     ? settingsNotificationTopics.flatMap(topic => (['inbox', 'email'] as const).map(channel => ({
       purpose: purposeOf(topic), topic, channel, state: 'enabled' as const, revision: null }))) : null);
@@ -120,6 +124,8 @@ function Notifications({ t, preview = false }: { t: SettingsMessages; preview?: 
     setSaving('');
   };
   return <Section id="notifications" title={t.notificationsTitle} help={t.notificationsHelp}>
+    <a href={localizedPath('/following', locale)} className="w-fit text-primary text-sm underline-offset-4 hover:underline">
+      {relationshipMessages[locale].manage}</a>
     {choices ? <div className="grid gap-0">
       <div className="grid grid-cols-[minmax(0,1fr)_4rem_4rem] gap-2 border-b pb-2 text-muted-foreground text-xs
         sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
@@ -392,7 +398,7 @@ export function SettingsSections({ agent, locale, accountOrigin, t, preview = fa
   children?: ReactNode;
 }) {
   return <>
-    <Notifications t={t} preview={preview} />
+    <NotificationPreferences t={t} locale={locale} preview={preview} />
     {agent ? <PersonControls agent={agent} locale={locale} t={t} preview={preview}
       previewLanguages={previewLanguages} /> : null}
     <Display locale={locale} t={t} preview={preview} />

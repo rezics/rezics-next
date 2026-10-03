@@ -1,7 +1,7 @@
 import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
-import type { WorkCover, WorkName } from './types.ts';
+import type { DiscoveryPage, WorkCover, WorkName } from './types.ts';
 
-/** G-939's additions to Main. Keep this seam here until the manager merges its served contracts. */
+/** Main's shared list envelope for resource browsing and remote pickers. */
 export interface ListPage<T> {
   items: T[];
   nextCursor: string | null;
@@ -41,7 +41,12 @@ export interface DiscoverySection {
   reason: { kind: SectionReason };
   page: ListPage<ResourceCard>;
 }
-export interface SectionsPage extends ListPage<DiscoverySection> {
+export interface ServedPage<T, Profile extends string> extends ListPage<T> {
+  profile: Profile;
+  sourcePosition: DiscoveryPage['sourcePosition'];
+  stale: boolean;
+}
+export interface SectionsPage extends ServedPage<DiscoverySection, 'discovery-sections-v1'> {
   personalized: boolean;
 }
 export interface ListInput {
@@ -60,17 +65,18 @@ type Answer<T> = { data: T | null; error: { status: number; value: unknown } | n
 type Get<T, Q> = {
   get: (options: { query: Q; headers?: Record<string, string> }) => Promise<Answer<T>>;
 };
-interface PendingContract {
+// The manager must merge Main's route types before this seam can use Eden directly.
+interface BrowseContract {
   v1: {
     query: {
       post: (
         query: ResourceQuery,
         options: { headers: Record<string, string> },
-      ) => Promise<Answer<{ result: ListPage<ResourceCard> & { profile: string } }>>;
+      ) => Promise<Answer<{ result: ServedPage<ResourceCard, 'resource-list-v1'> }>>;
     };
     discovery: {
       concepts: Get<
-        ListPage<ConceptChoice>,
+        ServedPage<ConceptChoice, 'concept-search-v1'>,
         ListInput & {
           scope?: 'realm';
           realm?: string;
@@ -84,7 +90,7 @@ interface PendingContract {
       >;
     };
     'rating-populations': Get<
-      ListPage<RatingPopulation>,
+      ServedPage<RatingPopulation, 'rating-populations-v1'> & { target: string },
       ListInput & { target: string; actingSubject?: string }
     >;
   };
@@ -121,18 +127,27 @@ export function checkedPage<T>(page: ListPage<T>, cursor?: string): ListPage<T> 
   return page;
 }
 
+function servedPage<T, Profile extends string>(
+  page: ServedPage<T, Profile>,
+  profile: Profile,
+  cursor?: string,
+): ServedPage<T, Profile> {
+  checkedPage(page, cursor);
+  if (page.profile !== profile) throw new BrowseReadError(503);
+  return page;
+}
+
 export function discoveryApi(main: unknown, locale: string, actingSubject?: string) {
-  const contract = main as unknown as PendingContract;
+  const contract = main as BrowseContract;
   const headers = { 'accept-language': locale };
   return {
     async resources(query: ResourceQuery) {
       const result = await value(contract.v1.query.post(query, { headers }));
-      if (result.result.profile !== 'resource-list-v1') throw new BrowseReadError(503);
-      return checkedPage(result.result, query.cursor);
+      return servedPage(result.result, 'resource-list-v1', query.cursor);
     },
     async concepts(query: ListInput & { realm?: string; personalization?: boolean } = {}) {
       const { realm, ...input } = query;
-      return checkedPage(
+      return servedPage(
         await value(
           contract.v1.discovery.concepts.get({
             query: {
@@ -144,7 +159,7 @@ export function discoveryApi(main: unknown, locale: string, actingSubject?: stri
             headers,
           }),
         ),
-        query.cursor,
+        'concept-search-v1', query.cursor,
       );
     },
     async sections(query: ListInput & { section?: SectionId; personalization?: boolean } = {}) {
@@ -154,12 +169,12 @@ export function discoveryApi(main: unknown, locale: string, actingSubject?: stri
           headers,
         }),
       );
-      checkedPage(page);
+      servedPage(page, 'discovery-sections-v1');
       page.items.forEach((section) => checkedPage(section.page, query.cursor));
       return page;
     },
     async populations(target: string, query: ListInput = {}) {
-      return checkedPage(
+      return servedPage(
         await value(
           contract.v1['rating-populations'].get({
             query: {
@@ -171,7 +186,7 @@ export function discoveryApi(main: unknown, locale: string, actingSubject?: stri
             headers,
           }),
         ),
-        query.cursor,
+        'rating-populations-v1', query.cursor,
       );
     },
   };

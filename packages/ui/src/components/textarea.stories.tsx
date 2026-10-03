@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { waitForFocus } from '../test/focus.ts';
 import { Field, FieldError, FieldHelper, FieldLabel } from './field.tsx';
 import { Textarea } from './textarea.tsx';
 
@@ -45,7 +46,7 @@ export const Default: Story = {
   async play({ canvasElement }) {
     const textarea = within(canvasElement).getByRole('textbox', { name: 'Your review' });
     await userEvent.click(textarea);
-    await expect(textarea).toHaveFocus();
+    await waitForFocus(textarea);
     await userEvent.type(textarea, 'A slow burn that pays off.');
     await expect(textarea).toHaveValue('A slow burn that pays off.');
   },

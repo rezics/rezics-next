@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { waitForFocus } from '../../../../packages/ui/src/test/focus.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
 import { bodyText } from '../document-editor/body.ts';
@@ -62,25 +63,18 @@ type Story = StoryObj<typeof meta>;
 const body = () => within(document.body);
 const open = async (canvas: ReturnType<typeof within>, name: RegExp) => {
   await userEvent.click(canvas.getByRole('button', { name }));
-  return body().findByRole('searchbox');
+  const overlay = await body().findByRole('dialog');
+  await waitForFocus(overlay);
+  const search = within(overlay).getByRole('searchbox');
+  await userEvent.click(search);
+  await waitForFocus(search);
+  return search;
 };
 
-/** The search field is controlled. A short query keeps a different list than the one the story asked for. */
 async function typeQuery(canvas: ReturnType<typeof within>, opener: RegExp, query: string) {
   const search = await open(canvas, opener);
-  await waitFor(() => expect(search).toBeVisible());
-  await waitFor(
-    async () => {
-      const box = body().getByRole('searchbox') as HTMLInputElement;
-      if (box.value !== query) {
-        await userEvent.click(box);
-        await userEvent.clear(box);
-        await userEvent.type(box, query);
-      }
-      expect(body().getByRole('searchbox')).toHaveValue(query);
-    },
-    { timeout: 5000 },
-  );
+  await userEvent.type(search, query);
+  await expect(search).toHaveValue(query);
 }
 
 /** Nothing is known about the writer: the text says so instead of claiming the interface language. */

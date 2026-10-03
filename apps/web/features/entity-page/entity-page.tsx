@@ -7,6 +7,7 @@ import { getMessages } from '../../i18n/server.ts';
 import { browseReader } from '../discover/server.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
+import { RelationshipControl } from '../relationships/control.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { readingAgent } from '../work-page/read.ts';
@@ -78,6 +79,10 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   const body: ReactNode = <div className="grid min-w-0 gap-10">
     {header ? <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale}
       t={t} /> : null}
+    {header ? <RelationshipControl target={page.target.resource}
+      kind={page.summary.base === 'work' ? 'work' : ['realm', 'space', 'collection', 'concept'].includes(page.summary.type)
+        ? page.summary.type : page.registry.type} name={page.summary.name.value} locale={locale}
+      signedIn={signedIn} actingSubject={actingSubject} signInHref="/auth/start" /> : null}
     {draw.map(section => {
       switch (section.id) {
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>

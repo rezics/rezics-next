@@ -142,7 +142,7 @@ describe('G-945 one browse', () => {
     expect(parseBrowseState({ ci: `${id(1)},,${id(2)}` })).toBeNull();
   });
 });
-describe('G-945 pending served contract', () => {
+describe('G-945 served browse contract', () => {
   test('the client forwards language, actor, cursor and page bounds without multilingual fan-out', async () => {
     const calls: unknown[] = [];
     const main = {
@@ -151,7 +151,7 @@ describe('G-945 pending served contract', () => {
           concepts: {
             get: async (options: unknown) => {
               calls.push(options);
-              return { data: page([]), error: null };
+              return { data: { ...page([]), profile: 'concept-search-v1' }, error: null };
             },
           },
         },
@@ -210,7 +210,7 @@ describe('G-945 pending served contract', () => {
         'rating-populations': {
           get: async (options: unknown) => {
             input = options;
-            return { data: page([]), error: null };
+            return { data: { ...page([]), profile: 'rating-populations-v1', target: iri(99) }, error: null };
           },
         },
       },
@@ -244,7 +244,7 @@ describe('G-945 pending served contract', () => {
         discovery: {
           sections: {
             get: async () => ({
-              data: { ...page([item]), personalized: false },
+              data: { ...page([item]), profile: 'discovery-sections-v1', personalized: false },
               error: null,
             }),
           },

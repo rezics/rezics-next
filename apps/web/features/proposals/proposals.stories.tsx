@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { waitForFocus } from '../../../../packages/ui/src/test/focus.ts';
 import { agents, headerNow, ids, now, proposalApi, staleBase, target, views, wikiBundleView, wikiDeltaView,
   wikiUndoView } from './fixtures.ts';
 import { messages } from './messages.ts';
@@ -18,13 +19,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/**
- * The open dialog, once focus has moved into it. The dialog takes focus a moment after it appears, and on a busy
- * host that comes after typing has begun, so keystrokes sent before it settles land outside the field.
- */
 async function openedDialog() {
   const dialog = await within(document.body).findByRole('dialog');
-  await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+  await waitForFocus(dialog);
   return dialog;
 }
 

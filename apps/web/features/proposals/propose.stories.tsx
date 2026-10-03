@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { waitForFocus } from '../../../../packages/ui/src/test/focus.ts';
 import type { Correction } from './commands.ts';
 import { basis, ids } from './fixtures.ts';
 import { messages } from './messages.ts';
@@ -70,9 +71,15 @@ export const Unreadable: Story = {
 export const InDialog: Story = {
   render: args => <div className="p-6"><ProposeCorrection {...args} defaultOpen /></div>,
   async play() {
-    const dialog = within(document.body);
+    const overlay = await within(document.body).findByRole('dialog');
+    await waitForFocus(overlay);
+    const dialog = within(overlay);
     const heading = await dialog.findByRole('heading', { name: 'Propose a correction' });
     await waitFor(() => expect(heading).toBeVisible());
+    const synopsis = dialog.getByRole('textbox', { name: 'Synopsis' });
+    await userEvent.clear(synopsis);
+    await userEvent.type(synopsis, '一間只在雨夜開門的書店。');
+    await expect(synopsis).toHaveValue('一間只在雨夜開門的書店。');
   },
 };
 

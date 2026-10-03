@@ -19,7 +19,7 @@ describe('Direction 9 public fixture commands', () => {
     const api = new PublicCommands(request, async () => {
       waits++;
     });
-    expect(await api.write('/agents', { kind: 'person' })).toEqual({ agent: 'created' });
+    expect(await api.write<{ agent: string }>('/agents', { kind: 'person' })).toEqual({ agent: 'created' });
     expect(waits).toBe(2);
     expect(attempts).toHaveLength(3);
     expect(attempts[1]).toEqual(attempts[0]);

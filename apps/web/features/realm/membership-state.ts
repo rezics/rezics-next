@@ -1,3 +1,4 @@
+import type { Level, Source } from '../relationships/types.ts';
 import type { MainClient } from '../discover/types.ts';
 
 // The reader's place in a Realm: whether they joined (G-314's consent-based
@@ -13,6 +14,9 @@ export type JoinPolicy = Omit<Ok<Realm['joining']['get']>, 'realm'>;
 export interface Membership {
   /** Null when Main has no joining policy for this Realm or could not read it. */
   policy: JoinPolicy | null;
+  level?: Level | null;
+  source?: Source | null;
+  pinPosition?: number | null;
   /** Null when the follow could not be read. */
   following: boolean | null;
   /** The follow relation's revision, Main's compare-and-set basis. */
@@ -41,6 +45,7 @@ export async function readMembership(main: MainClient, realm: string, actingSubj
     main.v1.follows({ id: uuid(realm) }).get({ query: { kind: 'realm', actingSubject } }).catch(() => null),
   ]);
   const read = policy?.data ? (({ realm: _, ...rest }) => rest)(policy.data) : null;
-  return { policy: read, following: follow?.data ? follow.data.following ?? false : null,
+  const fields = follow?.data as { level?: Level; source?: Source; pinPosition?: number | null } | undefined;
+  return { level: fields?.level ?? null, source: fields?.source ?? null, pinPosition: fields?.pinPosition ?? null, policy: read, following: follow?.data ? follow.data.following ?? false : null,
     followRevision: follow?.data?.revision ?? null };
 }

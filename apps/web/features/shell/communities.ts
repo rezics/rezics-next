@@ -1,7 +1,8 @@
-/** A Realm or Zone as the navigation lists it. */
+/** A resource in the relationship navigation: Spaces in the community list, any target among pins. */
 export interface Community {
   id: string;
-  kind: 'realm' | 'zone';
+  kind: 'realm' | 'zone' | 'resource';
+  person?: boolean;
   /** The Realm itself, or the one behind a Zone, when known: following either follows the same community. */
   realm?: string;
   name: string;
@@ -30,10 +31,17 @@ export interface CommunityNavigation {
   followed: { realms: Community[]; zones: Community[] } | null;
   official: Community[];
   moderated: Managed[];
+  relationships?: {
+    actingSubject: string | null;
+    /** False only when Main proved the whole inventory empty; failed reads never imply a newcomer. */
+    hasFollows: boolean | null;
+    pinned: import('@rezics/ui/entity-picker').EntityPickerPage<Community> | null;
+    spaces: import('@rezics/ui/entity-picker').EntityPickerPage<Community> | null;
+  };
 }
 
 /** How many of each list the navigation shows before "See all". */
-export const NAV_COMMUNITIES = 8;
+export const NAV_COMMUNITIES = 4;
 
 /** The Realm a community stands for: a followed Zone counts as following its Realm. */
 export const realmOf = (community: Community): string | undefined =>

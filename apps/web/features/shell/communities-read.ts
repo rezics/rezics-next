@@ -1,9 +1,13 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
-import { type FollowEntry, type FollowKind, settle, uuidOf } from '../feed/types.ts';
+import { settle, uuidOf } from '../feed/types.ts';
+import { serviceOrigin } from '../api/origins.ts';
+import { mainRelationships } from '../relationships/api.ts';
+import { displayLanguageHeaders } from '../../i18n/display-languages.ts';
+import { followedCommunity, pinnedCommunities, spaceCommunities, withZoneAddress } from './communities-relationships.ts';
 import { type Community, type CommunityNavigation, type Managed, type Moderated, realmOf, realmSegment }
   from './communities.ts';
 
@@ -21,30 +25,32 @@ export const shellReader = cache(async () => {
     avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '' };
 });
 
-type Followed = Extract<FollowEntry, { available: true }>;
-
-function community(item: Followed): Community {
-  const activity = item.newSince?.state === 'new' || item.newSince?.state === 'more-unverified' ? 'new'
-    : item.newSince ? 'none' : 'unknown';
-  return { id: item.id, kind: item.kind === 'zone' ? 'zone' : 'realm', ...item.realm ? { realm: item.realm } : {},
-    name: item.name.value, language: item.name.language, direction: item.name.direction,
-    icon: item.icon, href: item.href, activity,
-    ...(item.newSince?.count ? { count: item.newSince.count } : {}) };
-}
+const relationshipReader = cache(async () => {
+  const reader = await shellReader();
+  if (!reader.actingSubject) return null;
+  const [jar, incoming, preferences] = await Promise.all([cookies(), headers(),
+    settle(() => reader.main.v1.me['person-preferences'].get({ query: { actingSubject: reader.actingSubject! } }))]);
+  return mainRelationships(reader.actingSubject, { origin: serviceOrigin('MAIN_ORIGIN'), headers: {
+    authorization: `Bearer ${jar.get(ACCESS_COOKIE)!.value}`,
+    ...displayLanguageHeaders({ signedIn: true, profile: preferences.ok ? preferences.data.contentLanguages : [],
+      pageUrl: incoming.get('x-rezics-page-url'), browser: incoming.get('accept-language') }),
+  } });
+});
 
 /**
  * One page of the reader's follows of a kind, with whether each has activity
  * the reader has not seen. `complete` is false when they follow more than a page.
  */
-export const readFollowed = cache(async (kind: Extract<FollowKind, 'realm' | 'zone'>):
+export const readFollowed = cache(async (kind: 'realm' | 'zone'):
   Promise<{ items: Community[]; complete: boolean } | null> => {
-  const reader = await shellReader();
-  if (!reader.actingSubject) return null;
-  const page = await settle(() => reader.main.v1.me.follows.get({ query: { actingSubject: reader.actingSubject!, kind,
-    include: 'newSince' } }));
-  if (!page.ok) return null;
-  return { items: page.data.items.filter((item): item is Followed => item.available).map(community),
-    complete: page.data.nextCursor === null };
+  const api = await relationshipReader();
+  if (!api) return null;
+  // Main partitions Space follows by Zone alias for the existing feed consumers.
+  try {
+    const page = await api.follows({ kind, include: 'newSince' });
+    return { items: page.items.map(followedCommunity).filter(item => item !== null)
+      .map(item => ({ ...item, id: item.realm ?? item.id })), complete: page.complete };
+  } catch { return null; }
 });
 
 /** Official Zones for everyone, named by their backing Realm; at most six, in Main's order. */
@@ -92,20 +98,17 @@ export const readModerated = cache(async (language: string): Promise<Moderated[]
   }));
 });
 
-/** A followed Realm that is an official Zone's opens at the Zone's address, as the official list links it. */
-function withZoneAddress(realms: Community[], official: readonly Community[]): Community[] {
-  return realms.map(realm => {
-    const zone = official.find(item => item.realm === realm.id);
-    return zone ? { ...realm, href: zone.href } : realm;
-  });
-}
-
 /** Everything the side navigation lists below its main items. */
 export async function readCommunityNavigation(language: string): Promise<CommunityNavigation> {
   const reader = await shellReader();
-  const [realms, zones, official, moderated] = await Promise.all([readFollowed('realm'), readFollowed('zone'),
-    readOfficialZones(language), readManaged(language)]);
+  const api = await relationshipReader();
+  const [pinned, spaces, inventory, official, moderated] = await Promise.all([
+    api ? pinnedCommunities(api, '', null).catch(() => null) : null,
+    api ? spaceCommunities(api, '', null).catch(() => null) : null,
+    api ? api.follows().catch(() => null) : null, readOfficialZones(language), readManaged(language)]);
   return { signedIn: reader.signedIn, avatarQuery: reader.avatarQuery,
-    followed: realms && zones ? { realms: withZoneAddress(realms.items, official), zones: zones.items } : null,
-    official, moderated };
+    followed: spaces ? { realms: withZoneAddress(spaces.items, official), zones: [] } : null,
+    official, moderated, relationships: { actingSubject: reader.actingSubject ?? null,
+      hasFollows: reader.signedIn ? inventory ? inventory.items.length > 0 || !inventory.complete : null : false,
+      pinned, spaces } };
 }
