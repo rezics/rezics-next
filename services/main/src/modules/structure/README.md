@@ -48,8 +48,9 @@ interior split redistributes only its own segment between its neighbors. If
 that local interval cannot admit another bounded key, staged replacement is
 required; the interactive command never renumbers an entire parent. Removing
 an occurrence probes at most 17 retained children plus the current command's
-pending placements to reject a nonempty group. Subtree-height validation for
-moving a group still visits that group's descendants.
+pending placements to reject a nonempty group. Reordering a group under its
+existing parent never reads its descendants. Reparenting a group still validates
+subtree height by visiting that group's descendants.
 
 Recipe measure replacement accepts at most 64 format-checked measures and one
 expected head. It reads one root manifest, writes one new root while reusing its

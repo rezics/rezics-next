@@ -1035,6 +1035,7 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
     throw new CompositionConflict('an occurrence cannot be placed after itself');
   }
   if (chain.length + 1 > deepestLevel(profile, state.role) || state.role === 'group'
+    && operation.parent !== state.parent
     && chain.length + 1 + await height(w, state.occurrence) > (profile.maxDepth ?? STRUCTURE_LIMITS.maxDepth)) {
     throw new CompositionConflict('composition depth exceeded');
   }

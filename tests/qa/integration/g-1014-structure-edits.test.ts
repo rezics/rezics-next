@@ -72,5 +72,29 @@ test('G1014: dense segment splits remain local, preserve order and compose with 
     expect((await json<Composition>(await call('POST', `${path}/changes`, body, key))).revision).toBe(composed.revision);
     expect((await call('POST', `${path}/changes`, body)).status).toBe(409);
     expect(await readCompositionHeader(stack.env, base.structure)).toMatchObject({ placementCount: 34 });
+    const chapters = await read();
+    let grouped = await json<Composition>(await call('POST', `${path}/changes`, {
+      profile: 'book-composition', expectedHead: (await readCompositionHeader(stack.env, base.structure))!.head,
+      actingSubject: member.actor,
+      operations: [{ op: 'insert', role: 'group', parent: base.structure, position: 'last' }] }));
+    const group = grouped.occurrences[0]!;
+    for (let offset = 0; offset < chapters.length; offset += 16) {
+      grouped = await json<Composition>(await call('POST', `${path}/changes`, {
+        profile: 'book-composition', expectedHead: grouped.revision, actingSubject: member.actor,
+        operations: chapters.slice(offset, offset + 16).map(occurrence => ({ op: 'move', occurrence,
+          parent: group, position: 'last' })) }));
+    }
+    const originalQuery = stack.fuseki.query.bind(stack.fuseki);
+    let childRows = 0;
+    stack.fuseki.query = async (sparql, maxBytes) => {
+      const result = await originalQuery(sparql, maxBytes);
+      childRows += (result.results?.bindings ?? []).filter(row => row.parent?.value === group).length;
+      return result;
+    };
+    const reordered = await json<Composition>(await call('POST', `${path}/changes`, {
+      profile: 'book-composition', expectedHead: grouped.revision, actingSubject: member.actor,
+      operations: [{ op: 'move', occurrence: group, parent: base.structure, position: 'first' }] }));
+    expect(childRows).toBe(0); expect(reordered.cost.placementsWritten).toBe(1);
+    expect(await readCompositionHeader(stack.env, base.structure)).toMatchObject({ placementCount: 35 });
   } finally { await stack.stop(); }
 }, 60_000);
