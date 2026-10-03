@@ -47,7 +47,12 @@ test('G991: common owner migrations retain reads on deferral, import official na
       accessKeyId: apps.MAIN_S3_ACCESS_KEY!, secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
       prefix: 'semantic/structure/' });
     await objects.initialize();
-    Object.assign(f.env, { structureObjects: objects });
+    const workObjects = new S3ImmutableObjects({ endpoint: apps.MAIN_S3_ENDPOINT!,
+      bucket: apps.MAIN_S3_BUCKET!, region: apps.MAIN_S3_REGION!,
+      accessKeyId: apps.MAIN_S3_ACCESS_KEY!, secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/work/' });
+    await workObjects.initialize();
+    Object.assign(f.env, { structureObjects: objects, workObjects });
     await f.grant('space:create:root', 'space.create');
     const key = `g991-${randomUUID().slice(0, 8)}`;
     const { space, realm } = await f.json<{ space: string; realm: string }>(

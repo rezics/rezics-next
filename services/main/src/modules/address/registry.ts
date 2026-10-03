@@ -65,10 +65,10 @@ export const NAME_COST = {
   redirectHops: 32,
   deadlineMs: 10_000,
   fusekiRequests: {
-    claim: 3,
-    rename: 3,
-    release: 3,
-    merge: 38,
+    claim: 4,
+    rename: 4,
+    release: 4,
+    merge: 39,
     resolve: 24,
     resolvePerHop: 24,
     exact: 24,
@@ -128,6 +128,17 @@ export class NameRegistry {
         [key, scopeKind(scope)],
       )
     ).rowCount;
+  }
+  /** Platform authority is proved by Main, never taken from NameWrite. It
+   * permits official Space handles without relaxing any ownership gate. */
+  async assertNameAllowed(
+    scope: NameScope,
+    key: string,
+    client: Pick<PoolClient, 'query'>,
+    platformAuthority = false,
+  ) {
+    if (!(platformAuthority && scope === 'space') && (await this.isReserved(scope, key, client)))
+      throw new NameInvalid('Name is reserved');
   }
   async lookup(scope: NameScope, key: string): Promise<NameRow | null> {
     scopeKind(scope);
@@ -248,6 +259,7 @@ export class NameRegistry {
     input: NameWrite,
     controller: string,
     creationAdmission: string | null = null,
+    platformAuthority = false,
   ): Promise<NameReceipt> {
     if (
       !NATIVE_ADDRESS_HOLDER.test(input.holder) ||
@@ -269,8 +281,7 @@ export class NameRegistry {
     } catch (error) {
       throw new NameInvalid(error instanceof Error ? error.message : 'Invalid name');
     }
-    if (name && (await this.isReserved(input.scope, name.key, client)))
-      throw new NameInvalid('Name is reserved');
+    if (name) await this.assertNameAllowed(input.scope, name.key, client, platformAuthority);
     if (
       ['claim', 'rename'].includes(input.operation) !== !!name ||
       (input.operation === 'merge') !== !!input.successor ||

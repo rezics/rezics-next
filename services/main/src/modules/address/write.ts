@@ -1,5 +1,5 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readMergedIdentity } from '../identity-merge/resolution.ts';
 import { NameInvalid, NameDenied, NameUnavailable, scopeKind, type NameWrite } from './registry.ts';
@@ -7,8 +7,38 @@ import type { PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
 export async function writeName(work: MainWorkDependencies, request: Request, input: NameWrite) {
-  return withNameAuthority(work, request, input, (client, principal, controller) =>
-    work.environment.addresses!.write(client, principal, input, controller),
+  return withNameAuthority(work, request, input, async (client, principal, controller) =>
+    work.environment.addresses!.write(
+      client,
+      principal,
+      input,
+      controller,
+      null,
+      await platformNameAuthority(work.environment, input.scope, input.holder),
+    ),
+  );
+}
+
+/** Official Zones own their site's Space handle. Authentication and owner
+ * authority remain mandatory; this proof only opens the reservation gate. */
+export async function platformNameAuthority(
+  env: WorkActivationEnvironment,
+  scope: string,
+  holder: string,
+): Promise<boolean> {
+  if (scope !== 'space') return false;
+  return (
+    (
+      await env.fuseki.query(
+        `PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(holder)} a rv:Space .
+      { ${iri(holder)} rv:official true }
+      UNION { ?zone a rv:Zone ; rv:official true ; rv:space ${iri(holder)} }
+    } }`,
+        1024,
+      )
+    ).boolean === true
   );
 }
 

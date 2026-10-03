@@ -6,6 +6,7 @@ import {
   iri,
   lit,
   prepareComponent,
+  prepareWorkComponent,
   type WorkActivationEnvironment,
 } from '../work/activate.ts';
 import {
@@ -64,12 +65,9 @@ export async function prepareZoneNameCleanup(env: WorkActivationEnvironment, zon
   const configuration = checkZoneConfiguration(
     Buffer.from(JSON.stringify({ ...prior, official: {} })),
   );
-  const manifest = prepareComponent(
-    env.objectDirectory,
-    zone,
-    { ...state, configuration },
-    ZONE_PROFILE,
-  );
+  const manifest = env.workObjects
+    ? await prepareWorkComponent(env.workObjects, zone, { ...state, configuration }, ZONE_PROFILE)
+    : prepareComponent(env.objectDirectory, zone, { ...state, configuration }, ZONE_PROFILE);
   const revision = ID + Bun.randomUUIDv7(),
     operation = ID + Bun.randomUUIDv7();
   const validations = await profileValidations(env.fuseki, 'zone-capability-v1', [

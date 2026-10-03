@@ -10,9 +10,21 @@ import {
   lit,
   type WorkActivationEnvironment,
 } from '../work/activate.ts';
-import { NameUnavailable, type NameRow } from './registry.ts';
+import { NameInvalid, NameUnavailable, type NameRow } from './registry.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { prepareZoneNameCleanup } from './migrate-zone.ts';
+import { platformNameAuthority } from './write.ts';
+import { readWorkComponentState } from '../work/history.ts';
+import type { SparqlResult } from '../../infrastructure/fuseki.ts';
+
+type LegacyName = NonNullable<SparqlResult['results']>['bindings'][number];
+export const NAME_IMPORT_COST = {
+  page: 45,
+  historyPage: 50,
+  preparationMs: 600_000,
+  complexity:
+    'Keyset pages over epoch/source reports and source revisions; memory O(page), work O(imported and skipped evidence).',
+} as const;
 class LegacyNameInvalid extends Error {}
 function rdfIri(value: string) {
   if (!/^(?:https?:\/\/|urn:)[^\s<>"{}|^`\\]+$/u.test(value))
@@ -40,7 +52,6 @@ async function importGraphNames(env: WorkActivationEnvironment) {
     'SELECT cursor,completed_at FROM access.name_graph_import WHERE data_epoch = $1',
     [env.lineage.dataEpoch],
   );
-  if (completed.rows[0]?.completed_at) return;
   const held = await env.fuseki.query(
     `PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }`,
@@ -51,7 +62,9 @@ async function importGraphNames(env: WorkActivationEnvironment) {
     !(await registry.pool.query('SELECT 1 FROM access.recovery_fence WHERE id AND open')).rowCount
   )
     throw new NameUnavailable('Name import waits for the restore hold to clear');
-  const deadline = Date.now() + 600_000;
+  const deadline = Date.now() + NAME_IMPORT_COST.preparationMs;
+  await repairSkippedNames(env, deadline);
+  if (completed.rows[0]?.completed_at) return;
   let after = completed.rows[0]?.cursor ?? '';
   for (;;) {
     if (Date.now() > deadline)
@@ -72,132 +85,12 @@ async function importGraphNames(env: WorkActivationEnvironment) {
           OPTIONAL { ?source rv:redirectWork ?target . FILTER(?target != ?holder) }
           BIND(?target AS ?successor) BIND(?holder AS ?controller) BIND("work" AS ?scope) BIND("work" AS ?kind) }
         FILTER(STR(?source) > ${lit(after)})
-      } } ORDER BY STR(?source) LIMIT 45`,
+      } } ORDER BY STR(?source) LIMIT ${NAME_IMPORT_COST.page}`,
           256 * 1024,
         )
       ).results?.bindings ?? [];
     if (!rows.length) break;
-    const client = await registry.pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      for (const row of rows) {
-        await client.query('SAVEPOINT import_name');
-        try {
-          if (!row.scope || !row.key || !row.holder || !row.controller || !row.state || !row.source)
-            throw new LegacyNameInvalid('Former name is incomplete');
-          const scope = row.scope.value as 'space' | 'work';
-          const name = normalizeAddressName(
-            row.key.value,
-            scope === 'space' ? 'ascii-handle' : 'unicode-title',
-          );
-          if (await registry.isReserved(scope, name.key, client))
-            throw new LegacyNameInvalid('Former name is reserved');
-          if (
-            row.successor &&
-            (
-              await env.fuseki.query(
-                `PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-          ${iri(row.holder.value)} rv:mergedInto ${iri(row.successor.value)} } }`,
-                1024,
-              )
-            ).boolean !== true
-          ) {
-            throw new LegacyNameInvalid('Former name has a non-equivalent merge successor');
-          }
-          let state =
-            row.state.value === `${RV}Current`
-              ? 'current'
-              : row.state.value === `${RV}Retired`
-                ? 'retired'
-                : 'redirect';
-          if (
-            row.kind?.value === 'zone' &&
-            (
-              await client.query(
-                `SELECT 1 FROM access.name_registry
-          WHERE scope = 'space' AND holder = $1 AND state = 'current' AND key <> $2`,
-                [row.holder.value, name.key],
-              )
-            ).rowCount
-          )
-            state = 'redirect';
-          const imported = (
-            await client.query<NameRow>(
-              `INSERT INTO access.name_registry(scope,key,display,skeleton,holder,controller,state,revision,successor)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(scope,key) DO UPDATE SET key = EXCLUDED.key
-          WHERE access.name_registry.holder = EXCLUDED.holder RETURNING *`,
-              [
-                scope,
-                name.key,
-                name.display,
-                name.skeleton,
-                row.holder.value,
-                row.controller.value,
-                state,
-                row.revision?.value.slice(-36) ?? randomUUID(),
-                row.successor?.value ?? null,
-              ],
-            )
-          ).rows[0];
-          if (!imported)
-            throw new LegacyNameInvalid('Former name conflicts with a permanent holder');
-          await client.query(
-            `INSERT INTO access.name_history(revision,scope,key,holder,display,state,successor)
-          VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(revision) DO NOTHING`,
-            [
-              imported.revision,
-              scope,
-              name.key,
-              imported.holder,
-              imported.display,
-              imported.state,
-              imported.successor,
-            ],
-          );
-          if (scope === 'work')
-            await importWorkNameHistory(
-              env,
-              client,
-              row.source.value,
-              name.key,
-              row.holder.value,
-              deadline,
-            );
-          await client.query('RELEASE SAVEPOINT import_name');
-        } catch (error) {
-          if (
-            !(
-              error instanceof LegacyNameInvalid ||
-              error instanceof InvalidAddressName ||
-              (error &&
-                typeof error === 'object' &&
-                'code' in error &&
-                ['23505', '23514'].includes(String(error.code)))
-            )
-          )
-            throw error;
-          await client.query('ROLLBACK TO SAVEPOINT import_name');
-          const reason = error instanceof Error ? error.message : String(error);
-          console.warn('Skipped legacy name; holder uses its identity address', {
-            source: row.source?.value,
-            key: row.key?.value,
-            reason,
-          });
-          await client.query(
-            `INSERT INTO access.name_graph_import_report(data_epoch,source,reason)
-            VALUES ($1,$2,$3) ON CONFLICT(data_epoch,source) DO UPDATE SET reason = EXCLUDED.reason`,
-            [env.lineage.dataEpoch, row.source!.value, reason],
-          );
-        }
-      }
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK').catch(() => {});
-      throw error;
-    } finally {
-      client.release();
-    }
+    await importNameRows(env, rows, deadline);
     await cleanupGraphNames(
       env,
       rows.map((row) => ({ source: row.source!.value, kind: row.kind!.value })),
@@ -213,6 +106,153 @@ async function importGraphNames(env: WorkActivationEnvironment) {
     'INSERT INTO access.name_graph_import(data_epoch,completed_at) VALUES ($1,clock_timestamp()) ON CONFLICT(data_epoch) DO UPDATE SET completed_at = EXCLUDED.completed_at',
     [env.lineage.dataEpoch],
   );
+}
+
+async function importNameRows(
+  env: WorkActivationEnvironment,
+  rows: LegacyName[],
+  deadline: number,
+) {
+  const registry = env.addresses!;
+  const client = await registry.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    if (
+      !(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE'))
+        .rowCount
+    )
+      throw new NameUnavailable('Name import waits for the restore hold to clear');
+    for (const row of rows) {
+      if (Date.now() > deadline)
+        throw new NameUnavailable('Name import exceeded its preparation budget');
+      await client.query('SAVEPOINT import_name');
+      try {
+        if (!row.scope || !row.key || !row.holder || !row.controller || !row.state || !row.source)
+          throw new LegacyNameInvalid('Former name is incomplete');
+        const scope = row.scope.value as 'space' | 'work';
+        const name = normalizeAddressName(
+          row.key.value,
+          scope === 'space' ? 'ascii-handle' : 'unicode-title',
+        );
+        await registry.assertNameAllowed(
+          scope,
+          name.key,
+          client,
+          await platformNameAuthority(env, scope, row.holder.value),
+        );
+        if (
+          row.successor &&
+          (
+            await env.fuseki.query(
+              `PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(row.holder.value)} rv:mergedInto ${iri(row.successor.value)} } }`,
+              1024,
+            )
+          ).boolean !== true
+        ) {
+          throw new LegacyNameInvalid('Former name has a non-equivalent merge successor');
+        }
+        let state =
+          row.state.value === `${RV}Current`
+            ? 'current'
+            : row.state.value === `${RV}Retired`
+              ? 'retired'
+              : 'redirect';
+        if (
+          row.kind?.value === 'zone' &&
+          (
+            await client.query(
+              `SELECT 1 FROM access.name_registry
+        WHERE scope = 'space' AND holder = $1 AND state = 'current' AND key <> $2`,
+              [row.holder.value, name.key],
+            )
+          ).rowCount
+        )
+          state = 'redirect';
+        const imported = (
+          await client.query<NameRow>(
+            `INSERT INTO access.name_registry(scope,key,display,skeleton,holder,controller,state,revision,successor)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(scope,key) DO UPDATE SET key = EXCLUDED.key
+        WHERE access.name_registry.holder = EXCLUDED.holder RETURNING *`,
+            [
+              scope,
+              name.key,
+              name.display,
+              name.skeleton,
+              row.holder.value,
+              row.controller.value,
+              state,
+              row.revision?.value.slice(-36) ?? randomUUID(),
+              row.successor?.value ?? null,
+            ],
+          )
+        ).rows[0];
+        if (!imported) throw new LegacyNameInvalid('Former name conflicts with a permanent holder');
+        await client.query(
+          `INSERT INTO access.name_history(revision,scope,key,holder,display,state,successor)
+        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(revision) DO NOTHING`,
+          [
+            imported.revision,
+            scope,
+            name.key,
+            imported.holder,
+            imported.display,
+            imported.state,
+            imported.successor,
+          ],
+        );
+        if (scope === 'work')
+          await importWorkNameHistory(
+            env,
+            client,
+            row.source.value,
+            name.key,
+            row.holder.value,
+            deadline,
+          );
+        await client.query(
+          `UPDATE access.name_graph_import_report SET legacy_name = $3,
+          attempted_at = clock_timestamp(),repaired_at = clock_timestamp(),reason = 'Imported retained name'
+          WHERE data_epoch = $1 AND source = $2 AND repaired_at IS NULL`,
+          [env.lineage.dataEpoch, row.source.value, JSON.stringify(row)],
+        );
+        await client.query('RELEASE SAVEPOINT import_name');
+      } catch (error) {
+        if (
+          !(
+            error instanceof LegacyNameInvalid ||
+            error instanceof NameInvalid ||
+            error instanceof InvalidAddressName ||
+            (error &&
+              typeof error === 'object' &&
+              'code' in error &&
+              ['23505', '23514'].includes(String(error.code)))
+          )
+        )
+          throw error;
+        await client.query('ROLLBACK TO SAVEPOINT import_name');
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn('Skipped legacy name; holder uses its identity address', {
+          source: row.source?.value,
+          key: row.key?.value,
+          reason,
+        });
+        await client.query(
+          `INSERT INTO access.name_graph_import_report(data_epoch,source,reason,legacy_name,attempted_at)
+          VALUES ($1,$2,$3,$4,clock_timestamp()) ON CONFLICT(data_epoch,source) DO UPDATE SET
+            reason = EXCLUDED.reason,legacy_name = EXCLUDED.legacy_name,attempted_at = EXCLUDED.attempted_at`,
+          [env.lineage.dataEpoch, row.source!.value, reason, JSON.stringify(row)],
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function importWorkNameHistory(
@@ -236,7 +276,7 @@ async function importWorkNameHistory(
         OPTIONAL { ?revision rv:routeState ?state }
         OPTIONAL { ?revision rv:redirectWork ?target . FILTER(?target != ?work) BIND(?target AS ?successor) }
         FILTER(STR(?revision) > ${lit(after)})
-      } } ORDER BY STR(?revision) LIMIT 50`,
+      } } ORDER BY STR(?revision) LIMIT ${NAME_IMPORT_COST.historyPage}`,
           64 * 1024,
         )
       ).results?.bindings ?? [];
@@ -267,6 +307,126 @@ async function importWorkNameHistory(
       [JSON.stringify(records)],
     );
     after = rows.at(-1)!.revision!.value;
+  }
+}
+
+/** Completed epochs still have a repair queue. Advance by source even on a
+ * repeated denial so one bad legacy value cannot starve later reports. */
+async function repairSkippedNames(env: WorkActivationEnvironment, deadline: number) {
+  const registry = env.addresses!;
+  let after = '';
+  for (;;) {
+    if (Date.now() > deadline)
+      throw new NameUnavailable('Name repair exceeded its preparation budget');
+    const reports = (
+      await registry.pool.query<{ source: string; legacy_name: LegacyName | null }>(
+        `SELECT source,legacy_name FROM access.name_graph_import_report
+      WHERE data_epoch = $1 AND repaired_at IS NULL AND source > $2 ORDER BY source LIMIT ${NAME_IMPORT_COST.page}`,
+        [env.lineage.dataEpoch, after],
+      )
+    ).rows;
+    if (!reports.length) return;
+    const rows: LegacyName[] = [];
+    for (const report of reports) {
+      const row = report.legacy_name ?? (await recoverLegacyName(env, report.source, deadline));
+      if (row) rows.push(row);
+      else
+        await registry.pool.query(
+          `UPDATE access.name_graph_import_report
+        SET attempted_at = clock_timestamp(),reason = 'Retained name evidence is unavailable'
+        WHERE data_epoch = $1 AND source = $2 AND repaired_at IS NULL`,
+          [env.lineage.dataEpoch, report.source],
+        );
+    }
+    if (rows.length) await importNameRows(env, rows, deadline);
+    after = reports.at(-1)!.source;
+  }
+}
+
+/** Pre-upgrade reports contain only a source IRI. Read retained bytes rather
+ * than guessing a key from labels, URLs or a platform-specific lookup table. */
+async function recoverLegacyName(env: WorkActivationEnvironment, source: string, deadline: number) {
+  const binding = (value: string) => ({ type: 'literal' as const, value });
+  const base =
+    (
+      await env.fuseki.query(
+        `PREFIX rv: <${RV}>
+    SELECT ?kind ?holder ?controller WHERE { GRAPH ${iri(GRAPHS.current)} {
+      { ${iri(source)} a rv:Zone ; rv:space ?holder . BIND("zone" AS ?kind) }
+      UNION { ${iri(source)} a rv:Realm ; rv:space ?holder . BIND("realm" AS ?kind) }
+      OPTIONAL { ?holder rv:owner ?owner } BIND(COALESCE(?owner,?holder) AS ?controller)
+    } } LIMIT 2`,
+        8192,
+      )
+    ).results?.bindings ?? [];
+  if (base.length > 1) throw new LegacyNameInvalid('Former name source is ambiguous');
+  let after = '';
+  let afterSequence: string | null = null;
+  for (;;) {
+    if (Date.now() > deadline)
+      throw new NameUnavailable('Name evidence exceeded its preparation budget');
+    const revisions: LegacyName[] =
+      (
+        await env.fuseki.query(
+          `PREFIX rv: <${RV}>
+      SELECT ?revision ?manifest ?profile ?key ?holder ?state ?successor ?sequence WHERE {
+        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:RevisionAnchor ; rv:component ${iri(source)} .
+          OPTIONAL { ?revision rv:sequence ?recordedSequence }
+          BIND(COALESCE(?recordedSequence,0) AS ?sequence)
+          OPTIONAL { ?revision rv:manifest ?manifest ; rv:modelRevision ?profile }
+          OPTIONAL { ?revision rv:normalizedSlug ?key ; rv:targetWork ?holder ; rv:routeState ?state }
+          OPTIONAL { ?revision rv:redirectWork ?successor . FILTER(?successor != ?holder) }
+          ${
+            afterSequence === null
+              ? ''
+              : `FILTER(?sequence < ${lit(afterSequence)}^^<http://www.w3.org/2001/XMLSchema#integer>
+            || ?sequence = ${lit(afterSequence)}^^<http://www.w3.org/2001/XMLSchema#integer> && STR(?revision) < ${lit(after)})`
+          }
+        } } ORDER BY DESC(?sequence) DESC(STR(?revision)) LIMIT ${NAME_IMPORT_COST.page}`,
+          256 * 1024,
+        )
+      ).results?.bindings ?? [];
+    if (!revisions.length) return null;
+    for (const revision of revisions) {
+      if (revision.key && revision.holder && revision.state)
+        return {
+          ...revision,
+          source: binding(source),
+          kind: binding('work'),
+          scope: binding('work'),
+          controller: revision.holder,
+        };
+      const owner = base[0];
+      if (
+        !owner?.kind ||
+        !owner.holder ||
+        !owner.controller ||
+        !revision.manifest ||
+        !revision.profile
+      )
+        continue;
+      const state = await readWorkComponentState(
+        env,
+        revision.manifest.value,
+        source,
+        revision.profile.value,
+      );
+      const configuration = state.configuration as
+        | { official?: { routeSegment?: unknown } }
+        | undefined;
+      const key =
+        owner.kind.value === 'zone' ? configuration?.official?.routeSegment : state.handle;
+      if (typeof key === 'string')
+        return {
+          ...owner,
+          source: binding(source),
+          scope: binding('space'),
+          key: binding(key),
+          state: binding(RV + 'Current'),
+        };
+    }
+    after = revisions.at(-1)!.revision!.value;
+    afterSequence = revisions.at(-1)!.sequence!.value;
   }
 }
 
