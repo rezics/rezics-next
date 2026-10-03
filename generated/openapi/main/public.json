@@ -391497,11 +391497,12 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 7,
+                            "maxItems": 8,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -391607,11 +391608,12 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 7,
+                            "maxItems": 8,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -391717,11 +391719,12 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 7,
+                            "maxItems": 8,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -391826,7 +391829,8 @@
                                     "realm.roles.manage",
                                     "realm.settings.manage",
                                     "review.decide",
-                                    "publication.adopt"
+                                    "publication.adopt",
+                                    "rating.configure"
                                   ],
                                   "type": "string"
                                 },
@@ -391841,7 +391845,8 @@
                                     "realm.roles.manage",
                                     "realm.settings.manage",
                                     "review.decide",
-                                    "publication.adopt"
+                                    "publication.adopt",
+                                    "rating.configure"
                                   ],
                                   "type": "string"
                                 },
@@ -391929,7 +391934,8 @@
                                     "realm.roles.manage",
                                     "realm.settings.manage",
                                     "review.decide",
-                                    "publication.adopt"
+                                    "publication.adopt",
+                                    "rating.configure"
                                   ],
                                   "type": "string"
                                 },
@@ -391944,7 +391950,8 @@
                                     "realm.roles.manage",
                                     "realm.settings.manage",
                                     "review.decide",
-                                    "publication.adopt"
+                                    "publication.adopt",
+                                    "rating.configure"
                                   ],
                                   "type": "string"
                                 },
@@ -392373,11 +392380,12 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 7,
+                            "maxItems": 8,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -392478,11 +392486,12 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 7,
+                            "maxItems": 8,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -392583,11 +392592,12 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
-                            "maxItems": 7,
+                            "maxItems": 8,
                             "type": "array",
                             "uniqueItems": true
                           },
@@ -392681,7 +392691,8 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
@@ -392696,7 +392707,8 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
@@ -393114,7 +393126,8 @@
                                 "realm.roles.manage",
                                 "realm.settings.manage",
                                 "review.decide",
-                                "publication.adopt"
+                                "publication.adopt",
+                                "rating.configure"
                               ],
                               "type": "string"
                             },
