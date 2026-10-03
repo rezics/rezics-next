@@ -26,7 +26,7 @@ import { useShell } from './shell-provider.tsx';
 import { useSideNav } from './side-nav.tsx';
 
 const row = cn(
-  'flex min-h-9 items-center gap-3 rounded-xl px-3 py-1.5 text-muted-foreground text-sm outline-none',
+  'flex min-h-9 min-w-0 items-center gap-3 rounded-xl px-3 py-1.5 text-muted-foreground text-sm outline-none',
   'transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring',
   'aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-accent-foreground',
 );
@@ -117,17 +117,17 @@ function CommunityList({
         className={cn('grid min-w-0 gap-0.5', expanded && !collapsed && 'max-h-72 overflow-y-auto')}
       >
         {shown.map((item) => (
-          <li key={item.id}>
+          <li key={item.id} className="min-w-0">
             <Link
               href={localizedPath(item.href, locale)}
               onClick={onNavigate}
-              title={collapsed ? item.name : undefined}
+              title={item.name}
               aria-current={
                 pathname === item.href || pathname.startsWith(item.href + '/') ? 'page' : undefined
               }
               className={cn(row, collapsed && 'justify-center px-0')}
             >
-              <span className="relative">
+              <span className="relative shrink-0">
                 <CommunityIcon
                   icon={item.icon}
                   name={item.name}
@@ -190,8 +190,8 @@ function CommunityList({
             if (expanded) setQ('');
           }}
         >
-          <ChevronDownIcon aria-hidden="true" className={cn('size-4', expanded && 'rotate-180')} />
-          {expanded ? copy.showFewer : copy.showAll}
+          <ChevronDownIcon aria-hidden="true" className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
+          <span className="min-w-0 flex-1 truncate">{expanded ? copy.showFewer : copy.showAll}</span>
         </button>
       ) : null}
       {expanded && !collapsed && !state.complete && state.nextCursor && !state.error ? (
@@ -337,7 +337,7 @@ export function CommunityNav({
               aria-current={pathname === '/following' ? 'page' : undefined}
               className={cn(row, collapsed && 'justify-center px-0')}
             >
-              <span className={collapsed ? 'sr-only' : undefined}>{copy.manage}</span>
+              <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{copy.manage}</span>
               {collapsed ? <ChevronDownIcon aria-hidden="true" className="size-4" /> : null}
             </Link>
           </Section>
@@ -359,7 +359,7 @@ export function CommunityNav({
             {open ? (
               <span
                 className={cn(
-                  'rounded-full bg-primary px-2 py-0.5 font-semibold text-[11px] text-primary-foreground',
+                  'shrink-0 rounded-full bg-primary px-2 py-0.5 font-semibold text-[11px] text-primary-foreground',
                   collapsed && 'sr-only',
                 )}
               >
