@@ -154,22 +154,19 @@ export const Follow: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Lin Mei 林梅' }));
     await expect(
-      canvas.getByRole('button', { name: 'Following · Unfollow Lin Mei 林梅' }),
+      await canvas.findByRole('button', { name: 'Following · Lin Mei 林梅 · Unfollow' }),
     ).toBeVisible();
     await expect(canvas.getByText('129 followers')).toBeVisible();
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute(
-        'aria-disabled',
-        'true',
-      ),
+      expect(canvas.getByRole('button', { name: /^Following/ })).toBeEnabled(),
     );
     await userEvent.click(canvas.getByRole('button', { name: /^Following/ }));
-    await expect(canvas.getByRole('button', { name: 'Follow · Lin Mei 林梅' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Follow · Lin Mei 林梅' })).toBeVisible();
     await expect(canvas.getByText('128 followers')).toBeVisible();
   },
 };
 
-/** Another tab changed the follow first: the control reads it again and applies the press once more. */
+/** A stale command refreshes the relationship and asks the reader to review before retrying. */
 export const FollowAfterAnotherTab: Story = {
   args: {
     reader: signedIn,
@@ -180,13 +177,14 @@ export const FollowAfterAnotherTab: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Lin Mei 林梅' }));
-    await waitFor(() =>
-      expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute(
-        'aria-disabled',
-        'true',
-      ),
-    );
-    await expect(canvas.queryByText('Couldn’t update. Try again.')).toBeNull();
+    await expect(await canvas.findByText('This relationship changed. Review it and try again.')).toBeVisible();
+    await expect(canvas.getByText('128 followers')).toBeVisible();
+    const retry = canvas.getByRole('button', { name: 'Follow · Lin Mei 林梅' });
+    await expect(retry).toBeEnabled();
+    await userEvent.click(retry);
+    await expect(await canvas.findByRole('button', { name: 'Following · Lin Mei 林梅 · Unfollow' })).toBeVisible();
+    await expect(canvas.getByText('129 followers')).toBeVisible();
+    await expect(canvas.queryByText('This relationship changed. Review it and try again.')).toBeNull();
   },
 };
 
@@ -201,7 +199,7 @@ export const FollowFails: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Lin Mei 林梅' }));
-    await expect(await canvas.findByText('Couldn’t update. Try again.')).toBeVisible();
+    await expect(await canvas.findByText('Couldn’t save. Try again.')).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Follow · Lin Mei 林梅' })).toBeVisible();
     await expect(canvas.getByText('128 followers')).toBeVisible();
   },

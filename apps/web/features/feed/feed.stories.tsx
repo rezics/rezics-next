@@ -4,6 +4,8 @@ import { spaceHref, threadHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { fixtureFollow, memoryRelationships } from '../relationships/fixtures.ts';
+import { relationshipStoryFetch } from '../relationships/story-fetch.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { FeedProvider } from './feed-context.tsx';
@@ -40,6 +42,7 @@ interface Args {
   followedRealms?: string[] | null;
   locale?: UiLocale;
   headInterval?: number;
+  relationships?: ReturnType<typeof memoryRelationships>;
 }
 
 const signInHref = '/auth/start?next=%2Fen';
@@ -94,6 +97,13 @@ const meta = {
   component: Feed,
   args: { initial: { ok: true, data: page(everyKind) } },
   globals: { viewport: { value: 'desktop' } },
+  beforeEach({ args }) {
+    const memory = args.relationships ?? memoryRelationships((args.followedRealms ?? [realms.fiction.id])
+      .map((id, index) => ({ ...fixtureFollow(index + 1, 'realm'), id, realm: id })));
+    const original = window.fetch;
+    window.fetch = relationshipStoryFetch(memory.api, original);
+    return () => { window.fetch = original; };
+  },
 } satisfies Meta<typeof Feed>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -237,9 +247,7 @@ export const VoteRefused: Story = {
   async play({ canvasElement }) {
     const post = article(within(canvasElement), 'Chapters 212–214');
     await userEvent.click(within(post).getByRole('button', { name: 'Downvote' }));
-    await waitFor(() =>
-      expect(within(post).getByRole('status')).toHaveTextContent('Couldn’t save your vote'),
-    );
+    await expect(await within(post).findByText(/Couldn’t save your vote/)).toHaveAttribute('role', 'status');
     await expect(within(post).getByRole('button', { name: 'Downvote' })).toHaveAttribute(
       'aria-pressed',
       'false',
@@ -388,6 +396,7 @@ export const FollowFromAll: Story = {
     followedRealms: [],
     api: memoryFeed(),
     query: { scope: 'all', sort: 'best' },
+    relationships: memoryRelationships(),
     initial: {
       ok: true,
       data: page(
@@ -414,14 +423,17 @@ export const FollowFromAll: Story = {
     // In All every post is REZICS-wide, so no "Suggested" label repeats on each.
     await expect(post).not.toHaveTextContent('Suggested');
     await expect(post).not.toHaveTextContent('Join');
-    await userEvent.click(
-      within(post).getByRole('button', { name: 'Follow Home Cooking · 家常菜' }),
-    );
+    const follow = within(post).getByRole('button', { name: 'Follow Home Cooking · 家常菜' });
+    await waitFor(() => expect(follow).toBeEnabled());
+    await userEvent.click(follow);
     await waitFor(() => expect(post).toHaveTextContent('Following'));
     await expect(post).not.toHaveTextContent('Joined');
-    await expect(args.api!.calls.filter((call) => !call.startsWith('watermark'))).toEqual([
-      `follow:${realms.kitchen.id.slice(-4)}:true`,
-    ]);
+    await expect(args.relationships!.calls).toEqual([expect.objectContaining({
+      operation: 'follow',
+      body: expect.objectContaining({ target: realms.kitchen.id, kind: 'realm', following: true, expectedRevision: null }),
+      key: expect.any(String),
+    })]);
+    await expect(within(post).getByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();
   },
 };
 
@@ -599,7 +611,7 @@ export const SignedOut: Story = {
     await expect(
       within(post).getByRole('link', { name: 'Upvote — Sign in to vote, follow and save' }),
     ).toHaveAttribute('href', signInHref);
-    await expect(within(post).getByRole('link', { name: /^Follow .+ — Sign in/ })).toHaveAttribute(
+    await expect(within(post).getByRole('link', { name: `Follow ${realms.fiction.name.value} · Sign in` })).toHaveAttribute(
       'href',
       signInHref,
     );
@@ -646,9 +658,7 @@ export const StillArriving: Story = {
     },
   },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('status')).toHaveTextContent(
-      'More posts are on their way',
-    );
+    await expect(within(canvasElement).getByText('More posts are on their way').closest('[role="status"]')).toBeVisible();
   },
 };
 

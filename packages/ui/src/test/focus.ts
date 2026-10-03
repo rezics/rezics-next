@@ -3,7 +3,7 @@
  * inside the overlay before choosing a field, or on a control before typing
  * or sending keyboard navigation. Two frames reject transient autofocus.
  */
-export function waitForFocus(target: HTMLElement): Promise<void> {
+export function waitForFocus(target: HTMLElement, timeoutMs = 1000): Promise<void> {
   const window = target.ownerDocument.defaultView;
   if (!window) return Promise.reject(new Error('Focus target has no window'));
 
@@ -13,7 +13,7 @@ export function waitForFocus(target: HTMLElement): Promise<void> {
     const timeout = window.setTimeout(() => {
       window.cancelAnimationFrame(frame);
       reject(new Error('Focus did not settle inside the target'));
-    }, 1000);
+    }, timeoutMs);
     const check = () => {
       focusedFrames = target.contains(target.ownerDocument.activeElement) ? focusedFrames + 1 : 0;
       if (focusedFrames === 2) {

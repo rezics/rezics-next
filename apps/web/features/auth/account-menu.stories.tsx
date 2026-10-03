@@ -282,15 +282,17 @@ const currentValues: Story = {
     const phone = window.matchMedia('(max-width: 639px)').matches;
     const root = await page.findByRole(phone ? 'dialog' : 'menu');
     const rows = within(root);
+    // Presence precedes the sheet/menu's opening animation; assert its visible values after it settles.
+    await waitFor(() => expect(root).toBeVisible());
     const language = rows.getByRole(phone ? 'button' : 'menuitem', {
       name: accountRowName(t.language, localeNames[locale]),
     });
     await expect(language).toHaveTextContent(`${t.language}·${localeNames[locale]}`);
-    await expect(
+    await waitFor(() => expect(
       rows.getByRole(phone ? 'button' : 'menuitem', {
         name: accountRowName(t.appearance, shell.themeSystem),
       }),
-    ).toBeVisible();
+    ).toBeVisible());
     const content = await rows.findByRole(phone ? 'link' : 'menuitem', {
       name: accountRowName(
         t.contentPreferences,
@@ -378,7 +380,8 @@ export const DarkCurrentValue: Story = {
   async play({ canvasElement }) {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Account menu' }));
-    await expect(await page.findByRole('menuitem', { name: 'Appearance: Dark' })).toBeVisible();
+    const appearance = await page.findByRole('menuitem', { name: 'Appearance: Dark' });
+    await waitFor(() => expect(appearance).toBeVisible());
   },
 };
 

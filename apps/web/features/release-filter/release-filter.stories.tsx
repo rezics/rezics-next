@@ -97,7 +97,7 @@ function Browse({
       )
     : [];
   return (
-    <RealmPageStory zone={zone} locale={locale}>
+    <RealmPageStory site zone={zone} locale={locale}>
       <ReleaseBrowse
         header={
           <ReleaseBrowseHeader
@@ -125,7 +125,8 @@ function Browse({
 }
 
 function zoneFor(locale: UiLocale) {
-  const home = localizedPath(spaceHref('books', 'community'), locale);
+  // Edition browsing is a Site route; community discussions and decisions stay under /r.
+  const home = localizedPath(spaceHref('books', 'site'), locale);
   return {
     slug: 'books',
     realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001',
@@ -139,9 +140,9 @@ function zoneFor(locale: UiLocale) {
       home,
       browse: `${home}/browse`,
       works: `${home}/browse`,
-      discussions: `${home}/discussions`,
-      decisions: `${home}/decisions`,
-      about: `${home}/about`,
+      discussions: localizedPath(spaceHref('books', 'community', ['discussions']), locale),
+      decisions: localizedPath(spaceHref('books', 'community', ['decisions']), locale),
+      about: localizedPath(spaceHref('books', 'community', ['about']), locale),
     },
   };
 }

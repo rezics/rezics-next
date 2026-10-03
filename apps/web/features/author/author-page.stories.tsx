@@ -104,17 +104,14 @@ export const Follow: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Jane Austen' }));
     await expect(
-      canvas.getByRole('button', { name: 'Following · Unfollow Jane Austen' }),
+      await canvas.findByRole('button', { name: 'Following · Jane Austen · Unfollow' }),
     ).toBeVisible();
     await expect(canvas.getByText('2 followers')).toBeVisible();
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute(
-        'aria-disabled',
-        'true',
-      ),
+      expect(canvas.getByRole('button', { name: /^Following/ })).toBeEnabled(),
     );
     await userEvent.click(canvas.getByRole('button', { name: /^Following/ }));
-    await expect(canvas.getByRole('button', { name: 'Follow · Jane Austen' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Follow · Jane Austen' })).toBeVisible();
     await expect(canvas.getByText('1 follower')).toBeVisible();
   },
 };
@@ -131,7 +128,7 @@ export const FollowFails: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Jane Austen' }));
     await expect(await canvas.findByRole('status')).toHaveTextContent(
-      'Couldn’t update. Try again.',
+      'Couldn’t save. Try again.',
     );
     await expect(canvas.getByRole('button', { name: 'Follow · Jane Austen' })).toBeVisible();
     await expect(canvas.getByText('1 follower')).toBeVisible();
@@ -198,10 +195,14 @@ export const EnglishAuthorInChinese: Story = {
   },
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
   parameters: { route: { pathname: '/zh-Hans/authors/open-library/OL21594A' } },
+  async beforeEach({ args }) {
+    // The relationship's refresh must agree with the followed state shown by the page read.
+    if (args.followActions?.kind === 'ready') await args.followActions.send(true, null);
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(
-      canvas.getByRole('button', { name: '已关注 · 取消关注Jane Austen' }),
+      await canvas.findByRole('button', { name: '已关注 · Jane Austen · 取消关注' }),
     ).toBeVisible();
     await expect(canvas.getByText('1,000+ 位关注者')).toBeVisible();
     await expect(canvas.getByText('1775年—1817年')).toBeVisible();

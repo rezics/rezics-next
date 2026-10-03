@@ -1,7 +1,7 @@
 import { resourceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { works as discoveryWorks } from '../discover/fixtures.ts';
 import { memoryFollowActions } from '../profile/fixtures.ts';
 import { Providers } from '../shell/providers.tsx';
@@ -34,6 +34,7 @@ const jaMessages: ConceptMessages = { ...messages, ...ja };
 const koMessages: ConceptMessages = { ...messages, ...ko };
 const page = localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'en');
 const signedOut = { signedIn: false };
+const navigate = fn();
 
 const meta = {
   title: 'Concept/Page',
@@ -58,7 +59,8 @@ const meta = {
       </Providers>
     ),
   ],
-  parameters: { route: { pathname: page } },
+  parameters: { route: { pathname: page, onPush: navigate } },
+  beforeEach() { navigate.mockClear(); },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof ConceptPage>;
 export default meta;
@@ -94,7 +96,11 @@ export const Concept: Story = {
       `/auth/start?next=${encodeURIComponent(page)}`,
     );
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
-    await expect(bar.getByText('Fantasy, this page’s tag')).toBeInTheDocument();
+    // The shared picker retains this page's fixed Concept when removal is requested.
+    await expect(bar.getByText('Fantasy')).toBeVisible();
+    await userEvent.click(bar.getByRole('button', { name: 'Remove Fantasy' }));
+    await expect(navigate).not.toHaveBeenCalled();
+    await expect(bar.getByText('Fantasy')).toBeVisible();
     // Concepts the listed Works also carry are one step from included or excluded.
     await expect(bar.getByRole('link', { name: 'Include Dragons' })).toHaveAttribute(
       'href',
@@ -103,13 +109,14 @@ export const Concept: Story = {
         'en',
       ),
     );
-    await expect(bar.getByRole('link', { name: 'Exclude Romance' })).toHaveAttribute(
-      'href',
-      localizedPath(
-        `${resourceHref('/concepts/', conceptUuid(1))}?exclude=${conceptUuid(3)}`,
-        'en',
-      ),
+    await userEvent.click(bar.getByRole('combobox', { name: 'Topics' }));
+    await userEvent.type(bar.getByRole('combobox', { name: 'Topics' }), 'rom');
+    await userEvent.click(await screen.findByRole('option', { name: 'Romance' }));
+    await expect(navigate).toHaveBeenLastCalledWith(
+      localizedPath(`${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(3)}`, 'en'),
+      { scroll: false },
     );
+    await userEvent.keyboard('{Escape}');
     const list = within(canvas.getByRole('region', { name: 'Works' }));
     await expect(list.getByText('5 works')).toBeVisible();
     await expect(list.getAllByRole('heading', { level: 3 })).toHaveLength(5);
@@ -130,19 +137,25 @@ export const IncludeAndExclude: Story = {
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
     await expect(bar.getByText('Dragons')).toBeInTheDocument();
     await expect(bar.getByText('Romance')).toBeInTheDocument();
-    await expect(bar.getByRole('link', { name: 'Remove Dragons' })).toHaveAttribute(
-      'href',
+    await expect(bar.getByRole('button', { name: 'Include Romance' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(bar.getByRole('button', { name: 'Include Romance' }));
+    await expect(navigate).toHaveBeenLastCalledWith(
+      localizedPath(`${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(8)}%2C${conceptUuid(3)}`, 'en'),
+      { scroll: false },
+    );
+    await userEvent.click(bar.getByRole('button', { name: 'Remove Dragons' }));
+    await expect(navigate).toHaveBeenLastCalledWith(
       localizedPath(
         `${resourceHref('/concepts/', conceptUuid(1))}?exclude=${conceptUuid(3)}`,
         'en',
-      ),
+      ), { scroll: false },
     );
-    await expect(bar.getByRole('link', { name: 'Remove Romance' })).toHaveAttribute(
-      'href',
+    await userEvent.click(bar.getByRole('button', { name: 'Remove Romance' }));
+    await expect(navigate).toHaveBeenLastCalledWith(
       localizedPath(
         `${resourceHref('/concepts/', conceptUuid(1))}?include=${conceptUuid(8)}`,
         'en',
-      ),
+      ), { scroll: false },
     );
     const match = within(bar.getByRole('group', { name: 'Match' }));
     await expect(match.getByRole('link', { name: /^All/ })).toHaveAttribute('aria-current', 'true');
@@ -153,10 +166,9 @@ export const IncludeAndExclude: Story = {
         'en',
       ),
     );
-    await expect(bar.getByRole('link', { name: 'Clear Conditions' })).toHaveAttribute(
-      'href',
-      localizedPath(resourceHref('/concepts/', conceptUuid(1)), 'en'),
-    );
+    // The page Concept stays fixed while individual picked conditions can be removed.
+    await userEvent.click(bar.getByRole('button', { name: 'Remove Fantasy' }));
+    await expect(navigate).toHaveBeenCalledTimes(3);
     await expect(
       within(canvas.getByRole('region', { name: 'Works' })).getAllByRole('heading', { level: 3 }),
     ).toHaveLength(2);
@@ -189,13 +201,12 @@ export const AddByName: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
-    await userEvent.click(bar.getByRole('radio', { name: 'Exclude' }));
-    const input = bar.getByRole('combobox', { name: 'Search tags' });
+    const input = bar.getByRole('combobox', { name: 'Topics' });
     await userEvent.type(input, 'dr');
     await waitFor(() => expect(screen.getByRole('option', { name: 'Dragons' })).toBeVisible());
     await userEvent.clear(input);
     await userEvent.type(input, 'zz');
-    await waitFor(() => expect(screen.getByText('No tags found')).toBeVisible());
+    await waitFor(() => expect(screen.getByText('No matches.')).toBeVisible());
   },
 };
 
@@ -213,17 +224,14 @@ export const Follow: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Fantasy' }));
     await expect(
-      canvas.getByRole('button', { name: 'Following · Unfollow Fantasy' }),
+      await canvas.findByRole('button', { name: 'Following · Fantasy · Unfollow' }),
     ).toBeVisible();
     await expect(canvas.getByText('13 followers')).toBeVisible();
     await waitFor(() =>
-      expect(canvas.getByRole('button', { name: /^Following/ })).not.toHaveAttribute(
-        'aria-disabled',
-        'true',
-      ),
+      expect(canvas.getByRole('button', { name: /^Following/ })).toBeEnabled(),
     );
     await userEvent.click(canvas.getByRole('button', { name: /^Following/ }));
-    await expect(canvas.getByRole('button', { name: 'Follow · Fantasy' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Follow · Fantasy' })).toBeVisible();
     await expect(canvas.getByText('12 followers')).toBeVisible();
   },
 };

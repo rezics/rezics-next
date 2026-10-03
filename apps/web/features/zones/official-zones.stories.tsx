@@ -1,4 +1,6 @@
 import type { ZonePackage } from '@rezics/zone-sdk';
+import { spaceHref, zoneMemberHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import aiWorkshop from '../../zones/official/ai-workshop/index.tsx';
@@ -152,7 +154,7 @@ export const Books: Story = {
     await expect(within(cover).getByText('by Charlotte Brontë')).toBeVisible();
     await expect(
       within(cover).getByRole('link', { name: 'Why Jane Eyre is here' }),
-    ).toHaveAttribute('href', '/en/z/books/decisions#decision-jane-eyre');
+    ).toHaveAttribute('href', `${localizedPath(spaceHref('books', 'community', ['decisions']), 'en')}#decision-jane-eyre`);
     const contents = canvas.getByRole('region', { name: 'In this issue' });
     await expect(within(contents).getAllByRole('listitem')).toHaveLength(3);
     const shelf = canvas.getByRole('region', { name: 'Latest' });
@@ -420,7 +422,8 @@ export const AiWorkshop: Story = {
     await expect(copied).toEqual([workshopPick('club-prompt-v1').hub!.copyText]);
     await expect(
       spotlight.getByRole('link', { name: 'Try it Book club discussion prompt' }),
-    ).toHaveAttribute('href', expect.stringContaining('/w/00000000-0000-7000-8003-000000000000'));
+    ).toHaveAttribute('href', localizedPath(zoneMemberHref('ai-workshop', 'w',
+      '00000000-0000-7000-8003-000000000000'), 'en'));
     const collections = canvas.getByRole('region', { name: 'Editors’ picks' });
     await expect(
       within(collections).getByRole('heading', {
@@ -434,7 +437,8 @@ export const AiWorkshop: Story = {
     });
     await userEvent.click(link);
     await waitFor(() => expect(link.nextElementSibling).toHaveTextContent('Link copied'));
-    await expect(copied.at(-1)).toMatch(/\/w\/00000000-0000-7000-8003-000000000007\?scope=realm/);
+    await expect(copied.at(-1)).toBe(new URL(localizedPath(zoneMemberHref('ai-workshop', 'w',
+      '00000000-0000-7000-8003-000000000007'), 'en'), window.location.href).href);
     await holds('ai-workshop')(context);
   },
 };

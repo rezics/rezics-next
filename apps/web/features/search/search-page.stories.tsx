@@ -1,13 +1,13 @@
 import { localizedPath } from '../../i18n/locale.ts';
 import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { Providers } from '../shell/providers.tsx';
 import { messages } from './messages.ts';
 import type { SearchLoader } from './query.ts';
 import type { TypeaheadLoader } from './typeahead.tsx';
 import { SearchPage } from './search-page.tsx';
-import type { SearchState } from './state.ts';
+import { searchHref, type SearchState } from './state.ts';
 import type { SearchFailure, SearchHit, SearchLoaded, SearchResultPage } from './types.ts';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-4b5a-4c6d-8e7f-9a0b1c2d3e4f`;
@@ -49,6 +49,7 @@ const more = (second: SearchHit[] | SearchFailure): SearchLoader => async () => 
 
 const state = (phrase: string, extra: Partial<SearchState> = {}): { ok: true; state: SearchState } =>
   ({ ok: true, state: { phrase, scope: { kind: 'global' }, language: null, term: null, ...extra } });
+const navigate = fn();
 
 const meta = {
   title: 'Search/Page', component: SearchPage,
@@ -58,7 +59,8 @@ const meta = {
   signedIn: false, load: more([hit(4, 'Pride and Prejudice — Chapter 3', 'en'), hit(5, null, 'en')]),
   locale: 'en', messages: messages.en },
   decorators: [Story => <Providers><Story /></Providers>],
-  parameters: { route: { pathname: '/en/search', search: '?q=Pride' } },
+  beforeEach() { navigate.mockClear(); },
+  parameters: { route: { pathname: '/en/search', search: '?q=Pride', onPush: navigate } },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof SearchPage>;
 export default meta;
@@ -98,14 +100,29 @@ const romance = '6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d9e';
 export const ConceptConditions: Story = {
   args: { parsed: state('书店', { term, concepts: { include: [mystery], exclude: [romance], match: 'any' } }),
     initial: results([hit(24, '深夜书店', 'zh-Hans', { classification: {
-      concept: id(88), conceptName: name('悬疑', 'zh-Hans'), source: 'global' } })]) },
+      concept: id(88), conceptName: name('悬疑', 'zh-Hans'), source: 'global' } })], {
+        concepts: [{ id: term, name: 'Bookstores', language: 'en' },
+          { id: mystery, name: 'Mystery', language: 'en' },
+          { id: romance, name: 'Romance', language: 'en' }],
+      }) },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const bar = within(canvas.getByRole('region', { name: 'Conditions' }));
-    await expect(bar.getAllByRole('link', { name: /^Remove/ })).toHaveLength(3);
+    await expect(bar.getAllByRole('button', { name: /^Remove/ })).toHaveLength(3);
     await expect(within(bar.getByRole('group', { name: 'Match' })).getByRole('link', { name: 'Any' }))
       .toHaveAttribute('aria-current', 'true');
     await expect(canvas.getByRole('link', { name: '深夜书店' })).toBeVisible();
+    // Removing a picked topic now issues router navigation, preserving the remaining conditions.
+    await userEvent.click(bar.getByRole('button', { name: 'Remove Romance' }));
+    await expect(navigate).toHaveBeenLastCalledWith(localizedPath(searchHref({
+      phrase: '书店', scope: { kind: 'global' }, language: null, term,
+      concepts: { include: [mystery], exclude: [], match: 'any' },
+    }), 'en'), { scroll: false });
+    await userEvent.click(bar.getByRole('button', { name: 'Remove Bookstores' }));
+    await expect(navigate).toHaveBeenLastCalledWith(localizedPath(searchHref({
+      phrase: '书店', scope: { kind: 'global' }, language: null, term: mystery,
+      concepts: { include: [], exclude: [romance], match: 'any' },
+    }), 'en'), { scroll: false });
   },
 };
 
@@ -139,7 +156,9 @@ export const RealmClassified: Story = {
   initial: results([hit(6, '西游记', 'zh-Hans', { realm: 'realm-adoption', classification: { concept: id(700),
     source: 'local', conceptName: { value: '神魔小说', language: 'zh-Hans', direction: 'ltr', basis: 'requested' } } }),
   hit(7, '西游记 · 第二回 悟彻菩提真妙理', 'zh-Hans', { realm: 'main-fallback', classification: { concept: id(700),
-    source: 'global', conceptName: null } })]), signedIn: true },
+    source: 'global', conceptName: null } })], { concepts: [{
+      id: '5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d', name: '神魔小说', language: 'zh-Hans',
+    }] }), signedIn: true },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('combobox', { name: 'Search in' })).toHaveTextContent('Classic Literature · 经典文学');
@@ -153,8 +172,12 @@ export const RealmClassified: Story = {
     await expect(completeness).toHaveTextContent('Only Simplified Chinese text');
     await expect(completeness).toHaveTextContent('Only this genre');
     await expect(completeness).toHaveTextContent('Works you muted are left out');
-    await expect(within(canvas.getByRole('region', { name: 'Conditions' })).getByRole('link', { name: /^Remove/ }))
-      .toHaveAttribute('href', `/en/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`);
+    await userEvent.click(within(canvas.getByRole('region', { name: 'Conditions' }))
+      .getByRole('button', { name: 'Remove 神魔小说' }));
+    await expect(navigate).toHaveBeenLastCalledWith(
+      `/en/search?q=${encodeURIComponent('西游记')}&scope=realm&realm=${realm}&lang=zh-Hans`,
+      { scroll: false },
+    );
     await userEvent.click(canvas.getByRole('combobox', { name: 'Search in' }));
     await waitFor(() => expect(within(document.body).getByRole('option', { name: 'All of REZICS' })).toBeVisible());
     await userEvent.click(within(document.body).getByRole('option', { name: 'All of REZICS' }));

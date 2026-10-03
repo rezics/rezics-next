@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { threadHref } from '../address/path.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import { memoryFeed } from '../feed/fixtures.ts';
 import { messages } from '../feed/messages.ts';
@@ -30,7 +32,7 @@ const rules = [
 
 function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads() }: Args) {
   const zone = communityZone(locale);
-  const here = `/${locale}${storyRealm.path}/discussions/${read.focus.slice(-36)}`;
+  const here = localizedPath(threadHref(storyRealm.path, read.focus), locale);
   return <RealmPageStory zone={zone} locale={locale} members={locale === 'zh-Hans' ? '10 位成员' : '10 members'}>
     <FeedProvider locale={locale} messages={locale === 'zh-Hans' ? { ...messages, ...zhHans } : messages} now={THREAD_NOW}
       signedIn={signedIn} actingSubject={signedIn ? 'https://rezics.com/id/00000802-bbbb-7a6f-8c2d-3e7b5c1a9f40' : null}
@@ -53,7 +55,7 @@ const meta = {
   title: 'Realm/Thread',
   component: ThreadPage,
   args: { read: storyThread, mode: 'open', signedIn: true, locale: 'en' },
-  parameters: { route: { pathname: `/en${storyRealm.path}/discussions/${storyReply(1).slice(-36)}` } },
+  parameters: { route: { pathname: localizedPath(threadHref(storyRealm.path, storyReply(1)), 'en') } },
   globals: { viewport: { value: 'desktop' } },
   render: (args, { globals }) => <ThreadPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
 } satisfies Meta<typeof ThreadPage>;
@@ -77,7 +79,7 @@ export const Thread: Story = {
     await expect(canvas.getAllByText('A member').length).toBeGreaterThan(0);
     // Six levels down, a branch continues on the reply's own page.
     await expect(canvas.getByRole('link', { name: 'Continue this thread' })).toHaveAttribute('href',
-      `/en${storyRealm.path}/discussions/${storyReply(7).slice(-36)}`);
+      localizedPath(threadHref(storyRealm.path, storyReply(7)), 'en'));
     // The community voted this reply down, so it starts folded; one tap opens it.
     const folded = canvas.getByRole('button', { name: 'Show the reply by Leo Sun 孙乐' });
     await expect(folded).toHaveAttribute('aria-expanded', 'false');
@@ -199,7 +201,7 @@ export const ReplyPage: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'View the whole discussion' })).toHaveAttribute('href',
-      `/en${storyRealm.path}/discussions/${storyReply(1).slice(-36)}`);
+      localizedPath(threadHref(storyRealm.path, storyReply(1)), 'en'));
     await expect(canvas.getByText('In reply to')).toBeVisible();
     await expect(canvas.getByText(/joke turns out to cost his daughters/)).toBeVisible();
   },

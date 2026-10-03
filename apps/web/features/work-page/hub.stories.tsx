@@ -1,4 +1,4 @@
-import { spaceHref } from '../address/path.ts';
+import { resourceHref, spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
@@ -46,7 +46,7 @@ export const WikiPresent: WikiStory = {
     const list = within(section).getByRole('list', { name: 'Main characters' });
     await expect(within(list).getByRole('link', { name: 'Kirito' })).toHaveAttribute(
       'href',
-      expect.stringMatching(/^\/en\/e\/[0-9a-f-]{36}$/),
+      localizedPath(resourceHref('/e/', kirito.reference), 'en'),
     );
     await expect(within(section).getByRole('link', { name: 'All characters' })).toHaveAttribute(
       'href',
@@ -86,7 +86,7 @@ export const WikiWithheldByPosition: WikiStory = {
     // The wiki itself is still one tap away.
     await expect(within(section).getByRole('link', { name: 'Open the wiki' })).toHaveAttribute(
       'href',
-      localizedPath(spaceHref(wikiRealm, 'community'), 'en'),
+      localizedPath(spaceHref(wikiRealm, 'site'), 'en'),
     );
   },
 };
