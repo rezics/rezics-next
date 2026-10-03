@@ -19,6 +19,7 @@ function splitCatalog<T extends object>(english: () => Promise<T>, translations:
 // this file with the union driver (see .gitattributes), so parallel feature
 // branches add their lines without conflicts; keep one entry per line.
 export const catalogs = {
+  notifications: inlineCatalog(() => import('../features/shell/notifications/messages.ts').then(module => module.messages)),
   documentEditor: inlineCatalog(() => import('../features/document-editor/messages.ts').then(module => module.messages)),
   documentMedia: inlineCatalog(() => import('../features/document-editor/media-messages.ts').then(module => module.mediaMessages)),
   auth: splitCatalog(() => import('../features/auth/messages.ts').then(module => module.englishMessages), { 'zh-Hant': () => import('../features/auth/messages/zh-Hant.ts').then(module => module.default), 'zh-Hans': () => import('../features/auth/messages/zh-Hans.ts').then(module => module.default), ja: () => import('../features/auth/messages/ja.ts').then(module => module.default), ko: () => import('../features/auth/messages/ko.ts').then(module => module.default), de: () => import('../features/auth/messages/de.ts').then(module => module.default), fr: () => import('../features/auth/messages/fr.ts').then(module => module.default), es: () => import('../features/auth/messages/es.ts').then(module => module.default)}),

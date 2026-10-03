@@ -132,3 +132,15 @@ export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; r
   } } } } } } as unknown as MainClient;
   return { main, calls };
 }
+
+
+/** Current topic/view names; Work address resolved by Main rather than guessed from its UUID. */
+export const newWorks: StreamItem[] = [
+  { ...item(121, { kind: 'new_work', actor: null, realm: null, ...nowhere, groupKey: null,
+    target: { ...target('雨夜书店', null, iri(701), 'zh-Hans'), topicName: 'Fantasy', href: '/w/rainy-bookshop' } }),
+    purpose: 'subscription', topic: 'new-work' },
+  { ...item(122, { kind: 'new_work', actor: null, realm: null, ...nowhere, groupKey: null,
+    target: { ...target('Middlemarch', null, iri(703)), topicName: 'English novels without spoilers', href: '/w/middlemarch' } }),
+    purpose: 'subscription', topic: 'new-work' },
+  { ...item(123, null), purpose: 'subscription', topic: 'new-work', state: 'active' },
+];

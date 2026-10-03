@@ -6,7 +6,7 @@ import type { NotificationDispatcher } from '../modules/notification/dispatcher.
 import type { NotificationRealtimeHub, NotificationStreamHint } from '../modules/notification/realtime.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { NotificationConflict, NotificationDenied, NotificationInvalid, NotificationStale,
-  NotificationUnavailable, sha256, type NotificationStore } from '../modules/notification/store.ts';
+  NotificationUnavailable, NOTIFICATION_SETTINGS_COST, sha256, type NotificationStore } from '../modules/notification/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { WatchStore, watchCommand, watchKind, watchReceipt, watchState, watchTarget } from '../modules/notification/watch.ts';
@@ -71,7 +71,7 @@ const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.S
     t.Literal('reply'), t.Literal('submission_decision'), t.Literal('moderation_outcome'),
     t.Literal('realm_role_change'), t.Literal('follow'), t.Literal('claim_correction'),
     t.Literal('review'), t.Literal('review_helpful'), t.Literal('realm_invitation'),
-    t.Literal('chapter'), t.Literal('post_vote')]),
+    t.Literal('chapter'), t.Literal('new_work'), t.Literal('post_vote')]),
     actor: t.Nullable(t.Object({ id: t.String(), name: t.String(), handle: t.String(),
       avatar: t.Nullable(t.String()) })), realm: t.Nullable(t.String()),
     realmName: t.Nullable(t.String()), realmRouteSegment: t.Nullable(t.String()),
@@ -79,7 +79,8 @@ const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.S
     roleChange: t.Nullable(t.Union([t.Literal('given'), t.Literal('taken')])),
     groupKey: t.Nullable(t.String()),
     target: t.Object({ title: t.Nullable(t.String()), excerpt: t.Nullable(t.String()),
-      language: t.Nullable(t.String()), linkTarget: t.Nullable(t.String()), reviewId: t.Nullable(t.String()) }) })),
+      language: t.Nullable(t.String()), linkTarget: t.Nullable(t.String()), reviewId: t.Nullable(t.String()),
+      topicName: t.Optional(t.Nullable(t.String())), href: t.Optional(t.Nullable(t.String())) }) })),
   createdAt: t.String() });
 const streamPage = t.Object({ profile: t.Literal('notification-stream-page-v1'), generation: t.String(),
   head: t.String(), reset: t.Boolean(), readThrough: t.String(), items: t.Array(streamItem),
@@ -95,7 +96,7 @@ const preference = t.Object({ profile: t.Literal('notification-preference-v1'), 
   topic: t.String(), channel: t.String(), state: t.String(), revision: t.String(), replayed: t.Boolean() });
 const settingsPreferences = t.Object({ profile: t.Literal('notification-settings-v1'),
   items: t.Array(t.Object({ purpose: t.String(), topic: t.String(), channel: t.String(),
-    state: t.String(), revision: t.Nullable(t.String()) }), { maxItems: 24 }) });
+    state: t.String(), revision: t.Nullable(t.String()) }), { maxItems: NOTIFICATION_SETTINGS_COST.responseItems }) });
 const endpoint = t.Object({ profile: t.Literal('notification-endpoint-v1'), id: t.String(),
   generation: t.String(), retiredDeliveries: t.Number() });
 const delivery = t.Object({ profile: t.Literal('notification-delivery-v1'), id: t.String(), itemId: t.String(),

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { governance, inbox, inboxWindow, invitationNotice, invitations, memoryInbox, memoryInvitations, NOW, reviews,
-  roleTaken, streamId } from './fixtures.ts';
+  newWorks, roleTaken, streamId } from './fixtures.ts';
 import { RealmInvitations } from './invitations.tsx';
 import { NotificationsUnavailable, NotificationsView } from './notifications-view.tsx';
 
@@ -299,3 +299,19 @@ export const TriageError: Story = {
 export const TriageErrorDark: Story = { args: triageErrorArgs(), globals: { theme: 'dark' }, play: TriageError.play };
 
 export const FailedDark: Story = { ...Failed, globals: { theme: 'dark' } };
+
+
+/** Followed topics and named saved views lead to the Work's current canonical address. */
+export const NewWorks: Story = {
+  args: { initial: inboxWindow(newWorks, '0', '123'), now: NOW, avatarQuery: '', main: memoryInbox(newWorks).main },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'New in Fantasy: 雨夜书店' }))
+      .toHaveAttribute('href', '/en/w/rainy-bookshop');
+    await expect(canvas.getByRole('link', { name: 'New in English novels without spoilers: Middlemarch' }))
+      .toHaveAttribute('href', '/en/w/middlemarch');
+    await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
+  },
+};
+export const NewWorksPhone: Story = { ...NewWorks, globals: { viewport: { value: 'mobile' } } };
+export const NewWorksDark: Story = { ...NewWorks, globals: { theme: 'dark' } };
