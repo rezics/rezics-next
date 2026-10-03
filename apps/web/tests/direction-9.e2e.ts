@@ -79,6 +79,17 @@ async function screenshot(page: Page, info: TestInfo, step: string) {
   ).toBe(false);
 }
 
+function discoverResource(page: Page, name: string) {
+  // Resource cards include their type in the link's accessible name. The
+  // resource heading identifies the result independently of that extra label.
+  return page
+    .getByRole('main')
+    .getByRole('link')
+    .filter({
+      has: page.getByRole('heading', { name, exact: true }),
+    });
+}
+
 async function selectActor(page: Page, actor: string, next: string) {
   const sessionKey = (await page.context().cookies()).find(
     (cookie) => cookie.name === 'rezics_session_key',
@@ -145,7 +156,12 @@ async function signInAtAccounts(
   }
   const finished = (url: URL) =>
     url.pathname === next || (onboard && url.pathname === '/en/onboarding');
-  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
+  // A rejected cached session can have reached /auth/start through settings.
+  // Dispose that document before its mount effect starts a competing redirect.
+  await page.goto('about:blank');
+  // This page immediately replaces itself with /auth/authorize after mounting.
+  // Its load event can be aborted by that expected navigation.
+  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`, { waitUntil: 'commit' });
   await page.waitForURL(
     (url) =>
       (atAccounts(url) && url.pathname === '/sign-in') ||
@@ -228,9 +244,12 @@ async function address(page: Page, scope: string, holder: string, locale: Locale
   expect(actingSubject, 'authenticated address reads carry the selected Agent').toBeTruthy();
   const response = await page.request.get(
     `/api/main/v1/addresses/resolve?${new URLSearchParams({
-      scope, key: short(holder), actingSubject,
+      scope,
+      key: short(holder),
+      actingSubject,
     })}`,
     {
+      timeout: 30_000,
       headers: { 'accept-language': locale, 'x-rezics-display-languages': locale },
     },
   );
@@ -275,12 +294,15 @@ async function walkAddress(
   if (capability) forms.add(`/${locale}${identityPrefix}${short(capability)}`);
   for (const form of forms) {
     if (form === canonical) continue;
-    const legacy = await page.request.get(`${form}?direction9=preserved`, { maxRedirects: 0 });
+    const legacy = await page.request.get(`${form}?direction9=preserved`, {
+      maxRedirects: 0,
+      timeout: 30_000,
+    });
     expect(legacy.status(), `${name}: ${form} is one permanent redirect`).toBe(301);
     const destination = new URL(legacy.headers().location!, page.url());
     expect(destination.pathname).toBe(canonical);
     expect(destination.search).toBe('?direction9=preserved');
-    const terminal = await page.request.get(destination.href, { maxRedirects: 0 });
+    const terminal = await page.request.get(destination.href, { maxRedirects: 0, timeout: 30_000 });
     expect(terminal.status(), `${name}: ${form} reaches 200 without another redirect`).toBe(200);
     await page.goto(`${form}?direction9=preserved#direction9`);
     await expect(page).toHaveURL(
@@ -325,7 +347,9 @@ test.beforeAll(async ({ browser }, info) => {
     ).not.toBe(credentials().member.email);
     await phase('real Account sign-in', () =>
       // One at a time: parallel first sign-ins race the Accounts dev server's first compile.
-      signInAtAccounts(page, '/en/settings', credentials().member).then(() => signInManager(managerPage)),
+      signInAtAccounts(page, '/en/settings', credentials().member).then(() =>
+        signInManager(managerPage),
+      ),
     );
     if (administrator && setupPage)
       await phase('administrator Account sign-in', () =>
@@ -417,53 +441,85 @@ for (const locale of locales)
       test.beforeEach(async ({ page }) => {
         test.setTimeout(180_000);
         page.setDefaultTimeout(30_000);
-        await page.goto(`/${locale}/settings`);
+        page.setDefaultNavigationTimeout(30_000);
+        await signInAtAccounts(page, `/${locale}/settings`, credentials().member);
       });
       test.afterEach(async ({ page }, info) => {
+        // Account rotates refresh tokens. Carry the latest session into the
+        // next journey instead of replaying beforeAll's consumed refresh token.
+        memberState = await page.context().storageState();
         if (info.status !== info.expectedStatus) await screenshot(page, info, 'failure');
       });
 
-      test('addresses: named and unnamed people, community, site, Work and Concept', async ({
-        page,
-      }, info) => {
-        for (const [scope, holder, name, surface] of [
-          ['agent', fixture.namedPerson, 'named-person', undefined],
-          ['agent', fixture.unnamedPerson, 'unnamed-person', undefined],
-          ['space', fixture.named.space, 'named-community', 'community'],
-          ['space', fixture.named.space, 'named-site', 'site'],
-          ['space', fixture.unnamed.space, 'unnamed-community', 'community'],
-          ['work', fixture.work.work, 'work', undefined],
-          ['concept', fixture.topic.concept, 'concept', undefined],
-        ] as const) {
+      // Each owner/surface has its own journey budget. The full matrix performs
+      // dozens of successful document reads and used to exhaust one 180 s test
+      // at the Work row, misreporting the current short read as a hung request.
+      for (const [scope, holder, name, surface] of [
+        ['agent', () => fixture.namedPerson, 'named-person', undefined],
+        ['agent', () => fixture.unnamedPerson, 'unnamed-person', undefined],
+        ['space', () => fixture.named.space, 'named-community', 'community'],
+        ['space', () => fixture.named.space, 'named-site', 'site'],
+        ['space', () => fixture.unnamed.space, 'unnamed-community', 'community'],
+        ['work', () => fixture.work.work, 'work', undefined],
+        ['concept', () => fixture.topic.concept, 'concept', undefined],
+      ] as const) {
+        test(`addresses: ${name}`, async ({ page }, info) => {
           await walkAddress(
             page,
             info,
             locale,
-            await address(page, scope, holder, locale),
+            await address(page, scope, holder(), locale),
             name,
             surface,
           );
-        }
-        const old = `/${locale}/r/${fixture.named.handle}/story/w/${uuidToSid(short(fixture.story.work))}`;
+        });
+      }
+      test('addresses: legacy site and Zone capability links', async ({ page }, info) => {
+        // The fixture mounts this Work as the document at /story. Member
+        // detail paths belong to Collection mounts, not this Work mount.
+        const old = `/${locale}/r/${fixture.named.handle}/story`;
         const expected = new URL(
-          (await page.request.get(`${old}?position=all`, { maxRedirects: 0 })).headers().location!,
+          (
+            await page.request.get(`${old}?position=all`, {
+              maxRedirects: 0,
+              timeout: 30_000,
+            })
+          ).headers().location!,
           page.url(),
         );
         expect(expected.pathname).toMatch(new RegExp(`^/${locale}/z/`));
-        const response = await page.request.get(`${old}?position=all`, { maxRedirects: 0 });
+        const response = await page.request.get(`${old}?position=all`, {
+          maxRedirects: 0,
+          timeout: 30_000,
+        });
         expect(response.status()).toBe(301);
         expect(expected.search).toBe('?position=all');
-        expect((await page.request.get(expected.href, { maxRedirects: 0 })).status()).toBe(200);
+        expect(
+          (
+            await page.request.get(expected.href, {
+              maxRedirects: 0,
+              timeout: 30_000,
+            })
+          ).status(),
+        ).toBe(200);
         await page.goto(old);
         await expect(page).toHaveURL(new RegExp(`/${locale}/z/`));
         await screenshot(page, info, 'legacy-r-site');
         const legacyZone = await page.request.get(`/${locale}/r/${short(fixture.zone)}`, {
           maxRedirects: 0,
+          timeout: 30_000,
         });
         expect(legacyZone.status(), 'a legacy Zone identity opens its site surface').toBe(301);
         const siteTarget = new URL(legacyZone.headers().location!, page.url());
         expect(siteTarget.pathname).toMatch(new RegExp(`^/${locale}/z/`));
-        expect((await page.request.get(siteTarget.href, { maxRedirects: 0 })).status()).toBe(200);
+        expect(
+          (
+            await page.request.get(siteTarget.href, {
+              maxRedirects: 0,
+              timeout: 30_000,
+            })
+          ).status(),
+        ).toBe(200);
         await page.goto(`/${locale}/r/${short(fixture.zone)}`);
         await screenshot(page, info, 'legacy-zone-identity');
       });
@@ -550,8 +606,13 @@ for (const locale of locales)
         ).toBeChecked();
         if (phone) {
           await appearance.getByText(shell.themeDark, { exact: true }).click();
-          await expect(appearance.getByRole('radio', { name: shell.themeDark, exact: true })).toBeChecked();
-        } else await appearance.getByRole('menuitemradio', { name: shell.themeDark, exact: true }).click();
+          await expect(
+            appearance.getByRole('radio', { name: shell.themeDark, exact: true }),
+          ).toBeChecked();
+        } else
+          await appearance
+            .getByRole('menuitemradio', { name: shell.themeDark, exact: true })
+            .click();
         await expect(page.locator('html')).toHaveClass(/dark/);
         if (phone) await appearance.getByRole('button', { name: t.back, exact: true }).click();
         else await trigger.click();
@@ -571,8 +632,11 @@ for (const locale of locales)
         const reset = phone ? page.getByRole('dialog', { name: t.appearance, exact: true }) : page;
         if (phone) {
           await reset.getByText(shell.themeSystem, { exact: true }).click();
-          await expect(reset.getByRole('radio', { name: shell.themeSystem, exact: true })).toBeChecked();
-        } else await reset.getByRole('menuitemradio', { name: shell.themeSystem, exact: true }).click();
+          await expect(
+            reset.getByRole('radio', { name: shell.themeSystem, exact: true }),
+          ).toBeChecked();
+        } else
+          await reset.getByRole('menuitemradio', { name: shell.themeSystem, exact: true }).click();
       });
 
       test('Discover: type tabs, topic picker chips and Communities continuation', async ({
@@ -634,9 +698,8 @@ for (const locale of locales)
         await expect(communityLinks.first()).toBeVisible();
         // Conditions has its own suggestion list that repeats on every page.
         // Resource destinations carry identity; different communities may share a name.
-        const destinations = () => communityLinks.evaluateAll(
-          (links) => links.map((link) => link.getAttribute('href')),
-        );
+        const destinations = () =>
+          communityLinks.evaluateAll((links) => links.map((link) => link.getAttribute('href')));
         const firstLinks = await destinations();
         expect(firstLinks.every((href) => href !== null)).toBe(true);
         expect(new Set(firstLinks).size).toBe(firstLinks.length);
@@ -651,10 +714,33 @@ for (const locale of locales)
           expect(secondLinks.some((href) => firstLinks.includes(href))).toBe(false);
         }).toPass({ timeout: 30_000 });
         await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
-        await expect(
-          page.getByRole('main').getByRole('link', { name: fixture.unlisted.name, exact: true }),
-        ).toHaveCount(0);
+        await expect(discoverResource(page, fixture.unlisted.name)).toHaveCount(0);
         await screenshot(page, info, 'communities-next-page');
+      });
+
+      test('Discover: choosing Communities after Works keeps the latest tab', async ({
+        page,
+      }, info) => {
+        const t = browseMessages[locale];
+        await page.goto(`/${locale}/discover`);
+        const tabs = page.getByRole('navigation', { name: t.type, exact: true });
+        // Do not wait for Works to commit before choosing the next destination.
+        await tabs.getByRole('link', { name: t.works, exact: true }).click({ noWaitAfter: true });
+        const communities = tabs.getByRole('link', { name: t.communities, exact: true });
+        await communities.click();
+        await expect(page).toHaveURL((url) => url.searchParams.get('tab') === 'communities', {
+          timeout: 30_000,
+        });
+        await expect(communities).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+        await expect(
+          page
+            .getByRole('main')
+            .getByRole('region', { name: t.communities, exact: true })
+            .getByRole('link')
+            .first(),
+        ).toBeVisible();
+        await screenshot(page, info, 'discover-latest-community-tab');
       });
 
       test('rating scope: choose a population past page one', async ({ page, browser }, info) => {
@@ -677,7 +763,9 @@ for (const locale of locales)
         const overview = canonicalHref(workAddress.canonical, locale);
         await page.goto(overview);
         await expect(page).toHaveURL(overview);
-        await expect(page.getByRole('heading', { level: 1 })).toHaveText(workAddress.canonical.slugSource);
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+          workAddress.canonical.slugSource,
+        );
         await page.getByRole('button', { name: t.otherCommunities, exact: true }).first().click();
         await page.getByRole('combobox', { name: t.chooseCommunity, exact: true }).click();
         await expect(page.getByRole('option').first()).toBeVisible();
@@ -735,13 +823,17 @@ for (const locale of locales)
         page,
         browser,
       }, info) => {
-        const positions = await setupCommands(browser, info, (api) => seedWikiPosition(api, fixture));
+        const positions = await setupCommands(browser, info, (api) =>
+          seedWikiPosition(api, fixture),
+        );
         // Probe as the reader too: administrative setup cannot prove disclosure.
         await new PublicCommands(page.request).until<{ items: { occurrence: string }[] }>(
           `/reading-positions/${short(positions.work)}?${new URLSearchParams({
-            q: positions.laterChapter.name, actingSubject: fixture.actor,
+            q: positions.laterChapter.name,
+            actingSubject: fixture.actor,
           })}`,
-          (result) => result.items.some((item) => item.occurrence === positions.laterChapter.occurrence),
+          (result) =>
+            result.items.some((item) => item.occurrence === positions.laterChapter.occurrence),
         );
         const t = browseMessages[locale],
           wiki = wikiCopy(locale);
@@ -804,7 +896,8 @@ for (const locale of locales)
           ).toBeVisible();
           await expect(outsider.locator('meta[name="robots"]')).toHaveCount(1);
           await expect(outsider.locator('meta[name="robots"]')).toHaveAttribute(
-            'content', /(?:^|[,\s])noindex(?:[,\s]|$)/,
+            'content',
+            /(?:^|[,\s])noindex(?:[,\s]|$)/,
           );
           const signIn = outsider.getByRole('link', { name: t.signIn, exact: true });
           await expect(signIn).toBeVisible();
@@ -821,9 +914,13 @@ for (const locale of locales)
           const manager = await managerContext.newPage();
           manager.setDefaultTimeout(30_000);
           // Select the fixture's manager before loading its scoped requests.
-          await phase(`${locale} ${view.name} manager selection`, () => selectActor(
-            manager, fixture.manager, `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
-          ));
+          await phase(`${locale} ${view.name} manager selection`, () =>
+            selectActor(
+              manager,
+              fixture.manager,
+              `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
+            ),
+          );
           await screenshot(manager, info, 'private-manager-before-decision');
           await phase(`${locale} ${view.name} manager approval`, async () => {
             await manager.getByRole('button', { name: t.approve, exact: true }).click();
@@ -842,9 +939,12 @@ for (const locale of locales)
             'accepted',
           ]);
           const relationship = relationshipMessages[locale];
-          await expect(page.getByRole('button', {
-            name: `${relationship.joined} · ${privateSpace.name} · ${relationship.leave}`, exact: true,
-          })).toBeVisible();
+          await expect(
+            page.getByRole('button', {
+              name: `${relationship.joined} · ${privateSpace.name} · ${relationship.leave}`,
+              exact: true,
+            }),
+          ).toBeVisible();
           await expect(page.getByText(t.pending, { exact: true })).toHaveCount(0);
           await screenshot(page, info, 'private-requester-reloaded');
         } finally {
@@ -855,40 +955,52 @@ for (const locale of locales)
 
       test('visibility: unlisted Space opens by link with noindex and is excluded from Discover', async ({
         page,
+        browser,
       }, info) => {
-        const direct = await page.goto(`/${locale}/r/${fixture.unlisted.handle}`);
-        expect(direct?.status()).toBe(200);
-        await expect(
-          page.getByRole('heading', { level: 1, name: fixture.unlisted.name }),
-        ).toBeVisible();
-        await expect(page.locator('meta[name="robots"]')).toHaveCount(1);
-        await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
-          'content',
-          /(?:^|[,\s])noindex(?:[,\s]|$)/,
-        );
-        await expect(
-          page.getByText(accessMessages[locale].unlistedNotice, { exact: true }),
-        ).toBeVisible();
-        await screenshot(page, info, 'unlisted-direct-link');
+        // Unlisted is readable by anyone holding the link. Start outside the
+        // signed-in shell so a stale settings/auth navigation cannot replace
+        // this document read (or turn goto's response into a same-document null).
+        const anonymous = await browser.newContext({
+          baseURL: info.project.use.baseURL,
+          viewport: view.viewport,
+        });
+        try {
+          const directPage = await anonymous.newPage();
+          const direct = await directPage.goto(`/${locale}/r/${fixture.unlisted.handle}`, {
+            timeout: 30_000,
+          });
+          expect(direct?.status()).toBe(200);
+          expect(direct?.headers()['x-robots-tag']).toMatch(/(?:^|[,\s])noindex(?:[,\s]|$)/);
+          await expect(
+            directPage.getByRole('heading', { level: 1, name: fixture.unlisted.name }),
+          ).toBeVisible();
+          await expect(directPage.locator('meta[name="robots"]')).toHaveCount(1);
+          await expect(directPage.locator('meta[name="robots"]')).toHaveAttribute(
+            'content',
+            /(?:^|[,\s])noindex(?:[,\s]|$)/,
+          );
+          await expect(
+            directPage.getByText(accessMessages[locale].unlistedNotice, { exact: true }),
+          ).toBeVisible();
+          await screenshot(directPage, info, 'unlisted-direct-link');
+        } finally {
+          await anonymous.close();
+        }
         const t = browseMessages[locale];
         await page.goto(
           `/${locale}/discover?tab=communities&q=${encodeURIComponent(fixture.unlisted.name)}`,
         );
-        await expect(page.getByRole('searchbox', { name: t.search, exact: true })).toHaveValue(
-          fixture.unlisted.name,
-        );
-        await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
         await expect(
-          page.getByRole('main').getByRole('link', { name: fixture.unlisted.name, exact: true }),
-        ).toHaveCount(0);
+          page.getByRole('main').getByRole('searchbox', { name: t.search, exact: true }),
+        ).toHaveValue(fixture.unlisted.name);
+        await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+        await expect(discoverResource(page, fixture.unlisted.name)).toHaveCount(0);
         await expect(page.getByRole('main').getByText(t.empty, { exact: true })).toBeVisible();
         await screenshot(page, info, 'unlisted-discover-excluded');
         await page.goto(
           `/${locale}/discover?tab=communities&q=${encodeURIComponent(fixture.named.name)}`,
         );
-        await expect(
-          page.getByRole('main').getByRole('link', { name: fixture.named.name, exact: true }),
-        ).toBeVisible();
+        await expect(discoverResource(page, fixture.named.name)).toBeVisible();
         await screenshot(page, info, 'listed-discover-positive-control');
       });
     });
