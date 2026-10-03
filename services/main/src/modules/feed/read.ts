@@ -705,7 +705,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const [latest, followsNow, personalNow, pending, watermark] = await Promise.all([
     settle(store.checkpoint(session.position.dataEpoch)),
     settle(reader ? follows.matches(reader.principal, reader.agent, []) : Promise.resolve(null)),
-    settle(reader ? homePersonal!.read(reader.principal, reader.agent) : Promise.resolve(null)),
+    settle(reader ? homePersonal!.fence(reader.principal, reader.agent) : Promise.resolve(null)),
     settle(projected ? store.reviewPending(checkpoint.review_sequence) : Promise.resolve(false)),
     watermarkRead]);
   if (unwrap(latest).revision !== checkpoint.revision) throw new WorkReadMoved('Feed changed');

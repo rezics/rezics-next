@@ -174,7 +174,7 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
     if (scope.startsWith('zone:')) await readZoneVisibility(session, scope.slice(5));
     const end = await this.projection.current();
     if (end.generation !== checkpoint.generation || end.contentSequence !== checkpoint.contentSequence
-      || principal && agent && personal && (await session.deps.homePersonal!.read(principal, agent)).revision !== personal.revision
+      || principal && agent && personal && (await session.deps.homePersonal!.fence(principal, agent)).revision !== personal.revision
       || follows && (await session.deps.follows!.matches(principal!, agent!, [])).revision !== follows.revision) {
       throw new WorkReadMoved('Trending changed');
     }

@@ -50,20 +50,20 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     realm, profile.moderators)] : [];
   const managedRules = await session.deps.governance?.rules?.publishedRealmRules(realm, true);
   const sourceRules = managedRules ?? profile?.rules;
-  const rules = sourceRules ? await Promise.all(sourceRules.map(async rule => {
+  const governance = session.deps.governance?.rules;
+  const refs = sourceRules?.flatMap(rule => rule.governanceRule ? [rule.governanceRule.ref] : []) ?? [];
+  let ruleHeads: Awaited<ReturnType<NonNullable<typeof governance>['currentRealmHeads']>> | undefined;
+  if (governance && refs.length) {
+    try { ruleHeads = await governance.currentRealmHeads(realm, refs); }
+    catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
+  }
+  const rules = sourceRules ? sourceRules.map(rule => {
     let governanceRule = rule.governanceRule;
-    if (governanceRule) {
-      if (!session.deps.governance?.rules) governanceRule = null;
-      else {
-        let current: { revision: string } | null;
-        try { current = await session.deps.governance.rules.current(governanceRule.ref,
-          `governance:realm:${realm}`); }
-        catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
-        if (current?.revision !== governanceRule.revision) governanceRule = null;
-      }
+    if (governanceRule && ruleHeads?.get(governanceRule.ref)?.revision !== governanceRule.revision) {
+      governanceRule = null;
     }
     return { id: rule.id, title: selected(rule.title), body: selected(rule.body), governanceRule };
-  })) : null;
+  }) : null;
   if (profile?.count.kind === 'exact' && !session.deps.access.publicRealmCount) {
     throw new WorkReadUnavailable('Realm count owner is unavailable');
   }
