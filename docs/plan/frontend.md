@@ -321,7 +321,7 @@ should not have to learn the model's vocabulary. The locale is a path prefix so
 each language version of a public page has its own indexable URL with
 `hreflang` alternates; content language belongs to a version and never enters
 the route. [URLs and SEO](../product/urls-and-seo.md) owns durable identifiers,
-names and slugs, canonical redirects and eligible alternates. Signed out, a
+aliases and readable suffixes, canonical redirects and eligible alternates. Signed out, a
 language select and a theme button sit in the header; signed in, they live in
 the account menu and settings. The account menu (maintainer, 2026-10-02) puts
 identity first (the acting Agent and switching), then profile, library, Studio
