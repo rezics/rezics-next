@@ -87,7 +87,8 @@ test('G-964: private open admission records self-join/invitation cuts; durable f
     expect((await joining.respond(principal, realm, invitation.invitation.id, accepted, acceptKey)).replayed).toBe(true);
     const rejoinedFollow = (await s.accessPool.query('SELECT revision::text FROM access.follow WHERE principal_id=$1 AND target=$2',
       [reader.principalId, space])).rows[0];
-    followed = { ...followed, source: 'join', revision: rejoinedFollow.revision };
+    // A new membership episode preserves the existing explicit interest.
+    expect(rejoinedFollow.revision).toBe(followed.revision);
     await notifying(true);
     await available(true);
     expect((await s.accessPool.query(`SELECT generation::text FROM access.realm_history_admission
