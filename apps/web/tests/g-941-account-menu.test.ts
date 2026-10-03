@@ -31,7 +31,7 @@ describe.skipIf(!reviewUrl || !authPath)('G-941 account menu against the shared 
         'href',
         '/en/library',
       );
-      await page.getByRole('menuitem', { name: 'Appearance', exact: true }).click();
+      await page.getByRole('menuitem', { name: /^Appearance\b/ }).click();
       await page.getByRole('menuitemradio', { name: 'Dark', exact: true }).click();
       await expect(page.locator('html')).toHaveClass(/dark/);
       await trigger.click();
@@ -42,15 +42,15 @@ describe.skipIf(!reviewUrl || !authPath)('G-941 account menu against the shared 
       let dialog = page.getByRole('dialog', { name: 'Account menu', exact: true });
       await expect(dialog.getByRole('radio')).toHaveCount(0);
       await page.screenshot({ path: '.temp/g941-account-phone.png' });
-      await dialog.getByRole('button', { name: 'Language', exact: true }).click();
+      await dialog.getByRole('button', { name: /^Language\b/ }).click();
       dialog = page.getByRole('dialog', { name: 'Language', exact: true });
       await expect(dialog.getByRole('radio')).toHaveCount(8);
       await expect(dialog.getByRole('button', { name: 'Back', exact: true })).toBeFocused();
       await page.screenshot({ path: '.temp/g941-account-language.png' });
       await dialog.getByRole('button', { name: 'Back', exact: true }).click();
       dialog = page.getByRole('dialog', { name: 'Account menu', exact: true });
-      await expect(dialog.getByRole('button', { name: 'Language', exact: true })).toBeFocused();
-      await dialog.getByRole('button', { name: 'Appearance', exact: true }).click();
+      await expect(dialog.getByRole('button', { name: /^Language\b/ })).toBeFocused();
+      await dialog.getByRole('button', { name: /^Appearance\b/ }).click();
       dialog = page.getByRole('dialog', { name: 'Appearance', exact: true });
       await expect(dialog.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
         await dialog.getByText('Light', { exact: true }).click();

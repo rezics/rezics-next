@@ -161,7 +161,9 @@ async function signInAtAccounts(
     );
   if (new URL(page.url()).pathname === '/sign-in') {
     await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-    await page.getByRole('textbox', { name: 'Email', exact: true }).fill(member.email);
+    const email = page.getByRole('textbox', { name: 'Email', exact: true });
+    await email.fill(member.email);
+    await expect(email).toHaveValue(member.email);
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.getByLabel('Enter your password').fill(member.password);
     await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -318,10 +320,8 @@ test.beforeAll(async ({ browser }, info) => {
       'requester and manager must be different Accounts',
     ).not.toBe(credentials().member.email);
     await phase('real Account sign-in', () =>
-      Promise.all([
-        signInAtAccounts(page, '/en/settings', credentials().member),
-        signInManager(managerPage),
-      ]),
+      // One at a time: parallel first sign-ins race the Accounts dev server's first compile.
+      signInAtAccounts(page, '/en/settings', credentials().member).then(() => signInManager(managerPage)),
     );
     if (administrator && setupPage)
       await phase('administrator Account sign-in', () =>
