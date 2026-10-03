@@ -16,6 +16,8 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
   initial: RequestPage; space: string; realm: string; actingSubject: string; locale: UiLocale; api?: SpaceAccessApi;
 }) {
   const t = accessMessages[locale];
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const api = useMemo(() => provided ?? browserSpaceAccessApi(space, realm, actingSubject), [provided, space, realm, actingSubject]);
   const [page, setPage] = useState(initial);
   const [search, setSearch] = useState('');
@@ -80,14 +82,15 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
     }
     setBusy(false);
   }
-  return <section aria-labelledby="join-requests-title" className="grid max-w-3xl gap-4">
+  return <section aria-labelledby="join-requests-title" data-hydrated={hydrated ? 'true' : undefined}
+    className="grid max-w-3xl gap-4">
     <h2 id="join-requests-title" className="font-semibold text-xl">{t.requests}</h2>
     <form className="grid gap-3" onSubmit={event => { event.preventDefault(); void load(false, search.trim()); }}>
-    <Field><FieldLabel>{t.search}</FieldLabel><Input type="search" value={search} maxLength={80} disabled={busy}
+    <Field><FieldLabel>{t.search}</FieldLabel><Input type="search" value={search} maxLength={80} disabled={!hydrated || busy}
       onChange={event => setSearch(event.currentTarget.value)} /><p className="text-muted-foreground text-sm">{t.searchHelp}</p></Field>
-    <Button type="submit" className="w-fit" disabled={busy}>{t.searchSubmit}</Button></form>
+    <Button type="submit" className="w-fit" disabled={!hydrated || busy}>{t.searchSubmit}</Button></form>
     {appliedSearch ? <p className="text-muted-foreground text-sm">{t.search}: <span dir="auto">{appliedSearch}</span></p> : null}
-    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => void load(false)}>{t.refresh}</Button></div>
+    <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={!hydrated || busy} onClick={() => void load(false)}>{t.refresh}</Button></div>
     {status ? <p role="status">{status}</p> : null}
     {error && !selected ? <p role="alert">{error}</p> : null}
     {page.items.length ? <ul className="grid gap-3">{page.items.map(item => <li key={item.id} className="grid gap-3 rounded-xl border border-border p-4">
@@ -96,12 +99,12 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
       <time className="text-muted-foreground text-sm" dateTime={item.createdAt}>
         {date(item.createdAt, locale)}</time>
       <p dir="auto" className="whitespace-pre-wrap break-words text-sm">{item.reason}</p>
-      <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => { setSelected(item); setDecision('accepted'); setReason(''); setError(null); setStale(false); intent.current = null; }}>{t.approve}</Button>
-        <Button variant="outline" disabled={busy} onClick={() => {
+      <div className="flex flex-wrap gap-2"><Button disabled={!hydrated || busy} onClick={() => { setSelected(item); setDecision('accepted'); setReason(''); setError(null); setStale(false); intent.current = null; }}>{t.approve}</Button>
+        <Button variant="outline" disabled={!hydrated || busy} onClick={() => {
           setSelected(item); setDecision('declined'); setReason(''); setError(null); setStale(false); intent.current = null;
         }}>{t.decline}</Button></div>
     </li>)}</ul> : <p role="status">{appliedSearch ? t.noMatch : t.empty}</p>}
-    {!page.complete && page.nextCursor ? <Button className="w-fit" variant="outline" isLoading={busy} disabled={busy || cursorStale}
+    {!page.complete && page.nextCursor ? <Button className="w-fit" variant="outline" isLoading={busy} disabled={!hydrated || busy || cursorStale}
       onClick={() => void load(true)}>{t.more}</Button> : null}
     <CommandDialog open={selected !== null} title={decision === 'accepted' ? t.approve : t.decline} confirm={decision === 'accepted' ? t.approve : t.decline} pending={busy} error={error}
       disabled={stale || !reason.trim()} cancel={t.cancel} onClose={() => setSelected(null)} onConfirm={() => void decide()}>

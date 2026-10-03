@@ -4,7 +4,7 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { EntityPicker, type EntityPickerItem, type EntityPickerLoad } from '@rezics/ui/entity-picker';
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezics/ui/sheet';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { discoveryApi } from '../discover/api.ts';
@@ -67,6 +67,8 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
   const t = materializeData(messages, { locale });
   const words = browseMessages[locale];
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [open, setOpen] = useState(false);
   const current = scope?.kind === 'realm' ? realms.find(realm => realm.id === scope.realm) : undefined;
   const realm = scope?.kind === 'realm' ? realmLabel(current ?? { id: scope.realm, name: null }, messages, locale) : '';
@@ -96,7 +98,8 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
       <li><ScopeLink href={workHref(workRef, tab, { kind: 'mine' })} current={sameScope(scope, { kind: 'mine' })}
         icon={UserRoundIcon}>{t.mine}</ScopeLink></li>
       {target || load ? <li><Sheet open={open} onOpenChange={details => setOpen(details.open)}>
-        <SheetTrigger asChild><Button size="sm" variant="ghost" pill>{words.otherCommunities}</Button></SheetTrigger>
+        <SheetTrigger asChild><Button size="sm" variant="ghost" pill disabled={!hydrated}
+          data-hydrated={hydrated ? 'true' : undefined}>{words.otherCommunities}</Button></SheetTrigger>
         <SheetContent placement="bottom" className="max-h-[85svh] sm:mx-auto sm:max-w-lg">
           <SheetHeader title={words.otherCommunities} />
           <SheetBody><EntityPicker key={`${target}:${locale}:${actingSubject}`} label={words.chooseCommunity}
