@@ -19,13 +19,16 @@ import { PrincipalBudgetCache } from '../src/modules/rate-limit/principal-cache.
 import { appEnvironment } from '../../../scripts/dev/config.ts';
 import { compareMigrationPaths } from '../../../scripts/lib/migration-order.ts';
 import { ReaderLibraryImportStore } from '../src/modules/library-import/reader-import.ts';
+import { buildMainOpenApi } from '../../../scripts/api/generate.ts';
 
 const options: RateLimitOptions = { secret: 'g543-test-counter-secret-at-least-32-characters',
   serviceClientIds: new Set(['installed-importer']), trustedProxyPeers: new Set(['127.0.0.2']),
   clientIpHeader: 'x-forwarded-for' };
 
-test('G-543: every generated operation has an explicit policy and path boundaries protect safety budgets', () => {
-  const spec = JSON.parse(readFileSync(resolve(import.meta.dir, '../../../generated/openapi/main/public.json'), 'utf8')) as {
+test('G-543: every current OpenAPI operation has an explicit policy and path boundaries protect safety budgets', async () => {
+  // Build from the installed routes: a stale checked-in document must never
+  // hide an operation added since the last contract generation.
+  const spec = JSON.parse(await buildMainOpenApi()) as {
     paths: Record<string, Record<string, unknown>>;
   };
   let mutations = 0;
