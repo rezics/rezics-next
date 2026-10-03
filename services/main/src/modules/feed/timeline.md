@@ -53,3 +53,23 @@ Following New reports unavailable while its target projection is incomplete,
 including migration/restore backfill; it never calls an incomplete index caught
 up. Every selected activity still passes current graph, Content and Access
 disclosure, so an index entry is not an authorization grant.
+
+## Ranked populations
+
+Rankings use a separately indexed admitted population, before score order and
+LIMIT. Raw private Book progress remains a valid owner signal but never enters
+the public score seek. Global and public-Realm admission keys are refreshed for
+the changed Work set, and score changes maintain their mirrored order rows.
+Strong Work gates and governance enforcement update admission in the same
+Access transaction. Live graph/Content disclosure still fences the selected
+page; an outdated admission is a moved outcome, not a scan into another raw
+candidate batch.
+
+This follows PostgreSQL's
+[ORDER BY/LIMIT index mechanism](https://www.postgresql.org/docs/18/indexes-ordering.html):
+the physical ordered relation must contain the requested population. Sorting a
+raw relation and rejecting its prefix afterwards would restore the measured
+growth. The real-engine guard creates 4/16/64 privately read Books through API
+commands, executes the former raw-score scan and checks one admitted seek plus
+the visible result. SQL plans and request profiles remain separate from native
+Jena operator measurements.
