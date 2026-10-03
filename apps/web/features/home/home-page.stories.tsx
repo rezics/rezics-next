@@ -4,6 +4,8 @@ import { communityHref } from '../feed/discussion.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { fixtureFollow, memoryRelationships } from '../relationships/fixtures.ts';
+import { relationshipStoryFetch } from '../relationships/story-fetch.ts';
 import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { everyKind, memoryFeed, NOW, page, post, realms, storyId, suggestion } from '../feed/fixtures.ts';
 import { messages as feed } from '../feed/messages.ts';
@@ -71,6 +73,17 @@ const meta = {
       signedIn={args.signedIn} locale={args.locale} messages={args.messages.home} /> : undefined} />,
   parameters: { route: { pathname: '/en' } },
   globals: { viewport: { value: 'desktop' } },
+  beforeEach({ args }) {
+    const communities = [...args.followed?.realms ?? [], ...args.followed?.zones ?? []];
+    const aliases = Object.fromEntries([...suggestions, ...communities].flatMap(item =>
+      item.realm ? [[item.realm, item.id]] : []));
+    const memory = memoryRelationships(communities.map((item, index) => ({
+      ...fixtureFollow(index + 1, item.kind), id: item.id, realm: item.realm ?? item.id,
+    })));
+    const original = window.fetch;
+    window.fetch = relationshipStoryFetch(memory.api, original, aliases);
+    return () => { window.fetch = original; };
+  },
 } satisfies Meta<Args>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -137,8 +150,8 @@ export const ReturningReader: Story = {
 
 /**
  * Follow state is one fact wherever it shows: a Realm followed through its
- * Zone offers no Follow on its posts. Following from a post says Following
- * there and on Home; following from Home says Following and takes Follow off
+ * Zone says Following on its posts. Following from a post says Following
+ * there and on Home; following from Home says Following on
  * that Realm's posts at once, without a reload.
  */
 export const FollowStateEverywhere: Story = {
@@ -156,17 +169,19 @@ export const FollowStateEverywhere: Story = {
     const tea = canvas.getByRole('article', { name: 'Ginger lemon tea' });
     const fences = canvas.getByRole('article', { name: 'Fence planner' });
     const austen = canvas.getByRole('article', { name: 'Sense and Sensibility' });
-    await expect(within(tea).queryByRole('button', { name: /^Follow/ })).toBeNull();
-    await expect(within(fences).getByRole('button', { name: 'Follow Stardew Mods' })).toBeVisible();
-    await expect(within(austen).getByRole('button', { name: 'Follow Classic Literature' })).toBeVisible();
+    await expect(await within(tea).findByRole('button', { name: 'Following · Home Cooking · 家常菜 · Unfollow' })).toBeVisible();
+    await expect(within(tea).getByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();
+    await waitFor(() => expect(within(fences).getByRole('button', { name: 'Follow Stardew Mods' })).toBeEnabled());
+    await waitFor(() => expect(within(austen).getByRole('button', { name: 'Follow Classic Literature' })).toBeEnabled());
     await userEvent.click(within(fences).getByRole('button', { name: 'Follow Stardew Mods' }));
     await waitFor(() => expect(within(fences).getByText('Following')).toBeVisible());
     await expect(fences).not.toHaveTextContent('Joined');
     const rail = canvas.getByRole('region', { name: 'Realms to follow' });
     await expect(within(rail).getByText('Following')).toBeVisible();
     await userEvent.click(within(rail).getByRole('button', { name: 'Follow Classic Literature' }));
-    await waitFor(() => expect(within(austen).queryByRole('button', { name: /^Follow/ })).toBeNull());
-    await expect(within(rail).getAllByText('Following')).toHaveLength(2);
+    await expect(await within(austen).findByRole('button', { name: 'Following · Classic Literature · Unfollow' })).toBeVisible();
+    await expect(within(austen).getByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();
+    await waitFor(() => expect(within(rail).getAllByText('Following')).toHaveLength(2));
   },
 };
 
@@ -304,16 +319,20 @@ export const PinATopic: Story = {
     const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
     // Before searching: the reader's unpinned topics and popular ones.
     await expect(dialog.getByRole('region', { name: 'Your topics' })).toHaveTextContent('Mystery');
-    await waitFor(() => expect(dialog.getByRole('button', { name: 'Cozy games' })).toBeVisible());
-    await userEvent.type(dialog.getByRole('searchbox', { name: 'Search topics' }), 'fan');
-    await userEvent.click(await dialog.findByRole('button', { name: 'Fantasy' }));
+    const search = dialog.getByRole('combobox', { name: 'Search topics' });
+    await userEvent.click(search);
+    await expect(await screen.findByRole('option', { name: 'Cozy games' })).toBeVisible();
+    await userEvent.type(search, 'fan');
+    await userEvent.click(await screen.findByRole('option', { name: 'Fantasy' }));
     await expect(await dialog.findByRole('heading', { name: 'Fantasy' })).toBeVisible();
     await expect(dialog.getByRole('region', { name: 'Broader' })).toHaveTextContent('Fiction');
     await userEvent.click(within(dialog.getByRole('region', { name: 'Narrower' })).getByRole('button', { name: '仙侠' }));
     await expect(await dialog.findByRole('heading', { name: '仙侠' })).toBeVisible();
     await userEvent.click(dialog.getByRole('button', { name: 'Back' }));
-    await userEvent.clear(dialog.getByRole('searchbox', { name: 'Search topics' }));
-    await userEvent.click(await dialog.findByRole('button', { name: 'Cozy games' }));
+    const returnedSearch = dialog.getByRole('combobox', { name: 'Search topics' });
+    await userEvent.click(returnedSearch);
+    await userEvent.clear(returnedSearch);
+    await userEvent.click(await screen.findByRole('option', { name: 'Cozy games' }));
     await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Cozy games”' }));
     await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
@@ -328,7 +347,7 @@ export const SaveFiltersAsTab: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
     // The dialog focuses its first field, the topic search, once it opens; typing waits for that.
-    await waitFor(() => expect(dialog.getByRole('searchbox', { name: 'Search topics' })).toHaveFocus());
+    await waitFor(() => expect(dialog.getByRole('combobox', { name: 'Search topics' })).toHaveFocus());
     const form = within(dialog.getByRole('form', { name: 'Save these filters as a tab' }));
     await expect(form.getByRole('textbox', { name: 'Name' })).toHaveValue(`Japanese · ${realms.fiction.name.value}`);
     await userEvent.clear(form.getByRole('textbox', { name: 'Name' }));
@@ -440,7 +459,7 @@ export const EmptyFollowing: Story = {
 export const PersonalFeedRefused: Story = {
   args: props({ personalRefused: true, page: { ok: true, data: page(everyKind.slice(2, 5), { scope: 'all' }) } }),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('status')).toHaveTextContent('Your personal feed couldn’t load');
+    await expect(within(canvasElement).getByText(/Your personal feed couldn’t load/).closest('[role="status"]')).toBeVisible();
   },
 };
 

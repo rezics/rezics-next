@@ -2,6 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { MessagesSquareIcon } from 'lucide-react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { threadHref } from '../address/path.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import { memoryFeed } from '../feed/fixtures.ts';
 import { messages } from '../feed/messages.ts';
@@ -58,7 +60,7 @@ export const Threads: Story = {
     await expect(within(feed).getAllByRole('article')).toHaveLength(storyThreads.length);
     const readAlong = canvas.getByRole('article', { name: 'October read-along: Pride and Prejudice, chapters 1–12' });
     await expect(within(readAlong).getByRole('link', { name: 'October read-along: Pride and Prejudice, chapters 1–12' }))
-      .toHaveAttribute('href', `${base}/${storyReply(1).slice(-36)}`);
+      .toHaveAttribute('href', localizedPath(threadHref(storyRealm.path, storyReply(1)), 'en'));
     await expect(within(readAlong).getByRole('link', { name: '11 comments' })).toBeVisible();
     // Where the page is the Realm's own, the meta line names the person, not the Realm again.
     await expect(within(readAlong).queryByRole('button', { name: 'Join' })).toBeNull();

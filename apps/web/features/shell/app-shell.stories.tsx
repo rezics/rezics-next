@@ -145,8 +145,8 @@ export const Dark: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
-    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Appearance' })).toBeVisible());
-    await userEvent.click(menu.getByRole('menuitem', { name: 'Appearance' }));
+    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Appearance: Dark' })).toBeVisible());
+    await userEvent.click(menu.getByRole('menuitem', { name: 'Appearance: Dark' }));
     await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: 'Dark' }))
       .toHaveAttribute('aria-checked', 'true'));
   },
@@ -178,8 +178,8 @@ export const Chinese: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('navigation', { name: '主导航' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: '账户菜单' }));
-    await waitFor(() => expect(within(document.body).getByRole('menuitem', { name: '语言' })).toBeVisible());
-    await userEvent.click(within(document.body).getByRole('menuitem', { name: '语言' }));
+    await waitFor(() => expect(within(document.body).getByRole('menuitem', { name: '语言: 简体中文' })).toBeVisible());
+    await userEvent.click(within(document.body).getByRole('menuitem', { name: '语言: 简体中文' }));
     await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: '简体中文' }))
       .toHaveAttribute('aria-checked', 'true'));
     await expect(canvas.getByRole('combobox', { name: '搜索作品' })).toBeVisible();
@@ -213,7 +213,9 @@ export const PhoneSignedInChinese: Story = {
     await expect(canvas.getByRole('button', { name: '账户菜单' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: '账户菜单' }));
     const sheet = await within(document.body).findByRole('dialog', { name: '账户菜单' });
-    await userEvent.click(await within(sheet).findByRole('button', { name: '语言' }));
+    const currentLanguage = await within(sheet).findByRole('button', { name: '语言: 简体中文' });
+    await waitFor(() => expect(currentLanguage).toBeVisible());
+    await userEvent.click(currentLanguage);
     const language = await within(document.body).findByRole('dialog', { name: '语言' });
     await waitFor(() => expect(within(language).getByRole('radiogroup', { name: '语言' })).toBeVisible());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -321,8 +323,8 @@ export const DisplayModeNotSaved: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
-    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Appearance' })).toBeVisible());
-    await userEvent.click(menu.getByRole('menuitem', { name: 'Appearance' }));
+    await waitFor(() => expect(menu.getByRole('menuitem', { name: 'Appearance: Light' })).toBeVisible());
+    await userEvent.click(menu.getByRole('menuitem', { name: 'Appearance: Light' }));
     await userEvent.click(await within(document.body).findByRole('menuitemradio', { name: 'Dark' }));
     await expect(document.documentElement).toHaveClass('dark');
     // Storybook has no Account behind /api/preferences, so the save fails.
