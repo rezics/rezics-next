@@ -539,6 +539,8 @@ for (const locale of locales)
         if (phone) await language.getByRole('button', { name: t.back, exact: true }).click();
         else {
           await page.keyboard.press('Escape');
+          await expect(page.getByRole('menu')).toHaveCount(0);
+          await trigger.click();
         }
         await root
           .getByRole(phone ? 'button' : 'menuitem', {
@@ -555,9 +557,10 @@ for (const locale of locales)
             exact: true,
           }),
         ).toBeChecked();
-        await appearance
-          .getByRole(phone ? 'radio' : 'menuitemradio', { name: shell.themeDark, exact: true })
-          .click();
+        if (phone) {
+          await appearance.getByText(shell.themeDark, { exact: true }).click();
+          await expect(appearance.getByRole('radio', { name: shell.themeDark, exact: true })).toBeChecked();
+        } else await appearance.getByRole('menuitemradio', { name: shell.themeDark, exact: true }).click();
         await expect(page.locator('html')).toHaveClass(/dark/);
         if (phone) await appearance.getByRole('button', { name: t.back, exact: true }).click();
         else await trigger.click();
@@ -575,9 +578,10 @@ for (const locale of locales)
           })
           .click();
         const reset = phone ? page.getByRole('dialog', { name: t.appearance, exact: true }) : page;
-        await reset
-          .getByRole(phone ? 'radio' : 'menuitemradio', { name: shell.themeSystem, exact: true })
-          .click();
+        if (phone) {
+          await reset.getByText(shell.themeSystem, { exact: true }).click();
+          await expect(reset.getByRole('radio', { name: shell.themeSystem, exact: true })).toBeChecked();
+        } else await reset.getByRole('menuitemradio', { name: shell.themeSystem, exact: true }).click();
       });
 
       test.fixme('relationships: follow → bell → pin → one-command join → leave → unfollow; sidebar updates without duplicate Spaces', async () => {
