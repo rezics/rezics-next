@@ -164,7 +164,7 @@ test('a thread shows its approved replies nested, hides what sits under a withdr
     [reply(4), reply(2)], [reply(3), reply(1)]]);
   // The opening discussion's first line is its title; its body goes on from there. Replies have no title.
   expect(read.items[0]).toMatchObject({ title: 'Chapter one: the letter', body: 'Who left it?', language: 'en',
-    author: { id: agent(1), name: 'Reader 1', handle: allocateAgentHandle(agent(1)) },
+    author: { id: agent(1), name: 'Reader 1', handle: null },
     time: new Date(start + 60_000).toISOString() });
   expect(read.items[1]!.vote).toEqual({ score: 3, value: 1, revision: null, open: true });
   expect(read.items[1]).toMatchObject({ title: null, body: 'Title 2\nBody 2' });

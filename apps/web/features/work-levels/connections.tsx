@@ -32,8 +32,9 @@ function Target({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hre
   if (target.kind === 'external') {
     // A contributor is one REZICS Agent wherever they are named: the link is their profile, not a page of this Zone.
     const person = target.agent ? people?.get(target.agent) : undefined;
-    return person
-      ? <Link href={authorHref({ kind: 'agent', handle: person.handle })} title={`@${person.handle}`} data-contributor={target.agent}
+    return person && target.agent
+      ? <Link href={authorHref({ kind: 'agent', handle: person.handle, agent: target.agent })}
+        title={person.handle ? `@${person.handle}` : undefined} data-contributor={target.agent}
         className="rounded-sm font-medium outline-none decoration-1 underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
         {person.name}</Link>
       : <bdi className="font-mono text-sm">{target.label}</bdi>;

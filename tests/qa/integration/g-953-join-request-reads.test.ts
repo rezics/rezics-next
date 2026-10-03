@@ -4,7 +4,7 @@ import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { RealmJoinRequests } from '../../../services/main/src/modules/realm-admin/join-requests.ts';
-import { allocateAgentHandle } from '../../../services/main/src/modules/agent/handle.ts';
+import { uuidToSid } from '@rezics/model/address';
 
 async function fixture(label: string) {
   const s = await startMediaStack(label);
@@ -87,15 +87,17 @@ test('G-953: database search traverses matching pages, folds Unicode and filters
     }
     const literal = await f.call('GET',`${f.root}?q=${encodeURIComponent('_%\\')}`);
     expect(literal.body.items.map((item: { id: string }) => item.id)).toEqual([ids[5]]);
-    const native = await f.call('GET',`${f.root}?q=${allocateAgentHandle(f.people[1]!.actor)}`);
-    expect(native.body.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);
+    for (const key of [uuidToSid(f.people[1]!.actor.slice(-36)), f.people[1]!.actor.slice(-36)]) {
+      const native = await f.call('GET',`${f.root}?q=${key}`);
+      expect(native.body.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);
+    }
     const handle = `current_${randomUUID().replaceAll('-','').slice(0,12)}`;
     const retired = `retired_${randomUUID().replaceAll('-','').slice(0,12)}`;
     await f.s.accessPool.query(`INSERT INTO access.name_registry (scope,key,display,skeleton,holder,controller,state)
       VALUES ('agent',$1,$1,$1,$2,$2,'current'),('agent',$3,$3,$3,$2,$2,'redirect')`,
     [handle,f.people[1]!.actor,retired]);
     expect((await f.call('GET',`${f.root}?q=@${handle}`)).body.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);
-    expect((await f.call('GET',`${f.root}?q=${retired}`)).body).toMatchObject({ items: [],complete: true,nextCursor: null });
+    expect((await f.call('GET',`${f.root}?q=${retired}`)).body.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);
     const first = await f.call('GET',`${f.root}?q=alice&limit=1`);
     expect((await f.call('GET',`${f.root}?q=other&cursor=${first.body.nextCursor}`)).status).toBe(409);
     await f.request(f.noRequest);

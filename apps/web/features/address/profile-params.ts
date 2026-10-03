@@ -6,5 +6,5 @@ export async function profileIdentityParams<T extends { ref: string }>(params: P
   const { ref, ...rest } = await params;
   const parsed = parseAddressSegment(ref);
   if (!parsed || parsed.kind === 'name') notFound();
-  return { ...rest, handle: `@agent-${parsed.id}` };
+  return { ...rest, handle: `@${parsed.key}` };
 }

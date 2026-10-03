@@ -1,5 +1,23 @@
 import type { PoolClient } from 'pg';
 import { REALM_ADMIN_COST, RealmAdminInvalid } from '../realm-admin/contract.ts';
+import { identityKeyUuid, normalizeAddressName } from '@rezics/model/address';
+import { agentForHandle } from '../agent/handle.ts';
+
+/** Resolve exact identity/name input before the existing bounded text search.
+ * One registry point lookup also follows retained names; no Account data. */
+export async function resolveAgentSearch(client: PoolClient, query: string): Promise<string> {
+  const key = query.startsWith('https://rezics.com/id/') ? query.slice(22) : query;
+  const id = identityKeyUuid(key);
+  if (id) return `https://rezics.com/id/${id}`;
+  const legacy = agentForHandle(query);
+  if (legacy) return legacy;
+  let name;
+  try { name = normalizeAddressName(query, 'ascii-handle').key; }
+  catch { return query; }
+  const row = (await client.query<{ holder: string }>(`SELECT holder FROM access.name_registry
+    WHERE scope = 'agent' AND key = $1 AND state IN ('current','redirect')`, [name])).rows[0];
+  return row?.holder ?? query;
+}
 
 /** Each branch seeks an indexed name/handle candidate relation, intersects the
  * exact Realm's public Agent roster, then retains at most page + 1 identities.
@@ -40,11 +58,13 @@ export const REALM_MEMBER_SEARCH_SQL = `WITH query AS MATERIALIZED (
     ORDER BY h.holder LIMIT $4)
   UNION
   (SELECT m.member_subject AS member FROM access.membership m
+    JOIN access.authority_subject s ON s.id = m.member_subject AND s.active
     WHERE m.kind = 'realm' AND m.owner_subject = $1 AND m.member_subject > $2
       AND m.member_subject LIKE $5 || '%'
     ORDER BY m.member_subject LIMIT $4)
   UNION
   (SELECT DISTINCT a.member FROM access.realm_admin_assignment a
+    JOIN access.authority_subject s ON s.id = a.member AND s.active
     WHERE a.realm = $1 AND a.valid_until > clock_timestamp() AND a.member > $2
       AND a.member LIKE $5 || '%'
     ORDER BY a.member LIMIT $4)
@@ -58,7 +78,7 @@ export async function searchRealmMembers(client: PoolClient, realm: string, sear
     || !Number.isInteger(limit) || limit < 1 || limit > REALM_ADMIN_COST.page + 1) {
     throw new RealmAdminInvalid('Invalid member search');
   }
-  const native = query.startsWith('agent-') ? `https://rezics.com/id/${query.slice(6)}` : query;
+  const native = await resolveAgentSearch(client, query);
   const rows = await client.query<{ member: string }>(REALM_MEMBER_SEARCH_SQL,
     [realm, after ?? '', query, limit, native.replace(/[\\%_]/g, '\\$&')]);
   return rows.rows.map(row => row.member);

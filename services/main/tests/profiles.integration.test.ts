@@ -66,19 +66,19 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
     const before = stack.fuseki.queries;
     const headerResponse = await call('GET', root);
     expect(headerResponse.headers.get('cache-control')).toContain('no-store');
-    const header = await json<{ id: string; displayName: string; kind: string; handle: string }>(headerResponse);
+    const header = await json<{ id: string; displayName: string; kind: string; handle: string | null }>(headerResponse);
     expect(stack.fuseki.queries - before).toBe(3);
     expect(header).toMatchObject({ id: person.agent, kind: 'person', displayName: 'Public pen name' });
-    expect(header.handle).toBe(`agent-${short(person.agent)}`);
+    expect(header.handle).toBeNull();
     const serialized = JSON.stringify(header);
     for (const secret of [a.principalId, a.principal.subject, a.principal.issuer, b.principalId]) expect(serialized).not.toContain(secret);
-    expect(await json(await call('GET', `/v1/handles/${header.handle}`))).toMatchObject({ id: person.agent });
+    expect(await json(await call('GET', `/v1/handles/agent-${short(person.agent)}`))).toMatchObject({ id: person.agent });
     expect(await json(await call('GET', `/v1/agents/${short(org.agent)}`))).toMatchObject({ kind: 'organization' });
     expect(await json(await call('GET', `/v1/agents/${short(service.agent)}`))).toMatchObject({ kind: 'service' });
     expect((await call('GET', `/v1/agents/${randomUUID()}`)).status).toBe(404);
     expect((await call('GET', '/v1/handles/not-allocated')).status).toBe(404);
     // Existing provision-v1 Agents were already explicitly public. The same
-    // immutable handle allocation works without a data rewrite on a GET.
+    // identity address works without a data rewrite on a GET.
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(service.agent)} rv:profileHandle ?handle } }; DELETE WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(service.agent)} rv:profileDisclosure ?disclosure } }`);
@@ -275,7 +275,7 @@ test('G238: native Agent profiles, credits and library enforce disclosure, autho
       ${iri(person.agent)} rv:profileDisclosure rv:Public } }; INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(person.agent)} rv:profileDisclosure rv:Private } }`);
     for (const suffix of ['', '/works', '/collections']) expect((await call('GET', root + suffix)).status).toBe(404);
-    expect((await call('GET', `/v1/handles/${header.handle}`)).status).toBe(404);
+    expect((await call('GET', `/v1/handles/agent-${short(person.agent)}`)).status).toBe(404);
     expect((await json<Page<unknown>>(await call('GET', creditPath))).items).toEqual([]);
     await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(person.agent)} rv:profileDisclosure rv:Private } }; INSERT DATA { GRAPH ${iri(GRAPHS.current)} {

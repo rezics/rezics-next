@@ -177,9 +177,9 @@ describe('profile metadata', () => {
         messages,
       ).description,
     ).toBe('Lin Mei 林梅 on REZICS.');
-    // A native handle is an identifier: it resolves, but titles name only the Agent.
-    const native = storyProfile({ handle: `agent-${uuid}` });
-    expect(isNativeHandle(native.handle)).toBe(true);
+    // An unnamed profile titles only the display name and exposes no username.
+    const native = storyProfile({ handle: null });
+    expect(isNativeHandle(`agent-${uuid}`)).toBe(true);
     expect(isNativeHandle('lin_mei')).toBe(false);
     expect(profileMetadata(native, true, 'en', messages)).toMatchObject({
       title: 'Lin Mei 林梅',

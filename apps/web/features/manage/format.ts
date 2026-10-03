@@ -37,8 +37,8 @@ export function agentLabel(agent: AgentSummary | undefined, iri: string, fallbac
   return agent?.label ?? fallback(agentShort(iri));
 }
 
-/** Handles Main generates from the Agent ID are not worth showing as a name. */
-export const shownHandle = (handle: string | null) => handle && !handle.startsWith('agent-') ? `@${handle}` : null;
+/** Only a name chosen by its holder is a handle. */
+export const shownHandle = (handle: string | null) => handle ? `@${handle}` : null;
 
 /**
  * Report reasons are open codes (`^[a-z][a-z0-9_.-]{0,63}$`). Known ones have

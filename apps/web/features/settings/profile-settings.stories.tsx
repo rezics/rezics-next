@@ -21,6 +21,16 @@ const meta = { title: 'Settings/Profile', component: ProfileSettings,
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+export const UnnamedPerson: Story = {
+  args: { agent: { ...person, handle: null } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('textbox', { name: 'Your handle' })).toHaveValue('');
+    await expect(canvas.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada Lovelace');
+    await expect(canvas.queryByText(/^@.+/)).not.toBeInTheDocument();
+  },
+};
+
 export const Person: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);

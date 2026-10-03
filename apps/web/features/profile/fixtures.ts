@@ -15,7 +15,8 @@ const cover = (n: number) => ({ kind: 'fallback' as const, policy: 'avatar-fallb
 
 export function storyProfile(overrides: Partial<AgentProfile> = {}): AgentProfile {
   const id = overrides.id ?? storyId(1);
-  const handle = overrides.handle ?? 'lin_mei';
+  const handle = overrides.handle === undefined ? 'lin_mei' : overrides.handle;
+  const href = profileHref({ handle, id });
   const path = `/v1/agents/${id.slice(-36)}`;
   return { profile: 'agent-read-v1', id, displayName: 'Lin Mei 林梅', kind: 'person',
     revision: `${storyId(900)}`, bio: { language: 'en', text: 'Lin Mei writes 雨夜书店 (The Rainy Night Bookshop), a '
@@ -24,9 +25,9 @@ export function storyProfile(overrides: Partial<AgentProfile> = {}): AgentProfil
       + 'this, enough of that, and a pot that has seen forty winters. New chapters arrive on rainy weekends.' },
     avatarSelection: null, avatarUrl: null, handle, disclosure: 'public', sourcePosition: position,
     library: { visibility: 'public', statusShelvesVisible: true },
-    links: { profile: profileHref(handle), works: `${path}/works`, collections: `${path}/collections`,
+    links: { profile: href, works: `${path}/works`, collections: `${path}/collections`,
       statusShelves: `${path}/shelves` },
-    resolution: { requestedHandle: handle, state: 'current', redirect: false, canonical: profileHref(handle) },
+    ...(handle ? { resolution: { requestedHandle: handle, state: 'current' as const, redirect: false, canonical: href } } : {}),
     ...overrides };
 }
 

@@ -49,7 +49,7 @@ export type WorkStats = Ok<Work['reader-stats']['get']>;
 export type StatCount = WorkStats['reading'];
 
 /** A reviewer as the page names them; null while Main cannot. */
-export interface Reviewer { name: string; handle: string }
+export interface Reviewer { name: string; handle: string | null }
 
 /** A scope's rating summary with the Context (question) it answers. */
 export interface RatingRead {

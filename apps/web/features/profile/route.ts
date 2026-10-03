@@ -11,6 +11,7 @@
 
 import type { ShelfStatus } from './types.ts';
 import { resourceHref, type AddressTarget } from '../address/path.ts';
+import { identityKeyUuid } from '@rezics/model/address';
 
 // Main's handle forms (`services/main/src/modules/agent/handle.ts` and
 // `vanity.ts`): a native `agent-{uuid}`, or a vanity name Main matches without
@@ -24,7 +25,7 @@ export function parseHandleSegment(segment: string): string | null {
   const decoded = segment.startsWith('%40') ? `@${segment.slice(3)}` : segment;
   if (!decoded.startsWith('@')) return null;
   const handle = decoded.slice(1);
-  return vanity.test(handle) || native.test(handle) ? handle : null;
+  return identityKeyUuid(handle) || vanity.test(handle) || native.test(handle) ? handle : null;
 }
 
 /**
@@ -43,12 +44,17 @@ export function parseShelfStatus(value: string): ShelfStatus | null {
 export type ProfileView = { kind: 'overview' } | { kind: 'works' } | { kind: 'shelf'; status: ShelfStatus };
 
 /** A profile view's address, before the locale prefix. */
-export function profileHref(profile: string | { handle: string; address?: AddressTarget },
+export function profileHref(profile: string | { handle: string | null; id?: string; address?: AddressTarget },
   view: ProfileView = { kind: 'overview' }, cursor?: string): string {
   const handle = typeof profile === 'string' ? profile : profile.handle;
   const address = typeof profile === 'string' ? undefined : profile.address;
-  const base = address ? resourceHref('/a/', address) : isNativeHandle(handle)
-    ? resourceHref('/a/', handle.slice(6)) : resourceHref('/a/', { prefix: '/@', key: handle, slugSource: '' });
+  const id = typeof profile === 'string' ? profile : profile.id;
+  if (!address && !handle && !id) throw new Error('Profile identity is unavailable');
+  const base = address ? resourceHref('/a/', address) : !handle
+    ? resourceHref('/a/', id!) : isNativeHandle(handle)
+      ? resourceHref('/a/', handle.slice(6)) : identityKeyUuid(handle)
+        ? resourceHref('/a/', identityKeyUuid(handle)!)
+        : resourceHref('/a/', { prefix: '/@', key: handle, slugSource: '' });
   const path = `${base}${view.kind === 'works' ? '/works' : view.kind === 'shelf' ? `/shelves/${view.status}` : ''}`;
   return cursor ? `${path}?${new URLSearchParams({ cursor })}` : path;
 }

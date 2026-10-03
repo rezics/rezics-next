@@ -134,7 +134,7 @@ export async function readNativeCredits(session: WorkReadSession, work: string) 
     try {
       const agent = await readAgent(session, field(row, 'agent'));
       items.push({ id: field(row, 'id'), role: role as NativeCreditInput['role'],
-        agent: agent.id, displayName: agent.displayName, handle: agent.handle });
+        agent: agent.id, displayName: agent.displayName, handle: agent.handle, address: agent.address });
     } catch (error) { if (!(error instanceof WorkReadMissing)) throw error; }
   }
   await fenceWorkBasis(session, workBasis);

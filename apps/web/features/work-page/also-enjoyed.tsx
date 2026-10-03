@@ -19,8 +19,8 @@ export function alsoEnjoyedWork(item: AlsoEnjoyedItem): CatalogueWork {
   return { id: item.id, href: workHref(item.id.slice(-36)), title: item.title, cover: item.cover,
     kind: coverKindOf(item.types),
     authors: item.primaryCredits.flatMap(credit => credit.displayName ? [{ name: credit.displayName,
-      href: credit.participantKind === 'agent' ? credit.handle ? authorHref({ kind: 'agent', handle: credit.handle })
-        : null : credit.provider === 'open-library' && credit.key ? authorHref({ kind: 'external', key: credit.key })
+      href: credit.participantKind === 'agent' ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
+        : credit.provider === 'open-library' && credit.key ? authorHref({ kind: 'external', key: credit.key })
         : null }] : []),
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max } : null,
     completion: item.completionStatus };

@@ -52,7 +52,7 @@ export function post(n: number, overrides: Overrides = {}): FeedItem {
       types: ['https://schema.org/Book'], excerpt: null, language: 'en' },
     realm: realms.fiction, time: ago(n * 37), timeBasis: 'revision', score: 12, vote: 0, voteRevision: null,
     comments: { value: 3, kind: 'exact' },
-    links: { target: resourceHref('/w/', work), actor: profileHref(actor.handle), comments: `${resourceHref('/w/', work)}/discussion`,
+    links: { target: resourceHref('/w/', work), actor: profileHref(actor), comments: `${resourceHref('/w/', work)}/discussion`,
       vote: `/v1/feed/${storyId(n).slice(-36)}/vote` },
   };
   return { ...base, ...overrides, target: { ...base.target, ...overrides.target } };
@@ -162,7 +162,7 @@ function review(n: number, options: { actor: FeedItem['actor']; realm: FeedItem[
     card: { kind: 'review', review: id, ...options.card }, primaryAction: { kind: 'read-review', review: id, href },
     group: { key: `review-${n}`, count: options.count ?? 1, actors: [options.actor] },
     target: { title: options.title, language: options.title.language },
-    links: { target: href, actor: profileHref(options.actor.handle), comments: `${resourceHref('/w/', storyId(n, 'cccc'))}/discussion`,
+    links: { target: href, actor: profileHref(options.actor), comments: `${resourceHref('/w/', storyId(n, 'cccc'))}/discussion`,
       vote: `/v1/feed/${storyId(n).slice(-36)}/vote` } });
 }
 

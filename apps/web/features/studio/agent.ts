@@ -1,17 +1,15 @@
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { idOf } from './types.ts';
+import { identityKeyUuid, uuidToSid } from '@rezics/model/address';
 
 // Studio carries its Agent in the route, `/studio/@{agent}/…`: a workspace
 // layer (docs/contracts/identity-and-access.md#acting-identity-layers) that
 // starts from the session Agent and may differ from it, per tab. The segment
-// is the Agent's public handle, or the `agent-<uuid>` form Main mints when it
-// has none, so a Studio address and a profile address name an Agent alike.
-
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// is the chosen handle or the opaque sid. Historical forms still resolve.
 
 /** The route segment for an Agent, without the `@`. */
 function agentSlug(agent: Pick<AgentOption, 'iri' | 'handle'>): string {
-  return agent.handle ?? `agent-${agent.iri.slice(-36)}`;
+  return agent.handle ?? uuidToSid(agent.iri.slice(-36));
 }
 
 /** `/studio/@{agent}` plus a Studio path such as `/new` or `/works/<id>`. */
@@ -28,18 +26,19 @@ export type StudioAgent =
 
 /**
  * The Agent a Studio route segment names, among the Agents this person may act as.
- * Accepts `@handle`, `@agent-<uuid>` and `@<uuid>`, raw or percent-encoded.
+ * Accepts a sid or chosen handle, and legacy UUID forms, raw or percent-encoded.
  */
 export function resolveStudioAgent(segment: string, options: readonly AgentOption[]): StudioAgent {
   let value: string;
   try { value = decodeURIComponent(segment); } catch { return { kind: 'invalid' }; }
   if (!value.startsWith('@') || value.length < 2 || value.length > 80) return { kind: 'invalid' };
-  const slug = value.slice(1).toLowerCase();
-  const id = slug.startsWith('agent-') ? slug.slice(6) : slug;
+  const key = value.slice(1);
+  const slug = key.toLowerCase();
+  const id = identityKeyUuid(/^agent-/i.test(key) ? key.slice(6) : key);
   const agent = options.find(option => option.handle?.toLowerCase() === slug
-    || (uuid.test(id) && option.iri.slice(-36) === id));
+    || (id !== null && option.iri.slice(-36) === id));
   if (agent) return { kind: 'agent', agent };
-  return /^[a-z0-9][a-z0-9_-]*$/.test(slug) ? { kind: 'foreign', slug } : { kind: 'invalid' };
+  return /^[a-z0-9][a-z0-9_-]*$/.test(slug) ? { kind: 'foreign', slug: id ? key : slug } : { kind: 'invalid' };
 }
 
 export type WorkTab = 'chapters' | 'text' | 'details' | 'realms';

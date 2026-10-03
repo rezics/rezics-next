@@ -16,6 +16,7 @@ import { JOIN_REQUEST_READ_COST, JOIN_REQUEST_SEARCH_SQL, joinRequestCursor, req
   requestCursorBinding, encodeRequestCursor, decodeRequestCursor } from './join-requests-read.ts';
 import { prepareRealmFollow } from '../follows/recovery.ts';
 import { registerFollowSpace } from '../follows/targets.ts';
+import { resolveAgentSearch } from '../access/realm-management-search.ts';
 
 const PAGE = JOIN_REQUEST_READ_COST.page;
 export const joinRequestCommand = t.Object({ actingSubject: readId, expectedMembershipGeneration: generation,
@@ -171,7 +172,7 @@ export class RealmJoinRequests {
       const cursor = options.cursor ?? options.after;
       const after = options.after && Value.Check(readUuid, options.after) ? options.after
         : cursor ? decodeRequestCursor(cursor,binding) : null;
-      const native = search.startsWith('agent-') ? `https://rezics.com/id/${search.slice(6)}` : search;
+      const native = search ? await resolveAgentSearch(client, search) : '';
       const matches = search ? (await client.query<{ id: string }>(JOIN_REQUEST_SEARCH_SQL,
         [realm,after,search,limit + 1,native.replace(/[\\%_]/g,'\\$&')])).rows.map(row => row.id) : null;
       const rows = (await client.query<ReadRow>(`SELECT q.id,q.member,q.membership_generation::text,

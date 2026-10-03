@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
+import { messages as authMessages } from '../auth/messages.ts';
 import { type ReaderActions, ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import type { ReaderSeed } from '../catalogue/reader-store.ts';
 import { formatMean } from '../catalogue/work.ts';
@@ -25,7 +26,7 @@ import type { ProfileMessages } from './messages.ts';
 import { ProfileAvatar } from './profile-avatar.tsx';
 import { ProfileContributions } from './contributions.tsx';
 import type { ContributionPage } from './contributions.tsx';
-import { isNativeHandle, profileHref, type ProfileView } from './route.ts';
+import { profileHref, type ProfileView } from './route.ts';
 import type { AgentProfile, AgentWorksPage, FollowState, LibraryView, Loaded, ReadFailure, ShelfCard,
   ShelfStatus } from './types.ts';
 
@@ -85,13 +86,15 @@ function ProfileHeader({ profile, credited, follow, reader, followActions, local
       <p className="font-medium text-muted-foreground text-sm">{kindLabel(profile, credited, t)}</p>
       <h1 className="text-balance font-semibold font-work-title text-3xl/tight tracking-tight [overflow-wrap:anywhere]
         sm:text-5xl/tight">{profile.displayName}</h1>
-      {isNativeHandle(profile.handle) ? null
-        : <p className="text-muted-foreground [overflow-wrap:anywhere]">@{profile.handle}</p>}
+      {profile.handle ? <p className="text-muted-foreground [overflow-wrap:anywhere]">@{profile.handle}</p> : null}
     </div>
     <div className="col-span-2 grid content-start gap-5 sm:col-span-1 sm:col-start-2">
       {own ? <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Link href={localizedPath('/settings', locale)} className={cn(buttonVariants({ variant: 'outline', pill: true }),
           'min-w-32')}><UserRoundIcon aria-hidden="true" />{t.editProfile}</Link>
+        {profile.handle ? null : <Link href={localizedPath('/settings#handle', locale)}
+          className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
+          {authMessages[locale].chooseHandle}</Link>}
         {followers ? <span className="text-muted-foreground text-sm tabular-nums">
           {followerLabel(followers, locale, messages)}</span> : null}
       </div>
@@ -126,7 +129,7 @@ function WorkRows({ page, profile, own, headingLevel, avatarQuery, locale, messa
     {page.items.map(item => {
       const serial = completionText(item.completionStatus, t);
       return <li key={item.id} className="py-6 first:pt-2">
-        <WorkRow work={creditedCard(item, profile.displayName, profile.handle, locale, messages)} headingLevel={headingLevel}
+        <WorkRow work={creditedCard(item, profile.displayName, profile, locale, messages)} headingLevel={headingLevel}
           avatarQuery={avatarQuery} locale={locale} shelf={own ? 'none' : 'secondary'}>{serial}</WorkRow>
       </li>;
     })}
@@ -320,8 +323,7 @@ function ListFrame({ profile, title, count, view, cursor, nextCursor, reader, re
             avatarQuery={reader.avatarQuery} size="sm" />
           <span className="grid min-w-0">
             <span className="truncate font-medium">{profile.displayName}</span>
-            {isNativeHandle(profile.handle) ? null
-              : <span className="truncate text-muted-foreground text-sm">@{profile.handle}</span>}
+            {profile.handle ? <span className="truncate text-muted-foreground text-sm">@{profile.handle}</span> : null}
           </span>
           <span className="sr-only">{t.backTo({ name: profile.displayName })}</span>
         </Link>

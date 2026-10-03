@@ -83,7 +83,7 @@ export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonl
 
 const leading = 'font-semibold text-foreground';
 
-type Person = Pick<FeedItem['actor'], 'name' | 'handle'> & { address?: AddressTarget };
+type Person = Pick<FeedItem['actor'], 'id' | 'name' | 'handle'> & { address?: AddressTarget };
 
 /** People's names as one list in the reader's language ("Mei, Leo and Aria"), each leading to their profile. */
 function People({ people, className }: { people: readonly Person[]; className?: string }) {
@@ -93,7 +93,7 @@ function People({ people, className }: { people: readonly Person[]; className?: 
     .formatToParts(people.map(person => person.name)).map((part, index) => {
       if (part.type === 'literal') return <span key={index}>{part.value}</span>;
       const person = people[next++]!;
-      return <LocalizedLink key={person.handle} href={authorHref({ ...person, kind: 'agent' })}
+      return <LocalizedLink key={person.id} href={authorHref({ ...person, kind: 'agent' })}
         className={cn(rowLink, className)}>{part.value}</LocalizedLink>;
     });
 }

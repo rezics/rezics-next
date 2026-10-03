@@ -31,7 +31,7 @@ function cursorOrder(value: string) {
 }
 
 export function displayZoneCredits(credits: ProjectedCredit[],
-  names: ReadonlyMap<string, { displayName: string; handle: string }>,
+  names: ReadonlyMap<string, { displayName: string; handle: string | null }>,
   sourceNames: Awaited<ReturnType<typeof readAuthorNames>> = new Map()): DiscoveryCredit[] {
   return credits.flatMap((credit): DiscoveryCredit[] => {
     if (credit.participantKind === 'external-reference') return [{ ...credit,

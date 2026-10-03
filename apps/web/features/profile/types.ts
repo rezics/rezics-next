@@ -1,4 +1,5 @@
 import type { MainClient } from '../discover/types.ts';
+import type { CanonicalAddress } from '@rezics/model/address';
 
 // Main's profile, credited-Work, public shelf and follow reads
 // (`services/main/src/routes/profiles.ts`, `library.ts`, `follows.ts`), taken
@@ -6,7 +7,9 @@ import type { MainClient } from '../discover/types.ts';
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 type Agent = ReturnType<MainClient['v1']['agents']>;
 
-export type AgentProfile = Ok<ReturnType<MainClient['v1']['handles']>['get']>;
+export type AgentProfile = Omit<Ok<ReturnType<MainClient['v1']['handles']>['get']>, 'address'> & {
+  address?: CanonicalAddress;
+};
 export type AgentKind = AgentProfile['kind'];
 export type AgentWorksPage = Ok<Agent['works']['get']>;
 export type CreditedWork = AgentWorksPage['items'][number];

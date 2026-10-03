@@ -7,6 +7,7 @@ import { metadataComponent } from '../src/modules/work/metadata-schema.ts';
 import { optionalPreview } from '../src/modules/query/optional-preview.ts';
 import { readAuthorNames, fenceAuthorNames, sourceReportedCredits } from '../src/modules/source/author-name-read.ts';
 import { namedDiscoveryCredits } from '../src/modules/discovery/credits.ts';
+import { uuidToSid } from '@rezics/model/address';
 
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
 const field = (value: string) => ({ value });
@@ -71,7 +72,8 @@ test('G1012: an ambiguous Agent name is withheld without discarding unrelated cr
   ] });
   const names = await namedDiscoveryCredits(reader, [credit(id(1)), credit(id(2))], 20, true);
   expect(names.has(id(1))).toBe(false);
-  expect(names.get(id(2))).toEqual({ displayName: 'Healthy', handle: 'healthy' });
+  expect(names.get(id(2))).toEqual({ displayName: 'Healthy', handle: null,
+    address: { prefix: '/a/', key: uuidToSid(id(2).slice(-36)), slugSource: '' } });
   await expect(namedDiscoveryCredits(reader, [credit(id(1)), credit(id(2))])).rejects.toBeInstanceOf(WorkReadUnavailable);
   const handles = session({ query: async () => [
     { agent: field(id(1)), displayName: field('Affected') },
@@ -82,7 +84,8 @@ test('G1012: an ambiguous Agent name is withheld without discarding unrelated cr
   } } } });
   const named = await namedDiscoveryCredits(handles, [credit(id(1)), credit(id(2))], 20, true);
   expect(named.has(id(1))).toBe(false);
-  expect(named.get(id(2))).toEqual({ displayName: 'Healthy', handle: 'healthy' });
+  expect(named.get(id(2))).toEqual({ displayName: 'Healthy', handle: 'healthy',
+    address: { prefix: '/@', key: 'healthy', slugSource: '' } });
 });
 
 test('G1012: optional source bindings are fenced after names, so removal affects only that Work', async () => {

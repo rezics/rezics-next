@@ -11,8 +11,8 @@ import type { DiscoveryItem } from './types.ts';
 export function discoveryWork(item: DiscoveryItem, scope: BrowseScope): CatalogueWork {
   const authors = item.primaryCredits.flatMap(credit => {
     if (!credit.displayName) return [];
-    const href = credit.participantKind === 'agent' ? credit.handle
-      ? authorHref({ kind: 'agent', handle: credit.handle }) : null
+    const href = credit.participantKind === 'agent'
+      ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
       : credit.provider === 'open-library' && credit.key
         ? authorHref({ kind: 'external', key: credit.key }) : null;
     return [{ name: credit.displayName, href }];

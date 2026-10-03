@@ -317,7 +317,8 @@ if (safetyAlerts) {
   notificationStore.registerReadSubjectReader(SAFETY_ALERT_BASIS, safetyAlerts);
 } else console.warn('Safety responders are not configured; launch safety readiness is unclaimed');
 notificationStore.setDefaultReadSubjectReader(currentContentSubjectReader(content, notificationStore, access));
-notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, environment.lineage, media.store));
+notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, environment.lineage, media.store,
+  new AgentVanityHandles(pool)));
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);

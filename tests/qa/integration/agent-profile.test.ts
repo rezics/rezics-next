@@ -74,7 +74,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       } LIMIT 21`);
     expect(orgGraph.results?.bindings).toHaveLength(3);
     expect(new Set(orgGraph.results?.bindings.map(row => row.model?.value)))
-      .toEqual(new Set(['https://rezics.com/definition/agent-profile-v2']));
+      .toEqual(new Set(['https://rezics.com/definition/agent-profile-address-v1']));
     expect(new Set(orgGraph.results?.bindings.map(row => row.original?.value)))
       .toEqual(new Set(['en']));
     expect(new Set(orgGraph.results?.bindings.map(row => row.name?.['xml:lang'])))
@@ -94,7 +94,7 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
       SELECT ?model WHERE { GRAPH <urn:rezics:graph:revisions> {
         <${orgLegacyEdit.revision}> rv:modelRevision ?model . } } LIMIT 2`);
     expect(preservedRevision.results?.bindings[0]?.model?.value)
-      .toBe('https://rezics.com/definition/agent-profile-v2');
+      .toBe('https://rezics.com/definition/agent-profile-address-v1');
     expect(await json(await call('GET', orgPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
       .toMatchObject({ displayName: '北辰出版', originalDisplayName: 'North Star Books',
         localizedNames: { labels: { en: 'North Star Books' } } });
@@ -283,9 +283,9 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
         GRAPH <urn:rezics:graph:current> { <${legacyAgent}> rv:profileNameFormat ?format . }
       } LIMIT 2`);
     expect(upgradedGraph.results?.bindings.map(row => row.model?.value))
-      .toEqual(['https://rezics.com/definition/agent-profile-v2']);
+      .toEqual(['https://rezics.com/definition/agent-profile-address-v1']);
     expect(upgradedGraph.results?.bindings.map(row => row.format?.value))
-      .toEqual(['https://rezics.com/vocab/LocalizedNameV2']);
+      .toEqual(['https://rezics.com/vocab/LocalizedNameAddressV1']);
     expect(await json(await call('GET', legacyPath, undefined, undefined, randomUUID(), 'zh-CN'), 200))
       .toMatchObject({ displayName: '老出版社', originalDisplayName: 'Old Press Books' });
     const crowded = await json(await call('POST', '/v1/agents', owner.token,
@@ -301,14 +301,14 @@ test('G-300: controlled profile CAS, receipts, public reads and event survive co
     expect(crowdedRenamed.profile).toBe('agent-public-profile-v1');
     expect((await json(await call('GET', crowdedPath), 200)).displayName).toBe('Daniel Chen');
     await stack.fuseki.update(`DELETE WHERE { GRAPH <urn:rezics:graph:current> {
-      <${crowdedAgent}> <https://rezics.com/vocab/profileHandle> ?handle } }`);
+      <${crowdedAgent}> <https://rezics.com/vocab/profileDisclosure> ?disclosure } }`);
     const leaked = 'Secret Name Should Not Leak';
     const shapeRejected = await json(await call('PUT', `${crowdedPath}/profile`, owner.token, {
       profile: 'agent-public-profile-v1', expectedHead: crowdedRenamed.revision,
       displayName: leaked, avatarSelection: null, bio: null,
     }), 422);
     expect(shapeRejected.code).toBe('agent_profile_validation_failed');
-    expect(String(shapeRejected.title)).toContain('https://rezics.com/vocab/profileHandle');
+    expect(String(shapeRejected.title)).toContain('https://rezics.com/vocab/profileDisclosure');
     expect(String(shapeRejected.title)).toContain('MinCountConstraintComponent');
     expect(String(shapeRejected.title)).not.toContain(leaked);
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');

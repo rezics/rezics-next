@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { allocateAgentHandle } from './handle.ts';
 import { DATASET, GRAPHS, ID, PROFILE as MODEL_HEAD, RV, hash, iri, lit,
   prepareComponent, prepareWorkComponent, type WorkActivationEnvironment }
   from '../work/activate.ts';
@@ -54,12 +53,11 @@ export async function createAgentGraph(env: WorkActivationEnvironment,
   const validations = await profileValidations(env.fuseki, 'agent-provision-v1', [
     { shape: AGENT_SHAPE, focus: [intent.agent], graphs: [GRAPHS.current] },
   ]);
-  validations.push(...await profileValidations(env.fuseki, 'agent-profile-v1', [
-    { shape: 'https://rezics.com/definition/agent-profile-v1/profile-shape',
+  validations.push(...await profileValidations(env.fuseki, 'agent-profile-address-v1', [
+    { shape: 'https://rezics.com/definition/agent-profile-address-v1/profile-shape',
       focus: [intent.agent], graphs: [GRAPHS.current] },
   ]));
-  const handle = allocateAgentHandle(intent.agent);
-  const state = { kind: intent.kind, displayName: intent.displayName, handle, disclosure: 'public' };
+  const state = { kind: intent.kind, displayName: intent.displayName, disclosure: 'public' };
   const manifest = env.workObjects
     ? await prepareWorkComponent(env.workObjects, intent.agent, state, AGENT_PROFILE)
     : prepareComponent(env.objectDirectory, intent.agent, state, AGENT_PROFILE);
@@ -68,7 +66,8 @@ export async function createAgentGraph(env: WorkActivationEnvironment,
     `INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }\n` +
     ` GRAPH ${iri(GRAPHS.current)} { ${iri(intent.agent)} a rv:Agent ;
        rv:agentKind rv:${kindIri[intent.kind]} ; rdfs:label ${lit(intent.displayName)} ;
-       rv:profileHandle ${lit(handle)} ; rv:profileDisclosure rv:Public ;
+       rv:profileStateFormat rv:AddressedAgentProfileV1 ; rv:profileNameFormat rv:PlainNameAddressV1 ;
+       rv:profileDisclosure rv:Public ;
        rv:head ${iri(revision)} . }\n` +
     ` GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ;
        rv:component ${iri(intent.agent)} ; rv:operation ${iri(operation)} ;

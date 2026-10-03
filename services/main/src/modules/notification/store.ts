@@ -32,7 +32,8 @@ export interface NotificationDisplayContext {
   groupKey: string | null;
 }
 export interface NotificationAgentSummary {
-  id: string; name: string; handle: string; avatar: string | null;
+  id: string; name: string; handle: string | null;
+  address?: import('@rezics/model/address').CanonicalAddress; avatar: string | null;
 }
 export type NotificationAgentReader = (agent: string) => Promise<NotificationAgentSummary | null>;
 

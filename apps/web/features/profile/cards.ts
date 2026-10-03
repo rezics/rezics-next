@@ -1,7 +1,8 @@
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
-import { authorHref } from '../author/route.ts';
+import { profileHref } from './route.ts';
+import type { AgentProfile } from './types.ts';
 import { workHref } from '../work-page/route.ts';
 import type { ProfileMessages } from './messages.ts';
 import type { AgentWorksPage, CreditedWork, CreditRole, ShelfCard } from './types.ts';
@@ -24,12 +25,12 @@ export function creditLine(name: string, roles: readonly CreditRole[], locale: U
 }
 
 /** A credited Work as a catalogue card: cover, title, the profile's credit, Global rating, pitch and serial state. */
-export function creditedCard(item: CreditedWork, name: string, handle: string, locale: UiLocale,
+export function creditedCard(item: CreditedWork, name: string, profile: string | Pick<AgentProfile, 'handle' | 'id' | 'address'>, locale: UiLocale,
   messages: ProfileMessages): CatalogueWork {
   return { id: item.id, href: workHref(item.id.slice(-36)), title: item.title, cover: item.cover,
     kind: coverKindOf(item.types),
     authors: [{ name: creditLine(name, item.attribution.map(credit => credit.role), locale, messages),
-      href: authorHref({ kind: 'agent', handle }) }],
+      href: profileHref(profile) }],
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max } : null,
     tagline: item.tagline, completion: item.completionStatus };
 }

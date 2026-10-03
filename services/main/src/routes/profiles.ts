@@ -150,7 +150,8 @@ export function profileRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/works/:id/agent-credits', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
       response: { 200: t.Object({ items: t.Array(t.Object({ id: readId, role: creditRole,
-        agent: readId, displayName: t.String(), handle: profileHandle }), { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+        agent: readId, displayName: t.String(), handle: profileHandle,
+        address: agentProfile.properties.address }), { maxItems: 20 }), ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query, s => readNativeCredits(s, `https://rezics.com/id/${path.id}`))); }
       catch (error) { return readError(error); }

@@ -52,7 +52,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
   const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
   const author = agentCredits.ok ? agentCredits.data.items.find(credit => credit.role === 'author') : undefined;
   const authors = [...agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
-    .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle }) })) : [],
+    .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent }) })) : [],
   ...credits.ok ? credits.data.items.filter(credit => credit.role === 'author')
     .map(credit => ({ name: credit.displayName ?? credit.key,
       href: authorHref({ kind: 'external', key: credit.key }) })) : []];
@@ -77,7 +77,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
         messages={t} /> : null}
       author={authorOverride ? <AuthorSection author={authorOverride} work={fixture.workRef} locale={locale}
         messages={t} /> : author ? <AuthorSection author={{ kind: 'agent', name: author.displayName,
-        handle: author.handle, works: fixture.agentWorks }} work={fixture.workRef} locale={locale} messages={t} /> : null} />
+        handle: author.handle, agent: author.agent, works: fixture.agentWorks }} work={fixture.workRef} locale={locale} messages={t} /> : null} />
   </WorkFrame>;
 }
 
