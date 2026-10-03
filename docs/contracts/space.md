@@ -35,7 +35,10 @@ and a Zone is a site. Each has its own router over the same
   search are starter routes that the Zone may rename or localize.
 - A Zone needs no Realm and a Realm needs no Zone. When a Space has both, the
   Zone's navigation offers the community and the community's header offers the
-  site.
+  site. For a Space without a community, `/r/{space}` (its home only) answers
+  one 301 to the site, because sites lived under `/r` before the routers split
+  and those links must keep working; its community routes (feed, members,
+  discussions…) answer 404 (2026-10-03).
 - Links name the Space, never a Realm or Zone capability identity; a capability
   ID in a link redirects to its Space's canonical address. Follow and Join target
   the Space ([interactions](community-interactions.md#follow-join-and-notification)),
