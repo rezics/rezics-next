@@ -23,6 +23,7 @@ import { releaseWorksPage } from '../modules/facets/release-contract.ts';
 import { readReleaseWorks, withReleaseQueryBudget } from '../modules/facets/release-read.ts';
 import { resourceListQuery, resourceListPage, type ResourceListQuery } from '../modules/query/resource-contract.ts';
 import { readResourceList } from '../modules/query/resources.ts';
+import { withResourceListBudget } from '../modules/query/budget.ts';
 
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const closed = { additionalProperties: false } as const;
@@ -101,8 +102,9 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const query = compiled.request.input;
         let result;
         try {
-          result = await publicWorkRead(work, request, { limit: query.limit, cursor: query.cursor },
-            session => readResourceList(session, compiled.request));
+          result = await withResourceListBudget(() => publicWorkRead(work, request,
+            { limit: query.limit, cursor: query.cursor },
+            session => readResourceList(session, compiled.request)));
         } catch (error) { return discoveryError(error); }
         return Response.json({ profile: 'query-v1', template: 'resource-list-v1',
           selection: { context: query.context, scope: query.scope, filter: query.filter ?? { all: [] },

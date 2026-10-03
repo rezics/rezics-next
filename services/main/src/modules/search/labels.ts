@@ -6,6 +6,7 @@ import {
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { assertPublicTextReady, assertSameTextInstance } from '../work/search-readiness.ts';
+import { knownSearchPosition } from './snapshot-state.ts';
 
 /** Use the search owner's uncertainty, restore, graph/index and process gates. */
 export async function labelIndexReady(session: WorkReadSession) {
@@ -43,6 +44,10 @@ export async function publicNamePage(
   limit: number,
   after?: DirectoryAfter,
 ) {
+  const shared = knownSearchPosition(
+    session.deps.environment.fuseki,
+    session.deps.environment.lineage,
+  );
   const position = await labelIndexReady(session);
   const rows = await session.query(
     `SELECT ?page WHERE {
@@ -80,7 +85,7 @@ export async function publicNamePage(
     )
   )
     throw new WorkReadUnavailable('Name directory returned an invalid page');
-  await fenceLabelIndex(session, position);
+  if (!shared) await fenceLabelIndex(session, position);
   return {
     more: page.more,
     rows: page.hits.map((hit) => ({
@@ -108,6 +113,10 @@ export async function indexedLabels(
   kind = 'all',
   resources?: readonly string[],
 ) {
+  const shared = knownSearchPosition(
+    session.deps.environment.fuseki,
+    session.deps.environment.lineage,
+  );
   const position = await labelIndexReady(session);
   const phrase = q.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (!phrase || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)) {
@@ -145,7 +154,7 @@ export async function indexedLabels(
     throw new WorkReadUnavailable('Label index returned an invalid page');
   }
   const last = page.hits.at(-1);
-  await fenceLabelIndex(session, position);
+  if (!shared) await fenceLabelIndex(session, position);
   return {
     ids: page.hits.flatMap((hit) =>
       hit.key === null ? [] : ['https://rezics.com/id/' + hit.id.split(':').at(-1)],
