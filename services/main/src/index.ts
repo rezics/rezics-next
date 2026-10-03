@@ -167,6 +167,7 @@ import { resourceNotificationSubjectReader } from './modules/notification-produc
 import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
 import { editorialNotificationSubjectReader } from './modules/notification-producers/editorial.ts';
 import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
+import { SavedViewNotifications, SAVED_VIEW_BASES } from './modules/notification-producers/saved-views.ts';
 import { HttpDeliveryProvider } from './modules/notification/http-provider.ts';
 import { NotificationDigestWorker } from './modules/notification/digest.ts';
 import { SafetyAlerts, SAFETY_ALERT_BASIS, safetyResponders } from './modules/safety-alerts/store.ts';
@@ -549,6 +550,14 @@ const app = createMainApp(fuseki, {
   ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
 });
 libraryImport.setDispatch(request => app.handle(request));
+const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,
+  judgments: new AccessJudgments(pool),
+  realmReplies: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, access, environment),
+  governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment) } as MainWorkDependencies,
+notificationStore);
+notificationProducerWorker.setSavedViews(savedViewNotifications);
+for (const basis of SAVED_VIEW_BASES) notificationStore.registerReadSubjectReader(basis, savedViewNotifications);
+for (const basis of SAVED_VIEW_BASES) notificationDispatcher?.registerSubjectReader(basis, savedViewNotifications);
 const realmPolicyRecovery = new RealmPolicyRecoveryWorker(pool, environment);
 const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
