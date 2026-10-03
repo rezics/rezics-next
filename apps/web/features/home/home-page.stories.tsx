@@ -321,7 +321,8 @@ export const PinATopic: Story = {
     await expect(dialog.getByRole('region', { name: 'Your topics' })).toHaveTextContent('Mystery');
     const search = dialog.getByRole('combobox', { name: 'Search topics' });
     await userEvent.click(search);
-    await expect(await screen.findByRole('option', { name: 'Cozy games' })).toBeVisible();
+    // Presence precedes the popup's enter animation on a loaded browser.
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Cozy games' })).toBeVisible());
     await userEvent.type(search, 'fan');
     await userEvent.click(await screen.findByRole('option', { name: 'Fantasy' }));
     await expect(await dialog.findByRole('heading', { name: 'Fantasy' })).toBeVisible();

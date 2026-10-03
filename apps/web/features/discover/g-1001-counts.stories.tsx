@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { direction } from '@rezics/main/language';
+import { waitForFocus } from '../../../../packages/ui/src/test/focus.ts';
 import { expect, screen, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { Providers } from '../shell/providers.tsx';
@@ -45,6 +46,8 @@ const meta = {
     await userEvent.click(open);
     const picker = await screen.findByRole('combobox', { name: words.chooseCommunity });
     await waitFor(() => expect(picker).toBeEnabled());
+    // The modal's scheduled autofocus can close a popup opened before it settles.
+    await waitForFocus(picker);
     await userEvent.click(picker);
     const options = await screen.findByRole('listbox', { name: words.chooseCommunity });
     await waitFor(() => expect(within(options).getByText(args.locale === 'en' ? '1 rating' : '1 个评分')).toBeVisible());
