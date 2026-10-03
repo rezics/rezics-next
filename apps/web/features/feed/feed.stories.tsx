@@ -428,11 +428,14 @@ export const FollowFromAll: Story = {
     await userEvent.click(follow);
     await waitFor(() => expect(post).toHaveTextContent('Following'));
     await expect(post).not.toHaveTextContent('Joined');
-    await expect(args.relationships!.calls).toEqual([expect.objectContaining({
-      operation: 'follow',
-      body: expect.objectContaining({ target: realms.kitchen.id, kind: 'realm', following: true, expectedRevision: null }),
-      key: expect.any(String),
-    })]);
+    const calls = args.relationships!.calls;
+    await expect(calls).toHaveLength(1);
+    await expect(calls[0]!.operation).toBe('follow');
+    await expect(calls[0]!.body).toEqual({
+      profile: 'follow-command-v1', actingSubject: storyId(801, 'bbbb'),
+      target: realms.kitchen.id, kind: 'realm', following: true, expectedRevision: null,
+    });
+    await expect(calls[0]!.key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     await expect(within(post).getByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();
   },
 };

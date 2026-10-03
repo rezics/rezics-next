@@ -202,7 +202,7 @@ export const EnglishAuthorInChinese: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(
-      await canvas.findByRole('button', { name: '已关注 · Jane Austen · 取消关注' }),
+      await canvas.findByRole('button', { name: '关注中 · Jane Austen · 取消关注' }),
     ).toBeVisible();
     await expect(canvas.getByText('1,000+ 位关注者')).toBeVisible();
     await expect(canvas.getByText('1775年—1817年')).toBeVisible();
