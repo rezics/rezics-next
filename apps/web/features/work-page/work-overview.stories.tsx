@@ -149,7 +149,8 @@ export const Global: Story = {
       'AdventureRelevance: Substantial', 'Coming of ageRelevance: Incidental', 'Maps and cartography', '海洋']);
     // Each opens its Concept's page.
     await expect(within(values).getByRole('link', { name: 'Adventure' }))
-      .toHaveAttribute('href', expect.stringMatching(/^\/en\/concepts\/[0-9a-f-]{36}$/));
+      .toHaveAttribute('href', localizedPath(conceptPath(fixture.globalClassifications.ok
+        ? fixture.globalClassifications.data.items.find(item => item.name.value === 'Adventure')!.concept : ''), 'en'));
     // Lists and discovery come after ratings and reviews, as the Work page documents.
     const regions = canvas.getAllByRole('region').map(region => region.getAttribute('aria-labelledby'));
     await expect(regions.indexOf('work-also-co-readers')).toBeGreaterThan(regions.indexOf('work-ratings'));

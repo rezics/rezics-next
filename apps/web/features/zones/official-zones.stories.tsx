@@ -1,6 +1,6 @@
 import type { ZonePackage } from '@rezics/zone-sdk';
 import { spaceHref, zoneMemberHref } from '../address/path.ts';
-import { localizedPath } from '../../i18n/locale.ts';
+import { isPublicPagePath, localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import aiWorkshop from '../../zones/official/ai-workshop/index.tsx';
@@ -113,6 +113,12 @@ const holds =
   async ({ canvasElement, globals }: Context) => {
     const locale = (globals.locale as UiLocale | undefined) ?? 'en';
     await expect(unstamped(canvasElement, slug, locale)).toEqual([]);
+    // Package links keep the reader's locale on every public page destination.
+    const pageLinks = [...canvasElement.querySelectorAll<HTMLAnchorElement>('a[href]')]
+      .map(link => link.getAttribute('href')!)
+      .filter(href => href.startsWith('/') && !href.startsWith('//')
+        && isPublicPagePath(href.split(/[?#]/, 1)[0]!));
+    await expect(pageLinks.filter(href => href !== localizedPath(href, locale))).toEqual([]);
     await expect(overflowing(canvasElement)).toEqual([]);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   };
@@ -465,6 +471,14 @@ export const AiWorkshopChinese: Story = {
       featured.getByRole('link', { name: '试一试 Book club discussion prompt' }),
     ).toBeVisible();
     await expect(featured.getAllByText('提示词').length).toBeGreaterThan(0);
+    const copied = clipboard();
+    const link = within(canvas.getByRole('region', { name: '编辑推荐' }))
+      .getByRole('button', { name: '复制链接 Book club notes assistant' });
+    await userEvent.click(link);
+    await waitFor(() => expect(link.nextElementSibling).toHaveTextContent('链接已复制'));
+    await expect(copied).toEqual([new URL(localizedPath(officialWorks('ai-workshop', 'zh-Hans', 'rich')
+      .find(work => work.title?.value === 'Book club notes assistant')!.href,
+      'zh-Hans'), window.location.href).href]);
     await holds('ai-workshop')(context);
   },
 };

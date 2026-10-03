@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 export function CopyButton({ text, href, title, label, copied, failed, compact }: {
   /** The published text to copy; without it, the pick's address. */
   text: string | null;
-  /** The pick's path, kept without a locale so whoever opens it reads it in their own language. */
+  /** The pick's platform address, including the reader's interface locale. */
   href: string;
   title: string; label: string; copied: string; failed: string;
   /** Icon only, for rows and the rail; the label stays for assistive technology. */

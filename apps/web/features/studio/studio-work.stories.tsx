@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ComponentProps } from 'react';
 import { expect, fireEvent, screen, userEvent, waitFor, within } from 'storybook/test';
-import { waitForFocus } from '../../../../packages/ui/src/test/focus.ts';
+import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
 import { detailsValues } from './details-api.ts';
 import type { DetailsState, SaveDetails } from './details-form.tsx';
 import { chapterVariant } from './content-api.ts';
@@ -130,10 +130,9 @@ export const Chapters: Story = {
     await moveBy(canvasElement, '第三章 最后一班车', 'Move “第三章 最后一班车” up');
     await waitFor(() => expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent('第三章 最后一班车'));
     await expect(canvas.getByText('Moved “第三章 最后一班车”.')).toBeInTheDocument();
-    await waitForFocus(canvasElement, 5000);
     const title = canvas.getByRole('textbox', { name: 'New chapter' });
     await userEvent.click(title);
-    await waitForFocus(title, 5000);
+    await focusForTyping(title, 5000);
     await userEvent.type(title, '第四章 站台');
     await waitFor(() => expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('第四章 站台'));
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
@@ -252,10 +251,9 @@ export const Volumes: Story = {
     // A new volume, then its first chapter: new chapters go to the end of the volume chosen below.
     await waitFor(() => expect(canvas.getByRole('button', { name: 'New volume' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'New volume' }));
-    await waitForFocus(canvasElement, 5000);
     const volumeTitle = canvas.getByRole('textbox', { name: /Title/ });
     await userEvent.click(volumeTitle);
-    await waitForFocus(volumeTitle, 5000);
+    await focusForTyping(volumeTitle, 5000);
     await userEvent.type(volumeTitle, '第三卷 晴');
     await userEvent.click(canvas.getByRole('button', { name: 'Create' }));
     const third = await canvas.findByRole('button', { name: /^第三卷 晴/ }, { timeout: 5000 });
@@ -274,10 +272,9 @@ export const Volumes: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “番外”' }));
     await choose('Rename');
     // The closing menu returns focus to its handle after the inline field mounts.
-    await waitForFocus(canvasElement, 5000);
     const name = canvas.getByRole('textbox', { name: 'New title for “番外”' });
     await userEvent.click(name);
-    await waitForFocus(name, 5000);
+    await focusForTyping(name, 5000);
     await userEvent.clear(name);
     await userEvent.type(name, '番外篇');
     await expect(name).toHaveValue('番外篇');
