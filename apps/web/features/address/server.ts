@@ -16,5 +16,5 @@ export const resolveAddress = cache(async (scope: AddressScope, key: string, loc
     } catch { /* A malformed internal header is never admission. */ }
   }
   const languages = displayLanguages({ pageUrl: incoming.get('x-rezics-page-url'), uiLocale: locale });
-  return readAddress({ scope, key }, languages.join(','));
+  return readAddress({ scope, key }, languages.join(','), undefined, incoming);
 });

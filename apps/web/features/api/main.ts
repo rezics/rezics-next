@@ -6,19 +6,22 @@ import { ACCESS_COOKIE, SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders }
   from '../../i18n/display-languages.ts';
 import { serviceOrigin } from './origins.ts';
+import { mainReadHeaders } from './main-read.ts';
 
 const profileContentLanguages = cache(async (token: string, sessionKey: string): Promise<string[]> => {
   if (!sessionKey) return [];
   try {
     const origin = serviceOrigin('MAIN_ORIGIN');
-    const session = await fetch(`${origin}/v1/me/session-agent`, { headers: {
-      authorization: `Bearer ${token}`, 'x-session-key': sessionKey }, cache: 'no-store' });
+    const session = await fetch(`${origin}/v1/me/session-agent`, { headers: await mainReadHeaders({
+      authorization: `Bearer ${token}`, 'x-session-key': sessionKey }), cache: 'no-store',
+      signal: AbortSignal.timeout(10_000) });
     if (!session.ok) return [];
     const state = await session.json() as { sessionAgent?: { actingSubject?: string; eligible?: boolean } };
     const actor = state.sessionAgent?.eligible ? state.sessionAgent.actingSubject : null;
     if (!actor) return [];
     const preferences = await fetch(`${origin}/v1/me/person-preferences?actingSubject=${encodeURIComponent(actor)}`,
-      { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
+      { headers: await mainReadHeaders({ authorization: `Bearer ${token}` }), cache: 'no-store',
+        signal: AbortSignal.timeout(10_000) });
     if (!preferences.ok) return [];
     const value = await preferences.json() as { contentLanguages?: unknown };
     return Array.isArray(value.contentLanguages) ? value.contentLanguages.filter(
@@ -34,6 +37,7 @@ export function mainApiWithToken(accessToken: string | undefined) {
       if (accessToken) result.authorization = `Bearer ${accessToken}`;
       try {
         const [jar, incoming] = await Promise.all([cookies(), headers()]);
+        Object.assign(result, Object.fromEntries(await mainReadHeaders(undefined, incoming)));
         const token = accessToken ?? jar.get(ACCESS_COOKIE)?.value;
         const signedIn = Boolean(token);
         const profile = signedIn
@@ -45,6 +49,13 @@ export function mainApiWithToken(accessToken: string | undefined) {
       return result;
     },
     fetch: { cache: 'no-store' },
+    fetcher: ((input, init) => {
+      const read = init?.method === 'GET' || init?.method === 'HEAD';
+      const signal = read ? AbortSignal.timeout(10_000) : undefined;
+      return fetch(input, { ...init, ...(signal ? {
+        signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal,
+      } : {}) });
+    }) as typeof fetch,
   });
 }
 

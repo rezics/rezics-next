@@ -195,7 +195,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     // policy. Operators can lower any family through saved environment config.
     MAIN_RATE_LIMIT_BUDGETS: compose.MAIN_RATE_LIMIT_BUDGETS ?? JSON.stringify(Object.fromEntries(
       ['anonymous', 'new-account', 'member', 'trusted', 'service'].map(principal => [principal,
-        Object.fromEntries(['write', 'upload', 'report', 'correspondence', 'search', 'provider']
+        Object.fromEntries(['write', 'upload', 'report', 'correspondence', 'search', 'provider', 'address']
           .map(family => [family, { maximum: 1_000_000, seconds: 60 }]))]))),
     MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS: compose.MAIN_RATE_LIMIT_TRUSTED_PROXY_PEERS ?? '127.0.0.1,::1',
     // Account applies a sign-up's market rule from the edge's CF-IPCountry only via a trusted

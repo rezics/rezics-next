@@ -1,4 +1,5 @@
 import { serviceOrigin } from '../api/origins.ts';
+import { mainReadHeaders } from '../api/main-read.ts';
 import { seedTypes, type TypeRegistry } from './types.ts';
 
 // Main answers `GET /v1/types` with a one-digest ETag and `max-age=300`; the web holds the last
@@ -26,7 +27,8 @@ function keep(now: () => number): TypeRegistry | null {
 async function revalidate(fetcher: typeof fetch, now: () => number): Promise<TypeRegistry | null> {
   try {
     const response = await fetcher(`${serviceOrigin('MAIN_ORIGIN')}/v1/types`, { cache: 'no-store',
-      signal: AbortSignal.timeout(5000), headers: served?.tag ? { 'if-none-match': served.tag } : {} });
+      signal: AbortSignal.timeout(5000), headers: await mainReadHeaders(
+        served?.tag ? { 'if-none-match': served.tag } : {}) });
     if (response.status === 304 && served) {
       served = { ...served, checkedAt: now(), ttl: ttlOf(response.headers.get('cache-control')) };
       return served.registry;

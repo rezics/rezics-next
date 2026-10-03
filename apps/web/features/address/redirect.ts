@@ -13,11 +13,12 @@ import {
 export type AddressDecision =
   | { kind: 'pass'; data?: ResolvedAddress }
   | { kind: 'redirect'; location: string; status: 301 }
-  | { kind: 'error'; status: 404 | 410 | 503 };
+  | { kind: 'error'; status: 404 | 410 | 429 | 503; retryAfter?: string };
 type Resolver = (lookup: AddressLookup) => Promise<AddressRead>;
 const error = (read: Exclude<AddressRead, { kind: 'resolved' }>): AddressDecision => ({
   kind: 'error',
-  status: read.kind === 'retired' ? 410 : read.kind === 'missing' ? 404 : 503,
+  status: read.kind === 'retired' ? 410 : read.kind === 'missing' ? 404 : read.status ?? 503,
+  ...(read.kind === 'unavailable' && read.retryAfter ? { retryAfter: read.retryAfter } : {}),
 });
 
 /** Resolve first, then construct the final Location. No intermediate UUID/name/surface redirects. */

@@ -1,4 +1,5 @@
 import { serviceOrigin } from '../api/origins.ts';
+import { mainReadHeaders } from '../api/main-read.ts';
 
 export interface PublicAgentProfile {
   id: string;
@@ -18,7 +19,7 @@ export async function readAgentProfile(agent: string, accessToken?: string,
     const response = await send(`${serviceOrigin('MAIN_ORIGIN')}/v1/agents/${id}`
       + (accessToken ? `?actingSubject=${encodeURIComponent(agent)}` : ''), {
       cache: 'no-store', signal: AbortSignal.timeout(10_000),
-      ...(accessToken ? { headers: { authorization: `Bearer ${accessToken}` } } : {}),
+      headers: await mainReadHeaders(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
     });
     if (!response.ok) return null;
     const profile = await response.json() as PublicAgentProfile;

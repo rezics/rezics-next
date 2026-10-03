@@ -5,6 +5,7 @@ import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import { settle, uuidOf } from '../feed/types.ts';
 import { serviceOrigin } from '../api/origins.ts';
+import { mainReadHeaders } from '../api/main-read.ts';
 import { mainRelationships } from '../relationships/api.ts';
 import { displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { followedCommunity, pinnedCommunities, spaceCommunities, withZoneAddress } from './communities-relationships.ts';
@@ -30,11 +31,11 @@ const relationshipReader = cache(async () => {
   if (!reader.actingSubject) return null;
   const [jar, incoming, preferences] = await Promise.all([cookies(), headers(),
     settle(() => reader.main.v1.me['person-preferences'].get({ query: { actingSubject: reader.actingSubject! } }))]);
-  return mainRelationships(reader.actingSubject, { origin: serviceOrigin('MAIN_ORIGIN'), headers: {
+  return mainRelationships(reader.actingSubject, { origin: serviceOrigin('MAIN_ORIGIN'), headers: await mainReadHeaders({
     authorization: `Bearer ${jar.get(ACCESS_COOKIE)!.value}`,
     ...displayLanguageHeaders({ signedIn: true, profile: preferences.ok ? preferences.data.contentLanguages : [],
       pageUrl: incoming.get('x-rezics-page-url'), browser: incoming.get('accept-language') }),
-  } });
+  }, incoming) });
 });
 
 /**
