@@ -330,6 +330,42 @@ export class RealmReplyContentStore {
     return result.rowCount === 1;
   }
 
+  /** Feed batches retain each root's 64-reference probe; no per-reply owner call. */
+  async currentReviews(heads: readonly { realm: string; reply: string; revisionId: string;
+    reviewDecisionId?: string; preparationId?: string }[]): Promise<Set<number>> {
+    if (heads.length > 8 * 64 || heads.some(h => !native.test(h.realm) || !native.test(h.reply)
+      || !uuid.test(h.revisionId) || h.reviewDecisionId && !uuid.test(h.reviewDecisionId)))
+      throw new RealmReplyInvalid('invalid feed approval batch');
+    if (!heads.length) return new Set();
+    const rows = await this.pool.query<{ ordinal: number }>(`WITH requested AS (
+      SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(ordinal int, reply text, realm text,
+        revision text, review text, preparation text))
+SELECT x.ordinal FROM requested x JOIN content.reply p ON p.id = x.reply
+      JOIN content.variant v ON v.id = p.variant_id
+      JOIN content.revision head ON head.id = v.draft_head AND head.availability = 'available'
+        AND head.body->>'deleted' = 'false'
+      JOIN content.realm_review_decision d ON d.variant_id = p.variant_id
+      JOIN content.revision r ON r.variant_id = d.variant_id AND r.id = d.revision_id
+      WHERE p.id = x.reply AND d.realm = x.realm AND d.revision_id = x.revision::uuid AND d.outcome = 'approved'
+        -- Origin and exact review share one current owner read. A Realm-local
+        -- reply can never be disclosed through another Realm's placement.
+        AND NOT EXISTS (SELECT 1 FROM content.reply_author origin
+          WHERE origin.reply = p.id AND origin.origin_realm IS NOT NULL AND origin.origin_realm <> x.realm)
+        AND r.availability = 'available' AND (x.review::uuid::uuid IS NULL OR d.id = x.review::uuid)
+        AND (x.preparation::text IS NULL OR EXISTS (
+          SELECT 1 FROM content.realm_placement_preparation placement
+          JOIN content.publication_preparation publication ON publication.operation_id = placement.operation_id
+          WHERE placement.operation_id = x.preparation AND placement.realm = d.realm
+            AND placement.variant_id = p.variant_id AND placement.revision_id = d.revision_id
+            AND placement.review_decision_id = d.id
+            AND publication.status = 'active' AND publication.pin_active))
+        AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later
+          WHERE later.supersedes = d.id)
+      `, [JSON.stringify(heads.map((h, ordinal) => ({ ordinal, reply: h.reply, realm: h.realm,
+        revision: h.revisionId, review: h.reviewDecisionId ?? null, preparation: h.preparationId ?? null })))]);
+    return new Set(rows.rows.map(row => row.ordinal));
+  }
+
   /** Live keyset page, at most 32 visible comments and one lookahead row.
    * Exact-root index bounds traversal to this thread; no per-row owner calls. */
   async listCurrent(rootTarget: string, rootRevision: string, after?: string, realm: string | null = null) {

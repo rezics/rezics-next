@@ -45,9 +45,9 @@ export class FeedRefreshWorker {
         await this.store.advance(checkpoint, relay.sequence, grouped, new Map(times.rows.map(row => [row.sequence, row.delivered_at])));
         return 'advanced';
       }
-      if (!this.deps.reviews) return 'current';
+      if (!this.deps.reviews) return await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence) ? 'advanced' : 'current';
       const events = await this.deps.reviews.eventsAfter(checkpoint.review_sequence);
-      if (!events.length) return 'current';
+      if (!events.length) return await this.store.projectTargets(session,this.relay,checkpoint,relay.sequence) ? 'advanced' : 'current';
       const ids = [...new Set(events.slice(0, FEED_COST.refreshItems).filter(event => event.kind === 'created')
         .map(event => reviewActivityId(event.review)))];
       const admitted = new Map((await feedReviewSources(session, ids)).map(source => [source.id, source]));

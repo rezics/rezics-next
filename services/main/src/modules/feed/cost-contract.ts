@@ -1,7 +1,12 @@
 /**
- * Home request work, G-1025. These are the existing G-383 mixed-card bounds,
- * not new latency/timeout allowances. Counts include the opening and closing
- * graph/Access fences and every helper invoked by the operation.
+ * Home request work, G-1025. Native Work pages share set-based owner stages:
+ * Access opening/closing cuts cost 8+8 signed (6+6 anonymous), candidate and
+ * member seeks cost 2, actors/follow matching cost 1, canonical names cost 1,
+ * avatar hydration/fence cost 2, and selected shelf state costs 2. Thus 24 SQL
+ * statements signed and 18 anonymous, independent of the emitted item count.
+ * Graph calls: two position cuts, source, metadata parts, actor names, public
+ * summaries, global comment contexts and compositions: eight. Batch row/byte
+ * work still grows with emitted references; these are round-trip bounds.
  *
  * Feed: New/Top seek P+1 anchors; Best seeks at most K=256 and ranks by Realm
  * percentile. Hydration visits M<=8 member references (<=2 tagged groups),
@@ -28,8 +33,8 @@
  * fan-out. Anonymous requests perform no private Home/follow/viewer reads.
  */
 export const HOME_REQUEST_COST = {
-  anonymousFeed: { fusekiRequests: 85, postgresStatements: 100 },
-  signedFeed: { fusekiRequests: 105, postgresStatements: 204 },
+  anonymousFeed: { fusekiRequests: 8, postgresStatements: 18 },
+  signedFeed: { fusekiRequests: 8, postgresStatements: 24 },
   continue: { fusekiRequests: 30, postgresStatements: 110 },
   suggestions: { fusekiRequests: 25, postgresStatements: 60 },
 } as const;

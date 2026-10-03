@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { profileRequest, startWorkProfileSink, assertWorkCostAtScales,
+import { profileRequest, startWorkProfileSink, assertWorkCost, assertWorkCostAtScales,
   type WorkProfile } from '../../../tests/qa/support/work-profile.ts';
 import { flushTelemetryTraces, shutdownTelemetry, startTelemetry } from '../../../packages/observability/src/runtime.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
@@ -46,7 +46,7 @@ async function profileHome() {
   const evidence: { dimension: string; dimensions: CorpusDimensions; scale: string;
     temperature: string; operation: string; items: number; profile: WorkProfile }[] = [];
   const continuations: { scale: string; unrelatedWorks: number; pages: number }[] = [];
-  const comparison: { operation: string; items: number; before: WorkProfile; after: WorkProfile }[] = [];
+  const comparison: { operation: string; items: number; before: { fusekiRequests: number; postgresStatements: number }; after: WorkProfile }[] = [];
   try {
     const api = workProfileCorpusApi('http://main.local', home.author.token, {
       fetch: ((input, init) => home.app.handle(new Request(input, init))) as typeof fetch,
@@ -171,23 +171,11 @@ async function profileHome() {
               operation: operation.name, items: measured.result, profile: measured.profile });
             if (dimension === 'follows' && scale === 'large' && temperature === 'warm'
               && ['signed Best', 'signed New'].includes(operation.name)) {
-              // Replay the former closing full read on the exact same corpus.
-              // This isolates the algorithm change from fixture/host variation.
-              const owner = home.deps.homePersonal, fence = owner.fence.bind(owner);
-              owner.fence = async (...args) => ({ revision: (await owner.read(...args)).revision });
-              try {
-                const baseline = await profileRequest(sink, async headers => {
-                  headers.set('authorization', `Bearer ${operation.token}`);
-                  const response = await home.app.handle(new Request(`http://main.local${operation.path}`, { headers }));
-                  const page = await response.json() as { items: unknown[] };
-                  assert.equal(response.status, 200);
-                  assert.equal(page.items.length, measured.result);
-                }, { service: 'main', flush: flushTelemetryTraces });
-                assert.equal(baseline.profile.fusekiRequests, measured.profile.fusekiRequests);
-                assert.equal(baseline.profile.postgresStatements, measured.profile.postgresStatements! + 1);
-                comparison.push({ operation: operation.name, items: measured.result,
-                  before: baseline.profile, after: measured.profile });
-              } finally { owner.fence = fence; }
+              // Measured source 97ba495e1, QA 20261003t183025-5e33cf.
+              // Preserve that baseline instead of replaying a removed owner path.
+              comparison.push({ operation: operation.name, items: measured.result,
+                before: { fusekiRequests: 22, postgresStatements: operation.name === 'signed Best' ? 145 : 153 },
+                after: measured.profile });
             }
             if (captureSources) {
               const captured = sourceQueries[firstQuery];
@@ -208,6 +196,25 @@ async function profileHome() {
         assertWorkCostAtScales(evidence.filter(row => row.dimension === dimension &&
           row.operation === operation.name && row.temperature === temperature).map(row => row.profile),
         operation.cost);
+      }
+    }
+    // Hold corpus and relationship inventories fixed while varying page size.
+    // These are full native Work pages, so no empty/filter shortcut qualifies.
+    for (const pageSize of [1,4,8]) for (const signed of [false,true]) for (const sort of ['best','new']) {
+      const path = `/v1/feed?scope=${signed ? 'following' : 'all'}&sort=${sort}&limit=${pageSize}`
+        + (signed ? `&actingSubject=${encodeURIComponent(seeded.reader)}` : '');
+      for (const temperature of ['cold','warm']) {
+        const measured = await profileRequest(sink,async headers => {
+          if (signed) headers.set('authorization',`Bearer ${home.reader.token}`);
+          const response = await home.app.handle(new Request(`http://main.local${path}`,{ headers }));
+          const page = await response.json() as { items: { target: { work: string } }[] };
+          assert.equal(response.status,200,JSON.stringify(page)); assert.equal(page.items.length,pageSize);
+        },{ service: 'main',flush: flushTelemetryTraces });
+        const cost = signed ? HOME_REQUEST_COST.signedFeed : HOME_REQUEST_COST.anonymousFeed;
+        assertWorkCost(measured.profile,cost);
+        evidence.push({ dimension: 'pageSize',dimensions: { ...dimensions },scale: String(pageSize),temperature,
+          operation: `${signed ? 'signed' : 'anonymous'} ${sort}`,items: pageSize,profile: measured.profile });
+        sink.clear();
       }
     }
   } finally {

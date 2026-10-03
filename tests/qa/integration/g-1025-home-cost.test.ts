@@ -20,6 +20,6 @@ test('G1025: Feed API work stays bounded at three public-command corpus scales o
     plans: unknown[]; comparison: unknown[]; evidence: { dimension: string; scale: string; profile: WorkProfile }[] };
   expect(saved.plans).toHaveLength(3);
   expect(saved.comparison).toHaveLength(2);
-  expect(saved.evidence).toHaveLength(108);
-  expect(new Set(saved.evidence.map(row => row.dimension)).size).toBe(3);
+  expect(saved.evidence).toHaveLength(132);
+  expect(new Set(saved.evidence.map(row => row.dimension)).size).toBe(4);
 }, 420_000);

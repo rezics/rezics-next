@@ -4,6 +4,7 @@ import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { readProgressSignal, type ProgressSignal } from '../structure/progress-outbox.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { refreshReadRankingAdmissions } from '../feed/ranking-admission.ts';
 
 export const RANKING_COST = { sourceEvents: 32, graphRowsPerEvent: 2,
   pageCandidates: 100, pageSize: 20, cleanupRows: 500, deadlineMs: 10_000 } as const;
@@ -193,6 +194,8 @@ export class ReadRankingProjection {
         if (latest || existing) throw new RankingProjectionUnavailable('Ranking checkpoint changed concurrently');
       }
       const generation = reset ? randomUUID() : latest!.generation;
+      await refreshReadRankingAdmissions(this.env,this.access,
+        [...signals.map(signal => signal.work), ...reviewEvents.map(event => event.work)],client);
       if (reset) {
         await client.query(`INSERT INTO access.read_ranking_checkpoint
           (singleton, generation, content_epoch, content_sequence, graph_epoch)
@@ -253,7 +256,8 @@ export class ReadRankingProjection {
   }
 
   async candidates(generation: string, metric: RankingMetric, interval: RankingInterval,
-    bucket: string, order: 'score' | 'growth', after: { value: string; work: string } | null, limit: number) {
+    bucket: string, order: 'score' | 'growth', after: { value: string; work: string } | null, limit: number,
+    realm: string | null = null) {
     if (!/^[0-9a-f-]{36}$/.test(generation) || !['reads', 'finished-chapters', 'reviews'].includes(metric)
       || !intervals.includes(interval) || !/^\d{4}-\d{2}-\d{2}$/.test(bucket)
       || !['score', 'growth'].includes(order)
@@ -263,13 +267,14 @@ export class ReadRankingProjection {
     }
     const key = order === 'score' ? 'score' : 'growth';
     const result = await this.access.query<{ work: string; score: string; growth: string }>(
-      `SELECT work, score::text, growth::text FROM access.read_ranking_score
-       WHERE generation = $1 AND metric = $2 AND interval = $3 AND bucket = $4
+      `SELECT work, score::text, growth::text FROM access.read_ranking_admitted
+       WHERE generation = $1 AND metric = $2 AND interval = $3 AND bucket = $4 AND context=$8
          ${order === 'growth' ? 'AND growth > 0' : ''}
          AND ($5::bigint IS NULL OR ${key} < $5::bigint
            OR (${key} = $5::bigint AND work > $6::text))
        ORDER BY ${key} DESC, work LIMIT $7`,
-      [generation, metric, interval, bucket, after?.value ?? null, after?.work ?? '', limit]);
+      [generation, metric, interval, bucket, after?.value ?? null, after?.work ?? '', limit,
+        realm ?? 'urn:rezics:context:global']);
     return result.rows;
   }
 }

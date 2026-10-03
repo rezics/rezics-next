@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, controlTransaction } from '../access/topology-control.ts';
+import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, controlRead, controlTransaction } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { WorkReadMoved } from '../work/read-session.ts';
 import { REVIEW_COST } from './contract.ts';
@@ -307,6 +307,17 @@ export class ReaderReviews {
         ON v.review_id = r.id AND v.principal_id = $2
       WHERE r.id = $1 AND NOT r.deleted AND ${reviewVisibleSql}`,
     [review, principalId]))).rows[0] ?? null;
+  }
+
+  /** One current audience statement for the Feed's reference batch. */
+  async byIds(reviews: readonly string[], principalId: string | null): Promise<ReviewRow[]> {
+    if (reviews.length > REVIEW_COST.eventBatch || reviews.some(id => !UUID.test(id))) throw new ControlInvalid('Invalid review batch');
+    if (!reviews.length) return [];
+    return controlRead(this.pool,async client => (await client.query<ReviewRow>(`SELECT ${rowColumns},
+      COALESCE(v.helpful,false) AS viewer_helpful,v.revision AS viewer_vote_revision
+      FROM access.reader_review r JOIN access.authority_subject s ON s.id=r.acting_subject AND s.active
+      LEFT JOIN access.reader_review_vote v ON v.review_id=r.id AND v.principal_id=$2
+      WHERE r.id=ANY($1::uuid[]) AND NOT r.deleted AND ${reviewVisibleSql}`, [reviews,principalId])).rows);
   }
 
   async quotes(realm: string, limit: number): Promise<ReviewRow[]> {

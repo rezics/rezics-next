@@ -85,6 +85,9 @@ export function decodeReadCursor(token: string | undefined, binding: unknown, po
 }
 
 export class WorkReadSession {
+  private readonly avatarSnapshots = new Map<string, { epoch: string;
+    rows: Map<string, string>; targets: Set<string> }>();
+  private readonly deliveredSummaryAssets = new Set<string>();
   /** Snapshot of the signed-in reader's Main preference, shared by every name read. */
   readingLanguages: readonly string[] | null = null;
   get displayLanguages(): string[] {
@@ -126,7 +129,7 @@ export class WorkReadSession {
     }
   }
   constructor(readonly deps: MainWorkDependencies, readonly request: Request, readonly options: ReadOptions,
-    readonly position: ReadPosition) {}
+    readonly position: ReadPosition, readonly graphSnapshotFenced = false) {}
 
   async query(body: string, limit: number): Promise<ReadRow[]> {
     this.checkDeadline();
@@ -144,9 +147,23 @@ export class WorkReadSession {
     canReadWork: this.principal && this.options.actingSubject ? (work: string) =>
       this.deps.access.canReadWork(this.principal!, this.options.actingSubject!, work) : undefined };
     const media = this.deps.media?.store;
-    const summaryMedia = media && optionalMedia ? {
-      avatarRows: (...args: Parameters<typeof media.avatarRows>) => optionalPreview(this, () => media.avatarRows(...args)),
-    } : media;
+    const summaryMedia = media ? {
+      avatarRows: async (...args: Parameters<typeof media.avatarRows>) => {
+        const row = optionalMedia ? await optionalPreview(this, () => media.avatarRows(...args)) : await media.avatarRows(...args);
+        if (row && this.graphSnapshotFenced) {
+          const prior = this.avatarSnapshots.get(args[1]);
+          const captured = prior ?? { epoch: row.generation.dataEpoch, rows: new Map<string,string>(), targets: new Set<string>() };
+          if (captured.epoch !== row.generation.dataEpoch) throw new WorkReadMoved('Media owner changed');
+          for (const target of args[0]) {
+            const signature = JSON.stringify(row.rows.get(target) ?? null);
+            if (captured.rows.has(target) && captured.rows.get(target) !== signature) throw new WorkReadMoved('Avatar changed');
+            captured.rows.set(target, signature); captured.targets.add(target);
+          }
+          this.avatarSnapshots.set(args[1], captured);
+        }
+        return row;
+      },
+    } : undefined;
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
       { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
         languages: this.displayLanguages });
@@ -157,7 +174,28 @@ export class WorkReadSession {
       }
       throw new WorkReadMoved('Graph changed during the read');
     }
+    if (this.graphSnapshotFenced) for (const summary of result.summaries) {
+      if (summary.status !== 'available' || summary.avatar.kind !== 'image') continue;
+      const captured = this.avatarSnapshots.get(DEFAULT_MEDIA_CONTEXT)?.rows.get(summary.reference);
+      if (captured) {
+        const row = JSON.parse(captured) as { asset?: string } | null;
+        if (row?.asset) this.deliveredSummaryAssets.add(`https://rezics.com/id/${row.asset}`);
+      }
+    }
     return result.summaries;
+  }
+
+  /** One mutable-media fence per context for every summary section together.
+   * Graph labels/publication heads use the enclosing graph position fence. */
+  async fenceSummaryMedia() {
+    for (const [context, prior] of this.avatarSnapshots) {
+      const row = await this.deps.media!.store.avatarRows([...prior.targets], context);
+      if (row.generation.dataEpoch !== prior.epoch || [...prior.targets].some(target =>
+        JSON.stringify(row.rows.get(target) ?? null) !== prior.rows.get(target))) throw new WorkReadMoved('Avatar changed');
+    }
+    const assets = [...this.deliveredSummaryAssets];
+    if (assets.length && (await this.disclosure(assets.map(resource => ({ owner: 'media',resource,component: 'cover' })), 'summary'))
+      .some(decision => decision !== 'visible')) throw new WorkReadMoved('Avatar disclosure changed');
   }
 
   async scope() {
@@ -228,7 +266,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
         try {
-          const session = new WorkReadSession(deps, request, options, await position(deps));
+          const session = new WorkReadSession(deps, request, options, await position(deps), true);
           if (request.headers.has('authorization')) {
             if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
             session.principal = await deps.account.verify(request, ['work:read']);

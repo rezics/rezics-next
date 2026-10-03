@@ -17,7 +17,7 @@ import type { RealmPermit } from '../access/realm-management-policy.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { realmHistoryOriginCutFilter } from '../realm-admin/history.ts';
-import { RV, iri } from '../work/activate.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -248,6 +248,38 @@ export class RealmReplyStore {
 
   async visible(realm: string, reply: string, principal?: VerifiedPrincipal, actor?: string) {
     return visibleRealmReply(this.content, this.access, this.env, realm, reply, principal, actor);
+  }
+
+  /** Public Feed references only. Public Realm/placement facts share one graph
+   * cut; Content approvals share one indexed statement. The feed envelope
+   * fences the graph and this exact approval set again before delivery. */
+  async visiblePublicBatch(requested: readonly { realm: string; reply: string }[]) {
+    if (requested.length > 8 || requested.some(row => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(row.realm)
+      || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(row.reply))) throw new RealmReplyInvalid('invalid feed placement batch');
+    if (!requested.length) return [];
+    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?reply ?placement ?revision ?review ?root ?rootRevision ?author ?preparation WHERE {
+      VALUES (?realm ?reply) { ${requested.map(row => `(${iri(row.realm)} ${iri(row.reply)})`).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:realm ?realm ; rv:reply ?reply ; rv:replyPlacementHead ?placement .
+        ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
+        ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+        FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+        FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
+        OPTIONAL { ?realm rv:visibility ?visibility }
+        FILTER(!BOUND(?visibility) || ?visibility IN ("public","restricted")) }
+      GRAPH ${iri(GRAPHS.revisions)} { ?placement a rv:RealmReplyPlacement ; rv:realm ?realm ; rv:reply ?reply ; rv:placementOutcome rv:Accepted ;
+        rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:rootTarget ?root ; rv:rootRevision ?rootRevision ; rv:author ?author ; rv:contentPreparation ?preparation . }
+    } LIMIT ${requested.length + 1}`)).results?.bindings ?? [];
+    if (rows.length > requested.length) throw new RealmReplyUnavailable('Feed placement is ambiguous');
+    const heads = rows.map(row => ({ realm: row.realm!.value, reply: row.reply!.value,
+      revisionId: row.revision!.value.replace('urn:rezics:content:revision:', ''),
+      reviewDecisionId: row.review!.value.replace('urn:rezics:realm-review:', ''), preparationId: row.preparation!.value,
+      placement: row.placement!.value, rootTarget: row.root!.value, rootRevision: row.rootRevision!.value, author: row.author!.value }));
+    const approved = await this.content.currentReviews(heads);
+    return heads.filter((_,index) => approved.has(index));
+  }
+
+  currentFeedApprovals(heads: Parameters<RealmReplyContentStore['currentReviews']>[0]) {
+    return this.content.currentReviews(heads);
   }
 
   private async assemblePublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {

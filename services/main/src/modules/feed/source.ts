@@ -4,12 +4,17 @@ import { publicWork, unerased, WorkReadMissing, WorkReadUnavailable, type ReadRo
 import { FEED_COST, type FeedKind } from './contract.ts';
 import { reviewTarget } from '../review/read.ts';
 import type { ReviewRow } from '../review/store.ts';
+import { GLOBAL_RATING_POPULATION_OWNER, GLOBAL_RATING_POPULATION } from '../rating/global.ts';
+import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE } from '../rating/context.ts';
+import { resolveTargets } from '../target/resolve.ts';
 
 export interface FeedSource { id: string; sequence: string; kind: FeedKind; target: string;
   work: string | null; actor: string; realm: string | null; zone: string | null;
   language: string | null; excerpt: string | null; title: string | null;
   occurrence: string | null; contentTarget: string | null; reply: string | null; contentRevision: string | null; review: string | null;
-  readerReview?: ReviewRow }
+  readerReview?: ReviewRow;
+  /** Request-local exact bytes already admitted for a published card. */
+  publishedContent?: Extract<import('../../../../content/src/core.ts').ExactReadResult,{ status: 'available' }> }
 export interface FeedCut { epoch: string; through: string; afterSequence: string; afterId: string }
 export interface FeedReference { id: string; sequence: string; kind: FeedKind; work?: string | null;
   realm?: string | null; target?: string; actor?: string; occurrence?: string;
@@ -24,13 +29,39 @@ export async function feedReviewSources(session: WorkReadSession, ids: readonly 
   if (!ids.length) return [];
   if (!session.deps.reviews) throw new WorkReadUnavailable('Review owner is unavailable');
   const reviews = session.deps.reviews;
-  // Each review is independent; concurrent reads keep the input order.
+  const rows = await reviews.byIds(ids.map(id => id.slice('https://rezics.com/id/'.length)),null);
+  const native = rows.filter(row => row.main_version !== null);
+  const requested = [...new Set(native.map(row => row.work))];
+  const resolved = native.length ? await resolveTargets(session,requested,'review') : [];
+  const canonical = new Map(resolved.map((target,index) => [requested[index]!,target.resource]));
+  // Same Work/Context proof as reviewTarget, across the whole reference set.
+  const targets = native.length ? await session.query(`SELECT DISTINCT ?review ?main ?realm WHERE {
+    VALUES (?review ?work ?context) { ${native.map(row => `(${iri(`https://rezics.com/id/${row.id}`)} ${iri(row.work)} ${iri(row.context)})`).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main a rv:MainVersion ; rv:work ?work . }
+    ${publicWork('?work','?main')}
+    { GRAPH ${iri(GRAPHS.current)} { ?context a rv:GlobalRatingContext ; rv:contextState rv:Active ;
+        rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 5 ;
+        rv:ratingPopulationOwner ${iri(GLOBAL_RATING_POPULATION_OWNER)} ; rv:ratingPopulationPolicy ${iri(GLOBAL_RATING_POPULATION)} ;
+        rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} . } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:ratingContext ?context .
+      ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+      ?context a rv:RatingContext ; rv:contextState rv:Active ; rv:realm ?realm ; rv:targetGrain rv:MainVersion ; rv:ratingScaleMin 1 ; rv:ratingScaleMax 10 ;
+        rv:ratingCadence ${iri(RATING_STANDING_CADENCE)} ; rv:ratingPopulationPolicy ${iri(RATING_ACCOUNT_POPULATION)} ;
+        rv:ratingAggregationPolicy ${iri(RATING_LATEST_MEAN_POLICY)} .
+      FILTER NOT EXISTS { ?space rv:disclosure rv:Private } FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
+      FILTER NOT EXISTS { ?context rv:protectionHead ?contextProtection } } }
+  } LIMIT ${native.length + 1}`,native.length) : [];
   const result = await Promise.all(ids.map(async (id): Promise<FeedSource | null> => {
     const review = id.slice('https://rezics.com/id/'.length);
-    const row = await reviews.byId(review, null);
+    const row = rows.find(row => row.id === review);
     if (!row || !row.body.trim()) return null;
+    if (row.main_version !== null && canonical.get(row.work) !== row.work) return null;
     let target: Awaited<ReturnType<typeof reviewTarget>>;
-    try { target = await reviewTarget(session, row.context, row.work); }
+    try { target = row.main_version !== null ? (() => {
+      const value = targets.find(value => value.review?.value === id);
+      if (!value?.main) throw new WorkReadMissing('Review target unavailable');
+      return { mainVersion: value.main.value,realm: value.realm?.value ?? null,generic: false };
+    })() : await reviewTarget(session, row.context, row.work); }
     catch (error) { if (error instanceof WorkReadMissing) return null; throw error; }
     if (target.mainVersion !== row.main_version || target.realm !== row.realm) return null;
     return { id, sequence: '0', kind: 'review', target: row.work, work: row.work,
@@ -211,14 +242,15 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
   if (published.some(row => !row.contentRevision) || published.length && !session.deps.content) {
     throw new WorkReadUnavailable('Published Content owner unavailable');
   }
-  // One bound-Work probe and one exact read per published revision, concurrently.
-  // Separate reads keep each body under its own 4 MiB bound rather than a shared one.
+  // Four 1 MiB bodies fit Content's 4 MiB batch. The page's eight references
+  // therefore use at most two exact owner reads, not one per card.
   const revisions = [...new Set(published.map(revisionOf))];
   const [sourceBound, exacts] = await Promise.all([
     session.deps.sourceAdoptions?.boundWorks(rows.flatMap(row =>
       row.kind?.value === 'work' && row.work ? [row.work.value] : [])) ?? new Set<string>(),
-    Promise.all(revisions.map(async id =>
-      (await session.deps.content!.readExactBatch([id], async ids => new Set(ids)))[0]))]);
+    Promise.all(Array.from({ length: Math.ceil(revisions.length / 4) }, (_, batch) =>
+      session.deps.content!.readExactBatch(revisions.slice(batch * 4, batch * 4 + 4), async ids => new Set(ids))))
+      .then(batches => batches.flat())]);
   const exactById = new Map(revisions.map((id, index) => [id, exacts[index]]));
   const mapped: FeedSource[] = [];
   for (const row of rows) {
@@ -241,7 +273,9 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
       ? 'added' : required(row, 'kind') as FeedKind, target: required(row, 'target'), actor,
     work: row.work?.value ?? null, realm: row.realm?.value ?? null, zone: row.zone?.value ?? null,
     language: row.language?.value ?? null, excerpt, title: row.title?.value ?? null,
-    occurrence: row.occurrence?.value ?? null, contentTarget: row.contentTarget?.value ?? null, reply: row.reply?.value ?? null, contentRevision: row.contentRevision?.value ?? null, review: row.review?.value ?? null });
+    occurrence: row.occurrence?.value ?? null, contentTarget: row.contentTarget?.value ?? null, reply: row.reply?.value ?? null, contentRevision: row.contentRevision?.value ?? null, review: row.review?.value ?? null,
+    ...(row.contentTarget && exactById.get(revisionOf(row))?.status === 'available'
+      ? { publishedContent: exactById.get(revisionOf(row)) as Extract<import('../../../../content/src/core.ts').ExactReadResult,{ status: 'available' }> } : {}) });
   }
   return mapped;
 }

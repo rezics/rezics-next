@@ -79,9 +79,19 @@ test('G1025: Feed, head, Continue and trending restart after an intervening Home
       { headers: { authorization: `Bearer ${home.reader.token}` } }));
     const owner = home.deps.homePersonal;
     const originalRead = owner.read.bind(owner), originalFence = owner.fence.bind(owner);
+    const originalOpen = home.deps.feed.openFrame.bind(home.deps.feed);
     for (const path of ['/v1/feed?scope=all&sort=best', '/v1/feed?scope=all&sort=new',
       '/v1/feed/head?scope=all&after=0', '/v1/me/continue', '/v1/trending?scope=global']) {
       let fullReads = 0, fences = 0;
+      const feedPage = path.startsWith('/v1/feed?');
+      if (feedPage) home.deps.feed.openFrame = async (...args) => {
+        fullReads++;
+        const frame = await originalOpen(...args), close = frame.close.bind(frame);
+        frame.close = async () => { fences++; return close(); };
+        if (fullReads === 1) await home.json(await home.call('PUT', `/v1/me/continue/${work.work.slice(-36)}/hidden`, {
+          actingSubject: reader,hidden: true },home.reader.token));
+        return frame;
+      };
       owner.read = async (...args) => {
         fullReads++;
         const opened = await originalRead(...args);
@@ -95,7 +105,7 @@ test('G1025: Feed, head, Continue and trending restart after an intervening Home
         const response = await request(path);
         await response.text();
         expect({ path, status: response.status, fullReads, fences }).toEqual({ path, status: 200, fullReads: 2, fences: 2 });
-      } finally { owner.read = originalRead; owner.fence = originalFence; }
+      } finally { owner.read = originalRead; owner.fence = originalFence; home.deps.feed.openFrame = originalOpen; }
       expect((await request(path)).status).toBe(200);
     }
   } finally { await home.stop(); }

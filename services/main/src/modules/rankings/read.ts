@@ -9,7 +9,6 @@ import {
   type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { admittedPage } from '../disclosure/admitted-page.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import {
   RANKING_COST,
@@ -48,23 +47,19 @@ export async function readRankings(
   type Candidate = Awaited<ReturnType<ReadRankingProjection['candidates']>>[number];
   const heads = new Map<string, ReadRow>();
   const limit = session.options.limit ?? RANKING_COST.pageSize;
-  const selected = await admittedPage<Candidate>({
-    limit,
-    after: cursor ? { work: cursor.after, score: cursor.order, growth: cursor.order } : undefined,
-    key: (row) => row.work,
-    fetch: (after, size) =>
-      projection.candidates(
+  const candidates = await projection.candidates(
         checkpoint.generation,
         options.metric,
         options.interval,
         bucket,
         options.order,
-        after
-          ? { value: options.order === 'score' ? after.score : after.growth, work: after.work }
+        cursor
+          ? { value: cursor.order, work: cursor.after }
           : null,
-        size,
-      ),
-    admit: async (candidates) => {
+        limit + 1,
+        options.realm,
+      );
+  const admitted = await (async (candidates: Candidate[]) => {
       const ids = candidates.map((row) => row.work);
       const visible = ids.length
         ? await session.query(
@@ -114,11 +109,11 @@ export async function readRankings(
       visible.forEach((row, index) => {
         if (decisions[index] === 'visible') heads.set(row.work!.value, row);
       });
-      return candidates.filter((row) => heads.has(row.work));
-    },
-  });
-  const page = selected.page,
-    last = selected.last;
+      if (candidates.some(row => !heads.has(row.work))) throw new WorkReadMoved('Ranking admission changed');
+      return candidates;
+    })(candidates);
+  const selected = { page: admitted.slice(0,limit), lookahead: admitted[limit], last: admitted.slice(0,limit).at(-1) };
+  const page = selected.page, last = selected.last;
   const summaries = await session.summaries(page.map((row) => row.work));
   const serial = await readSerialSummaries(
     session,

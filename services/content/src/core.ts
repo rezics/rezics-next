@@ -795,6 +795,20 @@ export class ContentCore {
     });
   }
 
+  /** Exact delivery fence: one indexed metadata statement, no body reload.
+   * The caller still supplies current authorization for these exact revisions.
+   * At most the existing 64-revision read batch; erasure/withdrawal is live. */
+  async readExactMetadataBatch(revisionIds: string[], authorize: (ids: readonly string[]) => Promise<ReadonlySet<string>>) {
+    if (revisionIds.length > MAX_READ_ITEMS || new Set(revisionIds).size !== revisionIds.length)
+      throw new ContentLimitExceeded('exact metadata read requires at most 64 revisions');
+    revisionIds.forEach(id => checkUuid(id,'revision id'));
+    const allowed = await authorize(revisionIds), admitted = revisionIds.filter(id => allowed.has(id));
+    if (!admitted.length) return new Map<string,{ availability: string; byteDigest: string }>();
+    const rows = await this.pool.query<{ id: string; availability: string; byte_digest: string }>(
+      'SELECT id,availability,byte_digest FROM content.revision WHERE id=ANY($1::uuid[])', [admitted]);
+    return new Map(rows.rows.map(row => [row.id,{ availability: row.availability,byteDigest: row.byte_digest }]));
+  }
+
   async readOutbox(dataEpoch: string, afterSequence: string, limit: number): Promise<ContentOutboxEvent[]> {
     if (!/^[0-9a-f-]{36}$/.test(dataEpoch) || !/^(0|[1-9][0-9]*)$/.test(afterSequence)
       || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new ContentLimitExceeded('invalid outbox window');

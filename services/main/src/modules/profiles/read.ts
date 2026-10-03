@@ -199,12 +199,13 @@ export interface AgentCard {
  * absent. Preview mode also withholds invalid or changed Agents individually.
  * Cards show no library or avatar, so neither owner is read. */
 export async function readAgentCards(session: WorkReadSession, agents: readonly string[],
-  mode: 'required' | 'preview' = 'required') {
+  mode: 'required' | 'preview' = 'required',
+  frame?: { fences: ReadonlyMap<string, string>; handles: ReadonlyMap<string, string> }) {
   const ids = [...new Set(agents)];
   const cards = new Map<string, AgentCard>();
   if (!ids.length) return cards;
   const owner = profileAccess(session);
-  const before = await owner.agentFences(ids);
+  const before = frame?.fences ?? await owner.agentFences(ids);
   const active = ids.filter((id) => before.has(id));
   if (!active.length) return cards;
   const [rows, handles] = await Promise.all([
@@ -226,7 +227,7 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
     ),
     (async () => {
       try {
-        return (await session.deps.agentHandles?.currents(active)) ?? new Map<string, string>();
+        return frame?.handles ?? (await session.deps.agentHandles?.currents(active)) ?? new Map<string, string>();
       } catch {
         throw new WorkReadUnavailable('Agent handle owner is unavailable');
       }
@@ -283,7 +284,9 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
       if (mode !== 'preview' || !(error instanceof WorkReadUnavailable)) throw error;
     }
   }
-  const after = await owner.agentFences([...cards.keys()]);
+  // A feed frame rechecks these exact actor keys once with its closing owner
+  // revisions. It owns that closing fence; standalone callers fence here.
+  const after = frame?.fences ?? await owner.agentFences([...cards.keys()]);
   for (const agent of cards.keys()) {
     if (after.get(agent) === before.get(agent)) continue;
     if (mode === 'required') throw new WorkReadMoved('Agent profile changed');

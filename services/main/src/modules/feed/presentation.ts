@@ -10,6 +10,8 @@ import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { externalAuthorFollow, FOLLOWS_COST } from '../follows/contract.ts';
 import { FEED_COST, type FeedKind } from './contract.ts';
 import type { FeedSource } from './source.ts';
+import type { FeedReadFrame } from './frame.ts';
+import { readAgentCards } from '../profiles/read.ts';
 
 /** Every author credit of the Works, Agents first, then Open Library authors by position; 64 per Work at most. */
 const authorCreditsQuery = (ids: readonly string[]) => `SELECT ?work ?id ?revision ?key ?ordinal ?agent WHERE {
@@ -94,11 +96,17 @@ export interface FeedWorkPresentation { authors: DiscoveryCredit[]; excerpt: str
  * preview batch for the admitted Works. The final fence checks pointers, types
  * and credit identity without hydrating metadata states or preview bodies a
  * second time. */
-export async function feedWorkPresentations(session: WorkReadSession, works: readonly string[]) {
+export async function feedWorkPresentations(session: WorkReadSession, works: readonly string[],
+  feed?: { frame: FeedReadFrame; sources: readonly FeedSource[] }) {
   const ids = [...new Set(works)];
   if (ids.length > FEED_COST.candidates) throw new WorkReadUnavailable('Feed Work presentation budget exceeded');
   const items = new Map<string, FeedWorkPresentation>();
-  if (!ids.length) return { items, fence: async () => {} };
+  if (!ids.length) {
+    const access = feed ? await feed.frame.cardAccess(feed.sources.map(source => source.actor),
+      feed.sources.map(source => followIdentities(source))) : null;
+    const actors = access ? await readAgentCards(session, [...access.actorState.fences.keys()], 'required', access.actorState) : undefined;
+    return { items, actors, matches: access?.matches ?? null, fence: async () => {} };
+  }
   const values = ids.map(iri).join(' ');
   const pointersQuery = `SELECT ?work ?head ?main ?selection WHERE {
     VALUES ?work { ${values} }
@@ -108,7 +116,7 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
   } LIMIT ${ids.length + 1}`;
   const components = ids.map(work => [work, metadataComponent(work,
     { kind: 'header', originalTitle: null, localized: [] })] as const);
-  const pointers = await session.query(`SELECT ?work ?head ?main ?selection ?state WHERE {
+  const pointerQuery = `SELECT ?work ?head ?main ?selection ?state WHERE {
     VALUES (?work ?component) { ${components.map(([work, component]) => `(${iri(work)} ${iri(component)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork .
       OPTIONAL { ?work rv:descriptiveMetadataHead ?head }
@@ -119,7 +127,30 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:WorkMetadataRevision ; rv:component ?component ;
         rv:modelRevision ${iri(METADATA_PROFILE)} ; rv:shapeRevision ${iri(METADATA_PROFILE)} ;
         rv:metadataState ?state } }
-  } LIMIT ${ids.length + 1}`, ids.length + 1);
+  } LIMIT ${ids.length + 1}`;
+  const typesQuery = `SELECT ?work ?type WHERE { VALUES ?work { ${values} }
+    GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} } }
+  } ORDER BY ?work ?type LIMIT ${ids.length * MAX_WORK_SEMANTIC_TYPES + 1}`;
+  const creditQuery = authorCreditsQuery(ids);
+  const previewQuery = `SELECT ?work ?language (SUBSTR(STR(?body), 1, 400) AS ?preview) WHERE {
+    VALUES ?work { ${values} }
+    GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ; rv:mainVersion ?main ;
+      rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language .
+      ?decision rv:disclosure rv:Public ; rv:selectedDraft ?draft .
+      FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
+    GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?decision . }
+    GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?selection ; rv:revision ?draft ; rv:searchBody ?body }
+  } ORDER BY ?work ?language LIMIT ${ids.length * 64 + 1}`;
+  // Set-based parts share one graph transaction. Each branch is anchored to
+  // the same bounded Work VALUES; no per-card or completed-prefix scan.
+  const facts = await session.query(`SELECT * WHERE {
+    { { ${pointerQuery} } BIND("pointer" AS ?part) }
+    UNION { { ${typesQuery} } BIND("type" AS ?part) }
+    UNION { { ${creditQuery} } BIND("credit" AS ?part) }
+    UNION { { ${previewQuery} } BIND("preview" AS ?part) }
+  }`, ids.length * (1 + MAX_WORK_SEMANTIC_TYPES + 128) + 4);
+  const pointers = facts.filter(row => row.part?.value === 'pointer');
   const pointerSignature = (rows: typeof pointers) => {
     if (rows.length !== ids.length || new Set(rows.map(row => row.work?.value)).size !== ids.length
       || rows.some(row => !row.work || !ids.includes(row.work.value) || row.selection && !row.main)) {
@@ -135,22 +166,20 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
     throw new WorkReadUnavailable('Feed metadata heads are incomplete');
   }
 
-  const typesQuery = `SELECT ?work ?type WHERE { VALUES ?work { ${values} }
-    GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${workSemanticTypes.map(type => `<${type}>`).join(' ')} } }
-  } ORDER BY ?work ?type LIMIT ${ids.length * MAX_WORK_SEMANTIC_TYPES + 1}`;
   const typeSignature = (rows: readonly ReadRow[]) => {
     if (rows.length > ids.length * MAX_WORK_SEMANTIC_TYPES
       || rows.some(row => !row.work || !ids.includes(row.work.value) || !row.type)) {
       throw new WorkReadUnavailable('Feed Work types are ambiguous');
     }
-    return rows.map(row => [row.work!.value, row.type!.value]);
+    return rows.map(row => [row.work!.value, row.type!.value]).sort((a,b) => a[0]!.localeCompare(b[0]!) || a[1]!.localeCompare(b[1]!));
   };
-  const originalTypes = typeSignature(await session.query(typesQuery, ids.length * MAX_WORK_SEMANTIC_TYPES + 1));
+  const originalTypes = typeSignature(facts.filter(row => row.part?.value === 'type'));
   const types = new Map<string, string[]>(ids.map(work => [work, []]));
   for (const [work, type] of originalTypes) types.get(work!)!.push(type!);
 
-  const creditQuery = authorCreditsQuery(ids);
-  const creditRows = await session.query(creditQuery, ids.length * 64 + 1);
+  const creditRows = facts.filter(row => row.part?.value === 'credit').sort((a,b) =>
+    a.work!.value.localeCompare(b.work!.value) || Number(a.ordinal?.value ?? -1) - Number(b.ordinal?.value ?? -1)
+      || a.id!.value.localeCompare(b.id!.value));
   const creditSignature = (rows: typeof creditRows) => {
     if (rows.length > ids.length * 64 || rows.some(row => !row.work || !ids.includes(row.work.value)
       || !row.id || !row.revision || (!row.agent && (!row.key || !/^\d+$/.test(row.ordinal?.value ?? '')
@@ -172,8 +201,12 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
         provider: 'open-library', key: row.key!.value, ordinal: Number(row.ordinal!.value),
         agent: null, displayName: null, handle: null });
   }
-  const names = await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
   const reported = await sourceReportedCredits(session, ids);
+  const access = feed ? await feed.frame.cardAccess([
+    ...feed.sources.map(source => source.actor), ...[...credits.values()].flatMap(rows => rows.flatMap(row => row.agent ? [row.agent] : [])),
+  ], feed.sources.map(source => followIdentities(source, source.work ? credits.get(source.work) : undefined))) : null;
+  const actors = access ? await readAgentCards(session, [...access.actorState.fences.keys()], 'required', access.actorState) : undefined;
+  const names = actors ?? await namedDiscoveryCredits(session, [...credits.values()].flat(), ids.length);
   const sourceNames = await readAuthorNames(session, [...credits.values()].flat().flatMap(credit =>
     credit.key !== null ? [credit.key] : []));
   const excerpts = new Map<string, { excerpt: string | null; language: string | null }>();
@@ -187,17 +220,7 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
   }
   const missing = ids.filter(work => !excerpts.get(work)?.excerpt);
   if (missing.length) {
-    const bodies = await session.query(`SELECT ?work ?language (SUBSTR(STR(?body), 1, 400) AS ?preview) WHERE {
-      VALUES ?work { ${missing.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main . ?main rv:selectionHead ?selection . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ; rv:mainVersion ?main ;
-        rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language .
-        ?decision rv:disclosure rv:Public ; rv:selectedDraft ?draft .
-        FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
-      # Joined from the bound selection: on its own this pattern names every contribution.
-      GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?decision . }
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:selection ?selection ; rv:revision ?draft ; rv:searchBody ?body }
-    } ORDER BY ?work ?language LIMIT ${missing.length * 64 + 1}`, missing.length * 64 + 1);
+    const bodies = facts.filter(row => row.part?.value === 'preview' && row.work && missing.includes(row.work.value));
     const grouped = new Map<string, typeof bodies>();
     for (const row of bodies) {
       if (!row.work || !missing.includes(row.work.value) || !row.language || !row.preview) {
@@ -228,7 +251,9 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
     });
     items.set(work, { authors, ...excerpts.get(work)!, types: types.get(work)! });
   }
-  return { items, fence: async () => {
+  return { items, actors, matches: access && feed ? access.match(feed.sources.map(source =>
+    followIdentities(source, source.work ? items.get(source.work)?.authors : undefined))) : null, fence: async () => {
+    if (feed && session.graphSnapshotFenced) return;
     if (JSON.stringify(pointerSignature(await session.query(pointersQuery, ids.length + 1)))
       !== JSON.stringify(originalPointers)
       || JSON.stringify(creditSignature(await session.query(creditQuery, ids.length * 64 + 1)))

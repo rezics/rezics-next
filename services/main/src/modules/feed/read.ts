@@ -2,7 +2,7 @@ import { Value } from 'typebox/value';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { followTarget } from '../follows/contract.ts';
-import { readFollowTarget, readFollowTargets } from '../follows/read.ts';
+import { readFollowTarget } from '../follows/read.ts';
 import { readAgentCards, type AgentCard } from '../profiles/read.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
@@ -12,7 +12,7 @@ import { FEED_COST, feedViewerState, type FeedItem, type FeedQuery } from './con
 import { feedReviewSources, feedSources, type FeedSource } from './source.ts';
 import type { FeedRow } from './store.ts';
 import type { FeedViewerStateReader } from './viewer-state.ts';
-import { feedCardData, feedWorkTypes, fenceListCard } from './cards.ts';
+import { feedCardData, feedCardParts, fenceListCard } from './cards.ts';
 import { diversityAllows, FEED_RANKING, recommendationAllowed } from './ranking.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import type { HomeExclusion } from './personal.ts';
@@ -20,10 +20,11 @@ import { direction, languageSatisfies } from '../display-language/select.ts';
 import { readWorkKindMatches } from '../onboarding-interests/read.ts';
 import { interestKinds, matchingActivityKinds } from '../work/work-kinds.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
-import { feedWorkPresentations, followIdentities, type FeedWorkPresentation } from './presentation.ts';
+import { feedWorkPresentations, type FeedWorkPresentation } from './presentation.ts';
 import type { Static } from 'typebox';
 import { inOrder, settle, unwrap, type Settled } from './settled.ts';
 import { clip, discussionParts } from '../realm-reply/discussion-text.ts';
+import { feedCompositions } from './compositions.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 /** Keep the candidate's place without retaining any author, words or image. */
@@ -104,6 +105,35 @@ async function replyExcerpt(session: WorkReadSession, source: FeedSource) {
     post: { title: parts.title, excerpt: clip(parts.body, 400) || null, language } };
 }
 
+async function replyExcerpts(session: WorkReadSession, sources: readonly FeedSource[]) {
+  const replies = sources.filter(source => source.reply && source.realm);
+  const bodies = new Map<string, Settled<Awaited<ReturnType<typeof replyExcerpt>>>>();
+  if (!replies.length) return { bodies, fence: async () => {} };
+  if (!session.deps.realmReplies || !session.deps.content) throw new WorkReadUnavailable('Reply owner is unavailable');
+  const heads = await session.deps.realmReplies.visiblePublicBatch(replies.map(source => ({ realm: source.realm!, reply: source.reply! })));
+  const exacts = (await Promise.all(Array.from({ length: Math.ceil(heads.length / 4) }, (_, batch) =>
+    session.deps.content!.readExactBatch(heads.slice(batch * 4, batch * 4 + 4).map(head => head.revisionId), async ids => new Set(ids))))).flat();
+  for (const source of replies) {
+    const index = heads.findIndex(head => head.realm === source.realm && head.reply === source.reply && head.placement === source.id
+      && `urn:rezics:content:revision:${head.revisionId}` === source.contentRevision
+      && `urn:rezics:realm-review:${head.reviewDecisionId}` === source.review);
+    const exact = exacts[index];
+    if (index < 0 || !exact || ['missing','erased','denied'].includes(exact.status)) {
+      bodies.set(source.id, { ok: false, error: new WorkReadMissing('Reply unavailable') }); continue;
+    }
+    if (exact.status !== 'available' || exact.reference.resourceId !== source.reply || typeof exact.body.body !== 'string')
+      throw new WorkReadUnavailable('Reply body unavailable');
+    const language = exact.reference.language.kind === 'tag' ? exact.reference.language.tag : null;
+    const parts = source.kind === 'discussion' ? discussionParts(exact.body.body) : { title: null, body: exact.body.body.trim() };
+    bodies.set(source.id, { ok: true, value: { excerpt: exact.body.body.slice(0,400), language,
+      post: { title: parts.title, excerpt: clip(parts.body,400) || null, language } } });
+  }
+  return { bodies, fence: async () => {
+    const approved = await session.deps.realmReplies!.currentFeedApprovals(heads);
+    if (approved.size !== heads.length) throw new WorkReadMoved('Reply approval changed');
+  } };
+}
+
 /**
  * The post's own title and words, now that its card is known. A discussion or
  * reply brings them from its body; a chapter, release or list has its own
@@ -145,15 +175,46 @@ async function commentCounts(session: WorkReadSession, sources: readonly FeedSou
       FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
       FILTER NOT EXISTS { ?realm rv:protectionHead ?protection } }
   } GROUP BY ?work`, global.length) : Promise.resolve([]));
-  const counts = new Map<string, Promise<Settled<{ count: number; complete: boolean }>>>();
-  const count = (realm: string, work: string) => {
-    const key = JSON.stringify([realm, work]);
-    if (!counts.has(key)) counts.set(key, settle((async () => {
-      if (!session.deps.realmReplies) throw new WorkReadUnavailable('Comment count owner is unavailable');
-      return session.deps.realmReplies.rootCount(realm, work);
-    })()));
-    return counts.get(key)!;
-  };
+  const pairs = new Map<string, { realm: string; work: string }>();
+  if (!threads.ok) throw threads.error;
+  for (const source of sources) {
+    if (source.reply || !source.work) continue;
+    const realm = source.realm ?? threads.value.find(row => row.work?.value === source.work)?.first?.value;
+    if (realm) pairs.set(JSON.stringify([realm,source.work]), { realm, work: source.work });
+  }
+  const counted = new Map<string, { count: number; complete: boolean }>();
+  if (pairs.size) {
+    if (!session.deps.realmReplies) throw new WorkReadUnavailable('Comment count owner unavailable');
+    const entries = [...pairs];
+    const rows = await session.query(`SELECT * WHERE { ${entries.map(([key,pair], index) => `{
+      { SELECT ?reply ?placement ?revision ?review ?preparation ?rootRevision WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:realm ${iri(pair.realm)} ;
+          rv:rootTarget ${iri(pair.work)} ; rv:reply ?reply ; rv:replyPlacementHead ?placement .
+          ${iri(pair.realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
+          ?space a rv:Space ; rv:realmCapability ${iri(pair.realm)} ; rv:disclosure rv:Public .
+          FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+          FILTER NOT EXISTS { ${iri(pair.realm)} rv:protectionHead ?protection } }
+        GRAPH ${iri(GRAPHS.revisions)} { ?placement a rv:RealmReplyPlacement ; rv:placementOutcome rv:Accepted ;
+          rv:realm ${iri(pair.realm)} ; rv:reply ?reply ; rv:rootTarget ${iri(pair.work)} ; rv:rootRevision ?rootRevision ;
+          rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:contentPreparation ?preparation . }
+        BIND(IRI(?rootRevision) AS ?rootAnchor)
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?rootAnchor a rv:ErasedRevision } }
+      } ORDER BY ?reply LIMIT 65 } BIND("${index}" AS ?pair)
+    }`).join(' UNION ')} }`, entries.length * 65);
+    const heads = entries.flatMap(([key,pair], index) => {
+      const own = rows.filter(row => row.pair?.value === String(index));
+      counted.set(key, { count: 0, complete: own.length <= 64 });
+      return own.slice(0,64).map(row => ({ ...pair, key, reply: row.reply!.value,
+        revisionId: row.revision!.value.replace('urn:rezics:content:revision:', ''),
+        reviewDecisionId: row.review!.value.replace('urn:rezics:realm-review:', ''), preparationId: row.preparation!.value }));
+    });
+    const approved = await session.deps.realmReplies.currentFeedApprovals(heads);
+    const decisions = await session.disclosure(heads.map(head => ({ owner: 'content' as const, resource: head.reply,
+      component: 'body' as const, revision: head.revisionId, work: head.work, context: head.realm })), 'count');
+    heads.forEach((head,index) => { if (approved.has(index) && decisions[index] === 'visible') counted.get(head.key)!.count++; });
+  }
+  const count = (realm: string, work: string) => Promise.resolve({ ok: true as const,
+    value: counted.get(JSON.stringify([realm,work])) ?? { count: 0, complete: true } });
   const results = await Promise.all(sources.map(async (source): Promise<Settled<FeedItem['comments']>> => {
     if (source.reply && source.realm) {
       const counted = await threadCounts.get(source.realm)!;
@@ -169,13 +230,23 @@ async function commentCounts(session: WorkReadSession, sources: readonly FeedSou
       realm = row.first.value; single = row.first.value === row.last?.value;
     }
     const counted = await count(realm, source.work);
-    return counted.ok ? { ok: true, value: { value: counted.value.count,
-      kind: counted.value.complete && single ? 'exact' : 'lower-bound' } } : counted;
+    return { ok: true, value: { value: counted.value.count,
+      kind: counted.value.complete && single ? 'exact' : 'lower-bound' } };
   }));
   return new Map(sources.map((source, index) => [source.id, results[index]!]));
 }
 
 type FollowTarget = Static<typeof followTarget>;
+function summaryTargets(ids: readonly string[], kind: 'work' | 'realm', summaries: ReadonlyMap<string, import('../media/summary.ts').ResourceSummary>) {
+  const result = new Map<string, FollowTarget>();
+  for (const id of new Set(ids)) {
+    const summary = summaries.get(id);
+    if (summary?.status === 'available' && summary.disclosure === 'public' && summary.type === kind)
+      result.set(id, { id, kind, name: summary.name, icon: summary.avatar,
+        realm: kind === 'realm' ? id : null, href: kind === 'work' ? `/w/${id.slice(-36)}` : `/r/${id.slice(-36)}` });
+  }
+  return result;
+}
 const workEvent = (kind: FeedSource['kind']) => kind === 'work' || kind === 'added' || kind === 'adoption';
 const targetHref = (source: FeedSource) => source.work ? `/w/${source.work.slice(-36)}` : `/collections/${source.target.slice(-36)}`;
 function targetLink(source: FeedSource) {
@@ -367,11 +438,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   if (reader && !homePersonal) throw new WorkReadUnavailable('Home preferences are unavailable');
   if (!session.deps.personPreferences) throw new WorkReadUnavailable('Person preferences are unavailable');
   if (query.scope === 'following' && !reader) throw new WorkReadInvalid('Following requires authentication');
-  const [personal, checkpoint, personSettings] = await inOrder(
-    reader ? homePersonal!.read(reader.principal, reader.agent) : null,
-    store.checkpoint(session.position.dataEpoch),
-    reader && session.deps.personPreferences
-      ? session.deps.personPreferences.read(reader.principal, reader.agent) : null);
+  const frame = await store.openFrame(session.position.dataEpoch, reader);
+  const personal = frame.personal, checkpoint = frame.checkpoint, personSettings = frame.personSettings;
   // Saved preferences remain distinct from request filters: only the latter
   // exclude a post whose language has not been recorded.
   if (personal) session.readingLanguages = personal.preferences.contentLanguages;
@@ -380,12 +448,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   // Following needs its inventory before validating a cursor. All gets the
   // same head from its card-match batch; the private preferences already bind
   // the cursor to the principal through the same followPrincipal authority.
-  const following = reader && scope === 'following'
-    ? await follows.matches(reader.principal, reader.agent, []) : null;
+  const following = reader && scope === 'following' ? frame.following : null;
   const sort = query.sort ?? personal?.preferences.sort ?? 'best', window = query.window ?? 'all';
   if (scope === 'following' && sort === 'top') throw new WorkReadInvalid('Top is available in All');
-  const watermarkRead = settle(reader && scope === 'following' && sort === 'new'
-    ? homePersonal!.getWatermark(reader.principal, reader.agent, 'following') : Promise.resolve(null));
   const binding = ['home-feed-v1', FEED_RANKING.version, scope, sort, window, normalized(query),
     personal?.owner ?? null, reader?.agent ?? null,
     personSettings ? digest([personSettings.version, personSettings.blockedPeople]) : null];
@@ -412,7 +477,8 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   const conceptFilter = pinnedConcepts(query);
   const limit = Math.min(query.limit ?? FEED_COST.pageSize, conceptFilter.length ? FEED_COST.tagCandidates : FEED_COST.candidates);
-  const rows = await store.page(session.position, checkpoint.revision, sort, limit, after, reader, window, asOf, query.kinds);
+  const rows = await store.page(session.position, checkpoint.revision, sort, limit, after,
+    reader ? { ...reader, scope } : undefined, window, asOf, query.kinds, frame);
   const page: FeedRow[] = [];
   let members = 0;
   for (const row of rows.slice(0, limit)) {
@@ -421,11 +487,13 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   const cutoff = window === 'all' ? 0 : asOf - (window === 'week' ? 7 : 30) * 86_400_000;
   const withinWindow = page.filter(row => row.sort_time.getTime() >= cutoff && row.sort_time.getTime() <= asOf);
-  const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members));
+  const memberRows = await store.members(session.position.dataEpoch, withinWindow.flatMap(row => row.group_members), frame);
   const sources = await visibleFeedSources(session, memberRows);
-  const hiddenReading = await session.deps.personPreferences.hiddenReadingActors(
-    [...new Set(sources.filter(source => ['review', 'collection'].includes(source.kind))
-      .map(source => source.actor))]);
+  const compositionsRead = feedCompositions(session, sources.flatMap(source => source.work ? [source.work]
+    : source.kind === 'collection' ? [source.target] : []));
+  const repliesRead = replyExcerpts(session, sources);
+  const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []), { frame, sources });
+  const hiddenReading = (await presentationRead, frame.hiddenReadingActors);
   const summaryIds = [...new Set(sources.flatMap(source => [source.work, source.realm].filter((id): id is string => !!id)))];
   const more = rows.length > page.length;
   /** Groups, collapses and selects the disclosed cards. Pure over its input:
@@ -484,7 +552,7 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const readViewer = (targets: ReturnType<typeof viewerTargets>) => {
     const key = JSON.stringify(targets);
     if (!viewerReads.has(key)) viewerReads.set(key, settle(reader && session.deps.feedViewerState
-      ? session.deps.feedViewerState.read(reader, targets, session) : Promise.resolve(undefined)));
+      ? compositionsRead.then(compositions => session.deps.feedViewerState!.read(reader, targets, session, frame, compositions)) : Promise.resolve(undefined)));
     return viewerReads.get(key)!;
   };
   // At most eight member Works enter one bounded catalogue read. The same
@@ -507,36 +575,32 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
     return filtered.filter(source => !source.work || !tagRules.length
       || !tagRules.some(rule => unwrap(tagMatches.get(tagKey(source))!).includes(rule.target) && reduced(source, rule)));
   });
-  const partsRead = candidatesRead.then(candidates => {
-    const typed = candidates.filter(source => source.work && !source.occurrence && !source.readerReview
-      && ['work', 'added', 'contribution'].includes(source.kind));
+  const partsRead = Promise.all([candidatesRead, compositionsRead]).then(async ([candidates, compositions]) => {
+    const batch = await presentationRead;
+    const types = new Map([...batch.items].map(([work,item]) => [work,item.types]));
+    const prepared = await feedCardParts(session,candidates,compositions,types);
     return inOrder(
-      readAgentCards(session, candidates.map(source => source.actor)),
-      summariesRead.then(summaries => readFollowTargets(session,
-        candidates.flatMap(source => source.work ? [source.work] : []), 'work', summaries)),
-      summariesRead.then(summaries => readFollowTargets(session,
-        candidates.flatMap(source => source.realm ? [source.realm] : []), 'realm', summaries)),
-      Promise.all(candidates.map(source => settle(replyExcerpt(session, source)))),
+      presentationRead.then(batch => batch.actors ?? readAgentCards(session, candidates.map(source => source.actor))),
+      summariesRead.then(summaries => summaryTargets(candidates.flatMap(source => source.work ? [source.work] : []), 'work', summaries)),
+      summariesRead.then(summaries => summaryTargets(candidates.flatMap(source => source.realm ? [source.realm] : []), 'realm', summaries)),
+      repliesRead.then(batch => candidates.map(source => batch.bodies.get(source.id)
+        ?? { ok: true as const, value: { excerpt: source.excerpt, language: source.language } })),
       commentCounts(session, candidates),
       // A card reads only its target's cover, which the summary batch already holds.
-      Promise.all([feedWorkTypes(session, typed.map(source => source.work!)), summariesRead])
-        .then(([types, summaries]) => Promise.all(candidates.map(source => {
+      summariesRead.then(summaries => Promise.all(candidates.map(source => {
           const summary = source.work ? summaries.get(source.work) : undefined;
           const target = summary?.status === 'available' ? { name: summary.name, icon: summary.avatar } : null;
           return settle(feedCardData(session, source, itemTarget(source, target, undefined, source),
-            targetLink(source), types, personSettings?.spoilerPolicy === 'show'));
+            targetLink(source), types, personSettings?.spoilerPolicy === 'show', compositions,prepared));
         }))),
-      conceptFilter.length ? readTagSets(session, query.language, candidates, conceptFilter) : new Map<string, Settled<string[]>>());
+      conceptFilter.length ? readTagSets(session, query.language, candidates, conceptFilter) : new Map<string, Settled<string[]>>(),prepared);
   });
-  const presentationRead = feedWorkPresentations(session, sources.flatMap(source => source.work ? [source.work] : []));
   // A Work's news also answers to follows of the authors its card credits,
   // which the page's presentation batch already holds. All matches too, so a
   // card there leads with the person the reader follows; one bounded read.
-  const matchesRead = reader ? presentationRead.then(batch => follows.matches(
-    reader.principal, reader.agent, sources.map(source => followIdentities(source,
-      source.work ? batch.items.get(source.work)?.authors : undefined)))) : Promise.resolve(null);
+  const matchesRead = presentationRead.then(batch => batch.matches ?? null);
   const [initialChapters, workKinds, summaries, presentationBatch, matches, candidates,
-    [actors, workTargets, realmTargets, bodies, comments, cards, acceptedTags]] = await inOrder(
+    [actors, workTargets, realmTargets, bodies, comments, cards, acceptedTags, cardParts]] = await inOrder(
     chapterPointers(session, sources), kindsRead, summariesRead, presentationRead,
     matchesRead, candidatesRead, partsRead);
   const presentations = presentationBatch.items;
@@ -580,34 +644,36 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const earlier = new Map(sources.map(source => [source.id, source]));
   const itemSources = items.map(item => earlier.get(item.id)!);
   const [final, targetFence, finalActors, , finalChapters, finalWorkKinds, replyChecks, cardChecks] = await inOrder(
-    visibleFeedSources(session, items).then(list => new Map(list.map(source => [source.id, source]))),
+    session.graphSnapshotFenced ? earlier : visibleFeedSources(session, items).then(list => new Map(list.map(source => [source.id, source]))),
     // List cards' preview Works join the page's one final summary batch.
-    summariesRead.then(() => session.summaries([...new Set([...summaryIds, ...items.flatMap(item =>
-      item.card.kind === 'list' ? item.card.works.map(work => work.id) : [])])])).then(async list => {
+    summariesRead.then(async prior => {
+      const missing = [...new Set(items.flatMap(item => item.card.kind === 'list' ? item.card.works.map(work => work.id) : []))]
+        .filter(id => !prior.has(id));
+      return [...prior.values(), ...await session.summaries(missing)];
+    }).then(async list => {
       const fenced = new Map(list.map(summary => [summary.reference, summary]));
       const [works, realms, lists] = await inOrder(
-        readFollowTargets(session, items.flatMap(item => item.target.work ? [item.target.work] : []), 'work', fenced),
-        readFollowTargets(session, items.flatMap(item => item.realm ? [item.realm.id] : []), 'realm', fenced),
+        summaryTargets(items.flatMap(item => item.target.work ? [item.target.work] : []), 'work', fenced),
+        summaryTargets(items.flatMap(item => item.realm ? [item.realm.id] : []), 'realm', fenced),
         Promise.all(items.map(item => item.card.kind === 'list' ? settle(fenceListCard(session, item.card, fenced)) : null)));
       return { fenced, works, realms, lists };
     }),
-    readAgentCards(session, items.map(item => item.actor.id)),
+    session.graphSnapshotFenced ? actors : readAgentCards(session, items.map(item => item.actor.id), 'required', frame.actorState),
     presentationBatch.fence(),
-    chapterPointers(session, itemSources),
-    interests.length ? readWorkKindMatches(session, [...new Set(itemSources
+    session.graphSnapshotFenced ? initialChapters : chapterPointers(session, itemSources),
+    session.graphSnapshotFenced ? workKinds : interests.length ? readWorkKindMatches(session, [...new Set(itemSources
       .filter(source => matchingActivityKinds(source.kind).length === 0)
       .flatMap(source => source.work ? [source.work] : []))]) : new Map<string, HomeInterestKind[]>(),
-    Promise.all(itemSources.map(source => settle(replyExcerpt(session, source)))),
-    Promise.all(items.map((item, index) => fenceCards(item) && item.kind !== 'review'
+    repliesRead.then(async batch => { await batch.fence(); return itemSources.map(source => batch.bodies.get(source.id)
+      ?? { ok: true as const, value: { excerpt: source.excerpt, language: source.language } }); }),
+    compositionsRead.then(compositions => Promise.all(items.map((item, index) => fenceCards(item) && item.kind !== 'review'
       ? settle(feedCardData(session, itemSources[index]!, item.target, item.links.target,
-        undefined, personSettings?.spoilerPolicy === 'show')) : null)));
+        new Map([...presentations].map(([work,value]) => [work,value.types])), personSettings?.spoilerPolicy === 'show',compositions,cardParts)) : null))));
   const graphFields = (source: FeedSource) => JSON.stringify([source.id, source.kind, source.actor, source.target, source.work,
     source.realm, source.zone, source.language, source.occurrence, source.contentTarget, source.reply,
     source.contentRevision, source.review]);
   const disclosed: FeedItem[] = [];
-  const hiddenReadingNow = await session.deps.personPreferences.hiddenReadingActors(
-    [...new Set(items.filter(item => ['review', 'collection'].includes(item.kind))
-      .map(item => item.actor.id))]);
+  const hiddenReadingNow = frame.hiddenReadingActors;
   for (const [index, item] of items.entries()) {
     const finalSource = final.get(item.id);
     if (!finalSource || !personFeedSourceVisible(finalSource, reader?.agent ?? null,
@@ -695,30 +761,27 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   }
   const projected = checkpoint.sequence === session.position.sequence && checkpoint.after_id === '\uffff'
     && !checkpoint.rebuild_epoch;
-  if (reader && personSettings) {
-    const current = await session.deps.personPreferences!.read(reader.principal, reader.agent);
-    if (current.version !== personSettings.version
-      || JSON.stringify(current.blockedPeople) !== JSON.stringify(personSettings.blockedPeople)) {
-      throw new WorkReadMoved('Person preferences changed');
-    }
+  const content = new Map([...sources.flatMap(source => source.publishedContent ? [[source.publishedContent.revisionId,source.publishedContent.reference.byteDigest] as const] : []),
+    ...[...cardParts.hubs.values()].map(hub => [hub.exact.revisionId,hub.exact.reference.byteDigest] as const)]);
+  if (content.size) {
+    const ids = [...content.keys()];
+    const current = session.deps.contentAuthoring
+      ? await session.deps.contentAuthoring.readExactMetadataBatch(ids,async keys => new Set(keys))
+      : new Map((await Promise.all(Array.from({ length: Math.ceil(ids.length/4) },(_,batch) =>
+        session.deps.content!.readExactBatch(ids.slice(batch*4,batch*4+4),async keys => new Set(keys))))).flat()
+        .map(row => [row.revisionId,{ availability: row.status,
+          byteDigest: row.status === 'available' ? row.reference.byteDigest : '' }] as const));
+    if ([...content].some(([id,digest]) => current.get(id)?.availability !== 'available' || current.get(id)?.byteDigest !== digest))
+      throw new WorkReadMoved('Card Content changed');
   }
-  const [latest, followsNow, personalNow, pending, watermark] = await Promise.all([
-    settle(store.checkpoint(session.position.dataEpoch)),
-    settle(reader ? follows.matches(reader.principal, reader.agent, []) : Promise.resolve(null)),
-    settle(reader ? homePersonal!.fence(reader.principal, reader.agent) : Promise.resolve(null)),
-    settle(projected ? store.reviewPending(checkpoint.review_sequence) : Promise.resolve(false)),
-    watermarkRead]);
-  if (unwrap(latest).revision !== checkpoint.revision) throw new WorkReadMoved('Feed changed');
-  if (reader && unwrap(followsNow)?.revision !== (following ?? matches)?.revision) {
-    throw new WorkReadMoved('Follows changed');
-  }
-  if (reader && unwrap(personalNow)?.revision !== personal?.revision) throw new WorkReadMoved('Home preferences changed');
+  await session.fenceSummaryMedia();
+  const { pending, watermark } = await frame.close();
   const last = page.at(-1);
-  const current = projected && !unwrap(pending);
+  const current = projected && !pending;
   return { profile: 'home-feed-v1' as const, scope, sort, window, ranking: FEED_RANKING,
     caughtUp: scope === 'following' && sort === 'new' ? { asOf: new Date(asOf).toISOString(),
-      lastVisitedAt: unwrap(watermark)?.data_epoch === session.position.dataEpoch
-        ? unwrap(watermark)!.updated_at.toISOString() : null,
+      lastVisitedAt: watermark?.data_epoch === session.position.dataEpoch
+        ? watermark.updated_at.toISOString() : null,
       state: more ? 'more' as const : current ? 'caught-up' as const : 'projecting' as const } : null,
     ...pageResult(session, selected.map(item => hidden.has(item.id)
       ? feedTombstone(item) : item), more && last

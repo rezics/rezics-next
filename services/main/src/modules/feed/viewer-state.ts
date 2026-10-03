@@ -1,143 +1,94 @@
-import { readChapterContinuation, readContents } from '../work-contents/read.ts';
-import { nextChapter } from '../structure/reading-order.ts';
-import { GRAPHS, iri } from '../work/activate.ts';
-import { WorkReadMoved, WorkReadSession, WorkReadUnavailable }
-  from '../work/read-session.ts';
+import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { MAIN_LANGUAGE_LIMIT, chooseMainLanguage } from '../work/selection-heads.ts';
 import type { FeedViewerState } from './contract.ts';
-import { inOrder, settle, unwrap } from './settled.ts';
 import type { FeedReader } from './read.ts';
+import type { FeedReadFrame } from './frame.ts';
+import { feedCompositions, type FeedComposition } from './compositions.ts';
+import type { OccurrenceRecord } from '../structure/format.ts';
 
 type Available = Extract<FeedViewerState, { status: 'available' }>;
 type Target = { activity: string; work: string | null; occurrence?: string };
-/** At most eight Works and the first six chapters per Work. A missing composition
- * yields no next-chapter action; incomplete pagination never claims caught up.
- * A Book with volumes resolves its next chapter by one exact placement read (after
- * a bounded reading-order walk when the reader has not started it). */
 export const VIEWER_STATE_COST = { activities: 8, chaptersPerWork: 6 } as const;
 
+/** Four selected-key Content statements, one composition/header graph batch,
+ * one language batch and one publication batch. Saved progress seeks its exact
+ * immutable position; neither completed prefixes nor the reader's entire
+ * shelf are scanned. Object reads grow with emitted Books and tree height. */
 export class FeedViewerStateReader {
-  async read(reader: FeedReader, targets: readonly Target[], session: WorkReadSession): Promise<ReadonlyMap<string, Available>> {
+  async read(reader: FeedReader, targets: readonly Target[], session: WorkReadSession,
+    frame?: FeedReadFrame, supplied?: ReadonlyMap<string, FeedComposition>): Promise<ReadonlyMap<string, Available>> {
     if (targets.length > VIEWER_STATE_COST.activities) throw new WorkReadUnavailable('Feed viewer batch exceeds budget');
-    const status = session.deps.libraryStatus;
-    const canRead = session.deps.access.canReadAsBaselineMember;
-    if (!status || !canRead) throw new WorkReadUnavailable('Reader state is unavailable');
+    const status = session.deps.libraryStatus, canRead = session.deps.access.canReadAsBaselineMember;
+    if (!status || !canRead || !(frame ? frame.owner !== null : await canRead.call(session.deps.access, reader.principal, reader.agent)))
+      throw new WorkReadUnavailable('Reader state is unavailable');
     const works = [...new Set(targets.flatMap(target => target.work ? [target.work] : []))];
-    // Independent owner reads run together; each dependent stage waits only for its inputs.
-    const [allowed, rest] = await inOrder(canRead.call(session.deps.access, reader.principal, reader.agent),
-      settle(inOrder(status.fence(reader.agent), status.batch(reader.agent, works),
-      works.length ? session.query(`SELECT ?work ?structure WHERE { VALUES ?work {
-      ${works.map(iri).join(' ')} } GRAPH ${iri(GRAPHS.current)} {
-      ?work rv:mainVersion ?main . ?structure a rv:Structure ; rv:structureOf ?main ;
-        rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?generation .
-      ?generation rv:generationState rv:Active . } } LIMIT ${VIEWER_STATE_COST.activities + 1}`,
-      VIEWER_STATE_COST.activities + 1) : [])));
-    if (!allowed) throw new WorkReadUnavailable('Reader state is unavailable');
-    const [fence, shelves, rows] = unwrap(rest);
-    const structures = new Map(rows.map(row => [row.work!.value, row.structure!.value]));
-    if (structures.size !== rows.length) throw new WorkReadUnavailable('Work composition is ambiguous');
-    const progress = await status.progress(reader.principal, [...structures.values()]);
-    const revisions = [...new Set([...progress.values()].flatMap(row =>
-      row.selectedRevision ? [row.selectedRevision] : []))];
-    const unkeyed = [...progress.values()].filter(row => !row.selectedRevision).map(row => row.occurrence);
-    const [languageRows, occurrenceRows] = await inOrder(revisions.length ? session.query(`SELECT DISTINCT ?revision ?language WHERE {
-      VALUES ?revision { ${revisions.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:ContentPublicationDecision ;
-        rv:contentRevision ?revision ; rv:contentLanguage ?language . }
-    } LIMIT ${VIEWER_STATE_COST.activities + 1}`, VIEWER_STATE_COST.activities + 1) : [],
-    unkeyed.length ? session.query(`SELECT ?occurrence
-      (MIN(LCASE(STR(?language))) AS ?firstLanguage)
-      (MAX(LCASE(STR(?language))) AS ?lastLanguage) WHERE {
-      VALUES ?occurrence { ${unkeyed.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} {
-        ?placement a rv:OccurrencePlacement ; rv:occurrence ?occurrence ; schema:item ?target .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-        ?variant a rv:ContentVariant ; rv:resource ?target ;
-          rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
-      GRAPH ${iri(GRAPHS.revisions)} {
-        ?decision a rv:ContentPublicationDecision ; rv:contentLanguage ?language .
-        ?eligibility a rv:ContentSearchEligibilityDecision ;
-          rv:publicationDecision ?decision ; rv:disclosure rv:Public . }
-    } GROUP BY ?occurrence LIMIT ${VIEWER_STATE_COST.activities + 1}`,
-    VIEWER_STATE_COST.activities + 1) : []);
-    const progressLanguages = new Map(languageRows.map(row => [row.revision!.value, row.language!.value]));
-    const occurrenceLanguages = new Map(occurrenceRows.flatMap(row =>
-      row.firstLanguage?.value === row.lastLanguage?.value && row.firstLanguage
-        ? [[row.occurrence!.value, row.firstLanguage.value] as const] : []));
-    const byWork = new Map(shelves.map(row => [row.work, row]));
-    const chapterCards = new Set(targets.filter(target => target.occurrence).map(target => target.work));
-    const privateSession = new WorkReadSession(session.deps, session.request,
-      { language: session.options.language, actingSubject: reader.agent,
-        limit: VIEWER_STATE_COST.chaptersPerWork }, session.position);
-    privateSession.principal = reader.principal;
-    const chapters = new Map<string, Awaited<ReturnType<typeof readContents>>>();
-    await Promise.all(works.map(async work => {
-      if (!structures.has(work)) return;
-      if (byWork.get(work)?.status !== 'reading' && !progress.has(structures.get(work)!)
-        && !chapterCards.has(work)) return;
-      const read = progress.get(structures.get(work)!);
-      const language = read?.selectedRevision ? progressLanguages.get(read.selectedRevision)
-        : read ? occurrenceLanguages.get(read.occurrence) : undefined;
-      try { chapters.set(work, await readContents(privateSession, work, language ? { language } : {})); }
-      catch { /* An unreadable composition has no next chapter for this Work. */ }
-    }));
+    const [shelves, compositions] = await Promise.all([status.batch(reader.agent, works),
+      supplied ?? feedCompositions(session, works)]);
+    const books = new Map([...compositions].filter(([work, value]) => works.includes(work) && value.header.profile === 'book-composition'));
+    const structures = [...books.values()].map(book => book.header.structure);
+    const progress = await status.progress(reader.principal, structures);
+    const revisions = [...new Set([...progress.values()].flatMap(row => row.selectedRevision ? [row.selectedRevision] : []))];
+    const languages = books.size ? await session.query(`SELECT ?part ?work ?revision ?language WHERE {
+      { VALUES (?work ?main) { ${[...books].map(([work,book]) => `(${iri(work)} ${iri(book.header.mainVersion)})`).join(' ')} }
+        GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?selection . }
+        GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ; rv:language ?language . }
+        BIND("main" AS ?part) }
+      UNION { VALUES ?revision { ${revisions.map(iri).join(' ')} }
+        GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:ContentPublicationDecision ; rv:contentRevision ?revision ; rv:contentLanguage ?language . }
+        BIND("progress" AS ?part) }
+    } LIMIT ${books.size * MAIN_LANGUAGE_LIMIT + revisions.length + 1}`, books.size * MAIN_LANGUAGE_LIMIT + revisions.length) : [];
+    const byWork = new Map(shelves.map(row => [row.work,row]));
+    const next = new Map<string, { record: OccurrenceRecord; language: string }>();
+    const paths = new Map<string, string | null>();
+    for (const [work, book] of books) {
+      const saved = progress.get(book.header.structure);
+      const mainLanguages = languages.filter(row => row.work?.value === work && row.language)
+        .map(row => ({ language: row.language!.value, selection: '' }));
+      const selected = chooseMainLanguage(mainLanguages, saved?.selectedRevision
+        ? languages.find(row => row.revision?.value === saved.selectedRevision)?.language?.value : undefined);
+      if (!selected) continue;
+      const cards = targets.filter(target => target.work === work && target.occurrence).map(target => target.occurrence!);
+      const records = await book.lookup([...new Set([...cards, ...(saved ? [saved.occurrence] : [])])]);
+      const current = saved ? records.get(saved.occurrence) : undefined;
+      for (const [id, record] of records) paths.set(id, await book.path(record));
+      if (byWork.get(work)?.status !== 'reading' && !saved && !cards.length) continue;
+      const record = saved ? !current || current.state !== 'active' ? null
+        : saved.completed ? await book.next(current) : current : await book.next();
+      if (record?.target) next.set(work, { record, language: selected.language.toLowerCase() });
+    }
+    const publications = next.size ? await session.query(`SELECT DISTINCT ?work ?occurrence ?revision WHERE {
+      VALUES (?work ?occurrence ?target ?language) { ${[...next].map(([work,item]) =>
+        `(${iri(work)} ${iri(item.record.occurrence)} ${iri(item.record.target!)} ${lit(item.language.toLowerCase())})`).join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ; rv:resource ?target ; rv:contentPublicationHead ?decision ; rv:publicSearchEligibilityHead ?eligibility . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:ContentPublicationDecision ; rv:contentRevision ?revision ; rv:contentLanguage ?recordedLanguage .
+        ?eligibility a rv:ContentSearchEligibilityDecision ; rv:publicationDecision ?decision ; rv:disclosure rv:Public .
+        FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+      FILTER(LCASE(STR(?recordedLanguage)) = ?language)
+    } LIMIT ${next.size + 1}`, next.size) : [];
     const result = new Map<string, Available>();
-    // A saved position beyond the first page resolves without a full chapter body read.
-    const distantNext = new Map<string, { occurrence: string; language?: string } | null>();
-    await Promise.all(works.map(async work => {
-      const read = progress.get(structures.get(work) ?? '');
-      const page = chapters.get(work);
-      const entries = page?.items.filter(item => item.role === 'chapter' && item.availability === 'available') ?? [];
-      const lastIndex = read ? entries.findIndex(item => item.occurrence === read.occurrence) : -1;
-      const next = read && lastIndex >= 0 ? entries[read.completed ? lastIndex + 1 : lastIndex] : undefined;
-      // In a Book with volumes, the top level alone does not say which chapter comes next.
-      const grouped = page?.items.some(item => item.role === 'group') ?? false;
-      if (!read && page?.items[0]?.role === 'group') {
-        try {
-          const first = await nextChapter(session.deps.environment, { structure: structures.get(work)!,
-            canReadTarget: async () => true });
-          const opened = first && page.language ? await readChapterContinuation(privateSession, work,
-            structures.get(work)!, first.record.occurrence, page.language, false) : null;
-          distantNext.set(work, opened);
-        } catch { distantNext.set(work, null); }
-        return;
-      }
-      if (!read || !(grouped || lastIndex < 0 || read.completed && !next && !!page?.nextCursor)) return;
-      try {
-        const language = read.selectedRevision ? progressLanguages.get(read.selectedRevision)
-          : occurrenceLanguages.get(read.occurrence);
-        const selectedLanguage = language ?? page?.language;
-        distantNext.set(work, selectedLanguage ? await readChapterContinuation(privateSession, work,
-          structures.get(work)!, read.occurrence, selectedLanguage, read.completed) : null);
-      } catch { distantNext.set(work, null); }
-    }));
     for (const target of targets) {
-      const work = target.work;
-      const state = work ? byWork.get(work) : null;
-      const read = work ? progress.get(structures.get(work) ?? '') : null;
-      const page = work ? chapters.get(work) : null;
-      const entries = page?.items.filter(item => item.role === 'chapter' && item.availability === 'available') ?? [];
-      const lastIndex = read ? entries.findIndex(item => item.occurrence === read.occurrence) : -1;
-      const nextIndex = read ? lastIndex < 0 ? -1 : read.completed ? lastIndex + 1 : lastIndex : 0;
-      const next = work && distantNext.has(work) ? undefined : entries[nextIndex];
-      const distant = work ? distantNext.get(work) : null;
-      const itemIndex = target.occurrence ? entries.findIndex(item => item.occurrence === target.occurrence) : -1;
-      let hidden = false;
-      if (target.occurrence && state?.status !== 'read') {
-        if (!read) hidden = true;
-        else if (lastIndex >= 0) hidden = itemIndex < 0 || itemIndex > lastIndex;
-        else hidden = itemIndex < 0 && target.occurrence !== read.occurrence;
-      }
+      const work = target.work, state = work ? byWork.get(work) : undefined;
+      const book = work ? books.get(work) : undefined, saved = book ? progress.get(book.header.structure) : undefined;
+      const candidate = work ? next.get(work) : undefined;
+      const published = candidate && publications.find(row => row.work?.value === work && row.occurrence?.value === candidate.record.occurrence);
+      const available = published && (candidate!.record.selection?.mode !== 'fixed-revision'
+        || candidate!.record.selection.revision === published.revision?.value);
+      const cardPath = target.occurrence ? paths.get(target.occurrence) : null;
+      const savedPath = saved ? paths.get(saved.occurrence) : null;
+      const hidden = !!target.occurrence && state?.status !== 'read'
+        && (!saved || !cardPath || !savedPath || cardPath > savedPath);
       result.set(target.activity, { status: 'available',
-        ...(work && (next || distant) ? { nextUnread: { work, occurrence: next?.occurrence ?? distant!.occurrence,
-          ...((page?.language ?? distant?.language) ? { language: page?.language ?? distant?.language } : {}) } } : {}),
+        ...(available && candidate && work ? { nextUnread: { work, occurrence: candidate.record.occurrence, language: candidate.language } } : {}),
         shelf: state?.status && work ? { id: work, status: state.status } : null,
-        progress: read ? { composition: read.structure, occurrence: read.occurrence,
-          selectedRevision: read.selectedRevision, completed: read.completed, position: read.position } : null,
+        progress: saved ? { composition: saved.structure, occurrence: saved.occurrence,
+          selectedRevision: saved.selectedRevision, completed: saved.completed, position: saved.position } : null,
         spoiler: { policy: 'hide-unread', hidden } });
     }
-    const [fenced, stillAllowed] = await inOrder(status.fence(reader.agent),
-      canRead.call(session.deps.access, reader.principal, reader.agent));
-    if (fenced !== fence || !stillAllowed) throw new WorkReadMoved('Reader state changed');
+    const [shelvesNow, progressNow, allowed] = await Promise.all([status.batch(reader.agent, works),
+      status.progress(reader.principal, structures), frame ? true : canRead.call(session.deps.access, reader.principal, reader.agent)]);
+    if (!allowed || JSON.stringify(shelvesNow) !== JSON.stringify(shelves)
+      || JSON.stringify([...progressNow]) !== JSON.stringify([...progress])) throw new WorkReadMoved('Reader state changed');
     return result;
   }
 }

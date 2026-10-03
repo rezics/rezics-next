@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { controlRead, controlTransaction, ControlConflict, ControlInvalid, ControlStale } from '../access/topology-control.ts';
 import { followPrincipal } from '../follows/authority.ts';
@@ -11,6 +11,8 @@ import { activityTime, bestKey, FEED_RANKING, rankCandidates } from './ranking.t
 import type { FeedSource, FeedReference } from './source.ts';
 import type { ReviewEvent } from '../review/store.ts';
 import { reviewActivityId } from './source.ts';
+import { FeedReadFrame } from './frame.ts';
+import { FeedTargetIndex } from './target-index.ts';
 
 export interface FeedCheckpoint { data_epoch: string; sequence: string; after_id: string; revision: string;
   rebuild_epoch: string | null; rebuild_after: string; review_sequence: string }
@@ -21,6 +23,13 @@ const soloKinds: ReadonlySet<string> = new Set(['discussion', 'reply']);
 
 export class FeedStore {
   constructor(private readonly pool: Pool) {}
+
+  openFrame(epoch: string, reader?: { principal: VerifiedPrincipal; agent: string }) {
+    return FeedReadFrame.open(this.pool, epoch, reader);
+  }
+  projectTargets(session: import('../work/read-session.ts').WorkReadSession, relay: Pool, checkpoint: FeedCheckpoint, through: string) {
+    return new FeedTargetIndex(this.pool,relay).tick(session,checkpoint,through);
+  }
 
   async checkpoint(epoch: string): Promise<FeedCheckpoint> {
     return controlRead(this.pool, async client => {
@@ -148,17 +157,38 @@ export class FeedStore {
   }
 
   async page(position: ReadPosition, revision: string, sort: 'best' | 'new' | 'top', limit: number,
-    after: { key: string; id: string } | undefined, reader: { principal: VerifiedPrincipal; agent: string } | undefined,
-    window: NonNullable<FeedQuery['window']>, asOf: number, kinds?: readonly string[]) {
+    after: { key: string; id: string } | undefined, reader: { principal: VerifiedPrincipal; agent: string; scope?: string } | undefined,
+    window: NonNullable<FeedQuery['window']>, asOf: number, kinds?: readonly string[], frame?: FeedReadFrame) {
     if (!Number.isInteger(limit) || limit < 1 || limit > FEED_COST.pageSize) throw new ControlInvalid('Invalid feed page');
     if (kinds && (kinds.length < 1 || kinds.length > 8 || new Set(kinds).size !== kinds.length)) {
       throw new ControlInvalid('Invalid feed kinds');
     }
-    return controlRead(this.pool, async client => {
-      const checkpoint = (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
+    const read = async (client: Pick<PoolClient, 'query'>) => {
+      const checkpoint = frame?.checkpoint ?? (await client.query<FeedCheckpoint>('SELECT * FROM access.feed_checkpoint WHERE id FOR SHARE')).rows[0];
       if (checkpoint?.data_epoch !== position.dataEpoch || checkpoint.revision !== revision) throw new WorkReadMoved('Feed changed');
-      const owner = reader ? await followPrincipal(client, reader.principal, reader.agent) : null;
+      const owner = frame ? frame.owner : reader ? await followPrincipal(client as PoolClient, reader.principal, reader.agent) : null;
       const cutoff = window === 'all' ? new Date(0) : new Date(asOf - (window === 'week' ? 7 : 30) * 86_400_000);
+      if (sort === 'new' && reader?.scope === 'following' && frame) {
+        frame.requireFollowingIndex(position.sequence);
+        return (await client.query<FeedRow>(`WITH followed AS MATERIALIZED (
+          SELECT target FROM access.follow WHERE principal_id=$5 AND following),
+        keys AS MATERIALIZED (
+          SELECT target FROM followed UNION SELECT a.alias AS target FROM access.follow_space_alias a
+            JOIN followed f ON f.target=a.space UNION SELECT a.space FROM access.follow_space_alias a JOIN followed f ON f.target=a.alias),
+        candidates AS MATERIALIZED (
+          SELECT DISTINCT seek.id,seek.sort_time FROM keys CROSS JOIN LATERAL (
+            SELECT id,sort_time FROM access.feed_target WHERE data_epoch=$1 AND target=keys.target
+              AND sort_time>=$3 AND sort_time<=$4
+              ${after ? 'AND (sort_time,id)<($6::timestamptz,$7)' : ''}
+              ${kinds ? `AND kind=ANY($${after ? 8 : 6}::text[])` : ''}
+            ORDER BY sort_time DESC,id DESC LIMIT $2) seek)
+        SELECT item.*,item.sort_time::text AS order_key,COALESCE(v.value,0) AS vote,v.revision AS vote_revision
+        FROM (SELECT * FROM candidates ORDER BY sort_time DESC,id DESC LIMIT $2) candidate
+        JOIN access.feed_item item ON item.data_epoch=$1 AND item.id=candidate.id
+        LEFT JOIN access.feed_vote v ON v.target=item.id AND v.principal_id=$5
+        ORDER BY item.sort_time DESC,item.id DESC`,
+        [position.dataEpoch,limit+1,cutoff,new Date(asOf),owner,...(after ? [after.key,after.id] : []),...(kinds ? [kinds] : [])])).rows;
+      }
       // New has an unbounded history but a bounded index seek. Best declares
       // its recent candidate horizon and ranks only that bounded cohort.
       // A kind filter seeks that kind: filtering after the seek hid every
@@ -214,13 +244,15 @@ export class FeedStore {
         throw new WorkReadMoved('Feed ranking changed');
       }
       return ranked.slice(offset, offset + limit + 1);
-    });
+    };
+    return frame ? read(this.pool) : controlRead(this.pool, read);
   }
 
-  async members(epoch: string, ids: string[]): Promise<FeedRow[]> {
+  async members(epoch: string, ids: string[], frame?: FeedReadFrame): Promise<FeedRow[]> {
     if (ids.length > FEED_COST.candidates) throw new ControlInvalid('Feed member budget exceeded');
-    return controlRead(this.pool, async client => (await client.query<FeedRow>(
-      'SELECT * FROM access.feed_item WHERE data_epoch = $1 AND id = ANY($2::text[])', [epoch, ids])).rows);
+    const read = async (client: Pick<PoolClient,'query'>) => (await client.query<FeedRow>(
+      'SELECT * FROM access.feed_item WHERE data_epoch = $1 AND id = ANY($2::text[])', [epoch, ids])).rows;
+    return frame ? read(this.pool) : controlRead(this.pool, read);
   }
 
   /** Indexed head probe only; disclosure and follows are checked by the reader. */
