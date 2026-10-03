@@ -6,6 +6,7 @@ import { SuitabilityStore } from '../../../services/main/src/modules/suitability
 import type { Assessed } from '../../../services/main/src/modules/suitability/contract.ts';
 import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { WorkReaderStats } from '../../../services/main/src/modules/work/read-stats.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
@@ -15,7 +16,19 @@ import { relayContentProjectionOnce } from '../../../services/main/src/modules/c
 import { png } from './media-support.ts';
 
 test('G-897 H1: interactive reads return rated payload while public previews retain anonymous presentation', async () => {
-  const home = await startHomeStack('g897h1');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    // Own the projection inventory and start its relay at this fixture's cut,
+    // so earlier files' receipts never consume its preparation budget.
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack('g897h1', { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
   try {
     const seeded = await seedHome(home, 3), work = seeded.works[0]!;
     const suitability = new SuitabilityStore(home.stack.accessPool, home.stack.access);
@@ -240,5 +253,5 @@ test('G-897 H1: interactive reads return rated payload while public previews ret
     expect(cleared.assessment.predecessor).toBe(corrected.assessment.revision);
     expect(cleared.assessment.labels).toEqual([]);
     for (const read of requests(work.work, false)) expect((await read()).status).toBe(200);
-  } finally { await home.stop(); }
+  } finally { try { await home.stop(); } finally { await databases.close(); } }
 }, 180_000);

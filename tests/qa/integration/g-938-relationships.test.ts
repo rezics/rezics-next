@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startHomeStack } from './feed-read-support.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { automaticFollow } from '../../../services/main/src/modules/follows/store.ts';
 import { controlTransaction } from '../../../services/main/src/modules/access/topology-control.ts';
 import {
@@ -58,7 +59,19 @@ interface Receipt {
 }
 
 test('G-938 follows traverse twenty-item pages, atomic management preserves sources, and delivery rechecks levels', async () => {
-  const home = await startHomeStack('g-938-relationships');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    // Own the projection inventory and start its relay at this fixture's cut,
+    // so earlier files' receipts never consume its preparation budget.
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack('g-938-relationships', { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
   try {
     const { stack, call, json } = home;
     const author = await home.provision('Relationship author', home.author.token);
@@ -441,12 +454,24 @@ test('G-938 follows traverse twenty-item pages, atomic management preserves sour
     );
     expect(await notifications.enqueue(event)).toEqual([]);
   } finally {
-    await home.stop();
+    try { await home.stop(); } finally { await databases.close(); }
   }
 }, 300_000);
 
 test('G-938 server Join and Leave commit membership and the sourced Space follow together', async () => {
-  const home = await startHomeStack('g-938-join');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    // Own the projection inventory and start its relay at this fixture's cut,
+    // so earlier files' receipts never consume its preparation budget.
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack('g-938-join', { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
   try {
     const { stack, call, json } = home;
     const owner = await home.provision('Space owner', home.author.token);
@@ -698,6 +723,6 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
     expect(peoplePage.items).toHaveLength(20);
     expect(peoplePage.complete).toBe(true);
   } finally {
-    await home.stop();
+    try { await home.stop(); } finally { await databases.close(); }
   }
 }, 180_000);
