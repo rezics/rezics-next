@@ -217,12 +217,15 @@ test('G-409 a Concept page lists Works through its Condition bar within its seek
           ...continued ? ['10000', 'https://rezics.com/id/00000000-0000-4000-8000-000000010000'] : [], [rare], [never]]);
         const plan = explained.rows[0]['QUERY PLAN'][0].Plan;
         const planned = nodes(plan);
+        // Global membership can use the narrower partial index added for topic
+        // ranking; both indexes perform the same bounded per-Work probes.
+        const membershipIndexes = ['discovery_entry_pkey', 'discovery_topic_work'];
         expect(planned.some(node => node['Index Name'] === 'discovery_recent_seek')).toBe(true);
-        expect(planned.some(node => node['Index Name'] === 'discovery_entry_pkey')).toBe(true);
+        expect(planned.some(node => membershipIndexes.includes(String(node['Index Name'])))).toBe(true);
         expect(planned.some(node => ['Seq Scan', 'Sort', 'Hash'].includes(String(node['Node Type'])))).toBe(false);
         expect(Number(plan['Actual Rows'])).toBeLessThanOrEqual(DISCOVERY_CONDITION_COST.window);
         // Each drive row costs at most one probe per group and one for the exclusion.
-        const probes = planned.filter(node => node['Index Name'] === 'discovery_entry_pkey')
+        const probes = planned.filter(node => membershipIndexes.includes(String(node['Index Name'])))
           .reduce((sum, node) => sum + Number(node['Actual Loops'] ?? 0), 0);
         expect(probes).toBeLessThanOrEqual(2 * DISCOVERY_CONDITION_COST.window);
         console.log(`concept condition seek: ${JSON.stringify({ continued, rows: plan['Actual Rows'], probes,

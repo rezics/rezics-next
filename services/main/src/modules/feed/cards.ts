@@ -179,7 +179,7 @@ async function chapterCard(session: WorkReadSession, source: FeedSource, occurre
   if (links.length !== 1 || !links[0]?.structure || !source.contentTarget) throw new WorkReadMissing('Chapter placement unavailable');
   const header = await readCompositionHeader(session.deps.environment, links[0].structure.value);
   if (!header || header.profile !== 'book-composition' || header.work !== source.work) throw new WorkReadMissing('Chapter composition unavailable');
-  const page = await readCompositionPage(session.deps.environment, { structure: header.structure, occurrence,
+  const page = await readCompositionPage(session.deps.environment, { structure: header.structure, header, occurrence,
     limit: 1, canReadTarget: async target => target === source.contentTarget });
   const record = page.occurrences[0];
   if (page.revision !== header.head) throw new WorkReadMoved('Chapter composition changed');

@@ -12,7 +12,7 @@ import { acknowledgeContentDecision, cancelPlacement, placeReply,
 import { readableReplyRoot, replyRoot } from './root.ts';
 import { targetRead } from '../target/resolve.ts';
 import { WorkReadMissing } from '../work/read-session.ts';
-import { readRealmPolicy, reviewPolicy } from '../space/policy.ts';
+import { readRealmPolicy, reviewPolicy, type RealmPolicy } from '../space/policy.ts';
 import type { RealmPermit } from '../access/realm-management-policy.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
@@ -32,27 +32,27 @@ export function realmReplyDigest(value: unknown): string {
 type RealmReadAuthority = Partial<Pick<AccessAdmissionRegistry, 'realmReadProof' | 'canReadWork'
   | 'canReadSemanticResource' | 'realmHistoryFloor'>>;
 
-async function realmReplyReadProof(access: RealmReadAuthority, env: WorkActivationEnvironment,
-  realm: string, principal?: VerifiedPrincipal, actor?: string): Promise<string | null> {
+async function realmReplyReadState(access: RealmReadAuthority, env: WorkActivationEnvironment,
+  realm: string, principal?: VerifiedPrincipal, actor?: string) {
   const policy = await readRealmPolicy(env, realm);
   if (!policy) return null;
   const member = policy.visibility === 'private'
     ? principal && actor ? await access.realmReadProof?.(principal, actor, realm) : null : 'public';
-  return member ? JSON.stringify([policy, member]) : null;
+  return member ? { policy, proof: JSON.stringify([policy, member]) } : null;
 }
 
-/** The same exact placement, Content review and two-sided Realm fence serve direct reads and notifications. */
-export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'origin' | 'currentReview'>,
+async function realmReplyReadProof(access: RealmReadAuthority, env: WorkActivationEnvironment,
+  realm: string, principal?: VerifiedPrincipal, actor?: string): Promise<string | null> {
+  return (await realmReplyReadState(access, env, realm, principal, actor))?.proof ?? null;
+}
+
+/** The caller fences the shared Realm policy around these exact owner reads. */
+async function readVisiblePlacement(content: Pick<RealmReplyContentStore, 'currentReview'>,
   access: RealmReadAuthority, env: WorkActivationEnvironment, realm: string, reply: string,
-  principal?: VerifiedPrincipal, actor?: string) {
-  const before = await realmReplyReadProof(access, env, realm, principal, actor);
-  if (!before) return null;
-  const origin = await content.origin(reply);
-  if (origin?.realm && origin.realm !== realm) return null;
+  policy: RealmPolicy, principal?: VerifiedPrincipal, actor?: string) {
   const placement = await readPlacementHead(env, realm, reply);
   if (!placement) return null;
-  const policy = await readRealmPolicy(env, realm);
-  if (policy?.visibility === 'private' && policy.history === 'from-admission') {
+  if (policy.visibility === 'private' && policy.history === 'from-admission') {
     if (!principal || !actor || !access.realmHistoryFloor) throw new RealmReplyUnavailable('Realm history admission is unavailable');
     const floor = await access.realmHistoryFloor(principal, actor, realm);
     if (floor) {
@@ -63,7 +63,18 @@ export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'o
   }
   if (!await content.currentReview(realm, reply, placement.revisionId,
     placement.reviewDecisionId, placement.preparationId)) return null;
-  return await realmReplyReadProof(access, env, realm, principal, actor) === before ? placement : null;
+  return placement;
+}
+
+/** The same exact placement, Content review and two-sided Realm fence serve direct reads and notifications. */
+export async function visibleRealmReply(content: Pick<RealmReplyContentStore, 'currentReview'>,
+  access: RealmReadAuthority, env: WorkActivationEnvironment, realm: string, reply: string,
+  principal?: VerifiedPrincipal, actor?: string) {
+  const before = await realmReplyReadState(access, env, realm, principal, actor);
+  if (!before) return null;
+  const placement = await readVisiblePlacement(content, access, env, realm, reply, before.policy, principal, actor);
+  if (!placement) return null;
+  return await realmReplyReadProof(access, env, realm, principal, actor) === before.proof ? placement : null;
 }
 
 /** Content owns identities and exact review; Jena owns Realm-local placement. */
@@ -293,7 +304,7 @@ export class RealmReplyStore {
   }
 
   async rootCount(realm: string, rootTarget: string, principal?: VerifiedPrincipal, actor?: string) {
-    const before = await realmReplyReadProof(this.access, this.env, realm, principal, actor);
+    const before = await realmReplyReadState(this.access, this.env, realm, principal, actor);
     if (!before) throw new RealmReplyDenied('Realm is unavailable');
     const page = await readRootPlacementHeads(this.env, realm, rootTarget);
     let count = 0;
@@ -302,9 +313,12 @@ export class RealmReplyStore {
       work: rootTarget, context: realm })), disclosureViewer(principal ?? null), 'count');
     for (const [index, placement] of page.heads.entries()) {
       if (decisions[index] !== 'visible') continue;
-      if (await this.visible(realm, placement.reply, principal, actor)) count++;
+      // One two-sided Realm fence covers this count's bounded inventory; each
+      // placement and exact Content review still gets its own live check.
+      if (await readVisiblePlacement(this.content, this.access, this.env, realm, placement.reply,
+        before.policy, principal, actor)) count++;
     }
-    if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before) throw new RealmReplyDenied('Realm is unavailable');
+    if (await realmReplyReadProof(this.access, this.env, realm, principal, actor) !== before.proof) throw new RealmReplyDenied('Realm is unavailable');
     return { realm, rootTarget, count, complete: page.complete };
   }
 }
