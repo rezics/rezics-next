@@ -12,7 +12,7 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 
 export interface SpaceIdentity {
   space: string;
-  realm: string;
+  realm: string | null;
   aliases: string[];
   nameKey?: string;
 }
@@ -23,24 +23,26 @@ export async function followSpace(
 ): Promise<SpaceIdentity | null> {
   const rows = await session.query(
     `SELECT DISTINCT ?space ?realm ?zone WHERE { GRAPH ${iri(GRAPHS.current)} {
-    { BIND(${iri(target)} AS ?space) ?space a rv:Space ; rv:realmCapability ?realm }
+    { BIND(${iri(target)} AS ?space) ?space a rv:Space }
     UNION { BIND(${iri(target)} AS ?realm) ?realm a rv:Realm ; rv:space ?space . ?space rv:realmCapability ?realm }
-    UNION { BIND(${iri(target)} AS ?zone) ?space rv:zoneCapability ?zone ; rv:realmCapability ?realm }
-    ?space a rv:Space . ?realm a rv:Realm ; rv:space ?space . OPTIONAL { ?space rv:zoneCapability ?zone }
+    UNION { BIND(${iri(target)} AS ?zone) ?space rv:zoneCapability ?zone . ?zone a rv:Zone ; rv:space ?space }
+    ?space a rv:Space . OPTIONAL { ?space rv:realmCapability ?realm . ?realm a rv:Realm ; rv:space ?space }
+    OPTIONAL { ?space rv:zoneCapability ?zone . ?zone a rv:Zone ; rv:space ?space }
+    FILTER(BOUND(?realm) || BOUND(?zone))
   } } LIMIT 3`,
     2,
   );
   if (!rows.length) return null;
-  if (rows.length !== 1 || !rows[0]?.space || !rows[0].realm)
+  if (rows.length !== 1 || !rows[0]?.space || !rows[0].realm && !rows[0].zone)
     throw new WorkReadUnavailable('Space identity is ambiguous');
   const row = rows[0];
   const names = await session.query(`SELECT (MIN(STR(?label)) AS ?name) WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(row.space!.value)} <http://www.w3.org/2000/01/rdf-schema#label> ?label } }`,1);
   return {
     space: row.space!.value,
-    realm: row.realm!.value,
+    realm: row.realm?.value ?? null,
     nameKey: names[0]?.name?.value.normalize('NFKC').toLowerCase(),
-    aliases: [row.space!.value, row.realm!.value, ...(row.zone ? [row.zone.value] : [])],
+    aliases: [row.space!.value, ...(row.realm ? [row.realm.value] : []), ...(row.zone ? [row.zone.value] : [])],
   };
 }
 export async function registerFollowSpace(client: PoolClient, identity: SpaceIdentity) {

@@ -858,6 +858,10 @@ export const SpaceRealmV3RealmShapeSchema = Type.Object({ "@id": Type.String({ m
 
 export type SpaceRealmV3RealmShape = Static<typeof SpaceRealmV3RealmShapeSchema>;
 
+export const SpaceZoneV1SpaceShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Space") }), "rv:definitionProfile": Type.Array(Type.Literal("https://rezics.com/definition/space-zone-v1"), { maxItems: 1, minItems: 1 }), "rv:owner": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:head": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:zoneCapability": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:disclosure": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/Public"), Type.Literal("https://rezics.com/vocab/Private")]), { minItems: 1, maxItems: 1 }), "rv:listing": Type.Array(Type.Union([Type.Literal("listed"), Type.Literal("unlisted")]), { minItems: 1, maxItems: 1 }), "rdfs:label": Type.Array(Type.Object({ "@value": Type.String({"minLength":1,"maxLength":120}), "@language": Type.String({ pattern: "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }) }, { additionalProperties: false }), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type SpaceZoneV1SpaceShape = Static<typeof SpaceZoneV1SpaceShapeSchema>;
+
 export const StatementCutoverV1CutoverShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/StatementCutover"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:recordedBy": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/statement-cutover-v1"), { maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/statement-cutover-v1"), { maxItems: 1, minItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type StatementCutoverV1CutoverShape = Static<typeof StatementCutoverV1CutoverShapeSchema>;
@@ -1405,6 +1409,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/space-realm-v2/realm-shape": SpaceRealmV2RealmShapeSchema,
   "https://rezics.com/definition/space-realm-v3/space-shape": SpaceRealmV3SpaceShapeSchema,
   "https://rezics.com/definition/space-realm-v3/realm-shape": SpaceRealmV3RealmShapeSchema,
+  "https://rezics.com/definition/space-zone-v1/space-shape": SpaceZoneV1SpaceShapeSchema,
   "https://rezics.com/definition/statement-cutover-v1/cutover-shape": StatementCutoverV1CutoverShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/slot-shape": StatementDecisionV1SlotShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/decision-shape": StatementDecisionV1DecisionShapeSchema,

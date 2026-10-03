@@ -14,6 +14,8 @@ import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import type { HomeExclusion } from './personal.ts';
 import { contentLanguageVisible } from './read.ts';
+import { readZoneVisibility } from '../zone/route-visibility.ts';
+import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 
 export const trendingQuery = t.Object({ scope: t.Optional(t.String({ maxLength: 100 })),
   kind: t.Optional(t.Union([t.Literal('work'), t.Literal('contribution'), t.Literal('adoption')])),
@@ -61,7 +63,8 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
     if (scope.startsWith('zone:')) {
       try {
         const zone = await readZonePublication(session.deps.environment, scope.slice(5));
-        if (zone.disclosure !== 'public' || !zone.realm) throw new WorkReadMissing('Zone is unavailable');
+        await readZoneVisibility(session, zone.zone);
+        if (!zone.realm) throw new WorkReadMissing('Zone is unavailable');
         realm = zone.realm;
       } catch (error) {
         if (error instanceof ZoneUnavailable) throw new WorkReadMissing('Zone is unavailable');
@@ -85,8 +88,10 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
     const window = query.window ?? 'week';
     const items: TrendingResult['items'] = [];
     if (personal?.preferences.recommendations !== false) {
-      const publicSession = new WorkReadSession(session.deps, new Request(session.request.url),
-        { limit: TRENDING_COST.candidatePool, languages: session.displayLanguages.join(',') }, session.position);
+      const publicSession = new WorkReadSession(session.deps, session.request,
+        { limit: TRENDING_COST.candidatePool, languages: session.displayLanguages.join(','),
+          actingSubject: session.options.actingSubject }, session.position);
+      publicSession.principal = session.principal;
       let ranked: Awaited<ReturnType<typeof readRankings>>;
       try { ranked = await readRankings(publicSession, this.projection, {
         realm, metric: 'reads', interval: window, order: 'growth' }); }
@@ -95,15 +100,18 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
         throw error;
       }
       const ids = ranked.items.map(item => item.id);
+      const history = realm ? await realmHistoryOriginFilter(session, realm, 'selection', '?work') : '';
       const rows = ids.length ? await session.query(`SELECT DISTINCT ?work ?realm ?actor ?language ?zone WHERE {
         VALUES ?work { ${ids.map(iri).join(' ')} }
         GRAPH ${iri(GRAPHS.current)} {
           ?slot a rv:RealmPublicationSlot ; rv:work ?work ; rv:realm ?realm ;
             rv:mainVersion ?main ; rv:selectionHead ?selection .
           ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
-          ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+          ?space a rv:Space ; rv:realmCapability ?realm .
+          ${realm ? '' : '?space rv:disclosure rv:Public .'}
           ?contribution rv:publicationHead ?decision ; rv:author ?actor .
-          FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+          ${realm ? '' : 'FILTER NOT EXISTS { ?space rv:disclosure rv:Private }'}
+          ${realm ? '' : 'FILTER NOT EXISTS { ?space rv:listing ?listing FILTER(?listing != "listed") }'}
           FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
           OPTIONAL { ?zone a rv:Zone ; rv:zoneState rv:Active ; rv:disclosure rv:Public ;
               rv:defaultRealm ?realm ; rv:space ?space .
@@ -120,6 +128,7 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
           FILTER NOT EXISTS { ?draft a rv:ErasedRevision }
         }
         ${publicWork('?work', '?main')}
+        ${history}
         ${realm ? `FILTER(?realm = ${iri(realm)})` : ''}
       } ORDER BY STR(?work) STR(?realm) STR(?zone) LIMIT ${TRENDING_COST.realmRelations + 1}`,
       TRENDING_COST.realmRelations + 1) : [];
@@ -162,6 +171,7 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
       }
     }
     if (realm) await readRealmBasis(session, realm);
+    if (scope.startsWith('zone:')) await readZoneVisibility(session, scope.slice(5));
     const end = await this.projection.current();
     if (end.generation !== checkpoint.generation || end.contentSequence !== checkpoint.contentSequence
       || principal && agent && personal && (await session.deps.homePersonal!.read(principal, agent)).revision !== personal.revision

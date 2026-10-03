@@ -1,5 +1,3 @@
-import { resourceHref, spaceHref } from '../../address/path.ts';
-import { localizedPath } from '../../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import {
@@ -12,6 +10,7 @@ import {
   memoryInvitations,
   NOW,
   reviews,
+  newWorks,
   roleTaken,
   streamId,
 } from './fixtures.ts';
@@ -61,17 +60,14 @@ export const Latest: Story = {
       canvas.getByRole('link', {
         name: 'Your submission “Middlemarch: A Study of Provincial Life” was accepted',
       }),
-    ).toHaveAttribute(
-      'href',
-      localizedPath(resourceHref('/w/', '00000703-5555-4a6f-8c2d-3e7b5c1a9f40'), 'en'),
-    );
+    ).toHaveAttribute('href', `/en/w/${'00000703-5555-4a6f-8c2d-3e7b5c1a9f40'}`);
     await expect(canvas.getByText('Moderators reached a decision on a report')).toBeVisible();
     // A role change says where and which role, and opens the Realm by its Zone's address.
     await expect(
       canvas.getByRole('link', {
         name: 'You now have the Community moderators role in Fiction · 小说',
       }),
-    ).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community'), 'en'));
+    ).toHaveAttribute('href', '/en/r/fiction');
     await expect(rows[0]).toHaveTextContent('in Fiction · 小说');
     await expect(canvas.getByText('Aria Wang 王雅 followed you')).toBeVisible();
     await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
@@ -116,10 +112,7 @@ export const Reviews: Story = {
       canvas.getByRole('link', { name: 'Aria Wang 王雅 reviewed “雨夜书店”' }),
     ).toHaveAttribute(
       'href',
-      localizedPath(
-        `${resourceHref('/w/', '00000801-5555-4a6f-8c2d-3e7b5c1a9f40')}#review-00000111-5555-4a6f-8c2d-3e7b5c1a9f40`,
-        'en',
-      ),
+      '/en/w/00000801-5555-4a6f-8c2d-3e7b5c1a9f40#review-00000111-5555-4a6f-8c2d-3e7b5c1a9f40',
     );
     await expect(
       canvas.getByText('Quiet, rainy and exactly as sad as it should be.'),
@@ -154,7 +147,7 @@ export const InvitationNotification: Story = {
     const canvas = within(canvasElement);
     await expect(
       canvas.getByRole('link', { name: 'Daniel Chen invited you to join Fiction · 小说' }),
-    ).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community'), 'en'));
+    ).toHaveAttribute('href', '/en/r/fiction');
     await expect(canvas.getByText('Unread')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Join' }));
     await expect(await canvas.findByRole('status')).toHaveTextContent('You joined Fiction · 小说.');
@@ -170,7 +163,7 @@ export const RoleTaken: Story = {
       within(canvasElement).getByRole('link', {
         name: 'You no longer have the Community moderators role in Fiction · 小说',
       }),
-    ).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community'), 'en'));
+    ).toHaveAttribute('href', '/en/r/fiction');
   },
 };
 
@@ -192,7 +185,7 @@ export const Invitation: Story = {
     const region = canvas.getByRole('region', { name: 'Invitations' });
     await expect(
       within(region).getByRole('link', { name: 'Daniel Chen invited you to join Fiction · 小说' }),
-    ).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community'), 'en'));
+    ).toHaveAttribute('href', '/en/r/fiction');
     await userEvent.click(
       within(region).getByRole('checkbox', { name: 'Show me on its public member list' }),
     );
@@ -428,3 +421,26 @@ export const TriageErrorDark: Story = {
 };
 
 export const FailedDark: Story = { ...Failed, globals: { theme: 'dark' } };
+
+/** Followed topics and named saved views lead to the Work's current canonical address. */
+export const NewWorks: Story = {
+  args: {
+    initial: inboxWindow(newWorks, '0', '123'),
+    now: NOW,
+    avatarQuery: '',
+    main: memoryInbox(newWorks).main,
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'New in Fantasy: 雨夜书店' })).toHaveAttribute(
+      'href',
+      '/en/w/rainy-bookshop',
+    );
+    await expect(
+      canvas.getByRole('link', { name: 'New in English novels without spoilers: Middlemarch' }),
+    ).toHaveAttribute('href', '/en/w/middlemarch');
+    await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
+  },
+};
+export const NewWorksPhone: Story = { ...NewWorks, globals: { viewport: { value: 'mobile' } } };
+export const NewWorksDark: Story = { ...NewWorks, globals: { theme: 'dark' } };

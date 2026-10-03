@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { ResourceSummary } from '../media/summary.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
@@ -58,3 +59,33 @@ export async function notificationRoleName(access: Pool, realm: string, member: 
     ORDER BY r.id LIMIT 2`, [realm, member])).rows;
   return rows.length === 1 ? rows[0]!.name : null;
 }
+
+/** A current saved-view match is private to its recipient. Its optional Concept
+ * name and the Work name come from the same public, disclosure-aware summary read. */
+export async function notificationNewWorkDisplay(access: Pool, input: {
+  principalId: string; owner: string; ref: string; work: string;
+}, summaries: (resources: string[]) => Promise<ResourceSummary[]>) {
+  if (!native.test(input.work)) return null;
+  type View = { name: string | null; concept: string | null; revision: string };
+  const readView = async () => (await access.query<View>(`SELECT name, concept, revision::text
+    FROM access.saved_filter WHERE id = $1 AND principal_id = $2`, [input.ref, input.principalId])).rows[0];
+  const view = input.owner === 'access' ? await readView() : null;
+  if (input.owner === 'access' && !view) return null;
+  const resources = [input.work, ...(view?.concept ? [view.concept] : [])];
+  const current = await summaries(resources);
+  const work = current.find(item => item.reference === input.work);
+  const concept = view?.concept ? current.find(item => item.reference === view.concept) : null;
+  if (work?.status !== 'available' || work.type !== 'work' || work.disclosure !== 'public'
+    || view?.concept && (concept?.status !== 'available' || concept.type !== 'concept'
+      || concept.disclosure !== 'public')) return null;
+  if (view) {
+    const after = await readView();
+    if (!after || after.revision !== view.revision || after.name !== view.name || after.concept !== view.concept) return null;
+  }
+  return { title: work.name.value, language: work.name.language,
+    topicName: view?.name ?? (concept?.status === 'available' ? concept.name.value : null),
+    href: `${work.address.prefix}${encodeURIComponent(work.address.key)}`, linkTarget: work.reference };
+}
+
+/** Per notice: two exact recipient/view reads and one summary batch of at most two identities. */
+export const NOTIFICATION_NEW_WORK_DISPLAY_COST = { accessStatements: 2, summaryItems: 2 } as const;

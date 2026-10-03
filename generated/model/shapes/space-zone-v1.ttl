@@ -1,0 +1,16 @@
+# A Space with one Zone capability and no required Realm. Creation includes its navigation.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/space-zone-v1/space-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Space ] ;
+    sh:property [ sh:path rv:definitionProfile ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/space-zone-v1> ] ;
+    sh:property [ sh:path rv:owner ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:zoneCapability ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Zone ] ;
+    sh:property [ sh:path rv:disclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] ;
+    sh:property [ sh:path rv:listing ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "listed" "unlisted" ) ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:minLength 1 ; sh:maxLength 120 ] .

@@ -17,6 +17,8 @@ const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const epoch = /^(0|[1-9][0-9]*)$/;
 const consentId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MAX_DEPENDENT_AUTHORITY = 256;
+export const MEMBERSHIP_LEAVE_COST = { controllerLookups: 1,
+  dependentAuthorityRows: MAX_DEPENDENT_AUTHORITY, lockTimeoutMs: 2000, statementTimeoutMs: 5000 } as const;
 export const REPRESENTED_ORG_MANAGER_SQL = `SELECT r.id FROM access.principal p
       JOIN access.representation r ON r.principal_id = p.id
       JOIN access.representation_request q ON q.id = r.request_id
@@ -102,6 +104,9 @@ export interface MembershipChange {
   requestDigest: string;
   represented?: RepresentedMembershipProof;
   selected?: SelectedOrgMemberSetProof;
+  /** A membership-consent OAuth bearer may withdraw itself but cannot use
+   * management authority even when the principal also has that authority. */
+  selfLeaveOnly?: boolean;
 }
 
 export interface SelectedOrgMemberSetProof {
@@ -147,7 +152,8 @@ export interface MembershipResult {
 }
 
 type Policy = { revision: string; terms_revision: string; open: boolean };
-type Member = { id: string; state: 'joined' | 'left'; generation: string };
+type Member = { id: string; state: 'joined' | 'left'; generation: string;
+  policy_revision: string; terms_revision: string | null; consent_reference: string | null };
 
 /** One owner transaction serializes a membership episode with dependent grants.
  * Org roster and Realm participation use distinct management actions/policies. */
@@ -233,6 +239,18 @@ export class AccessMemberships {
     return row.rows[0].id;
   }
 
+  /** Withdrawal uses the member's live controller mandate, never a Realm grant
+   * or a consent/representation mandate for somebody else's Agent. */
+  private async controlsMember(client: PoolClient, principalId: string,
+    memberSubject: string): Promise<boolean> {
+    const row = await client.query(`SELECT r.id FROM access.representation r
+      JOIN access.authority_subject s ON s.id = r.subject_id
+      WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = 'agent.control'
+        AND r.active AND r.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
+      ORDER BY r.id LIMIT 1 FOR SHARE OF r, s`, [principalId, memberSubject]);
+    return !!row.rows[0];
+  }
+
   private async representedManager(client: PoolClient, input: MembershipChange,
     principalId: string): Promise<void> {
     const proof = input.represented!;
@@ -262,6 +280,8 @@ export class AccessMemberships {
       || !input.idempotencyKey || input.idempotencyKey.length > 128
       || input.idempotencyKey.includes('\0') || !/^[0-9a-f]{64}$/.test(input.requestDigest)
       || input.represented && input.selected
+      || input.selfLeaveOnly && (input.kind !== 'realm' || input.action !== 'leave'
+        || input.represented || input.selected)
       || input.represented && (input.kind !== 'org' || !agent.test(input.represented.actingSubject)
         || !consentId.test(input.represented.representationId)
         || !consentId.test(input.represented.grantId)
@@ -295,6 +315,10 @@ export class AccessMemberships {
       [input.principal.issuer, input.principal.subject]);
       if (!principal.rows[0]) throw new MembershipDenied('principal unavailable');
       const principalId = principal.rows[0].id;
+      const selfLeave = input.kind === 'realm' && input.action === 'leave'
+        && !input.represented && !input.selected
+        && await this.controlsMember(client, principalId, input.memberSubject);
+      if (input.selfLeaveOnly && !selfLeave) throw new MembershipDenied('member controller authority missing');
       const prior = await client.query<{ request_digest: string; membership_id: string;
         result_generation: string; result_authority_epoch: string; action: MembershipAction;
         acting_subject: string | null; representation_id: string | null;
@@ -348,7 +372,7 @@ export class AccessMemberships {
         }
         if (input.represented) await this.representedManager(client, input, principalId);
         else await this.selectedManager(client, input, principalId);
-      } else {
+      } else if (!selfLeave) {
         await this.manager(client, input.principal, input.kind, input.ownerSubject);
       }
       if (followSpace) await registerFollowSpace(client,followSpace);
@@ -356,7 +380,7 @@ export class AccessMemberships {
         FROM access.membership_policy WHERE kind = $1 AND owner_subject = $2 FOR SHARE`,
       [input.kind, input.ownerSubject]);
       if (!policy.rows[0]) throw new MembershipDenied('admission policy missing');
-      if (policy.rows[0].revision !== input.expectedPolicyRevision) {
+      if (!selfLeave && policy.rows[0].revision !== input.expectedPolicyRevision) {
         throw new MembershipStale('policy revision changed');
       }
       if (input.action === 'join' && (!policy.rows[0].open
@@ -366,13 +390,31 @@ export class AccessMemberships {
       const member = await client.query(`SELECT id FROM access.authority_subject
         WHERE id = $1 AND kind = 'agent' AND active FOR SHARE`, [input.memberSubject]);
       if (!member.rows[0]) throw new MembershipDenied('member Agent unavailable');
-      const existing = await client.query<Member>(`SELECT id, state, generation
+      const existing = await client.query<Member>(`SELECT id, state, generation,
+          policy_revision, terms_revision, consent_reference
         FROM access.membership WHERE kind = $1 AND owner_subject = $2
           AND member_subject = $3 FOR UPDATE`,
       [input.kind, input.ownerSubject, input.memberSubject]);
       const priorGeneration = existing.rows[0]?.generation ?? '0';
       if (priorGeneration !== input.expectedGeneration) {
         throw new MembershipStale('admission generation changed');
+      }
+      // A second withdrawal cannot end a later episode or create another history
+      // row. Bind its new retry key to the already-ended episode instead.
+      if (selfLeave && existing.rows[0]?.state === 'left') {
+        const saved = existing.rows[0];
+        await client.query(`INSERT INTO access.membership_change_receipt
+          (principal_id, idempotency_key, request_digest, membership_id,
+            result_generation, result_authority_epoch, action)
+          VALUES ($1,$2,$3,$4,$5,$6,'leave')`,
+        [principalId, input.idempotencyKey, input.requestDigest, saved.id,
+          saved.generation, currentEpoch]);
+        await client.query('COMMIT');
+        return { membershipId: saved.id, kind: input.kind, ownerSubject: input.ownerSubject,
+          memberSubject: input.memberSubject, action: 'leave', state: 'left',
+          generation: saved.generation, policyRevision: saved.policy_revision,
+          termsRevision: saved.terms_revision, consentReference: saved.consent_reference,
+          authorityEpoch: currentEpoch, replayed: false };
       }
       if (input.action === 'join' && existing.rows[0]?.state === 'joined'
         || input.action === 'leave' && existing.rows[0]?.state !== 'joined') {
@@ -389,12 +431,13 @@ export class AccessMemberships {
       }
       const membershipId = existing.rows[0]?.id ?? randomUUID();
       const generation = (BigInt(priorGeneration) + 1n).toString();
+      const policyRevision = selfLeave ? policy.rows[0].revision : input.expectedPolicyRevision;
       if (existing.rows[0]) {
         await client.query(`UPDATE access.membership SET state = $2,
           generation = $3, policy_revision = $4, terms_revision = $5,
           consent_reference = $6, changed_at = now() WHERE id = $1`,
         [membershipId, input.action === 'join' ? 'joined' : 'left', generation,
-          input.expectedPolicyRevision, input.action === 'join' ? input.termsRevision : null,
+          policyRevision, input.action === 'join' ? input.termsRevision : null,
           input.action === 'join' ? input.consentReference : null]);
       } else {
         await client.query(`INSERT INTO access.membership
@@ -444,7 +487,7 @@ export class AccessMemberships {
           selected_membership_generation)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [membershipId, generation, input.action === 'join' ? 'joined' : 'left',
-        input.expectedPolicyRevision, input.action === 'join' ? input.termsRevision : null,
+        policyRevision, input.action === 'join' ? input.termsRevision : null,
         input.action === 'join' ? input.consentReference : null, principalId,
         input.represented?.actingSubject ?? null, input.represented?.representationId ?? null,
         input.represented?.expectedRepresentationGeneration ?? null,
@@ -478,7 +521,7 @@ export class AccessMemberships {
       return { membershipId, kind: input.kind, ownerSubject: input.ownerSubject,
         memberSubject: input.memberSubject, action: input.action,
         state: input.action === 'join' ? 'joined' : 'left', generation,
-        policyRevision: input.expectedPolicyRevision,
+        policyRevision,
         termsRevision: input.action === 'join' ? input.termsRevision! : null,
         consentReference: input.action === 'join' ? input.consentReference! : null,
         authorityEpoch, replayed: false,

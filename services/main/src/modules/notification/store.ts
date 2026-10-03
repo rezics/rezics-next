@@ -4,6 +4,10 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { deliveryChannels, notificationKinds, notificationPurposes, optionalPurposes,
   preferenceChannels } from './schema.ts';
 import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.ts';
+import { notificationNewWorkDisplay } from './display.ts';
+import { disclosurePoolReader } from '../disclosure/read.ts';
+import { readResourceSummaries } from '../media/summary.ts';
+import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { discloseNotifications } from '../disclosure/notifications.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { notificationRecipientAllowed } from './recipient-policy.ts';
@@ -109,15 +113,16 @@ export const SETTINGS_NOTIFICATION_TOPICS = [
   { purpose: 'social', topic: 'mention' },
   { purpose: 'social', topic: 'post-vote' },
   { purpose: 'subscription', topic: 'followed-chapter' },
+  { purpose: 'subscription', topic: 'new-work' },
   { purpose: 'social', topic: 'review-helpful' },
   { purpose: 'social', topic: 'review' },
   ...REVIEW_NOTIFICATION_TOPICS.map((topic) => ({ purpose: 'governance' as const, topic })),
 ] as const;
 /** One recovery check, one principal read and one indexed preference read for optional topics. */
-export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: 72,
-  responseItems: SETTINGS_NOTIFICATION_TOPICS.length * 2 } as const;
+export const NOTIFICATION_SETTINGS_COST = { readStatements: 3, maxRows: SETTINGS_NOTIFICATION_TOPICS.length * 3 * 3,
+  responseItems: SETTINGS_NOTIFICATION_TOPICS.length * 3 } as const;
 export interface SettingsPreference { purpose: OptionalPurpose; topic: string;
-  channel: 'inbox' | 'email'; state: 'enabled' | 'disabled'; revision: string | null }
+  channel: 'inbox' | 'push' | 'email'; state: 'enabled' | 'disabled'; revision: string | null }
 
 export interface StreamItem {
   id: string; sequence: string; purpose: string; topic: string; state: 'active' | 'withdrawn' | 'erased';
@@ -130,16 +135,19 @@ export interface StreamItem {
   deliveries: { id: string; channel: string }[];
   /** Present only for active items; withdrawn or erased items keep their sequence as a tombstone. */
   subject: { owner: string; ref: string; revision: string | null } | null;
-  display: (Omit<NotificationDisplayContext, 'actorAgent'> & { actor: NotificationAgentSummary | null;
+  display: (Omit<NotificationDisplayContext, 'actorAgent' | 'kind'> & {
+    /** New-Work context is derived at read time; no new persisted display kind. */
+    kind: NotificationKind | 'new_work'; actor: NotificationAgentSummary | null;
     realmName: string | null; realmRouteSegment: string | null; roleName: string | null;
     roleChange: 'given' | 'taken' | null;
     target: { title: string | null; excerpt: string | null;
-    language: string | null; linkTarget: string | null; reviewId: string | null } }) | null;
+    language: string | null; linkTarget: string | null; reviewId: string | null;
+    topicName?: string | null; href?: string | null } }) | null;
   createdAt: string;
 }
 export interface StreamPage {
   generation: string; head: string; reset: boolean; readThrough: string;
-  items: StreamItem[]; groups: { kind: NotificationKind; key: string; itemIds: string[] }[];
+  items: StreamItem[]; groups: { kind: NonNullable<StreamItem['display']>['kind']; key: string; itemIds: string[] }[];
   next: string | null;
 }
 
@@ -457,13 +465,13 @@ export class NotificationStore {
     return this.transaction(async client => {
       const principalId = await this.reader(client, principal);
       const rows = principalId ? (await client.query<{ purpose: OptionalPurpose; topic: string;
-        channel: 'inbox' | 'email'; state: 'enabled' | 'disabled'; revision: string }>(
+        channel: 'inbox' | 'push' | 'email'; state: 'enabled' | 'disabled'; revision: string }>(
         `SELECT purpose, topic, channel, state, revision::text FROM access.notification_preference
-         WHERE principal_id = $1 AND channel IN ('inbox', 'email')
+         WHERE principal_id = $1 AND channel IN ('inbox', 'push', 'email')
            AND topic = ANY($2::text[])`,
         [principalId, SETTINGS_NOTIFICATION_TOPICS.map(item => item.topic)])).rows : [];
       const known = new Map(rows.map(row => [`${row.purpose}:${row.topic}:${row.channel}`, row]));
-      return SETTINGS_NOTIFICATION_TOPICS.flatMap(item => (['inbox', 'email'] as const).map(channel => {
+      return SETTINGS_NOTIFICATION_TOPICS.flatMap(item => (['inbox', 'push', 'email'] as const).map(channel => {
         const saved = known.get(`${item.purpose}:${item.topic}:${channel}`);
         return { ...item, channel, state: saved?.state ?? (channel === 'email' ? 'disabled' : 'enabled'),
           revision: saved?.revision ?? null };
@@ -663,6 +671,22 @@ export class NotificationStore {
       resolutions.push(resolved);
       if (resolved.status !== 'available') { items.push(base); continue; }
       const fields = resolved.subject.fields;
+      const environment = raw.topic === 'new-work' ? disclosurePoolReader(this.pool)?.environment : undefined;
+      const newWork = environment && fields.linkTarget ? await notificationNewWorkDisplay(this.pool, {
+        principalId, owner: raw.subject_owner, ref: raw.subject_ref, work: fields.linkTarget,
+      }, async resources => (await readResourceSummaries(environment, undefined, { viewer: disclosureViewer(principal) }, {
+        resources, context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'inbox',
+      })).summaries).catch(() => { throw new NotificationUnavailable('notification display owner is unavailable'); }) : null;
+      if (newWork) {
+        const current = await resolver.resolve({ principalId, owner: raw.subject_owner,
+          ref: raw.subject_ref, revision: raw.subject_revision, disclosureBasis: raw.disclosure_basis,
+          realm: raw.realm, recipientReason: raw.reason, topic: raw.topic })
+          .catch(() => { throw new NotificationUnavailable('subject owner is unavailable'); });
+        if (current.status !== 'available' || current.subject.fields.linkTarget !== fields.linkTarget) {
+          resolutions[resolutions.length - 1] = { status: 'undisclosed' };
+          items.push(base); continue;
+        }
+      }
       const actor = raw.actor_agent && this.readAgent
         ? await this.readAgent(raw.actor_agent).catch(() => {
           throw new NotificationUnavailable('Agent owner is unavailable');
@@ -671,7 +695,7 @@ export class NotificationStore {
         reason: raw.reason,
         proposal: raw.proposal ? { id: raw.proposal, revision: raw.proposal_revision! } : null,
         subject: { owner: raw.subject_owner, ref: raw.subject_ref, revision: raw.subject_revision },
-        display: raw.kind ? { kind: raw.kind, actor, realm: fields.realm ?? null,
+        display: raw.kind || newWork ? { kind: newWork ? 'new_work' : raw.kind!, actor, realm: fields.realm ?? null,
           realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
           roleName: fields.roleName ?? null,
           roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
@@ -679,6 +703,7 @@ export class NotificationStore {
             title: fields.title ?? null, excerpt: fields.excerpt ?? null,
             language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
             reviewId: fields.reviewId ?? null,
+            ...(newWork ?? {}),
           } } : null });
     }
     const checked = await discloseNotifications(this.pool, items.map((item, index) => ({

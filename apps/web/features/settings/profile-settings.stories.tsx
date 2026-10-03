@@ -37,7 +37,7 @@ export const Person: Story = {
     await expect(canvas.getByRole('heading', { name: 'Notifications' })).toBeVisible();
     await expect(canvas.getByRole('switch', { name: 'Replies · In-app' })).toBeVisible();
     const notifications = within(canvasElement.querySelector('#notifications')!);
-    await expect(notifications.getAllByRole('switch')).toHaveLength(settingsNotificationTopics.length * 2);
+    await expect(notifications.getAllByRole('switch')).toHaveLength(settingsNotificationTopics.length * 3);
     for (const label of [englishMessages.notificationSubmissionDecision, englishMessages.notificationModerationOutcome,
       englishMessages.notificationRealmRoleChange, englishMessages.notificationRealmMembershipChange,
       englishMessages.notificationRealmInvitation, englishMessages.notificationClaimCorrection]) {

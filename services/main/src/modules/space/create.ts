@@ -44,6 +44,10 @@ export interface SpaceCreationReceipt {
   realm?: string;
   spaceRevision?: string;
   realmRevision?: string;
+  zone?: string;
+  zoneRevision?: string;
+  navigation?: string;
+  navigationRevision?: string;
   owner?: string;
 }
 
@@ -90,13 +94,16 @@ export async function readSpaceCreationReceipt(env: WorkActivationEnvironment,
   const receipt = spaceCreationReceiptIri(admissionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?outcome ?digest ?id ?epoch ?scope ?dataEpoch ?sequence
-    ?space ?realm ?spaceRevision ?realmRevision ?owner WHERE {
+    ?space ?realm ?spaceRevision ?realmRevision ?owner
+    ?zone ?zoneRevision ?navigation ?navigationRevision WHERE {
     GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} a rv:OperationReceipt ; rv:outcome ?outcome ;
         rv:requestDigest ?digest ; rv:admissionId ?id ; rv:authorityEpoch ?epoch ;
         rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
-      OPTIONAL { ${iri(receipt)} rv:space ?space ; rv:realm ?realm ;
-        rv:spaceRevision ?spaceRevision ; rv:realmRevision ?realmRevision ; rv:owner ?owner }
+      OPTIONAL { ${iri(receipt)} rv:space ?space ; rv:spaceRevision ?spaceRevision ; rv:owner ?owner }
+      OPTIONAL { ${iri(receipt)} rv:realm ?realm ; rv:realmRevision ?realmRevision }
+      OPTIONAL { ${iri(receipt)} rv:zone ?zone ; rv:zoneRevision ?zoneRevision ;
+        rv:navigation ?navigation ; rv:navigationRevision ?navigationRevision }
     }
   }`);
   const rows = result.results?.bindings ?? [];
@@ -108,10 +115,15 @@ export async function readSpaceCreationReceipt(env: WorkActivationEnvironment,
     : value('outcome') === `${RV}Cancelled` ? 'cancelled' : null;
   if (!outcome || !value('digest') || !value('id') || !value('epoch') || !value('scope')
     || !value('dataEpoch') || !/^[0-9]+$/.test(value('sequence') ?? '')
-    || (outcome === 'succeeded' && (!value('space') || !value('realm')
-      || !value('spaceRevision') || !value('realmRevision') || !value('owner')))
+    || (outcome === 'succeeded' && (!value('space') || !value('spaceRevision') || !value('owner')
+      || Boolean(value('realm')) === Boolean(value('zone'))
+      || Boolean(value('realm')) !== Boolean(value('realmRevision'))
+      || Boolean(value('zone')) !== Boolean(value('zoneRevision'))
+      || Boolean(value('zone')) !== Boolean(value('navigation'))
+      || Boolean(value('zone')) !== Boolean(value('navigationRevision'))))
     || (outcome === 'cancelled' && (value('space') || value('realm')
-      || value('spaceRevision') || value('realmRevision') || value('owner')))) {
+      || value('spaceRevision') || value('realmRevision') || value('owner') || value('zone')
+      || value('zoneRevision') || value('navigation') || value('navigationRevision')))) {
     throw new Error('Space receipt is incomplete');
   }
   return { outcome, receipt, admissionId: value('id')!, requestDigest: value('digest')!,
@@ -119,7 +131,8 @@ export async function readSpaceCreationReceipt(env: WorkActivationEnvironment,
     dataEpoch: value('dataEpoch')!, sequence: value('sequence')!,
     ...(outcome === 'succeeded' ? { space: value('space'), realm: value('realm'),
       spaceRevision: value('spaceRevision'), realmRevision: value('realmRevision'),
-      owner: value('owner') } : {}) };
+      owner: value('owner'), zone: value('zone'), zoneRevision: value('zoneRevision'),
+      navigation: value('navigation'), navigationRevision: value('navigationRevision') } : {}) };
 }
 
 function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
@@ -129,7 +142,9 @@ function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
     throw new IdempotencyConflict('Space admission differs from graph receipt');
   }
   if (receipt.outcome === 'cancelled') throw new CancelledActivation('Space creation was cancelled');
-  if (receipt.owner !== input.actingSubject) throw new IdempotencyConflict('Space owner differs');
+  if (receipt.owner !== input.actingSubject || !receipt.realm || receipt.zone) {
+    throw new IdempotencyConflict('Realm Space owner or capabilities differ');
+  }
   return receipt;
 }
 

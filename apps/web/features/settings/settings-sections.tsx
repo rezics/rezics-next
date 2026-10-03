@@ -7,59 +7,15 @@ import { Switch } from '@rezics/ui/switch';
 import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { localeNames, uiLocales, type UiLocale } from '../../i18n/define.ts';
-import { messages as relationshipMessages } from '../relationships/messages.ts';
-import { localizedPath } from '../../i18n/locale.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { LanguagePicker } from '../onboarding/language-picker.tsx';
 import { messages as onboardingMessages } from '../onboarding/messages.ts';
 import { useOptionalShell } from '../shell/shell-provider.tsx';
+import { NotificationSettings } from './notification-settings.tsx';
 import type { SettingsMessages } from './messages.ts';
 
-type Channel = 'inbox' | 'email';
-type NotificationChoice = { purpose: 'social' | 'subscription' | 'governance'; topic: string;
-  channel: Channel; state: 'enabled' | 'disabled'; revision: string | null };
-
-/** Known producer topics. The live list follows Main's response; the preview includes every labeled topic. */
-export const settingsNotificationTopics = [
-  'reply', 'mention', 'post-vote', 'followed-chapter', 'new-work', 'new-release', 'collection-change', 'review-helpful', 'review',
-  'review-requested', 'changes-requested', 'proposal-revised', 'proposal-decided',
-  'proposal-withdrawn', 'proposal-reverted',
-] as const;
-type SettingsNotificationTopic = (typeof settingsNotificationTopics)[number];
-export const notificationTopicLabel: Record<SettingsNotificationTopic, keyof SettingsMessages> = {
-  reply: 'notificationReply', mention: 'notificationMention', 'post-vote': 'notificationPostVote',
-  'followed-chapter': 'notificationFollowedChapter',
-  'new-work': 'notificationNewWork', 'new-release': 'notificationNewRelease', 'collection-change': 'notificationCollectionChange',
-  'review-helpful': 'notificationReviewHelpful',
-  review: 'notificationReview', 'review-requested': 'notificationReviewRequested',
-  'changes-requested': 'notificationChangesRequested', 'proposal-revised': 'notificationProposalRevised',
-  'proposal-decided': 'notificationProposalDecided', 'proposal-withdrawn': 'notificationProposalWithdrawn',
-  'proposal-reverted': 'notificationProposalReverted',
-};
-
-/** What the settings list shows: each topic the preferences response contains, once, in that order. */
-export function topicsShown(items: readonly { topic: string }[]): string[] {
-  const seen = new Set<string>();
-  const topics: string[] = [];
-  for (const item of items) {
-    if (seen.has(item.topic)) continue;
-    seen.add(item.topic);
-    topics.push(item.topic);
-  }
-  return topics;
-}
-
-const governanceTopics = new Set<string>(['review-requested', 'changes-requested', 'proposal-revised',
-  'proposal-decided', 'proposal-withdrawn', 'proposal-reverted']);
-function purposeOf(topic: string): NotificationChoice['purpose'] {
-  if (['followed-chapter', 'new-work', 'new-release', 'collection-change'].includes(topic)) return 'subscription';
-  return governanceTopics.has(topic) ? 'governance' : 'social';
-}
-function labelFor(topic: string, t: SettingsMessages): string {
-  return (settingsNotificationTopics as readonly string[]).includes(topic)
-    ? t[notificationTopicLabel[topic as SettingsNotificationTopic]] : topic;
-}
+export { notificationTopicLabel, settingsNotificationTopics, topicsShown } from './notification-settings.tsx';
 type Library = { visibility: 'public' | 'private' | 'followers'; version: number };
 type Reader = { profile: 'reader-settings-v1'; fontSize: 15 | 17 | 19 | 22 | 25;
   lineWidth: 'narrow' | 'medium' | 'wide'; typeface: 'serif' | 'sans'; paragraphIndent: boolean;
@@ -93,61 +49,6 @@ function Section({ id, title, help, children }: { id: string; title: string; hel
       <p className="text-muted-foreground text-sm">{help}</p></div>
     {children}
   </CardContent></Card>;
-}
-
-export function NotificationPreferences({ t, locale, preview = false }: { t: SettingsMessages; locale: UiLocale; preview?: boolean }) {
-  const [choices, setChoices] = useState<NotificationChoice[] | null>(preview
-    ? settingsNotificationTopics.flatMap(topic => (['inbox', 'email'] as const).map(channel => ({
-      purpose: purposeOf(topic), topic, channel, state: 'enabled' as const, revision: null }))) : null);
-  const [status, setStatus] = useState('');
-  const [saving, setSaving] = useState('');
-  useEffect(() => {
-    if (preview) return;
-    let active = true;
-    void read<{ items: NotificationChoice[] }>('/v1/me/notification-preferences')
-      .then(value => { if (active) setChoices(value.items); })
-      .catch(() => { if (active) setStatus(t.notificationUnavailable); });
-    return () => { active = false; };
-  }, [preview, t]);
-  const save = async (choice: NotificationChoice, checked: boolean) => {
-    const key = `${choice.topic}:${choice.channel}`;
-    setSaving(key); setStatus('');
-    try {
-      const result = await write<{ state: NotificationChoice['state']; revision: string }>(
-        '/v1/me/notification-preferences', { profile: 'notification-preference-v1',
-          purpose: choice.purpose, topic: choice.topic, channel: choice.channel,
-          state: checked ? 'enabled' : 'disabled', expectedRevision: choice.revision }, true);
-      setChoices(current => current?.map(item => item.topic === choice.topic && item.channel === choice.channel
-        ? { ...item, state: result.state, revision: result.revision } : item) ?? null);
-      setStatus(t.notificationSaved);
-    } catch (error) { setStatus(String(error).includes('409') ? t.sectionStale : t.sectionFailed); }
-    setSaving('');
-  };
-  return <Section id="notifications" title={t.notificationsTitle} help={t.notificationsHelp}>
-    <a href={localizedPath('/following', locale)} className="w-fit text-primary text-sm underline-offset-4 hover:underline">
-      {relationshipMessages[locale].manage}</a>
-    {choices ? <div className="grid gap-0">
-      <div className="grid grid-cols-[minmax(0,1fr)_4rem_4rem] gap-2 border-b pb-2 text-muted-foreground text-xs
-        sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
-        <span>{t.notificationType}</span><span className="text-center">{t.notificationInbox}</span>
-        <span className="text-center">{t.notificationEmail}</span></div>
-      {topicsShown(choices).map(topic => {
-        const label = labelFor(topic, t);
-        return <div key={topic}
-          className="grid min-h-12 grid-cols-[minmax(0,1fr)_4rem_4rem] items-center gap-2 border-b border-border/50 py-2
-            text-sm last:border-0 sm:grid-cols-[minmax(0,1fr)_5rem_5rem]">
-          <span className="min-w-0">{label}</span>
-          {(['inbox', 'email'] as const).map(channel => {
-            const choice = choices.find(item => item.topic === topic && item.channel === channel);
-            return <span key={channel} className="flex justify-center"><Switch size="sm"
-              aria-label={`${label} · ${channel === 'inbox' ? t.notificationInbox : t.notificationEmail}`}
-              checked={choice?.state === 'enabled'} disabled={!choice || !!saving || preview}
-              onCheckedChange={details => { if (choice) void save(choice, details.checked); }} /></span>;
-          })}</div>;
-      })}
-    </div> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
-    {choices && status ? <p role="status" className="text-sm">{status}</p> : null}
-  </Section>;
 }
 
 function Privacy({ agent, t, preview = false, extra }: { agent: string | null; t: SettingsMessages;
@@ -398,7 +299,7 @@ export function SettingsSections({ agent, locale, accountOrigin, t, preview = fa
   children?: ReactNode;
 }) {
   return <>
-    <NotificationPreferences t={t} locale={locale} preview={preview} />
+    <NotificationSettings t={t} preview={preview} />
     {agent ? <PersonControls agent={agent} locale={locale} t={t} preview={preview}
       previewLanguages={previewLanguages} /> : null}
     <Display locale={locale} t={t} preview={preview} />

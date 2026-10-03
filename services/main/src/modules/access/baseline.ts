@@ -10,6 +10,7 @@ import { publicReplyRoot } from '../realm-reply/root.ts';
 import { authorSubmissionProof, authorWithdrawalProof, authorWorkGeneration } from './author-baseline.ts';
 import { workKinds } from '../work/work-kinds.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
+import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -44,7 +45,7 @@ export interface BaselineProof {
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
   | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
-  | 'avatar' | 'submission-withdraw' | 'definition'; id: string };
+  | 'avatar' | 'submission-withdraw' | 'definition' | 'zone'; id: string };
 
 /** Closed permission vocabulary. In particular, a public Realm does not gain
  * a baseline policy, and translation authorization is not translation proposal. */
@@ -63,6 +64,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
   if ((action === 'work.create' && scope === 'work:create:root')
     || (action === 'space.create' && scope === 'space:create:root')) return { kind: 'root' };
   const prefixes: Record<string, { prefix: string; kind: Exclude<BaselineTarget['kind'], 'root'> }> = {
+    'zone.edit': { prefix: 'zone:edit:', kind: 'zone' },
     'work.edit': { prefix: 'work:edit:', kind: 'author-work' },
     'content.publish': { prefix: 'content:publish:', kind: 'author-work' },
     'content.search-eligibility': { prefix: 'content:search-eligibility:', kind: 'author-work' },
@@ -153,6 +155,9 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'personal') return target.id === actingSubject;
   if (target.kind === 'definition') {
     return definitionCreatorAllowed(client, graph, principalId, actingSubject, target.id);
+  }
+  if (target.kind === 'zone') {
+    return zoneSpaceCreatorAllowed(client, graph, principalId, actingSubject, target.id);
   }
   if (!graph) return false;
   if (target.kind === 'avatar') return !!await avatarControllerProof(client, graph, principalId, target.id)

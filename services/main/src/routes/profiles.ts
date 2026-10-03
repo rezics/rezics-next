@@ -15,6 +15,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { resourceListing } from '../modules/realm-admin/contract.ts';
+import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
 import { pageDiscoveryHeaders } from '../modules/space/visibility.ts';
 import { AgentListingConflict, AgentListingDenied, AgentListingUnavailable, InvalidAgentListing,
   StaleAgentListing } from '../modules/profiles/listing.ts';
@@ -94,14 +95,16 @@ export function profileRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/agents/:id/works', { params, detail, query: t.Object({ ...pageQuery,
       context: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }), discovery: agentProfile.properties.discovery, ...pageFields }), ...workReadProblems },
+      response: { 200: t.Object({ items: t.Array(creditedWork, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query,
         s => readAgentWorks(s, `https://rezics.com/id/${path.id}`, query.context))); }
       catch (error) { return readError(error); }
     })
     .get('/v1/agents/:id/collections', { params, detail, query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }), discovery: agentProfile.properties.discovery, ...pageFields }), ...workReadProblems },
+      response: { 200: t.Object({ items: t.Array(shelfCollection, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try { return response(await workRead(work, request, query,
         s => readAgentCollections(s, `https://rezics.com/id/${path.id}`))); }
@@ -132,13 +135,15 @@ export function profileRoutes(work: MainWorkDependencies) {
       } catch (error) { return visibilityError(error); }
     })
     .get('/v1/me/contributions', { query: t.Object(pageQuery, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(libraryContribution, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+      response: { 200: t.Object({ items: t.Array(libraryContribution, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
     }, async ({ request, query }) => {
       try { return response(await workRead(work, request, query, readMyContributions)); }
       catch (error) { return readError(error); }
     })
     .get('/v1/me/ratings', { query: t.Object({ ...pageQuery, scope: t.Optional(t.Literal('global')) }, { additionalProperties: false }),
-      response: { 200: t.Object({ items: t.Array(libraryRating, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+      response: { 200: t.Object({ items: t.Array(libraryRating, { maxItems: 20 }),
+        listing: resourceListing, discovery: pageDiscovery, ...pageFields }), ...workReadProblems },
     }, async ({ request, query }) => {
       try { return response(await workRead(work, request, query, readMyRatings)); }
       catch (error) { return readError(error); }

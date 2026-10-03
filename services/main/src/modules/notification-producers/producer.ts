@@ -13,6 +13,7 @@ import { recoverSpaceFollows } from '../follows/recovery.ts';
 import { recoverLibraryFollows } from '../library/follows.ts';
 import { resourceNotification } from './resources.ts';
 import { normalizeAddressName } from '@rezics/model/address/names';
+import type { SavedViewNotifications } from './saved-views.ts';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -53,6 +54,11 @@ function agentsInImpact(value: unknown): string[] {
 
 export class NotificationProducer {
   private safetyCorrespondence?: { enqueueDecision(decisionId: string): Promise<void> };
+  private savedViews?: Pick<SavedViewNotifications, 'run'>;
+
+  setSavedViews(producer: Pick<SavedViewNotifications, 'run'>): void {
+    this.savedViews = producer;
+  }
 
   setSafetyCorrespondence(sender: { enqueueDecision(decisionId: string): Promise<void> }): void {
     this.safetyCorrespondence = sender;
@@ -500,6 +506,17 @@ export class NotificationProducer {
   }
 
   async runRelayOnce(): Promise<number> {
+    return this.runRelayConsumerOnce(cursorName);
+  }
+
+  /** Matching can need several ticks or wait for a query owner. Its durable
+   * cursor must not hold direct replies and mentions behind that work. */
+  async runSavedViewsRelayOnce(): Promise<number> {
+    if (!this.savedViews) return 0;
+    return this.runRelayConsumerOnce('notification-saved-views-v1', true);
+  }
+
+  private async runRelayConsumerOnce(consumer: string, savedViewsOnly = false): Promise<number> {
     if (!this.relay || !this.relayCheckpoint || !this.relayConsumer) return 0;
     const upstream = (await this.relayCheckpoint.query<{ data_epoch: string; sequence: string }>(`
       SELECT data_epoch, sequence::text FROM relay.checkpoint WHERE consumer = $1`,
@@ -511,17 +528,17 @@ export class NotificationProducer {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '10s'");
       await client.query(`INSERT INTO relay.notification_producer_cursor (consumer, data_epoch)
-        VALUES ($1, $2) ON CONFLICT DO NOTHING`, [cursorName, upstream.data_epoch]);
+        VALUES ($1, $2) ON CONFLICT DO NOTHING`, [consumer, upstream.data_epoch]);
       const cursor = (await client.query<{ data_epoch: string; sequence: string }>(`
         SELECT data_epoch, sequence::text FROM relay.notification_producer_cursor
-        WHERE consumer = $1 FOR UPDATE SKIP LOCKED`, [cursorName])).rows[0];
+        WHERE consumer = $1 FOR UPDATE SKIP LOCKED`, [consumer])).rows[0];
       if (!cursor) { await client.query('COMMIT'); return 0; }
       if (cursor.data_epoch !== upstream.data_epoch) {
         // A restored source starts a new epoch. Replaying its batches is safe:
         // Access deduplicates each recipient by the immutable event identity.
         await client.query(`UPDATE relay.notification_producer_cursor SET data_epoch = $2,
           sequence = 0, updated_at = clock_timestamp() WHERE consumer = $1`,
-        [cursorName, upstream.data_epoch]);
+        [consumer, upstream.data_epoch]);
         cursor.data_epoch = upstream.data_epoch;
         cursor.sequence = '0';
       } else if (BigInt(cursor.sequence) > BigInt(upstream.sequence)) {
@@ -542,6 +559,12 @@ export class NotificationProducer {
       let produced = 0;
       let pending = false;
       for (const event of events) {
+        if (savedViewsOnly) {
+          const matched = await this.savedViews!.run(event.envelope);
+          produced += matched.produced;
+          if (!matched.complete) { pending = true; break; }
+          continue;
+        }
         const resource = await resourceNotification(this.access,this.graph,event.envelope);
         if (resource) {
           const result = await this.notifications.enqueue(resource); produced++;
@@ -554,7 +577,7 @@ export class NotificationProducer {
         if (pending) break;
       }
       if (!pending) await client.query(`UPDATE relay.notification_producer_cursor SET sequence = $2,
-        updated_at = clock_timestamp() WHERE consumer = $1`, [cursorName, batch.sequence]);
+        updated_at = clock_timestamp() WHERE consumer = $1`, [consumer, batch.sequence]);
       await client.query('COMMIT');
       return produced;
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
@@ -566,6 +589,9 @@ export class NotificationProducerWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running: Promise<void> | null = null;
   constructor(private readonly producer: NotificationProducer) {}
+  setSavedViews(producer: Pick<SavedViewNotifications, 'run'>): void {
+    this.producer.setSavedViews(producer);
+  }
   setSafetyCorrespondence(sender: { enqueueDecision(decisionId: string): Promise<void> }): void {
     this.producer.setSafetyCorrespondence(sender);
   }
@@ -576,7 +602,11 @@ export class NotificationProducerWorker {
       this.running = withWorkerTelemetry('main.notification.producer', async () => {
         await this.producer.runRelationshipRecoveryOnce().catch(error => { console.warn('Relationship recovery paused',error); });
         const access = await this.producer.runAccessOnce();
-        return access + await this.producer.runRelayOnce();
+        const relay = await this.producer.runRelayOnce();
+        let matched = 0;
+        try { matched = await this.producer.runSavedViewsRelayOnce(); }
+        catch (error) { console.warn('Saved view notifications deferred', error); recordWorkerOutcome({ outcome: 'deferred' }); }
+        return access + relay + matched;
       }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' }))
         .then(() => undefined).catch(error => { console.error('Notification producers:', error); })
         .finally(() => { this.running = null; });

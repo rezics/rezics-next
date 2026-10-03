@@ -83,12 +83,13 @@ const credited = (uuid: string, title: string, key: string) => ({ id: iri(uuid),
   types: [], tagline: null, completionStatus: null, rating: null,
   attribution: [{ credit: iri('f2b4d6f8-0a1c-4e3a-8b5d-7f9b1d3f5a71'), role: 'author' as const }] });
 /** Other Works Maren Osei is credited on, with this one among them as Main lists it. */
-export const agentWorks = ok<AgentWorksPage>(page([
+export const agentWorks = ok<AgentWorksPage>({ listing: 'listed',
+  discovery: { indexable: true, robots: 'index', referrerPolicy: null }, ...page([
   credited(workRef, 'The Cartographer of Tides', '3fa2c9d17b8e4a6f0c2d5e8b1a4f7c90'),
   credited('0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', 'The Salt Road', 'salt-road'),
   credited('1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e', 'Lanterns over the Estuary', 'lanterns'),
   credited('2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f', 'A Grammar of Floods', 'floods'),
-]));
+]) });
 
 const adoption = (realm: string, realmName: WorkName, language: string) => ({ realm: iri(realm), name: realmName,
   selection: iri('9d1b3f5a-7c9e-4b1d-a3f5-7b9d1f3a5c7e'), contribution: iri('8c0a2e4f-6b8d-4a0c-92e4-6a8c0e2f4b6d'),

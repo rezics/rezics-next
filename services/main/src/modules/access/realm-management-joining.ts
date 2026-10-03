@@ -66,18 +66,20 @@ export class AccessRealmJoining {
   }
 
   async policyFor(principal: VerifiedPrincipal, realm: string, actor: string) {
-    const graph = await readRealmPolicy(this.env,realm);
     return realmTransaction(this.pool,realm,false,async client => {
       await realmActor(client,principal,actor,'access.membership.consent');
       const policy = await this.policy(client,realm);
+      const graph = await readRealmPolicy(this.env,realm);
       const member = await this.member(client,realm,actor);
       const invited = (await client.query(`SELECT 1 FROM access.realm_invitation WHERE realm = $1 AND member = $2
         AND state = 'pending' AND expires_at > clock_timestamp() LIMIT 1`,[realm,actor])).rowCount;
-      if (!graph || (graph.visibility !== 'public' || policy.visibility !== 'public') && !invited && member?.state !== 'joined') {
+      const selfJoin = policy.open && policy.self_join && graph?.admission === 'open';
+      if (!graph || (graph.visibility === 'private' || policy.visibility === 'private')
+        && !selfJoin && !invited && member?.state !== 'joined') {
         throw new RealmAdminDenied('Realm membership policy is unavailable');
       }
       return { realm,policyRevision: policy.revision,termsRevision: policy.terms_revision,open: policy.open,
-        selfJoin: policy.self_join && graph.visibility === 'public' && policy.visibility === 'public',
+        selfJoin,
         membershipGeneration: member?.generation ?? '0',state: member?.state ?? 'absent' as const };
     });
   }
@@ -163,14 +165,14 @@ export class AccessRealmJoining {
   }
 
   async selfJoin(principal: VerifiedPrincipal, realm: string, input: SelfJoinCommand, key: string) {
-    const graph = await readRealmPolicy(this.env,realm);
     const identity = await publicTargetRead(this.env.fuseki,session => followSpace(session,realm));
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
       return this.receipt(client,actor.id,key,['self-join',realm,input],async () => {
         const policy = await this.policy(client,realm);
-          if (!policy.self_join || !policy.open || policy.visibility !== 'public' || graph?.visibility !== 'public') {
+        const graph = await readRealmPolicy(this.env,realm);
+        if (!policy.self_join || !policy.open || graph?.admission !== 'open') {
           throw new RealmAdminDenied('This Realm does not allow self-joining');
         }
         return this.join(client,principal,actor.id,realm,input,key,identity);

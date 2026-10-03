@@ -104,7 +104,7 @@ function propertyClauses(property: PropertyDefinition): string[] {
   if (property.datatype !== undefined) clauses.push(`sh:datatype ${property.datatype}`);
   if (property.pattern !== undefined) clauses.push(`sh:pattern ${JSON.stringify(property.pattern)}`);
   if (property.in !== undefined) clauses.push(`sh:in ( ${property.in.join(' ')} )`);
-  if (property.languageIn !== undefined) clauses.push(`sh:languageIn ( ${property.languageIn.map(JSON.stringify).join(' ')} )`);
+  if (property.languageIn !== undefined) clauses.push(`sh:languageIn ( ${property.languageIn.map(value => JSON.stringify(value)).join(' ')} )`);
   if (property.uniqueLang !== undefined) clauses.push(`sh:uniqueLang ${property.uniqueLang}`);
   if (property.minLength !== undefined) clauses.push(`sh:minLength ${property.minLength}`);
   if (property.maxLength !== undefined) clauses.push(`sh:maxLength ${property.maxLength}`);

@@ -54,7 +54,8 @@ export const libraryRating = t.Object({ id: readId, revision: readId, work: t.Nu
  * use 5; Work pages use ≤8 plus at most one serial batch, one type batch and
  * 20 bounded standing rating reads when a Context is selected. Library hydration
  * is O(P), P≤20, with two summary batches, one type batch and final authority checks. SQL uses
- * five-second statements. Relation ordering may scan/sort D heads (O(D log D));
+ * five-second statements; personal pages add two listing point reads to fence
+ * discovery signals. Relation ordering may scan/sort D heads (O(D log D));
  * LIMIT bounds output, not native execution cost. No corpus-scale claim. */
 export const PROFILE_READ_COST = { ...WORK_READ_COST, sqlStatementMs: 5_000,
   responseBytes: 512 * 1024, creditRoles: 3 } as const;

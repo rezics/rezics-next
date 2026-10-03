@@ -82,7 +82,7 @@ export async function readManagementAccess(main: MainClient, candidate: string, 
 export async function readRequestsAtAddress(main: MainClient, candidate: string, actor: string):
   Promise<Outcome<{ space: string; realm: string; page: RequestPage }>> {
   const publicSpace = await send(() => main.v1.spaces({ space: uuidOf(candidate) }).get());
-  const realm = publicSpace.ok ? publicSpace.data.realm : candidate;
+  const realm = publicSpace.ok && 'realm' in publicSpace.data ? publicSpace.data.realm : candidate;
   const page = await spaceAccessApi(() => main, candidate, realm, actor).requests(null);
   if (page.ok) return { ok: true, data: { space: candidate, realm, page: page.data } };
   if (publicSpace.ok || page.failure !== 'denied' && page.failure !== 'missing') return page;

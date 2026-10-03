@@ -11,6 +11,9 @@ import { ArrowUpDownIcon, BellIcon, CheckCheckIcon, CircleCheckIcon, FileCheckIc
   from 'lucide-react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { materializeData } from 'native-i18n';
+import { messages as newWorkMessages } from './messages.ts';
+import type { UiLocale } from '../../../i18n/define.ts';
 import { useRef, useState } from 'react';
 import { localizedPath } from '../../../i18n/locale.ts';
 import { browserMainApi } from '../../api/browser.ts';
@@ -31,7 +34,7 @@ type Kind = NonNullable<StreamItem['display']>['kind'];
 const icons: Record<Kind, LucideIcon> = { reply: MessageSquareReplyIcon, submission_decision: FileCheckIcon,
   moderation_outcome: ShieldIcon, realm_role_change: UserRoundCogIcon, follow: UserPlusIcon,
   claim_correction: CircleCheckIcon, review: MessageSquareQuoteIcon, review_helpful: ThumbsUpIcon,
-  realm_invitation: UserPlusIcon, chapter: MessageSquareQuoteIcon, post_vote: ArrowUpDownIcon };
+  realm_invitation: UserPlusIcon, new_work: BellIcon, chapter: MessageSquareQuoteIcon, post_vote: ArrowUpDownIcon };
 
 const uuid = (iri: string | null) => iri?.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)?.[0];
 
@@ -56,7 +59,7 @@ function proposalSentence(topic: string, t: T): string | null {
   }
 }
 
-function sentence(item: StreamItem, t: T): string {
+function sentence(item: StreamItem, t: T, locale: UiLocale): string {
   const display = item.display;
   if (item.state !== 'active') return t.notificationUnavailable;
   const proposal = item.proposal ? proposalSentence(item.topic, t) : null;
@@ -87,6 +90,12 @@ function sentence(item: StreamItem, t: T): string {
     case 'claim_correction': return title ? t.correctionOn({ title }) : t.correctionMade;
     case 'review': return title ? t.reviewedWork({ name, title }) : t.reviewedYourWork({ name });
     case 'review_helpful': return title ? t.reviewHelpful({ title }) : t.reviewHelpfulAny;
+    case 'new_work': {
+      if (!title) return t.notificationUnavailable;
+      const copy = materializeData(newWorkMessages[locale], { locale });
+      return display.target.topicName ? copy.newWorkIn({ topic: display.target.topicName, title })
+        : copy.newWork({ title });
+    }
     case 'chapter': return title ? t.newChapterOn({ title }) : t.newChapter;
     case 'post_vote': return title ? t.votedOnPost({ name, title }) : t.votedOnYourPost({ name });
   }
@@ -106,6 +115,7 @@ function destination(item: StreamItem): string | null {
   if (item.state !== 'active') return null;
   if (item.proposal) return `/proposals/${item.proposal.id}?revision=${item.proposal.revision}`;
   if (!display) return null;
+  if (display.kind === 'new_work') return display.target.href ?? null;
   if (display.kind === 'submission_decision') {
     const work = uuid(display.target.linkTarget);
     return work ? globalWorkHref(work) : null;
@@ -138,7 +148,7 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
   const display = item.display;
   const Icon = display ? icons[display.kind] : item.proposal ? FilePenLineIcon : BellIcon;
   const href = destination(item);
-  const text = sentence(item, t);
+  const text = sentence(item, t, locale);
   const where = place(item, t);
   const because = item.reason ? t[reasonLabel[item.reason]] : null;
   const excerpt = display?.kind === 'reply' || display?.kind === 'review' ? display.target.excerpt : null;

@@ -1102,6 +1102,16 @@ export const profileRegistry = {
       "realm"
     ]
   },
+  "space-zone-v1": {
+    "sha256": "dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803",
+    "file": "shapes/space-zone-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/space-zone-v1/space-shape"
+    ],
+    "focusRoles": [
+      "space"
+    ]
+  },
   "statement-cutover-v1": {
     "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "file": "shapes/statement-cutover-v1.ttl",

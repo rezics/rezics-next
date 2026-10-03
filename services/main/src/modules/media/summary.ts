@@ -281,8 +281,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type IN ("agent","zone")) GRAPH ${iri(GRAPHS.current)} {
           { ?r rdfs:label ?label }
-          UNION { FILTER(?type = "zone") FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
-            ?r rv:space ?zoneSpace . ?zoneSpace rdfs:label ?label }
+          UNION { ?r a rv:Zone ; rv:space ?zoneSpace . FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
+            ?zoneSpace rdfs:label ?label }
         } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r schema:name ?label } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r rv:collectionNameHead ?nameHead }

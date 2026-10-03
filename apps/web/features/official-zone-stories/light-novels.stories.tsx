@@ -1,5 +1,3 @@
-import { spaceHref } from '../address/path.ts';
-import { localizedPath } from '../../i18n/locale.ts';
 import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
@@ -96,6 +94,8 @@ function Series({
     direction: direction('en', 'Catalogue'),
     profile: 'zone-route-v1' as const,
     zone: 'z',
+    listing: 'listed' as const,
+    discovery: { indexable: true, robots: 'index' as const, referrerPolicy: null },
     path: '/catalogue',
     realm: null,
     revision: 'r',
@@ -161,9 +161,7 @@ const meta = {
   title: 'Zones/Light Novels',
   component: Series,
   args: { locale: 'en', signedIn: true, surface: 'index' },
-  parameters: {
-    route: { pathname: localizedPath(spaceHref('light-novels', 'site', ['catalogue']), 'en') },
-  },
+  parameters: { route: { pathname: '/en/r/light-novels/catalogue' } },
   render: (args, { globals }) => (
     <Series {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
   ),
@@ -180,7 +178,7 @@ export const Catalogue: Story = {
     await expect(canvas.getAllByText('Sword Art Online').length).toBeGreaterThan(1);
     await expect(canvas.getByRole('link', { name: 'Open the Visual Novels Zone' })).toHaveAttribute(
       'href',
-      localizedPath(spaceHref('visual-novels', 'site'), 'en'),
+      '/en/r/visual-novels',
     );
     await expect(
       canvas.getByText(/does not sell books, link to stores, show prices/),

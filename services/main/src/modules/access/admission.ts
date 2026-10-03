@@ -20,6 +20,7 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed,
   newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
+import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { ensureBaselineScopeGate } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
@@ -757,6 +758,12 @@ export class AccessAdmissionRegistry {
       const readKind = action === 'work.read' ? 'work' : action === 'semantic.read' ? 'collection'
         : action === 'contribution.read' ? 'contribution' : null;
       const targetId = scope.slice(scope.indexOf(':', scope.indexOf(':') + 1) + 1);
+      if (action === 'semantic.read'
+        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+        && await zoneSpaceCreatorAllowed(client, this.baselineGraph, principalId, actingSubject, targetId)) {
+        await client.query('COMMIT');
+        return true;
+      }
       if (readKind && principal.emailVerified === true
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
         && await baselineMemberProof(client, principalId, actingSubject)
