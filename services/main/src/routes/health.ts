@@ -8,6 +8,7 @@ import { mainSchemaReady } from '../schema-ready.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { ratingProjectionHealth, readRatingProjectionHealth } from '../modules/rating/projection-health.ts';
+import { discoveryRankingHealth, readDiscoveryRankingHealth } from '../modules/discovery/public-ranking.ts';
 
 export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) {
   return new Elysia()
@@ -42,6 +43,20 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
         const health = await workRead(work, new Request('http://main.internal/health/rating-ready'), {}, readRatingProjectionHealth);
+        return health.status === 'unavailable' ? status(503, health) : health;
+      } catch {
+        return status(503, { status: 'unavailable' as const });
+      }
+    })
+    .get('/health/discovery-ready', {
+      response: {
+        200: discoveryRankingHealth,
+        503: t.Union([discoveryRankingHealth, t.Object({ status: t.Literal('unavailable') })]),
+      },
+    }, async ({ status }) => {
+      if (!work) return status(503, { status: 'unavailable' as const });
+      try {
+        const health = await workRead(work, new Request('http://main.internal/health/discovery-ready'), {}, readDiscoveryRankingHealth);
         return health.status === 'unavailable' ? status(503, health) : health;
       } catch {
         return status(503, { status: 'unavailable' as const });

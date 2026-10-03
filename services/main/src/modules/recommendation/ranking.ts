@@ -1,6 +1,9 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { DISCOVERY_SERVICE_PRINCIPAL } from '../discovery/automation.ts';
+import { automaticPublicRanking, DISCOVERY_RANKING_REFRESH_COST, PUBLIC_DISCOVERY_RANKING,
+  publicRankingAutomation, type PublicRankingAutomation } from '../discovery/public-ranking.ts';
 import {
   activateHead, authorizeManager, claimLease, digest, fenceLease, inAccess, markFailed,
   type Activation, type ManageContext, nativeIri, type ReceiptKey, RecommendationDenied,
@@ -65,6 +68,15 @@ export interface RankingOptions {
 interface SlotSignal { slot: string; candidate: string; weight: bigint; sequence: string; event: string;
   admission: string; requestDigest: string; authorityEpoch: string; contributor?: string }
 interface Totals { score: bigint; signals: bigint }
+type RankingOperator = ManageContext | PublicRankingAutomation;
+
+async function rankingOperator(client: PoolClient, context: RankingOperator, basis: RankingBasis): Promise<string> {
+  if (!(publicRankingAutomation in context)) return authorizeManager(client, context);
+  if (digest(basis) !== digest(PUBLIC_DISCOVERY_RANKING)) {
+    throw new RecommendationDenied('Automatic refresh requires the public Discovery ranking');
+  }
+  return DISCOVERY_SERVICE_PRINCIPAL;
+}
 
 function validBasis(basis: RankingBasis): void {
   const population = basis.population;
@@ -105,6 +117,14 @@ export class RankingGenerations {
     this.signalBatches = options.signalBatches ?? DEFAULT_SIGNAL_BATCHES;
   }
 
+  get dataEpoch(): string { return this.options.dataEpoch; }
+
+  private async candidateSnapshot(): Promise<string | null> {
+    if (!this.options.zeroSnapshot) return null;
+    try { return await this.options.zeroSnapshot(); }
+    catch { throw new RecommendationUnavailable('zero-score source snapshot is unavailable'); }
+  }
+
   private async relayHead(): Promise<string> {
     try {
       return (await this.options.relay.query<{ head: string }>(`SELECT coalesce(max(sequence), 0)::text AS head
@@ -137,15 +157,15 @@ export class RankingGenerations {
   }
 
   /** Register one building generation with pinned basis and relay snapshot target. */
-  async registerBuild(context: ManageContext, basis: RankingBasis, partitionCount: number,
+  async registerBuild(context: RankingOperator, basis: RankingBasis, partitionCount: number,
     receipt: ReceiptKey): Promise<GenerationView> {
     validBasis(basis);
     if (basis.semantic && this.options.verifySemantic) {
       await inAccess(this.options.access, async client => {
         await requireRecoveryOpen(client);
-        await authorizeManager(client, context);
+        await rankingOperator(client, context, basis);
       });
-      if (!await this.options.verifySemantic(context, basis)) {
+      if (publicRankingAutomation in context || !await this.options.verifySemantic(context, basis)) {
         throw new RecommendationDenied('ranking semantic basis is not current');
       }
     }
@@ -154,18 +174,24 @@ export class RankingGenerations {
     }
     const snapshotTarget = await this.relayHead();
     const erasureEpoch = await this.erasureHead();
-    let zeroSnapshot: string | null = null;
-    if (this.options.zeroSnapshot) {
-      try { zeroSnapshot = await this.options.zeroSnapshot(); }
-      catch { throw new RecommendationUnavailable('zero-score source snapshot is unavailable'); }
-    }
+    const zeroSnapshot = await this.candidateSnapshot();
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
-      const principalId = await authorizeManager(client, context);
+      const principalId = await rankingOperator(client, context, basis);
       const replay = await replayReceipt(client, principalId, receipt, 'build');
       if (replay) return { ...await this.describe(client, replay.generation_id), replayed: true };
       const owner = basis.population.kind === 'personal' ? principalId : null;
       const scope = scopeKey(basis, owner, this.options.dataEpoch);
+      if (publicRankingAutomation in context) {
+        // Use activation's scope lock: two Main processes cannot bootstrap two
+        // builds, and a crash after finish leaves a ready candidate to activate.
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`ranking:${scope}`]);
+        const pending = (await client.query<{ id: string }>(`SELECT g.id FROM access.derived_generation g
+          WHERE g.family='ranking' AND g.scope_key=$1 AND g.state IN ('building','ready')
+            AND NOT EXISTS (SELECT 1 FROM access.derived_generation_head h WHERE h.active_generation=g.id)
+          ORDER BY g.created_at DESC,g.id LIMIT 1`, [scope])).rows[0];
+        if (pending) return { ...await this.describe(client, pending.id), replayed: true };
+      }
       const manifest = { basis, owner, partitionCount,
         source: { source: 'main-graph', relay: RELAY_SOURCE, dataEpoch: this.options.dataEpoch,
           snapshotTarget, erasureEpoch, zeroSnapshot } };
@@ -199,6 +225,83 @@ export class RankingGenerations {
       await authorizeManager(client, context);
       return this.describe(client, generation);
     });
+  }
+
+  /** One indexed serving-head probe and the same bounded contributor-erasure
+   * fence as delivery. No scores, candidates or Work payloads are read. */
+  async publicRankingStatus() {
+    const scope = scopeKey(PUBLIC_DISCOVERY_RANKING, null, this.options.dataEpoch);
+    const row = await inAccess(this.options.access, async client => {
+      await requireRecoveryOpen(client);
+      return (await client.query<{ generation: string; data_epoch: string; checkpoint: string;
+        zero_snapshot: string | null; erasure_epoch: string }>(`SELECT g.id::text AS generation,i.data_epoch,
+          i.checkpoint_sequence::text AS checkpoint,g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
+          g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
+        FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
+        JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
+        WHERE h.family='ranking' AND h.scope_key=$1 AND g.state='ready'`, [scope])).rows[0] ?? null;
+    });
+    if (!row) return null;
+    await this.assertContributorsCurrent(row.generation, row.erasure_epoch);
+    const sequence = row.zero_snapshot !== null && BigInt(row.zero_snapshot) < BigInt(row.checkpoint)
+      ? row.zero_snapshot : row.checkpoint;
+    return { generation: row.generation, dataEpoch: row.data_epoch, sequence };
+  }
+
+  /** Heal the public head without a human management grant. Existing heads stay
+   * in place until a validated replacement wins the exact-revision activation.
+   * The regular build worker advances the same durable leases/checkpoints. */
+  async refreshPublicRanking(): Promise<'building' | 'activated' | 'current' | 'registered'> {
+    const scope = scopeKey(PUBLIC_DISCOVERY_RANKING, null, this.options.dataEpoch);
+    const state = await inAccess(this.options.access, async client => {
+      await requireRecoveryOpen(client);
+      const head = (await client.query<{ generation: string; revision: string; checkpoint: string;
+        zero_snapshot: string | null; erasure_epoch: string }>(`SELECT h.active_generation::text AS generation,
+          h.revision::text,i.checkpoint_sequence::text AS checkpoint,
+          g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
+          g.input_manifest->'source'->>'erasureEpoch' AS erasure_epoch
+        FROM access.derived_generation_head h JOIN access.derived_generation g ON g.id=h.active_generation
+        JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
+        WHERE h.family='ranking' AND h.scope_key=$1`, [scope])).rows[0] ?? null;
+      const pending = (await client.query<{ id: string; state: string; checkpoint: string;
+        zero_snapshot: string | null }>(`SELECT g.id::text,g.state,i.checkpoint_sequence::text AS checkpoint,
+          g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot
+        FROM access.derived_generation g JOIN access.derived_generation_input i
+          ON i.generation_id=g.id AND i.source='main-graph'
+        WHERE g.family='ranking' AND g.scope_key=$1 AND g.state IN ('building','ready')
+          AND g.id IS DISTINCT FROM $2::uuid ORDER BY g.created_at DESC,g.id LIMIT 1`,
+      [scope, head?.generation ?? null])).rows[0] ?? null;
+      return { head, pending };
+    });
+    if (state.pending?.state === 'building') return 'building';
+    if (state.pending) {
+      // A manual build can finish after a newer public head. Never replace that
+      // head with an older candidate population or an older signal checkpoint.
+      if (state.head && (BigInt(state.pending.checkpoint) < BigInt(state.head.checkpoint)
+        || state.head.zero_snapshot !== null && (state.pending.zero_snapshot === null
+          || BigInt(state.pending.zero_snapshot) < BigInt(state.head.zero_snapshot)))) {
+        await inAccess(this.options.access, async client => {
+          await requireRecoveryOpen(client);
+          await client.query(`UPDATE access.derived_generation g SET state='cancelled',finished_at=clock_timestamp(),
+            failure_reason='public-ranking-cut-obsolete' WHERE g.id=$1 AND g.state='ready'
+            AND NOT EXISTS (SELECT 1 FROM access.derived_generation_head h WHERE h.active_generation=g.id)`,
+          [state.pending!.id]);
+        });
+        return 'building';
+      }
+      const activation = await this.activate(automaticPublicRanking, state.pending.id, state.head?.revision ?? null,
+        { idempotencyKey: `public-ranking-activate:${state.pending.id}:${state.head?.revision ?? 'none'}`,
+          requestDigest: digest([state.pending.id, state.head?.revision ?? null]) });
+      if (activation.outcome !== 'succeeded') throw new RecommendationStale('Public ranking head changed');
+      return 'activated';
+    }
+    const relay = await this.relayHead(), erasure = await this.erasureHead();
+    const candidates = await this.candidateSnapshot();
+    if (state.head && BigInt(state.head.checkpoint) >= BigInt(relay)
+      && state.head.erasure_epoch === erasure && state.head.zero_snapshot === candidates) return 'current';
+    await this.registerBuild(automaticPublicRanking, PUBLIC_DISCOVERY_RANKING, DISCOVERY_RANKING_REFRESH_COST.partitions,
+      { idempotencyKey: `public-ranking-build:${randomUUID()}`, requestDigest: digest([relay, candidates, erasure]) });
+    return 'registered';
   }
 
   /** Worker entry: take an unclaimed or expired lease. */
@@ -477,12 +580,12 @@ export class RankingGenerations {
     });
   }
 
-  async activate(context: ManageContext, generation: string, expectedHeadRevision: string | null,
+  async activate(context: RankingOperator, generation: string, expectedHeadRevision: string | null,
     receipt: ReceiptKey): Promise<Activation> {
     if (this.options.verifySemantic) {
       await inAccess(this.options.access, async client => {
         await requireRecoveryOpen(client);
-        await authorizeManager(client, context);
+        if (!(publicRankingAutomation in context)) await authorizeManager(client, context);
       });
       let manifest: { basis: RankingBasis } | undefined;
       try {
@@ -490,13 +593,18 @@ export class RankingGenerations {
           input_manifest->'basis' AS basis FROM access.derived_generation
           WHERE id = $1 AND family = 'ranking'`, [generation])).rows[0];
       } catch { throw new RecommendationUnavailable('Access owner is unavailable'); }
-      if (manifest?.basis?.semantic && !await this.options.verifySemantic(context, manifest.basis)) {
+      if (manifest?.basis?.semantic && (publicRankingAutomation in context
+        || !await this.options.verifySemantic(context, manifest.basis))) {
         throw new RecommendationStale('ranking semantic basis changed');
       }
     }
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
-      const principalId = await authorizeManager(client, context);
+      const managerId = publicRankingAutomation in context ? null : await authorizeManager(client, context);
+      const manifest = (await client.query<{ basis: RankingBasis }>(`SELECT input_manifest->'basis' AS basis
+        FROM access.derived_generation WHERE id=$1 AND family='ranking'`, [generation])).rows[0];
+      if (!manifest) throw new RecommendationMissing('generation is unavailable');
+      const principalId = managerId ?? await rankingOperator(client, context, manifest.basis);
       await this.requireCurrentEpoch(client, generation);
       const family = (await client.query<{ family: string }>(
         'SELECT family FROM access.derived_generation WHERE id = $1', [generation])).rows[0];

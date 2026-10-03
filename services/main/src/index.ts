@@ -590,6 +590,7 @@ const mediaScreenWorker = new MediaScreenWorker(new MediaScreenStore(contentPool
   mediaObjects, governanceServices(pool, contentPool, content, sourceIntake, access, environment).store);
 mediaScreenWorker.start();
 discoveryWorker?.start();
+recommendationWorker?.enablePublicRefresh();
 recommendationWorker?.start();
 serialStats?.start();
 zoneBrowse?.start();
