@@ -54,7 +54,7 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
       : rows.find(row => row.id === source.id)?.group_key).filter((key): key is string => !!key));
   const count = groups.size;
   if ((await feed.checkpoint(session.position.dataEpoch)).revision !== checkpoint.revision
-    || reader && personal && (await homePersonal!.read(reader.principal, reader.agent)).revision !== personal.revision) {
+    || reader && personal && (await homePersonal!.fence(reader.principal, reader.agent)).revision !== personal.revision) {
     throw new WorkReadMoved('Feed head changed');
   }
   if (reader && matches && (await follows.matches(reader.principal, reader.agent, [])).revision !== matches.revision) {

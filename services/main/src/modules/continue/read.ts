@@ -49,7 +49,7 @@ export async function readContinue(session: WorkReadSession, principal: Verified
         updatedAt: saved?.changedAt ?? state?.changedAt ?? new Date(0).toISOString() }];
   });
   const [fenced, personalNow, followsNow, stillAllowed] = await inOrder(status.fence(agent),
-    homePersonal.read(principal, agent), follows.read(principal, agent, '', 'work', 1),
+    homePersonal.fence(principal, agent), follows.read(principal, agent, '', 'work', 1),
     canRead.call(session.deps.access, principal, agent));
   if (fenced !== fence || personalNow.revision !== personal.revision || followsNow.revision !== followed.revision
     || !stillAllowed) {

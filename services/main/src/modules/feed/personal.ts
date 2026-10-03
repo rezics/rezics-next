@@ -46,6 +46,23 @@ export const defaultPreferences: HomePreferences = { tab: 'following', sort: 'be
 export class HomePersonalStore {
   constructor(private readonly pool: Pool) {}
 
+  /** The closing read needs only the owner revision, not E exclusions again.
+   * All preference/language/exclusion writes advance home_state in their own
+   * transaction. Recheck current authority and recovery, then seek one PK:
+   * eight SQL statements, <=1 state row, independent of E/follows/history.
+   * A fresh Read Committed statement sees completed intervening writes:
+   * https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED
+   * (reviewed 2026-10-04). Reusing the opening snapshot or a cached permission
+   * would miss changes; reloading the full inventory adds no fence evidence. */
+  async fence(principal: VerifiedPrincipal, agent: string) {
+    return controlRead(this.pool, async client => {
+      const owner = await followPrincipal(client, principal, agent);
+      const row = (await client.query<{ revision: string }>(
+        'SELECT revision FROM access.home_state WHERE principal_id = $1', [owner])).rows[0];
+      return { revision: row?.revision ?? null };
+    });
+  }
+
   async read(principal: VerifiedPrincipal, agent: string) {
     return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
