@@ -47,6 +47,16 @@ Full reconstruction and recovery proofs belong to final acceptance or a relevant
 defect investigation. Routine preparation and its evidence are separate from
 the timed operation.
 
+Large command corpora and performance runs use the
+[disk-backed scale recipe](../testing/complexity.md#api-request-work-profiles).
+Ordinary tests keep tmpfs. This separates TDB2 file growth from the JVM's
+memory allocation; it does not relax preparation time or command semantics.
+Catalogue capacity probes create Works, publish/select contributions and decide
+classification through the public APIs. Measure their preparation throughput
+and storage growth before claiming a scale. If those commands cannot reach a
+requested scale within 600 seconds, fix their owner paths; bypassing admission,
+validation or projections cannot qualify the write cost.
+
 ## Fixed bounds for interactive requests
 
 The maintainer requires a fixed maximum of storage/service round trips for each

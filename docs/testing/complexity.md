@@ -121,6 +121,53 @@ startup/readiness in `startedAt`; preparation and restore each abort at 600
 seconds. The scale constants are diagnostic recipes, not evidence that every
 owner's command corpus already prepares under that ceiling. Qualify the actual
 recipe's preparation time and isolated restore before retaining its dataset.
+
+Large command corpora use `REZICS_QA_STACK_MODE=scale`: one setting chooses
+persistent disk volumes, a 1,536 MiB JVM heap, a 512 MiB direct-memory cap and
+a 7 GiB Fuseki container limit. Ordinary integration shards retain tmpfs,
+512 MiB heap, 128 MiB direct memory and a 2 GiB container limit. The
+[catalogue recipe registry](../../scripts/qa/stack-environment.ts) selects scale
+mode before starting the G-1031 write probe and G-1032 preparation probe;
+the shard planner gives these recipes separate projects. Other scale probes
+can select it explicitly:
+
+```sh
+REZICS_QA_STACK_MODE=scale bun scripts/goal/goalctl.ts test tests/qa/integration/g-1032-query-cost.test.ts
+G1031_SCALES=100,1000,10000 bun scripts/goal/goalctl.ts test tests/qa/integration/g-1031-catalogue-write.test.ts
+```
+
+[`task load`](../../scripts/load/cli.ts) always selects the same scale allocation.
+`REZICS_QA_FUSEKI_MEMORY_LIMIT` and `REZICS_QA_FUSEKI_JVM_ARGS` override its
+allocation; new persistent projects save those settings, and later process
+environments cannot replace the saved project allocation. Use a new run ID
+when changing storage mode. Scale fixture stacks retain QA mutation endpoints;
+command-only native qualification retains the product assembler instead.
+
+Disk backing addresses a specific resource defect:
+[Docker tmpfs data counts against the container memory limit](https://docs.docker.com/engine/storage/tmpfs/),
+while [TDB2 grows between compactions](https://jena.apache.org/documentation/tdb2/tdb2_admin.html).
+Increasing tmpfs capacity cannot supply additional RAM. The selected allocation
+is a local diagnostic recipe, not a production capacity qualification or an
+extension of the 600-second preparation ceiling.
+
+The [catalogue write probe](../../tests/qa/integration/g-1031-catalogue-write.test.ts)
+profiles each of the four public Work commands and a classification decision.
+Unparented preparation is unsampled; measured requests carry sampled parents,
+and PostgreSQL loads after telemetry. It keeps real command retries, relay
+settlement and exact selected-content checks. The larger requested scales fail
+on the preparation deadline rather than substituting raw background rows.
+Its command allowance is at most 400 seconds, reduced by startup/bootstrap
+time when needed to leave 60 seconds for shutdown within the 600-second total.
+Relay settlement time is recorded separately from the sampled API requests.
+[`qaTdbStorage`](../../scripts/load/tdb-growth.ts) observes logical file sizes,
+allocated filesystem blocks, Lucene files and cgroup memory around separate
+32-write cohorts, without another JVM opening the live database. Logical sizes
+alone can miss updates within preallocated files; allocated-block deltas are
+also coarse and include retained generations. Lucene merges can reduce its
+cohort delta. Native validation, indexing and commit phase times remain
+unobserved until the engine supplies their timers. Filesystem growth and HTTP
+duration cannot establish those phase costs.
+
 [`seedPublicProfileWork`](../../scripts/load/work-profile-work.ts) provides the
 Work dimension's real authoring, publication and selection sequence. The
 integration calibration grows 4, 16 and 64 public selected Works, checks every

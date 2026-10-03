@@ -13,15 +13,17 @@ export function stackStorage(options: StackOptions): 'persistent' | 'tmpfs' {
 }
 
 /** Only the fixed shared dev project outranks disposable QA and worktree stacks. */
-export function stackMemorySettings(options: StackOptions): Record<string, string> {
+export function stackMemorySettings(options: StackOptions,
+  env: NodeJS.ProcessEnv = process.env): Record<string, string> {
   // A seeded worktree Fuseki used 5.6 GiB resident with a 2 GiB heap. Allow
   // 7 GiB for mapped TDB2 pages while leaving the smaller QA heap below it.
   return options.profile === 'dev'
     ? { REZICS_FUSEKI_OOM_SCORE_ADJ: '-900', REZICS_POSTGRES_OOM_SCORE_ADJ: '-800',
       REZICS_FUSEKI_MEMORY_LIMIT: '0', REZICS_FUSEKI_JVM_ARGS: '-Xms256m -Xmx2g' }
     : { REZICS_FUSEKI_OOM_SCORE_ADJ: '0', REZICS_POSTGRES_OOM_SCORE_ADJ: '0',
-      REZICS_FUSEKI_MEMORY_LIMIT: '7g',
-      REZICS_FUSEKI_JVM_ARGS: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m' };
+      REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_FUSEKI_MEMORY_LIMIT ?? '7g',
+      REZICS_FUSEKI_JVM_ARGS: env.REZICS_FUSEKI_JVM_ARGS
+        ?? '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m' };
 }
 
 export function assertSavedStackStorage(options: StackOptions, saved: Record<string, string>): void {

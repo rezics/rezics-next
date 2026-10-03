@@ -59,7 +59,7 @@ import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-owner
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
 import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
-import { qaStackEnvironment } from './stack-environment.ts';
+import { qaStackEnvironment, qaStackMode, scaleIntegrationFiles } from './stack-environment.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -73,6 +73,7 @@ const isolation: IsolationRecord[] = [];
 const errors: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
+const rawUpdateProjects = new Set<string>();
 const childStackRegistries = new Set<string>();
 const faultFixtureEnvironment: NodeJS.ProcessEnv = {};
 const inventory = caseInventory(root);
@@ -123,13 +124,20 @@ async function runShard(
   startStack?: <T>(work: () => Promise<T>) => Promise<T>,
   batches: string[][] = [files],
 ): Promise<ShardRun> {
+  const preparationStartedAt = Date.now();
   const environment = qaStackEnvironment({
     ...process.env,
     ...(tier === 'fault/recovery' ? faultFixtureEnvironment : {}),
-  });
+  }, files.some(file => scaleIntegrationFiles.has(file)) ? 'scale' : undefined);
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
-  const persistent = tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
-  const stackArgs = ['--profile', 'qa', '--run-id', projectRunId, ...(persistent ? ['--persistent'] : [])];
+  const persistent = qaStackMode(environment) === 'scale'
+    || tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
+  // Scale changes storage, not a fixture's endpoints. Product-only native
+  // qualification keeps its closed raw-update endpoint in every storage mode.
+  const rawUpdate = persistent && !files.some(file => commandOnlyIntegrationFiles.has(file));
+  if (rawUpdate) rawUpdateProjects.add(projectRunId);
+  const stackArgs = ['--profile', 'qa', '--run-id', projectRunId,
+    ...(persistent ? ['--persistent'] : []), ...(rawUpdate ? ['--raw-update'] : [])];
   const started = persistent ? startedFixtureProjects : startedProjects;
   const label = `${tierArtifactName(tier)}-${projectRunId.slice(runId.length + 1)}`;
   const record: ShardRecord = { project: projectRunId, files, status: 'failed', stage: 'stack',
@@ -204,6 +212,7 @@ async function runShard(
     ...environment,
     ...apps,
     REZICS_QA_RUN_ID: projectRunId,
+    REZICS_QA_PREPARATION_STARTED_AT: String(preparationStartedAt),
     [QA_STACK_REGISTRY]: registry,
     REZICS_QA_ARTIFACT_DIR: directory,
     ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId } : {}),
@@ -670,7 +679,8 @@ try {
   if (!options.keep) {
     const resets = await Promise.all(startedFixtureProjects.map(async projectRunId => ({ projectRunId,
       down: await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa',
-        '--run-id', projectRunId, '--persistent'], 300_000) })));
+        '--run-id', projectRunId, '--persistent',
+        ...(rawUpdateProjects.has(projectRunId) ? ['--raw-update'] : [])], 300_000) })));
     for (const { projectRunId, down } of resets) {
       if (!down.ok) { errors.push(`Fixture stack cleanup failed: ${projectRunId}`);
         writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }

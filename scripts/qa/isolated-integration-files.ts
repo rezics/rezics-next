@@ -137,6 +137,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-897-suitability.test.ts',
   // Optional hydration seeds one Global question and owns its fresh discovery generations.
   'tests/qa/integration/g-1012-optional-hydration.test.ts',
+  // Catalogue write/growth measurements own their initial population and disk-backed project.
+  'tests/qa/integration/g-1031-catalogue-write.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
