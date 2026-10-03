@@ -185,13 +185,14 @@ export interface DirectionFixture {
   unlisted: SpaceRecord;
   work: WorkRecord;
   story: WorkRecord;
+  chapterText: WorkRecord;
   zone: string;
   topic: { concept: string; name: string; names: Record<'en' | 'zh-Hant', string> };
   laterChapter: { occurrence: string; name: string };
 }
 
 export const short = (iri: string) => iri.slice(-36);
-export const fixtureName = 'direction-9-v3';
+export const fixtureName = 'direction-9-v4';
 export const populationCount = 21;
 export const chapterCount = 51;
 const spaceCount = populationCount + 5; // Four private journeys and one unlisted Space.
@@ -270,7 +271,7 @@ export async function seedWikiPosition(
           profile: 'book-composition', expectedHead: head, actingSubject: fixture.owner,
           operations: missing.slice(offset, offset + 16).map((value) => ({
             op: 'insert', parent: structure, role: 'chapter', position: 'last',
-            target: fixture.work.work, label: { value, language: 'en' },
+            target: fixture.chapterText.work, label: { value, language: 'en' },
           })),
         },
       );
@@ -402,16 +403,20 @@ export async function seedDirection(
         return { ...record, name, ...(handle ? { handle } : {}) };
       }),
     ),
-    phase('published Works', () =>
-      parallel([`Direction 9 Work ${suffix}`, `Direction 9 story ${suffix}`], (title) =>
-        createWork(title, 'https://schema.org/Book'),
-      ),
-    ),
+    phase('published Works', async () => {
+      const works: WorkRecord[] = [];
+      // Provisioning establishes the writer's grants. Finish one publication
+      // before the next Work changes that writer's authority basis.
+      for (const title of [`Direction 9 rating Work ${suffix}`, `Direction 9 submitted story ${suffix}`,
+        `Direction 9 chapter publication ${suffix}`])
+        works.push(await createWork(title, 'https://schema.org/Book'));
+      return works;
+    }),
   ] as const);
   if (spaceResult.status === 'rejected') throw spaceResult.reason;
   if (workResult.status === 'rejected') throw workResult.reason;
   const spaces = spaceResult.value;
-  const [work, story] = workResult.value;
+  const [work, story, chapterText] = workResult.value;
   await phase('Realm owner enrollment', () =>
     parallel(spaces, (space) =>
       ownerApi.write(`/realms/${short(space.realm)}/management`, { actingSubject: owner }),
@@ -571,7 +576,9 @@ export async function seedDirection(
             parent: composition.structure,
             role: 'chapter',
             position: 'last',
-            target: work.work,
+            // A chapter Work opens at its containing story. Keep the Work whose
+            // Overview supplies the rating picker independent of composition.
+            target: chapterText.work,
             label: {
               value: offset + index + 1 === chapterCount ? name : `Chapter ${offset + index + 1}`,
               language: 'en',
@@ -619,6 +626,7 @@ export async function seedDirection(
     unlisted,
     work,
     story,
+    chapterText,
     zone,
     topic,
     laterChapter: later,

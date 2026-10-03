@@ -11,14 +11,12 @@ import {
 } from '@playwright/test';
 import { entityPickerMessages } from '../../../packages/ui/src/components/entity-picker-messages.ts';
 import { uuidToSid } from '@rezics/model/address';
-import { materializeData } from 'native-i18n';
 import { canonicalHref, type Surface } from '../features/address/path.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
 import { messages as authMessages } from '../features/auth/messages.ts';
 import { browseMessages } from '../features/discover/browse-messages.ts';
 import { accessMessages } from '../features/manage/settings-messages.ts';
-import { messages as realmMessages } from '../features/realm/messages.ts';
-import realmChinese from '../features/realm/messages/zh-Hant.ts';
+import { messages as relationshipMessages } from '../features/relationships/messages.ts';
 import { messages as studioMessages } from '../features/studio/messages.ts';
 import studioChinese from '../features/studio/messages/zh-Hant.ts';
 import { messages as shellEnglish } from '../features/shell/messages.ts';
@@ -687,7 +685,10 @@ for (const locale of locales)
         await readyDirection(new PublicCommands(page.request), fixture, 'ratings');
         const t = browseMessages[locale];
         const workAddress = await address(page, 'work', fixture.work.work, locale);
-        await page.goto(canonicalHref(workAddress.canonical, locale));
+        const overview = canonicalHref(workAddress.canonical, locale);
+        await page.goto(overview);
+        await expect(page).toHaveURL(overview);
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(workAddress.canonical.slugSource);
         await page.getByRole('button', { name: t.otherCommunities, exact: true }).first().click();
         await page.getByRole('combobox', { name: t.chooseCommunity, exact: true }).click();
         await expect(page.getByRole('option').first()).toBeVisible();
@@ -790,7 +791,7 @@ for (const locale of locales)
         const t = accessMessages[locale];
         const privateSpace =
           fixture.privateSpaces[locales.indexOf(locale) * views.length + views.indexOf(view)]!;
-        const path = `/${locale}/r/${privateSpace.handle}`;
+        const path = `/${locale}/r/${privateSpace.handle}/discussions`;
         await selectActor(page, fixture.actor, `/${locale}/settings`);
         const previous = await phase(`reset admission ${locale} ${view.name}`, () =>
           resetAdmission(new PublicCommands(page.request), fixture, privateSpace),
@@ -798,6 +799,8 @@ for (const locale of locales)
         const anonymous = await browser.newContext({
           baseURL: info.project.use.baseURL,
           viewport: view.viewport,
+          // Playwright applies the project's member storageState to new contexts.
+          storageState: { cookies: [], origins: [] },
         });
         const managerContext = await browser.newContext({
           baseURL: info.project.use.baseURL,
@@ -827,7 +830,7 @@ for (const locale of locales)
           await expect(page.getByText(t.pending, { exact: true })).toBeVisible();
           await screenshot(page, info, 'private-request-pending');
           const manager = await managerContext.newPage();
-          await manager.goto(`/${locale}/manage`);
+          // Select the fixture's manager before loading its scoped requests.
           await selectActor(
             manager,
             fixture.manager,
@@ -846,8 +849,10 @@ for (const locale of locales)
           expect(own.filter((item) => !previous.has(item.id)).map((item) => item.state)).toEqual([
             'accepted',
           ]);
-          const realm = materializeData(locale === 'en' ? realmMessages : realmChinese, { locale });
-          await expect(page.getByRole('button', { name: realm.joined, exact: true })).toBeVisible();
+          const relationship = relationshipMessages[locale];
+          await expect(page.getByRole('button', {
+            name: `${relationship.joined} · ${privateSpace.name} · ${relationship.leave}`, exact: true,
+          })).toBeVisible();
           await expect(page.getByText(t.pending, { exact: true })).toHaveCount(0);
           await screenshot(page, info, 'private-requester-reloaded');
         } finally {

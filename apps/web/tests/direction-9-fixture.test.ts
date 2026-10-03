@@ -18,7 +18,7 @@ describe('Direction 9 public fixture commands', () => {
   function wikiRecipe(options: { missing?: boolean; fallback?: boolean; document?: boolean } = {}) {
     const iri = () => `https://rezics.com/id/${randomUUID()}`;
     const space = iri(), zone = iri(), work = iri(), structure = iri();
-    const fixture = { owner: iri(), actor: iri(), work: { work: iri() }, story: { work: iri() } } as DirectionFixture;
+    const fixture = { owner: iri(), actor: iri(), work: { work: iri() }, story: { work: iri() }, chapterText: { work: iri() } } as DirectionFixture;
     const items = Array.from({ length: 3 }, (_, index) => ({
       occurrence: iri(), structure, labels: [{ value: `Chapter ${index + 1}`, language: 'en' }],
     }));
@@ -76,6 +76,8 @@ describe('Direction 9 public fixture commands', () => {
       path === `/api/main/v1/compositions/${recipe.items[0]!.structure.slice(-36)}/changes`
       && data.actingSubject === recipe.fixture.owner,
     )).toBe(true);
+    expect(recipe.writes.flatMap(({ data }) => data.operations as { target: string }[])
+      .every(({ target }) => target === recipe.fixture.chapterText.work)).toBe(true);
     expect(await seedWikiPosition(recipe.api, recipe.fixture)).toEqual(wiki);
     expect(recipe.writes).toHaveLength(4);
   });
@@ -493,11 +495,16 @@ describe('Direction 9 public fixture commands', () => {
       );
       expect(chapters).toHaveLength(4);
       expect(chapters.flatMap((command) => command.data.operations as unknown[])).toHaveLength(51);
+      const chapterTargets = chapters.flatMap((command) => command.data.operations as { target: string }[])
+        .map((operation) => operation.target);
+      expect(new Set(chapterTargets)).toEqual(new Set([fixture.chapterText.work]));
+      expect(chapterTargets).not.toContain(fixture.work.work);
+      expect(chapterTargets).not.toContain(fixture.story.work);
       expect(fixture.laterChapter.name).toContain('遠方 chapter 51');
       expect(commands.every((command) => command.path.startsWith('/api/main/v1/'))).toBe(true);
       expect(
         commands.filter((command) => command.path.endsWith('/contribution-publications')),
-      ).toHaveLength(2);
+      ).toHaveLength(3);
       expect(commands.filter((command) => command.path.endsWith('/zones'))).toHaveLength(1);
       if (administrator) {
         expect(
