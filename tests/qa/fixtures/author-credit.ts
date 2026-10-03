@@ -100,7 +100,10 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
     const value = Reflect.get(target, property, target);
     return typeof value === 'function' ? value.bind(target) : value;
   } }) as Pool;
-  const env = { fuseki, addresses: new NameRegistry(accessPool),lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! }, objectDirectory };
+  // A shard's graph retains earlier Context/Work heads. Their immutable bytes
+  // must share its lifetime, including manifests read by rating/card hydration.
+  const env = { fuseki, addresses: new NameRegistry(accessPool),lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
+    objectDirectory: apps.MAIN_OBJECT_DIRECTORY ?? objectDirectory };
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   const intake = new SourceIntakeStore(pool), conversions = new OpenLibraryConversionStore(pool, intake);
   const graph = new OpenLibrarySourceGraph(fuseki, env.lineage, conversions);

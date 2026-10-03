@@ -7,6 +7,8 @@ import { prepareLibraryShelves, readShelfMetadata, SHELF_METADATA_COST } from '.
 import { ReaderLibraryStatusStore, STATUS_SHELF_COST, type ReadingStatus, type ShelfOrder, type ShelfSort }
   from '../../../services/main/src/modules/library/status.ts';
 import { meterStatements, startHomeStack } from './feed-read-support.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { fixtureDeadline, fixturePages } from '../../../services/main/tests/g-1009-fixture-guards.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const statuses: ReadingStatus[] = ['want-to-read', 'reading', 'read'];
@@ -17,14 +19,45 @@ const keys = { added: 'changed_at', title: 'title_key COLLATE "C"', rating: 'own
   'last-read': 'last_read_at', finished: 'finished_on' };
 type Page = { items: { work: string; card: { id: string } | null }[]; nextCursor: string | null };
 
+async function startLibraryStack(label: string) {
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack(label, { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
+  const fixtureSubjects = new Set<string>();
+  return { ...home, contentUrl: databases.urls.content, fixtureSubjects, stop: async () => {
+    try {
+      // Raw scale fixtures have no durable commands. Remove only their subjects
+      // so these 1,000 publication pointers cannot enter later global reads.
+      const subjects = [...fixtureSubjects];
+      for (let offset = 0; offset < subjects.length; offset += 100) {
+        await home.stack.fuseki.update(`DELETE { GRAPH ?graph { ?subject ?predicate ?object } } WHERE {
+          VALUES ?graph { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} }
+          VALUES ?subject { ${subjects.slice(offset, offset + 100).map(iri).join(' ')} }
+          GRAPH ?graph { ?subject ?predicate ?object }
+        }`);
+      }
+    } finally { try { await home.stop(); } finally { await databases.close(); } }
+  } };
+}
+
 /** Large owner fixture, intentionally made in bounded batches. Publication
  * pointers have the same read shape as a command-created metadata Work; the
  * reader/authority boundary is provisioned through the real API. */
-async function publishFixture(home: Awaited<ReturnType<typeof startHomeStack>>, works: string[]) {
+async function publishFixture(home: Awaited<ReturnType<typeof startLibraryStack>>, works: string[]) {
   for (let offset = 0; offset < works.length; offset += 50) {
     const fixtures = works.slice(offset, offset + 50).map((work, i) => ({ work,
       main: id(), head: id(), contribution: id(), decision: id(), draft: id(), selection: id(),
       title: `Shelf title ${String((offset + i) % 30).padStart(2, '0')}` }));
+    for (const fixture of fixtures) for (const subject of [fixture.work, fixture.main, fixture.head,
+      fixture.contribution, fixture.decision, fixture.draft, fixture.selection]) home.fixtureSubjects.add(subject);
     await home.stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
       PREFIX schema: <https://schema.org/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
@@ -45,7 +78,7 @@ async function publishFixture(home: Awaited<ReturnType<typeof startHomeStack>>, 
 }
 
 test('G-824: 1,000 Works traverse each status in every SQL sort/direction without gaps; cursors fence concurrent moves', async () => {
-  const home = await startHomeStack('g-824-traversal');
+  const home = await startLibraryStack('g-824-traversal');
   try {
     const agent = await home.provision('Shelf traversal reader', home.reader.token);
     const works = Array.from({ length: 1_000 }, id);
@@ -84,11 +117,15 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
             FROM reader.library_status WHERE agent = $1 AND status = $2
             ORDER BY ${keys[sort]} ${order} NULLS LAST, work ${order}`, [agent, status])).rows.map(row => row.work);
           const actual: string[] = [];
+          const stage = `G-824 owned ${status}/${sort}/${order}`;
+          const recordPage = fixturePages(stage, expected.length);
           let cursor: string | null = null;
           do {
             const path = `/v1/me/shelves/status/${status}/works?sort=${sort}&order=${order}&limit=20`
               + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
-            const page = await home.json<Page>(await home.call('GET', signed(path), undefined, home.reader.token));
+            const page = await fixtureDeadline(home.call('GET', signed(path), undefined, home.reader.token)
+              .then(response => home.json<Page>(response)), stage);
+            recordPage(page.items.map(item => item.work), page.nextCursor);
             expect(page.items.length).toBeGreaterThan(0);
             expect(page.items.length).toBeLessThanOrEqual(20);
             expect(page.items.every(item => item.card?.id === item.work)).toBe(true);
@@ -117,12 +154,15 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
       const scans = spyOn(home.deps.libraryStatus, 'sortedPage');
       try {
         const sharedWorks = publicPage.items.map(item => item.work);
+        const recordPage = fixturePages('G-824 public read/title/asc', publicPage.statusCount);
+        recordPage(sharedWorks, publicPage.nextCursor);
         let sharedCursor = publicPage.nextCursor;
         while (sharedCursor) {
           scans.mockClear();
           const graphBefore = home.stack.fuseki.queries;
-          const page = await home.json<Page & { statusCount: number }>(await home.call('GET',
-            `${sharedBase}&cursor=${encodeURIComponent(sharedCursor)}`));
+          const page = await fixtureDeadline(home.call('GET', `${sharedBase}&cursor=${encodeURIComponent(sharedCursor)}`)
+            .then(response => home.json<Page & { statusCount: number }>(response)), 'G-824 public read/title/asc');
+          recordPage(page.items.map(item => item.work), page.nextCursor);
           expect(page.statusCount).toBe(publicPage.statusCount);
           // Two candidate batches at most (including lookahead); no count scan.
           expect(scans.mock.calls.length).toBeLessThanOrEqual(2);
@@ -166,14 +206,15 @@ test('G-824: 1,000 Works traverse each status in every SQL sort/direction withou
         undefined, home.reader.token)).status).toBe(404);
     } finally { meter.restore(); }
   } finally { await home.stop(); }
-}, 600_000);
+}, 240_000);
 
 test('G-824: frozen chapter rows backfill once; owner placeholders match counts and public shelves skip them', async () => {
-  const home = await startHomeStack('g-824-backfill');
+  const home = await startLibraryStack('g-824-backfill');
   try {
     const agent = await home.provision('Backfill reader', home.reader.token);
     const parent = await home.stack.publicWork(agent, ['en'], 'Backfill parent');
     const child = id();
+    home.fixtureSubjects.add(child);
     await home.stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(child)} schema:isPartOf ${iri(parent.work)} } }`);
     await home.stack.contentPool.query(`INSERT INTO reader.library_status
@@ -192,10 +233,13 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
       FROM unnest($2::text[]) fixture(work)`, [agent, unavailable]);
     const ownBase = `/v1/me/shelves/status/reading/works?actingSubject=${encodeURIComponent(agent)}&limit=20`;
     const owned: Page['items'] = [];
+    const recordPage = fixturePages('G-824 owner placeholders', unavailable.length + 1);
     let cursor: string | null = null;
     do {
-      const page = await home.json<Page>(await home.call('GET', ownBase
-        + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''), undefined, home.reader.token));
+      const page = await fixtureDeadline(home.call('GET', ownBase
+        + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''), undefined, home.reader.token)
+        .then(response => home.json<Page>(response)), 'G-824 owner placeholders');
+      recordPage(page.items.map(item => item.work), page.nextCursor);
       owned.push(...page.items);
       cursor = page.nextCursor;
     } while (cursor);
@@ -265,26 +309,32 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
       WHERE agent=$1 AND work=$2`, [agent, parent.work])).rows[0]!.title_key).toBe('backfill parent');
     // Metadata reads reuse the write's connection: a one-connection Content
     // pool must complete concurrent writers rather than queue behind itself.
-    const single = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 1 });
+    // Bound the pool queue as well: a nested acquisition must release its
+    // transaction on failure, so cleanup cannot wait behind that same holder.
+    const single = new Pool({ connectionString: home.contentUrl, max: 1,
+      connectionTimeoutMillis: 5_000, query_timeout: 10_000 });
     try {
       await prepareLibraryShelves(single, home.stack.accessPool, home.stack.fuseki);
       const store = new ReaderLibraryStatusStore(single);
-      const results = await Promise.all(Array.from({ length: 4 }, () => store.write({ agent,
-        work: id(), status: 'want-to-read', expectedVersion: 0, idempotencyKey: randomUUID() })));
+      const results = await fixtureDeadline(Promise.all(Array.from({ length: 4 }, () => store.write({ agent,
+        work: id(), status: 'want-to-read', expectedVersion: 0, idempotencyKey: randomUUID() }))),
+      'G-824 concurrent one-connection Content writers');
       expect(results.every(result => result.version === 1)).toBe(true);
     } finally { await single.end(); }
 
   } finally { await home.stop(); }
-}, 600_000);
+}, 120_000);
 
 
 test('G-824: background backfill isolates graph and SQL failures, serves reads, and retries only pending rows', async () => {
-  const home = await startHomeStack('g-824-backfill-recovery');
+  const home = await startLibraryStack('g-824-backfill-recovery');
   try {
     const agent = await home.provision('Backfill recovery reader', home.reader.token);
     const healthy = Array.from({ length: 30 }, id).sort(), badWrite = id(), badMetadata = id(), badParent = id();
     await publishFixture(home, [...healthy, badWrite]);
     const extraMain = id(), retainedMain = id();
+    home.fixtureSubjects.add(badParent);
+    home.fixtureSubjects.add(badMetadata);
     await home.stack.fuseki.update(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
         ${iri(badParent)} schema:isPartOf ${iri(healthy[0]!)}, ${iri(healthy[1]!)} .
@@ -307,11 +357,10 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
     const graph = home.stack.fuseki;
     const original = graph.query.bind(graph);
     let first = true;
-    let pendingWork = '';
+    const pendingWork = healthy[1]!; // Only this Agent owns this Work's frozen row.
     const paused = spyOn(graph, 'query').mockImplementation(async (...args) => {
-      if (first && args[0].includes('SELECT ?main ?label ?structure')) {
+      if (first && args[0].includes('SELECT ?main ?label ?structure') && args[0].includes(iri(pendingWork))) {
         first = false;
-        pendingWork = [...healthy, badWrite, badMetadata].find(work => args[0].includes(iri(work)))!;
         entered(); await gate;
       }
       return original(...args);
@@ -319,7 +368,9 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
     const before = await alsoEnjoyedFence(home.stack.contentPool);
     const pending = prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
     try {
-      await enteredGraph;
+      await fixtureDeadline(Promise.race([enteredGraph, pending.then(() => {
+        throw new Error(`G-824 backfill finished without reading its owned Work ${pendingWork}`);
+      })]), `G-824 backfill metadata read for ${pendingWork}`);
       // A blocked migration read cannot hold Main's reader endpoints hostage.
       expect((await home.call('GET', `/v1/me/shelves?actingSubject=${encodeURIComponent(agent)}`,
         undefined, home.reader.token)).status).toBe(200);
@@ -328,10 +379,13 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
       expect((await home.stack.contentPool.query<{ locked: boolean }>(
         'SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS locked',
         [JSON.stringify(['library-status-work', agent, pendingWork])])).rows[0]!.locked).toBe(false);
-    } finally { resume(); await pending; paused.mockRestore(); }
+    } finally {
+      resume();
+      try { await fixtureDeadline(pending, 'G-824 resumed backfill'); } finally { paused.mockRestore(); }
+    }
     expect(errors.sort()).toEqual([badWrite, badMetadata, badParent].sort());
     expect((await home.stack.contentPool.query<{ count: string }>(`SELECT count(*)::text FROM reader.library_status
-      WHERE title_key=''`)).rows[0]!.count).toBe('3');
+      WHERE agent=$1 AND title_key=''`, [agent])).rows[0]!.count).toBe('3');
     expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(before);
     const snapshot = await home.deps.libraryStatus.fence(agent);
     errors.length = 0;
@@ -347,7 +401,7 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
     expect(errors).toEqual([]);
     expect((await home.stack.contentPool.query<{ count: string }>(`SELECT count(*)::text FROM reader.library_status
-      WHERE title_key=''`)).rows[0]!.count).toBe('0');
+      WHERE agent=$1 AND title_key=''`, [agent])).rows[0]!.count).toBe('0');
     expect((await home.deps.libraryStatus.batch(agent, [badParent]))[0]).toMatchObject({ status: null, version: 2 });
     expect([...(await home.deps.libraryStatus.batch(agent, healthy.slice(0, 20))),
       ...(await home.deps.libraryStatus.batch(agent, healthy.slice(20)))]
@@ -367,4 +421,4 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
       lock.release();
     }
   } finally { await home.stop(); }
-}, 600_000);
+}, 120_000);

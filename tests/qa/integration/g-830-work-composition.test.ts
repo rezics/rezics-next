@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { randomInt, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
@@ -19,6 +18,8 @@ import { CompositionConflict, compositionRestoreDigest } from '../../../services
 import { structureProfileFor } from '../../../services/main/src/modules/structure/profiles.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { queryPublicMainPhrase } from '../../../services/main/src/modules/work/search-public.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
+import { fixtureDeadline, fixturePages } from '../../../services/main/tests/g-1009-fixture-guards.ts';
 
 interface Work { work: string; mainVersion: string }
 interface Composition { structure: string; revision: string; receipt: string; replayed: boolean;
@@ -28,9 +29,23 @@ interface Part { occurrence: string; role: 'group' | 'part'; work?: string; main
 interface Parts { parts: Part[]; next: string | null; revision: string;
   completion: { status: string; evidence: string[] } }
 
+async function compositionFixture(scopes?: string) {
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['account', 'content', 'relay']);
+  const apps = { ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account,
+    CONTENT_DATABASE_URL: databases.urls.content, ACCOUNT_RELAY_DATABASE_URL: databases.urls.relay } as Record<string, string>;
+  // Access retains the shared graph's global Rating Context inventory. This
+  // fixture's principals, grants and Works have fresh identities; its source
+  // adoptions, author names and projection relay belong to its own databases.
+  try {
+    const f = await authorCreditFixture(apps, apps.MAIN_OBJECT_DIRECTORY!, scopes);
+    return { ...f, relayUrl: databases.urls.relay,
+      close: async () => { try { await f.close(); } finally { await databases.close(); } } };
+  } catch (error) { await databases.close(); throw error; }
+}
+
 test('G-830: Index compositions retain local numbering, publication order, replay, authority and cross-level paging', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
-  const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `g-830-${randomUUID()}`));
+  const f = await compositionFixture();
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
     region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
     secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/structure/' });
@@ -85,9 +100,12 @@ test('G-830: Index compositions retain local numbering, publication order, repla
         composition = changed;
       }
       const all: Part[] = [];
+      const recordPage = fixturePages(`G-830 parts for ${work.work}`, labels.length);
       let cursor: string | null = null;
       do {
-        const page = await parts(work, `&limit=7${cursor ? `&after=${encodeURIComponent(cursor)}` : ''}`);
+        const page = await fixtureDeadline(parts(work, `&limit=7${cursor ? `&after=${encodeURIComponent(cursor)}` : ''}`),
+          `G-830 parts for ${work.work}`);
+        recordPage(page.parts.map(item => item.occurrence), page.next);
         expect(page).not.toHaveProperty('placementCount');
         all.push(...page.parts);
         cursor = page.next;
@@ -202,9 +220,12 @@ test('G-830: Index compositions retain local numbering, publication order, repla
     expect(privateRaw).not.toHaveProperty('placementCount');
     expect(JSON.stringify(privateRaw)).not.toContain(repeatedWork.work);
     const disclosedParts: Part[] = [];
+    const recordDisclosed = fixturePages(`G-830 disclosed parts for ${original.work}`, before.parts.length - 1);
     let disclosedAfter: string | null = null;
     do {
-      const page = await parts(original, `&limit=1${disclosedAfter ? `&after=${encodeURIComponent(disclosedAfter)}` : ''}`);
+      const page = await fixtureDeadline(parts(original, `&limit=1${disclosedAfter ? `&after=${encodeURIComponent(disclosedAfter)}` : ''}`),
+        `G-830 disclosed parts for ${original.work}`);
+      recordDisclosed(page.parts.map(item => item.occurrence), page.next);
       expect(page.parts).toHaveLength(1);
       disclosedParts.push(...page.parts);
       disclosedAfter = page.next;
@@ -233,7 +254,7 @@ test('G-830: Index compositions retain local numbering, publication order, repla
 
 test('G-830: a composed volume stays discoverable in multifield search, public search, author works and Zone browse', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
-  const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `g-830-search-${randomUUID()}`));
+  const f = await compositionFixture();
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
     region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
     secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/structure/' });
@@ -246,8 +267,9 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
   });
   try {
     const token = `g830${randomUUID().replaceAll('-', '')}`;
-    const authorKey = '/authors/OL830830A';
-    const proposal = await f.propose('OL830830W', [{ author: { key: authorKey } }], `Volume ${token}`);
+    const authorId = `OL${randomInt(1, 1_000_000_000_000)}A`;
+    const authorKey = `/authors/${authorId}`;
+    const proposal = await f.propose(`OL${randomInt(1, 1_000_000_000_000)}W`, [{ author: { key: authorKey } }], `Volume ${token}`);
     const volume = await f.adoptWork(proposal);
     await f.grant(`work:read:${volume.work}`, 'work.read');
     f.setAuthorName(authorKey, 'Catalogue author');
@@ -283,9 +305,10 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
       .map(item => item.work)).toContain(volume.work);
     expect((await queryPublicMainPhrase(f.env, { phrase: token, language: 'en' })).results
       .map(item => item.work)).toContain(volume.work);
-    const authorPage = await f.json<{ items: Array<{ id: string }> }>(await f.call('GET',
-      `/v1/authors/open-library/OL830830A/works?actingSubject=${encodeURIComponent(f.actor)}`), 200);
-    expect(authorPage.items.map(item => item.id)).toContain(volume.work);
+    const authorPage = await fixtureDeadline(f.call('GET',
+      `/v1/authors/open-library/${authorId}/works?actingSubject=${encodeURIComponent(f.actor)}`)
+      .then(response => f.json<{ items: Array<{ id: string }> }>(response, 200)), 'G-830 composed-volume author works');
+    expect(authorPage.items.map(item => item.id)).toEqual([volume.work]);
     const realmInput = { name: `Volume catalogue ${token}`, actingSubject: f.actor };
     const space = await createRealmSpace(f.env, admission('space:create:root', 'space.create',
       spaceCreationDigest(realmInput)), realmInput);
@@ -296,10 +319,10 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
       selectionBasis: 'realm-manager-review' as const, actingSubject: f.actor };
     expect((await selectRealmLocal(f.env, admission(`publication:adopt:${space.realm}`,
       'publication.adopt', realmSelectionDigest(adoptionInput)), adoptionInput)).outcome).toBe('succeeded');
-    const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
+    const relay = new Pool({ connectionString: f.relayUrl });
     try {
       const zoneBrowse = new ZoneBrowseProjection(f.accessPool, relay, f.env);
-      await zoneBrowse.backfill();
+      await fixtureDeadline(zoneBrowse.backfill(), 'G-830 composed-volume Zone browse backfill');
       const zoneApp = createMainApp(f.env.fuseki, { environment: f.env, catalogueIntake: f.catalogueIntake, access: f.access, zoneBrowse,
         account: f.account.verifier });
       const zone = await f.json<{ items: Array<{ id: string }> }>(await zoneApp.handle(new Request(
@@ -314,7 +337,7 @@ test('G-830: a composed volume stays discoverable in multifield search, public s
 
 test('G-830: Zone restore validates the candidate generation and seals qualifier topology rejections', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
-  const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `g-830-restore-${randomUUID()}`),
+  const f = await compositionFixture(
     'openid work:create work:read space:create zone:edit collection:edit semantic:read');
   const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!, bucket: Bun.env.MAIN_S3_BUCKET!,
     region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
