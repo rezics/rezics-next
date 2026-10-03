@@ -123,6 +123,7 @@ workers do not overload the host:
 task goal -- test <explicit test files> [-t <ID>]
 bun node_modules/typescript/bin/tsc --project services/main/tsconfig.json   # or the owner's tsconfig
 node_modules/.bin/oxlint --type-aware <changed source directories>        # lint and promise rules
+task ast-grep -- scan <changed files>                                     # repository rules that task check enforces
 ```
 
 In a worktree, `task dev` runs web and Storybook natively on random ports
