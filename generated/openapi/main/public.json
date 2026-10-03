@@ -111822,6 +111822,255 @@
                                       },
                                       "maxItems": 64,
                                       "type": "array"
+                                    },
+                                    "work": {
+                                      "properties": {
+                                        "creditCount": {
+                                          "properties": {
+                                            "kind": {
+                                              "enum": [
+                                                "exact",
+                                                "at-least"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "value",
+                                            "kind"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "primaryCredits": {
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "properties": {
+                                                  "agent": {
+                                                    "type": "null"
+                                                  },
+                                                  "confirmation": {
+                                                    "const": "source-reported",
+                                                    "type": "string"
+                                                  },
+                                                  "displayName": {
+                                                    "~elyTyp": 7,
+                                                    "maxLength": 200,
+                                                    "minLength": 1,
+                                                    "nullable": true,
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "handle": {
+                                                    "type": "null"
+                                                  },
+                                                  "id": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "key": {
+                                                    "type": "string"
+                                                  },
+                                                  "nameSource": {
+                                                    "properties": {
+                                                      "basis": {
+                                                        "const": "facts",
+                                                        "type": "string"
+                                                      },
+                                                      "digest": {
+                                                        "type": "string"
+                                                      },
+                                                      "fetchedAt": {
+                                                        "type": "string"
+                                                      },
+                                                      "field": {
+                                                        "const": "/name",
+                                                        "type": "string"
+                                                      },
+                                                      "observation": {
+                                                        "type": "string"
+                                                      },
+                                                      "record": {
+                                                        "type": "string"
+                                                      },
+                                                      "revision": {
+                                                        "type": "string"
+                                                      },
+                                                      "sourceRevision": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      "url": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "record",
+                                                      "observation",
+                                                      "revision",
+                                                      "sourceRevision",
+                                                      "digest",
+                                                      "url",
+                                                      "fetchedAt",
+                                                      "basis",
+                                                      "field"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "ordinal": {
+                                                    "type": "integer"
+                                                  },
+                                                  "participantKind": {
+                                                    "const": "external-reference",
+                                                    "type": "string"
+                                                  },
+                                                  "provider": {
+                                                    "const": "open-library",
+                                                    "type": "string"
+                                                  },
+                                                  "role": {
+                                                    "const": "author",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "role",
+                                                  "participantKind",
+                                                  "provider",
+                                                  "key",
+                                                  "ordinal",
+                                                  "agent",
+                                                  "displayName",
+                                                  "handle"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "properties": {
+                                                  "agent": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "displayName": {
+                                                    "maxLength": 200,
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "handle": {
+                                                    "maxLength": 100,
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "id": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "key": {
+                                                    "type": "null"
+                                                  },
+                                                  "ordinal": {
+                                                    "type": "null"
+                                                  },
+                                                  "participantKind": {
+                                                    "const": "agent",
+                                                    "type": "string"
+                                                  },
+                                                  "provider": {
+                                                    "type": "null"
+                                                  },
+                                                  "role": {
+                                                    "const": "author",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "role",
+                                                  "participantKind",
+                                                  "provider",
+                                                  "key",
+                                                  "ordinal",
+                                                  "agent",
+                                                  "displayName",
+                                                  "handle"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            ]
+                                          },
+                                          "maxItems": 3,
+                                          "type": "array"
+                                        },
+                                        "rating": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "properties": {
+                                            "context": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                              "type": "string"
+                                            },
+                                            "count": {
+                                              "maximum": 100,
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "mean": {
+                                              "type": "number"
+                                            },
+                                            "scale": {
+                                              "properties": {
+                                                "max": {
+                                                  "enum": [
+                                                    5,
+                                                    10
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "min": {
+                                                  "const": 1,
+                                                  "type": "number"
+                                                }
+                                              },
+                                              "required": [
+                                                "min",
+                                                "max"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "sum": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "context",
+                                            "count",
+                                            "sum",
+                                            "mean",
+                                            "scale"
+                                          ],
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "primaryCredits",
+                                        "creditCount",
+                                        "rating"
+                                      ],
+                                      "type": "object"
                                     }
                                   },
                                   "required": [
@@ -347922,6 +348171,255 @@
                                     },
                                     "maxItems": 64,
                                     "type": "array"
+                                  },
+                                  "work": {
+                                    "properties": {
+                                      "creditCount": {
+                                        "properties": {
+                                          "kind": {
+                                            "enum": [
+                                              "exact",
+                                              "at-least"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "kind"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "primaryCredits": {
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "agent": {
+                                                  "type": "null"
+                                                },
+                                                "confirmation": {
+                                                  "const": "source-reported",
+                                                  "type": "string"
+                                                },
+                                                "displayName": {
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 200,
+                                                  "minLength": 1,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "handle": {
+                                                  "type": "null"
+                                                },
+                                                "id": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "nameSource": {
+                                                  "properties": {
+                                                    "basis": {
+                                                      "const": "facts",
+                                                      "type": "string"
+                                                    },
+                                                    "digest": {
+                                                      "type": "string"
+                                                    },
+                                                    "fetchedAt": {
+                                                      "type": "string"
+                                                    },
+                                                    "field": {
+                                                      "const": "/name",
+                                                      "type": "string"
+                                                    },
+                                                    "observation": {
+                                                      "type": "string"
+                                                    },
+                                                    "record": {
+                                                      "type": "string"
+                                                    },
+                                                    "revision": {
+                                                      "type": "string"
+                                                    },
+                                                    "sourceRevision": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "url": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "record",
+                                                    "observation",
+                                                    "revision",
+                                                    "sourceRevision",
+                                                    "digest",
+                                                    "url",
+                                                    "fetchedAt",
+                                                    "basis",
+                                                    "field"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "ordinal": {
+                                                  "type": "integer"
+                                                },
+                                                "participantKind": {
+                                                  "const": "external-reference",
+                                                  "type": "string"
+                                                },
+                                                "provider": {
+                                                  "const": "open-library",
+                                                  "type": "string"
+                                                },
+                                                "role": {
+                                                  "const": "author",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "role",
+                                                "participantKind",
+                                                "provider",
+                                                "key",
+                                                "ordinal",
+                                                "agent",
+                                                "displayName",
+                                                "handle"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "agent": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "displayName": {
+                                                  "maxLength": 200,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "handle": {
+                                                  "maxLength": 100,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "id": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "key": {
+                                                  "type": "null"
+                                                },
+                                                "ordinal": {
+                                                  "type": "null"
+                                                },
+                                                "participantKind": {
+                                                  "const": "agent",
+                                                  "type": "string"
+                                                },
+                                                "provider": {
+                                                  "type": "null"
+                                                },
+                                                "role": {
+                                                  "const": "author",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "role",
+                                                "participantKind",
+                                                "provider",
+                                                "key",
+                                                "ordinal",
+                                                "agent",
+                                                "displayName",
+                                                "handle"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "rating": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "properties": {
+                                          "context": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "count": {
+                                            "maximum": 100,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "mean": {
+                                            "type": "number"
+                                          },
+                                          "scale": {
+                                            "properties": {
+                                              "max": {
+                                                "enum": [
+                                                  5,
+                                                  10
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "const": 1,
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "min",
+                                              "max"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "sum": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "context",
+                                          "count",
+                                          "sum",
+                                          "mean",
+                                          "scale"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "primaryCredits",
+                                      "creditCount",
+                                      "rating"
+                                    ],
+                                    "type": "object"
                                   }
                                 },
                                 "required": [
