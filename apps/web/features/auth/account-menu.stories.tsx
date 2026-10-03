@@ -390,8 +390,9 @@ export const ContentUnavailable: Story = {
   async play({ canvasElement }) {
     const page = within(canvasElement.ownerDocument.body);
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Account menu' }));
-    await expect(
-      await page.findByRole('menuitem', { name: 'Content preferences: Unavailable' }),
-    ).toBeVisible();
+    const content = await page.findByRole('menuitem', { name: 'Content preferences: Unavailable' });
+    // The item enters the DOM before the menu's opening animation completes.
+    await waitFor(() => expect(content).toBeVisible());
+    await expect(content).toHaveAttribute('href', '/en/settings#reading');
   },
 };
