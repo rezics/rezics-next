@@ -3,12 +3,11 @@ import { NATIVE_ID } from '../structure/graph.ts';
 import { targetSummaryReader } from '../target/resolve.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
-import { parseStoredRelease } from '../release/schema.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { REVELATION_COST, type Revelation } from './store.ts';
 import { READING_POSITION_COST } from './contract.ts';
-import { ReadingPositionTraversal } from './traversal.ts';
+import { compareReadingLocations, ReadingPositionTraversal } from './traversal.ts';
 import { chooserPosition } from './chooser-position.ts';
 export { READING_POSITION_COST } from './contract.ts';
 
@@ -34,6 +33,8 @@ function disclosureSummaries(session: WorkReadSession, resources: string[]) {
     { resources, context: DEFAULT_MEDIA_CONTEXT, language: null });
 }
 
+/** Explicit diagnostic inventory for conformance fixtures. Reader disclosure
+ * and chooser requests use exact locations, never this whole-composition read. */
 export async function readReadingComposition(session: WorkReadSession, work: string): Promise<ReadingComposition> {
   const root = await disclosureSummaries(session, [work]);
   if (root.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) throw new WorkReadMoved('Reading composition changed');
@@ -156,8 +157,8 @@ export function prefixVisible(composition: ReadingComposition, position: string 
 export class ReadingBoundary {
   private readonly records = new Map<string, Revelation[]>();
   private readonly required = new Set<string>();
-  private readonly compositions = new Map<string, Promise<ReadingComposition>>();
   private readonly positions = new Map<string, Promise<string | null>>();
+  private readonly traversals = new Map<string, ReadingPositionTraversal>();
   private generation: Promise<string> | null = null;
   private reader: Promise<boolean> | null = null;
   private snapshot: Promise<string | null> | null = null;
@@ -168,81 +169,43 @@ export class ReadingBoundary {
       throw new WorkReadInvalid('Position must be an occurrence IRI or all');
     }
   }
-  composition(work: string) {
-    if (!this.compositions.has(work)) this.compositions.set(work, readReadingComposition(this.session, work));
-    return this.compositions.get(work)!;
-  }
   async position(work: string): Promise<string | null> {
     if (!this.positions.has(work)) this.positions.set(work, this.resolve(work));
     return this.positions.get(work)!;
   }
+  /** Exact ancestor paths replace the old composition-wide wiki scan. */
+  traversalFor(work: string): ReadingPositionTraversal {
+    if (!this.traversals.has(work)) this.traversals.set(work, new ReadingPositionTraversal(
+      this.session, work, resources => this.disclosed(resources)));
+    return this.traversals.get(work)!;
+  }
+  private async disclosed(resources: string[]) {
+    const available = new Set<string>();
+    for (let at = 0; at < resources.length; at += 24) {
+      const targets = await disclosureSummaries(this.session, resources.slice(at, at + 24));
+      if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
+        throw new WorkReadMoved('Reading composition changed');
+      }
+      for (const target of targets.summaries) if (target.status === 'available') available.add(target.reference);
+    }
+    return available;
+  }
   private async resolve(work: string) {
-    if (this.selection === 'start') return null;
-    if (this.selection === 'mine' && !await this.ownReader()) return null;
-    const composition = await this.composition(work);
-    if (this.selection !== 'mine' && this.selection !== 'all') {
-      return composition.occurrences.some(item => item.occurrence === this.selection) ? this.selection : null;
-    }
-    if (this.selection === 'all') return composition.occurrences.at(-1)?.occurrence ?? null;
-    const { principal, deps, options } = this.session;
-    if (!principal) return null;
-    if (!principal || !options.actingSubject) return null;
-    const completed = await deps.readingPositions?.completed(principal, composition.structures) ?? new Set<string>();
-    const finishWork = (resource: string) => {
-      const descendants = new Set([resource]);
-      for (const item of composition.occurrences) {
-        if (item.role === 'part' && item.target && descendants.has(item.work)) descendants.add(item.target);
-        if (descendants.has(item.work) || item.target === resource) completed.add(item.occurrence);
-      }
-    };
-    const releases = new Map<string, { resource: string; revision: string }>();
-    if (deps.seriesSessions) {
-      let cursor: string | undefined;
-      for (let page = 0; ; page++) {
-        if (page >= READING_POSITION_COST.sessionPages) throw new WorkReadUnavailable('Reader history exceeds its cost');
-        const attempts = await deps.seriesSessions.batch({ principal, agent: options.actingSubject }, composition.works, [], this.session.position, cursor);
-        for (const attempt of attempts.items) if (attempt.state === 'finished') for (const selected of attempt.selections) {
-          const target = selected.target;
-          if (target.base === 'occurrence') {
-            // A reordered revision needs correspondence; today's ordinal does not reinterpret its pin.
-            if (composition.occurrences.some(item => item.occurrence === target.resource && item.revision === target.revision)) completed.add(target.resource);
-          } else if (target.base === 'work') {
-            finishWork(target.resource);
-          } else if (target.base === 'realization' && target.work) {
-            finishWork(target.work);
-          } else if (target.base === 'release' && target.revision) {
-            releases.set(`${target.resource}|${target.revision}`, { resource: target.resource, revision: target.revision });
-          }
-        }
-        if (!attempts.next) break;
-        cursor = attempts.next;
-      }
-    }
-    if (releases.size > READING_POSITION_COST.releasePins) throw new WorkReadUnavailable('Reader release pins exceed their cost');
-    const releasePins = [...releases.values()];
-    for (let at = 0; at < releasePins.length; at += REVELATION_COST.batch) {
-      const batch = releasePins.slice(at, at + REVELATION_COST.batch);
-      const rows = await this.session.query(`SELECT ?resource ?revision ?state WHERE {
-        VALUES (?resource ?revision) { ${batch.map(pin => `(${iri(pin.resource)} ${iri(pin.revision)})`).join(' ')} }
-        GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?resource ; rv:releaseState ?state }
-      } LIMIT ${batch.length + 1}`, batch.length);
-      if (rows.length !== batch.length) throw new WorkReadUnavailable('Pinned release coverage is unavailable');
-      for (const row of rows) {
-        const release = parseStoredRelease(row.state!.value);
-        if (release.id !== row.resource?.value) throw new WorkReadUnavailable('Pinned release identity differs');
-        if (release.profile === 'release-v2') for (const entry of release.coverage) {
-          if (entry.completeness === 'complete') {
-            const covered = release.resolvedCoverage.find(pin => pin.realization === entry.realization);
-            if (covered) finishWork(covered.work);
-          }
-        }
-      }
-    }
-    if (deps.readingPositions) for (let at = 0; at < composition.works.length; at += REVELATION_COST.batch) {
-      const finished = await deps.readingPositions.finishedWorks(options.actingSubject, composition.works.slice(at, at + REVELATION_COST.batch));
-      for (const resource of finished) finishWork(resource);
-    }
-    return [...composition.occurrences].reverse().find(item => completed.has(item.occurrence))?.occurrence ?? null;
+    if (this.selection === 'start' || this.selection === 'mine' && !await this.ownReader()) return null;
+    const traversal = this.traversalFor(work);
+    await traversal.requireWork(work);
+    if (this.selection === 'all') return (await traversal.last(work))?.item.occurrence ?? null;
+    const resolved = await chooserPosition(this.session, traversal, this.selection,
+      this.selection === 'mine' && await this.ownReader());
+    return resolved === 'start' ? null : resolved;
+  }
+  private async prefixVisible(work: string, position: string, occurrence: string): Promise<boolean> {
+    const traversal = this.traversalFor(work);
+    await traversal.recordsFor([position, occurrence]);
+    const boundary = await traversal.location(position), revealed = await traversal.location(occurrence);
+    if (!boundary || !revealed) return false;
+    await traversal.requireLocation(revealed);
+    return compareReadingLocations(boundary, revealed) >= 0;
   }
   async binding() {
     const store = this.session.deps.readingPositions;
@@ -286,7 +249,7 @@ export class ReadingBoundary {
       for (const row of rows) {
         try {
           const position = await this.position(row.continuityWork);
-          if (position && prefixVisible(await this.composition(row.continuityWork), position, row)) {
+          if (position && await this.prefixVisible(row.continuityWork, position, row.occurrence)) {
             visible.add(record); break;
           }
         } catch (error) {
@@ -314,18 +277,7 @@ export class ReadingBoundary {
     }
   }
   async chooser(work: string, limit: number, after?: string, q?: string) {
-    const disclosed = async (resources: string[]) => {
-      const available = new Set<string>();
-      for (let at = 0; at < resources.length; at += 24) {
-        const targets = await disclosureSummaries(this.session, resources.slice(at, at + 24));
-        if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
-          throw new WorkReadMoved('Reading composition changed');
-        }
-        for (const target of targets.summaries) if (target.status === 'available') available.add(target.reference);
-      }
-      return available;
-    };
-    const traversal = new ReadingPositionTraversal(this.session, work, disclosed);
+    const traversal = this.traversalFor(work);
     const page = await traversal.page({ limit, after, q });
     const resolved = await chooserPosition(this.session, traversal, this.selection,
       this.selection === 'mine' && await this.ownReader());

@@ -10,6 +10,13 @@ import org.apache.jena.rdf.model.Resource;
 /** Uses the reviewed Jena Lucene assembler for the physical index, then swaps
  * only the graph-scoped read behavior. */
 public final class FilteredGraphTextAssembler extends TextIndexLuceneAssembler {
+    private static final String SEARCH_TRANSFORM = "Traditional-Simplified; Hiragana-Katakana";
+    /** Scalar substring keys use the same character normalization and script
+     * folding as the token analyzer, before its per-script token boundaries. */
+    static String foldSearchText(String value) {
+        return com.ibm.icu.text.Transliterator.getInstance(SEARCH_TRANSFORM).transliterate(
+            com.ibm.icu.text.Normalizer2.getNFKCCasefoldInstance().normalize(value));
+    }
     /** cjk-bigram-v2. Fold before bigram generation on both index and query;
      * stored values and their languages are never transformed. Each token
      * stream owns its ICU transliterator (which is mutable, not thread-safe).
@@ -25,7 +32,7 @@ public final class FilteredGraphTextAssembler extends TextIndexLuceneAssembler {
         }
         private org.apache.lucene.analysis.TokenStream fold(org.apache.lucene.analysis.TokenStream stream) {
             return new org.apache.lucene.analysis.icu.ICUTransformFilter(stream,
-                com.ibm.icu.text.Transliterator.getInstance("Traditional-Simplified; Hiragana-Katakana"));
+                com.ibm.icu.text.Transliterator.getInstance(SEARCH_TRANSFORM));
         }
         @Override protected TokenStreamComponents createComponents(String field) {
             var tokenizer = new org.apache.lucene.analysis.standard.StandardTokenizer();

@@ -270,7 +270,8 @@ final class CommandService extends ActionService {
             ModelMutationPolicy.Snapshot model = ModelMutationPolicy.capture(profiles, dataset, plan);
             var releaseCoverage = ReleaseCoveragePolicy.capture(dataset, model);
             java.util.Map<String, ReleasePolicy.Prior> releases = ReleasePolicy.capture(dataset, plan);
-            UpdateAction.execute(plan.request(), DatasetFactory.wrap(delta == null ? dataset : delta.observed()));
+            OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(occurrenceLabels.observed(delta == null ? dataset : delta.observed())));
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
             if (!stored.equals(digest)) return Map.of("status", "conflict");
@@ -314,6 +315,8 @@ final class CommandService extends ActionService {
                 if (invalid != null) return invalid;
                 if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             }
+            if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+            occurrenceLabels.refresh(receipt);
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");

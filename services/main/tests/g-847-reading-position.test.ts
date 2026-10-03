@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ReadingBoundary, prefixVisible, type ReadingComposition } from '../src/modules/reading-position/boundary.ts';
+import { ReadingPositionTraversal, type ReadingLocation } from '../src/modules/reading-position/traversal.ts';
 import { ReadingPositionStore, REVELATION_COST, propertyRevelationRecord, type Revelation } from '../src/modules/reading-position/store.ts';
 import { revelationReads } from '../src/modules/reading-position/read-registry.ts';
 import { WorkReadSession, WorkReadInvalid, WorkReadMissing, WorkReadMoved } from '../src/modules/work/read-session.ts';
@@ -23,13 +24,22 @@ function fixture(selection: string, principal = false) {
   const store = { lookup: async (records: readonly string[]) => {
     lookedUp.push(records.length); return new Map(records.flatMap(record => rows.has(record) ? [[record, rows.get(record)!]] : []));
   }, required: async () => new Set(), generation: async () => version, privateSnapshot: async () => { privateReads++; return version; },
-    completed: async () => new Set([chapter3]), finishedWorks: async () => new Set() };
+    completedPage: async () => ({ items: [chapter3], next: null }), finishedWorks: async () => new Set() };
   const deps = { readingPositions: store, access: { canReadAsBaselineMember: async () => own } } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request(`http://main.local/v1/fixture?position=${encodeURIComponent(selection)}`),
     principal ? { actingSubject: id() } : {}, { dataEpoch: 'epoch', sequence: '1' });
   if (principal) session.principal = { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };
   const boundary = new ReadingBoundary(session);
-  boundary.composition = async () => composition;
+  const location = (resource: string): ReadingLocation | null => {
+    const index = composition.occurrences.findIndex(item => item.occurrence === resource);
+    if (index < 0) return null;
+    const item = { ...composition.occurrences[index]!, segmentKey: 'a', orderKey: String(index).padStart(4, '0') };
+    return { item, frames: [{ work, parent: work, after: item }] };
+  };
+  boundary.traversalFor = () => ({ requireWork: async () => {}, requireLocation: async () => {},
+    recordsFor: async () => [], location: async (resource: string) => location(resource),
+    works: async function* () { yield [{ work, structure: composition.structures[0]!, revision: id(), generation: id() }]; },
+  }) as unknown as ReadingPositionTraversal;
   return { rows, boundary, lookedUp, privateReads: () => privateReads,
     move: () => { version = '2'; }, deny: () => { own = false; } };
 }
@@ -71,9 +81,10 @@ test('G847 D1 R2: a record can belong to two continuities; one unreadable contin
   const f = fixture(chapter3), secret = id(), early = row(), late = row(id(), chapter4);
   f.rows.set(early.record, [{ ...early, continuityWork: secret }, early]);
   f.rows.set(late.record, [{ ...late, continuityWork: secret }]);
-  f.boundary.composition = async resource => {
+  const traversalFor = f.boundary.traversalFor;
+  f.boundary.traversalFor = resource => {
     if (resource === secret) throw new WorkReadMissing('Work is unavailable');
-    return composition;
+    return traversalFor(resource);
   };
   expect([...(await f.boundary.visible([early.record, late.record, 'untagged']))]).toEqual([early.record, 'untagged']);
 });

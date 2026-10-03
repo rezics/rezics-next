@@ -6,11 +6,14 @@ import type { ReadingOccurrence } from './boundary.ts';
 import { READING_POSITION_COST } from './contract.ts';
 import { normalizePositionQuery } from './store.ts';
 import { ReadingOrderIndex, readingOrderRead } from './immutable-order.ts';
+import { searchOccurrenceLabels } from './label-index.ts';
+import { readingWorkScope } from './work-scope.ts';
 
 /** Bounded results and live traversal state, independent of chapter inventory.
  * Each seek returns <=101 placements, with <=16 labels each. Configured stores
  * use immutable counted trees for ranges, numeric rank and ordinals. Graph-only
- * adapters retain the prior projection path; substring search still scans labels.
+ * adapters retain the prior projection path. Configured search seeks the native
+ * normalized substring directory; chapter labels are never scanned.
  * Traversal retains only the ancestor stack and the current seek's candidates.
  * The surrounding Work read bounds graph calls, bytes and elapsed time. */
 export const READING_CHOOSER_COST = { probe: 101, contextDepth: 16, workBatch: 50 } as const;
@@ -97,7 +100,7 @@ export class ReadingPositionTraversal {
     for (;;) {
       const rows = await this.session.query(`# reading-position:works
         SELECT DISTINCT ?work ?structure ?revision ?generation WHERE { GRAPH ${current} {
-          ${iri(this.root)} (${edge})* ?work . ?work rv:mainVersion ?main .
+          { ${readingWorkScope(this.root)} } ?work rv:mainVersion ?main .
           ${after ? `FILTER(STR(?work) > ${lit(after)})` : ''}
           OPTIONAL { ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?profile ;
             rv:structureHead ?revision ; rv:selectedGeneration ?generation .
@@ -132,6 +135,8 @@ export class ReadingPositionTraversal {
       return items.map(item => ({ item, matches: true }));
     }
     const numbered = q ? await this.numbered(meta, parent, q) : null;
+    if (q && this.order) return readingOrderRead(() => searchOccurrenceLabels(this.session,
+      this.order!, meta, parent, q, after, probe, numbered));
     // ARQ provides XPath scalar functions, including Unicode normalization:
     // https://jena.apache.org/documentation/query/library-function.html
     const matches = !q ? 'true' : `(${numbered ? `?occurrence = ${iri(numbered)} ||` : ''}
@@ -250,10 +255,11 @@ export class ReadingPositionTraversal {
     if (!this.paths.has(work)) this.paths.set(work, (async () => {
       const rows = await this.session.query(`# reading-position:parent-work
         SELECT ?occurrence WHERE { GRAPH ${current} {
-          ${iri(this.root)} (${edge})* ?owner . ?owner rv:mainVersion/^rv:structureOf/rv:selectedGeneration ?generation .
+          ?owner rv:mainVersion/^rv:structureOf/rv:selectedGeneration ?generation .
           ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?occurrence ;
             rv:occurrenceRole rv:PartRole ; schema:item ${iri(work)} .
           FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+          FILTER EXISTS { ?owner (^(${edge}))* ${iri(this.root)} }
         } } LIMIT 2`, 2);
       if (!rows.length) return null;
       if (rows.length !== 1) throw new WorkReadUnavailable('Reading Work has multiple uses in this continuity');

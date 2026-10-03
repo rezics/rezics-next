@@ -101,6 +101,10 @@ export class ReadingOrderIndex {
     const to = reverse && after ? orderTreeKey(after) : `${parent}\u0002`;
     const ordered = await tree.range(manifest.order, from, to, limit, cost, reverse);
     if (!ordered.length) return [];
+    return this.hydrate(meta, ordered);
+  }
+  async hydrate(meta: ReadingWork, ordered: OrderEntry[], sparse = false): Promise<ReadingOccurrence[]> {
+    if (!ordered.length) return [];
     const rows = await this.session.query(`# reading-position:hydrate
       SELECT ?occurrence ?parent ?segmentKey ?orderKey ?role ?target ?label ?displayLabel WHERE {
         GRAPH ${iri(GRAPHS.current)} {
@@ -142,6 +146,18 @@ export class ReadingOrderIndex {
       }
       records.set(item.occurrence, selected);
     }
+    const manifest = await this.manifest(meta), tree = orderTree(this.objects), cost = newCost();
+    if (sparse) {
+      const items: ReadingOccurrence[] = [];
+      for (const entry of ordered) {
+        const item = records.get(entry.occurrence);
+        if (!item) throw new WorkReadUnavailable('Reading placement is unavailable');
+        items.push({ ...item, ordinal: await this.ordinal(meta, item) });
+      }
+      return items;
+    }
+    const reverse = ordered.length > 1 && orderTreeKey(ordered[0]!) > orderTreeKey(ordered[1]!);
+    const parent = ordered[0]!.parent;
     const offset = await tree.countBefore(manifest.order, orderTreeKey(ordered[0]!), cost)
       - await tree.countBefore(manifest.order, `${parent}\u0001`, cost) + 1;
     return ordered.map((entry, index): ReadingOccurrence => {
