@@ -40,6 +40,7 @@ import {
   prepareSubmissionReview,
   short,
   selectedSessionAgent,
+  seedWikiPosition,
   type DirectionFixture,
 } from './direction-9-fixture.ts';
 
@@ -204,10 +205,10 @@ async function signInManager(page: Page) {
   await signInAtAccounts(page, '/en/settings', credentials().operator, true);
 }
 
-async function setupCommands(
+async function setupCommands<T>(
   browser: Browser,
   info: TestInfo,
-  action: (api: PublicCommands) => Promise<unknown>,
+  action: (api: PublicCommands) => Promise<T>,
 ) {
   const administrator = setupCredentials() ?? credentials().operator;
   const path = authStatePath(String(info.project.use.baseURL), administrator);
@@ -742,34 +743,43 @@ for (const locale of locales)
 
       test('wiki position: search for a chapter beyond the initial window', async ({
         page,
+        browser,
       }, info) => {
-        await readyDirection(new PublicCommands(page.request), fixture, 'chapters');
+        const positions = await setupCommands(browser, info, (api) => seedWikiPosition(api, fixture));
+        // Probe as the reader too: administrative setup cannot prove disclosure.
+        await new PublicCommands(page.request).until<{ items: { occurrence: string }[] }>(
+          `/reading-positions/${short(positions.work)}?${new URLSearchParams({
+            q: positions.laterChapter.name, actingSubject: fixture.actor,
+          })}`,
+          (result) => result.items.some((item) => item.occurrence === positions.laterChapter.occurrence),
+        );
         const t = browseMessages[locale],
           wiki = wikiCopy(locale);
-        const read = await address(page, 'space', fixture.named.space, locale);
-        await page.goto(
+        const read = await address(page, 'space', positions.space, locale);
+        const response = await page.goto(
           canonicalHref(read.canonical, locale, read.canonical.slugSource, {
             surface: 'site',
-            tail: ['story', 'w', uuidToSid(short(fixture.story.work))],
+            tail: [positions.mount, uuidToSid(short(positions.work))],
             search: '?position=all',
           }),
         );
+        expect(response?.status(), 'the mounted wiki story opens').toBe(200);
         const trigger = page
           .getByRole('region', { name: wiki.region, exact: true })
           .getByRole('button');
         await expect(trigger).toHaveAttribute('data-hydrated', 'true');
         await trigger.click();
         await expect(
-          page.getByRole('link', { name: fixture.laterChapter.name, exact: true }),
+          page.getByRole('link', { name: positions.laterChapter.name, exact: true }),
         ).toHaveCount(0);
         await page
           .getByRole('combobox', { name: t.searchChapters, exact: true })
-          .fill(fixture.laterChapter.name);
-        await page.getByRole('option', { name: fixture.laterChapter.name, exact: true }).click();
+          .fill(positions.laterChapter.name);
+        await page.getByRole('option', { name: positions.laterChapter.name, exact: true }).click();
         await expect
           .poll(() => new URL(page.url()).searchParams.get('position'))
-          .toBe(short(fixture.laterChapter.occurrence));
-        await expect(trigger).toContainText(fixture.laterChapter.name);
+          .toBe(short(positions.laterChapter.occurrence));
+        await expect(trigger).toContainText(positions.laterChapter.name);
         await screenshot(page, info, 'wiki-later-chapter-selected');
       });
 

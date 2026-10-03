@@ -196,6 +196,99 @@ export const populationCount = 21;
 export const chapterCount = 51;
 const spaceCount = populationCount + 5; // Four private journeys and one unlisted Space.
 
+export interface WikiPositionFixture {
+  space: string;
+  zone: string;
+  work: string;
+  mount: string;
+  laterChapter: DirectionFixture['laterChapter'];
+}
+
+interface PositionPage {
+  items: {
+    occurrence: string;
+    structure: string;
+    labels?: { value: string; language: string }[];
+  }[];
+  complete: boolean;
+  nextCursor: string | null;
+}
+
+/** Approvals are host-bound, and the web loads packages by official Space key.
+ * Use the seeded franchise wiki rather than copying its approval to our Zone.
+ * Keep its story separate from the synthetic Work used by submission journeys. */
+export async function seedWikiPosition(
+  api: PublicCommands,
+  fixture: DirectionFixture,
+): Promise<WikiPositionFixture> {
+  const query = new URLSearchParams({ actingSubject: fixture.owner });
+  const address = await api.find<{ holder: string; capabilities?: { zone?: string } }>(
+    `/addresses/resolve?${new URLSearchParams({
+      scope: 'space', key: 'franchise-wiki', actingSubject: fixture.owner,
+    })}`,
+  );
+  if (!address?.capabilities?.zone)
+    throw new Error('Direction 9 wiki needs the seeded official franchise-wiki Space and Zone');
+  const zone = address.capabilities.zone;
+  const presentation = await api.read<{ official: string | null; execution: { state: string } }>(
+    `/zones/${short(zone)}/presentation?${query}`,
+  );
+  if (presentation.official !== 'franchise-wiki' || presentation.execution.state !== 'package')
+    throw new Error('Direction 9 wiki needs an active franchise-wiki package approval on its seeded Zone');
+  const mount = 'franchise'; // The official package declares positions: { mount: 'franchise' }.
+  const route = await api.read<{ kind: string; items?: { id: string; title?: unknown }[] }>(
+    `/zones/${short(zone)}/routes?${new URLSearchParams({
+      path: `/${mount}`, actingSubject: fixture.owner,
+    })}`,
+  );
+  const story = route.kind === 'index' ? route.items?.find((item) => 'title' in item) : null;
+  if (!story) throw new Error('Direction 9 wiki needs a story in the franchise mount');
+  const work = story.id;
+  const positions = `/reading-positions/${short(work)}`;
+  const prefix = `Direction 9 wiki ${short(fixture.story.work)}`;
+  const labels = Array.from({ length: chapterCount }, (_, index) =>
+    `${prefix} 遠方 chapter ${index + 1}`,
+  );
+  api = api.reusable(`${fixtureName}:${fixture.actor}:wiki:${zone}`);
+  const initial = await api.read<PositionPage>(`${positions}?${query}&limit=50`);
+  const structure = initial.items[0]?.structure;
+  if (!structure) throw new Error('Direction 9 wiki needs a composed story in the franchise mount');
+  const existing = await api.read<PositionPage>(
+    `${positions}?${query}&${new URLSearchParams({ q: prefix, limit: '100' })}`,
+  );
+  const present = new Set(existing.items.flatMap((item) => item.labels?.map((label) => label.value) ?? []));
+  const missing = labels.filter((label) => !present.has(label));
+  if (missing.length) {
+    const composition = await api.read<{ revision: string }>(
+      `/compositions/${short(structure)}?${query}`,
+    );
+    let head = composition.revision;
+    for (let offset = 0; offset < missing.length; offset += 16) {
+      const changed = await api.write<{ revision: string }>(
+        `/compositions/${short(structure)}/changes`,
+        {
+          profile: 'book-composition', expectedHead: head, actingSubject: fixture.owner,
+          operations: missing.slice(offset, offset + 16).map((value) => ({
+            op: 'insert', parent: structure, role: 'chapter', position: 'last',
+            target: fixture.work.work, label: { value, language: 'en' },
+          })),
+        },
+      );
+      head = changed.revision;
+    }
+  }
+  const name = labels.at(-1)!;
+  const found = await api.until<PositionPage>(
+    `${positions}?${query}&${new URLSearchParams({ q: name })}`,
+    (page) => page.items.some((item) => item.labels?.some((label) => label.value === name)),
+  );
+  const occurrence = found.items.find((item) => item.labels?.some((label) => label.value === name))!.occurrence;
+  const first = await api.read<PositionPage>(`${positions}?${query}&limit=50`);
+  if (first.complete || !first.nextCursor || first.items.some((item) => item.occurrence === occurrence))
+    throw new Error('Direction 9 wiki chapter must be beyond the chooser first page');
+  return { space: address.holder, zone, work, mount, laterChapter: { occurrence, name } };
+}
+
 export async function phase<T>(name: string, action: () => Promise<T>): Promise<T> {
   const start = performance.now();
   console.log(`[direction-9 setup] ${name}: start`);
