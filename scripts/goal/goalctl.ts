@@ -403,7 +403,8 @@ function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(tas
       + ' Change only your claimed paths; commit only them with `git commit --only <paths>` (retry if index.lock is held);'
       + ' never reset, checkout, stash or reformat files you did not change. Start no dev server, Storybook,'
       + ' type-check watcher or browser: use the shared ones listed in .temp/goal/shared.md, and leave Storybook'
-      + ' and browser runs to the manager. Run the unit and integration files your task adds or fixes through'
+      + ' and browser runs to the manager unless your brief asks you to run them. Run the unit and integration'
+      + ' files (and any stories) your task adds or fixes through'
       + ' `bun scripts/goal/goalctl.ts test <files>`, one run at a time; an unverified fix is not done.'] : [],
     `The manager session is "${manager}". End with the handoff that the worker protocol specifies.`,
   ].join('\n');
