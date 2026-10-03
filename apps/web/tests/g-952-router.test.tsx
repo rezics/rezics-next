@@ -37,7 +37,7 @@ const address: ResolvedAddress = {
   status: 'resolved',
   state: 'current',
   holder: iri(space),
-  canonical: { prefix: '/z/', key: 'books', slugSource: 'Books' },
+  canonical: { prefix: '/z/', key: 'books', suffixSource: 'Books' },
   capabilities: { realm: iri(realm), zone: iri(work) },
 };
 const oldFetch = globalThis.fetch;
@@ -64,14 +64,14 @@ describe('G-952 community and site addresses', () => {
     expect(siteHref('ja', address.canonical, ['guide'])).toBe('/ja/z/books/guide');
     expect(realmHref('en', address.canonical, 'rules')).toBe('/en/r/books/rules');
     expect(realmHref('en', address.canonical, 'browse')).toBe('/en/z/books/browse');
-    expect(resourceHref('/w/', { prefix: '/w/', key: '春の物語', slugSource: 'Story' })).toBe(
+    expect(resourceHref('/w/', { prefix: '/w/', key: '春の物語', suffixSource: 'Story' })).toBe(
       '/w/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E',
     );
     expect(
       zoneMemberHref(address.canonical, 'characters', {
         prefix: '/z/books/characters/',
         key: 'キリト',
-        slugSource: '',
+        suffixSource: '',
       }),
     ).toBe('/z/books/characters/%E3%82%AD%E3%83%AA%E3%83%88');
     expect(realmWorkHref('books', iri(work))).toBe(`/z/books/w/${uuidToSid(work)}`);
@@ -83,7 +83,7 @@ describe('G-952 community and site addresses', () => {
   });
 
   test('a global Work name never masquerades as a name in a mounted Zone route', () => {
-    const global = { prefix: '/w/' as const, key: 'Spring-story', slugSource: 'Spring story' };
+    const global = { prefix: '/w/' as const, key: 'Spring-story', suffixSource: 'Spring story' };
     expect(zoneMemberHref('books', 'catalogue', siteMemberTarget(iri(work), global))).toBe(
       `/z/books/catalogue/${uuidToSid(work)}`,
     );

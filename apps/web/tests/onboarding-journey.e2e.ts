@@ -359,7 +359,7 @@ test('new person picks a public name and handle, sets up Home, and the Account n
     try {
       await db.connect();
       const aged = await db.query(
-        `UPDATE access.name_registry
+        `UPDATE access.alias_registry
         SET changed_at = clock_timestamp() - interval '31 days'
         WHERE scope = 'agent' AND key = $1 AND holder = $2 AND state = 'current'`,
         [person.handle, oldProfile.id],
@@ -394,7 +394,7 @@ test('new person picks a public name and handle, sets up Home, and the Account n
       expect(
         (
           await aged2.query(
-            `UPDATE access.name_registry
+            `UPDATE access.alias_registry
         SET changed_at = clock_timestamp() - interval '31 days'
         WHERE scope = 'agent' AND key = $1 AND holder = $2 AND state = 'current'`,
             [currentHandle, oldProfile.id],

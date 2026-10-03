@@ -20,7 +20,7 @@ because nothing is stored or resolved by it.
 | Layer | What it is | Set by | Used to resolve |
 | --- | --- | --- | --- |
 | `sid` | All 128 UUID bits as a fixed, case-sensitive 22-character Base58 value with a frozen alphabet | Main, at creation | Always |
-| Alias | A unique key a person chose within a scope: an Agent or Space handle, a Work address, a Zone page title | Holder or editors; optional | Yes |
+| Alias | A unique key a person chose within a scope: an Agent or Space handle, a Work address, a Zone route title | Holder or editors; optional | Yes |
 | Readable suffix | Words from the display name the page shows in its language | Derived when rendering | Never |
 
 | Resource | Alias form | Identity form |
@@ -49,11 +49,11 @@ aliases, one canonical alias) and the
 `alias` makes the current alias canonical when one exists and is the default for
 Agents, Spaces and Works, because handles and titles are what people share and
 type. `id` makes `{sid}-{suffix}` canonical, the pattern of Stack Overflow and
-Reddit posts, for content whose names are not unique or not chosen; a Zone
+Reddit posts, for content whose titles are not unique or not chosen; a Zone
 picks `alias` or `id` per detail route, so a franchise wiki can use titles as
 Fandom and Wikipedia do. Resolution reads the `sid` or the alias and ignores the
 readable suffix. Any other form (a bare `sid` or one with a stale suffix, a former alias, a UUID link)
-answers one 301 to the canonical URL, which answers 200; a page without a name
+answers one 301 to the canonical URL, which answers 200; a page without an alias
 is complete at its identity form. Keep tab and meaningful language or version
 selections, and preserve anchors where applicable. Normalize host, HTTPS and
 trailing slash without redirect chains. Share copies the canonical URL; a short
@@ -74,13 +74,13 @@ no case variants to impersonate).
   is the namespace where impersonation pays. Single-script native handles may
   open later under the "Highly Restrictive" level of
   [UTS #39](https://unicode.org/reports/tr39/).
-- Work addresses and Zone titles accept any script, NFC-normalized, compared
+- Work addresses and Zone route titles accept any script, NFC-normalized, compared
   without case, with whitespace as `-`, and limited to the UTS #39 "Highly
   Restrictive" mixtures so that one title cannot impersonate another.
 - No alias may decode as a valid `sid`, so each segment has one reading.
 - A rename keeps the former alias as a permanent redirect to the same resource. A
   retired or replaced alias is never given to another holder: abandoned Twitter
-  names were reclaimed for malicious content and SEO
+  handles were reclaimed for malicious content and SEO
   ([Mariconti et al., WWW 2017](https://arxiv.org/abs/1702.04256)). Merges
   redirect only to equivalent successors.
 - The same handle in the Agent and Space scopes may belong only to one
@@ -94,7 +94,7 @@ reader of that locale sees ([language order](#language-and-anonymous-representat
 NFC-normalized, keeping native script, with whitespace and punctuation collapsed
 to `-` and cut at a word boundary near 60 characters. Because resolution never
 reads it, a title change or a new translation moves the canonical URL with one
-301. This replaces the 2026-09-29 store of approved per-language slugs: it
+301. This replaces the 2026-09-29 store of approved per-language suffixes: it
 needed an editorial workflow for a value that identifies nothing, and Stack
 Overflow shows that derived suffixes with redirects suffice.
 
@@ -131,7 +131,7 @@ redirects to it.
 
 [Google's URL guidance](https://developers.google.com/search/docs/crawling-indexing/url-structure)
 supports audience-language words and correct percent-encoding; it does not show
-romanized URL words rank above CJK. [Permanent redirects](https://developers.google.com/search/docs/crawling-indexing/301-redirects)
+romanized suffixes rank above CJK. [Permanent redirects](https://developers.google.com/search/docs/crawling-indexing/301-redirects)
 and canonical annotations are signals, not indexing guarantees.
 
 ## Language and anonymous representation

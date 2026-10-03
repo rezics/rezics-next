@@ -30572,7 +30572,7 @@
           },
           {
             "in": "query",
-            "name": "name",
+            "name": "alias",
             "required": true,
             "schema": {
               "maxLength": 512,
@@ -30809,6 +30809,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "type": "null"
                   },
@@ -30816,17 +30821,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "claim",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -30840,7 +30840,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -30854,6 +30854,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "type": "null"
                   },
@@ -30861,17 +30866,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "claim",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -30885,7 +30885,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -30899,6 +30899,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "type": "null"
                   },
@@ -30906,17 +30911,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "claim",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -30930,7 +30930,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -30946,9 +30946,6 @@
                 "schema": {
                   "properties": {
                     "changedAt": {
-                      "type": "string"
-                    },
-                    "display": {
                       "type": "string"
                     },
                     "holder": {
@@ -30967,7 +30964,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -30999,7 +30996,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -31020,9 +31016,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -31039,7 +31032,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -31071,7 +31064,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -31611,7 +31603,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31649,7 +31641,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31698,7 +31690,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31736,7 +31728,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31785,7 +31777,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31823,7 +31815,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31861,9 +31853,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -31880,7 +31869,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -31912,7 +31901,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -31933,9 +31921,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -31952,7 +31937,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -31984,7 +31969,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -32276,6 +32260,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -32284,17 +32273,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "rename",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -32308,7 +32292,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -32322,6 +32306,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -32330,17 +32319,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "rename",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -32354,7 +32338,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -32368,6 +32352,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -32376,17 +32365,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "rename",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -32400,7 +32384,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -32416,9 +32400,6 @@
                 "schema": {
                   "properties": {
                     "changedAt": {
-                      "type": "string"
-                    },
-                    "display": {
                       "type": "string"
                     },
                     "holder": {
@@ -32437,7 +32418,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -32469,7 +32450,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -32490,9 +32470,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -32509,7 +32486,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -32541,7 +32518,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -32979,14 +32955,14 @@
                                   "prefix": {
                                     "type": "string"
                                   },
-                                  "slugSource": {
+                                  "suffixSource": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "prefix",
                                   "key",
-                                  "slugSource"
+                                  "suffixSource"
                                 ],
                                 "type": "object"
                               },
@@ -33336,14 +33312,14 @@
                             "prefix": {
                               "type": "string"
                             },
-                            "slugSource": {
+                            "suffixSource": {
                               "type": "string"
                             }
                           },
                           "required": [
                             "prefix",
                             "key",
-                            "slugSource"
+                            "suffixSource"
                           ],
                           "type": "object"
                         },
@@ -33560,14 +33536,14 @@
                             "prefix": {
                               "type": "string"
                             },
-                            "slugSource": {
+                            "suffixSource": {
                               "type": "string"
                             }
                           },
                           "required": [
                             "prefix",
                             "key",
-                            "slugSource"
+                            "suffixSource"
                           ],
                           "type": "object"
                         },
@@ -34600,14 +34576,14 @@
                         "prefix": {
                           "type": "string"
                         },
-                        "slugSource": {
+                        "suffixSource": {
                           "type": "string"
                         }
                       },
                       "required": [
                         "prefix",
                         "key",
-                        "slugSource"
+                        "suffixSource"
                       ],
                       "type": "object"
                     },
@@ -82820,14 +82796,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -112039,14 +112015,14 @@
                                                       "prefix": {
                                                         "type": "string"
                                                       },
-                                                      "slugSource": {
+                                                      "suffixSource": {
                                                         "type": "string"
                                                       }
                                                     },
                                                     "required": [
                                                       "prefix",
                                                       "key",
-                                                      "slugSource"
+                                                      "suffixSource"
                                                     ],
                                                     "type": "object"
                                                   },
@@ -137706,14 +137682,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -149937,14 +149913,14 @@
                         "prefix": {
                           "type": "string"
                         },
-                        "slugSource": {
+                        "suffixSource": {
                           "type": "string"
                         }
                       },
                       "required": [
                         "prefix",
                         "key",
-                        "slugSource"
+                        "suffixSource"
                       ],
                       "type": "object"
                     },
@@ -187846,14 +187822,14 @@
                                       "prefix": {
                                         "type": "string"
                                       },
-                                      "slugSource": {
+                                      "suffixSource": {
                                         "type": "string"
                                       }
                                     },
                                     "required": [
                                       "prefix",
                                       "key",
-                                      "slugSource"
+                                      "suffixSource"
                                     ],
                                     "type": "object"
                                   },
@@ -319199,14 +319175,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -321174,14 +321150,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -323158,14 +323134,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -325293,14 +325269,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -327439,14 +327415,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -329612,14 +329588,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -334465,14 +334441,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -335251,14 +335227,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -336049,14 +336025,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -336995,14 +336971,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -337951,14 +337927,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -338934,14 +338910,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -341356,14 +341332,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -342142,14 +342118,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -342940,14 +342916,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -343886,14 +343862,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -344842,14 +344818,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -345825,14 +345801,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -346677,14 +346653,14 @@
                                                 "prefix": {
                                                   "type": "string"
                                                 },
-                                                "slugSource": {
+                                                "suffixSource": {
                                                   "type": "string"
                                                 }
                                               },
                                               "required": [
                                                 "prefix",
                                                 "key",
-                                                "slugSource"
+                                                "suffixSource"
                                               ],
                                               "type": "object"
                                             },
@@ -347495,14 +347471,14 @@
                                                 "prefix": {
                                                   "type": "string"
                                                 },
-                                                "slugSource": {
+                                                "suffixSource": {
                                                   "type": "string"
                                                 }
                                               },
                                               "required": [
                                                 "prefix",
                                                 "key",
-                                                "slugSource"
+                                                "suffixSource"
                                               ],
                                               "type": "object"
                                             },
@@ -348318,14 +348294,14 @@
                                                 "prefix": {
                                                   "type": "string"
                                                 },
-                                                "slugSource": {
+                                                "suffixSource": {
                                                   "type": "string"
                                                 }
                                               },
                                               "required": [
                                                 "prefix",
                                                 "key",
-                                                "slugSource"
+                                                "suffixSource"
                                               ],
                                               "type": "object"
                                             },
@@ -349281,14 +349257,14 @@
                                                     "prefix": {
                                                       "type": "string"
                                                     },
-                                                    "slugSource": {
+                                                    "suffixSource": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
                                                     "prefix",
                                                     "key",
-                                                    "slugSource"
+                                                    "suffixSource"
                                                   ],
                                                   "type": "object"
                                                 },
@@ -362404,7 +362380,7 @@
             "name": "q",
             "required": false,
             "schema": {
-              "description": "Literal title substring in any carried language, display label, or one-based sibling number.",
+              "description": "Analyzed title phrase in any carried language, display label, or one-based sibling number.",
               "maxLength": 200,
               "type": "string"
             }
@@ -362502,7 +362478,10 @@
                     "count": {
                       "properties": {
                         "kind": {
-                          "const": "exact-page",
+                          "enum": [
+                            "exact-page",
+                            "at-least"
+                          ],
                           "type": "string"
                         },
                         "total": {
@@ -362630,6 +362609,21 @@
                     },
                     "resolved": {
                       "type": "string"
+                    },
+                    "search": {
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "current",
+                            "indexing"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
                     },
                     "sourcePosition": {
                       "properties": {
@@ -381980,14 +381974,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -384752,14 +384746,14 @@
                                             "prefix": {
                                               "type": "string"
                                             },
-                                            "slugSource": {
+                                            "suffixSource": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
                                             "prefix",
                                             "key",
-                                            "slugSource"
+                                            "suffixSource"
                                           ],
                                           "type": "object"
                                         },
@@ -385695,14 +385689,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -387688,14 +387682,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -411261,7 +411255,7 @@
                                   },
                                   "key": {
                                     "enum": [
-                                      "name",
+                                      "alias",
                                       "id"
                                     ]
                                   },
@@ -422134,14 +422128,14 @@
                                 "prefix": {
                                   "type": "string"
                                 },
-                                "slugSource": {
+                                "suffixSource": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "prefix",
                                 "key",
-                                "slugSource"
+                                "suffixSource"
                               ],
                               "type": "object"
                             },
@@ -425459,14 +425453,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -428893,14 +428887,14 @@
                                   "prefix": {
                                     "type": "string"
                                   },
-                                  "slugSource": {
+                                  "suffixSource": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "prefix",
                                   "key",
-                                  "slugSource"
+                                  "suffixSource"
                                 ],
                                 "type": "object"
                               },
@@ -444179,14 +444173,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -445015,14 +445009,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -509426,14 +509420,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -513157,14 +513151,14 @@
                               "prefix": {
                                 "type": "string"
                               },
-                              "slugSource": {
+                              "suffixSource": {
                                 "type": "string"
                               }
                             },
                             "required": [
                               "prefix",
                               "key",
-                              "slugSource"
+                              "suffixSource"
                             ],
                             "type": "object"
                           },
@@ -514568,14 +514562,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -544535,14 +544529,14 @@
                               "prefix": {
                                 "type": "string"
                               },
-                              "slugSource": {
+                              "suffixSource": {
                                 "type": "string"
                               }
                             },
                             "required": [
                               "prefix",
                               "key",
-                              "slugSource"
+                              "suffixSource"
                             ],
                             "type": "object"
                           },
@@ -548724,7 +548718,7 @@
                   },
                   "key": {
                     "enum": [
-                      "name",
+                      "alias",
                       "id"
                     ],
                     "type": "string"
@@ -548802,7 +548796,7 @@
                   },
                   "key": {
                     "enum": [
-                      "name",
+                      "alias",
                       "id"
                     ],
                     "type": "string"
@@ -548880,7 +548874,7 @@
                   },
                   "key": {
                     "enum": [
-                      "name",
+                      "alias",
                       "id"
                     ],
                     "type": "string"
@@ -550020,14 +550014,14 @@
                         "prefix": {
                           "type": "string"
                         },
-                        "slugSource": {
+                        "suffixSource": {
                           "type": "string"
                         }
                       },
                       "required": [
                         "prefix",
                         "key",
-                        "slugSource"
+                        "suffixSource"
                       ],
                       "type": "object"
                     },
@@ -553481,14 +553475,14 @@
                                 "prefix": {
                                   "type": "string"
                                 },
-                                "slugSource": {
+                                "suffixSource": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "prefix",
                                 "key",
-                                "slugSource"
+                                "suffixSource"
                               ],
                               "type": "object"
                             },
@@ -553947,14 +553941,14 @@
                                       "prefix": {
                                         "type": "string"
                                       },
-                                      "slugSource": {
+                                      "suffixSource": {
                                         "type": "string"
                                       }
                                     },
                                     "required": [
                                       "prefix",
                                       "key",
-                                      "slugSource"
+                                      "suffixSource"
                                     ],
                                     "type": "object"
                                   },
@@ -554317,14 +554311,14 @@
                                 "prefix": {
                                   "type": "string"
                                 },
-                                "slugSource": {
+                                "suffixSource": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "prefix",
                                 "key",
-                                "slugSource"
+                                "suffixSource"
                               ],
                               "type": "object"
                             },

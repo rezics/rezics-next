@@ -1,15 +1,15 @@
 import { uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { NameUnavailable, NATIVE_ADDRESS_HOLDER } from './registry.ts';
-import { NAME_POLICIES } from './policy.ts';
+import { AliasUnavailable, NATIVE_ADDRESS_HOLDER } from './registry.ts';
+import { ALIAS_POLICIES } from './policy.ts';
 
 export function identityCanonical(
   type: string,
   holder: string,
-  slugSource: string,
+  suffixSource: string,
 ): CanonicalAddress {
-  if (!NATIVE_ADDRESS_HOLDER.test(holder)) throw new NameUnavailable('Address holder is invalid');
+  if (!NATIVE_ADDRESS_HOLDER.test(holder)) throw new AliasUnavailable('Address holder is invalid');
   const prefix =
     type === 'agent'
       ? '/a/'
@@ -22,7 +22,7 @@ export function identityCanonical(
             : type === 'concept'
               ? '/concepts/'
               : '/e/';
-  return { prefix, key: uuidToSid(holder.slice(-36)), slugSource };
+  return { prefix, key: uuidToSid(holder.slice(-36)), suffixSource };
 }
 
 export interface AddressableSummary {
@@ -32,7 +32,7 @@ export interface AddressableSummary {
   name: { value: string; preferenceRevision?: string };
 }
 
-/** One bounded capability-to-Space query and one indexed current-name batch.
+/** One bounded capability-to-Space query and one indexed current-alias batch.
  * Call only after the owning summary has admitted each returned resource. */
 export async function canonicalAddresses(
   env: WorkActivationEnvironment,
@@ -78,7 +78,7 @@ export async function canonicalAddresses(
       }
     }
   }
-  const names =
+  const aliases =
     (await env.addresses?.currents([...new Set(holders.values())]).catch(() => new Map())) ??
     new Map();
   const result = new Map<string, CanonicalAddress>();
@@ -92,8 +92,8 @@ export async function canonicalAddresses(
           : summary.type === 'work'
             ? 'work'
             : null;
-    const name = scope ? names.get(`${scope}\0${holder}`) : null;
-    const named = name && NAME_POLICIES[scope!].canonical === 'name';
+    const alias = scope ? aliases.get(`${scope}\0${holder}`) : null;
+    const aliased = alias && ALIAS_POLICIES[scope!].canonical === 'alias';
     const address = identityCanonical(
       summary.type,
       holder,
@@ -102,8 +102,8 @@ export async function canonicalAddresses(
         : summary.name.value,
     );
     if (scope === 'space') address.prefix = siteSpaces.has(holder) ? '/z/' : '/r/';
-    if (named) {
-      address.key = name.key;
+    if (aliased) {
+      address.key = alias.key;
       if (scope === 'agent') address.prefix = '/@';
     }
     result.set(summary.reference, address);

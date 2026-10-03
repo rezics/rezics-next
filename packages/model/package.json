@@ -6,8 +6,8 @@
     ".": "./src/index.ts",
     "./address": "./src/address/index.ts",
     "./address/sid": "./src/address/sid.ts",
-    "./address/slug": "./src/address/slug.ts",
-    "./address/names": "./src/address/names.ts"
+    "./address/suffix": "./src/address/suffix.ts",
+    "./address/aliases": "./src/address/aliases.ts"
   },
   "dependencies": {
     "@rezics/wiki-toolkit": "workspace:*",

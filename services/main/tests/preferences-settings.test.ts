@@ -42,7 +42,7 @@ test('blocking a handle resolves its current Agent inside the Access transaction
   const statements: string[] = [];
   let stored = '';
   const store = new PersonPreferencesStore(pool((sql, args) => {
-    if (sql.includes('FROM access.name_registry')) return { rows: [{ agent_id: target }] };
+    if (sql.includes('FROM access.alias_registry')) return { rows: [{ agent_id: target }] };
     if (sql.includes('FROM access.authority_subject') && sql.includes('kind')) return { rows: [{ id: target }] };
     if (sql.includes('SELECT count(*)::text AS count FROM access.person_block')) return { rows: [{ count: '0' }] };
     if (sql.includes('INSERT INTO access.person_block (')) stored = String(args?.[1]);

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { GRAPHS, iri, prepareComponent } from '../../../services/main/src/modules/work/activate.ts';
-import { migrateGraphNames } from '../../../services/main/src/modules/address/migrate.ts';
+import { migrateGraphAliases } from '../../../services/main/src/modules/address/migrate.ts';
 import { addressFixture } from './g-937-support.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
@@ -78,38 +78,38 @@ test('G937: former graph names move once, retain holders and recover after nativ
         ${iri(invalid)} a rv:RouteBinding ; rv:routeNamespace "work" ; rv:normalizedSlug "${invalidKey}" ; rv:targetWork ${iri(record.work)} ; rv:routeState rv:Current ; rv:routeRevision ${iri(retained)} .
       } GRAPH ${iri(GRAPHS.revisions)} { ${iri(retained)} a rv:RevisionAnchor ; rv:component ${iri(binding)} ;
         rv:targetWork ${iri(record.work)} ; rv:normalizedSlug "${key}" ; rv:routeState rv:Current } }`);
-    await f.accessPool.query('DELETE FROM access.name_graph_import WHERE data_epoch = $1', [
+    await f.accessPool.query('DELETE FROM access.alias_graph_import WHERE data_epoch = $1', [
       f.env.lineage.dataEpoch,
     ]);
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
-    expect(await migrateGraphNames(f.env)).toEqual({ status: 'deferred' });
-    expect((await f.accessPool.query('SELECT 1 FROM access.name_graph_import WHERE data_epoch = $1',[f.env.lineage.dataEpoch])).rowCount).toBe(0);
+    expect(await migrateGraphAliases(f.env)).toEqual({ status: 'deferred' });
+    expect((await f.accessPool.query('SELECT 1 FROM access.alias_graph_import WHERE data_epoch = $1',[f.env.lineage.dataEpoch])).rowCount).toBe(0);
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
       GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:restoreHold true } }`);
     const original = f.accessPool.query.bind(f.accessPool);
     let interrupt = true;
     f.accessPool.query = (async (sql: string, ...args: unknown[]) => {
-      if (interrupt && sql.startsWith('INSERT INTO access.name_graph_import')) {
+      if (interrupt && sql.startsWith('INSERT INTO access.alias_graph_import')) {
         interrupt = false;
         throw new Error('Lost completion marker');
       }
       return original(sql, ...(args as []));
     }) as typeof f.accessPool.query;
-    expect(await migrateGraphNames(f.env)).toEqual({ status: 'deferred' });
+    expect(await migrateGraphAliases(f.env)).toEqual({ status: 'deferred' });
     f.accessPool.query = original;
-    await migrateGraphNames(f.env);
-    await migrateGraphNames(f.env);
+    await migrateGraphAliases(f.env);
+    await migrateGraphAliases(f.env);
     expect((await f.env.addresses.lookup('space', key))?.holder).toBe(space);
     expect((await f.env.addresses.lookup('work', key))?.holder).toBe(record.work);
     expect(await f.env.addresses.lookup('work',invalidKey)).toBeNull();
-    expect((await f.accessPool.query('SELECT reason FROM access.name_graph_import_report WHERE data_epoch = $1 AND source = $2',
-      [f.env.lineage.dataEpoch,invalid])).rows[0]?.reason).toContain('Identity keys cannot be names');
+    expect((await f.accessPool.query('SELECT reason FROM access.alias_graph_import_report WHERE data_epoch = $1 AND source = $2',
+      [f.env.lineage.dataEpoch,invalid])).rows[0]?.reason).toContain('Identity keys cannot be aliases');
     expect((await readZoneConfiguration(f.env, zone)).configuration.official).toEqual({});
     expect(
       (
         await f.accessPool.query(
-          'SELECT count(*)::int AS count FROM access.name_history WHERE scope = $1 AND key = $2',
+          'SELECT count(*)::int AS count FROM access.alias_history WHERE scope = $1 AND key = $2',
           ['work', key],
         )
       ).rows[0].count,

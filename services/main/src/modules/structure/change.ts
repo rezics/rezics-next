@@ -1015,7 +1015,12 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
     if (operation.qualifier && state.role !== (operation.qualifier.type === 'work-part' ? 'part' : 'group')) {
       throw new CompositionConflict('qualifier does not belong to this occurrence role');
     }
-    if (operation.label) state.label = operation.label;
+    if (operation.label) {
+      state.labels = [...state.labels ?? (state.label ? [state.label] : [])]
+        .filter(label => label.language.toLowerCase() !== operation.label!.language.toLowerCase());
+      state.labels.push(operation.label);
+      state.label = state.labels[0];
+    }
     if (operation.qualifier) state.qualifier = operation.qualifier;
     return;
   }
@@ -1080,7 +1085,9 @@ function placementTriples(state: PlacementState, generation: string,
     add('lastParent', iri(state.parent));
     add('removedBy', iri(state.removedBy!));
   }
-  if (state.label) add('occurrenceLabel', `${lit(state.label.value)}@${state.label.language}`);
+  for (const label of state.labels ?? (state.label ? [state.label] : [])) {
+    add('occurrenceLabel', `${lit(label.value)}@${label.language}`);
+  }
   if (state.target) triples.push(`${subject} <https://schema.org/item> ${profile
     && isCatalogTarget(profile, state.target) ? structureIri(state.target) : iri(state.target)} .`);
   if (state.selection?.mode === 'follow-context') add('selectionMode', 'rv:FollowContext');
@@ -1244,7 +1251,12 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const retained = await recordTree(objects).lookup(manifest.records,
     changedExisting.map(state => state.occurrence), cost);
   for (const old of changedExisting) {
-    if (JSON.stringify(retained.get(old.occurrence)) !== JSON.stringify(placementRecord(old))) {
+    const canonical = (record: OccurrenceRecord | undefined) => record && JSON.stringify({ ...record,
+      labels: record.labels.map(label => ({ ...label, language: label.language.toLowerCase() }))
+        .sort((a, b) => a.language < b.language ? -1 : a.language > b.language ? 1 : 0),
+    }, (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value);
+    if (canonical(retained.get(old.occurrence)) !== canonical(placementRecord(old))) {
       throw new StructureObjectCorrupt('composition graph differs from its retained head');
     }
   }
@@ -1701,7 +1713,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
       throw error;
     }
-    if (record.labels.length > 1 || record.selection?.mode === 'fixed-realm'
+    if (record.selection?.mode === 'fixed-realm'
       || record.state === 'active'
       && (!orderKeys.has(orderTreeKey(record as OrderEntry))
         || record.parent !== header.structure
@@ -1792,7 +1804,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
       parent: record.parent, role: record.role, introducedBy: record.introducedBy,
       ...(segment ? { segment, segmentKey: record.segmentKey, orderKey: record.orderKey } : {
         removedBy: record.removedBy }),
-      ...(record.labels[0] ? { label: record.labels[0] } : {}),
+      labels: record.labels, ...(record.labels[0] ? { label: record.labels[0] } : {}),
       ...(record.target ? { target: record.target,
         ...(record.selection ? { selection: record.selection as Selection } : {}) } : {}),
       ...(record.qualifier ? { qualifier: record.qualifier } : {}),

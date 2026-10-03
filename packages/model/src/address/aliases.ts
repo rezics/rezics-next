@@ -7,11 +7,10 @@ import {
   confusables,
 } from './unicode-data.ts';
 
-export class InvalidAddressName extends Error {}
-export type NamePolicy = 'ascii-handle' | 'unicode-title';
-export interface NormalizedName {
+export class InvalidAddressAlias extends Error {}
+export type AliasPolicy = 'ascii-handle' | 'unicode-title';
+export interface NormalizedAlias {
   key: string;
-  display: string;
   skeleton: string;
 }
 
@@ -31,7 +30,7 @@ function rangeAt<T extends readonly [number, number, ...unknown[]]>(
   return undefined;
 }
 
-export function foldAddressName(value: string): string {
+export function foldAddressAlias(value: string): string {
   return [...value]
     .map((character) => caseFolds[character.codePointAt(0)!] ?? character)
     .join('')
@@ -40,9 +39,9 @@ export function foldAddressName(value: string): string {
 
 /** UTS #39 §4, Unicode 16.0.0. Case comparison precedes skeleton comparison;
  * the folded skeleton also prevents ASCII digit zero impersonating letter o. */
-export function nameSkeleton(value: string): string {
-  return foldAddressName(
-    [...foldAddressName(value).normalize('NFD')]
+export function aliasSkeleton(value: string): string {
+  return foldAddressAlias(
+    [...foldAddressAlias(value).normalize('NFD')]
       .map((character) => confusables[character.codePointAt(0)!] ?? character)
       .join('')
       .normalize('NFD'),
@@ -76,38 +75,38 @@ export function isHighlyRestrictive(value: string): boolean {
   ].some((group) => scripts.every((set) => [...set].some((script) => group.has(script))));
 }
 
-export function normalizeAddressName(value: string, policy: NamePolicy): NormalizedName {
+export function normalizeAddressAlias(value: string, policy: AliasPolicy): NormalizedAlias {
   if (typeof value !== 'string' || value.length > 512)
-    throw new InvalidAddressName('Name exceeds its bound');
-  const display = value.normalize('NFC');
-  const key = foldAddressName(display).replace(/\s+/gu, '-');
+    throw new InvalidAddressAlias('Alias exceeds its bound');
+  const normalized = value.normalize('NFC');
+  const key = foldAddressAlias(normalized).replace(/\s+/gu, '-');
   if (
-    identityKeyUuid(display) ||
+    identityKeyUuid(normalized) ||
     identityKeyUuid(key) ||
     hasSidCaseVariant(key) ||
     (key[22] === '-' && hasSidCaseVariant(key.slice(0, 22)))
   ) {
-    throw new InvalidAddressName('Identity keys cannot be names');
+    throw new InvalidAddressAlias('Identity keys cannot be aliases');
   }
   if (policy === 'ascii-handle') {
-    if (!/^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$/.test(key) || !/^[A-Za-z0-9_-]+$/.test(display))
-      throw new InvalidAddressName('Invalid ASCII handle');
+    if (!/^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$/.test(key) || !/^[A-Za-z0-9_-]+$/.test(normalized))
+      throw new InvalidAddressAlias('Invalid ASCII alias');
   } else if (
     [...key].length < 1 ||
     [...key].length > 120 ||
     !/[\p{L}\p{N}]/u.test(key) ||
     !isHighlyRestrictive(key)
   ) {
-    throw new InvalidAddressName('Title must use a Highly Restrictive script combination');
+    throw new InvalidAddressAlias('Alias must use a Highly Restrictive script combination');
   }
-  return { key, display, skeleton: nameSkeleton(key) };
+  return { key, skeleton: aliasSkeleton(key) };
 }
 
-/** A readable ASCII candidate from the typed public name, never an identity
- * token or Account data. Availability remains the name registry's decision. */
+/** A readable ASCII candidate from the typed public alias, never an identity
+ * token or Account data. Availability remains the alias registry's decision. */
 export function asciiHandleSuggestion(value: string): string | null {
   try {
-    return normalizeAddressName(value, 'ascii-handle').key;
+    return normalizeAddressAlias(value, 'ascii-handle').key;
   } catch {
     /* Derive a candidate from display-name words. */
   }
@@ -126,7 +125,7 @@ export function asciiHandleSuggestion(value: string): string | null {
     .slice(0, 30)
     .replace(/_+$/g, '');
   try {
-    return normalizeAddressName(base, 'ascii-handle').key;
+    return normalizeAddressAlias(base, 'ascii-handle').key;
   } catch {
     return null;
   }

@@ -29,7 +29,7 @@ const summary = (reference: string, type: 'work' | 'concept', value: string): Re
   address: {
     prefix: type === 'work' ? '/w/' : '/concepts/',
     key: 'rainy-bookshop',
-    slugSource: value,
+    suffixSource: value,
   },
   name: { value, language: 'zh-Hans', direction: 'ltr', basis: 'fallback' },
   avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: reference, resourceType: type },

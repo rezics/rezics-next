@@ -1,4 +1,4 @@
-import { normalizeAddressName } from '@rezics/model/address/names';
+import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
@@ -42,7 +42,7 @@ export function zoneSpaceCreationDigest(input: CreateZoneSpaceInput) {
   return hash(JSON.stringify({ family: 'create-space-zone-v1', name: input.name, language,
     capabilities: ['zone'], owner: input.actingSubject, visibility: input.visibility ?? 'public',
     listing: input.listing ?? 'listed', ...(input.handle ? {
-      handle: normalizeAddressName(input.handle, 'ascii-handle').key } : {}) }));
+      handle: normalizeAddressAlias(input.handle, 'ascii-handle').key } : {}) }));
 }
 
 function checked(terminal: SpaceCreationReceipt, admission: RegisteredAdmission,

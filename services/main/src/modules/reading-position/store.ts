@@ -4,7 +4,7 @@ import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
 import { READING_POSITION_COST } from './contract.ts';
 
-/** Literal substring search across every carried label, independent of display
+/** Analyzed label search across every carried label, independent of display
  * language. NFKC also lets a full-width chapter number find its Arabic ordinal. */
 export function normalizePositionQuery(q?: string): string {
   if (q !== undefined && q.length > READING_POSITION_COST.chooserQueryChars) {

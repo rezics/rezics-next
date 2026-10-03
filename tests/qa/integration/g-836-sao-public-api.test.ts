@@ -142,7 +142,7 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     await f.grant(`address:claim:${source.work}`,'address.claim');
     const slug = `sao-836-${randomUUID().slice(0,8)}`;
     const address = await f.json<{ revision: string }>(await f.call('POST','/v1/addresses/claims',
-      { profile: 'name-write-v1',scope: 'work',holder: source.work,operation: 'claim',name: slug,expectedRevision: null,actingSubject: f.actor }),201);
+      { profile: 'alias-write-v1',scope: 'work',holder: source.work,operation: 'claim',alias: slug,expectedRevision: null,actingSubject: f.actor }),201);
     const oldAddress = `/v1/addresses/revisions/${address.revision}?scope=work&key=${slug}`;
     const addressBefore = await json<Record<string,unknown>>(await call('GET',oldAddress,undefined,null));
     const status = (work: string,actor: string,value: string,token: string,expectedVersion = 0) => call('PUT',`/v1/works/${shortId(work)}/reader-status`,

@@ -60,7 +60,7 @@ export const JOIN_REQUEST_SEARCH_SQL = `WITH query AS MATERIALIZED (
       AND strpos(access.realm_member_search_key(p.display_name), q.text) > 0
     ORDER BY pending.request_id LIMIT $4)
   UNION
-  (SELECT pending.request_id AS id FROM access.name_registry h
+  (SELECT pending.request_id AS id FROM access.alias_registry h
     JOIN access.authority_subject s ON s.id = h.holder AND s.active
     JOIN access.realm_join_request_pending pending ON pending.realm = $1 AND pending.member = h.holder
     CROSS JOIN terms q

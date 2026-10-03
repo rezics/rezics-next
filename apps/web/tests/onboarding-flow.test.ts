@@ -80,15 +80,15 @@ test('handle change sends the expected prior handle and preserves Main conflict 
   const send = async (input: URL, init: RequestInit) => {
     if (init.method === 'GET') return Response.json({ holder: person.agent,key: 'ada',revision: person.agent.slice(-36) });
     captured.request = new Request(input, init);
-    return Response.json({ code: 'name_cooldown' }, { status: 409 });
+    return Response.json({ code: 'alias_cooldown' }, { status: 409 });
   };
   const key = '00000000-0000-4000-8000-000000000002';
   expect(await changeHandle('secret', person.agent, 'Ada_New', 'ada', key, send)).toBe('cooldown');
   expect(captured.request?.url).toBe('http://127.0.0.1:3001/v1/addresses/renames');
   expect(captured.request?.headers.get('authorization')).toBe('Bearer secret');
   expect(captured.request?.headers.get('idempotency-key')).toBe(key);
-  expect(await captured.request?.json()).toEqual({ profile: 'name-write-v1',scope: 'agent',holder: person.agent,actingSubject: person.agent,operation: 'rename',name: 'ada_new',expectedRevision: person.agent.slice(-36) });
-  const conflict = async (_url: URL,init: RequestInit) => init.method === 'GET' ? Response.json({ holder: person.agent,key: 'ada',revision: person.agent.slice(-36) }) : Response.json({ code: 'name_conflict' }, { status: 409 });
+  expect(await captured.request?.json()).toEqual({ profile: 'alias-write-v1',scope: 'agent',holder: person.agent,actingSubject: person.agent,operation: 'rename',alias: 'ada_new',expectedRevision: person.agent.slice(-36) });
+  const conflict = async (_url: URL,init: RequestInit) => init.method === 'GET' ? Response.json({ holder: person.agent,key: 'ada',revision: person.agent.slice(-36) }) : Response.json({ code: 'alias_conflict' }, { status: 409 });
   expect(await changeHandle('secret', person.agent, 'ada_new', 'ada', key, conflict)).toBe('conflict');
   const invalid = async () => { throw new Error('should not send'); };
   expect(await changeHandle('secret', person.agent, 'a', 'ada', key, invalid)).toBe('invalid');

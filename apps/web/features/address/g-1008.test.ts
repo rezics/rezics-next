@@ -1,10 +1,11 @@
-import { expect, spyOn, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { uuidToSid } from '@rezics/model/address';
 import { NextRequest } from 'next/server';
 import { proxy } from '../../proxy.ts';
 import { beforePathNormalization } from './edge.ts';
 import { readAddress, type AddressRead } from './client.ts';
 import { decideAddress } from './redirect.ts';
+import { SERVER_DEADLINE_HEADER } from '../api/server-fetch.ts';
 
 const space = 'https://rezics.com/id/0199a0fe-0b21-7000-8000-123456789abc';
 const realm = 'https://rezics.com/id/0199a0fe-0b21-7000-8000-123456789abd';
@@ -20,7 +21,7 @@ const admittedSpace: AddressRead = {
     holder: space,
     state: 'current',
     capabilities: { realm, zone },
-    canonical: { prefix: '/z/', key: 'books', slugSource: 'Books' },
+    canonical: { prefix: '/z/', key: 'books', suffixSource: 'Books' },
   },
 };
 
@@ -124,13 +125,10 @@ test('G1008: proxy and trailing-slash ingress preserve the admitted legacy Zone 
 for (const phase of ['headers', 'body'] as const) {
   test(`G1008: a stalled address response ${phase} meets the read deadline and a later request recovers`, async () => {
     // Exercise native fetch cancellation, including a body that never ends.
-    // Shorten the real ten-second bound only for this transport fault test.
-    const timeout = AbortSignal.timeout.bind(AbortSignal);
-    const budgets: number[] = [];
-    const deadline = spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
-      budgets.push(ms);
-      return timeout(50);
-    });
+    // A short ingress deadline exercises the real transport budget without
+    // depending on how the shared server transport schedules its timer.
+    const deadlineHeaders = () =>
+      new Headers({ [SERVER_DEADLINE_HEADER]: String(Date.now() + 50) });
     let stalled = true;
     let release: ((response: Response) => void) | undefined;
     const server = Bun.serve({
@@ -156,19 +154,24 @@ for (const phase of ['headers', 'body'] as const) {
       },
     });
     try {
+      const started = Date.now();
       expect(
-        await readAddress({ scope: 'space', key: 'books' }, 'en', server.url.origin, new Headers()),
+        await readAddress(
+          { scope: 'space', key: 'books' },
+          'en',
+          server.url.origin,
+          deadlineHeaders(),
+        ),
       ).toEqual({ kind: 'unavailable' });
+      expect(Date.now() - started).toBeLessThan(1000);
       release?.(new Response(null, { status: 503 }));
       stalled = false;
       expect(
         await readAddress({ scope: 'space', key: 'books' }, 'en', server.url.origin, new Headers()),
       ).toEqual(admittedSpace);
-      expect(budgets).toEqual([10_000, 10_000]);
     } finally {
       release?.(new Response(null, { status: 503 }));
       await server.stop(true);
-      deadline.mockRestore();
     }
   });
 }

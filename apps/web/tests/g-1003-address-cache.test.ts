@@ -52,7 +52,7 @@ function data(key: string, canonicalKey = uuidToSid(uuid)): ResolvedAddress {
     key,
     holder: `https://rezics.com/id/${uuid}`,
     state: 'current',
-    canonical: { prefix: '/a/', key: canonicalKey, slugSource: 'Reader' },
+    canonical: { prefix: '/a/', key: canonicalKey, suffixSource: 'Reader' },
   };
 }
 function hit(key: string, canonicalKey?: string, headers: HeadersInit = {}) {
@@ -134,7 +134,7 @@ test('G1003: language, origin, scope and Zone route select independent cache ent
       canonical: {
         prefix: '/a/',
         key: uuidToSid(uuid),
-        slugSource: headers.get('accept-language'),
+        suffixSource: headers.get('accept-language'),
       },
     };
     return Response.json(value, {
@@ -143,7 +143,7 @@ test('G1003: language, origin, scope and Zone route select independent cache ent
   });
   for (const language of ['en', 'sv']) {
     expect(await f.read('reader', language)).toMatchObject({
-      data: { canonical: { slugSource: language } },
+      data: { canonical: { suffixSource: language } },
     });
     await f.read('reader', language);
   }
@@ -177,7 +177,7 @@ test('G1003: oversized values and cache keys never occupy cache capacity', async
         ...data(url.searchParams.get('key')!),
         canonical: {
           ...data('reader').canonical,
-          slugSource: '界'.repeat(ADDRESS_CACHE_LIMITS.entryBytes),
+          suffixSource: '界'.repeat(ADDRESS_CACHE_LIMITS.entryBytes),
         },
       },
       { headers: { 'cache-control': 'public, max-age=30', etag: '"revision"' } },

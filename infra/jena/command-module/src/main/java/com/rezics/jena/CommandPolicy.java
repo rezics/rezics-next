@@ -136,16 +136,23 @@ final class CommandPolicy {
         if (chapterBackfill) {
             List<Quad> publicInserts = insert.stream()
                 .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI())).toList();
-            if (!graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH))
+            boolean occurrenceBackfill = graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX))
+                && insert.stream().anyMatch(quad -> RECEIPTS.equals(quad.getGraph().getURI())
+                    && Set.of(OccurrenceLabelIndex.p("occurrenceSearchReset"), OccurrenceLabelIndex.p("occurrenceSearchGeneration"), OccurrenceLabelIndex.p("occurrenceSearchRevision"), OccurrenceLabelIndex.p("occurrenceSearchOffset")).contains(quad.getPredicate()));
+            if (!occurrenceBackfill && (!graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH))
                 || !current.isEmpty() || !revisions.isEmpty() || publicInserts.size() != 3
                 || delete.stream().anyMatch(quad -> !isControlSequence(quad))
                 || insert.stream().filter(quad -> CONTROL.equals(quad.getGraph().getURI()))
                     .anyMatch(quad -> !isControlSequence(quad))
                 || !publicInserts.stream().allMatch(CommandPolicy::isChapterIdentity)
                 || publicInserts.stream().map(quad -> quad.getPredicate().getURI())
-                    .distinct().count() != 3) {
+                    .distinct().count() != 3)) {
                 throw new IllegalArgumentException("chapter search backfill footprint differs");
             }
+            if (occurrenceBackfill && (!current.isEmpty() || !revisions.isEmpty()
+                || delete.stream().anyMatch(quad -> !isControlSequence(quad))
+                || insert.stream().filter(quad -> CONTROL.equals(quad.getGraph().getURI())).anyMatch(quad -> !isControlSequence(quad))))
+                throw new IllegalArgumentException("occurrence label backfill footprint differs");
         }
         boolean erasure = receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}");
         if (graphs.contains(PRIVATE_SEARCH) && (bootstrap || rebuild || revisions.isEmpty()

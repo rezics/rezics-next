@@ -51,12 +51,12 @@ test('G-943 Realm, Zone, Work, named and unnamed people, and legacy URLs have on
   const claim = await page.request.post('/api/main/v1/addresses/claims', {
     headers: { 'idempotency-key': randomUUID() },
     data: {
-      profile: 'name-write-v1',
+      profile: 'alias-write-v1',
       scope: 'agent',
       holder: named,
       actingSubject: named,
       operation: 'claim',
-      name: handle,
+      alias: handle,
       expectedRevision: null,
     },
   });
@@ -75,7 +75,7 @@ test('G-943 Realm, Zone, Work, named and unnamed people, and legacy URLs have on
   ];
   await page.context().clearCookies();
   for (const walk of walks) {
-    const canonical = canonicalHref(walk.read.canonical, 'en', walk.read.canonical.slugSource, {
+    const canonical = canonicalHref(walk.read.canonical, 'en', walk.read.canonical.suffixSource, {
       surface: 'surface' in walk ? walk.surface : undefined,
     });
     const response = await page.goto(canonical);
@@ -95,7 +95,7 @@ test('G-943 Realm, Zone, Work, named and unnamed people, and legacy URLs have on
           .first(),
       ).toHaveAttribute(
         'href',
-        canonicalHref(walk.read.canonical, 'en', walk.read.canonical.slugSource, {
+        canonicalHref(walk.read.canonical, 'en', walk.read.canonical.suffixSource, {
           surface: other,
         }),
       );

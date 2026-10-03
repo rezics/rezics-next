@@ -12,7 +12,7 @@ import { relationshipRecipients, type RelationshipRecipients } from '../follows/
 import { recoverSpaceFollows } from '../follows/recovery.ts';
 import { recoverLibraryFollows } from '../library/follows.ts';
 import { resourceNotification } from './resources.ts';
-import { normalizeAddressName } from '@rezics/model/address/names';
+import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import type { SavedViewNotifications } from './saved-views.ts';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
@@ -469,12 +469,12 @@ export class NotificationProducer {
     if (current && current.author === author && revision === `urn:rezics:content:revision:${current.revisionId}`) {
       const handles = [...new Set([...current.body.matchAll(/(?:^|[^\p{L}\p{N}_-])@([a-z0-9_-]+)(?![\p{L}\p{N}_-])/giu)]
         .flatMap(match => {
-          try { return [normalizeAddressName(match[1]!, 'ascii-handle').key]; }
+          try { return [normalizeAddressAlias(match[1]!, 'ascii-handle').key]; }
           catch { return []; }
         }))].slice(0, 20);
       if (handles.length) {
         const mentioned = (await this.access.query<{ agent_id: string }>(`SELECT holder AS agent_id
-          FROM access.name_registry WHERE scope = 'agent' AND key = ANY($1::text[]) AND state = 'current'
+          FROM access.alias_registry WHERE scope = 'agent' AND key = ANY($1::text[]) AND state = 'current'
           ORDER BY holder LIMIT 21`, [handles])).rows;
         if (mentioned.length > 20) throw new Error('mention target bound exceeded');
         const recipients = new Set<string>();

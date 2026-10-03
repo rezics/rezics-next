@@ -16,11 +16,11 @@ import {
   checkZoneConfiguration,
 } from '../zone/config-format.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { NameUnavailable } from './registry.ts';
+import { AliasUnavailable } from './registry.ts';
 
 /** Upgrade a current Zone payload once. Retained revision bytes keep the
  * former configuration as history; the new head contains no naming store. */
-export async function prepareZoneNameCleanup(env: WorkActivationEnvironment, zone: string) {
+export async function prepareZoneAliasCleanup(env: WorkActivationEnvironment, zone: string) {
   const rows =
     (
       await env.fuseki.query(
@@ -43,7 +43,7 @@ export async function prepareZoneNameCleanup(env: WorkActivationEnvironment, zon
     !row.state ||
     !row.disclosure
   )
-    throw new NameUnavailable('Former Zone configuration is incomplete');
+    throw new AliasUnavailable('Former Zone configuration is incomplete');
   const state = await readWorkComponentState(env, row.manifest.value, zone, ZONE_PROFILE);
   const prior =
     state.configuration && typeof state.configuration === 'object'

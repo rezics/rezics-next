@@ -10,7 +10,7 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
     async read({ fuseki, batch, eventId, value, ordinal }) {
       const receipt = value('receipt');
       if (!receipt || !/^urn:rezics:name-migration:[0-9a-f]{64}$/.test(receipt))
-        throw new Error('Name migration receipt is invalid');
+        throw new Error('Alias migration receipt is invalid');
       const rows =
         (
           await fuseki.query(
@@ -20,7 +20,7 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
           )
         ).results?.bindings ?? [];
       if (rows.length !== 1 || !rows[0]?.first || !rows[0]?.last)
-        throw new Error('Name migration cursor is incomplete');
+        throw new Error('Alias migration cursor is incomplete');
       const digest = hash(
         `name-registry-v1\0${batch.dataEpoch}\0${rows[0].first.value}\0${rows[0].last.value}`,
       );
@@ -32,7 +32,7 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
         value('sequence') !== batch.sequence ||
         eventId !== `urn:rezics:event:${hash(receipt)}`
       )
-        throw new Error('Name migration receipt differs');
+        throw new Error('Alias migration receipt differs');
       return {
         specversion: '1.0',
         id: eventId,
@@ -53,7 +53,7 @@ export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
             action: 'address.migrate',
             outcome: 'succeeded',
             requestDigest: digest,
-            systemProof: { kind: 'name-registry-migration', dataEpoch: batch.dataEpoch },
+            systemProof: { kind: 'alias-registry-migration', dataEpoch: batch.dataEpoch },
           },
         },
       };

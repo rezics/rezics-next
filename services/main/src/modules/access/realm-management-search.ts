@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { REALM_ADMIN_COST, RealmAdminInvalid } from '../realm-admin/contract.ts';
-import { identityKeyUuid, normalizeAddressName } from '@rezics/model/address';
+import { identityKeyUuid, normalizeAddressAlias } from '@rezics/model/address';
 import { agentForHandle } from '../agent/handle.ts';
 
 /** Resolve exact identity/name input before the existing bounded text search.
@@ -12,9 +12,9 @@ export async function resolveAgentSearch(client: PoolClient, query: string): Pro
   const legacy = agentForHandle(query);
   if (legacy) return legacy;
   let name;
-  try { name = normalizeAddressName(query, 'ascii-handle').key; }
+  try { name = normalizeAddressAlias(query, 'ascii-handle').key; }
   catch { return query; }
-  const row = (await client.query<{ holder: string }>(`SELECT holder FROM access.name_registry
+  const row = (await client.query<{ holder: string }>(`SELECT holder FROM access.alias_registry
     WHERE scope = 'agent' AND key = $1 AND state IN ('current','redirect')`, [name])).rows[0];
   return row?.holder ?? query;
 }
@@ -45,7 +45,7 @@ export const REALM_MEMBER_SEARCH_SQL = `WITH query AS MATERIALIZED (
     ORDER BY p.agent_id LIMIT $4)
   UNION
   (SELECT h.holder AS member
-    FROM access.name_registry h
+    FROM access.alias_registry h
     JOIN access.authority_subject s ON s.id = h.holder AND s.active
     CROSS JOIN terms q
     WHERE h.holder > $2 AND (EXISTS (SELECT 1 FROM access.membership m

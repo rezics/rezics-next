@@ -29,7 +29,7 @@ describe('G-951 durable links preserve navigation state', () => {
     const address: CanonicalAddress = {
       prefix: '/w/',
       key: 'spring-story',
-      slugSource: 'Spring story',
+      suffixSource: 'Spring story',
     };
     const summary = {
       status: 'available',
@@ -60,7 +60,7 @@ describe('G-951 durable links preserve navigation state', () => {
     const named: AddressTarget = {
       prefix: '/w/',
       key: '海の地図',
-      slugSource: 'The Cartographer of Tides',
+      suffixSource: 'The Cartographer of Tides',
     };
     expect(parsed(globalWorkHref(named)).path.lookup.key).toBe('海の地図');
     const identity: AddressTarget = { ...named, key: uuidToSid(work) };

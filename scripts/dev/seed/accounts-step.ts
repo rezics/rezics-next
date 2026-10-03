@@ -23,8 +23,8 @@ export async function seedAccounts(state: SeedState) {
     }
     // Address history can outlive a seed receipt; an already-held handle needs no new claim.
     if (current.handle !== person.handle) await api.post('/v1/addresses/claims',
-      { profile: 'name-write-v1',scope: 'agent',holder: agent.agent,operation: 'claim',
-        name: person.handle,expectedRevision: null,actingSubject: agent.agent },
+      { profile: 'alias-write-v1',scope: 'agent',holder: agent.agent,operation: 'claim',
+        alias: person.handle,expectedRevision: null,actingSubject: agent.agent },
       token, seedKey('handle', person.id));
     state.sessions.push({ id: person.id, accountId: signed.id, cookie: signed.cookie,
       token, issuedAt: Date.now(), actingSubject: agent.agent });

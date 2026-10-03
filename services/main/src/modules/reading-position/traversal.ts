@@ -6,17 +6,19 @@ import type { ReadingOccurrence } from './boundary.ts';
 import { READING_POSITION_COST } from './contract.ts';
 import { normalizePositionQuery } from './store.ts';
 import { ReadingOrderIndex, readingOrderRead } from './immutable-order.ts';
+import { searchOccurrenceLabels } from './label-index.ts';
+import { readingWorkScope } from './work-scope.ts';
 
 /** Bounded results and live traversal state, independent of chapter inventory.
  * Each seek returns <=101 placements, with <=16 labels each. Configured stores
  * use immutable counted trees for ranges, numeric rank and ordinals. Graph-only
- * adapters retain the prior projection path; substring search still scans labels.
+ * adapters retain the prior projection path. Configured search seeks the native
+ * Lucene text index; chapter labels are never scanned.
  * Traversal retains only the ancestor stack and the current seek's candidates.
  * The surrounding Work read bounds graph calls, bytes and elapsed time. */
 export const READING_CHOOSER_COST = { probe: 101, contextDepth: 16, workBatch: 50 } as const;
 const edge = 'rv:mainVersion/^rv:structureOf/rv:selectedGeneration/^rv:generation/rv:composedWork';
 const current = iri(GRAPHS.current);
-const fn = '<http://www.w3.org/2005/xpath-functions#normalize-unicode>';
 export interface ReadingWork { work: string; structure: string | null; revision: string | null; generation: string | null }
 export interface ReadingFrame { work: string; parent: string; after?: ReadingOccurrence }
 export interface ReadingLocation { item: ReadingOccurrence; frames: ReadingFrame[] }
@@ -60,6 +62,7 @@ export class ReadingPositionTraversal {
   private readonly records = new Map<string, ReadingOccurrence | null>();
   private readonly paths = new Map<string, Promise<ReadingFrame[] | null>>();
   private readonly order: ReadingOrderIndex | null;
+  private labelsIndexing = false;
   constructor(readonly session: WorkReadSession, readonly root: string, private readonly disclose: Disclose) {
     this.order = session.deps?.structureObjects ? new ReadingOrderIndex(session, session.deps.structureObjects) : null;
   }
@@ -97,7 +100,7 @@ export class ReadingPositionTraversal {
     for (;;) {
       const rows = await this.session.query(`# reading-position:works
         SELECT DISTINCT ?work ?structure ?revision ?generation WHERE { GRAPH ${current} {
-          ${iri(this.root)} (${edge})* ?work . ?work rv:mainVersion ?main .
+          { ${readingWorkScope(this.root)} } ?work rv:mainVersion ?main .
           ${after ? `FILTER(STR(?work) > ${lit(after)})` : ''}
           OPTIONAL { ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?profile ;
             rv:structureHead ?revision ; rv:selectedGeneration ?generation .
@@ -132,13 +135,14 @@ export class ReadingPositionTraversal {
       return items.map(item => ({ item, matches: true }));
     }
     const numbered = q ? await this.numbered(meta, parent, q) : null;
-    // ARQ provides XPath scalar functions, including Unicode normalization:
-    // https://jena.apache.org/documentation/query/library-function.html
-    const matches = !q ? 'true' : `(${numbered ? `?occurrence = ${iri(numbered)} ||` : ''}
-      EXISTS { ?placement rv:occurrenceLabel ?searchLabel .
-        FILTER(CONTAINS(LCASE(${fn}(STR(?searchLabel), "NFKC")), ${lit(q)})) }
-      || EXISTS { ?placement rv:qualifier/rv:displayLabel ?searchLabel .
-        FILTER(CONTAINS(LCASE(${fn}(STR(?searchLabel), "NFKC")), ${lit(q)})) })`;
+    if (q && this.order) {
+      const page = await readingOrderRead(() => searchOccurrenceLabels(this.session,
+        this.order!, meta, parent, q, after, probe, numbered));
+      this.labelsIndexing ||= !page.current;
+      return page.candidates;
+    }
+    if (q) throw new WorkReadUnavailable('Reading label search requires the configured order store');
+    const matches = 'true';
     const op = reverse ? '<' : '>';
     const rows = await this.session.query(`# reading-position:range
       SELECT ?placement ?occurrence ?parent ?segmentKey ?orderKey ?role ?target ?label ?displayLabel ?matches WHERE {
@@ -250,10 +254,11 @@ export class ReadingPositionTraversal {
     if (!this.paths.has(work)) this.paths.set(work, (async () => {
       const rows = await this.session.query(`# reading-position:parent-work
         SELECT ?occurrence WHERE { GRAPH ${current} {
-          ${iri(this.root)} (${edge})* ?owner . ?owner rv:mainVersion/^rv:structureOf/rv:selectedGeneration ?generation .
+          ?owner rv:mainVersion/^rv:structureOf/rv:selectedGeneration ?generation .
           ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?occurrence ;
             rv:occurrenceRole rv:PartRole ; schema:item ${iri(work)} .
           FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+          FILTER EXISTS { ?owner (^(${edge}))* ${iri(this.root)} }
         } } LIMIT 2`, 2);
       if (!rows.length) return null;
       if (rows.length !== 1) throw new WorkReadUnavailable('Reading Work has multiple uses in this continuity');
@@ -344,7 +349,8 @@ export class ReadingPositionTraversal {
     }
     const complete = items.length <= input.limit;
     items.splice(input.limit);
-    return { items, next: complete ? null : items.at(-1)!.occurrence, complete };
+    return { items, next: complete ? null : items.at(-1)!.occurrence, complete: complete && !this.labelsIndexing,
+      ...(q ? { search: { status: this.labelsIndexing ? 'indexing' as const : 'current' as const } } : {}) };
   }
 
   /** Reverse seeks locate the end of a finished Work without reading its prefix. */

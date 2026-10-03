@@ -77,7 +77,7 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
       200,
     );
     const root = `/v1/zones/${zone.slice(-36)}`;
-    const mount = (segment: string, key: 'name' | 'id', head: string) =>
+    const mount = (segment: string, key: 'alias' | 'id', head: string) =>
       f.call('POST', `${root}/mounts`, {
         expectedHead: head,
         target: collection,
@@ -87,20 +87,20 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
         actingSubject: f.actor,
       });
     for (const reserved of ZONE_RESERVED_SEGMENTS)
-      expect((await mount(reserved, 'name', site.revision)).status).toBe(409);
+      expect((await mount(reserved, 'alias', site.revision)).status).toBe(409);
     const first = await f.json<{ revision: string }>(
-      await mount('pages', 'name', site.revision),
+      await mount('pages', 'alias', site.revision),
       200,
     );
     expect((await mount('pages', 'id', first.revision)).status).toBe(409);
     await f.json(await mount('records', 'id', first.revision), 200);
     const named = await f.receipt(
-      await f.nameWrite(`zone:${space.space}`, resource.work, 'claim', '日本語のページ', null),
+      await f.aliasWrite(`zone:${space.space}`, resource.work, 'claim', '日本語のページ', null),
     );
     const route = (path: string) => f.publicCall(`${root}/routes?${new URLSearchParams({ path })}`);
     expect(await f.json(await route('/pages/日本語のページ'), 200)).toMatchObject({
       kind: 'detail',
-      mount: { key: 'name' },
+      mount: { key: 'alias' },
       resource: {
         id: resource.work,
         address: {
@@ -126,7 +126,7 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
       },
     });
     const renamed = await f.receipt(
-      await f.nameWrite(
+      await f.aliasWrite(
         `zone:${space.space}`,
         resource.work,
         'rename',
@@ -142,10 +142,10 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
       canonical: { prefix: '/z/', key: uuidToSid(space.space.slice(-36)) },
     });
     expect((await readZoneConfiguration(f.env, zone)).configuration.official).toBeUndefined();
-    const availability = `/v1/addresses/availability?${new URLSearchParams({ scope: `zone:${space.space}`,name: 'Other Page' })}`;
+    const availability = `/v1/addresses/availability?${new URLSearchParams({ scope: `zone:${space.space}`,alias: 'Other Page' })}`;
     expect((await f.publicCall(availability)).status).toBe(403);
     expect((await f.call('GET',availability + `&actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(200);
-    await f.receipt(await f.nameWrite(`zone:${space.space}`,resource.work,'release',null,renamed.revision));
+    await f.receipt(await f.aliasWrite(`zone:${space.space}`,resource.work,'release',null,renamed.revision));
     expect((await f.lookup(`zone:${space.space}`,renamed.key)).status).toBe(410);
     for (const hidden of [space.space,zone]) {
       await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
@@ -159,7 +159,7 @@ test('G937: Zone detail routes declare name or id keys and validate their namesp
         INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(hidden)} rv:disclosure rv:Public } }`);
     }
     const missing = `zone:https://rezics.com/id/${randomUUID()}`;
-    expect((await f.nameWrite(missing, resource.work, 'claim', 'Other Page', null)).status).toBe(
+    expect((await f.aliasWrite(missing, resource.work, 'claim', 'Other Page', null)).status).toBe(
       400,
     );
   } finally {

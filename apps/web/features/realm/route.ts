@@ -25,7 +25,7 @@ export function parseRealmRef(ref: string): RealmRef | null {
   const parsed = parseAddressSegment(ref);
   return !parsed
     ? null
-    : parsed.kind === 'name'
+    : parsed.kind === 'alias'
       ? { kind: 'segment', segment: parsed.key }
       : { kind: 'id', id: parsed.id };
 }

@@ -93,7 +93,7 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
       );
     const path = () => `/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key })}`;
     const authenticatedPath = () => path() + `&actingSubject=${encodeURIComponent(f.actor)}`;
-    const canonical = { prefix: '/z/', key, slugSource: 'A canonical Site' };
+    const canonical = { prefix: '/z/', key, suffixSource: 'A canonical Site' };
     const summaries = async (references: string[]) =>
       f.json<{ summaries: Array<Record<string, unknown>> }>(
         await publicCall('/v1/resources/summaries', {
@@ -124,13 +124,13 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
       name: 'Renamed canonical Site',
       language: 'en',
     }), 200);
-    canonical.slugSource = 'Renamed canonical Site';
+    canonical.suffixSource = 'Renamed canonical Site';
     expect((await summaries([zone])).summaries[0]).toMatchObject({
-      name: { value: canonical.slugSource, language: 'en' },
+      name: { value: canonical.suffixSource, language: 'en' },
       address: canonical,
     });
     expect(await f.json(await publicCall(`/v1/zones/${zone.slice(-36)}/presentation`), 200))
-      .toMatchObject({ name: canonical.slugSource, address: canonical });
+      .toMatchObject({ name: canonical.suffixSource, address: canonical });
     expect(await f.json(await publicCall('/v1/zones?official=true'), 200)).toMatchObject({
       items: expect.arrayContaining([expect.objectContaining({ zone, address: canonical })]),
     });
@@ -154,17 +154,17 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
     // A Zone's disclosure belongs to its immutable configuration. Create a
     // private Zone through its owner rather than corrupting the public head;
     // Space policy changes remain independent and use the policy owner.
-    ({ key, space, realm, zone } = await createSite('private', canonical.slugSource));
+    ({ key, space, realm, zone } = await createSite('private', canonical.suffixSource));
     canonical.key = key;
     await settings('private');
     expect(await readZoneConfiguration(f.env, zone)).toMatchObject({
-      name: canonical.slugSource, disclosure: 'private', spaceVisibility: 'private',
+      name: canonical.suffixSource, disclosure: 'private', spaceVisibility: 'private',
       configuration: { disclosure: 'private' },
     });
     // Use actual Access grants with a separately authenticated denied Account.
     const spaceGrant = await f.grant(`semantic:read:${space}`, 'semantic.read');
     const zoneGrant = await f.grant(`semantic:read:${zone}`, 'semantic.read');
-    const privateCanonical = { ...canonical, slugSource: '' };
+    const privateCanonical = { ...canonical, suffixSource: '' };
     expect((await publicCall(path())).status).toBe(404);
     expect(
       (await f.call('GET', authenticatedPath(), undefined, randomUUID(), f.account.tokenB)).status,

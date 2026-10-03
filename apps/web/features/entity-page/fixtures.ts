@@ -43,7 +43,7 @@ export function projectionFor({ id = '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d', bas
     summary: { reference: iri(id), status: 'available', type: summaryType[base], base, work: base === 'work' ? iri(id) : null,
       disclosure: restricted ? 'restricted' : 'public', address: {
         ...(base === 'work' ? { prefix: '/w/' as const } : { prefix: '/e/' as const }),
-        key: uuidToSid(id), slugSource: restricted ? '' : name },
+        key: uuidToSid(id), suffixSource: restricted ? '' : name },
       name: { value: name, language: 'en', direction: direction('en', name), basis: 'requested' },
       avatar: { kind: 'fallback', policy: 'avatar-fallback-v1', key: '3fa2c9d17b8e4a6f0c2d5e8b1a4f7c90',
         resourceType: summaryType[base] } },

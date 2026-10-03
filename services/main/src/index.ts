@@ -52,10 +52,11 @@ import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
 import { OnboardingPersons } from './modules/onboarding/persons.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
-import { NameRegistry } from './modules/address/registry.ts';
+import { AliasRegistry } from './modules/address/registry.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
+import { OccurrenceLabelWorker } from './modules/structure/label-index-worker.ts';
 import { configureNamePreferences } from './modules/search/name-preferences.ts';
 import { configureLibraryShelves, prepareLibraryShelves } from './modules/library/backfill.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
@@ -237,7 +238,7 @@ const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
 }) : undefined;
 if (workObjects) await workObjects.initialize();
 const environment = {
-  addresses: new NameRegistry(pool),
+  addresses: new AliasRegistry(pool),
   fuseki,
   lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
   objectDirectory: config.MAIN_OBJECT_DIRECTORY,
@@ -582,6 +583,8 @@ const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, acc
   reviews: new ReaderReviews(pool),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) }, new FeedStore(pool), relayPool) : undefined;
 feedWorker?.start();
+const occurrenceLabelWorker = new OccurrenceLabelWorker(environment);
+occurrenceLabelWorker.start();
 realmPolicyRecovery.start();
 worker.start();
 const libraryImportRetentionWorker = new LibraryImportRetentionWorker(contentPool,pool);
@@ -605,6 +608,7 @@ async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   try {
+  await occurrenceLabelWorker.stop();
   await realmPolicyRecovery.stop();
   await libraryImportRetentionWorker.stop();
   await mediaScreenWorker.stop();

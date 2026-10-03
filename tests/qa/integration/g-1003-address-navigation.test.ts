@@ -4,7 +4,7 @@ import { uuidToSid } from '@rezics/model/address/sid';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { rateLimitBudgets } from '../../../services/main/src/modules/rate-limit/budgets.ts';
 import { PostgresRateLimitStore } from '../../../services/main/src/modules/rate-limit/store.ts';
-import { NAME_COST } from '../../../services/main/src/modules/address/registry.ts';
+import { ALIAS_COST } from '../../../services/main/src/modules/address/registry.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { addressFixture } from './g-937-support.ts';
 
@@ -14,7 +14,7 @@ test('G1003: public navigation survives miss exhaustion; validators follow renam
     const record = await f.work('Address navigation');
     await f.permit(record.work);
     const first = await f.receipt(
-      await f.nameWrite('work', record.work, 'claim', 'Navigation first', null),
+      await f.aliasWrite('work', record.work, 'claim', 'Navigation first', null),
     );
     const options = {
       secret: `g-1003-${randomUUID()}-address-budget`,
@@ -71,10 +71,10 @@ test('G1003: public navigation survives miss exhaustion; validators follow renam
       const hit = await resolve(i % 2 ? first.key : identity);
       expect(hit.status, await hit.clone().text()).toBe(200);
       // The miss policy adds no graph traversal to the existing bounded read.
-      expect(graphCalls).toBeLessThanOrEqual(NAME_COST.fusekiRequests.resolve);
+      expect(graphCalls).toBeLessThanOrEqual(ALIAS_COST.fusekiRequests.resolve);
     }
     const renamed = await f.receipt(
-      await f.nameWrite('work', record.work, 'rename', 'Navigation second', first.revision),
+      await f.aliasWrite('work', record.work, 'rename', 'Navigation second', first.revision),
     );
     for (const [key, tag] of [
       [first.key, etag],

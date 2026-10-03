@@ -40,8 +40,8 @@ that build carries. Every write below takes an operator bearer token and an
 5. Once per Zone, `PUT /v1/zones/{zone}/configuration` with the current head
    and the presentation plus `official: { theme }`.
 6. `GET /v1/zones/{zone}/presentation` reports `state: "package"` with the
-   digest from step 1; `/r/<slug>` renders with `data-zone-mode="package"` and
-   `/r/<slug>?safe` shows the fallback and its notice.
+   digest from step 1; `/z/<handle>` renders with `data-zone-mode="package"` and
+   `/z/<handle>?safe` shows the fallback and its notice.
 
 Any byte change in the package directory changes its digest: the Zone shows
 its fallback (`digest-mismatch`) until a new revision is reviewed and activated.

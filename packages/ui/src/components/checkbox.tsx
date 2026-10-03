@@ -1,6 +1,7 @@
 'use client';
 
 import { Checkbox as ArkCheckbox, useCheckboxContext } from '@ark-ui/react/checkbox';
+import { ark } from '@ark-ui/react/factory';
 import { CheckIcon, MinusIcon } from 'lucide-react';
 import React from 'react';
 import { tv } from 'tailwind-variants';
@@ -48,8 +49,19 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
   const { className, tabIndex, children, role: _role, ...rest } = props;
 
   return (
-    <ArkCheckbox.Root className={cn(children ? 'inline-flex items-center gap-2' : checkboxVariants(), className)} data-slot="checkbox" {...rest}>
-      <ArkCheckbox.Control className={children ? checkboxVariants() : undefined} data-slot="checkbox-control">
+    <ArkCheckbox.Root
+      className={cn(
+        'group/checkbox',
+        children ? 'inline-flex items-center gap-2' : checkboxVariants(),
+        className,
+      )}
+      data-slot="checkbox"
+      {...rest}
+    >
+      <ArkCheckbox.Control
+        className={children ? checkboxVariants() : undefined}
+        data-slot="checkbox-control"
+      >
         <CheckboxIndicator>
           <CheckIcon />
         </CheckboxIndicator>
@@ -69,8 +81,17 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
 // Zag syncs `indeterminate` onto the hidden input only when the state changes, so a
 // checkbox that starts indeterminate would be announced as unchecked.
 const CheckboxHiddenInput = (props: React.ComponentProps<typeof ArkCheckbox.HiddenInput>) => {
-  const { indeterminate } = useCheckboxContext();
+  const { indeterminate, checked, setChecked } = useCheckboxContext();
   const ref = React.useRef<HTMLInputElement>(null);
+  const adopted = React.useRef(false);
+
+  React.useLayoutEffect(() => {
+    if (adopted.current || !ref.current) return;
+    adopted.current = true;
+    // HiddenInput uses defaultChecked. A native click before hydration must
+    // also become the machine's value before its next state change syncs it.
+    if (!indeterminate && ref.current.checked !== checked) setChecked(ref.current.checked);
+  }, [checked, indeterminate, setChecked]);
 
   React.useEffect(() => {
     if (ref.current) {
@@ -82,24 +103,40 @@ const CheckboxHiddenInput = (props: React.ComponentProps<typeof ArkCheckbox.Hidd
 };
 
 export const CheckboxIndicator = (props: React.ComponentProps<typeof ArkCheckbox.Indicator>) => {
-  const { className, ...rest } = props;
-
-  return (
-    <ArkCheckbox.Indicator
-      className={cn(
-        'absolute -inset-0.5',
-        'flex items-center justify-center',
-        'rounded-[6px]',
-        '[&_svg]:size-3.5 [&_svg]:stroke-3',
-        'data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground',
-        'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground',
-        'data-[state=unchecked]:hidden',
-        'data-[state=checked]:zoom-in-50 data-[state=checked]:animate-in data-[state=checked]:duration-200',
-        'motion-reduce:animate-none!',
-        className,
-      )}
-      data-slot="checkbox-indicator"
-      {...rest}
-    />
+  const { className, indeterminate, ...rest } = props;
+  const context = useCheckboxContext();
+  const classes = cn(
+    'absolute -inset-0.5',
+    'flex items-center justify-center',
+    'rounded-[6px]',
+    '[&_svg]:size-3.5 [&_svg]:stroke-3',
+    'data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground',
+    'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground',
+    'data-[state=unchecked]:hidden',
+    // Native label clicks work before hydration; show their actual value.
+    !indeterminate && [
+      'data-[state=indeterminate]:hidden',
+      'group-has-checked/checkbox:data-[state=unchecked]:flex!',
+      'group-has-checked/checkbox:data-[state=indeterminate]:flex!',
+      'group-has-checked/checkbox:bg-primary group-has-checked/checkbox:text-primary-foreground',
+      'group-has-[input:not(:checked)]/checkbox:data-[state=checked]:hidden!',
+    ],
+    indeterminate && 'group-has-checked/checkbox:data-[state=indeterminate]:hidden!',
+    'data-[state=checked]:zoom-in-50 data-[state=checked]:animate-in data-[state=checked]:duration-200',
+    'motion-reduce:animate-none!',
+    className,
   );
+  if (indeterminate)
+    return (
+      <ArkCheckbox.Indicator
+        indeterminate
+        className={classes}
+        data-slot="checkbox-indicator"
+        {...rest}
+      />
+    );
+  // Ark's hidden attribute is tied to machine state. Native :checked must be
+  // able to reveal this indicator even before that machine has hydrated.
+  const { hidden: _hidden, ...native } = context.getIndicatorProps();
+  return <ark.div {...native} className={classes} data-slot="checkbox-indicator" {...rest} />;
 };

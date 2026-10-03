@@ -27,7 +27,7 @@ test('G836: public old IDs, slugs and retained revisions explain a merge without
     await f.grant(`address:claim:${source.work}`, 'address.claim');
     const slug = `sao-836-${randomUUID().slice(0, 8)}`;
     const address = await f.json<{ revision: string }>(await f.call('POST', '/v1/addresses/claims',
-      { profile: 'name-write-v1',operation: 'claim',scope: 'work',holder: source.work,name: slug,
+      { profile: 'alias-write-v1',operation: 'claim',scope: 'work',holder: source.work,alias: slug,
         expectedRevision: null,actingSubject: f.actor }), 201);
     const revisionPath = `/v1/revisions/${shortId(source.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`;
     const mainPath = `/v1/main-versions/${shortId(source.mainVersion)}/revisions/${shortId(source.mainRevision)}?actingSubject=${encodeURIComponent(f.actor)}`;

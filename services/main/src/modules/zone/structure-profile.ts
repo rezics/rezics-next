@@ -38,7 +38,7 @@ async function hydrate(env: WorkActivationEnvironment, state: PlacementState):
   const row = rows[0]!;
   if (!row.zone?.value || !row.segment?.value || !row.disclosure?.value) return undefined;
   return { type: 'zone-mount', zone: row.zone.value, routeSegment: row.segment.value,
-    key: row.key?.value === 'name' ? 'name' : 'id',
+    key: row.key?.value === 'alias' ? 'alias' : 'id',
     disclosure: row.disclosure.value === `${RV}Public` ? 'public' : 'private',
     ...(row.presentation?.value ? { presentation: row.presentation.value } : {}) };
 }

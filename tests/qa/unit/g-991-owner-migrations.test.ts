@@ -6,9 +6,9 @@ import { readFormatMarker, saveFormatMarker, type FormatMarker } from '../../../
 import { stackDirectory, type StackOptions } from '../../../scripts/dev/config.ts';
 
 test('G991: a deferred owner migration fails development and survives release restart until a successful retry', () => {
-  const deferred: OwnerMigrationEvidence[] = [{ owner: 'graph-names', status: 'deferred',
-    reason: 'Graph-name import is incomplete; resolve the reported import error and rerun owner migrations' }];
-  expect(() => assertOwnerMigrationsComplete(deferred)).toThrow('Owner migrations deferred: graph-names');
+  const deferred: OwnerMigrationEvidence[] = [{ owner: 'graph-aliases', status: 'deferred',
+    reason: 'Graph-alias import is incomplete; resolve the reported import error and rerun owner migrations' }];
+  expect(() => assertOwnerMigrationsComplete(deferred)).toThrow('Owner migrations deferred: graph-aliases');
   const options: StackOptions = { profile: 'qa', runId: `g991-${randomUUID().slice(0, 8)}` };
   const directory = stackDirectory(process.cwd(), options);
   mkdirSync(directory, { recursive: true });
@@ -18,7 +18,7 @@ test('G991: a deferred owner migration fails development and survives release re
   try {
     saveFormatMarker(options, marker);
     expect(readFormatMarker(options)?.ownerMigrations).toEqual(deferred);
-    const complete: OwnerMigrationEvidence[] = [{ owner: 'graph-names', status: 'complete' }];
+    const complete: OwnerMigrationEvidence[] = [{ owner: 'graph-aliases', status: 'complete' }];
     assertOwnerMigrationsComplete(complete);
     saveFormatMarker(options, { ...marker, ownerMigrations: complete });
     expect(readFormatMarker(options)?.ownerMigrations).toEqual(complete);

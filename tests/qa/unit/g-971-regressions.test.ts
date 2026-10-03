@@ -75,7 +75,7 @@ test('G-971/VIEW08: summary batches report page visibility and addresses while t
   expect(mixed.summaries).toMatchObject([
     { reference: work, status: 'available', type: 'work' },
     { reference: space, status: 'available', type: 'space',
-      address: { prefix: '/r/', key: uuidToSid(space.slice(-36)), slugSource: 'A Realm Space' } },
+      address: { prefix: '/r/', key: uuidToSid(space.slice(-36)), suffixSource: 'A Realm Space' } },
     { reference: foreign, status: 'unavailable' },
     { reference: missing, status: 'unavailable' },
     { reference: work, status: 'available', type: 'work' },

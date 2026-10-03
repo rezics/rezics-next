@@ -1,6 +1,6 @@
 import {
   type CanonicalAddress,
-  deriveAddressSlug,
+  deriveAddressSuffix,
   identityKeyUuid,
   isSid,
   uuidToSid,
@@ -9,10 +9,10 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath, withoutLocale } from '../../i18n/locale.ts';
 
 export type AddressSegment =
-  | { kind: 'sid' | 'sid-slug' | 'uuid'; id: string; key: string }
-  | { kind: 'name'; key: string };
+  | { kind: 'sid' | 'sid-suffix' | 'uuid'; id: string; key: string }
+  | { kind: 'alias'; key: string };
 
-/** Router params are already decoded. Slugs never participate in identity resolution. */
+/** Router params are already decoded. Readable suffixes never participate in identity resolution. */
 export function parseAddressSegment(segment: string): AddressSegment | null {
   if (!segment || segment.length > 512 || /[/\\?#\u0000-\u001f\u007f]/u.test(segment)) return null;
   const id = identityKeyUuid(segment);
@@ -22,11 +22,11 @@ export function parseAddressSegment(segment: string): AddressSegment | null {
         ? 'uuid'
         : isSid(segment)
           ? 'sid'
-          : 'sid-slug',
+          : 'sid-suffix',
       id,
       key: segment,
     };
-  return { kind: 'name', key: segment.normalize('NFC') };
+  return { kind: 'alias', key: segment.normalize('NFC') };
 }
 
 export type AddressScope = 'agent' | 'space' | 'work' | 'resource' | 'concept' | `zone:${string}`;
@@ -102,17 +102,17 @@ export function addressPath(pathname: string): AddressPath | null {
   }
 }
 
-export function addressKey(address: CanonicalAddress, displayedName = address.slugSource): string {
+export function addressKey(address: CanonicalAddress, displayedName = address.suffixSource): string {
   if (!isSid(address.key)) return address.key;
-  const slug = deriveAddressSlug(displayedName);
-  return `${address.key}${slug ? `-${slug}` : ''}`;
+  const suffix = deriveAddressSuffix(displayedName);
+  return `${address.key}${suffix ? `-${suffix}` : ''}`;
 }
 
-/** Main selects the identity/name policy; the web only decorates an identity in the page's language. */
+/** Main selects the identity/alias policy; the web only decorates an identity in the page's language. */
 export function canonicalHref(
   address: CanonicalAddress,
   locale: UiLocale,
-  displayedName = address.slugSource,
+  displayedName = address.suffixSource,
   options: { surface?: Surface; tail?: readonly string[]; search?: string; hash?: string } = {},
 ): string {
   const prefix =
@@ -130,7 +130,7 @@ export function canonicalRedirect(
   locale: UiLocale,
   options: { surface?: Surface; tail?: readonly string[]; displayedName?: string } = {},
 ): string | null {
-  const target = canonicalHref(address, locale, options.displayedName ?? address.slugSource, {
+  const target = canonicalHref(address, locale, options.displayedName ?? address.suffixSource, {
     ...options,
     search: from.search,
     hash: from.hash,
@@ -144,7 +144,7 @@ export const identityHref = (prefix: '/a/' | '/w/' | '/e/' | '/concepts/', id: s
 
 export type AddressTarget = string | CanonicalAddress;
 
-/** A global Work name is not a name in a Zone mount. Only its owning route
+/** A global Work alias is not an alias in a Zone mount. Only its owning route
  * can supply that policy; an identity decoration remains valid in either scope. */
 export function siteMemberTarget(id: string, address?: CanonicalAddress): AddressTarget {
   return address && (address.prefix.startsWith('/z/') || isSid(address.key)) ? address : id;
@@ -175,7 +175,7 @@ export function spaceHref(
   }`;
 }
 
-/** A mounted member can have a route-specific name policy supplied by Main. */
+/** A mounted member can have a route-specific alias policy supplied by Main. */
 export function zoneMemberHref(
   space: AddressTarget,
   route: string,

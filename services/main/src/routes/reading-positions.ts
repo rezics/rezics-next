@@ -13,7 +13,7 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/reading-positions/:work', { params: t.Object({ work: readUuid }),
     query: t.Object({ ...readQuery, position: readingPositionQuery,
       q: t.Optional(t.String({ maxLength: READING_POSITION_COST.chooserQueryChars,
-        description: 'Literal title substring in any carried language, display label, or one-based sibling number.' })),
+        description: 'Analyzed title phrase in any carried language, display label, or one-based sibling number.' })),
       cursor: t.Optional(t.String({ maxLength: 2048 })),
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: READING_POSITION_COST.chooserPage, multipleOf: 1 })) }, { additionalProperties: false }),
     response: { 200: readingPositionPage, ...workReadProblems } }, async ({ request, params, query }: {
@@ -33,7 +33,7 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
         return { profile: 'reading-positions-v1', ...page,
           nextCursor, next: nextCursor,
           sourcePosition: session.position,
-          count: { value: page.items.length, kind: 'exact-page', total: null }, cost: READING_POSITION_COST };
+          count: { value: page.items.length, kind: page.search?.status === 'indexing' ? 'at-least' : 'exact-page', total: null }, cost: READING_POSITION_COST };
       });
       return Response.json(result, { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) { return workReadError(error); }

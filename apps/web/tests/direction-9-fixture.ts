@@ -331,12 +331,11 @@ export async function seedDirection(
   const personHandle = `d9-reader-${suffix}`;
   const claim = (scope: string, holder: string, name: string, actingSubject = manager) =>
     (actingSubject === manager ? managerApi : api).write('/addresses/claims', {
-      profile: 'name-write-v1',
+      profile: 'alias-write-v1',
       scope,
       holder,
       actingSubject,
-      operation: 'claim',
-      name,
+      operation: 'claim', alias: name,
       expectedRevision: null,
     });
   await claim('agent', namedPerson, personHandle, namedPerson);

@@ -53,6 +53,8 @@ export interface PlacementState {
   orderKey?: string;
   role: OccurrenceRole;
   label?: Label;
+  /** Every carried language; label is the first-label convenience for owners. */
+  labels?: Label[];
   target?: string;
   selection?: Selection;
   qualifier?: OccurrenceRecord['qualifier'];
@@ -209,10 +211,21 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
       throw new CompositionCorrupt('Composition placement is incomplete');
     }
     const prior = byOccurrence.get(occurrence);
-    if (prior && JSON.stringify(prior) !== JSON.stringify(state)) {
+    if (prior && JSON.stringify({ ...prior, label: undefined, labels: undefined })
+      !== JSON.stringify({ ...state, label: undefined, labels: undefined })) {
       throw new CompositionCorrupt('Composition placement is ambiguous');
     }
-    byOccurrence.set(occurrence, state);
+    const selected = prior ?? state;
+    selected.labels ??= [];
+    if (state.label && !selected.labels.some(label => label.value === state.label!.value && label.language === state.label!.language)) {
+      if (selected.labels.some(label => label.language.toLowerCase() === state.label!.language.toLowerCase())) {
+        throw new CompositionCorrupt('Composition labels repeat a language');
+      }
+      selected.labels.push(state.label);
+    }
+    if (selected.labels.length > 16) throw new CompositionCorrupt('Composition labels exceed their bound');
+    selected.label = selected.labels[0];
+    byOccurrence.set(occurrence, selected);
   }
   return [...byOccurrence.values()];
 }
@@ -289,7 +302,7 @@ export function placementRecord(state: PlacementState): OccurrenceRecord {
     role: state.role, ...(state.target ? { target: state.target } : {}),
     ...(state.selection ? { selection: state.selection } : {}),
     ...(state.qualifier ? { qualifier: state.qualifier } : {}),
-    labels: state.label ? [state.label] : [],
+    labels: state.labels ?? (state.label ? [state.label] : []),
     ...(state.sourceKey ? { sourceKey: state.sourceKey } : {}),
     introducedBy: state.introducedBy, ...(state.removedBy ? { removedBy: state.removedBy } : {}) };
 }

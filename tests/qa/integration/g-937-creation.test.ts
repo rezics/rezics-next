@@ -51,7 +51,7 @@ test('G937: Space validation precedes a name claim and a cancelled creation can 
             holder: `https://rezics.com/id/${admission.id}`,
             actingSubject: f.actor,
             operation: 'claim',
-            name: handle,
+            alias: handle,
             expectedRevision: null,
             idempotencyKey: randomUUID(),
           },
@@ -123,7 +123,7 @@ test('G937: legacy pending address admissions are terminal before strong revocat
       [scope],
     );
     const named = await f.receipt(
-      await f.nameWrite('work', record.work, 'claim', `report-${randomUUID().slice(0, 8)}`, null),
+      await f.aliasWrite('work', record.work, 'claim', `report-${randomUUID().slice(0, 8)}`, null),
     );
     await f.nativeFuseki.update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(record.work)} rv:catalogueVisible true } }`);

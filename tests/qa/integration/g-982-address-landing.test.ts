@@ -4,7 +4,7 @@ import { uuidToSid } from '@rezics/model/address/sid';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
-import { NAME_COST } from '../../../services/main/src/modules/address/registry.ts';
+import { ALIAS_COST } from '../../../services/main/src/modules/address/registry.ts';
 import type { ResolvedAddress } from '../../../apps/web/features/address/client.ts';
 
 test('G982: named request admission resolves through the public API and mounts the limited landing; invitation remains hidden', async () => {
@@ -92,11 +92,11 @@ test('G982: named request admission resolves through the public API and mounts t
       const address = (await response.json()) as ResolvedAddress;
       expect(address).toMatchObject({
         holder: space,
-        canonical: { prefix: '/r/', key: handle, slugSource: '' },
+        canonical: { prefix: '/r/', key: handle, suffixSource: '' },
         capabilities: { realm },
       });
       expect(address.capabilities?.zone).toBeUndefined();
-      expect(s.fuseki.queries - before).toBeLessThanOrEqual(NAME_COST.fusekiRequests.resolve);
+      expect(s.fuseki.queries - before).toBeLessThanOrEqual(ALIAS_COST.fusekiRequests.resolve);
       const landing = await call(`/v1/realms/${address.capabilities!.realm!.slice(-36)}/join-page`);
       expect(landing.status).toBe(200);
       expect(await landing.json()).toMatchObject({

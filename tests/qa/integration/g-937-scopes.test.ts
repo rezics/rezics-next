@@ -15,22 +15,22 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
         rv:agentKind rv:PersonAgent ; rdfs:label "A public writer"@en ; rv:profileDisclosure rv:Public }
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} a rv:RevisionAnchor ; rv:component ${iri(f.actor)} ;
           rv:modelRevision <https://rezics.com/definition/agent-provision-v1> } }`);
-    expect((await f.nameWrite('agent', f.actor, 'claim', handle, null)).status).toBe(403);
+    expect((await f.aliasWrite('agent', f.actor, 'claim', handle, null)).status).toBe(403);
     await f.accessPool.query(
       `INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
       VALUES ($1,$2,$3,'agent.control','infinity')`,
       [randomUUID(), f.principalId, f.actor],
     );
-    expect((await f.nameWrite('agent', f.actor, 'claim', 'admin', null)).status).toBe(400);
-    const agent = await f.receipt(await f.nameWrite('agent', f.actor, 'claim', handle, null));
+    expect((await f.aliasWrite('agent', f.actor, 'claim', 'admin', null)).status).toBe(400);
+    const agent = await f.receipt(await f.aliasWrite('agent', f.actor, 'claim', handle, null));
     expect(await f.json(await f.lookup('agent', uuidToSid(f.actor.slice(-36))), 200)).toMatchObject(
       {
         holder: f.actor,
-        canonical: { prefix: '/@', key: handle, slugSource: 'A public writer' },
+        canonical: { prefix: '/@', key: handle, suffixSource: 'A public writer' },
       },
     );
     expect(
-      (await f.nameWrite('agent', f.actor, 'rename', `${handle}_new`, agent.revision)).status,
+      (await f.aliasWrite('agent', f.actor, 'rename', `${handle}_new`, agent.revision)).status,
     ).toBe(409);
     await f.grant('space:create:root', 'space.create');
     const space = await f.json<{ space: string; realm: string }>(
@@ -59,16 +59,16 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
         ${iri(foreignRealm)} a rv:Realm ; rv:space ${iri(foreignSpace)} ; rv:realmState rv:Active . } }`);
     await f.grant(`governance:realm:${foreignRealm}`, 'realm.owner');
     expect(
-      (await f.nameWrite('space', foreignSpace, 'claim', handle.replace('moon', 'rn00n'), null))
+      (await f.aliasWrite('space', foreignSpace, 'claim', handle.replace('moon', 'rn00n'), null))
         .status,
     ).toBe(409);
-    expect((await f.nameWrite('space', foreignSpace, 'claim', handle, null)).status).toBe(409);
+    expect((await f.aliasWrite('space', foreignSpace, 'claim', handle, null)).status).toBe(409);
     await f.accessPool.query(
-      "UPDATE access.name_registry SET changed_at = clock_timestamp() - interval '31 days' WHERE scope = 'agent' AND holder = $1",
+      "UPDATE access.alias_registry SET changed_at = clock_timestamp() - interval '31 days' WHERE scope = 'agent' AND holder = $1",
       [f.actor],
     );
     const renamed = await f.receipt(
-      await f.nameWrite('agent', f.actor, 'rename', `${handle}_new`, agent.revision),
+      await f.aliasWrite('agent', f.actor, 'rename', `${handle}_new`, agent.revision),
     );
     expect(await f.json(await f.lookup('agent', handle), 200)).toMatchObject({
       state: 'redirect',
@@ -88,7 +88,7 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
     expect(
       (
         await f.accessPool.query(
-          "SELECT scope,key,holder,state FROM access.name_registry WHERE scope = 'agent' AND key = $1",
+          "SELECT scope,key,holder,state FROM access.alias_registry WHERE scope = 'agent' AND key = $1",
           [renamed.key],
         )
       ).rows[0],
@@ -96,16 +96,16 @@ test('G937: Agent and Space scopes share controller-safe names and enforce coold
     // The Agent handle bridge was removed by migration 1024. Permanent
     // ownership is guarded by the canonical registry, including for SQL writers.
     await expect(
-      f.accessPool.query("UPDATE access.name_registry SET holder = $2 WHERE scope = 'agent' AND key = $1", [
+      f.accessPool.query("UPDATE access.alias_registry SET holder = $2 WHERE scope = 'agent' AND key = $1", [
         renamed.key, foreign,
       ]),
-    ).rejects.toThrow('Name ownership is permanent');
+    ).rejects.toThrow('Alias ownership is permanent');
     await expect(
-      f.accessPool.query("DELETE FROM access.name_registry WHERE scope = 'agent' AND key = $1", [renamed.key]),
-    ).rejects.toThrow('Name ownership is permanent');
+      f.accessPool.query("DELETE FROM access.alias_registry WHERE scope = 'agent' AND key = $1", [renamed.key]),
+    ).rejects.toThrow('Alias ownership is permanent');
     await expect(
-      f.accessPool.query('DELETE FROM access.name_history WHERE revision = $1', [renamed.revision]),
-    ).rejects.toThrow('Name history is immutable');
+      f.accessPool.query('DELETE FROM access.alias_history WHERE revision = $1', [renamed.revision]),
+    ).rejects.toThrow('Alias history is immutable');
     await f.nativeFuseki
       .update(`PREFIX rv: <https://rezics.com/vocab/> DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(f.actor)} rv:profileDisclosure rv:Public } };
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(f.actor)} rv:profileDisclosure rv:Private } }`);

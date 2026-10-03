@@ -2,26 +2,26 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readMergedIdentity } from '../identity-merge/resolution.ts';
-import { NameInvalid, NameDenied, NameUnavailable, scopeKind, type NameWrite } from './registry.ts';
+import { AliasInvalid, AliasDenied, AliasUnavailable, scopeKind, type AliasWrite } from './registry.ts';
 import type { PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
-export async function writeName(work: MainWorkDependencies, request: Request, input: NameWrite) {
-  return withNameAuthority(work, request, input, async (client, principal, controller) =>
+export async function writeAlias(work: MainWorkDependencies, request: Request, input: AliasWrite) {
+  return withAliasAuthority(work, request, input, async (client, principal, controller) =>
     work.environment.addresses!.write(
       client,
       principal,
       input,
       controller,
       null,
-      await platformNameAuthority(work.environment, input.scope, input.holder),
+      await platformAliasAuthority(work.environment, input.scope, input.holder),
     ),
   );
 }
 
 /** Official Zones own their site's Space handle. Authentication and owner
  * authority remain mandatory; this proof only opens the reservation gate. */
-export async function platformNameAuthority(
+export async function platformAliasAuthority(
   env: WorkActivationEnvironment,
   scope: string,
   holder: string,
@@ -44,16 +44,16 @@ export async function platformNameAuthority(
 
 /** The same owner proofs admit a writer's current revision, including private
  * holders. Public address resolution never grants this editing authority. */
-export async function withNameAuthority<T>(
+export async function withAliasAuthority<T>(
   work: MainWorkDependencies,
   request: Request,
-  input: Pick<NameWrite, 'scope' | 'holder' | 'actingSubject' | 'operation' | 'successor'>,
+  input: Pick<AliasWrite, 'scope' | 'holder' | 'actingSubject' | 'operation' | 'successor'>,
   operation: (client: PoolClient, principal: VerifiedPrincipal, controller: string) => Promise<T>,
 ): Promise<T> {
   const registry = work.environment.addresses;
-  if (!registry) throw new NameUnavailable('Name registry is unavailable');
+  if (!registry) throw new AliasUnavailable('Alias registry is unavailable');
   const kind = scopeKind(input.scope);
-  if (!work.access.withOwnerAuthority) throw new NameUnavailable('Name authority is unavailable');
+  if (!work.access.withOwnerAuthority) throw new AliasUnavailable('Alias authority is unavailable');
   await assertGraphAdmissionOpen(work.environment.fuseki, work.environment.lineage);
   const principal = await work.account.verify(request, [
     kind === 'agent'
@@ -69,7 +69,7 @@ export async function withNameAuthority<T>(
   if (input.operation === 'merge') {
     const resolution = await readMergedIdentity(work.environment, input.holder, async () => true);
     if (!resolution || resolution.survivor !== input.successor)
-      throw new NameInvalid('Name merges require an equivalent successor');
+      throw new AliasInvalid('Alias merges require an equivalent successor');
   }
   if (kind === 'agent')
     return work.access.withOwnerAuthority(
@@ -87,8 +87,8 @@ export async function withNameAuthority<T>(
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.holder)} a schema:CreativeWork ; <${RV}mainVersion> ?main } }`,
       1024,
     );
-    if (exists.boolean !== true) throw new NameInvalid('Work identity is unavailable');
-    if (!work.access.withOwnerAuthority) throw new NameUnavailable('Name authority is unavailable');
+    if (exists.boolean !== true) throw new AliasInvalid('Work identity is unavailable');
+    if (!work.access.withOwnerAuthority) throw new AliasUnavailable('Alias authority is unavailable');
     const action =
       input.operation === 'claim'
         ? 'address.claim'
@@ -121,7 +121,7 @@ export async function withNameAuthority<T>(
       )
     ).results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0])
-    throw new NameInvalid('Space identity is unavailable or ambiguous');
+    throw new AliasInvalid('Space identity is unavailable or ambiguous');
   const row = rows[0];
   const controller = row.owner?.value ?? input.actingSubject;
   if (kind === 'space' && row.realm)
@@ -135,7 +135,7 @@ export async function withNameAuthority<T>(
       (client) => operation(client, principal, controller),
     );
   if (!row.zone || !work.access.withOwnerAuthority)
-    throw new NameDenied('Zone editor authority is unavailable');
+    throw new AliasDenied('Zone editor authority is unavailable');
   return work.access.withOwnerAuthority(
     {
       principal,
@@ -147,7 +147,7 @@ export async function withNameAuthority<T>(
   );
 }
 
-export async function withNameAvailabilityAuthority<T>(
+export async function withAliasAvailabilityAuthority<T>(
   work: MainWorkDependencies,
   request: Request,
   scope: string,
@@ -156,7 +156,7 @@ export async function withNameAvailabilityAuthority<T>(
 ): Promise<T> {
   if (scopeKind(scope) !== 'zone') return operation();
   if (!actingSubject || !work.access.withOwnerAuthority)
-    throw new NameDenied('Zone editor authority is required');
+    throw new AliasDenied('Zone editor authority is required');
   const principal = await work.account.verify(request, ['zone:edit']);
   const rows =
     (
@@ -168,7 +168,7 @@ export async function withNameAvailabilityAuthority<T>(
       )
     ).results?.bindings ?? [];
   if (rows.length !== 1 || !rows[0]?.zone)
-    throw new NameDenied('Zone editor authority is unavailable');
+    throw new AliasDenied('Zone editor authority is unavailable');
   return work.access.withOwnerAuthority(
     { principal, actingSubject, scope: `zone:edit:${rows[0].zone.value}`, action: 'zone.edit' },
     operation,

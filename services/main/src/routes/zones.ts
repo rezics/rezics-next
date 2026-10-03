@@ -314,7 +314,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .post('/v1/zones/:id/mounts', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, target: t.Optional(ref), collection: t.Optional(ref), routeSegment: t.String({
         pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
-        key: t.Optional(t.Union([t.Literal('name'),t.Literal('id')])),
+        key: t.Optional(t.Union([t.Literal('alias'),t.Literal('id')])),
         disclosure, presentation: t.Optional(t.String({ format: 'uri' })),
         position: t.Optional(t.Union([t.Literal('first'), t.Literal('last'),
           t.Object({ after: ref }, { additionalProperties: false })])), actingSubject: ref },

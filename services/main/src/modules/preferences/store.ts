@@ -135,7 +135,7 @@ export class PersonPreferencesStore {
         return { ...receipt.result, replayed: true };
       }
       const resolved = target.startsWith('@') ? (await client.query<{ agent_id: string }>(`SELECT holder AS agent_id
-        FROM access.name_registry WHERE scope = 'agent' AND key = $1 AND state = 'current'`, [target.slice(1)])).rows[0]?.agent_id
+        FROM access.alias_registry WHERE scope = 'agent' AND key = $1 AND state = 'current'`, [target.slice(1)])).rows[0]?.agent_id
         : target;
       if (!resolved || resolved === agent) throw new ControlInvalid('Invalid block target');
       if (blocked) {

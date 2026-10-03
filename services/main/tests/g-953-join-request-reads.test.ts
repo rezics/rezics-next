@@ -147,7 +147,7 @@ test('G-953: literal Unicode search and opaque cursors cannot silently change se
     expect(() => decodeRequestCursor(cursor,binding)).toThrow(RealmAdminInvalid);
   }
   expect(JOIN_REQUEST_SEARCH_SQL.match(/LIMIT \$4/g)).toHaveLength(JOIN_REQUEST_READ_COST.searchBranches + 1);
-  expect(JOIN_REQUEST_SEARCH_SQL).toContain('FROM access.name_registry h');
+  expect(JOIN_REQUEST_SEARCH_SQL).toContain('FROM access.alias_registry h');
   expect(JOIN_REQUEST_SEARCH_SQL).toContain("h.scope = 'agent'");
   expect(JOIN_REQUEST_SEARCH_SQL).toContain("h.state = 'current'");
   expect(JOIN_REQUEST_SEARCH_SQL).toContain('pending.member = h.holder');

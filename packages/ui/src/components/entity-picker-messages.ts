@@ -1,6 +1,7 @@
 export const entityPickerMessages = {
   en: {
     loading: 'Loading…',
+    updating: 'Search is still updating.',
     failed: 'Couldn’t load choices.',
     retry: 'Try again',
     empty: 'No matches.',
@@ -13,6 +14,7 @@ export const entityPickerMessages = {
   },
   'zh-Hant': {
     loading: '載入中…',
+    updating: '搜尋結果仍在更新中。',
     failed: '無法載入選項。',
     retry: '重試',
     empty: '沒有符合的結果。',
@@ -25,6 +27,7 @@ export const entityPickerMessages = {
   },
   'zh-Hans': {
     loading: '加载中…',
+    updating: '搜索结果仍在更新中。',
     failed: '无法加载选项。',
     retry: '重试',
     empty: '没有匹配的结果。',
@@ -37,6 +40,7 @@ export const entityPickerMessages = {
   },
   ja: {
     loading: '読み込み中…',
+    updating: '検索結果を更新中です。',
     failed: '選択肢を読み込めませんでした。',
     retry: '再試行',
     empty: '一致する結果がありません。',
@@ -49,6 +53,7 @@ export const entityPickerMessages = {
   },
   ko: {
     loading: '불러오는 중…',
+    updating: '검색 결과를 업데이트하는 중입니다.',
     failed: '선택 항목을 불러오지 못했습니다.',
     retry: '다시 시도',
     empty: '일치하는 결과가 없습니다.',
@@ -61,6 +66,7 @@ export const entityPickerMessages = {
   },
   de: {
     loading: 'Wird geladen…',
+    updating: 'Die Suchergebnisse werden noch aktualisiert.',
     failed: 'Auswahl konnte nicht geladen werden.',
     retry: 'Erneut versuchen',
     empty: 'Keine Treffer.',
@@ -73,6 +79,7 @@ export const entityPickerMessages = {
   },
   fr: {
     loading: 'Chargement…',
+    updating: 'Les résultats de recherche sont en cours de mise à jour.',
     failed: 'Impossible de charger les choix.',
     retry: 'Réessayer',
     empty: 'Aucun résultat.',
@@ -85,6 +92,7 @@ export const entityPickerMessages = {
   },
   es: {
     loading: 'Cargando…',
+    updating: 'تستمر نتائج البحث في التحديث.',
     failed: 'No se pudieron cargar las opciones.',
     retry: 'Reintentar',
     empty: 'Sin resultados.',

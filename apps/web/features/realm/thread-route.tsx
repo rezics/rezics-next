@@ -59,7 +59,7 @@ export async function realmThreadMetadata({
 }: Pick<ThreadRouteProps, 'params'>): Promise<Metadata> {
   const { locale, realm, thread } = await params;
   const parsed = parseAddressSegment(thread);
-  if (!isUiLocale(locale) || !parsed || parsed.kind === 'name') return {};
+  if (!isUiLocale(locale) || !parsed || parsed.kind === 'alias') return {};
   const metadata = await realmMetadata(
     { params: Promise.resolve({ locale, realm }) },
     'discussions',
@@ -166,7 +166,7 @@ async function ThreadContent({
 export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProps) {
   const [{ locale, realm, thread }, search] = await Promise.all([params, searchParams]);
   const parsed = parseAddressSegment(thread);
-  if (!parsed || parsed.kind === 'name') notFound();
+  if (!parsed || parsed.kind === 'alias') notFound();
   const resolved = await discussionView(locale, realm, search, `/${thread}`);
   if ('page' in resolved) return resolved.page;
   const { view, feed } = resolved;

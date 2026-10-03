@@ -1,10 +1,10 @@
 id: web-links-use-address
 valid:
-  - "const address = { prefix: '/z/' as const, key: name, slugSource: '' };"
-  - "const address = { prefix: '/@', key: handle, slugSource: '' };"
+  - "const address = { prefix: '/z/' as const, key: name, suffixSource: '' };"
+  - "const address = { prefix: '/@', key: handle, suffixSource: '' };"
   - "const href = '/r/new';"
   - "const href = '/en/r/new';"
-  - "const address = { prefix: '/w/', key: name, slugSource: '' };"
+  - "const address = { prefix: '/w/', key: name, suffixSource: '' };"
   - "const href = resourceHref('/w/', id);"
   - "const href = identityHref('/concepts/', id);"
   - "const href = addressHref(work);"
@@ -18,7 +18,7 @@ invalid:
   # Being a test does not exempt raw links; only named conformance files do.
   - "test('ordinary journey', () => visit('/en/r/private-books'));"
   - "test('raw UUID oracle', () => parse('/a/0199a0fe-0b21-7000-8000-123456789abc'));"
-  - "const address = { prefix: '/w/' + id, key: name, slugSource: '' };"
+  - "const address = { prefix: '/w/' + id, key: name, suffixSource: '' };"
   - "const href = `${origin}/w/${id}`;"
   - "const link = <Link href=\"/w/example\" />;"
   - "const href = '/w/' + id;"
@@ -35,11 +35,11 @@ invalid:
 ---
 id: web-links-use-address-tsx
 valid:
-  - "const address = { prefix: '/z/' as const, key: name, slugSource: '' };"
-  - "const address = { prefix: '/@', key: handle, slugSource: '' };"
+  - "const address = { prefix: '/z/' as const, key: name, suffixSource: '' };"
+  - "const address = { prefix: '/@', key: handle, suffixSource: '' };"
   - "const href = '/r/new';"
   - "const href = '/en/r/new';"
-  - "const address = { prefix: '/w/', key: name, slugSource: '' };"
+  - "const address = { prefix: '/w/', key: name, suffixSource: '' };"
   - "const href = resourceHref('/w/', id);"
   - "const href = identityHref('/concepts/', id);"
   - "const href = addressHref(work);"
@@ -53,7 +53,7 @@ invalid:
   # Being a test does not exempt raw links; only named conformance files do.
   - "test('ordinary journey', () => visit('/en/r/private-books'));"
   - "test('raw UUID oracle', () => parse('/a/0199a0fe-0b21-7000-8000-123456789abc'));"
-  - "const address = { prefix: '/w/' + id, key: name, slugSource: '' };"
+  - "const address = { prefix: '/w/' + id, key: name, suffixSource: '' };"
   - "const href = `${origin}/w/${id}`;"
   - "const link = <Link href=\"/w/example\" />;"
   - "const href = '/w/' + id;"
@@ -70,10 +70,10 @@ invalid:
 ---
 id: web-links-use-address-js
 valid:
-  - "const address = { prefix: '/@', key: handle, slugSource: '' };"
+  - "const address = { prefix: '/@', key: handle, suffixSource: '' };"
   - "const href = '/r/new';"
   - "const href = '/en/r/new';"
-  - "const address = { prefix: '/w/', key: name, slugSource: '' };"
+  - "const address = { prefix: '/w/', key: name, suffixSource: '' };"
   - "const href = resourceHref('/w/', id);"
   - "const href = identityHref('/concepts/', id);"
   - "const href = addressHref(work);"
@@ -87,7 +87,7 @@ invalid:
   # Being a test does not exempt raw links; only named conformance files do.
   - "test('ordinary journey', () => visit('/en/r/private-books'));"
   - "test('raw UUID oracle', () => parse('/a/0199a0fe-0b21-7000-8000-123456789abc'));"
-  - "const address = { prefix: '/w/' + id, key: name, slugSource: '' };"
+  - "const address = { prefix: '/w/' + id, key: name, suffixSource: '' };"
   - "const href = `${origin}/w/${id}`;"
   - "const link = <Link href=\"/w/example\" />;"
   - "const href = '/w/' + id;"

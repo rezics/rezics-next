@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
-import { NameRegistry } from '../../services/main/src/modules/address/registry.ts';
-import { migrateGraphNames } from '../../services/main/src/modules/address/migrate.ts';
+import { AliasRegistry } from '../../services/main/src/modules/address/registry.ts';
+import { migrateGraphAliases } from '../../services/main/src/modules/address/migrate.ts';
 import { migrateOwners } from '../ops/migrate.ts';
 import { S3ImmutableObjects } from '../../services/main/src/infrastructure/immutable-objects.ts';
 
@@ -15,7 +15,7 @@ export async function migrateFixtureOwners(apps: Record<string, string>): Promis
 }
 
 export interface OwnerMigrationEvidence {
-  owner: 'graph-names';
+  owner: 'graph-aliases';
   status: 'complete' | 'deferred';
   reason?: string;
 }
@@ -42,25 +42,25 @@ export async function migrateOwnerData(
         })
       : undefined;
     if (workObjects) await workObjects.initialize();
-    const result = await migrateGraphNames({
+    const result = await migrateGraphAliases({
       fuseki: new FusekiClient(
         apps.FUSEKI_URL!,
         apps.FUSEKI_MAINTENANCE_TOKEN,
         apps.FUSEKI_COMMAND_TOKEN,
       ),
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
-      addresses: new NameRegistry(pool),
+      addresses: new AliasRegistry(pool),
       objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
       ...(workObjects ? { workObjects } : {}),
     });
     return [
       {
-        owner: 'graph-names',
+        owner: 'graph-aliases',
         status: result.status,
         ...(result.status === 'deferred'
           ? {
               reason:
-                'Graph-name import is incomplete; resolve the reported import error and rerun owner migrations',
+                'Graph-alias import is incomplete; resolve the reported import error and rerun owner migrations',
             }
           : {}),
       },

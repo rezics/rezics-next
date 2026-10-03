@@ -4,6 +4,7 @@ import { assertCommandProfiles } from '../infrastructure/profile.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
 import { assertPublicContentSearchReady } from '../modules/content-publication/search.ts';
+import { occurrenceLabelReadiness } from '../modules/structure/label-index-backfill.ts';
 import { mainSchemaReady } from '../schema-ready.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workRead } from '../modules/work/read-session.ts';
@@ -64,22 +65,26 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
     })
     .get('/health/search-ready', {
       response: {
-        200: t.Object({ status: t.Literal('ready'), dataEpoch: t.String(),
-          sequence: t.String(), indexGeneration: t.String() }),
+        200: t.Object({ status: t.Union([t.Literal('ready'), t.Literal('indexing')]), dataEpoch: t.String(),
+          sequence: t.String(), indexGeneration: t.String(), occurrenceLabels: t.Object({
+            status: t.Union([t.Literal('current'), t.Literal('indexing')]),
+            pending: t.Object({ value: t.Integer({ minimum: 0, maximum: 1 }), kind: t.Literal('at-least') }) }) }),
         503: t.Object({ status: t.Literal('unavailable') }),
       },
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
+        const occurrenceLabels = await occurrenceLabelReadiness(work.environment);
+        const ready = occurrenceLabels.status === 'indexing' ? 'indexing' as const : 'ready' as const;
         if (work.contentProjection) {
           const { content, cursor, consumer } = work.contentProjection;
           const projection = await assertPublicContentSearchReady(work.environment, content, cursor, consumer);
-          return { status: 'ready' as const, dataEpoch: projection.graphPosition.dataEpoch,
+          return { status: ready, occurrenceLabels, dataEpoch: projection.graphPosition.dataEpoch,
             sequence: projection.graphPosition.sequence, indexGeneration: projection.indexGeneration };
         }
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const index = await assertPublicTextReady(fuseki, work.environment.lineage);
-        return { status: 'ready' as const, dataEpoch: index.dataEpoch,
+        return { status: ready, occurrenceLabels, dataEpoch: index.dataEpoch,
           sequence: index.sequence, indexGeneration: index.generation };
       } catch {
         return status(503, { status: 'unavailable' as const });

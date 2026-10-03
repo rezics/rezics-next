@@ -9,7 +9,7 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { addressRoutes } from '../src/routes/addresses.ts';
 import { resourceRoutes } from '../src/routes/resources.ts';
 import { canonicalAddresses } from '../src/modules/address/canonical.ts';
-import { NameInvalid } from '../src/modules/address/registry.ts';
+import { AliasInvalid } from '../src/modules/address/registry.ts';
 import { resolveAddresses } from '../src/modules/address/resolution.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../src/modules/media/store.ts';
@@ -165,7 +165,7 @@ test('G961: private Space and Zone summaries require both Access grants and omit
       reference,
       status: 'available',
       disclosure: 'restricted',
-      address: { prefix: '/z/', key: 'a-site', slugSource: '' },
+      address: { prefix: '/z/', key: 'a-site', suffixSource: '' },
     })),
   );
   expect(batch.cost).toMatchObject({ graphQueries: 4, accessChecks: 6, accessQueries: 6 });
@@ -221,7 +221,7 @@ test('G961: a private Zone does not appear in the capabilities of a readable pub
   f.grants.add(zone);
   expect((await resolveAddresses(f.work, f.request(true), [lookup], actor))[0]).toMatchObject({
     status: 'resolved',
-    canonical: { prefix: '/z/', key: 'a-site', slugSource: '' },
+    canonical: { prefix: '/z/', key: 'a-site', suffixSource: '' },
     capabilities: { zone },
   });
 });
@@ -242,7 +242,7 @@ test('G961: viewer-aware single and batch resolution returns the same canonical 
   const result = await resolved.json();
   expect(result).toMatchObject({
     holder: space,
-    canonical: { prefix: '/z/', key: 'a-site', slugSource: '' },
+    canonical: { prefix: '/z/', key: 'a-site', suffixSource: '' },
     capabilities: { zone },
   });
   const batch = await app.handle(
@@ -262,7 +262,7 @@ test('G961: authenticated resolutions cannot omit their acting subject', async (
   const f = fixture();
   await expect(
     resolveAddresses(f.work, f.request(true), [{ scope: 'space', key: 'a-site' }]),
-  ).rejects.toBeInstanceOf(NameInvalid);
+  ).rejects.toBeInstanceOf(AliasInvalid);
 });
 
 test('G961: grants revoked during media hydration cannot disclose page names or canonical addresses', async () => {
@@ -344,7 +344,7 @@ test('G961: Zone summary addresses use the owning Space identity without a publi
   const addresses = await canonicalAddresses(f.env, [
     { reference: zone, type: 'zone', disclosure: 'restricted', name: { value: 'A private site' } },
   ]);
-  expect(addresses.get(zone)).toEqual({ prefix: '/z/', key: 'a-site', slugSource: '' });
+  expect(addresses.get(zone)).toEqual({ prefix: '/z/', key: 'a-site', suffixSource: '' });
   f.env.addresses!.currents = async () => new Map();
   expect(
     (
@@ -352,7 +352,7 @@ test('G961: Zone summary addresses use the owning Space identity without a publi
         { reference: zone, type: 'zone', name: { value: 'A site' } },
       ])
     ).get(zone),
-  ).toEqual({ prefix: '/z/', key: uuidToSid(space.slice(-36)), slugSource: 'A site' });
+  ).toEqual({ prefix: '/z/', key: uuidToSid(space.slice(-36)), suffixSource: 'A site' });
 });
 
 test('G961: standalone and official Zone reads share canonical Space addresses and rename generations', async () => {
@@ -414,7 +414,7 @@ test('G961: standalone and official Zone reads share canonical Space addresses a
   try {
     const publication = await readZonePublication(env, zone);
     expect(publication).toMatchObject({
-      address: { prefix: '/z/', key: 'a-site', slugSource: 'A site' },
+      address: { prefix: '/z/', key: 'a-site', suffixSource: 'A site' },
       official: 'a-site',
     });
     expect((await listOfficialZones(env, { limit: 50 })).items[0]).toMatchObject({
@@ -430,7 +430,7 @@ test('G961: standalone and official Zone reads share canonical Space addresses a
     expect((await readZonePublication(env, zone)).address).toEqual({
       prefix: '/z/',
       key: uuidToSid(space.slice(-36)),
-      slugSource: 'A site',
+      suffixSource: 'A site',
     });
     expect((await listOfficialZones(env, { limit: 50 })).items[0]?.address.key).toBe(
       uuidToSid(space.slice(-36)),
@@ -474,7 +474,7 @@ test('G961: reply mentions read only current Agent names from the registry', asy
     query: async (sql: string, args: unknown[]) => {
       expect(sql).not.toContain('agent_handle');
       if (sql.includes('FROM access.admission')) return { rows: [{ principal_id: principal }] };
-      if (sql.includes('FROM access.name_registry')) {
+      if (sql.includes('FROM access.alias_registry')) {
         registryQuery = sql;
         expect(args).toEqual([['current-name', 'current_name', 'old_name']]);
         return { rows: [{ agent_id: space }] };

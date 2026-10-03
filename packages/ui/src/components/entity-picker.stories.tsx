@@ -209,3 +209,28 @@ export const Phone: Story = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
+
+function UpdatingFixture() {
+  const [value, setValue] = useState<EntityPickerSelection[]>([]);
+  const load = useMemo<EntityPickerLoad<EntityPickerItem>>(() => {
+    let attempts = 0;
+    return async () => ++attempts === 1
+      ? { items: [], nextCursor: null, complete: false, updating: true }
+      : { items: [inventory[0]!], nextCursor: null, complete: true };
+  }, []);
+  return <div className="max-w-sm p-4"><EntityPicker label="Chapters" load={load}
+    value={value} onValueChange={setValue} multiple={false} /></div>;
+}
+export const SearchUpdating: Story = {
+  render: () => <UpdatingFixture />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement), page = within(canvasElement.ownerDocument.body);
+    await userEvent.click(canvas.getByRole('combobox'));
+    await expect(await page.findByText('Search is still updating.')).toBeVisible();
+    await expect(page.getByText('At least 0')).toBeVisible();
+    await expect(page.queryByText('No matches.')).not.toBeInTheDocument();
+    await userEvent.click(page.getByRole('button', { name: 'Try again' }));
+    await expect(await page.findByText('1 results')).toBeVisible();
+    await expect(page.getByRole('option', { name: /银河英雄传说/ })).toBeVisible();
+  },
+};

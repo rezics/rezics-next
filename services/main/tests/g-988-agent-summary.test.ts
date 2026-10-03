@@ -55,7 +55,7 @@ for (const [value, direction] of [
       type: 'agent',
       disclosure: 'public',
       name: { value, language: '', direction, basis: 'fallback' },
-      address: { prefix: '/a/', slugSource: value },
+      address: { prefix: '/a/', suffixSource: value },
     });
     expect(queries).toHaveLength(1);
     expect(result.cost).toMatchObject({ graphQueries: 1, accessChecks: 0 });

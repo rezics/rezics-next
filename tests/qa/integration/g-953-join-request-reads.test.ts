@@ -93,8 +93,8 @@ test('G-953: database search traverses matching pages, folds Unicode and filters
     }
     const handle = `current_${randomUUID().replaceAll('-','').slice(0,12)}`;
     const retired = `retired_${randomUUID().replaceAll('-','').slice(0,12)}`;
-    await f.s.accessPool.query(`INSERT INTO access.name_registry (scope,key,display,skeleton,holder,controller,state)
-      VALUES ('agent',$1,$1,$1,$2,$2,'current'),('agent',$3,$3,$3,$2,$2,'redirect')`,
+    await f.s.accessPool.query(`INSERT INTO access.alias_registry (scope,key,skeleton,holder,controller,state)
+      VALUES ('agent',$1,$1,$2,$2,'current'),('agent',$3,$3,$2,$2,'redirect')`,
     [handle,f.people[1]!.actor,retired]);
     expect((await f.call('GET',`${f.root}?q=@${handle}`)).body.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);
     expect((await f.call('GET',`${f.root}?q=${retired}`)).body.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);

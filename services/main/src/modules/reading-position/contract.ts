@@ -17,8 +17,9 @@ export const readingPositionPage = t.Object({
     labels: t.Optional(t.Array(t.Object({ value: t.String(), language: t.String() }), { maxItems: READING_POSITION_COST.labels })),
     displayLabel: t.Optional(t.String()) }), { maxItems: READING_POSITION_COST.chooserPage }),
   nextCursor: t.Nullable(t.String()), complete: t.Boolean(),
+  search: t.Optional(t.Object({ status: t.Union([t.Literal('current'), t.Literal('indexing')]) })),
   /** Retained for existing clients; new consumers use nextCursor. */
   next: t.Nullable(t.String()), sourcePosition: readPosition,
-  count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }),
+  count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Union([t.Literal('exact-page'), t.Literal('at-least')]), total: t.Null() }),
   cost: t.Object(Object.fromEntries(Object.entries(READING_POSITION_COST).map(([key, value]) => [key, t.Literal(value)]))),
 });

@@ -22,7 +22,7 @@ import { RightsStore } from '../../../services/main/src/modules/rights/store.ts'
 import { PostgresRateLimitStore } from '../../../services/main/src/modules/rate-limit/store.ts';
 import { RATE_LIMIT_V1 } from '../../../services/main/src/modules/rate-limit/budgets.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
+import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -101,7 +101,7 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     await workObjects.initialize();
     await structureObjects.initialize();
     const env = {
-      addresses: new NameRegistry(accessPool),
+      addresses: new AliasRegistry(accessPool),
       fuseki,
       lineage: { dataEpoch: qa.dataEpoch, routingEpoch: qa.routingEpoch },
       objectDirectory: qa.objectDirectory,

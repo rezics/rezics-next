@@ -33,8 +33,8 @@ const realm = '7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
 describe('Work page addresses', () => {
   test('a ref is a Work UUID or a Main address slug; anything else is not a Work', () => {
     expect(parseWorkRef(work)).toEqual({ kind: 'id', id: work });
-    expect(parseWorkRef('The-Cartographer')).toEqual({ kind: 'slug', slug: 'The-Cartographer' });
-    expect(parseWorkRef('春の物語')).toEqual({ kind: 'slug', slug: '春の物語' });
+    expect(parseWorkRef('The-Cartographer')).toEqual({ kind: 'alias', key: 'The-Cartographer' });
+    expect(parseWorkRef('春の物語')).toEqual({ kind: 'alias', key: '春の物語' });
     expect(parseWorkRef(uuidToSid(work))).toEqual({ kind: 'id', id: work });
     for (const ref of ['', 'a/b', 'a\\b', 'a?b', 'a#b', 'a\u0000b', 'x'.repeat(513)]) {
       expect(parseWorkRef(ref)).toBeNull();

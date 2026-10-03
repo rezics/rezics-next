@@ -57,7 +57,7 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
-  addresses?: import('../address/registry.ts').NameRegistry;
+  addresses?: import('../address/registry.ts').AliasRegistry;
   fuseki: FusekiClient;
   lineage: GraphLineage;
   objectDirectory: string;

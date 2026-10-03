@@ -24,7 +24,7 @@ function answer(
       scope: lookup.scope,
       key: lookup.key,
       holder,
-      canonical: { prefix, key: named ? 'current-name' : sid, slugSource: 'Reader' },
+      canonical: { prefix, key: named ? 'current-name' : sid, suffixSource: 'Reader' },
       ...(lookup.scope === 'space' ? { capabilities: { realm: holder, zone: holder } } : {}),
     },
   };
@@ -117,9 +117,9 @@ test('G990: changing sid letter case selects a different identity and preserves 
   for (const suffix of ['', '-old-title']) {
     const original = parseAddressSegment(sid + suffix);
     const other = parseAddressSegment(changed + suffix);
-    expect(original?.kind === 'name' ? null : original?.id).toBe(uuid);
-    expect(other?.kind).toBe(suffix ? 'sid-slug' : 'sid');
-    expect(other?.kind === 'name' ? null : other?.id).not.toBe(uuid);
+    expect(original?.kind === 'alias' ? null : original?.id).toBe(uuid);
+    expect(other?.kind).toBe(suffix ? 'sid-suffix' : 'sid');
+    expect(other?.kind === 'alias' ? null : other?.id).not.toBe(uuid);
     expect(other?.key).toBe(changed + suffix);
     expect(addressPath(`/en/a/${changed}${suffix}`)?.lookup.key).toBe(changed + suffix);
   }

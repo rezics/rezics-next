@@ -15,7 +15,7 @@ const uuid = 'dfc1030e-efa0-4041-a686-bebce31f645c';
 const holder = `https://rezics.com/id/${uuid}`;
 const key = '99800000-0000-4000-8000-000000000001';
 const sessionKey = '99800000-0000-4000-8000-000000000002';
-const canonical = { prefix: '/a/' as const, key: uuidToSid(uuid), slugSource: 'Reader' };
+const canonical = { prefix: '/a/' as const, key: uuidToSid(uuid), suffixSource: 'Reader' };
 const address: ResolvedAddress = { profile: 'address-resolution-v1', status: 'resolved',
   scope: 'agent', key: uuid, holder, state: 'current', canonical };
 const originalFetch = globalThis.fetch;

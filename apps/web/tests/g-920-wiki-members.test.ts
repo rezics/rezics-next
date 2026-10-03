@@ -14,7 +14,7 @@ test('G-920: web index members consume projected names without a member page rea
           id: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
           types: ['https://schema.org/Place'],
           name: { value: 'Longbourn', language: 'en', direction: 'ltr', basis: 'requested' },
-          address: { prefix: '/e/',key: '1111111111111111111112',slugSource: 'Longbourn' },
+          address: { prefix: '/e/',key: '1111111111111111111112',suffixSource: 'Longbourn' },
           inZone: true,
         },
       ],
