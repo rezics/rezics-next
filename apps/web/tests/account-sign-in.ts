@@ -1,13 +1,39 @@
 import { expect, type Page } from '@playwright/test';
 
 /** Complete the browser redirect on the public Accounts origin. */
-export async function signInAtAccounts(page: Page, next: string,
-  member: { email: string; password: string }): Promise<void> {
-  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
+export async function signInAtAccounts(
+  page: Page,
+  next: string,
+  member: { email: string; password: string },
+): Promise<void> {
+  // Dispose an auth/start document reached by an expired-session navigation
+  // before its mount effect can compete with this sign-in.
+  await page.goto('about:blank');
+  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`, { waitUntil: 'commit' });
   const accountOrigin = new URL(process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004').origin;
-  await page.waitForURL(url => url.origin === accountOrigin && url.pathname === '/sign-in');
+  const accounts = new URL(accountOrigin);
+  const loopback = new Set(['localhost', '127.0.0.1', '[::1]']);
+  await page.waitForURL(
+    (url) =>
+      url.pathname === next ||
+      url.pathname.endsWith('/identity/failed') ||
+      (url.pathname === '/sign-in' &&
+        (url.origin === accountOrigin ||
+          (loopback.has(url.hostname) &&
+            loopback.has(accounts.hostname) &&
+            url.protocol === accounts.protocol &&
+            url.port === accounts.port))),
+  );
+  if (new URL(page.url()).pathname.endsWith('/identity/failed'))
+    throw new Error('Account sign-in failed');
+  if (new URL(page.url()).pathname === next) return;
   await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  await page.getByRole('textbox', { name: 'Email' }).fill(member.email);
+  const email = page.getByRole('textbox', { name: 'Email', exact: true });
+  await email.fill('');
+  // Native key events keep the controlled form's value aligned during the
+  // Accounts app's first hydration, as typing in its component stories does.
+  await email.pressSequentially(member.email);
+  await expect(email).toHaveValue(member.email);
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Enter your password').fill(member.password);
   await page.getByRole('button', { name: 'Next' }).click();
