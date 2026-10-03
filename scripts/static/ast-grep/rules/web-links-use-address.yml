@@ -10,6 +10,7 @@ ignores:
   # not call the address builder under test (including legacy redirect forms).
   # Keep this list explicit; ordinary tests, stories and product code stay checked.
   - apps/web/tests/g-990-uuid-address.test.ts
+  - apps/web/tests/g-998-address.test.ts
   - apps/web/tests/g-943-address.e2e.ts
   - apps/web/tests/g-943-address.test.ts
   - apps/web/tests/g-644-entity-page.test.ts
