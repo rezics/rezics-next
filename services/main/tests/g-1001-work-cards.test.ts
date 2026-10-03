@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { resourceWorkCards } from '../src/modules/query/work-cards.ts';
-import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 import { allocateAgentHandle } from '../src/modules/agent/handle.ts';
 import { RV } from '../src/modules/work/activate.ts';
 import { Value } from 'typebox/value';
@@ -69,13 +69,16 @@ test('G1001: a private author is withheld without falling back to a saved displa
   expect(card.primaryCredits).toEqual([]);
   expect(JSON.stringify(card)).not.toContain('Saved private author');
 });
-test('G1001: stale, concurrent, missing and malformed projection states never become exact empty cards', async () => {
+test('G1001: stale, concurrent, missing and malformed previews degrade without claiming an exact empty inventory', async () => {
   for (const options of [{ stale: true }, { moved: true }, { missing: true },
     { credits: [1, 2, 3, 4].map(nativeCredit) }, { context: true, invalidRating: true }]) {
     const f = fixture(options);
-    await expect(resourceWorkCards(f.session, [id(9)])).rejects.toBeInstanceOf(
-      options.stale || options.moved ? WorkReadMoved : WorkReadUnavailable,
-    );
+    const card = (await resourceWorkCards(f.session, [id(9)])).get(id(9))!;
+    expect(card.rating).toBeNull();
+    if (!options.invalidRating) {
+      expect(card.primaryCredits).toEqual([]);
+      expect(card.creditCount).toEqual({ value: 0, kind: 'at-least' });
+    } else expect(card.primaryCredits).toHaveLength(1);
   }
   const recovered = fixture();
   expect((await resourceWorkCards(recovered.session, [id(9)])).get(id(9))!.primaryCredits).toHaveLength(1);

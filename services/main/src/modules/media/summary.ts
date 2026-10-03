@@ -102,6 +102,13 @@ export interface SummaryBatch {
   cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
 }
 
+/** A list may omit optional media when its owner cannot answer. Core identity
+ * and disclosure still use the same required summary reads and fences. */
+export type SummaryMedia = {
+  avatarRows(...args: Parameters<MediaStore['avatarRows']>):
+    Promise<Awaited<ReturnType<MediaStore['avatarRows']>> | null>;
+};
+
 interface GraphRow { type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string>; localizedName?: LocalizedText;
   profileAvatarSelections?: Set<string> }
@@ -377,7 +384,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
 /** Resource summaries for at most 64 references. The Work path costs one graph
  * query, one media query and one batched Access query. Additional owner types
  * use their current read functions; the returned counters include those probes. */
-async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore | undefined,
+async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMedia | undefined,
   reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch & { redirects: Map<string, string> }> {
   if (!input.resources.length || input.resources.length > MAX_SUMMARY_BATCH
     || input.resources.some(resource => resource.length > MAX_SUMMARY_REFERENCE_LENGTH || !summaryReference.test(resource))
@@ -557,13 +564,15 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
   if (media && readable.size && !contextBatch.selectedContextDenied) {
     const hydrated = await media.avatarRows([...readable.keys()], input.context);
     cost.mediaQueries = 1;
-    avatars = hydrated.rows;
-    mediaGeneration = `${hydrated.generation.dataEpoch}:${hydrated.generation.sequence}`;
-    // Agent profiles adopt media selections explicitly. Summaries follow the
-    // same current reference as the profile read and avatar delivery route.
-    for (const [reference, row] of readable) {
-      if (row.type === 'agent' && (row.profileAvatarSelections?.size !== 1
-        || !row.profileAvatarSelections.has(avatars.get(reference)?.selection ?? ''))) avatars.delete(reference);
+    if (hydrated) {
+      avatars = hydrated.rows;
+      mediaGeneration = `${hydrated.generation.dataEpoch}:${hydrated.generation.sequence}`;
+      // Agent profiles adopt media selections explicitly. Summaries follow the
+      // same current reference as the profile read and avatar delivery route.
+      for (const [reference, row] of readable) {
+        if (row.type === 'agent' && (row.profileAvatarSelections?.size !== 1
+          || !row.profileAvatarSelections.has(avatars.get(reference)?.selection ?? ''))) avatars.delete(reference);
+      }
     }
   }
   // Hydrated names/images cannot outlive a disclosure or membership change.
@@ -638,7 +647,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
  * the source's summary is delivered; its typed resolution never substitutes
  * the survivor's title, media, revision or personal state. Ordinary reads incur
  * no extra round trip. Merge chains use one graph generation and a 10s budget. */
-export async function readResourceSummaries(env: WorkActivationEnvironment, media: MediaStore | undefined,
+export async function readResourceSummaries(env: WorkActivationEnvironment, media: SummaryMedia | undefined,
   reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
   const deadline = Date.now() + MERGE_COST.deadlineMs;
   const first = await readSummaryPage(env, media, reader, input);

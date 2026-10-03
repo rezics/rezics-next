@@ -114,8 +114,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/paging-authority-search.test.ts',
   // Saved Filter tabs read Home's feed, which is global across the QA project's files.
   'tests/qa/integration/saved-filter.test.ts',
-  // G-824's 1,000 published fixture Works must not enter another owner's global inventory.
-  'tests/qa/integration/g-824-library-traversal.test.ts',
   // Continue across volumes seeds Home, whose relay replays prior receipts from zero (G-410).
   'tests/qa/integration/structure-book-volumes.test.ts',
   // These probes bind exact replay positions or a complete graph/owner population.
@@ -133,7 +131,6 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-832-lexicon.test.ts',
   'tests/qa/integration/g-840-catalogue.test.ts',
   'tests/qa/integration/g-894-progress-summary.test.ts',
-  'tests/qa/integration/g-904-derived.test.ts',
   // Release traversal probes own their complete global publication and owner inventory.
   'tests/qa/integration/g-851-release-query.test.ts',
   // Suitability's complete resource reads require matching global Rating Context and Access histories.

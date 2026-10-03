@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { relationshipNavigationSource } from '../features/relationships/list.ts';
+import { fixtureFollow, memoryRelationships, target } from '../features/relationships/fixtures.ts';
 
 interface Item {
   id: string;
@@ -8,6 +9,26 @@ interface Item {
 const page = (items: Item[]) => ({ items, complete: true, nextCursor: null });
 const identity = (item: Item) => item.id;
 const label = (item: Item) => item.name;
+
+test('G-1000: the story owner preserves an existing explicit follow, bell and pin through Join and Leave', async () => {
+  const follow = { ...fixtureFollow(700), level: 'off' as const, pinPosition: 0 };
+  const memory = memoryRelationships([follow]);
+  const realm = follow.realm!;
+  await memory.api.join(realm, await memory.api.joining(realm), false);
+  expect(await memory.api.state(target(700), 'space')).toMatchObject({
+    following: true,
+    source: 'explicit',
+    level: 'off',
+    pinPosition: 0,
+  });
+  await memory.api.leave(realm, (await memory.api.joining(realm)).membershipGeneration);
+  expect(await memory.api.state(target(700), 'space')).toMatchObject({
+    following: true,
+    source: 'explicit',
+    level: 'off',
+    pinPosition: 0,
+  });
+});
 
 test('G-1000: a drawer mounted after Pin reads the current owner instead of its empty server snapshot', async () => {
   const pinned = { id: 'space', name: '中文社群' };

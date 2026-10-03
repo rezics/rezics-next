@@ -158,9 +158,13 @@ test('G1001: real Query cards show bounded ordered authors and Global ratings wi
     await f.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old } }
       INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next } }
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old } BIND(?old + 1 AS ?next) }`);
-    // The existing read envelope retries a moved graph at most twice, then
-    // returns unavailable; it must not turn the stale cards into an empty page.
-    await json(await request(), 503);
+    // Catalogue membership remains useful during projection lag. Optional
+    // previews are withheld rather than discarding the Work or inventing zero.
+    const lagging = await json<{ result: { stale: boolean; items: ResourceCard[] } }>(await request());
+    expect(lagging.result.stale).toBe(true);
+    expect(lagging.result.items.map(card => card.id)).toEqual([work.work]);
+    expect(lagging.result.items[0]!.work).toEqual({ primaryCredits: [],
+      creditCount: { value: 0, kind: 'at-least' }, rating: null });
     await f.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old } }
       INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ${sequence} } }
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old } }`);

@@ -197,8 +197,10 @@ export interface AgentCard {
 
 /** readAgent's public-Agent gate for a page of cards: one Access fence batch
  * before and after, one graph batch and one handle batch. A hidden Agent is
- * absent. Cards show no library or avatar, so neither owner is read. */
-export async function readAgentCards(session: WorkReadSession, agents: readonly string[]) {
+ * absent. Preview mode also withholds invalid or changed Agents individually.
+ * Cards show no library or avatar, so neither owner is read. */
+export async function readAgentCards(session: WorkReadSession, agents: readonly string[],
+  mode: 'required' | 'preview' = 'required') {
   const ids = [...new Set(agents)];
   const cards = new Map<string, AgentCard>();
   if (!ids.length) return cards;
@@ -233,53 +235,59 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
   ]);
   const kinds = new Set([`${RV}PersonAgent`, `${RV}OrganizationAgent`, `${RV}ServiceAgent`]);
   for (const agent of active) {
-    const matched = rows.filter((row) => row.agent?.value === agent);
-    if (!matched.length) continue;
-    const row = matched[0]!;
-    const originalDisplayName = field(row, 'displayName');
-    let displayName = originalDisplayName;
-    let names: LocalizedText | null;
     try {
-      names = agentLocalizedName(matched, originalDisplayName);
-    } catch {
-      throw new WorkReadUnavailable('Organization names are invalid');
+      const matched = rows.filter((row) => row.agent?.value === agent);
+      if (!matched.length) continue;
+      const row = matched[0]!;
+      const originalDisplayName = field(row, 'displayName');
+      let displayName = originalDisplayName;
+      let names: LocalizedText | null;
+      try {
+        names = agentLocalizedName(matched, originalDisplayName);
+      } catch {
+        throw new WorkReadUnavailable('Organization names are invalid');
+      }
+      if (names && field(row, 'agentKind') !== `${RV}OrganizationAgent`) {
+        throw new WorkReadUnavailable('Agent name kind is invalid');
+      }
+      if (names)
+        displayName =
+          selectDisplayName(names, session.displayLanguages)?.value ?? originalDisplayName;
+      if (
+        matched.length > 20 ||
+        matched.some(
+          (other) =>
+            other.agentHead?.value !== row.agentHead?.value ||
+            other.profileHead?.value !== row.profileHead?.value ||
+            other.displayName?.value !== row.displayName?.value,
+        ) ||
+        !kinds.has(field(row, 'agentKind')) ||
+        !displayName ||
+        displayName.length > 200 ||
+        (row.profileHead && !row.predecessor) ||
+        field(row, 'handle') !== allocateAgentHandle(agent)
+      )
+        throw new WorkReadUnavailable('Agent profile is ambiguous');
+      if (
+        row.bio &&
+        (!row.bio.value ||
+          row.bio.value.length > 500 ||
+          !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(row.bio['xml:lang'] ?? ''))
+      ) {
+        throw new WorkReadUnavailable('Agent bio is invalid');
+      }
+      const handle = handles.get(agent) ?? field(row, 'handle');
+      cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` },
+        ...(names ? { displayNameInfo: selectDisplayName(names, session.displayLanguages)! } : {}) });
+    } catch (error) {
+      if (mode !== 'preview' || !(error instanceof WorkReadUnavailable)) throw error;
     }
-    if (names && field(row, 'agentKind') !== `${RV}OrganizationAgent`) {
-      throw new WorkReadUnavailable('Agent name kind is invalid');
-    }
-    if (names)
-      displayName =
-        selectDisplayName(names, session.displayLanguages)?.value ?? originalDisplayName;
-    if (
-      matched.length > 20 ||
-      matched.some(
-        (other) =>
-          other.agentHead?.value !== row.agentHead?.value ||
-          other.profileHead?.value !== row.profileHead?.value ||
-          other.displayName?.value !== row.displayName?.value,
-      ) ||
-      !kinds.has(field(row, 'agentKind')) ||
-      !displayName ||
-      displayName.length > 200 ||
-      (row.profileHead && !row.predecessor) ||
-      field(row, 'handle') !== allocateAgentHandle(agent)
-    )
-      throw new WorkReadUnavailable('Agent profile is ambiguous');
-    if (
-      row.bio &&
-      (!row.bio.value ||
-        row.bio.value.length > 500 ||
-        !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u.test(row.bio['xml:lang'] ?? ''))
-    ) {
-      throw new WorkReadUnavailable('Agent bio is invalid');
-    }
-    const handle = handles.get(agent) ?? field(row, 'handle');
-    cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` },
-      ...(names ? { displayNameInfo: selectDisplayName(names, session.displayLanguages)! } : {}) });
   }
   const after = await owner.agentFences([...cards.keys()]);
-  if ([...cards.keys()].some((agent) => after.get(agent) !== before.get(agent))) {
-    throw new WorkReadMoved('Agent profile changed');
+  for (const agent of cards.keys()) {
+    if (after.get(agent) === before.get(agent)) continue;
+    if (mode === 'required') throw new WorkReadMoved('Agent profile changed');
+    cards.delete(agent);
   }
   return cards;
 }
