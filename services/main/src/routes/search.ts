@@ -29,6 +29,7 @@ import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/wo
 import { decoratePhraseRelation, phraseWorkTypes } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
 import { enrichSearchCardPage, searchPageAuthors } from '../modules/search/result-cards.ts';
+import { optionalPreview } from '../modules/query/optional-preview.ts';
 import { searchCardWindow } from '../modules/search/card-window.ts';
 import { readRankedCatalogue, RANKED_CATALOGUE_COST } from '../modules/search/ranked.ts';
 import { discloseCatalogueMatches } from '../modules/search/catalogue-disclosure.ts';
@@ -36,7 +37,7 @@ import { withSearchGraphSnapshot } from '../modules/search/snapshot.ts';
 import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
 import { querySearchFields, normalizedSearchText, SEARCH_FIELD_COST, fenceSearchFields } from '../modules/search/fields.ts';
-import { workRead } from '../modules/work/read-session.ts';
+import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { discoveryCredit } from '../modules/discovery/contract.ts';
 import { problemResult, phraseMatch, publicPhrasePageRequest, publicPhrasePageResult, publicQueryResult,
@@ -284,17 +285,21 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             if (session.position.dataEpoch !== position.dataEpoch || session.position.sequence !== position.sequence) {
               throw new SearchSnapshotMoved('Typeahead moved during hydration');
             }
-            const summaries = await session.summaries(page.map(row => row.work));
-            const authors = await searchPageAuthors(session, [...new Set(page.map(row => row.work))]);
-            const after = await session.summaries(page.map(row => row.work));
-            if (JSON.stringify(summaries) !== JSON.stringify(after)) {
+            const summaries = await session.summaries(page.map(row => row.work), true);
+            const authors = await optionalPreview(session,
+              () => searchPageAuthors(session, [...new Set(page.map(row => row.work))], true));
+            const after = await session.summaries(page.map(row => row.work), true);
+            if (summaries.some((summary, i) => JSON.stringify({ ...summary, avatar: undefined })
+              !== JSON.stringify({ ...after[i], avatar: undefined }))) {
               throw new SearchSnapshotMoved('Typeahead disclosure changed during hydration');
             }
             return page.flatMap((row, i) => {
               const summary = summaries[i];
+              const final = after[i];
               return summary?.status === 'available' && summary.type === 'work' && summary.disclosure === 'public'
-                ? [{ work: row.work, mainVersion: row.mainVersion, title: summary.name, cover: summary.avatar,
-                  types: types.get(row.work) ?? [], authors: authors.get(row.work) ?? [],
+                ? [{ work: row.work, mainVersion: row.mainVersion, title: summary.name,
+                  cover: final?.status === 'available' ? final.avatar : summary.avatar,
+                  types: types.get(row.work) ?? [], authors: authors?.get(row.work) ?? [],
                   matchedField: row.matchedField as 'title' | 'credit', matchedText: row.matchedText,
                   matchedLanguage: row.matchedLanguage }] : [];
             });
@@ -304,7 +309,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             sourcePosition: { dataEpoch: position.dataEpoch, sequence: position.sequence } };
         });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        return commandError(error instanceof WorkReadLimit ? new PublicQueryBudgetExceeded(error.message) : error);
+      }
     })
     .post('/v1/private-queries', {
       body: t.Object({ profile: t.Literal('private-contribution-phrase-v1'),

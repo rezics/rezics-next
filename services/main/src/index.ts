@@ -35,6 +35,7 @@ import { SavedFilterStore } from './modules/saved-filter/store.ts';
 import { RankingHomeTrendingReader } from './modules/feed/trending.ts';
 import { FeedRefreshWorker } from './modules/feed/refresh.ts';
 import { DiscoveryRefreshWorker } from './modules/discovery/refresh.ts';
+import { DiscoveryRefreshInputs } from './modules/discovery/source.ts';
 import { DiscoveryRefreshStore } from './modules/discovery/refresh-store.ts';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
@@ -563,6 +564,7 @@ const worker = new ContentProjectionWorker(
   () => relayContentProjectionOnce(environment, content, cursor, consumer),
   config.CONTENT_PROJECTION_INTERVAL_MS);
 const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, access, account, media,
+  discoveryRefreshInputs: new DiscoveryRefreshInputs(relayPool, relayConsumer!),
   judgments: new AccessJudgments(pool),
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },

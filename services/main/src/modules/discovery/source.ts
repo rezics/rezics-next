@@ -10,6 +10,76 @@ import { publicWork, WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadUn
 import { DISCOVERY_COST, type DiscoveryBasis, type ProjectedWork } from './contract.ts';
 import { readEpochOrder } from './lineage.ts';
 import { primaryDiscoveryCredits } from './credits.ts';
+import type { Pool } from 'pg';
+import type { MainCloudEvent } from '../outbox/relay.ts';
+import { DISCOVERY_DELTA_COST, type DiscoveryChanges } from './changes.ts';
+
+export const DISCOVERY_REFRESH_INPUT_COST = { queries: 1, batches: DISCOVERY_DELTA_COST.batches,
+  events: DISCOVERY_DELTA_COST.events, birthQueries: 1, birthRows: DISCOVERY_DELTA_COST.events } as const;
+
+/** One statement sees batch headers and their events at the same SQL snapshot:
+ * https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED
+ * (reviewed 2026-10-03). Never scan relay coverage from sequence zero per tick. */
+export class DiscoveryRefreshInputs {
+  constructor(private readonly pool: Pick<Pool, 'query'>, private readonly consumer: string) {}
+
+  async read(position: { dataEpoch: string; sequence: string }, after: string): Promise<DiscoveryChanges | null> {
+    const count = BigInt(position.sequence) - BigInt(after);
+    if (count === 0n) return { works: [], created: [] };
+    if (count < 0n || count > BigInt(DISCOVERY_REFRESH_INPUT_COST.batches)) return null;
+    const rows = (await this.pool.query<{ sequence: string; batch_id: string; routing_epoch: string;
+      event_count: number; event_id: string | null; envelope: MainCloudEvent | null }>(`SELECT b.sequence::text,
+        b.batch_id,b.routing_epoch,b.event_count,e.event_id,e.envelope
+      FROM relay.checkpoint c JOIN relay.delivered_batch b ON b.data_epoch=c.data_epoch
+      LEFT JOIN relay.delivered_event e ON e.data_epoch=b.data_epoch AND e.sequence=b.sequence
+      WHERE c.consumer=$1 AND c.data_epoch=$2 AND c.sequence >= $4::numeric
+        AND b.sequence > $3::numeric AND b.sequence <= $4::numeric
+      ORDER BY b.sequence,e.event_id LIMIT $5`,
+    [this.consumer, position.dataEpoch, after, position.sequence, DISCOVERY_REFRESH_INPUT_COST.events + 1])).rows;
+    if (rows.length > DISCOVERY_REFRESH_INPUT_COST.events) return null;
+    const batches = new Map<string, typeof rows>();
+    const works = new Set<string>(), created = new Set<string>();
+    const actions = new Set(['work.create', 'work.edit', 'contribution.create', 'contribution.publish', 'publication.select']);
+    for (const row of rows) {
+      const event = row.envelope, data = event?.data, receipt = data?.receipt;
+      if (!event || !data || !receipt || event.specversion !== '1.0'
+        || event.source !== 'https://rezics.com/services/main' || event.id !== row.event_id
+        || data.batchId !== row.batch_id || data.routingEpoch !== row.routing_epoch
+        || data.sourcePosition?.dataEpoch !== position.dataEpoch || data.sourcePosition.sequence !== row.sequence
+        || !actions.has(receipt.action) || !receipt.work
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(receipt.work)) return null;
+      batches.set(row.sequence, [...(batches.get(row.sequence) ?? []), row]);
+      works.add(receipt.work);
+      if (receipt.action === 'work.create' && receipt.outcome === 'succeeded') created.add(receipt.work);
+    }
+    if (batches.size !== Number(count)) return null;
+    let next = BigInt(after) + 1n;
+    for (const [sequence, batch] of batches) {
+      if (BigInt(sequence) !== next++ || batch.some(row => row.event_count !== batch.length
+        || row.batch_id !== batch[0]!.batch_id || row.routing_epoch !== batch[0]!.routing_epoch)
+        || new Set(batch.map(row => row.event_id)).size !== batch.length
+        || batch.map(row => row.envelope!.data.ordinal).sort((a, b) => a - b)
+          .some((ordinal, index) => ordinal !== index)) return null;
+    }
+    return { works: [...works].sort(), created: [...created].sort() };
+  }
+}
+
+/** Later edits to a Work appended during this build are still outside its pin.
+ * Only a proved birth after that pin permits retaining the existing checkpoint. */
+export async function discoveryAppendOnly(session: WorkReadSession, changes: DiscoveryChanges, sequence: string) {
+  const check = changes.works.filter(work => !changes.created.includes(work));
+  if (check.length > DISCOVERY_REFRESH_INPUT_COST.birthRows) return false;
+  if (!check.length) return true;
+  const rows = await session.query(`SELECT DISTINCT ?work WHERE {
+    VALUES ?work { ${check.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.revisions)} { ?birth a rv:RevisionAnchor ; rv:component ?work ;
+      rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:sequence ?born .
+      FILTER(?born > ${sequence}) FILTER NOT EXISTS { ?birth rv:predecessor ?previous } }
+  } LIMIT ${check.length + 1}`, check.length);
+  return new Set(rows.flatMap(row => row.work ? [row.work.value] : [])).size === check.length
+    && rows.every(row => !!row.work && check.includes(row.work.value));
+}
 
 const epochWidth = 1n << 63n;
 export function discoveryRecentOrder(epoch: number, sequence: string): string {

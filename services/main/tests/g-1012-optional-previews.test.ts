@@ -73,6 +73,16 @@ test('G1012: an ambiguous Agent name is withheld without discarding unrelated cr
   expect(names.has(id(1))).toBe(false);
   expect(names.get(id(2))).toEqual({ displayName: 'Healthy', handle: 'healthy' });
   await expect(namedDiscoveryCredits(reader, [credit(id(1)), credit(id(2))])).rejects.toBeInstanceOf(WorkReadUnavailable);
+  const handles = session({ query: async () => [
+    { agent: field(id(1)), displayName: field('Affected') },
+    { agent: field(id(2)), displayName: field('Healthy') },
+  ], deps: { agentHandles: { current: async (agent: string) => {
+    if (agent === id(1)) throw new WorkReadUnavailable('Handle owner unavailable');
+    return 'healthy';
+  } } } });
+  const named = await namedDiscoveryCredits(handles, [credit(id(1)), credit(id(2))], 20, true);
+  expect(named.has(id(1))).toBe(false);
+  expect(named.get(id(2))).toEqual({ displayName: 'Healthy', handle: 'healthy' });
 });
 
 test('G1012: optional source bindings are fenced after names, so removal affects only that Work', async () => {

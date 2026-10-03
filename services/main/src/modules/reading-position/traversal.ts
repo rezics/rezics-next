@@ -175,16 +175,19 @@ export class ReadingPositionTraversal {
     if (!items.length) return;
     const values = `VALUES (?occurrence ?parent ?segmentKey ?orderKey) {
       ${items.map(item => `(${iri(item.occurrence)} ${iri(item.parent)} ${lit(item.segmentKey)} ${lit(item.orderKey)})`).join(' ')} }`;
+    const segments = new Map(items.map(item => [`${item.parent}\0${item.segmentKey}`, item]));
+    const segmentValues = `VALUES (?parent ?segmentKey) {
+      ${[...segments.values()].map(item => `(${iri(item.parent)} ${lit(item.segmentKey)})`).join(' ')} }`;
     // These comparisons need both the VALUES row and the graph bindings.
     // A FILTER inside GRAPH cannot see the sibling VALUES group's keys:
     // https://www.w3.org/TR/sparql11-query/#scopeFilters
     const rows = await this.session.query(`# reading-position:ordinals
       SELECT ?occurrence (COALESCE(?prior, 0) + COALESCE(?local, 0) + 1 AS ?ordinal) WHERE {
         ${values}
-        OPTIONAL { SELECT ?occurrence (SUM(?count) AS ?prior) WHERE { ${values} GRAPH ${current} {
+        OPTIONAL { SELECT ?parent ?segmentKey (SUM(?count) AS ?prior) WHERE { ${segmentValues} GRAPH ${current} {
           ?before a rv:OrderSegment ; rv:generation ${iri(meta.generation!)} ; rv:parent ?parent ;
             rv:segmentKey ?key ; rv:memberCount ?count .
-        } FILTER(?key < ?segmentKey) } GROUP BY ?occurrence }
+        } FILTER(?key < ?segmentKey) } GROUP BY ?parent ?segmentKey }
         OPTIONAL { SELECT ?occurrence (COUNT(?earlier) AS ?local) WHERE { ${values} GRAPH ${current} {
           ?segment rv:generation ${iri(meta.generation!)} ; rv:parent ?parent ; rv:segmentKey ?segmentKey .
           ?earlier a rv:OccurrencePlacement ; rv:generation ${iri(meta.generation!)} ;

@@ -4,6 +4,7 @@ import { publicAgent } from '../profiles/read.ts';
 import { allocateAgentHandle } from '../agent/handle.ts';
 import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
+import { optionalPreview } from '../query/optional-preview.ts';
 
 /** One bounded source query. External references retain their explicit absent
  * name; Agent names and handles are hydrated at read time from current owners. */
@@ -68,8 +69,10 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     }
     const agent = row.agent!.value;
     seen.add(agent);
-    const handle = await session.deps.agentHandles?.current(agent)
+    const readHandle = async () => await session.deps.agentHandles?.current(agent)
       ?? row.handle?.value ?? allocateAgentHandle(agent);
+    const handle = preview ? await optionalPreview(session, readHandle) : await readHandle();
+    if (handle === null) continue;
     named.set(agent, { displayName: row.displayName!.value, handle });
   }
   for (const agent of damaged) named.delete(agent);

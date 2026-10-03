@@ -234,6 +234,23 @@ export async function readSegments(env: WorkActivationEnvironment, generation: s
   return segments.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 }
 
+/** One exact segment or an indexed occurrence's segment; no sibling inventory. */
+export async function readSegment(env: WorkActivationEnvironment, generation: string,
+  selector: { segment: string } | { occurrence: string }): Promise<SegmentState> {
+  const scope = 'segment' in selector ? `BIND(${iri(selector.segment)} AS ?segment)`
+    : `${iri(placementIri(generation, selector.occurrence))} rv:orderSegment ?segment .`;
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?segment ?parent ?key ?count WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${scope}
+      ?segment a rv:OrderSegment ; rv:generation ${iri(generation)} ; rv:parent ?parent ;
+        rv:segmentKey ?key ; rv:memberCount ?count . } } LIMIT 2`, 8192);
+  const rows = result.results?.bindings ?? [];
+  if (rows.length !== 1 || !rows[0]?.segment || !rows[0].parent || !rows[0].key
+    || !/^\d+$/.test(rows[0].count?.value ?? '')) throw new CompositionCorrupt('Composition order segment is ambiguous');
+  return { segment: rows[0].segment.value, parent: rows[0].parent.value,
+    key: rows[0].key.value, count: Number(rows[0].count!.value) };
+}
+
 export interface PublishedVariant { target: string; variant: string; decision: string; revision: string }
 
 /** Public eligible Content publications of a bounded target set. */

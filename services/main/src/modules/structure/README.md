@@ -40,6 +40,17 @@ read pages at most 100 children from the immutable revision root and reports
 page reads. A whole Structure seal is limited to 4,096 placements; larger seals
 need the stage job in `stage-schema.ts` and migration 030.
 
+Insertion seeks the first, last or neighboring segment through the retained
+order tree, then reads that exact graph segment and at most 32 members. It
+reads O(tree height) pages per seek, rather than every sibling segment. Open
+segment boundaries advance within the existing 32-digit key space; a dense
+interior split redistributes only its own segment between its neighbors. If
+that local interval cannot admit another bounded key, staged replacement is
+required; the interactive command never renumbers an entire parent. Removing
+an occurrence probes at most 17 retained children plus the current command's
+pending placements to reject a nonempty group. Subtree-height validation for
+moving a group still visits that group's descendants.
+
 Recipe measure replacement accepts at most 64 format-checked measures and one
 expected head. It reads one root manifest, writes one new root while reusing its
 record and order pages, and commits one revision, receipt and outbox event under
@@ -71,13 +82,15 @@ an exact read returns the retained pins; it does not infer a private reader's
 Realm. `stage.ts` provides RustFS record-page upload, a lease-fenced Content DB
 checkpoint, resume, seal and cancellation. The manifest builder caps a stage at
 4,096 records. The activation route rechecks the
-Structure head, Work edit grant and every target read grant before it switches
+Structure head, Work edit grant and each distinct target read grant before it switches
 the selected generation with a graph receipt. Activation projects at most 30
 records per graph receipt (below the 100-focus command bound), checkpoints each
 committed batch in Content, resumes from that checkpoint, and switches the
 selected generation only after the complete manifest is projected. Cancellation
 after graph start records a graph receipt and marks the unselected generation
 cancelled; it never changes the active head.
+Seal and activation deduplicate target authorization within their own request,
+then discard those decisions; revocation after seal is rechecked by activation.
 Context-specific variant resolution and whole-Structure export remain separate
 work. The export clause belongs to G-092's export owner.
 
