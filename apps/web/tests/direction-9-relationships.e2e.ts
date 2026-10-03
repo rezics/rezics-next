@@ -80,21 +80,7 @@ async function authenticate(page: Page, member: { email: string; password: strin
   try {
     await sessionActor();
   } catch {
-    // The imported form helper expects a fresh Account sign-in, rather than an
-    // automatic OAuth return through expired cached Main credentials.
-    await page.context().clearCookies();
-    // Aspire advertises 127.0.0.1 for Accounts even when the browser suite uses
-    // localhost. The shared sign-in helper matches that origin exactly.
-    const configured = process.env.ACCOUNT_ORIGIN;
-    const accounts = new URL(configured ?? 'http://127.0.0.1:3004');
-    if (accounts.hostname === 'localhost') accounts.hostname = '127.0.0.1';
-    process.env.ACCOUNT_ORIGIN = accounts.origin;
-    try {
-      await signInAtAccounts(page, next, member);
-    } finally {
-      if (configured === undefined) delete process.env.ACCOUNT_ORIGIN;
-      else process.env.ACCOUNT_ORIGIN = configured;
-    }
+    await signInAtAccounts(page, next, member);
   }
   await expect(page).toHaveURL(next);
   const actor = await sessionActor();
@@ -208,6 +194,7 @@ async function checkSidebar(
       await evidence(page, base.info(), `sidebar-${title}-${followed}-${pinned}`);
   }
   if (phone) {
+    if (followed && pinned) await evidence(page, base.info(), 'phone-sidebar-pinned');
     await nav.getByRole('button', { name: shell.close, exact: true }).click();
     await expect(nav).toBeHidden();
   }
@@ -289,7 +276,9 @@ test.beforeAll(async ({ browser }, info) => {
     const path = authStatePath(String(info.project.use.baseURL), member);
     const context = await browser.newContext({
       baseURL: info.project.use.baseURL,
-      ...(existsSync(path) ? { storageState: path } : {}),
+      // Exercise the imported Accounts helper once with a fresh reader session;
+      // administrator setup may reuse its independently refreshed cache.
+      ...(member.email !== auth.member.email && existsSync(path) ? { storageState: path } : {}),
     });
     contexts.push(context);
     const page = await context.newPage();
@@ -390,6 +379,12 @@ for (const [localeIndex, locale] of locales.entries())
               navigation,
             });
         });
+        // The full matrix can outlive an access token. Navigate/refresh this
+        // context before its first public setup read, as the main suite does.
+        expect(
+          await authenticate(page, credentials().member),
+          'the refreshed session retains the fixture Agent',
+        ).toBe(fixture.actor);
       });
       test.afterEach(async ({ page }, info) => {
         await info.attach('browser-health', {
@@ -645,6 +640,10 @@ for (const [localeIndex, locale] of locales.entries())
       test('standalone site: public Zone-only creation, one-hop site aliases and no community surface', async ({
         page,
       }, info) => {
+        expect(
+          await authenticate(setupContext.pages()[0]!, setupCredentials()!),
+          'the setup session retains the Space owner',
+        ).toBe(setupActor);
         const created = await setupApi
           .reusable(`g-1000:${fixture.actor}:${locale}:${view.name}`)
           .write<{ space: string; zone: string; capabilities: string[] }>('/spaces', {
