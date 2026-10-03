@@ -3,7 +3,7 @@
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 import { EntityPicker, type EntityPickerItem, type EntityPickerLoad, type EntityPickerSelection } from '@rezics/ui/entity-picker';
 import { browserMainApi } from '../api/browser.ts';
-import { browseTypes, discoveryApi } from '../discover/api.ts';
+import { browseTypeCondition, discoveryApi } from '../discover/api.ts';
 import { browseMessages } from '../discover/browse-messages.ts';
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
@@ -74,7 +74,7 @@ export function RealmSubmit({ agent, work, texts, realms, open, locale, messages
     const page = await discoveryApi(main ?? browserMainApi(), locale).resources({ profile: 'resource-list-v1',
       context: 'global', scope: { kind: 'all' }, sort: q ? 'relevance' : 'newest', limit: 20,
       ...(q ? { q } : {}), ...(cursor ? { cursor } : {}),
-      filter: { all: [{ facet: 'type', any: [browseTypes.communities] }] } });
+      filter: { all: [browseTypeCondition('communities')] } });
     return { ...page, items: page.items.map(item => ({ value: item.id, label: item.name.value,
       disabled: open.includes(item.id), realm: realms.ok && realms.data.find(option => option.id === item.id)
         || { id: item.id, name: item.name, reviewMode: null } })) };

@@ -20,6 +20,12 @@ export const typePrimaryActions = ['read', 'install', 'copy', 'watch', 'visit'] 
 export const typeCreationPolicies = ['administrator', 'contributor'] as const;
 export const typeWikiSegments = ['characters', 'places', 'events'] as const;
 
+export interface TypeBrowseCategory {
+  id: string;
+  order: number;
+  labels: Readonly<Record<(typeof typeLocales)[number], string>>;
+}
+
 export interface TypeMetadata {
   base: (typeof typeBases)[number];
   creation: (typeof typeCreationPolicies)[number];
@@ -31,6 +37,8 @@ export interface TypeMetadata {
   priority: number;
   /** Optional franchise-wiki placement for a descriptive resource type. */
   wikiSegment?: (typeof typeWikiSegments)[number];
+  /** Structural browse selection, independent of descriptive Work subtypes. */
+  browse?: TypeBrowseCategory;
   labels: Readonly<Record<(typeof typeLocales)[number], { one: string; other: string }>>;
 }
 
@@ -52,6 +60,34 @@ const knownFields = (value: object, fields: readonly string[], location: string)
   const extra = Object.keys(value).find((key) => !fields.includes(key));
   if (extra) throw new Error(`Unsupported Type field ${extra} on ${location}`);
 };
+const printableLabel = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  !!value &&
+  value === value.trim() &&
+  value.length <= 64 &&
+  !/[\u0000-\u001f\u007f]/u.test(value);
+
+function checkedBrowse(browse: TypeBrowseCategory, type: string): TypeBrowseCategory {
+  knownFields(browse, ['id', 'order', 'labels'], `${type} browse`);
+  if (
+    !/^[a-z][a-z0-9-]{0,63}$/.test(browse.id) ||
+    browse.id === 'all' ||
+    !Number.isSafeInteger(browse.order) ||
+    browse.order < 0
+  )
+    throw new Error(`Invalid browse category for ${type}`);
+  knownFields(browse.labels, typeLocales, `${type} browse labels`);
+  for (const locale of typeLocales)
+    if (!printableLabel(browse.labels[locale]))
+      throw new Error(`${type} needs a ${locale} browse label`);
+  return {
+    id: browse.id,
+    order: browse.order,
+    labels: Object.fromEntries(
+      typeLocales.map((locale) => [locale, browse.labels[locale]]),
+    ) as TypeBrowseCategory['labels'],
+  };
+}
 
 /** Read the owning Work shape's sh:in, never an unrelated revision shape's rdf:type. */
 export function profileWorkTypes(profile: ProfileDefinition): string[] {
@@ -102,6 +138,7 @@ export function compileTypes(
           'cover',
           'priority',
           'wikiSegment',
+          'browse',
           'labels',
         ],
         type,
@@ -126,14 +163,7 @@ export function compileTypes(
         knownFields(forms, ['one', 'other'], `${type} ${locale} labels`);
         for (const form of ['one', 'other'] as const) {
           const label = forms[form];
-          if (
-            typeof label !== 'string' ||
-            !label ||
-            label !== label.trim() ||
-            label.length > 64 ||
-            /[\u0000-\u001f\u007f]/u.test(label)
-          )
-            throw new Error(`${type} needs a ${locale} ${form} label`);
+          if (!printableLabel(label)) throw new Error(`${type} needs a ${locale} ${form} label`);
         }
       }
       return {
@@ -148,6 +178,7 @@ export function compileTypes(
         cover: metadata.cover,
         priority: metadata.priority,
         ...(metadata.wikiSegment ? { wikiSegment: metadata.wikiSegment } : {}),
+        ...(metadata.browse !== undefined ? { browse: checkedBrowse(metadata.browse, type) } : {}),
         labels: Object.fromEntries(
           typeLocales.map((locale) => [locale, metadata.labels[locale]]),
         ) as TypeMetadata['labels'],
@@ -156,6 +187,15 @@ export function compileTypes(
     .sort((a, b) => a.type.localeCompare(b.type));
   if (new Set(entries.map((entry) => entry.type)).size !== entries.length)
     throw new Error('Duplicate Type IRI');
+  const categories = new Map<string, string>();
+  for (const entry of entries) {
+    if (!entry.browse) continue;
+    const metadata = JSON.stringify(entry.browse);
+    const prior = categories.get(entry.browse.id);
+    if (prior !== undefined && prior !== metadata)
+      throw new Error(`Conflicting browse metadata for ${entry.browse.id}`);
+    categories.set(entry.browse.id, metadata);
+  }
   for (const base of typeBases) {
     if (entries.filter((entry) => entry.base === base && entry.default).length !== 1) {
       throw new Error(`Type base ${base} needs one default entry`);

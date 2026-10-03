@@ -1,7 +1,8 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApi } from '../api/main.ts';
-import { browseTypes, discoveryApi } from '../discover/api.ts';
+import { browseTypeCondition, discoveryApi } from '../discover/api.ts';
+import { readTypes } from '../catalogue/types-read.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { chapterVariant } from './content-api.ts';
 import { editorValue } from '../document-editor/body.ts';
@@ -556,9 +557,12 @@ export async function readRealmChoices(
   locale: UiLocale,
 ): Promise<Loaded<RealmOption[]>> {
   const main = await mainApi();
-  const loaded: Loaded<Awaited<ReturnType<ReturnType<typeof discoveryApi>['resources']>>> = await discoveryApi(main, locale)
-    .resources({ profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 20,
-      filter: { all: [{ facet: 'type', any: [browseTypes.communities] }] } })
+  const loaded: Loaded<Awaited<ReturnType<ReturnType<typeof discoveryApi>['resources']>>> = await (async () => {
+    await readTypes();
+    return discoveryApi(main, locale)
+      .resources({ profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest', limit: 20,
+        filter: { all: [browseTypeCondition('communities')] } });
+  })()
     .then(data => ({ ok: true as const, data }), () => ({ ok: false as const, failure: 'unavailable' as const }));
   if (!loaded.ok) return loaded;
   const info = await realmInfo(

@@ -1,7 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import {
   BrowseReadError,
-  browseTypes,
   checkedPage,
   discoveryApi,
   type ListPage,
@@ -16,10 +15,14 @@ import {
   parseBrowseState,
 } from '../features/discover/browse-state.ts';
 import { EntityPickerSource } from '../../../packages/ui/src/components/entity-picker-state.ts';
+import { browseCategories } from '../features/catalogue/registry.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const iri = (n: number) => `https://rezics.com/id/${id(n)}`;
 const params = (href: string) => Object.fromEntries(new URL(href, 'http://test').searchParams);
+const categoryTypes = (id: string) =>
+  browseCategories().find((category) => category.id === id)!.types;
 const page = <T>(items: T[], nextCursor: string | null = null): ListPage<T> => ({
   items,
   nextCursor,
@@ -27,8 +30,9 @@ const page = <T>(items: T[], nextCursor: string | null = null): ListPage<T> => (
   count: { value: items.length, kind: nextCursor ? 'at-least' : 'exact' },
 });
 describe('G-945 one browse', () => {
+  beforeEach(seedServedTypes);
   test('all seven tabs use one Query; structural types are Facet Conditions', () => {
-    for (const tab of browseTabs) {
+    for (const tab of browseTabs()) {
       const query = browseQuery({ ...emptyBrowse, tab });
       expect(query).toMatchObject({
         profile: 'resource-list-v1',
@@ -38,7 +42,7 @@ describe('G-945 one browse', () => {
         sort: 'newest',
       });
       expect(query.filter).toEqual(
-        tab === 'all' ? undefined : { all: [{ facet: 'type', any: [browseTypes[tab]] }] },
+        tab === 'all' ? undefined : { all: [{ facet: 'type', any: categoryTypes(tab) }] },
       );
     }
   });
@@ -63,7 +67,7 @@ describe('G-945 one browse', () => {
       cursor: 'opaque:second',
       filter: {
         all: [
-          { facet: 'type', any: [browseTypes.sites] },
+          { facet: 'type', any: categoryTypes('sites') },
           { facet: 'concept', any: [iri(1), iri(2)] },
           { facet: 'concept', none: [iri(3)] },
         ],
@@ -133,7 +137,7 @@ describe('G-945 one browse', () => {
     });
     expect(browseQuery(state!).filter).toEqual({
       all: [
-        { facet: 'type', any: [browseTypes.communities] },
+        { facet: 'type', any: categoryTypes('communities') },
         { facet: 'concept', all: [iri(1)] },
       ],
     });
@@ -210,7 +214,10 @@ describe('G-945 served browse contract', () => {
         'rating-populations': {
           get: async (options: unknown) => {
             input = options;
-            return { data: { ...page([]), profile: 'rating-populations-v1', target: iri(99) }, error: null };
+            return {
+              data: { ...page([]), profile: 'rating-populations-v1', target: iri(99) },
+              error: null,
+            };
           },
         },
       },

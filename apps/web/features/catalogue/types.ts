@@ -9,15 +9,21 @@ import type { browserMainApi } from '../api/browser.ts';
 // awaits before anything renders; the browser's copy is seeded by `TypeRegistryProvider`.
 
 type Main = ReturnType<typeof browserMainApi>;
-type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
+type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
+  ? NonNullable<Data>
+  : never;
 export type TypeRegistry = Ok<Main['v1']['types']['get']>;
 export type TypeEntry = TypeRegistry['types'][number];
 export type TypeBase = TypeEntry['base'];
 export type PrimaryAction = TypeEntry['primaryAction'];
 export type Presentation = TypeEntry['presentation'];
 
-interface Snapshot { digest: string; entries: readonly TypeEntry[]; byType: ReadonlyMap<string, TypeEntry>;
-  defaults: ReadonlyMap<TypeBase, TypeEntry> }
+interface Snapshot {
+  digest: string;
+  entries: readonly TypeEntry[];
+  byType: ReadonlyMap<string, TypeEntry>;
+  defaults: ReadonlyMap<TypeBase, TypeEntry>;
+}
 
 let snapshot: Snapshot | null = null;
 
@@ -28,14 +34,24 @@ let snapshot: Snapshot | null = null;
  */
 export function seedTypes(registry: TypeRegistry): void {
   if (snapshot?.digest === registry.digest) return;
-  snapshot = { digest: registry.digest, entries: registry.types,
-    byType: new Map(registry.types.map(entry => [entry.type, entry])),
-    defaults: new Map(registry.types.filter(entry => entry.default).map(entry => [entry.base, entry])) };
+  snapshot = {
+    digest: registry.digest,
+    entries: registry.types,
+    byType: new Map(registry.types.map((entry) => [entry.type, entry])),
+    defaults: new Map(
+      registry.types.filter((entry) => entry.default).map((entry) => [entry.base, entry]),
+    ),
+  };
 }
 
 /** Forgets the registry, for tests that start from an unloaded web. */
 export function clearTypes(): void {
   snapshot = null;
+}
+
+/** The currently served entries; an unread registry supplies no invented types. */
+export function registryEntries(): readonly TypeEntry[] {
+  return snapshot?.entries ?? [];
 }
 
 /** The entry that names a set of types: the lowest priority among the known ones, else the base's default. */
@@ -44,13 +60,18 @@ export function typeEntry(types: readonly string[], base: TypeBase = 'work'): Ty
   let best: TypeEntry | null = null;
   for (const type of types) {
     const entry = snapshot.byType.get(type);
-    if (entry && !entry.default && entry.base === base && (!best || entry.priority < best.priority)) best = entry;
+    if (entry && !entry.default && entry.base === base && (!best || entry.priority < best.priority))
+      best = entry;
   }
   return best ?? snapshot.defaults.get(base) ?? null;
 }
 
 /** An entry's word in a locale. */
-export function entryLabel(entry: TypeEntry, locale: UiLocale, form: 'one' | 'other' = 'one'): string {
+export function entryLabel(
+  entry: TypeEntry,
+  locale: UiLocale,
+  form: 'one' | 'other' = 'one',
+): string {
   return entry.labels[locale][form];
 }
 
@@ -59,14 +80,22 @@ export function entryLabel(entry: TypeEntry, locale: UiLocale, form: 'one' | 'ot
  * the registry does not know reads as its base's default ("Work"); a Work with
  * no type at all has no label, and callers name it by its place (a chapter).
  */
-export function typeLabel(types: readonly string[], locale: UiLocale, form: 'one' | 'other' = 'one'): string | null {
+export function typeLabel(
+  types: readonly string[],
+  locale: UiLocale,
+  form: 'one' | 'other' = 'one',
+): string | null {
   if (!types.length) return null;
   const entry = typeEntry(types);
   return entry ? entryLabel(entry, locale, form) : null;
 }
 
 /** The registry's word for one type IRI, or null when it is not an admitted non-default type. */
-export function labelOfType(type: string, locale: UiLocale, form: 'one' | 'other' = 'one'): string | null {
+export function labelOfType(
+  type: string,
+  locale: UiLocale,
+  form: 'one' | 'other' = 'one',
+): string | null {
   const entry = snapshot?.byType.get(type);
   return entry && !entry.default ? entryLabel(entry, locale, form) : null;
 }
@@ -83,10 +112,14 @@ export function coverOf(types: readonly string[]): WorkCoverKind {
   const entry = typeEntry(types);
   if (!entry || entry.presentation === 'media') return 'document';
   switch (entry.cover) {
-    case 'portrait': return entry.presentation === 'book' ? 'book' : 'document';
-    case 'landscape': return entry.presentation === 'game' ? 'game' : 'document';
-    case 'square': return entry.presentation === 'recipe' ? 'recipe' : 'package';
-    default: return 'document';
+    case 'portrait':
+      return entry.presentation === 'book' ? 'book' : 'document';
+    case 'landscape':
+      return entry.presentation === 'game' ? 'game' : 'document';
+    case 'square':
+      return entry.presentation === 'recipe' ? 'recipe' : 'package';
+    default:
+      return 'document';
   }
 }
 
@@ -100,6 +133,7 @@ export const isUseAction = (action: PrimaryAction) => action === 'install' || ac
 
 /** The Work types a person can create, in a stable order (by English name; priority only ranks a multiply typed Work). */
 export function creatableTypes(): readonly TypeEntry[] {
-  return [...snapshot?.entries ?? []].filter(entry => entry.creatable && entry.creation === 'contributor'
-    && entry.base === 'work').sort((a, b) => a.labels.en.one.localeCompare(b.labels.en.one));
+  return [...(snapshot?.entries ?? [])]
+    .filter((entry) => entry.creatable && entry.creation === 'contributor' && entry.base === 'work')
+    .sort((a, b) => a.labels.en.one.localeCompare(b.labels.en.one));
 }

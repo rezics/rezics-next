@@ -4,12 +4,13 @@ import type { EntityPickerLoad } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { DiscoverBrowseConditions } from '../query/condition-bar.tsx';
+import { browseCategories } from '../catalogue/registry.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { RetryButton } from '../work-page/retry-button.tsx';
 import type { SectionReason } from './api.ts';
 import { browseMessages } from './browse-messages.ts';
-import { browseHref, browseTabs, changeBrowse, type BrowseState } from './browse-state.ts';
+import { browseHref, changeBrowse, type BrowseState } from './browse-state.ts';
 import type { BrowseResult, LoadedBrowse } from './load.ts';
 import { messages } from './messages.ts';
 import { BrowseContinuation, ResourceList } from './resource-list.tsx';
@@ -74,6 +75,10 @@ export function DiscoverView({
 }: DiscoverPageProps) {
   const t = browseMessages[locale],
     copy = messages[locale];
+  const tabs = [
+    { id: 'all', label: t.all },
+    ...browseCategories().map((category) => ({ id: category.id, label: category.labels[locale] })),
+  ];
   if (!state)
     return (
       <PageContainer className="grid gap-5">
@@ -117,7 +122,7 @@ export function DiscoverView({
           load={topicLoad}
         />
         <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
-          {browseTabs.map((tab) => (
+          {tabs.map(({ id: tab, label }) => (
             <Link
               key={tab}
               href={browseHref(changeBrowse(state, { tab }))}
@@ -126,7 +131,7 @@ export function DiscoverView({
             hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-foreground
             aria-[current=page]:text-background"
             >
-              {t[tab]}
+              {label}
             </Link>
           ))}
         </nav>
@@ -174,7 +179,10 @@ export function DiscoverView({
       ) : null}
       {results ? (
         results.ok ? (
-          <section aria-label={t[state.tab]} className="grid gap-4">
+          <section
+            aria-label={tabs.find((tab) => tab.id === state.tab)?.label ?? t.type}
+            className="grid gap-4"
+          >
             <ResourceList items={results.data.items} locale={locale} avatarQuery={avatarQuery} />
             <BrowseContinuation page={results.data} state={state} locale={locale} />
           </section>
