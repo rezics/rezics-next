@@ -2,13 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { Client,Pool } from 'pg';
-import { NameRegistry } from '../../services/main/src/modules/address/registry.ts';
-import { migrateGraphNames } from '../../services/main/src/modules/address/migrate.ts';
+import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, RV, initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../../services/main/src/modules/work/restore-lineage.ts';
-import { migrateFixtureOwners } from '../fixture/migrate.ts';
+import { migrateFixtureOwners, migrateOwnerData, type OwnerMigrationEvidence } from '../fixture/migrate.ts';
 import { ownerReady } from '../load/restore.ts';
 import { projectName, readEnv, stackDirectory, type StackOptions } from './config.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from './release-manifest.ts';
@@ -27,6 +25,7 @@ export interface FormatMarker {
   state: 'ready' | 'upgrade-pending';
   targetFormatVersion?: number;
   artifactDigest?: string;
+  ownerMigrations?: OwnerMigrationEvidence[];
 }
 
 function markerPath(options: StackOptions): string {
@@ -97,6 +96,7 @@ export interface InstallationEvidence {
   ready: string[];
   fusekiImageId: string;
   artifactDigest?: string;
+  ownerMigrations: OwnerMigrationEvidence[];
 }
 
 export interface ReleaseArtifactMigrations {
@@ -156,11 +156,10 @@ export async function installRelease(options: StackOptions,
   const initialized = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch ?epoch } }`);
   if (!initialized.boolean) await initializeFreshGraph(fuseki, lineage);
   await assertGraphAdmissionOpen(fuseki, lineage);
-  const namePool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
-  try { await migrateGraphNames({ fuseki,lineage,addresses: new NameRegistry(namePool),
-    objectDirectory: apps.MAIN_OBJECT_DIRECTORY! }); }
-  catch (error) { console.warn('Name import deferred; identity addresses remain available',error); }
-  finally { await namePool.end(); }
+  const ownerMigrations = await migrateOwnerData(apps);
+  if (ownerMigrations.some(migration => migration.status === 'deferred')) {
+    console.error('RELEASE OWNER MIGRATIONS INCOMPLETE: graph-name import must be retried; see release-format.json and installation evidence', ownerMigrations);
+  }
   for (const [key, database] of [
     ['ACCOUNT_DATABASE_URL', 'account'], ['ACCESS_DATABASE_URL', 'access'],
     ['CONTENT_DATABASE_URL', 'content'], ['ACCOUNT_RELAY_DATABASE_URL', 'relay'],
@@ -173,11 +172,11 @@ export async function installRelease(options: StackOptions,
   } finally { await content.end(); }
   const graph = await fuseki.query('ASK {}');
   if (graph.boolean !== true) throw new Error('Fuseki graph query unavailable');
-  if (!existing) saveFormatMarker(options, { schema: 'rezics-format-marker-v1',
+  saveFormatMarker(options, { schema: 'rezics-format-marker-v1',
     formatVersion: releaseManifest.formatVersion, releaseDigest: releaseDigest(),
     fusekiImageId: imageId, dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH!,
-    state: 'ready', ...(artifact ? { artifactDigest: artifact.digest } : {}) });
+    state: 'ready', ownerMigrations, ...(artifact ? { artifactDigest: artifact.digest } : {}) });
   return { releaseDigest: releaseDigest(), formatVersion: releaseManifest.formatVersion,
     appliedMigrations, ready: ['account', 'access', 'content', 'relay', 'fuseki'], fusekiImageId: imageId,
-    ...(artifact ? { artifactDigest: artifact.digest } : {}) };
+    ownerMigrations, ...(artifact ? { artifactDigest: artifact.digest } : {}) };
 }

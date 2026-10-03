@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { createServer } from 'node:net';
-import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph, GRAPHS, DATASET, RV } from '../../services/main/src/modules/work/activate.ts';
@@ -18,6 +17,7 @@ import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
+import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -310,39 +310,6 @@ async function install(): Promise<void> {
   console.log('Toolchain installed');
 }
 
-async function migrateSql(url: string, path: string, key: string): Promise<void> {
-  const client = new Client({ connectionString: url });
-  await client.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
-      name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-    const applied = await client.query('SELECT 1 FROM public.rezics_local_migration WHERE name = $1', [key]);
-    if (!applied.rowCount) {
-      await client.query(readFileSync(path, 'utf8'));
-      await client.query('INSERT INTO public.rezics_local_migration(name) VALUES ($1)', [key]);
-    }
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  }
-  finally { await client.end(); }
-}
-
-async function migrateApps(apps: Record<string, string>): Promise<void> {
-  for (const [database, directory] of [
-    ['ACCESS_DATABASE_URL', 'services/main/migrations/access'],
-    ['ACCOUNT_RELAY_DATABASE_URL', 'services/main/migrations/relay'],
-  ] as const) {
-    const base = join(root, directory);
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: base })].sort(compareMigrationPaths)) {
-      await migrateSql(apps[database], join(base, file), `${directory}/${file}`);
-    }
-  }
-  run('bun', ['services/account/src/migrate.ts'], { ...process.env, ...apps });
-}
-
 async function initializeGraph(apps: Record<string, string>): Promise<void> {
   const fuseki = new FusekiClient(apps.FUSEKI_URL, apps.FUSEKI_MAINTENANCE_TOKEN,
     apps.FUSEKI_COMMAND_TOKEN);
@@ -376,14 +343,19 @@ const overridesFile = join(root, '.env.dev');
 /** Variable names whose values are masked in output and passed to Aspire as secrets. */
 const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$|^OTEL_EXPORTER_OTLP_HEADERS$/;
 
+async function prepareDevOwners(apps: Record<string, string>): Promise<void> {
+  await migrateFixtureOwners(apps);
+  await initializeGraph(apps);
+  assertOwnerMigrationsComplete(await migrateOwnerData(apps));
+}
+
 /** Start storage, apply migrations, check graph lineage and register the local
  * web OAuth client. Returns the application environment: the stack's derived
  * variables, the values the web auth fixture issued and personal overrides from
  * the repository-root .env.dev. */
 async function prepareDev(options: StackOptions): Promise<Record<string, string>> {
   const { apps } = await stackUp(options);
-  await migrateApps(apps);
-  await initializeGraph(apps);
+  await prepareDevOwners(apps);
   const search = new FusekiClient(apps.FUSEKI_URL);
   const health = await search.commandHealth() as { textIndexUncertain?: boolean };
   if (health.textIndexUncertain === true) {
@@ -594,7 +566,16 @@ async function main(): Promise<void> {
   if (command === 'dev:urls') { devUrls(); return; }
   if (command === 'dev:env') { devEnv(args); return; }
   if (command === 'stack:up') { await stackUp(parseOptions(args)); return; }
-  if (command === 'dev:prepare') { await devPrepare(parseOptions(args)); return; }
+  if (command === 'dev:prepare') {
+    // A worker can prepare an already-running shared stack from a private local
+    // environment copy, without recreating its containers or writing its config.
+    if (args[0] === '--existing-env') {
+      if (args.length !== 2) throw new Error('dev:prepare --existing-env requires one environment file');
+      await prepareDevOwners(readEnv(resolve(root, args[1]!)));
+      console.log('Existing stack owner migrations complete');
+    } else await devPrepare(parseOptions(args));
+    return;
+  }
   if (command === 'stack:backup') { await stackBackup(parseOptions(args)); return; }
   if (command === 'stack:logs') {
     const options = parseOptions(args);

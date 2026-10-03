@@ -1,55 +1,41 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { compareMigrationPaths } from '../lib/migration-order.ts';
-import { Client, Pool } from 'pg';
-import { migrateContent } from '../../services/content/src/migrate.ts';
-import { root, run } from './stack.ts';
+import { Pool } from 'pg';
+import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
+import { NameRegistry } from '../../services/main/src/modules/address/registry.ts';
+import { migrateGraphNames } from '../../services/main/src/modules/address/migrate.ts';
+import { migrateOwners } from '../ops/migrate.ts';
 
-const TRACKED = [['ACCESS_DATABASE_URL', 'services/main/migrations/access'],
-  ['ACCOUNT_RELAY_DATABASE_URL', 'services/main/migrations/relay']] as const;
-
-/** The `task dev` ledger, so a restored fixture and a dev stack agree on applied files. */
-async function migrateTracked(url: string, directory: string): Promise<string[]> {
-  const client = new Client({ connectionString: url });
-  await client.connect();
-  const applied: string[] = [];
-  try {
-    await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
-      name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-    for (const file of readdirSync(join(root, directory)).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths)) {
-      const key = `${directory}/${file}`;
-      await client.query('BEGIN');
-      try {
-        const done = await client.query('SELECT 1 FROM public.rezics_local_migration WHERE name = $1', [key]);
-        if (!done.rowCount) {
-          await client.query(readFileSync(join(root, key), 'utf8'));
-          await client.query('INSERT INTO public.rezics_local_migration (name) VALUES ($1)', [key]);
-          applied.push(key);
-        }
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    }
-  } finally { await client.end(); }
-  return applied;
+/** Dev, fixture restore and release share the same locked, idempotent SQL runner.
+ * A release artifact supplies its own root to this runner through installRelease. */
+export async function migrateFixtureOwners(apps: Record<string, string>): Promise<string[]> {
+  return migrateOwners({ ...apps,
+    MAIN_RELAY_DATABASE_URL: apps.MAIN_RELAY_DATABASE_URL ?? apps.ACCOUNT_RELAY_DATABASE_URL });
 }
 
-/** Apply every owner's pending migrations; a fresh build applies all of them. */
-export async function migrateFixtureOwners(apps: Record<string, string>): Promise<string[]> {
-  const applied: string[] = [];
-  for (const [key, directory] of TRACKED) applied.push(...await migrateTracked(apps[key]!, directory));
-  const content = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 1 });
+export interface OwnerMigrationEvidence {
+  owner: 'graph-names';
+  status: 'complete' | 'deferred';
+  reason?: string;
+}
+
+/** Data migrations run after SQL and graph initialization in both entrypoints.
+ * A returned deferral is evidence, never an implicitly successful installation. */
+export async function migrateOwnerData(apps: Record<string, string>): Promise<OwnerMigrationEvidence[]> {
+  const pool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 2,
+    connectionTimeoutMillis: 5_000 });
   try {
-    const before = await content.query<{ n: string }>(`SELECT count(*)::text AS n FROM information_schema.tables
-      WHERE table_schema = 'content' AND table_name = 'schema_migration'`);
-    const versions = before.rows[0]?.n === '1'
-      ? (await content.query<{ version: number }>('SELECT version FROM content.schema_migration')).rows.length : 0;
-    await migrateContent(content);
-    const after = (await content.query<{ version: number }>('SELECT version FROM content.schema_migration')).rows.length;
-    for (let version = versions + 1; version <= after; version++) applied.push(`content:${version}`);
-  } finally { await content.end(); }
-  run('bun', ['services/account/src/migrate.ts'], { ...process.env, ...apps }, 120_000);
-  return applied;
+    const result = await migrateGraphNames({
+      fuseki: new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN,
+        apps.FUSEKI_COMMAND_TOKEN),
+      lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
+      addresses: new NameRegistry(pool), objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
+    });
+    return [{ owner: 'graph-names', status: result.status,
+      ...(result.status === 'deferred' ? { reason: 'Graph-name import is incomplete; resolve the reported import error and rerun owner migrations' } : {}) }];
+  } finally { await pool.end(); }
+}
+
+export function assertOwnerMigrationsComplete(evidence: readonly OwnerMigrationEvidence[]): void {
+  const deferred = evidence.filter(migration => migration.status === 'deferred');
+  if (deferred.length) throw new Error(`Owner migrations deferred: ${deferred.map(migration =>
+    `${migration.owner}: ${migration.reason}`).join('; ')}`);
 }
