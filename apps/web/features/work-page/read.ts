@@ -94,8 +94,8 @@ export function mergedSurvivor(answer: unknown): string | null {
 
 export type ResolvedRef =
   | { kind: 'work'; id: string }
-  /** The slug was renamed, or its Work merged into another: the page moves to the current ref. */
-  | { kind: 'moved'; slug: string }
+  /** The alias was renamed, or its Work merged into another: the page moves to the current ref. */
+  | { kind: 'moved'; key: string }
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
@@ -104,14 +104,14 @@ export function workRefFromAddress(address: ResolvedAddress): ResolvedRef {
   // Main's summary-derived canonical address already selects a merged Work's
   // survivor and current name. Keep it intact instead of taking another UUID hop.
   return mergedSurvivor(address) || address.state === 'redirect'
-    ? { kind: 'moved', slug: addressKey(address.canonical) }
+    ? { kind: 'moved', key: addressKey(address.canonical) }
     : { kind: 'work', id: address.holder.slice(-36) };
 }
 
 /** A `/w/{ref}` segment to a Work UUID. Slugs never become alternate Work identities. */
 export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> => {
   if (ref.kind === 'id') return { kind: 'work', id: ref.id };
-  const resolved = await resolveAddress('work', ref.slug, await requestLocale());
+  const resolved = await resolveAddress('work', ref.key, await requestLocale());
   if (resolved.kind !== 'resolved')
     return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
   return workRefFromAddress(resolved.data);
@@ -137,7 +137,7 @@ export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage 
 
 export type WorkResolution =
   | { kind: 'work'; id: string; header: WorkHeader }
-  | { kind: 'moved'; slug: string }
+  | { kind: 'moved'; key: string }
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
@@ -158,7 +158,7 @@ export const resolveWork = cache(async (ref: string, locale: UiLocale): Promise<
 
 /**
  * The Work for a layout or view. A missing or invisible Work is a 404 and a
- * renamed slug moves to the current one; when Main cannot answer, the page
+ * renamed alias moves to the current one; when Main cannot answer, the page
  * says the Work is unavailable rather than pretending it does not exist. A
  * chapter is read in its Book: its address opens the Book's reader there.
  */
@@ -166,7 +166,7 @@ export async function loadWork(ref: string, locale: UiLocale):
   Promise<{ ok: true; id: string; header: WorkHeader } | { ok: false }> {
   const work = await resolveWork(ref, locale);
   if (work.kind === 'missing') notFound();
-  if (work.kind === 'moved') permanentRedirect(localizedPath(workHref(work.slug), locale));
+  if (work.kind === 'moved') permanentRedirect(localizedPath(workHref(work.key), locale));
   const place = work.kind === 'work' && work.header.partOf ? chapterPlaceHref(work.header.partOf) : null;
   if (place) redirect(localizedPath(place, locale));
   return work.kind === 'work' ? { ok: true, id: work.id, header: work.header } : { ok: false };

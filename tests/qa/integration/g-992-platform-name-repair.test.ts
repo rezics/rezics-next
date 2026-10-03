@@ -13,10 +13,10 @@ import {
   lit,
   prepareWorkComponent,
 } from '../../../services/main/src/modules/work/activate.ts';
-import { migrateGraphNames } from '../../../services/main/src/modules/address/migrate.ts';
+import { migrateGraphAliases } from '../../../services/main/src/modules/address/migrate.ts';
 import {
-  NameInvalid,
-  type NameReceipt,
+  AliasInvalid,
+  type AliasReceipt,
 } from '../../../services/main/src/modules/address/registry.ts';
 import { readWorkComponentState } from '../../../services/main/src/modules/work/history.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
@@ -44,7 +44,7 @@ test('G992: official claims retain all owner gates; completed imports repair ret
   await workObjects.initialize();
   Object.assign(f.env, { structureObjects, workObjects });
   const registry = f.env.addresses;
-  const allowed = registry.assertNameAllowed.bind(registry);
+  const allowed = registry.assertAliasAllowed.bind(registry);
   try {
     await createAgentGraph(f.env, {
       id: randomUUID(),
@@ -97,11 +97,10 @@ test('G992: official claims retain all owner gates; completed imports repair ret
       platform = await site(true),
       collision = await site(true);
     const intent = (holder: string, name: string) => ({
-      profile: 'name-write-v1',
+      profile: 'alias-write-v1',
       scope: 'space',
       holder,
-      operation: 'claim',
-      name,
+      operation: 'claim', alias: name,
       expectedRevision: null,
       actingSubject: f.actor,
     });
@@ -128,7 +127,7 @@ test('G992: official claims retain all owner gates; completed imports repair ret
       ).status,
     ).toBe(403);
     const idempotencyKey = randomUUID();
-    const named = await f.json<NameReceipt>(
+    const named = await f.json<AliasReceipt>(
       await f.call('POST', '/v1/addresses/claims', intent(platform.space, 'mods'), idempotencyKey),
       201,
     );
@@ -175,16 +174,16 @@ test('G992: official claims retain all owner gates; completed imports repair ret
         GRAPH ${iri(GRAPHS.current)} { ${iri(repair.zone)} rv:routeSegment "support" .
           ${iri(ordinary.realm)} rv:communityHandle "admin" } }
       WHERE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(before.revision)} rv:manifest ?old } }`);
-    await f.accessPool.query('DELETE FROM access.name_graph_import WHERE data_epoch = $1', [
+    await f.accessPool.query('DELETE FROM access.alias_graph_import WHERE data_epoch = $1', [
       f.env.lineage.dataEpoch,
     ]);
     // Reproduce the old reservation bug while running real cleanup and completion.
-    registry.assertNameAllowed = async (scope, key, client, authority) => {
-      if (key === 'support') throw new NameInvalid('Former name is reserved');
+    registry.assertAliasAllowed = async (scope, key, client, authority) => {
+      if (key === 'support') throw new AliasInvalid('Former name is reserved');
       return allowed(scope, key, client, authority);
     };
-    expect(await migrateGraphNames(f.env)).toEqual({ status: 'complete' });
-    registry.assertNameAllowed = allowed;
+    expect(await migrateGraphAliases(f.env)).toEqual({ status: 'complete' });
+    registry.assertAliasAllowed = allowed;
     const upgraded = await readZoneConfiguration(f.env, repair.zone);
     expect(upgraded.revision).not.toBe(before.revision);
     expect(upgraded.configuration).toEqual({ ...legacy, official: {} });
@@ -212,27 +211,27 @@ test('G992: official claims retain all owner gates; completed imports repair ret
     expect(
       (
         await f.accessPool.query(
-          'SELECT completed_at FROM access.name_graph_import WHERE data_epoch = $1',
+          'SELECT completed_at FROM access.alias_graph_import WHERE data_epoch = $1',
           [f.env.lineage.dataEpoch],
         )
       ).rows[0].completed_at,
     ).not.toBeNull();
     const pending = await f.accessPool.query(
-      'SELECT legacy_name,repaired_at FROM access.name_graph_import_report WHERE data_epoch = $1 AND source = $2',
+      'SELECT legacy_alias,repaired_at FROM access.alias_graph_import_report WHERE data_epoch = $1 AND source = $2',
       [f.env.lineage.dataEpoch, ordinary.realm],
     );
-    expect(pending.rows[0].legacy_name.key.value).toBe('admin');
+    expect(pending.rows[0].legacy_alias.key.value).toBe('admin');
     expect(pending.rows[0].repaired_at).toBeNull();
     // Older completed imports have no saved binding. Recover from retained bytes.
     await f.accessPool.query(
-      'UPDATE access.name_graph_import_report SET legacy_name = NULL WHERE data_epoch = $1 AND source = $2',
+      'UPDATE access.alias_graph_import_report SET legacy_alias = NULL WHERE data_epoch = $1 AND source = $2',
       [f.env.lineage.dataEpoch, repair.zone],
     );
     await f.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');
-    expect(await migrateGraphNames(f.env)).toEqual({ status: 'deferred' });
+    expect(await migrateGraphAliases(f.env)).toEqual({ status: 'deferred' });
     expect(await registry.lookup('space', 'support')).toBeNull();
     await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');
-    expect(await Promise.all([migrateGraphNames(f.env), migrateGraphNames(f.env)])).toEqual([
+    expect(await Promise.all([migrateGraphAliases(f.env), migrateGraphAliases(f.env)])).toEqual([
       { status: 'complete' },
       { status: 'complete' },
     ]);
@@ -242,12 +241,12 @@ test('G992: official claims retain all owner gates; completed imports repair ret
     expect((await readZoneConfiguration(f.env, repair.zone)).revision).toBe(upgraded.revision);
     const report = (
       await f.accessPool.query(
-        'SELECT legacy_name,reason,repaired_at FROM access.name_graph_import_report WHERE data_epoch = $1 AND source = $2',
+        'SELECT legacy_alias,reason,repaired_at FROM access.alias_graph_import_report WHERE data_epoch = $1 AND source = $2',
         [f.env.lineage.dataEpoch, repair.zone],
       )
     ).rows[0];
-    expect(report.legacy_name.key.value).toBe('support');
-    expect(report.reason).toBe('Imported retained name');
+    expect(report.legacy_alias.key.value).toBe('support');
+    expect(report.reason).toBe('Imported retained alias');
     expect(report.repaired_at).not.toBeNull();
     const resolveName = async (name: string) =>
       f.json(
@@ -263,12 +262,12 @@ test('G992: official claims retain all owner gates; completed imports repair ret
       canonical: { prefix: '/z/', key: 'support' },
     });
     expect(await resolveName('mods')).toMatchObject({ status: 'resolved', holder: platform.space });
-    expect(await migrateGraphNames(f.env)).toEqual({ status: 'complete' });
+    expect(await migrateGraphAliases(f.env)).toEqual({ status: 'complete' });
     expect((await registry.lookup('space', 'support'))?.revision).toBe(fixed?.revision);
     expect(
       (
         await f.accessPool.query(
-          'SELECT count(*)::int AS count FROM access.name_history WHERE scope = $1 AND key = $2',
+          'SELECT count(*)::int AS count FROM access.alias_history WHERE scope = $1 AND key = $2',
           ['space', 'support'],
         )
       ).rows[0].count,
@@ -280,7 +279,7 @@ test('G992: official claims retain all owner gates; completed imports repair ret
       ).boolean,
     ).toBe(false);
   } finally {
-    registry.assertNameAllowed = allowed;
+    registry.assertAliasAllowed = allowed;
     await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');
     await f.close();
     rmSync(directory, { recursive: true, force: true });

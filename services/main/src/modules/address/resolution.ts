@@ -13,15 +13,15 @@ import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { readRealmLanding } from '../realm-reads/read-realm.ts';
 import { identityCanonical } from './canonical.ts';
 import {
-  NAME_COST,
-  NameInvalid,
-  NameUnavailable,
+  ALIAS_COST,
+  AliasInvalid,
+  AliasUnavailable,
   scopeKind,
-  type NameScope,
-  type NameRow,
+  type AliasScope,
+  type AliasRow,
 } from './registry.ts';
 
-export type AddressScope = NameScope | 'resource' | 'concept';
+export type AddressScope = AliasScope | 'resource' | 'concept';
 export interface AddressLookup {
   scope: AddressScope;
   key: string;
@@ -36,15 +36,17 @@ export async function resolveAddresses(
   inputs: readonly AddressLookup[],
   actingSubject?: string,
 ) {
-  if (!work.environment.addresses) throw new NameUnavailable('Name registry is unavailable');
-  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(NAME_COST.deadlineMs)]);
+  if (!work.environment.addresses) throw new AliasUnavailable('Alias registry is unavailable');
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(ALIAS_COST.deadlineMs)]);
   try {
     return await fusekiReadBudget.run({ signal, callsLeft: 4096, bytesLeft: 8 * 1024 * 1024 }, () =>
-      work.environment.addresses!.withRead(() => resolveAddressBatch(work, request, inputs, actingSubject)),
+      work.environment.addresses!.withRead(() =>
+        resolveAddressBatch(work, request, inputs, actingSubject),
+      ),
     );
   } catch (error) {
     if (signal.aborted || error instanceof FusekiReadBudgetExceeded)
-      throw new NameUnavailable('Address read exceeded its budget');
+      throw new AliasUnavailable('Address read exceeded its budget');
     throw error;
   }
 }
@@ -55,38 +57,66 @@ async function resolveAddressBatch(
   inputs: readonly AddressLookup[],
   actingSubject?: string,
 ) {
-  if (!inputs.length || inputs.length > NAME_COST.batch)
-    throw new NameInvalid('Address batch exceeds its bound');
+  if (!inputs.length || inputs.length > ALIAS_COST.batch)
+    throw new AliasInvalid('Address batch exceeds its bound');
   const env = work.environment,
     registry = env.addresses;
-  if (!registry) throw new NameUnavailable('Name registry is unavailable');
+  if (!registry) throw new AliasUnavailable('Alias registry is unavailable');
   if (request.headers.has('authorization') && !actingSubject)
-    throw new NameInvalid('actingSubject is required for an authenticated resolution');
-  const viewer = await zoneRouteViewer(work, request,
-    request.headers.has('authorization') ? actingSubject : undefined);
+    throw new AliasInvalid('actingSubject is required for an authenticated resolution');
+  const viewer = await zoneRouteViewer(
+    work,
+    request,
+    request.headers.has('authorization') ? actingSubject : undefined,
+  );
   const reader: SummaryReader = {
     viewer: disclosureViewer(viewer.principal),
-    ...(work.mediaAccess ? {
-      canReadSemantics: targets => work.mediaAccess!.canReadSemantics(viewer.principal,
-        actingSubject ?? null, targets, env.fuseki),
-    } : {}),
-    ...(viewer.principal && actingSubject ? {
-      canReadSemantic: target => work.access.canReadSemanticResource?.(viewer.principal,
-        actingSubject, target, undefined, env.fuseki) ?? Promise.resolve(false),
-      realmReadProof: realm => work.access.realmReadProof?.(viewer.principal!, actingSubject, realm) ?? Promise.resolve(null),
-    } : {}),
-    ...(viewer.workPrincipal && actingSubject ? {
-      canReadWork: target => work.access.canReadWork(viewer.workPrincipal!, actingSubject, target),
-    } : {}),
+    ...(work.mediaAccess
+      ? {
+          canReadSemantics: (targets) =>
+            work.mediaAccess!.canReadSemantics(
+              viewer.principal,
+              actingSubject ?? null,
+              targets,
+              env.fuseki,
+            ),
+        }
+      : {}),
+    ...(viewer.principal && actingSubject
+      ? {
+          canReadSemantic: (target) =>
+            work.access.canReadSemanticResource?.(
+              viewer.principal,
+              actingSubject,
+              target,
+              undefined,
+              env.fuseki,
+            ) ?? Promise.resolve(false),
+          realmReadProof: (realm) =>
+            work.access.realmReadProof?.(viewer.principal!, actingSubject, realm) ??
+            Promise.resolve(null),
+        }
+      : {}),
+    ...(viewer.workPrincipal && actingSubject
+      ? {
+          canReadWork: (target) =>
+            work.access.canReadWork(viewer.workPrincipal!, actingSubject, target),
+        }
+      : {}),
   };
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const selected: Array<{ input: AddressLookup; holder: string | null; name: NameRow | null; alias?: string }> = [];
-  const deadline = Date.now() + NAME_COST.deadlineMs;
+  const selected: Array<{
+    input: AddressLookup;
+    holder: string | null;
+    alias: AliasRow | null;
+    capabilityIdentity?: string;
+  }> = [];
+  const deadline = Date.now() + ALIAS_COST.deadlineMs;
   for (const input of inputs) {
-    if (Date.now() > deadline) throw new NameUnavailable('Address read deadline exceeded');
+    if (Date.now() > deadline) throw new AliasUnavailable('Address read deadline exceeded');
     if (input.scope === 'resource' || input.scope === 'concept') {
       const uuid = identityKeyUuid(input.key);
-      selected.push({ input, holder: uuid ? `https://rezics.com/id/${uuid}` : null, name: null });
+      selected.push({ input, holder: uuid ? `https://rezics.com/id/${uuid}` : null, alias: null });
     } else selected.push({ input, ...(await registry.identify(input.scope, input.key)) });
   }
   const zoneSpaces = [
@@ -113,7 +143,7 @@ async function resolveAddressBatch(
       ).results?.bindings ?? [];
     for (const row of sites) {
       if (!row.space || !row.zone || scopeZones.has(row.space.value))
-        throw new NameUnavailable('Zone scope identity is ambiguous');
+        throw new AliasUnavailable('Zone scope identity is ambiguous');
       scopeZones.set(row.space.value, row.zone.value);
     }
   }
@@ -134,13 +164,13 @@ async function resolveAddressBatch(
         ?space a rv:Space .
         OPTIONAL { ?space rv:realmCapability ?realm . ?realm rv:realmState rv:Active }
         OPTIONAL { ?space rv:zoneCapability ?zone . ?zone rv:zoneState rv:Active }
-      } } LIMIT ${NAME_COST.batch + 1}`,
+      } } LIMIT ${ALIAS_COST.batch + 1}`,
           64 * 1024,
         )
       ).results?.bindings ?? [];
     const identities = new Map(rows.map((row) => [row.resource?.value, row.space?.value]));
     if (identities.size !== rows.length)
-      throw new NameUnavailable('Space capability identity is ambiguous');
+      throw new AliasUnavailable('Space capability identity is ambiguous');
     for (const row of rows)
       if (row.space) {
         capabilities.set(row.space.value, {
@@ -152,53 +182,62 @@ async function resolveAddressBatch(
     for (const item of aliases) {
       const original = item.holder!;
       item.holder = identities.get(original) ?? (item.input.scope === 'space' ? null : item.holder);
-      if (item.holder && item.holder !== original) item.alias = original;
+      if (item.holder && item.holder !== original) item.capabilityIdentity = original;
     }
   }
   const resources = [
     ...new Set([
       ...selected.flatMap((item) =>
-        item.holder ? [item.holder, ...(item.alias ? [item.alias] : []),
-          ...(item.name?.successor ? [item.name.successor] : [])] : [],
+        item.holder
+          ? [
+              item.holder,
+              ...(item.capabilityIdentity ? [item.capabilityIdentity] : []),
+              ...(item.alias?.successor ? [item.alias.successor] : []),
+            ]
+          : [],
       ),
       ...scopeZones.values(),
-      ...[...capabilities.values()].flatMap(item => [item.realm, item.zone].filter((ref): ref is string => !!ref)),
+      ...[...capabilities.values()].flatMap((item) =>
+        [item.realm, item.zone].filter((ref): ref is string => !!ref),
+      ),
     ]),
   ];
   const summaries = new Map();
-  for (let at = 0; at < resources.length; at += NAME_COST.batch) {
-    const batch = await readResourceSummaries(
-      env,
-      work.media?.store,
-      reader,
-      {
-        resources: resources.slice(at, at + NAME_COST.batch),
-        context: DEFAULT_MEDIA_CONTEXT,
-        language: null,
-        languages: readerLanguages(
-          request.headers.get('x-rezics-display-languages'),
-          request.headers.get('accept-language'),
-        ),
-        includeCollections: true,
-      },
-    );
+  for (let at = 0; at < resources.length; at += ALIAS_COST.batch) {
+    const batch = await readResourceSummaries(env, work.media?.store, reader, {
+      resources: resources.slice(at, at + ALIAS_COST.batch),
+      context: DEFAULT_MEDIA_CONTEXT,
+      language: null,
+      languages: readerLanguages(
+        request.headers.get('x-rezics-display-languages'),
+        request.headers.get('accept-language'),
+      ),
+      includeCollections: true,
+    });
     for (const summary of batch.summaries) summaries.set(summary.reference, summary);
   }
   // Scope membership is confidential even when the target is public. Retirement
-  // must not turn a denied site into a readable name inventory.
+  // must not turn a denied site into a readable alias inventory.
   for (const item of selected) {
-    if (item.alias && summaries.get(item.alias)?.status !== 'available'
-      && item.alias !== capabilities.get(item.holder!)?.realm) item.holder = null;
-    if (item.input.scope.startsWith('zone:')
-      && summaries.get(scopeZones.get(item.input.scope.slice(5)))?.status !== 'available') item.holder = null;
+    if (
+      item.capabilityIdentity &&
+      summaries.get(item.capabilityIdentity)?.status !== 'available' &&
+      item.capabilityIdentity !== capabilities.get(item.holder!)?.realm
+    )
+      item.holder = null;
+    if (
+      item.input.scope.startsWith('zone:') &&
+      summaries.get(scopeZones.get(item.input.scope.slice(5)))?.status !== 'available'
+    )
+      item.holder = null;
   }
-  const named = selected.filter((item) => item.name);
-  const wantedHeads = named.flatMap((item) => {
+  const aliased = selected.filter((item) => item.alias);
+  const wantedHeads = aliased.flatMap((item) => {
     const summary = summaries.get(item.holder);
     return summary?.status === 'available'
       ? [
           {
-            scope: item.input.scope as NameScope,
+            scope: item.input.scope as AliasScope,
             holder: summary.resolution?.survivor ?? item.holder!,
           },
         ]
@@ -212,10 +251,15 @@ async function resolveAddressBatch(
     : new Map();
   // A request landing admits only its Space address and Realm request target.
   // It never makes the private summary or a Zone capability readable. Cache by
-  // holder so duplicate batch inputs share the bounded landing and name reads.
-  const landings = new Map<string, Promise<{
-    canonical: ReturnType<typeof identityCanonical>; realm: string; head?: NameRow;
-  } | null>>();
+  // holder so duplicate batch inputs share the bounded landing and alias reads.
+  const landings = new Map<
+    string,
+    Promise<{
+      canonical: ReturnType<typeof identityCanonical>;
+      realm: string;
+      head?: AliasRow;
+    } | null>
+  >();
   const landing = (holder: string) => {
     let pending = landings.get(holder);
     if (!pending) {
@@ -223,19 +267,24 @@ async function resolveAddressBatch(
         const realm = capabilities.get(holder)?.realm;
         if (!realm) return null;
         try {
-          return await workRead(work, publicLanguageRequest(request), {
-            publicViewer: disclosureViewer(viewer.principal),
-          }, async session => {
-            const page = await readRealmLanding(session, realm);
-            if (page.profile !== 'realm-join-page-v1' || page.space !== holder) return null;
-            const head = (await registry.heads(['space'], [holder])).get(`space\0${holder}`);
-            const canonical = identityCanonical('space', holder, '');
-            if (head?.state === 'current') canonical.key = head.key;
-            return { canonical, realm: page.id, head };
-          });
+          return await workRead(
+            work,
+            publicLanguageRequest(request),
+            {
+              publicViewer: disclosureViewer(viewer.principal),
+            },
+            async (session) => {
+              const page = await readRealmLanding(session, realm);
+              if (page.profile !== 'realm-join-page-v1' || page.space !== holder) return null;
+              const head = (await registry.heads(['space'], [holder])).get(`space\0${holder}`);
+              const canonical = identityCanonical('space', holder, '');
+              if (head?.state === 'current') canonical.key = head.key;
+              return { canonical, realm: page.id, head };
+            },
+          );
         } catch (error) {
           if (error instanceof WorkReadMissing) return null;
-          throw new NameUnavailable('Space request address is unavailable', { cause: error });
+          throw new AliasUnavailable('Space request address is unavailable', { cause: error });
         }
       })();
       landings.set(holder, pending);
@@ -243,7 +292,7 @@ async function resolveAddressBatch(
     return pending;
   };
   return Promise.all(
-    selected.map(async ({ input, holder, name, alias }) => {
+    selected.map(async ({ input, holder, alias, capabilityIdentity }) => {
       const summary = holder ? summaries.get(holder) : null;
       const kind =
         input.scope === 'resource' || input.scope === 'concept'
@@ -252,44 +301,49 @@ async function resolveAddressBatch(
       if (
         !summary ||
         summary.status !== 'available' ||
-        (alias && summaries.get(alias)?.status !== 'available') ||
+        (capabilityIdentity && summaries.get(capabilityIdentity)?.status !== 'available') ||
         (kind !== 'zone' && kind !== 'resource' && summary.type !== kind)
       ) {
-        const page = input.scope === 'space' && holder && !name?.successor
-          ? await landing(holder) : null;
+        const page =
+          input.scope === 'space' && holder && !alias?.successor ? await landing(holder) : null;
         if (page) {
-          const retired = name?.state === 'retired' || page.head?.state === 'retired';
+          const retired = alias?.state === 'retired' || page.head?.state === 'retired';
           return {
             profile: 'address-resolution-v1' as const,
-            scope: input.scope, key: input.key, holder: holder!,
+            scope: input.scope,
+            key: input.key,
+            holder: holder!,
             status: retired ? ('retired' as const) : ('resolved' as const),
-            state: retired ? ('retired' as const) : (name?.state ?? ('current' as const)),
+            state: retired ? ('retired' as const) : (alias?.state ?? ('current' as const)),
             canonical: page.canonical,
             capabilities: { realm: page.realm },
-            ...(name ? { revision: name.revision } : {}),
+            ...(alias ? { revision: alias.revision } : {}),
           };
         }
         return { scope: input.scope, key: input.key, status: 'unavailable' as const };
       }
-      if (name?.successor) {
-        const next = summaries.get(name.successor);
+      if (alias?.successor) {
+        const next = summaries.get(alias.successor);
         if (!next || next.status !== 'available')
           return { scope: input.scope, key: input.key, status: 'unavailable' as const };
         if (
           !summary.resolution ||
-          summary.resolution.survivor !== (next.resolution?.survivor ?? name.successor)
+          summary.resolution.survivor !== (next.resolution?.survivor ?? alias.successor)
         ) {
-          throw new NameUnavailable('Name successor is no longer equivalent');
+          throw new AliasUnavailable('Alias successor is no longer equivalent');
         }
       }
       let canonical = summary.address;
-      const availableCapabilities = Object.fromEntries(Object.entries(capabilities.get(holder!) ?? {})
-        .filter(([, target]) => summaries.get(target)?.status === 'available'));
+      const availableCapabilities = Object.fromEntries(
+        Object.entries(capabilities.get(holder!) ?? {}).filter(
+          ([, target]) => summaries.get(target)?.status === 'available',
+        ),
+      );
       if (summary.type === 'space' && availableCapabilities.zone)
         canonical = summaries.get(availableCapabilities.zone).address;
       const retired =
-        name?.state === 'retired' ||
-        (!!name &&
+        alias?.state === 'retired' ||
+        (!!alias &&
           heads.get(`${input.scope}\0${summary.resolution?.survivor ?? holder}`)?.state ===
             'retired');
       if (kind === 'zone' && !retired) {
@@ -331,9 +385,9 @@ async function resolveAddressBatch(
         key: input.key,
         status: retired ? ('retired' as const) : ('resolved' as const),
         holder: holder!,
-        state: retired ? ('retired' as const) : (name?.state ?? ('current' as const)),
+        state: retired ? ('retired' as const) : (alias?.state ?? ('current' as const)),
         canonical,
-        ...(name ? { revision: name.revision } : {}),
+        ...(alias ? { revision: alias.revision } : {}),
         ...(summary.type === 'space' ? { capabilities: availableCapabilities } : {}),
         ...(summary.resolution ? { resolution: summary.resolution } : {}),
       };

@@ -15,7 +15,7 @@ const holder = `https://rezics.com/id/${uuid}`;
 const sid = uuidToSid(uuid);
 const agent: ResolvedAddress = {
   profile: 'address-resolution-v1', status: 'resolved', scope: 'agent', key: uuid,
-  holder, state: 'current', canonical: { prefix: '/a/', key: sid, slugSource: 'Reader' },
+  holder, state: 'current', canonical: { prefix: '/a/', key: sid, suffixSource: 'Reader' },
 };
 const claim = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
 const signedInCookie = sessionCookies('https://rezics.test', {

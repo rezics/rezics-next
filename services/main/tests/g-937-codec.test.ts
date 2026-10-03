@@ -8,8 +8,8 @@ import {
   identityKeyUuid,
   hasSidCaseVariant,
 } from '@rezics/model/address/sid';
-import { normalizeAddressName, nameSkeleton } from '@rezics/model/address/names';
-import { deriveAddressSlug } from '@rezics/model/address/slug';
+import { normalizeAddressAlias, aliasSkeleton } from '@rezics/model/address/aliases';
+import { deriveAddressSuffix } from '@rezics/model/address/suffix';
 
 test('G-937: sid preserves all 128 bits with exactly one fixed-length spelling', () => {
   expect(SID_ALPHABET).toBe('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz');
@@ -60,11 +60,11 @@ test('G-937: sid preserves all 128 bits with exactly one fixed-length spelling',
   expect(uuidToSid('00000000-0000-0000-0000-000000000000')).toBe('1'.repeat(22));
 });
 
-test('G-937: names keep native script, fold canonically and reject mixed-script impersonation and identities', () => {
-  expect(normalizeAddressName('My-Handle_2', 'ascii-handle').key).toBe('my-handle_2');
-  expect(normalizeAddressName('Cafe\u0301 Au Lait', 'unicode-title').key).toBe('café-au-lait');
-  expect(normalizeAddressName('Straße', 'unicode-title').key).toBe('strasse');
-  expect(normalizeAddressName('l·l', 'unicode-title').key).toBe('l·l');
+test('G-937: aliases keep native script, fold canonically and reject mixed-script impersonation and identities', () => {
+  expect(normalizeAddressAlias('My-Handle_2', 'ascii-handle').key).toBe('my-handle_2');
+  expect(normalizeAddressAlias('Cafe\u0301 Au Lait', 'unicode-title').key).toBe('café-au-lait');
+  expect(normalizeAddressAlias('Straße', 'unicode-title').key).toBe('strasse');
+  expect(normalizeAddressAlias('l·l', 'unicode-title').key).toBe('l·l');
   for (const title of [
     '日本語のタイトル',
     'ポケモンゲーム',
@@ -73,10 +73,10 @@ test('G-937: names keep native script, fold canonically and reject mixed-script 
     'العربية',
     'עברית',
   ]) {
-    expect(normalizeAddressName(title, 'unicode-title').display).toBe(title);
+    expect(normalizeAddressAlias(title, 'unicode-title').key).toBe(title.toLowerCase().replace(/\s+/gu, '-'));
   }
   for (const title of ['pаypal', 'LatinΕλληνικά', 'Latinالعربية', 'hello\u200bworld']) {
-    expect(() => normalizeAddressName(title, 'unicode-title')).toThrow();
+    expect(() => normalizeAddressAlias(title, 'unicode-title')).toThrow();
   }
   for (const name of [
     '_abc',
@@ -86,27 +86,27 @@ test('G-937: names keep native script, fold canonically and reject mixed-script 
     '𝕒bc',
     uuidToSid('ffffffff-ffff-ffff-ffff-ffffffffffff'),
   ]) {
-    expect(() => normalizeAddressName(name, 'ascii-handle')).toThrow();
+    expect(() => normalizeAddressAlias(name, 'ascii-handle')).toThrow();
   }
   fc.assert(
     fc.property(fc.uuid(), (uuid) => {
       for (const policy of ['ascii-handle', 'unicode-title'] as const) {
-        expect(() => normalizeAddressName(uuidToSid(uuid), policy)).toThrow();
+        expect(() => normalizeAddressAlias(uuidToSid(uuid), policy)).toThrow();
         expect(hasSidCaseVariant(uuidToSid(uuid).toLowerCase())).toBe(true);
-        expect(() => normalizeAddressName(uuidToSid(uuid).toLowerCase(),policy)).toThrow();
-        expect(() => normalizeAddressName(uuidToSid(uuid).toUpperCase(),policy)).toThrow();
-        expect(() => normalizeAddressName(`${uuidToSid(uuid)}-`, policy)).toThrow();
-        expect(() => normalizeAddressName(`${uuidToSid(uuid)}-title`, policy)).toThrow();
-        expect(() => normalizeAddressName(uuid, policy)).toThrow();
+        expect(() => normalizeAddressAlias(uuidToSid(uuid).toLowerCase(),policy)).toThrow();
+        expect(() => normalizeAddressAlias(uuidToSid(uuid).toUpperCase(),policy)).toThrow();
+        expect(() => normalizeAddressAlias(`${uuidToSid(uuid)}-`, policy)).toThrow();
+        expect(() => normalizeAddressAlias(`${uuidToSid(uuid)}-title`, policy)).toThrow();
+        expect(() => normalizeAddressAlias(uuid, policy)).toThrow();
       }
     }),
   );
-  expect(nameSkeleton('moon')).toBe(nameSkeleton('rn00n'));
+  expect(aliasSkeleton('moon')).toBe(aliasSkeleton('rn00n'));
 });
 
-test('G-937: derived slugs retain CJK and RTL and truncate on words or graphemes', () => {
-  expect(deriveAddressSlug('  Café！ 日本語 — العربية  ')).toBe('café-日本語-العربية');
-  expect(deriveAddressSlug('one '.repeat(30))).toBe('one-'.repeat(14) + 'one');
-  expect([...deriveAddressSlug('日本語'.repeat(40))].length).toBeLessThanOrEqual(60);
-  expect(deriveAddressSlug('a\u0301'.repeat(100))).toBe('á'.repeat(60));
+test('G-937: derived readable suffixes retain CJK and RTL and truncate on words or graphemes', () => {
+  expect(deriveAddressSuffix('  Café！ 日本語 — العربية  ')).toBe('café-日本語-العربية');
+  expect(deriveAddressSuffix('one '.repeat(30))).toBe('one-'.repeat(14) + 'one');
+  expect([...deriveAddressSuffix('日本語'.repeat(40))].length).toBeLessThanOrEqual(60);
+  expect(deriveAddressSuffix('a\u0301'.repeat(100))).toBe('á'.repeat(60));
 });

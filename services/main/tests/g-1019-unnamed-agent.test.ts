@@ -12,8 +12,8 @@ test('G-1019: public handles admit null or a chosen name, never the legacy ident
   expect(Value.Check(profileHandle, null)).toBe(true);
   expect(Value.Check(profileHandle, 'lin_mei')).toBe(true);
   expect(Value.Check(profileHandle, `agent-${id}`)).toBe(false);
-  expect(agentAddress(agent, null)).toEqual({ prefix: '/a/', key: uuidToSid(id), slugSource: '' });
-  expect(agentAddress(agent, 'lin_mei')).toEqual({ prefix: '/@', key: 'lin_mei', slugSource: '' });
+  expect(agentAddress(agent, null)).toEqual({ prefix: '/a/', key: uuidToSid(id), suffixSource: '' });
+  expect(agentAddress(agent, 'lin_mei')).toEqual({ prefix: '/@', key: 'lin_mei', suffixSource: '' });
   expect(agentForHandle(`AGENT-${id.toUpperCase()}`)).toBe(agent);
 });
 

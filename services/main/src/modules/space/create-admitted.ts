@@ -4,7 +4,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { CancelledActivation, IdempotencyConflict,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
-import { NameInvalid, NameConflict, NameUnavailable } from '../address/registry.ts';
+import { AliasInvalid, AliasConflict, AliasUnavailable } from '../address/registry.ts';
 import { createRealmSpace, readSpaceCreationReceipt, sealRealmSpaceAdmission,
   spaceCreationDigest, validateTopics, InvalidSpaceInput, type CreateRealmSpaceInput, type SpaceCreationReceipt } from './create.ts';
 import { createZoneSpace, zoneSpaceCreationDigest, type CreateZoneSpaceInput } from './create-zone.ts';
@@ -54,19 +54,19 @@ async function createAdmittedSpace(
         try {
           if (creation.capability === 'realm') await validateTopics(env, creation.input.topics ?? []);
           if (input.handle) {
-            if (!env.addresses || !access.withOwnerAuthority) throw new NameUnavailable('Space name registry is unavailable');
+            if (!env.addresses || !access.withOwnerAuthority) throw new AliasUnavailable('Space alias registry is unavailable');
             await access.withOwnerAuthority({ principal,actingSubject: input.actingSubject,
               action: 'space.create',scope: 'space:create:root' },client => env.addresses!.write(client,principal,{
                 scope: 'space',holder: `https://rezics.com/id/${admission.id}`,actingSubject: input.actingSubject,
-                operation: 'claim',name: input.handle,expectedRevision: null,idempotencyKey: `space-name:${admission.id}`,
+                operation: 'claim',alias: input.handle,expectedRevision: null,idempotencyKey: `space-alias:${admission.id}`,
               },input.actingSubject,admission.id));
           }
           if (creation.capability === 'realm') await createRealmSpace(env, admission, creation.input);
           else await createZoneSpace(env, admission, creation.input);
         }
         catch (error) {
-          if (error instanceof NameUnavailable) throw error;
-          if (error instanceof NameInvalid || error instanceof NameConflict) {
+          if (error instanceof AliasUnavailable) throw error;
+          if (error instanceof AliasInvalid || error instanceof AliasConflict) {
             const terminal = await sealRealmSpaceAdmission(env,admission);
             await access.recordGraphOutcome(admission.id,terminal);
             throw error;
@@ -95,8 +95,8 @@ async function createAdmittedSpace(
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
-      || error instanceof InvalidSpaceInput || error instanceof NameInvalid
-      || error instanceof NameConflict || error instanceof NameUnavailable) throw error;
+      || error instanceof InvalidSpaceInput || error instanceof AliasInvalid
+      || error instanceof AliasConflict || error instanceof AliasUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'space-create');
   }
 }

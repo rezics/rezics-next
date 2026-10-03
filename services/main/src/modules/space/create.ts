@@ -1,4 +1,4 @@
-import { normalizeAddressName } from '@rezics/model/address/names';
+import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -66,7 +66,7 @@ export function spaceCreationDigest(input: CreateRealmSpaceInput): string {
     ...(language === 'en' ? {} : { language }),
     capabilities: ['realm'], owner: input.actingSubject,
     selectionPolicy: SELECTION_POLICY, membershipPolicy: MEMBERSHIP_POLICY,
-    reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: normalizeAddressName(input.handle,'ascii-handle').key } : {},
+    reviewPolicy: REVIEW_POLICY, ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
     ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }));
 }
 
@@ -183,7 +183,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const realmManifest = prepareComponent(env.objectDirectory, realm,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
       membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: REVIEW_POLICY,
-      ...input.handle ? { handle: normalizeAddressName(input.handle,'ascii-handle').key } : {},
+      ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
       ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
   const receipt = spaceCreationReceiptIri(admission.id);

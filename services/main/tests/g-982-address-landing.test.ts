@@ -5,7 +5,7 @@ import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { addressRoutes } from '../src/routes/addresses.ts';
-import { NAME_COST, type NameRow } from '../src/modules/address/registry.ts';
+import { ALIAS_COST, type AliasRow } from '../src/modules/address/registry.ts';
 import { resolveAddresses } from '../src/modules/address/resolution.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
@@ -37,7 +37,7 @@ function fixture() {
     key: 'private-books',
     state: 'current',
     revision: '00000000-0000-4000-8000-000000000005',
-  } as NameRow;
+  } as AliasRow;
   const references = (query: string) =>
     [...(query.match(/VALUES \?resource \{([^}]+)\}/)?.[1] ?? '').matchAll(/<([^>]+)>/g)].map(
       (match) => match[1]!,
@@ -117,7 +117,7 @@ function fixture() {
             key === 'private-books'
               ? space
               : ([space, realm, zone].find((ref) => ref.slice(-36) === id) ?? null),
-          name: key === 'private-books' ? current : null,
+          alias: key === 'private-books' ? current : null,
         };
       },
       heads: async () => new Map(state.named ? [[`space\0${space}`, current]] : []),
@@ -193,10 +193,10 @@ test.each([
       profile: 'address-resolution-v1',
       status: 'resolved',
       holder: space,
-      canonical: { prefix: '/r/', key: 'private-books', slugSource: '' },
+      canonical: { prefix: '/r/', key: 'private-books', suffixSource: '' },
       capabilities: { realm },
     });
-    expect(f.queries.length).toBeLessThanOrEqual(NAME_COST.fusekiRequests.resolve);
+    expect(f.queries.length).toBeLessThanOrEqual(ALIAS_COST.fusekiRequests.resolve);
     const summaries = await readResourceSummaries(
       f.env,
       undefined,
@@ -222,7 +222,7 @@ test('G982: an unnamed request Space has an identity canonical address with no p
     [{ scope: 'space', key: space.slice(-36) }],
   );
   expect(result[0]).toMatchObject({
-    canonical: { prefix: '/r/', key: uuidToSid(space.slice(-36)), slugSource: '' },
+    canonical: { prefix: '/r/', key: uuidToSid(space.slice(-36)), suffixSource: '' },
   });
 });
 
@@ -257,7 +257,7 @@ test('G982: revoking request admission during landing hydration closes the addre
 
 test('G982: duplicate landing inputs share the read; retirement remains 410', async () => {
   const f = fixture();
-  const lookups = Array.from({ length: NAME_COST.batch }, () => ({
+  const lookups = Array.from({ length: ALIAS_COST.batch }, () => ({
     scope: 'space' as const,
     key: 'private-books',
   }));
@@ -266,7 +266,7 @@ test('G982: duplicate landing inputs share the read; retirement remains 410', as
     new Request('http://main.local/v1/addresses/resolve'),
     lookups,
   );
-  expect(result).toHaveLength(NAME_COST.batch);
+  expect(result).toHaveLength(ALIAS_COST.batch);
   expect(result.every((item) => item.status === 'resolved')).toBe(true);
   expect(f.queries.filter((query) => query.includes('SELECT ?name WHERE'))).toHaveLength(1);
   f.current.state = 'retired';

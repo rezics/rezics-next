@@ -10,7 +10,7 @@ import { createMainApp } from '../../../services/main/src/app.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { readWorkComponentState } from '../../../services/main/src/modules/work/history.ts';
-import { GRAPHS, RV, iri, lit, prepareComponent } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV, iri, lit, prepareComponent, prepareWorkComponent } from '../../../services/main/src/modules/work/activate.ts';
 import { ZONE_PROFILE } from '../../../services/main/src/modules/zone/config-format.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../../../scripts/fixture/migrate.ts';
 import { replacePrivate } from '../../../scripts/dev/config.ts';
@@ -71,6 +71,8 @@ test('G991: common owner migrations retain reads on deferral, import official na
     const manifest = prepareComponent(directory, zone,
       { configuration: legacy, name: head.name, language: head.language }, ZONE_PROFILE);
     const manifestBytes = readFileSync(`${directory}/${manifest}`);
+    expect(await prepareWorkComponent(workObjects, zone,
+      { configuration: legacy, name: head.name, language: head.language }, ZONE_PROFILE)).toBe(manifest);
     await f.env.fuseki.update(`PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head.revision)} rv:manifest ?manifest } }
       INSERT { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head.revision)} rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} }
@@ -78,13 +80,14 @@ test('G991: common owner migrations retain reads on deferral, import official na
       WHERE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head.revision)} rv:manifest ?manifest } }`);
     const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier, access: f.access });
     const presentation = () => app.handle(new Request(`http://main.local/v1/zones/${zone.slice(-36)}/presentation`));
-    expect((await presentation()).status).toBe(200);
-    await f.accessPool.query('DELETE FROM access.name_graph_import WHERE data_epoch = $1', [f.env.lineage.dataEpoch]);
+    const originalPresentation = await presentation();
+    expect(originalPresentation.status, await originalPresentation.text()).toBe(200);
+    await f.accessPool.query('DELETE FROM access.alias_graph_import WHERE data_epoch = $1', [f.env.lineage.dataEpoch]);
     await f.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');
     const migrationApps = { ...apps, MAIN_OBJECT_DIRECTORY: directory };
     const deferred = await migrateOwnerData(migrationApps);
     expect(deferred[0]?.status).toBe('deferred');
-    expect(() => assertOwnerMigrationsComplete(deferred)).toThrow('graph-names');
+    expect(() => assertOwnerMigrationsComplete(deferred)).toThrow('graph-aliases');
     const envFile = `${directory}/migration.env`;
     replacePrivate(envFile, Object.fromEntries(Object.entries(migrationApps)
       .filter(([name]) => /^(ACCESS_|ACCOUNT_|CONTENT_|FUSEKI_|MAIN_)/.test(name))));
@@ -92,12 +95,12 @@ test('G991: common owner migrations retain reads on deferral, import official na
       { encoding: 'utf8', timeout: 60_000 });
     const failedPreparation = prepare();
     expect(failedPreparation.status).not.toBe(0);
-    expect(failedPreparation.stderr).toContain('Owner migrations deferred: graph-names');
+    expect(failedPreparation.stderr).toContain('Owner migrations deferred: graph-aliases');
     expect((await presentation()).status).toBe(200);
     expect((await readZoneConfiguration(f.env, zone)).revision).toBe(head.revision);
     await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id');
     const migrated = await migrateOwnerData(migrationApps);
-    expect(migrated).toEqual([{ owner: 'graph-names', status: 'complete' }]);
+    expect(migrated).toEqual([{ owner: 'graph-aliases', status: 'complete' }]);
     const upgraded = await readZoneConfiguration(f.env, zone);
     expect(upgraded.revision).not.toBe(head.revision);
     expect(upgraded.configuration).toEqual({ ...legacy, official: {} });

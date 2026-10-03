@@ -26,7 +26,7 @@ import { suggestionHref } from '../features/search/typeahead.tsx';
 const uuid = '0199a0fe-0b21-7000-8000-123456789abc';
 const iri = `https://rezics.com/id/${uuid}`;
 const sid = uuidToSid(uuid);
-const workAddress = { prefix: '/w/' as const, key: '春の物語', slugSource: 'Spring story' };
+const workAddress = { prefix: '/w/' as const, key: '春の物語', suffixSource: 'Spring story' };
 // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
 const encodedWork = '/w/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E';
 
@@ -57,7 +57,7 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     expect(hrefFor(link)).toBe(encodedWork);
     const rtlLink = {
       ...link,
-      address: { prefix: '/e/' as const, key: sid, slugSource: 'كتاب جديد' },
+      address: { prefix: '/e/' as const, key: sid, suffixSource: 'كتاب جديد' },
     };
     expect(hrefFor(rtlLink))
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
@@ -70,7 +70,7 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     expect(profileHref('lin_mei', { kind: 'shelf', status: 'reading' }, 'a/b+?'))
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
       .toBe('/@lin_mei/shelves/reading?cursor=a%2Fb%2B%3F');
-    const address = { prefix: '/a/' as const, key: sid, slugSource: 'Lin Mei' };
+    const address = { prefix: '/a/' as const, key: sid, suffixSource: 'Lin Mei' };
     // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(profileHref({ handle: 'old_handle', address }, { kind: 'works' })).toBe(
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builder without calling it again.
@@ -88,7 +88,7 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
     expect(communityHref(iri)).toBe(`/r/${sid}`);
     // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
     expect(communityHref(iri, 'fiction')).toBe('/r/fiction');
-    expect(communityHref({ prefix: '/z/', key: 'new-community', slugSource: '' }, 'old-community'))
+    expect(communityHref({ prefix: '/z/', key: 'new-community', suffixSource: '' }, 'old-community'))
       // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builders without calling them again.
       .toBe('/r/new-community');
     const thread = threadPath(communityHref(iri, 'fiction'), iri);
@@ -119,7 +119,7 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
   test('concept conditions and entity pagination retain the canonical page and meaningful selections', () => {
     const state: ConceptState = {
       concept: uuid,
-      address: { prefix: '/concepts/', key: sid, slugSource: 'Fantasy' },
+      address: { prefix: '/concepts/', key: sid, suffixSource: 'Fantasy' },
       scope: { kind: 'global' },
       include: [],
       exclude: [],
@@ -187,7 +187,7 @@ describe('G-950 durable links across shared, feed, profile and catalogue surface
         }),
       );
     expect(render()).toContain(`href="/en${encodedWork}"`);
-    expect(render({ prefix: '/w/', key: 'renamed-story', slugSource: 'Other title' })).toContain(
+    expect(render({ prefix: '/w/', key: 'renamed-story', suffixSource: 'Other title' })).toContain(
       'href="/en/w/renamed-story"',
     );
   });

@@ -57,7 +57,7 @@ describe('G-945 durable discovery links', () => {
       {
         prefix: '/w/',
         key: 'a-named-work',
-        slugSource: 'A named work',
+        suffixSource: 'A named work',
       },
     ];
     for (const target of targets) {

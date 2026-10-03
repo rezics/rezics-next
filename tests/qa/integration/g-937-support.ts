@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
-import type { NameReceipt } from '../../../services/main/src/modules/address/registry.ts';
+import type { AliasReceipt } from '../../../services/main/src/modules/address/registry.ts';
 
 export async function addressFixture(label: string) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
@@ -30,24 +30,24 @@ export async function addressFixture(label: string) {
     );
   const lookup = (scope: string, key: string) =>
     publicCall(`/v1/addresses/resolve?${new URLSearchParams({ scope, key })}`);
-  const nameWrite = (
+  const aliasWrite = (
     scope: string,
     holder: string,
     operation: 'claim' | 'rename' | 'release' | 'merge',
-    name: string | null,
+    alias: string | null,
     expectedRevision: string | null,
-    key = `name-${randomUUID()}`,
+    key = `alias-${randomUUID()}`,
     successor?: string,
   ) =>
     f.call(
       'POST',
       `/v1/addresses/${operation === 'claim' ? 'claims' : operation === 'rename' ? 'renames' : 'dispositions'}`,
       {
-        profile: 'name-write-v1',
+        profile: 'alias-write-v1',
         scope,
         holder,
         operation,
-        ...(name === null ? {} : { name }),
+        ...(alias === null ? {} : { alias: alias }),
         expectedRevision,
         actingSubject: f.actor,
         ...(successor ? { successor } : {}),
@@ -66,12 +66,12 @@ export async function addressFixture(label: string) {
     for (const operation of ['claim', 'rename', 'dispose'])
       await f.grant(`address:${operation}:${holder}`, `address.${operation}`);
   };
-  const receipt = (response: Response, status = 201) => f.json<NameReceipt>(response, status);
+  const receipt = (response: Response, status = 201) => f.json<AliasReceipt>(response, status);
   return {
     ...f,
     publicCall,
     lookup,
-    nameWrite,
+    aliasWrite,
     work,
     permit,
     receipt,

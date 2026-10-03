@@ -3,7 +3,7 @@ import { Elysia } from 'elysia';
 import type { Pool } from 'pg';
 import { uuidToSid } from '@rezics/model/address/sid';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { NameRegistry, type NameScope } from '../src/modules/address/registry.ts';
+import { AliasRegistry, type AliasScope } from '../src/modules/address/registry.ts';
 import type { AddressScope } from '../src/modules/address/resolution.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { addressRoutes } from '../src/routes/addresses.ts';
@@ -30,21 +30,21 @@ function registry() {
   const client = { query, release: () => {} };
   return {
     queries,
-    names: new NameRegistry({ query, connect: async () => client } as unknown as Pool),
+    names: new AliasRegistry({ query, connect: async () => client } as unknown as Pool),
   };
 }
 
 for (const scope of ['agent', 'space', 'work', `zone:${space}`] as const) {
   test.each(forms)(`G990: ${scope} identifies UUID %s before name comparison`, async (key) => {
     const f = registry();
-    expect(await f.names.identify(scope, key)).toEqual({ holder, name: null });
+    expect(await f.names.identify(scope, key)).toEqual({ holder, alias: null });
     expect(f.queries).toEqual([]);
   });
 }
 
 test('G990: every name scope preserves sid case instead of folding it as a name', async () => {
   const changed = sid.replace('Z', 'z');
-  for (const scope of ['agent', 'space', 'work', `zone:${space}`] as NameScope[]) {
+  for (const scope of ['agent', 'space', 'work', `zone:${space}`] as AliasScope[]) {
     const f = registry();
     for (const suffix of ['', '-old-title']) {
       expect((await f.names.identify(scope, sid + suffix)).holder).toBe(holder);
@@ -157,7 +157,7 @@ for (const scope of ['agent', 'space', 'work', 'resource', 'concept', `zone:${sp
         key,
         status: 'resolved',
         holder,
-        canonical: { key: sid, slugSource: 'Reader' },
+        canonical: { key: sid, suffixSource: 'Reader' },
       });
       expect(f.graphQueries.join('\n')).not.toContain(key.toUpperCase());
     },
@@ -182,7 +182,7 @@ test('G990: batch resolution returns each spelling with one canonical identity',
       status: 'resolved',
       holder,
       state: 'current',
-      canonical: { prefix: '/a/', key: sid, slugSource: 'Reader' },
+      canonical: { prefix: '/a/', key: sid, suffixSource: 'Reader' },
     })),
   );
 });

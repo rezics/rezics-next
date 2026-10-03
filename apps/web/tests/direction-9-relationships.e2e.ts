@@ -641,7 +641,7 @@ for (const [localeIndex, locale] of locales.entries())
         expect(address.holder).toBe(created.space);
         expect(address.capabilities?.zone).toBe(created.zone);
         expect(address.capabilities?.realm).toBeUndefined();
-        const canonical = canonicalHref(address.canonical, locale, address.canonical.slugSource, {
+        const canonical = canonicalHref(address.canonical, locale, address.canonical.suffixSource, {
           surface: 'site',
         });
         expect(canonical).toMatch(new RegExp(`^/${locale}/z/`));

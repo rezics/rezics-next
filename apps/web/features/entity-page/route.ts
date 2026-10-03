@@ -8,7 +8,7 @@ import type { EntityLink, HrefFor, SectionId } from './types.ts';
 /** The UUID of an `/e/{ref}` segment or native IRI; a resource has no slug, so anything else is no address. */
 export function parseEntityRef(ref: string): string | null {
   const parsed = parseAddressSegment(ref);
-  return parsed && parsed.kind !== 'name' ? parsed.id : idOf(ref);
+  return parsed && parsed.kind !== 'alias' ? parsed.id : idOf(ref);
 }
 
 export const entityHref = (resource: AddressTarget) => resourceHref('/e/', resource);

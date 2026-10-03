@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { normalizeAddressName } from '@rezics/model/address/names';
+import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import {
   AgentVanityHandles,
   VANITY_SUGGESTION_COST,
 } from '../../../services/main/src/modules/agent/vanity.ts';
-import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
+import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 
 test('G-973: readable handle variants respect reserved, retained and cross-Space confusable names within a bounded budget', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
@@ -38,14 +38,14 @@ test('G-973: readable handle variants respect reserved, retained and cross-Space
     },
   });
   const handles = new AgentVanityHandles(probePool),
-    registry = new NameRegistry(pool);
+    registry = new AliasRegistry(pool);
   const occupy = async (key: string, scope = 'agent', state = 'current', spelling = key) => {
-    const name = normalizeAddressName(spelling, 'ascii-handle');
+    const name = normalizeAddressAlias(spelling, 'ascii-handle');
     const holder = `https://rezics.com/id/${randomUUID()}`;
     await pool.query(
-      `INSERT INTO access.name_registry(scope,key,display,skeleton,holder,controller,state)
-      VALUES ($1,$2,$3,$4,$5,$5,$6)`,
-      [scope, name.key, spelling, name.skeleton, holder, state],
+      `INSERT INTO access.alias_registry(scope,key,skeleton,holder,controller,state)
+      VALUES ($1,$2,$3,$4,$4,$5)`,
+      [scope, name.key, name.skeleton, holder, state],
     );
   };
   try {
@@ -55,7 +55,7 @@ test('G-973: readable handle variants respect reserved, retained and cross-Space
     expect(await handles.suggest(base)).toBe(`${base}2`);
     await occupy(`${base}2`, 'agent', 'redirect');
     await occupy(`${base}3`, 'agent', 'retired');
-    await pool.query('INSERT INTO access.name_reserved_word(word) VALUES ($1)', [`${base}4`]);
+    await pool.query('INSERT INTO access.alias_reserved_word(word) VALUES ($1)', [`${base}4`]);
     // Digit zero and lowercase o share a skeleton across Agent/Space handles.
     const confusable = `${base}5`.replace('reader', 'reader0');
     const confusableBase = base.replace('reader', 'readero');
@@ -84,7 +84,7 @@ test('G-973: readable handle variants respect reserved, retained and cross-Space
     expect((await registry.availability('agent', crowded)).available).toBe(true);
     expect(
       (
-        await pool.query('SELECT count(*)::int AS n FROM access.name_registry WHERE key = $1', [
+        await pool.query('SELECT count(*)::int AS n FROM access.alias_registry WHERE key = $1', [
           `${base}257`,
         ])
       ).rows[0]?.n,

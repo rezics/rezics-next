@@ -1,8 +1,8 @@
-import { asciiHandleSuggestion, normalizeAddressName } from '@rezics/model/address/names';
+import { asciiHandleSuggestion, normalizeAddressAlias } from '@rezics/model/address/aliases';
 
 export function normalizedHandle(value: string): string | null {
   try {
-    return normalizeAddressName(value.trim(), 'ascii-handle').key;
+    return normalizeAddressAlias(value.trim(), 'ascii-handle').key;
   } catch {
     return null;
   }

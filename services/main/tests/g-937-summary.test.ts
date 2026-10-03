@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
-import { NameRegistry } from '../src/modules/address/registry.ts';
+import { AliasRegistry } from '../src/modules/address/registry.ts';
 import { canonicalAddresses } from '../src/modules/address/canonical.ts';
 import { uuidToSid } from '@rezics/model/address/sid';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
@@ -39,9 +39,9 @@ test('G937: SQL owns every reserved web route and former authority word', () => 
     expect(words.has(word)).toBe(true);
 });
 
-test('G937: summary current-name lookup uses one plain query without recovery locks', async () => {
+test('G937: summary current-alias lookup uses one plain query without recovery locks', async () => {
   const calls: string[] = [];
-  const registry = new NameRegistry({
+  const registry = new AliasRegistry({
     query: async (sql: string) => {
       calls.push(sql);
       return { rows: [] };
@@ -49,8 +49,8 @@ test('G937: summary current-name lookup uses one plain query without recovery lo
   } as unknown as Pool);
   await registry.currents(['https://rezics.com/id/00000000-0000-0000-0000-000000000001']);
   expect(calls).toHaveLength(1);
-  expect(calls[0]).toContain('name_registry');
-  expect(calls[0]).not.toMatch(/BEGIN|FOR SHARE|recovery_fence|name_scope_policy/);
+  expect(calls[0]).toContain('alias_registry');
+  expect(calls[0]).not.toMatch(/BEGIN|FOR SHARE|recovery_fence|alias_scope_policy/);
 });
 
 test('G937: summaries survive missing capability backlinks and an unavailable registry', async () => {
@@ -73,6 +73,6 @@ test('G937: summaries survive missing capability backlinks and an unavailable re
   expect(results.get(holder)).toEqual({
     prefix: '/r/',
     key: uuidToSid(holder.slice(-36)),
-    slugSource: 'Community',
+    suffixSource: 'Community',
   });
 });

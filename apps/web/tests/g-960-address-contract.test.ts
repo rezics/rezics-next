@@ -9,7 +9,7 @@ import { workRefFromAddress } from '../features/work-page/read.ts';
 const uuid = '0199a0fe-0b21-7000-8000-123456789abc';
 const holder = `https://rezics.com/id/${uuid}`;
 const survivor = 'https://rezics.com/id/0199a0fe-0b21-7000-8000-123456789abd';
-const canonical = { prefix: '/w/' as const, key: '春の物語', slugSource: '春の物語' };
+const canonical = { prefix: '/w/' as const, key: '春の物語', suffixSource: '春の物語' };
 const summary = {
   reference: survivor,
   status: 'available',
@@ -57,14 +57,14 @@ describe('G-960 merged address contract', () => {
   });
 
   test('renamed and merged Works use the final canonical name instead of an intermediate UUID', async () => {
-    expect(workRefFromAddress(merged)).toEqual({ kind: 'moved', slug: canonical.key });
+    expect(workRefFromAddress(merged)).toEqual({ kind: 'moved', key: canonical.key });
     expect(workRefFromAddress({ ...merged, resolution: undefined })).toEqual({
       kind: 'moved',
-      slug: canonical.key,
+      key: canonical.key,
     });
     expect(workRefFromAddress({ ...merged, state: 'current' })).toEqual({
       kind: 'moved',
-      slug: canonical.key,
+      key: canonical.key,
     });
     expect(workRefFromAddress({ ...merged, state: 'current', resolution: undefined })).toEqual({
       kind: 'work',
@@ -72,8 +72,8 @@ describe('G-960 merged address contract', () => {
     });
     const resolve = async () => ({ kind: 'resolved' as const, data: merged });
     const suffix = { search: '?language=sv&version=first', hash: '#part' };
-    const target = canonicalHref(canonical, 'ja', canonical.slugSource, { tail: ['contents'], ...suffix });
-    const legacy = canonicalHref({ prefix: '/w/', key: uuid, slugSource: '' }, 'ja', '', {
+    const target = canonicalHref(canonical, 'ja', canonical.suffixSource, { tail: ['contents'], ...suffix });
+    const legacy = canonicalHref({ prefix: '/w/', key: uuid, suffixSource: '' }, 'ja', '', {
       tail: ['contents', ''], ...suffix,
     });
     expect(
@@ -92,11 +92,11 @@ describe('G-960 merged address contract', () => {
     const address = {
       prefix: '/w/' as const,
       key: uuidToSid(survivor.slice(-36)),
-      slugSource: 'New title',
+      suffixSource: 'New title',
     };
     expect(workRefFromAddress({ ...merged, canonical: address })).toEqual({
       kind: 'moved',
-      slug: `${address.key}-new-title`,
+      key: `${address.key}-new-title`,
     });
   });
 
@@ -105,7 +105,7 @@ describe('G-960 merged address contract', () => {
       ...merged,
       scope: `zone:${survivor}`,
       key: 'old-character',
-      canonical: { prefix: `${spaceHref('books', 'site', ['characters'])}/` as CanonicalAddress['prefix'], key: 'キリト', slugSource: 'Kirito' },
+      canonical: { prefix: `${spaceHref('books', 'site', ['characters'])}/` as CanonicalAddress['prefix'], key: 'キリト', suffixSource: 'Kirito' },
       capabilities: undefined,
       resolution: undefined,
     };

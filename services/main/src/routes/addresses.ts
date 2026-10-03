@@ -3,27 +3,27 @@ import { readProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import {
-  NAME_COST,
+  ALIAS_COST,
   NATIVE_ADDRESS_HOLDER,
-  NameInvalid,
-  NameDenied,
-  NameConflict,
-  NameCooldown,
-  NameUnavailable,
-  type NameScope,
-  type NameWrite,
+  AliasInvalid,
+  AliasDenied,
+  AliasConflict,
+  AliasCooldown,
+  AliasUnavailable,
+  type AliasScope,
+  type AliasWrite,
 } from '../modules/address/registry.ts';
-import { InvalidAddressName } from '@rezics/model/address/names';
-import { normalizeAddressName } from '@rezics/model/address/names';
+import { InvalidAddressAlias } from '@rezics/model/address/aliases';
+import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import {
   resolveAddresses,
   type AddressScope,
   type AddressLookup,
 } from '../modules/address/resolution.ts';
 import {
-  writeName,
-  withNameAuthority,
-  withNameAvailabilityAuthority,
+  writeAlias,
+  withAliasAuthority,
+  withAliasAvailabilityAuthority,
 } from '../modules/address/write.ts';
 import { canonicalAddress } from '../modules/address/schema.ts';
 import { mergedIdentity } from '../modules/identity-merge/resolution.ts';
@@ -78,15 +78,15 @@ const resolved = t.Union([
     { additionalProperties: false },
   ),
 ]);
-const writeFields = { profile: t.Literal('name-write-v1'), scope, holder, actingSubject: holder };
-const name = t.String({ minLength: 1, maxLength: 512 });
+const writeFields = { profile: t.Literal('alias-write-v1'), scope, holder, actingSubject: holder };
+const alias = t.String({ minLength: 1, maxLength: 512 });
 const writeBody = t.Union([
   t.Object(
-    { ...writeFields, operation: t.Literal('claim'), name, expectedRevision: t.Null() },
+    { ...writeFields, operation: t.Literal('claim'), alias, expectedRevision: t.Null() },
     { additionalProperties: false },
   ),
   t.Object(
-    { ...writeFields, operation: t.Literal('rename'), name, expectedRevision: revision },
+    { ...writeFields, operation: t.Literal('rename'), alias, expectedRevision: revision },
     { additionalProperties: false },
   ),
   t.Object(
@@ -104,11 +104,10 @@ const writeBody = t.Union([
   ),
 ]);
 const receipt = t.Object({
-  profile: t.Literal('name-write-v1'),
+  profile: t.Literal('alias-write-v1'),
   scope,
   holder,
   key: t.String(),
-  display: t.String(),
   state,
   revision,
   previousKey: t.Nullable(t.String()),
@@ -129,23 +128,23 @@ export const openApiOperations = {
 } as const;
 
 export function addressError(error: unknown): Response {
-  if (error instanceof NameCooldown) return problem(409, 'name_cooldown', error.message);
-  if (error instanceof NameInvalid || error instanceof InvalidAddressName)
-    return problem(400, 'invalid_name', error.message);
-  if (error instanceof NameDenied) return problem(403, 'name_denied', error.message);
-  if (error instanceof NameConflict) return problem(409, 'name_conflict', error.message);
-  if (error instanceof NameUnavailable || error instanceof MediaUnavailable)
-    return problem(503, 'name_unavailable', error.message);
+  if (error instanceof AliasCooldown) return problem(409, 'alias_cooldown', error.message);
+  if (error instanceof AliasInvalid || error instanceof InvalidAddressAlias)
+    return problem(400, 'invalid_alias', error.message);
+  if (error instanceof AliasDenied) return problem(403, 'alias_denied', error.message);
+  if (error instanceof AliasConflict) return problem(409, 'alias_conflict', error.message);
+  if (error instanceof AliasUnavailable || error instanceof MediaUnavailable)
+    return problem(503, 'alias_unavailable', error.message);
   return commandError(error);
 }
 
 export function addressRoutes(work: MainWorkDependencies) {
-  const write = async (request: Request, body: Omit<NameWrite, 'idempotencyKey'>) => {
+  const write = async (request: Request, body: Omit<AliasWrite, 'idempotencyKey'>) => {
     const key = request.headers.get('idempotency-key');
     if (!key || !/^[A-Za-z0-9:_./-]{1,128}$/.test(key))
       return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
     try {
-      const result = await writeName(work, request, { ...body, idempotencyKey: key });
+      const result = await writeAlias(work, request, { ...body, idempotencyKey: key });
       return Response.json(result, {
         status: result.replayed ? 200 : 201,
         headers: { 'cache-control': 'no-store' },
@@ -167,15 +166,15 @@ export function addressRoutes(work: MainWorkDependencies) {
       },
       async ({ request, query }) => {
         try {
-          const current = await withNameAuthority(
+          const current = await withAliasAuthority(
             work,
             request,
-            { ...query, scope: query.scope as NameScope, operation: 'rename' },
+            { ...query, scope: query.scope as AliasScope, operation: 'rename' },
             async (client) => {
               return (
                 (
                   await client.query(
-                    `SELECT scope,holder,key,revision FROM access.name_registry
+                    `SELECT scope,holder,key,revision FROM access.alias_registry
             WHERE scope = $1 AND holder = $2 AND state = 'current'`,
                     [query.scope, query.holder],
                   )
@@ -192,17 +191,17 @@ export function addressRoutes(work: MainWorkDependencies) {
     .post(
       '/v1/addresses/claims',
       { body: writeBody.anyOf[0], response: responses },
-      ({ request, body }) => write(request, body as Omit<NameWrite, 'idempotencyKey'>),
+      ({ request, body }) => write(request, body as Omit<AliasWrite, 'idempotencyKey'>),
     )
     .post(
       '/v1/addresses/renames',
       { body: writeBody.anyOf[1], response: responses },
-      ({ request, body }) => write(request, body as Omit<NameWrite, 'idempotencyKey'>),
+      ({ request, body }) => write(request, body as Omit<AliasWrite, 'idempotencyKey'>),
     )
     .post(
       '/v1/addresses/dispositions',
       { body: t.Union([writeBody.anyOf[2], writeBody.anyOf[3]]), response: responses },
-      ({ request, body }) => write(request, body as Omit<NameWrite, 'idempotencyKey'>),
+      ({ request, body }) => write(request, body as Omit<AliasWrite, 'idempotencyKey'>),
     )
     .get(
       '/v1/addresses/resolve',
@@ -225,7 +224,7 @@ export function addressRoutes(work: MainWorkDependencies) {
             !query.actingSubject
           ) {
             // A lookup revision alone misses renames of its canonical successor
-            // and language-dependent slugs. Include the admitted representation.
+            // and language-dependent suffixes. Include the admitted representation.
             const body = JSON.stringify(result);
             const digest = new Bun.CryptoHasher('sha256').update(body).digest('hex');
             const etag = `"address-${result.revision ?? 'identity'}-${digest}"`;
@@ -260,7 +259,7 @@ export function addressRoutes(work: MainWorkDependencies) {
       {
         body: t.Object(
           {
-            lookups: t.Array(lookup, { minItems: 1, maxItems: NAME_COST.batch }),
+            lookups: t.Array(lookup, { minItems: 1, maxItems: ALIAS_COST.batch }),
             actingSubject: t.Optional(holder),
           },
           { additionalProperties: false },
@@ -288,7 +287,7 @@ export function addressRoutes(work: MainWorkDependencies) {
     .get(
       '/v1/addresses/availability',
       {
-        query: t.Object({ scope, name, actingSubject: t.Optional(holder) }),
+        query: t.Object({ scope, alias, actingSubject: t.Optional(holder) }),
         response: {
           200: t.Object({ available: t.Boolean(), reason: t.String() }),
           ...readProblems,
@@ -297,17 +296,17 @@ export function addressRoutes(work: MainWorkDependencies) {
       async ({ request, query }) => {
         try {
           if (!work.environment.addresses)
-            throw new NameUnavailable('Name registry is unavailable');
+            throw new AliasUnavailable('Alias registry is unavailable');
           const registry = work.environment.addresses;
           return Response.json(
-            await withNameAvailabilityAuthority(
+            await withAliasAvailabilityAuthority(
               work,
               request,
               query.scope,
               query.actingSubject,
               () =>
                 registry.withRead(() =>
-                  registry.availability(query.scope as NameScope, query.name),
+                  registry.availability(query.scope as AliasScope, query.alias),
                 ),
             ),
             { headers: { 'cache-control': 'no-store' } },
@@ -332,17 +331,17 @@ export function addressRoutes(work: MainWorkDependencies) {
           if (current.status === 'unavailable')
             return problem(404, 'address_not_found', 'Address is unavailable');
           const registry = work.environment.addresses!;
-          const normalizedKey = normalizeAddressName(
+          const normalizedKey = normalizeAddressAlias(
             query.key,
             registry.policy(query.scope).characters,
           ).key;
           const exact = await registry.exact(
-            query.scope as NameScope,
+            query.scope as AliasScope,
             normalizedKey,
             params.revision,
           );
           if (!exact)
-            return problem(404, 'name_revision_not_found', 'Name revision is unavailable');
+            return problem(404, 'alias_revision_not_found', 'Alias revision is unavailable');
           return Response.json(
             {
               ...exact,

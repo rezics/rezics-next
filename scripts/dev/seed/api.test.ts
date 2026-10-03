@@ -46,7 +46,7 @@ test('G-543: a cancelled reply-draft read admission gets a fresh attempt while p
 });
 
 test('G-909: seed never retries an unrelated PUT conflict', async () => {
-  await fixture(['name_conflict'], async (api, calls) => {
+  await fixture(['alias_conflict'], async (api, calls) => {
     await expect(api.put(`/v1/works/${uuid}/reader-status`, {
       actingSubject: native, expectedVersion: 0, status: 'reading',
     }, 'token', 'seed-key')).rejects.toThrow('HTTP 409');

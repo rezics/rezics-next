@@ -67,12 +67,12 @@ export async function changeHandle(
           'idempotency-key': key,
         },
         body: JSON.stringify({
-          profile: 'name-write-v1',
+          profile: 'alias-write-v1',
           scope: 'agent',
           holder: agent,
           actingSubject: agent,
           operation: expectedRevision === null ? 'claim' : 'rename',
-          name: handle,
+          alias: handle,
           expectedRevision,
         }),
         cache: 'no-store',
@@ -84,7 +84,7 @@ export async function changeHandle(
       return 'changed';
     }
     const error = (await response.json().catch(() => null)) as { code?: string } | null;
-    if (error?.code === 'name_cooldown') return 'cooldown';
+    if (error?.code === 'alias_cooldown') return 'cooldown';
     if (response.status === 409) return 'conflict';
     if (response.status === 400) return 'invalid';
     if (response.status === 403) return 'denied';

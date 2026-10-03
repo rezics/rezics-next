@@ -351,7 +351,7 @@ test('G1028: address revalidation never holds a failed body as data and the next
     key: 'reader',
     holder: 'https://rezics.com/id/10280000-0000-4000-8000-000000000002',
     state: 'current',
-    canonical: { prefix: '/a/', key: 'reader', slugSource: 'Reader' },
+    canonical: { prefix: '/a/', key: 'reader', suffixSource: 'Reader' },
   };
   let calls = 0;
   let stalled = false;

@@ -180,7 +180,7 @@ async function walkAddress(
   name: string,
   surface?: Surface,
 ) {
-  const canonical = canonicalHref(read.canonical, locale, read.canonical.slugSource, { surface });
+  const canonical = canonicalHref(read.canonical, locale, read.canonical.suffixSource, { surface });
   const response = await page.goto(canonical);
   expect(response?.status(), `${name} canonical response`).toBe(200);
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
@@ -669,7 +669,7 @@ for (const locale of locales)
         await page.goto(overview);
         await expect(page).toHaveURL(overview);
         await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-          workAddress.canonical.slugSource,
+          workAddress.canonical.suffixSource,
         );
         await page.getByRole('button', { name: t.otherCommunities, exact: true }).first().click();
         await page.getByRole('combobox', { name: t.chooseCommunity, exact: true }).click();
@@ -744,7 +744,7 @@ for (const locale of locales)
           wiki = wikiCopy(locale);
         const read = await address(page, 'space', positions.space, locale);
         const response = await page.goto(
-          canonicalHref(read.canonical, locale, read.canonical.slugSource, {
+          canonicalHref(read.canonical, locale, read.canonical.suffixSource, {
             surface: 'site',
             tail: [positions.mount, uuidToSid(short(positions.work))],
             search: '?position=all',

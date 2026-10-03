@@ -25,10 +25,10 @@ export async function reportAddress(deps: MainWorkDependencies, value: string): 
   }
   const id = /^\/(?:v1\/)?(?:resources|works|agents|realms|media\/assets|posts|replies)\/([0-9a-f-]{36})$/.exec(url.pathname);
   if (id) return ID + id[1];
-  const slug = /^\/(?:w|work)\/([^/]+)$/.exec(url.pathname);
-  if (!slug) throw new GovernanceInvalid('Unsupported REZICS target URL');
-  const address = await deps.environment.addresses?.identify('work',decodeURIComponent(slug[1]!));
-  if (!address?.holder || address.name?.state === 'retired') throw new GovernanceDenied('Target is unavailable');
+  const segment = /^\/(?:w|work)\/([^/]+)$/.exec(url.pathname);
+  if (!segment) throw new GovernanceInvalid('Unsupported REZICS target URL');
+  const address = await deps.environment.addresses?.identify('work',decodeURIComponent(segment[1]!));
+  if (!address?.holder || address.alias?.state === 'retired') throw new GovernanceDenied('Target is unavailable');
   // Reporting's reader and evidence owners admit private Works below. URL
   // identification must not impose the public resolver's anonymous disclosure.
   const resolution = await readMergedIdentity(deps.environment,address.holder,async () => true);

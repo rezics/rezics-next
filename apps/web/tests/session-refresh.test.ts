@@ -235,7 +235,7 @@ function configure(fetcher: typeof fetch) {
         status: 'resolved',
         state: 'current',
         holder: 'https://rezics.com/id/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
-        canonical: { prefix: '/w/', key: 'book', slugSource: 'Book' },
+        canonical: { prefix: '/w/', key: 'book', suffixSource: 'Book' },
       } satisfies ResolvedAddress);
     }
     return fetcher(input, init);

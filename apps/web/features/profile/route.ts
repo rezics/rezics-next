@@ -54,7 +54,7 @@ export function profileHref(profile: string | { handle: string | null; id?: stri
     ? resourceHref('/a/', id!) : isNativeHandle(handle)
       ? resourceHref('/a/', handle.slice(6)) : identityKeyUuid(handle)
         ? resourceHref('/a/', identityKeyUuid(handle)!)
-        : resourceHref('/a/', { prefix: '/@', key: handle, slugSource: '' });
+        : resourceHref('/a/', { prefix: '/@', key: handle, suffixSource: '' });
   const path = `${base}${view.kind === 'works' ? '/works' : view.kind === 'shelf' ? `/shelves/${view.status}` : ''}`;
   return cursor ? `${path}?${new URLSearchParams({ cursor })}` : path;
 }

@@ -5,6 +5,6 @@ import { parseAddressSegment } from './path.ts';
 export async function profileIdentityParams<T extends { ref: string }>(params: Promise<T>) {
   const { ref, ...rest } = await params;
   const parsed = parseAddressSegment(ref);
-  if (!parsed || parsed.kind === 'name') notFound();
+  if (!parsed || parsed.kind === 'alias') notFound();
   return { ...rest, handle: `@${parsed.key}` };
 }

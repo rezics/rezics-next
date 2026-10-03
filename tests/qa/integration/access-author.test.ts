@@ -10,8 +10,7 @@ import { ProfilesAccess } from '../../../services/main/src/modules/profiles/acce
 import { RealmSubmissionReads } from '../../../services/main/src/modules/realm-submission/reads.ts';
 import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-submission/store.ts';
 import { WorkMaintainers } from '../../../services/main/src/modules/work/maintainers.ts';
-import { allocateAgentHandle } from '../../../services/main/src/modules/agent/handle.ts';
-import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
+import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
@@ -109,14 +108,13 @@ test('author baseline: metadata, own libraries, handles and narrow resource admi
     expect((await library.json() as { items: { id: string }[] }).items.map(row => row.id)).toContain(contribution.contribution);
     expect((await h.call('GET', `/v1/me/contributions?actingSubject=${encodeURIComponent(id())}`)).status).toBe(403);
     const contexts = new AccessActingContexts(h.accessPool, h.env);
-    const handle = allocateAgentHandle(h.actor);
     expect((await contexts.discover(h.principal)).contexts.find(row => row.actingSubject === h.actor)?.handle)
-      .toBe(handle);
+      .toBeNull();
     const vanity = `writer_${randomUUID().slice(0, 8)}`;
-    const names = new NameRegistry(h.accessPool);
+    const names = new AliasRegistry(h.accessPool);
     await h.access.withOwnerAuthority({ principal:h.principal,actingSubject:h.actor,
       scope:`agent:control:${h.actor}`,action:'agent.control' },client => names.write(client,h.principal,{
-      scope:'agent',holder:h.actor,actingSubject:h.actor,operation:'claim',name:vanity,expectedRevision:null,idempotencyKey:randomUUID(),
+      scope:'agent',holder:h.actor,actingSubject:h.actor,operation:'claim',alias:vanity,expectedRevision:null,idempotencyKey:randomUUID(),
     },h.actor));
     expect((await contexts.discover(h.principal)).contexts.find(row => row.actingSubject === h.actor)?.handle).toBe(vanity);
     expect((await contexts.checkContentDraft(h.principal, work.work, h.actor, '0')).decision).toBe('eligible-now');

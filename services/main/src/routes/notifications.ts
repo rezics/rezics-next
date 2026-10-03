@@ -73,7 +73,7 @@ const streamItem = t.Object({ id: t.String(), sequence: t.String(), purpose: t.S
     t.Literal('review'), t.Literal('review_helpful'), t.Literal('realm_invitation'),
     t.Literal('chapter'), t.Literal('new_work'), t.Literal('post_vote')]),
     actor: t.Nullable(t.Object({ id: t.String(), name: t.String(), handle: t.Nullable(t.String()),
-      address: t.Optional(t.Object({ prefix: t.String(), key: t.String(), slugSource: t.String() })),
+      address: t.Optional(t.Object({ prefix: t.String(), key: t.String(), suffixSource: t.String() })),
       avatar: t.Nullable(t.String()) })), realm: t.Nullable(t.String()),
     realmName: t.Nullable(t.String()), realmRouteSegment: t.Nullable(t.String()),
     roleName: t.Nullable(t.String()),

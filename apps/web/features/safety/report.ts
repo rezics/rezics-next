@@ -92,7 +92,7 @@ export function discussionTarget(href: string): string | null {
   if (!segment) return null;
   try {
     const reply = parseAddressSegment(decodeURIComponent(segment));
-    return reply && reply.kind !== 'name' ? ID + reply.id : null;
+    return reply && reply.kind !== 'alias' ? ID + reply.id : null;
   } catch { return null; }
 }
 

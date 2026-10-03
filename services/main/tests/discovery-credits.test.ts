@@ -24,7 +24,7 @@ test('discovery projects native and source credits with bounded order, then reso
     displayName: null });
   const named = await namedDiscoveryCredits(session, credits);
   expect(named.get(id(2))).toEqual({ displayName: 'Jane Austen', handle: 'jane-austen',
-    address: { prefix: '/@', key: 'jane-austen', slugSource: '' } });
+    address: { prefix: '/@', key: 'jane-austen', suffixSource: '' } });
   expect(queried[0]).toContain('ORDER BY ?ordinal STR(?id) LIMIT 3');
   expect(queried[1]).toContain('profileDisclosure rv:Private');
 });

@@ -45,12 +45,12 @@ test('G525: retired profile addresses answer one 301 and retain works and shelf 
     return page.request.post(`/api/main/v1/addresses/${current ? 'renames' : 'claims'}`, {
       headers: { 'idempotency-key': randomUUID() },
       data: {
-        profile: 'name-write-v1',
+        profile: 'alias-write-v1',
         scope: 'agent',
         holder: agent,
         actingSubject: agent,
         operation: current ? 'rename' : 'claim',
-        name: handle,
+        alias: handle,
         expectedRevision: current?.revision ?? null,
       },
     });
@@ -60,7 +60,7 @@ test('G525: retired profile addresses answer one 301 and retain works and shelf 
   try {
     // Only the isolated fixture's clock is advanced; both changes use the real API.
     await pool.query(
-      `UPDATE access.name_registry SET changed_at = now() - interval '31 days'
+      `UPDATE access.alias_registry SET changed_at = now() - interval '31 days'
       WHERE scope = 'agent' AND key = $1 AND holder = $2`,
       [oldHandle, agent],
     );

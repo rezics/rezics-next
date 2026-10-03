@@ -20,6 +20,6 @@ export function agentForHandle(handle: string): string | null {
 export function agentAddress(agent: string, handle: string | null): CanonicalAddress {
   const id = nativeAgent.exec(agent)?.[1];
   if (!id) throw new Error('invalid native Agent');
-  return handle ? { prefix: '/@', key: handle, slugSource: '' }
-    : { prefix: '/a/', key: uuidToSid(id), slugSource: '' };
+  return handle ? { prefix: '/@', key: handle, suffixSource: '' }
+    : { prefix: '/a/', key: uuidToSid(id), suffixSource: '' };
 }

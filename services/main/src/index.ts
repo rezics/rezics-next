@@ -52,7 +52,7 @@ import { AccessDownloadLeases } from './modules/access/download-leases.ts';
 import { AgentProvisioning } from './modules/agent/provision.ts';
 import { OnboardingPersons } from './modules/onboarding/persons.ts';
 import { AgentVanityHandles } from './modules/agent/vanity.ts';
-import { NameRegistry } from './modules/address/registry.ts';
+import { AliasRegistry } from './modules/address/registry.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
@@ -237,7 +237,7 @@ const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
 }) : undefined;
 if (workObjects) await workObjects.initialize();
 const environment = {
-  addresses: new NameRegistry(pool),
+  addresses: new AliasRegistry(pool),
   fuseki,
   lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
   objectDirectory: config.MAIN_OBJECT_DIRECTORY,

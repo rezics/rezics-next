@@ -157,7 +157,7 @@ describe('Work metadata', () => {
     });
     expect(workMetadata({ kind: 'missing' }, { tab: 'overview' }, {}, 'en', origin)).toEqual({});
     expect(
-      workMetadata({ kind: 'moved', slug: 'new-slug' }, { tab: 'overview' }, {}, 'en', origin),
+      workMetadata({ kind: 'moved', key: 'new-slug' }, { tab: 'overview' }, {}, 'en', origin),
     ).toEqual({});
   });
 

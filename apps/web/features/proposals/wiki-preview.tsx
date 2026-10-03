@@ -46,7 +46,7 @@ function Evidence({ evidence, t }: { evidence: readonly WikiEvidence[]; t: T }) 
   </ul>;
 }
 
-function NameRow({ name, t, locale }: { name: WikiName; t: T; locale: UiLocale }) {
+function AliasRow({ name, t, locale }: { name: WikiName; t: T; locale: UiLocale }) {
   const kind = { primary: t.wikiNamePrimary, alias: t.wikiNameAlias, title: t.wikiNameTitle }[name.kind];
   return <li className="grid min-w-0 gap-0.5">
     <span dir="auto" lang={name.language} className={`font-medium ${wrap}`}>{name.value}</span>
@@ -63,7 +63,7 @@ function EntityCard({ entity, t, locale }: { entity: WikiEntity; t: T; locale: U
       <Badge variant={entity.existing ? 'secondary' : 'info'} size="md" className="ms-auto">
         {entity.existing ? t.wikiEntityExisting : t.wikiNew}</Badge>
     </div>
-    <ul className="grid gap-1.5">{entity.names.map((name, index) => <NameRow key={index} name={name} t={t} locale={locale} />)}</ul>
+    <ul className="grid gap-1.5">{entity.names.map((name, index) => <AliasRow key={index} name={name} t={t} locale={locale} />)}</ul>
   </li>;
 }
 

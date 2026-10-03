@@ -30,9 +30,9 @@ const holder = `https://rezics.com/id/${uuid}`;
 const space = uuidToSid('0199a0fe-0b21-7000-8000-123456789abd');
 const url = (path: string) => new URL(path, 'https://rezics.test');
 const answer = (scope: ResolvedAddress['scope'], prefix: ResolvedAddress['canonical']['prefix'], key = sid,
-  slugSource = '春の物語'): AddressRead => ({ kind: 'resolved', data: {
+  suffixSource = '春の物語'): AddressRead => ({ kind: 'resolved', data: {
     profile: 'address-resolution-v1', scope, key, holder, state: 'current', status: 'resolved',
-    canonical: { prefix, key, slugSource },
+    canonical: { prefix, key, suffixSource },
     ...(scope === 'space' ? { capabilities: { realm: holder, zone: holder } } : {}),
   } });
 const full = (read: AddressRead) => {
@@ -41,20 +41,20 @@ const full = (read: AddressRead) => {
 };
 
 describe('G-943 one address grammar', () => {
-  test('sid, sid-slug, UUID, name and native-script name retain one identity', () => {
+  test('sid, sid-suffix, UUID, name and native-script name retain one identity', () => {
     expect(parseAddressSegment(sid)).toEqual({ kind: 'sid', id: uuid, key: sid });
     for (const slug of ['a', 'stale-title', '春の物語', 'abcdefghijklm']) {
-      expect(parseAddressSegment(`${sid}-${slug}`)).toEqual({ kind: 'sid-slug', id: uuid, key: `${sid}-${slug}` });
+      expect(parseAddressSegment(`${sid}-${slug}`)).toEqual({ kind: 'sid-suffix', id: uuid, key: `${sid}-${slug}` });
     }
     expect(parseAddressSegment(uuid.toUpperCase())?.kind).toBe('uuid');
     expect(parseWorkRef(`${sid}-ignored`)).toEqual({ kind: 'id', id: uuid });
-    expect(parseWorkRef('春の物語')).toEqual({ kind: 'slug', slug: '春の物語' });
+    expect(parseWorkRef('春の物語')).toEqual({ kind: 'alias', key: '春の物語' });
     expect(parseEntityRef(`${sid}-old`)).toBe(uuid);
     expect(parseConceptRef(`${sid}-old`)).toBe(uuid);
     expect(parseHandleSegment('@Mei-Lin')).toBe('Mei-Lin');
     expect(parseHandleSegment('@_old_name')).toBe('_old_name');
     expect(parseAddressSegment(`${uuidToSid('00000000-0000-0000-0000-000000000000')}-abcdefabcdefa`)?.kind)
-      .toBe('sid-slug');
+      .toBe('sid-suffix');
     expect(profileHref(`agent-${uuid}`)).toBe(`/a/${sid}`);
   });
   test('path separators, malformed escapes and control characters never reach the resolver', () => {
@@ -66,14 +66,14 @@ describe('G-943 one address grammar', () => {
     expect(addressPath('/api/main/v1/works')).toBeNull();
   });
   test('derived CJK and RTL slugs, empty names, and chosen names use proper encoding', () => {
-    expect(canonicalHref({ prefix: '/e/', key: sid, slugSource: '物語！ 春' }, 'ja'))
+    expect(canonicalHref({ prefix: '/e/', key: sid, suffixSource: '物語！ 春' }, 'ja'))
       .toBe(`/ja/e/${sid}-%E7%89%A9%E8%AA%9E-%E6%98%A5`);
-    expect(canonicalHref({ prefix: '/concepts/', key: sid, slugSource: 'كتاب جديد' }, 'en'))
+    expect(canonicalHref({ prefix: '/concepts/', key: sid, suffixSource: 'كتاب جديد' }, 'en'))
       .toBe(`/en/concepts/${sid}-%D9%83%D8%AA%D8%A7%D8%A8-%D8%AC%D8%AF%D9%8A%D8%AF`);
-    expect(canonicalHref({ prefix: '/a/', key: sid, slugSource: '' }, 'en')).toBe(`/en/a/${sid}`);
-    expect(canonicalHref({ prefix: '/w/', key: '春の物語', slugSource: 'Other' }, 'ja'))
+    expect(canonicalHref({ prefix: '/a/', key: sid, suffixSource: '' }, 'en')).toBe(`/en/a/${sid}`);
+    expect(canonicalHref({ prefix: '/w/', key: '春の物語', suffixSource: 'Other' }, 'ja'))
       .toBe('/ja/w/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E');
-    const address = { prefix: '/w/' as const, key: sid, slugSource: 'Title' };
+    const address = { prefix: '/w/' as const, key: sid, suffixSource: 'Title' };
     expect(canonicalRedirect(url(`/en/w/${sid}-title`), address, 'en')).toBeNull();
   });
   test('canonical annotations retain a content language outside the UI locales', () => {

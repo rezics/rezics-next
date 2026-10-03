@@ -21,7 +21,7 @@ const error = (read: Exclude<AddressRead, { kind: 'resolved' }>): AddressDecisio
   ...(read.kind === 'unavailable' && read.retryAfter ? { retryAfter: read.retryAfter } : {}),
 });
 
-/** Resolve first, then construct the final Location. No intermediate UUID/name/surface redirects. */
+/** Resolve first, then construct the final Location. No intermediate UUID/alias/surface redirects. */
 export async function decideAddress(
   url: URL,
   locale: UiLocale,
@@ -49,7 +49,7 @@ export async function decideAddress(
     path.lookup.scope === 'space' &&
     path.surface === 'community' &&
     identity &&
-    identity.kind !== 'name' &&
+    identity.kind !== 'alias' &&
     data.holder !== `https://rezics.com/id/${identity.id}` &&
     data.capabilities?.zone === `https://rezics.com/id/${identity.id}`
   )
@@ -63,12 +63,12 @@ export async function decideAddress(
   if (path.surface === 'community' && path.tail[0] === 'feed') path.tail = [];
   if (path.surface === 'community' && path.tail[0] === 'discussions' && path.tail[1]) {
     const reply = parseAddressSegment(path.tail[1]);
-    if (!reply || reply.kind === 'name') return { kind: 'error', status: 404 };
+    if (!reply || reply.kind === 'alias') return { kind: 'error', status: 404 };
     path.tail[1] = uuidToSid(reply.id);
   }
   if (path.legacySite && path.tail[0] === 'works') path.tail = ['browse', ...path.tail.slice(1)];
   let location = canonicalRedirect(url, data.canonical, locale, path);
-  // A mounted detail has its own name policy. The Space and member both
+  // A mounted detail has its own alias policy. The Space and member both
   // canonicalize before returning the single Location, even after renaming.
   if (path.surface === 'site' && path.tail.length >= 2) {
     const [route, key, ...tabs] = path.tail;
@@ -82,10 +82,10 @@ export async function decideAddress(
       route === 'w'
         ? { ...detail.data.canonical, key: uuidToSid(detail.data.holder.slice(-36)) }
         : detail.data.canonical;
-    const base = canonicalHref(data.canonical, locale, data.canonical.slugSource, {
+    const base = canonicalHref(data.canonical, locale, data.canonical.suffixSource, {
       surface: 'site',
     });
-    const target = canonicalHref({ ...member, prefix: '/e/' }, locale, member.slugSource, {
+    const target = canonicalHref({ ...member, prefix: '/e/' }, locale, member.suffixSource, {
       tail: tabs,
       search: url.search,
       hash: url.hash,

@@ -117,7 +117,7 @@ export function resolvedAddress(value: unknown): ResolvedAddress | null {
     // Main answer instead of permanently redirecting to a lowercase UUID.
     !parseAddressSegment(address.key) ||
     parseAddressSegment(address.key)?.kind === 'uuid' ||
-    typeof address.slugSource !== 'string' ||
+    typeof address.suffixSource !== 'string' ||
     !/^\/(?:@|(?:a|r|z|w|e|concepts)\/|z\/[^/]+\/[^/]+\/)$/.test(address.prefix) ||
     (data.capabilities &&
       Object.values(data.capabilities).some(

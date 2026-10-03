@@ -110,15 +110,15 @@ async function siteContentMetadata({ params, searchParams }: ZoneSiteProps): Pro
     if (read.failure !== 'missing') return { title: t.unavailableTitle, ...hidden };
     const { t: page } = await getTranslation('zones', [locale]);
     if (resolved.realm && path.length === 1 && path[0] === 'browse') {
-      return { title: `${page.browseTab} · ${resolved.address.canonical.slugSource}`, ...hidden };
+      return { title: `${page.browseTab} · ${resolved.address.canonical.suffixSource}`, ...hidden };
     }
     return {
-      title: `${page.pageMissingTitle} · ${resolved.address.canonical.slugSource}`,
+      title: `${page.pageMissingTitle} · ${resolved.address.canonical.suffixSource}`,
       ...hidden,
     };
   }
   const route = read.data;
-  const zone = resolved.address.canonical.slugSource;
+  const zone = resolved.address.canonical.suffixSource;
   const address = async (title: string): Promise<Metadata> => {
     const page = await pageUrl();
     return {
@@ -413,7 +413,7 @@ async function standaloneSite(
     slug: presentation.data.official,
     realm: null,
     name: zoneContentText(
-      route.data.name ?? resolved.address.canonical.slugSource,
+      route.data.name ?? resolved.address.canonical.suffixSource,
       route.data.language,
     ),
     description: null,

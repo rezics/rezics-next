@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { NameRegistry } from '../../../services/main/src/modules/address/registry.ts';
+import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
@@ -102,7 +102,7 @@ export async function authorCreditFixture(apps: Record<string, string>, objectDi
   } }) as Pool;
   // A shard's graph retains earlier Context/Work heads. Their immutable bytes
   // must share its lifetime, including manifests read by rating/card hydration.
-  const env = { fuseki, addresses: new NameRegistry(accessPool),lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
+  const env = { fuseki, addresses: new AliasRegistry(accessPool),lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
     objectDirectory: apps.MAIN_OBJECT_DIRECTORY ?? objectDirectory };
   const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
   const intake = new SourceIntakeStore(pool), conversions = new OpenLibraryConversionStore(pool, intake);

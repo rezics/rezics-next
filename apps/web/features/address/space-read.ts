@@ -48,9 +48,9 @@ export async function readSpacePage(
     if (options.address && !realm) return { kind: 'missing' };
     if (!realm) {
       const parsed = parseAddressSegment(key);
-      // The merged API has one name resolver and no per-Realm handle lookup.
-      // A denied name cannot be mapped to a Realm through a second resolver.
-      if (!parsed || parsed.kind === 'name') return { kind: 'missing' };
+      // The merged API has one alias resolver and no per-Realm handle lookup.
+      // A denied alias cannot be mapped to a Realm through a second resolver.
+      if (!parsed || parsed.kind === 'alias') return { kind: 'missing' };
       realm = parsed.id;
     }
     const query =

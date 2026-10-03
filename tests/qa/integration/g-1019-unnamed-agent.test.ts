@@ -117,12 +117,12 @@ test('G-1019: unnamed and named people keep their identity across profile, credi
     });
     const handle = `mei_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
     await call('POST', '/v1/addresses/claims', {
-      profile: 'name-write-v1',
+      profile: 'alias-write-v1',
       scope: 'agent',
       holder: agent,
       actingSubject: agent,
       operation: 'claim',
-      name: handle,
+      alias: handle,
       expectedRevision: null,
     });
     expect(await call('GET', path)).toMatchObject({ handle, links: { profile: `/@${handle}` } });

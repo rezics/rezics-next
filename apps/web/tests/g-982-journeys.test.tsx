@@ -24,7 +24,7 @@ const address: ResolvedAddress = {
   status: 'resolved',
   state: 'current',
   holder: joinPageFixture.space,
-  canonical: { prefix: '/r/', key: 'private-books', slugSource: '' },
+  canonical: { prefix: '/r/', key: 'private-books', suffixSource: '' },
   capabilities: { realm: joinPageFixture.id },
 };
 

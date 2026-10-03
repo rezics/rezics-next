@@ -1,7 +1,7 @@
 /** Native script survives. A long word is bounded at a grapheme boundary;
  * ordinary and unspaced CJK text use the last word boundary within 60 points.
- * Slug derivation is independent of the name registry and its Unicode tables. */
-export function deriveAddressSlug(value: string): string {
+ * Readable suffix derivation is independent of the alias registry and its Unicode tables. */
+export function deriveAddressSuffix(value: string): string {
   const normalized = value
     .normalize('NFC')
     .toLowerCase()

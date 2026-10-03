@@ -1,4 +1,4 @@
-// Work page addresses: `/w/{slug|id}/{tab}?scope=…`. Pure functions shared by
+// Work page addresses: `/w/{alias|id}/{tab}?scope=…`. Pure functions shared by
 // the routes, the components and their tests.
 
 import { withoutLocale } from '../../i18n/locale.ts';
@@ -11,12 +11,12 @@ export type WorkTab = (typeof workTabs)[number];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const idPrefix = 'https://rezics.com/id/';
 
-/** A `/w/{ref}` segment: a Work UUID, or a slug Main resolves. A UUID-shaped ref is always an ID. */
-export type WorkRef = { kind: 'id'; id: string } | { kind: 'slug'; slug: string };
+/** A `/w/{ref}` segment: a Work UUID, or an alias Main resolves. A UUID-shaped ref is always an ID. */
+export type WorkRef = { kind: 'id'; id: string } | { kind: 'alias'; key: string };
 
 export function parseWorkRef(ref: string): WorkRef | null {
   const parsed = parseAddressSegment(ref);
-  return !parsed ? null : parsed.kind === 'name' ? { kind: 'slug', slug: parsed.key }
+  return !parsed ? null : parsed.kind === 'alias' ? { kind: 'alias', key: parsed.key }
     : { kind: 'id', id: parsed.id };
 }
 
@@ -98,7 +98,7 @@ export interface ZoneWorkBase { ref: string; path: string; realm: string }
 /** Where a Work's pages are: its global `/w/{ref}`, or inside a Zone's site. */
 export type WorkAt = string | ZoneWorkBase;
 
-/** Main's address when available; otherwise an identity or an already resolved name. */
+/** Main's address when available; otherwise an identity or an already resolved alias. */
 export const globalWorkHref = (ref: AddressTarget) => resourceHref('/w/', ref);
 
 export const workRefOf = (at: WorkAt) => typeof at === 'string' ? at : at.ref;
