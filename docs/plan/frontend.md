@@ -143,6 +143,11 @@ Communities tab; `/r` redirects there.
   communities in the reader's languages, new sites. Things the reader already
   follows are not recommended. The frontend names no type: the former Books,
   Guides and Recipes shelves were hardcoded storage types.
+- The header's search box is Discover's search (2026-10-03): it opens Discover
+  on All with the query, and the former works-only `/search` redirects there
+  keeping its query. One search, one result vocabulary.
+- Each result uses its type's shared card, the same one rails and lists use (a
+  Work shows its cover, authors and rating), never a generic initial tile.
 - Personalization uses explicit signals only (follows, languages, library), as
   the [recommendation contract](../contracts/recommendations.md) requires, and
   can be turned off.
