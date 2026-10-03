@@ -54,14 +54,39 @@ export type ZoneConfiguration = Static<typeof ZoneConfiguration>;
 
 export class InvalidZoneConfiguration extends Error {}
 
-/** Checks the typed part; nested blocks must name an earlier block and stay within the depth bound. */
-export function checkZoneConfiguration(bytes: Uint8Array): ZoneConfiguration {
+// Stored revisions outlive an owner migration, including a deferred import.
+// Keep the former closed shape here; arbitrary properties would hide corruption.
+// Request schemas and new writes continue to use ZoneConfiguration.
+const StoredZoneConfiguration = Type.Object({ ...ZoneConfiguration.properties,
+  official: Type.Optional(Type.Object({ routeSegment: Type.Optional(Type.String({
+    pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 })) }, { additionalProperties: false })),
+}, { additionalProperties: false });
+
+function decodeZoneConfiguration(bytes: Uint8Array): unknown {
   if (bytes.length < 1 || bytes.length > ZONE_LIMITS.configBytes) {
     throw new InvalidZoneConfiguration('Zone configuration exceeds its byte bound');
   }
   let config: unknown;
   try { config = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); }
   catch { throw new InvalidZoneConfiguration('Zone configuration is not UTF-8 JSON'); }
+  return config;
+}
+
+/** Read every retained v1 shape without giving the former name field authority. */
+export function checkStoredZoneConfiguration(bytes: Uint8Array): ZoneConfiguration {
+  const config = decodeZoneConfiguration(bytes);
+  if (!Value.Check(StoredZoneConfiguration, config)) {
+    throw new InvalidZoneConfiguration('Zone configuration format differs');
+  }
+  return validateZoneConfiguration({ ...config, ...(config.official ? { official: {} } : {}) });
+}
+
+/** Checks new writes; nested blocks name an earlier block within the depth bound. */
+export function checkZoneConfiguration(bytes: Uint8Array): ZoneConfiguration {
+  return validateZoneConfiguration(decodeZoneConfiguration(bytes));
+}
+
+function validateZoneConfiguration(config: unknown): ZoneConfiguration {
   if (!Value.Check(ZoneConfiguration, config)) {
     throw new InvalidZoneConfiguration('Zone configuration format differs');
   }

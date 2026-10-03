@@ -9,7 +9,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
-import { checkZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
+import { checkZoneConfiguration, checkStoredZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
   ZONE_LIMITS, ZONE_PROFILE, type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
 import { ZONE_PRESENTATION_PROFILE, type ZonePresentation } from './presentation-format.ts';
@@ -79,7 +79,7 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   const name = readZoneName(stored.name, stored.language);
   const configuration = stored.configuration;
   const config = configuration && typeof configuration === 'object' && !Array.isArray(configuration)
-    ? checkZoneConfiguration(Buffer.from(JSON.stringify(configuration)))
+    ? checkStoredZoneConfiguration(Buffer.from(JSON.stringify(configuration)))
     : checkZoneConfiguration(Buffer.from(JSON.stringify({ format: ZONE_CONFIG_FORMAT,
       zone, space: head.space, navigation: head.navigation, state: head.state,
       disclosure: head.disclosure, budget: { timeMs: ZONE_LIMITS.queryBudgetMs,
