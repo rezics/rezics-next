@@ -59,6 +59,11 @@ export const discoveryConditionPayloadSql = `SELECT e.work, e.payload FROM acces
   JOIN unnest($3::text[], $4::text[]) AS k(work, term) ON e.work = k.work AND e.term = k.term
   WHERE e.generation_id = $1 AND e.work_type = $2`;
 
+export const discoveryResourceCardPayloadSql = `SELECT generation_id::text, work, jsonb_build_object(
+  'primaryCredits', payload->'primaryCredits', 'rating', payload->'rating') AS payload
+  FROM access.discovery_entry
+  WHERE generation_id=ANY($1::uuid[]) AND work=ANY($2::text[]) AND work_type='' AND term=''`;
+
 type SeekPosition = { key: string; work: string };
 const integerKey = /^-?\d+$/;
 const keyAfter = (left: string, right: string) => left !== right && (integerKey.test(left) && integerKey.test(right)
@@ -571,6 +576,33 @@ export class DiscoveryProjection {
           )
         ).rows.map((row) => row.work),
       );
+    });
+  }
+
+  /** Exact primary-key probes of immutable, already bounded card payloads.
+   * https://www.postgresql.org/docs/18/indexes-multicolumn.html
+   * No LIMIT/aggregation over the Work's underlying credits or ratings. */
+  async resourceCardPayloads(generations: readonly DiscoveryGeneration[], works: readonly string[]) {
+    if (generations.length > 2 || works.length > 64 || new Set(works).size !== works.length)
+      throw new RecommendationUnavailable('Resource card projection batch exceeds its bound');
+    return inAccess(this.pool, async client => {
+      const fence = await sourceFence(client);
+      if (generations.some(row => row.recovery_generation !== fence.generation))
+        throw new RecommendationRestart('Discovery recovery basis expired');
+      const rows = (await client.query<{ generation_id: string; work: string; payload: DiscoveryRow['payload'] }>(
+      discoveryResourceCardPayloadSql,
+      [generations.map(row => row.generation_id), works])).rows;
+      if (rows.length > generations.length * works.length
+        || Buffer.byteLength(JSON.stringify(rows)) > DISCOVERY_COST.projectionBytes)
+        throw new RecommendationUnavailable('Resource card payload exceeds its byte bound');
+      const result = new Map(generations.map(row => [row.generation_id, new Map<string, DiscoveryRow['payload']>()]));
+      for (const row of rows) {
+        const own = result.get(row.generation_id);
+        if (!own || own.has(row.work) || !works.includes(row.work))
+          throw new RecommendationUnavailable('Resource card projection is ambiguous');
+        own.set(row.work, row.payload);
+      }
+      return result;
     });
   }
 

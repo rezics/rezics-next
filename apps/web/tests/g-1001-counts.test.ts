@@ -35,3 +35,22 @@ test('G-1001 counts inflect results, topic use and ratings across all eight loca
     expect(counts.results(0)).not.toContain('{{');
   }
 });
+
+test('G1001: credit preview totals are counted messages in all eight locales', () => {
+  const expected = {
+    en: ['1 author credit', '20 author credits'],
+    'zh-Hant': ['1 筆作者署名', '20 筆作者署名'],
+    'zh-Hans': ['1 条作者署名', '20 条作者署名'],
+    ja: ['著者クレジット 1 件', '著者クレジット 20 件'],
+    ko: ['저자 크레딧 1개', '저자 크레딧 20개'],
+    de: ['1 Autorenangabe', '20 Autorenangaben'],
+    fr: ['1 crédit d’auteur', '20 crédits d’auteur'],
+    es: ['1 crédito de autor', '20 créditos de autor'],
+  };
+  for (const locale of uiLocales) {
+    const t = materializeData(browseCounts[locale], { locale });
+    expect([t.credits(1), t.credits(20)]).toEqual(expected[locale]);
+    expect(t.atLeastCredits(20)).toContain('20');
+    expect(t.atLeastCredits(20)).not.toBe(t.credits(20));
+  }
+});

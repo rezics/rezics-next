@@ -80,6 +80,7 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
     {work.authors.length ? <p className="mt-0.5 truncate text-muted-foreground text-sm">
       <AuthorNames authors={work.authors} /></p>
       : null}
+    {work.creditSummary ? <p className="mt-0.5 text-muted-foreground text-xs">{work.creditSummary}</p> : null}
     {/* An unfinished serial says so beside its rating, clear of the cover's own title and author. */}
     {work.rating || unfinished ? <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       {work.rating ? <RatingInline rating={work.rating} locale={locale} /> : null}

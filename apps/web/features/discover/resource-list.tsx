@@ -27,7 +27,7 @@ export function ResourceList({
   headingLevel?: 2 | 3 | 4;
 }) {
   const t = browseMessages[locale];
-  const works = items.filter(item => item.kind === 'work').map(item => resourceWork(item, scope));
+  const works = items.filter(item => item.kind === 'work').map(item => resourceWork(item, scope, locale));
   if (works.length && works.length === items.length) return <WorkGrid works={works}
     locale={locale} avatarQuery={avatarQuery} headingLevel={headingLevel} />;
   const slot = slotRatio(works);
