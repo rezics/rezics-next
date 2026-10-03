@@ -9,10 +9,13 @@ import { loadCompatibility, preparedLoadSourceMode } from './compatibility.ts';
 import { fusekiImageFromCompose } from './image.ts';
 import { validateLoadBaseline } from './baseline.ts';
 import { loadDockerEnvironment } from './docker-env.ts';
+import { qaStackEnvironment } from '../qa/stack-environment.ts';
 
 const root = resolve(import.meta.dir, '../..');
+// Load always uses the scale allocation, including preparation and cloned runs.
+const stackEnvironment = qaStackEnvironment(process.env, 'scale');
 function command(cwd: string, name: string, args: string[], timeoutMs: number,
-  env: NodeJS.ProcessEnv = process.env) {
+  env: NodeJS.ProcessEnv = stackEnvironment) {
   const started = Date.now();
   const result = spawnSync(name, args, { cwd, env, encoding: 'utf8', timeout: timeoutMs });
   return { ok: result.status === 0 && !result.error,
@@ -81,6 +84,7 @@ const stack = join(root, '.temp', 'stack', `rezics-qa-${stackRunId}`);
 mkdirSync(artifacts, { recursive: true });
 const sourceBefore = sourceIdentity(root);
 const evidence: Record<string, unknown> = {
+  stackMode: 'scale',
   runId, mode: prepare ? 'prepare' : from ? 'clone-profile'
     : fixtureRunId ? searchProbe ? 'fixture-search-probe' : 'fixture-profile' : 'online-profile',
   source: sourceBefore, ...(searchProbe ? { traceOnly: true }

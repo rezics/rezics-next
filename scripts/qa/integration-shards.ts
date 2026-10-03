@@ -1,5 +1,6 @@
 import { isolatedIntegrationFiles, planShards } from './core.ts';
 import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
+import { scaleIntegrationFiles } from './stack-environment.ts';
 
 export interface IntegrationShard {
   files: string[];
@@ -12,11 +13,10 @@ export function planIntegrationShards(
   estimates: ReadonlyMap<string, number>,
   count: number,
 ): IntegrationShard[] {
-  const reusable = new Map(
-    [...estimates].filter(([file]) => !commandOnlyIntegrationFiles.has(file)),
-  );
+  const ownProject = (file: string) => commandOnlyIntegrationFiles.has(file) || scaleIntegrationFiles.has(file);
+  const reusable = new Map([...estimates].filter(([file]) => !ownProject(file)));
   const persistent = [...estimates.keys()]
-    .filter((file) => commandOnlyIntegrationFiles.has(file))
+    .filter(ownProject)
     .sort();
   const plans = planShards(reusable, count).map((files) => {
     const shared = files.filter((file) => !isolatedIntegrationFiles.has(file));

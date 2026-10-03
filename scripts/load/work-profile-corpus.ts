@@ -85,13 +85,18 @@ export function workProfileCorpusApi(
       headers.set('authorization', `Bearer ${bearer}`);
       headers.set('idempotency-key', key);
       headers.set('content-type', 'application/json');
+      const requestSignal = signalFor(signal);
+      requestSignal?.throwIfAborted();
       const response = await (options.fetch ?? fetch)(new URL(command.path, target), {
         method: command.method,
         headers,
         body: JSON.stringify(command.body),
-        signal: signalFor(signal),
+        signal: requestSignal,
         redirect: 'error',
       });
+      // An in-process API can return an empty cancelled response instead of
+      // rejecting fetch. Preserve the preparation deadline, not a JSON error.
+      requestSignal?.throwIfAborted();
       // Pending and partial commands are not a completed corpus.
       if (![200, 201, 204].includes(response.status))
         throw new Error(`Corpus command ${key} returned HTTP ${response.status}`);
@@ -105,11 +110,14 @@ export function workProfileCorpusApi(
         url.origin !== target.origin
       )
         throw new Error('Invalid corpus read');
+      const requestSignal = signalFor(signal);
+      requestSignal?.throwIfAborted();
       const response = await (options.fetch ?? fetch)(url, {
         headers: { authorization: `Bearer ${bearer}` },
-        signal: signalFor(signal),
+        signal: requestSignal,
         redirect: 'error',
       });
+      requestSignal?.throwIfAborted();
       if (!response.ok) throw new Error(`Corpus verification returned HTTP ${response.status}`);
       return (await response.json()) as T;
     },
