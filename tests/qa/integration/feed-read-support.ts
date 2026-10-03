@@ -10,7 +10,7 @@ import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
 import { FeedViewerStateReader } from '../../../services/main/src/modules/feed/viewer-state.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
-import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce, type MainOutboxBatch } from '../../../services/main/src/modules/outbox/relay.ts';
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
@@ -23,6 +23,7 @@ import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { startMediaStack } from './media-support.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 
 /** The Home reads whose cost the budget and load tests hold. */
 export const HOME_READS = {
@@ -123,7 +124,7 @@ export function meterStatements() {
 
 /** The feed-home composition: real Account principals, API-provisioned Agents,
  * relay delivery and the projection worker, without a web server. */
-export async function startHomeStack(label: string) {
+export async function startHomeStack(label: string, options: { projectionStart?: 'current' } = {}) {
   const stack = await startMediaStack(label);
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
   const author = await stack.member('author'), reader = await stack.member('reader');
@@ -165,13 +166,30 @@ export async function startHomeStack(label: string) {
   const provision = async (name: string, token: string) => (await json<{ agent: string }>(
     await call('POST', '/v1/agents', { profile: 'agent-provision-v1', kind: 'person', displayName: name }, token), 201)).agent;
   await initializeRelayCheckpoint(relay, consumer, stack.env.lineage.dataEpoch);
+  if (options.projectionStart === 'current') {
+    // The fixture projects its subsequent commands. Both checkpoints start at
+    // the same cut so Feed never asks this relay for preceding files' events.
+    const position = await workRead(deps, new Request('http://main.internal/fixture-position'), {}, session => Promise.resolve(session.position));
+    await relay.query('UPDATE relay.checkpoint SET sequence=$2 WHERE consumer=$1 AND data_epoch=$3',
+      [consumer, position.sequence, position.dataEpoch]);
+    await feed.advance(await feed.initialize(position.dataEpoch), position.sequence, [], new Map());
+  }
+  const projectRelay = async () => {
+    const batches: MainOutboxBatch[] = [];
+    for (let i = 0; i < 400; i++) {
+      const batch = await relayMainOutboxOnce(stack.fuseki, relay, consumer);
+      if (!batch) return batches;
+      batches.push(batch);
+    }
+    throw new Error('Home relay exceeded its fixture budget');
+  };
   const project = async () => {
-    for (let i = 0; i < 400; i++) if (!await relayMainOutboxOnce(stack.fuseki, relay, consumer)) break;
+    await projectRelay();
     for (let i = 0; i < 400; i++) if (await new FeedRefreshWorker(deps, feed, relay).tick() === 'current') return;
     throw new Error('Home projection exceeded its fixture budget');
   };
   const stop = async () => { await relay.end(); await stack.stop(); };
-  return { stack, deps, app, call, json, provision, project, author, reader, stop };
+  return { stack, deps, app, call, json, provision, project, projectRelay, author, reader, stop };
 }
 
 export type HomeStack = Awaited<ReturnType<typeof startHomeStack>>;

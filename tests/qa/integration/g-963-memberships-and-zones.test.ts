@@ -86,7 +86,7 @@ test('G-963: self-leave ends only the current episode, preserves bans/history an
 });
 
 test('G-963: Zone-only creation uses ordinary Space authority, retries once and serves public/unlisted/private sites', async () => {
-  const home = await startHomeStack('g-963-zone-space');
+  const home = await startHomeStack('g-963-zone-space', { projectionStart: 'current' });
   try {
     const { stack, call, json } = home;
     const owner = await home.provision('Site owner', home.author.token);
@@ -97,7 +97,7 @@ test('G-963: Zone-only creation uses ordinary Space authority, retries once and 
       visibility: 'public', listing: 'unlisted' };
     expect((await call('POST', '/v1/spaces', { ...command, actingSubject: outsider }, home.author.token)).status).toBe(403);
     const created = await json<{ space: string; zone: string; navigation: string;
-      navigationRevision: string; zoneRevision: string; capabilities: string[] }>(
+      navigationRevision: string; zoneRevision: string; capabilities: string[]; sourcePosition: { sequence: string } }>(
       await call('POST', '/v1/spaces', command, home.author.token, key), 201);
     expect(created.capabilities).toEqual(['zone']);
     expect(await json(await call('POST', '/v1/spaces', command, home.author.token, key)))
@@ -121,7 +121,7 @@ test('G-963: Zone-only creation uses ordinary Space authority, retries once and 
       .toMatchObject({ holder: created.space, capabilities: { zone: created.zone } });
     await json(await call('PUT', `${root}/configuration`, { expectedHead: created.zoneRevision,
       actingSubject: owner, name: 'Renamed independent site', language: 'en' }, home.author.token));
-    const secret = await json<{ space: string; zone: string }>(await call('POST', '/v1/spaces', {
+    const secret = await json<{ space: string; zone: string; sourcePosition: { sequence: string } }>(await call('POST', '/v1/spaces', {
       ...command, handle: undefined, name: 'Private site', visibility: 'private', listing: 'unlisted',
     }, home.author.token), 201);
     const privateRoot = `/v1/zones/${secret.zone.slice(-36)}`;
@@ -132,6 +132,9 @@ test('G-963: Zone-only creation uses ordinary Space authority, retries once and 
       undefined, home.author.token))).toMatchObject({ kind: 'home', realm: null, name: 'Private site' });
     expect((await call('GET', `/v1/spaces/${secret.space.slice(-36)}`)).status).toBe(404);
     // The relay must consume the new owner event without inventing a Realm.
-    await home.project();
+    const batches = await home.projectRelay();
+    for (const space of [created,secret]) {
+      expect(batches).toContainEqual(expect.objectContaining({ sequence: space.sourcePosition.sequence }));
+    }
   } finally { await home.stop(); }
 });

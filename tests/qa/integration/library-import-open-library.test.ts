@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ReaderImportBudgetExceeded, ReaderImportConflict, ReaderLibraryImportStore }
@@ -26,7 +26,8 @@ test('G428: two readers add one Open Library identity and receive one native Wor
     let sourceStarted!: () => void, releaseSource!: () => void;
     const started = new Promise<void>(resolve => { sourceStarted = resolve; });
     const release = new Promise<void>(resolve => { releaseSource = resolve; });
-    const workId = `OL${String(Date.now()).slice(-9)}W`;
+    // Open Library IDs cannot start with zero; a timestamp suffix can.
+    const workId = `OL${randomInt(1, 1_000_000_000_000)}W`;
     const app = createMainApp(h.nativeFuseki, {
       account: h.account.verifier, access, environment: h.env,
       accessPolicy: new AccessPolicyOwner(h.accessPool),
@@ -56,7 +57,10 @@ test('G428: two readers add one Open Library identity and receive one native Wor
         body: JSON.stringify({ actingSubject: actor, workId, titleLanguage: 'en' }),
       }));
     const firstPending = adopt(h.account.tokenA, h.actor);
-    await started;
+    // A rejected request must fail here, not wait for a fetch it never reaches.
+    await Promise.race([started, firstPending.then(async response => {
+      throw new Error(`Import returned before acquisition: ${response.status} ${await response.clone().text()}`);
+    })]);
     const secondPending = adopt(h.account.tokenB, otherActor);
     await new Promise(resolve => setTimeout(resolve, 50));
     releaseSource();
