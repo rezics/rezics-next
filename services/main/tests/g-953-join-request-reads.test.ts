@@ -147,6 +147,11 @@ test('G-953: literal Unicode search and opaque cursors cannot silently change se
     expect(() => decodeRequestCursor(cursor,binding)).toThrow(RealmAdminInvalid);
   }
   expect(JOIN_REQUEST_SEARCH_SQL.match(/LIMIT \$4/g)).toHaveLength(JOIN_REQUEST_READ_COST.searchBranches + 1);
+  expect(JOIN_REQUEST_SEARCH_SQL).toContain('FROM access.name_registry h');
+  expect(JOIN_REQUEST_SEARCH_SQL).toContain("h.scope = 'agent'");
   expect(JOIN_REQUEST_SEARCH_SQL).toContain("h.state = 'current'");
+  expect(JOIN_REQUEST_SEARCH_SQL).toContain('pending.member = h.holder');
+  expect(JOIN_REQUEST_SEARCH_SQL).toContain('access.realm_member_search_key(h.key)');
+  expect(JOIN_REQUEST_SEARCH_SQL).not.toContain('access.agent_handle');
   expect(JOIN_REQUEST_SEARCH_SQL).not.toContain('account_subject');
 });

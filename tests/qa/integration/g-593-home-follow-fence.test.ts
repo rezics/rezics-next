@@ -38,6 +38,20 @@ test('G-593: All matches followed cards once and fences their inventory; Followi
       expect(calls[0]).toBeGreaterThan(0);
       expect(calls[1]).toBe(0);
     }
+    const following = await workRead(home.deps, publicRequest, {}, session =>
+      readFeed(session, { scope: 'following', sort: 'best', limit: 1 }, reader));
+    expect(following.nextCursor).not.toBeNull();
+    const continuation = { scope: 'following' as const, sort: 'best' as const,
+      limit: 1, cursor: following.nextCursor! };
+    await workRead(home.deps, publicRequest, {}, session => readFeed(session, continuation, reader));
+    await home.stack.accessPool.query('UPDATE access.follow_inventory SET revision = $2 WHERE principal_id = $1',
+      [home.reader.principalId, randomUUID()]);
+    calls.length = 0;
+    const cursorSession = await liveSession();
+    await expect(readFeed(new WorkReadSession(home.deps, publicRequest, {}, cursorSession.position),
+      continuation, reader)).rejects.toBeInstanceOf(WorkReadMoved);
+    // The inventory head rejects a stale continuation before card matching.
+    expect(calls).toEqual([0]);
     // A follow change after the card-match batch must never return stale reasons.
     changeDuringMatch = true;
     for (const scope of ['all', 'following'] as const) {
