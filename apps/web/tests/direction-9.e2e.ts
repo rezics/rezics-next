@@ -1,6 +1,14 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { expect, test as base, type Page, type TestInfo } from '@playwright/test';
+import {
+  expect,
+  test as base,
+  type Browser,
+  type BrowserContext,
+  type Page,
+  type TestInfo,
+} from '@playwright/test';
 import { entityPickerMessages } from '../../../packages/ui/src/components/entity-picker-messages.ts';
 import { uuidToSid } from '@rezics/model/address';
 import { materializeData } from 'native-i18n';
@@ -17,11 +25,19 @@ import { messages as shellEnglish } from '../features/shell/messages.ts';
 import shellChinese from '../features/shell/messages/zh-Hant.ts';
 import { copyOf as wikiCopy } from '../features/wiki/messages.ts';
 import { localeNames } from '../i18n/define.ts';
-import { signInAtAccounts } from './account-sign-in.ts';
 import {
   credentials,
+  setupCredentials,
   PublicCommands,
-  seedDirection,
+  directionFixture,
+  fixtureStore,
+  seedRatingPopulations,
+  ownRequests,
+  phase,
+  readyDirection,
+  resetAdmission,
+  resetSubmission,
+  prepareSubmissionReview,
   short,
   type DirectionFixture,
 } from './direction-9-fixture.ts';
@@ -35,6 +51,16 @@ const views = [
 const locales = ['en', 'zh-Hant'] as const;
 type Locale = (typeof locales)[number];
 const run = process.env.REZICS_QA_RUN_ID ?? `shared-${Date.now()}`;
+type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>;
+let memberState: StorageState | undefined;
+let operatorState: StorageState | undefined;
+
+function authStatePath(origin: string, member: { email: string }) {
+  const key = createHash('sha256').update(`${origin}:${member.email}`).digest('hex');
+  const directory = resolve('.temp/direction-9/auth');
+  mkdirSync(directory, { recursive: true });
+  return resolve(directory, `${key}.json`);
+}
 
 async function screenshot(page: Page, info: TestInfo, step: string) {
   const directory = resolve(
@@ -54,30 +80,102 @@ async function screenshot(page: Page, info: TestInfo, step: string) {
 }
 
 async function selectActor(page: Page, actor: string, next: string) {
+  const sessionKey = (await page.context().cookies()).find(
+    (cookie) => cookie.name === 'rezics_session_key',
+  )?.value;
+  expect(sessionKey).toBeTruthy();
+  const state = await page.request.get('/api/main/v1/me/session-agent', {
+    headers: { 'x-session-key': sessionKey! },
+  });
+  expect(state.status()).toBe(200);
+  const current = (await state.json()) as { sessionAgent: { revision: string | null } };
   const response = await page.request.post('/identity/select', {
     maxRedirects: 0,
-    form: { agent: actor, next },
+    form: {
+      agent: actor,
+      next,
+      locale: next.split('/')[1]!,
+      sessionRevision: current.sessionAgent.revision ?? '',
+    },
   });
   expect(response.status()).toBe(303);
   expect(response.headers().location).not.toContain('error=');
   await page.goto(next);
 }
 
-/** The fixture's second Account may not have published a Main Person yet. */
-async function signInManager(page: Page) {
-  const member = credentials().operator;
-  await page.goto('/auth/start?next=%2Fen%2Fsettings');
-  const accounts = new URL(process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004').origin;
-  await page.waitForURL((url) => url.origin === accounts && url.pathname === '/sign-in');
-  await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
-  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(member.email);
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.getByLabel('Enter your password').fill(member.password);
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
-  await page.waitForURL(
-    (url) => url.pathname === '/en/settings' || url.pathname === '/en/onboarding',
-    { timeout: 60_000 },
+/** Local Aspire advertises 127.0.0.1 even when the caller names localhost. */
+function atAccounts(url: URL) {
+  const accounts = new URL(process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004');
+  const loopback = new Set(['localhost', '127.0.0.1', '[::1]']);
+  return (
+    url.origin === accounts.origin ||
+    (loopback.has(url.hostname) &&
+      loopback.has(accounts.hostname) &&
+      url.protocol === accounts.protocol &&
+      url.port === accounts.port)
   );
+}
+
+async function signInAtAccounts(
+  page: Page,
+  next: string,
+  member: { email: string; password: string },
+  onboard = false,
+) {
+  page.setDefaultTimeout(30_000);
+  const statePath = authStatePath(String(process.env.REZICS_WEB_E2E_BASE_URL), member);
+  const cachedKey = (await page.context().cookies()).find(
+    (cookie) => cookie.name === 'rezics_session_key',
+  )?.value;
+  if (cachedKey) {
+    // Navigation refreshes an expired access token before the BFF read; an
+    // Account cookie may also finish OAuth without showing a password form.
+    await page.goto(next);
+    const current = await page.request.get('/api/main/v1/me/session-agent', {
+      timeout: 10_000,
+      headers: { 'x-session-key': cachedKey },
+    });
+    if (current.status() === 200) {
+      await expect(page).toHaveURL(next);
+      writeFileSync(statePath, JSON.stringify(await page.context().storageState()), {
+        mode: 0o600,
+      });
+      return;
+    }
+  }
+  const finished = (url: URL) =>
+    url.pathname === next || (onboard && url.pathname === '/en/onboarding');
+  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
+  await page.waitForURL(
+    (url) =>
+      (atAccounts(url) && url.pathname === '/sign-in') ||
+      finished(url) ||
+      url.pathname.endsWith('/identity/failed'),
+    {
+      timeout: 30_000,
+    },
+  );
+  if (new URL(page.url()).pathname.endsWith('/identity/failed'))
+    throw new Error(
+      `Fixture sign-in failed (${new URL(page.url()).searchParams.get('reason') ?? 'unknown'})`,
+    );
+  if (new URL(page.url()).pathname === '/sign-in') {
+    await page.locator('html[data-hydrated]').waitFor({ timeout: 60_000 });
+    await page.getByRole('textbox', { name: 'Email', exact: true }).fill(member.email);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.getByLabel('Enter your password').fill(member.password);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    const accept = page.getByRole('button', { name: 'Accept and continue', exact: true });
+    await Promise.race([
+      page.waitForURL(finished, { timeout: 30_000 }),
+      accept.waitFor({ state: 'visible', timeout: 30_000 }),
+    ]);
+    if (await accept.isVisible()) {
+      await page.locator('html[data-hydrated]').waitFor({ timeout: 30_000 });
+      await accept.click();
+    }
+    await page.waitForURL(finished, { timeout: 30_000 });
+  }
   if (new URL(page.url()).pathname === '/en/onboarding') {
     const sessionKey = (await page.context().cookies()).find(
       (cookie) => cookie.name === 'rezics_session_key',
@@ -92,7 +190,34 @@ async function signInManager(page: Page) {
       'POST',
       { 'x-session-key': sessionKey! },
     );
-    await selectActor(page, person.agent, '/en/settings');
+    await selectActor(page, person.agent, next);
+  }
+  await expect(page).toHaveURL(next);
+  writeFileSync(statePath, JSON.stringify(await page.context().storageState()), { mode: 0o600 });
+}
+
+/** The fixture's second Account may not have published a Main Person yet. */
+async function signInManager(page: Page) {
+  await signInAtAccounts(page, '/en/settings', credentials().operator, true);
+}
+
+async function setupCommands(
+  browser: Browser,
+  info: TestInfo,
+  action: (api: PublicCommands) => Promise<unknown>,
+) {
+  const administrator = setupCredentials() ?? credentials().operator;
+  const path = authStatePath(String(info.project.use.baseURL), administrator);
+  const context = await browser.newContext({
+    baseURL: info.project.use.baseURL,
+    ...(existsSync(path) ? { storageState: path } : {}),
+  });
+  try {
+    const page = await context.newPage();
+    await signInAtAccounts(page, '/en/settings', administrator, true);
+    return await action(new PublicCommands(context.request));
+  } finally {
+    await context.close();
   }
 }
 
@@ -162,21 +287,48 @@ async function walkAddress(
 
 // Setup is API-only after real sign-in; no SQL, in-process app, seeded IDs or
 // mocked routes can make a browser acceptance journey pass.
-const test = base;
+const test = base.extend({
+  storageState: async ({}, use) => {
+    await use(memberState);
+  },
+});
 let fixture: DirectionFixture;
 test.beforeAll(async ({ browser }, info) => {
-  test.setTimeout(600_000);
-  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
-  const managerContext = await browser.newContext({ baseURL: info.project.use.baseURL });
+  test.setTimeout(120_000);
+  const start = performance.now();
+  const administrator = setupCredentials();
+  const options = (member: { email: string }) => {
+    const path = authStatePath(String(info.project.use.baseURL), member);
+    return {
+      baseURL: info.project.use.baseURL,
+      ...(existsSync(path) ? { storageState: path } : {}),
+    };
+  };
+  const context = await browser.newContext(options(credentials().member));
+  const managerContext = await browser.newContext(options(credentials().operator));
+  const setupContext = await browser.newContext(options(administrator ?? credentials().operator));
+  const api = new PublicCommands(context.request);
+  const managerApi = new PublicCommands(managerContext.request);
   try {
     const page = await context.newPage();
-    await signInAtAccounts(page, '/en/settings', credentials().member);
     const managerPage = await managerContext.newPage();
+    const setupPage = administrator ? await setupContext.newPage() : null;
     expect(
       credentials().operator.email,
       'requester and manager must be different Accounts',
     ).not.toBe(credentials().member.email);
-    await signInManager(managerPage);
+    await phase('real Account sign-in', () =>
+      Promise.all([
+        signInAtAccounts(page, '/en/settings', credentials().member),
+        signInManager(managerPage),
+      ]),
+    );
+    if (administrator && setupPage)
+      await phase('administrator Account sign-in', () =>
+        signInAtAccounts(setupPage, '/en/settings', administrator, true),
+      );
+    memberState = await context.storageState();
+    operatorState = await managerContext.storageState();
     const sessionKey = (await context.cookies()).find(
       (cookie) => cookie.name === 'rezics_session_key',
     )?.value;
@@ -188,14 +340,69 @@ test.beforeAll(async ({ browser }, info) => {
     const { sessionAgent } = (await session.json()) as {
       sessionAgent: { actingSubject: string };
     };
-    fixture = await seedDirection(
-      new PublicCommands(page.request),
+    let setup: { api: PublicCommands; actor: string } | undefined;
+    if (setupPage) {
+      const setupKey = (await setupContext.cookies()).find(
+        (cookie) => cookie.name === 'rezics_session_key',
+      )?.value;
+      expect(setupKey).toBeTruthy();
+      const response = await setupPage.request.get('/api/main/v1/me/session-agent', {
+        headers: { 'x-session-key': setupKey! },
+      });
+      expect(response.status()).toBe(200);
+      const selected = (await response.json()) as { sessionAgent: { actingSubject: string } };
+      setup = {
+        api: new PublicCommands(setupContext.request),
+        actor: selected.sessionAgent.actingSubject,
+      };
+    }
+    fixture = await directionFixture(
+      api,
       sessionAgent.actingSubject,
-      new PublicCommands(managerPage.request),
+      managerApi,
+      fixtureStore(String(info.project.use.baseURL), sessionAgent.actingSubject),
+      setup,
     );
+    const elapsedMs = Math.round(performance.now() - start);
+    console.log(`[direction-9 setup] total: ${elapsedMs} ms`);
+    await info.attach('fixture', {
+      body: JSON.stringify(
+        {
+          elapsedMs,
+          fixture,
+          requests: [...api.timings, ...managerApi.timings, ...(setup?.api.timings ?? [])],
+        },
+        null,
+        2,
+      ),
+      contentType: 'application/json',
+    });
+    expect(elapsedMs, 'routine fixture preparation finishes in under two minutes').toBeLessThan(
+      120_000,
+    );
+  } catch (error) {
+    const directory = resolve('.temp/direction-9', run, 'setup');
+    mkdirSync(directory, { recursive: true });
+    await info.attach('setup-requests', {
+      body: JSON.stringify([...api.timings, ...managerApi.timings], null, 2),
+      contentType: 'application/json',
+    });
+    for (const [name, active] of [
+      ['member', context],
+      ['manager', managerContext],
+      ['administrator', setupContext],
+    ] as const) {
+      const page = active.pages()[0];
+      if (page && !page.isClosed()) {
+        console.log(`[direction-9 setup] ${name} stopped at ${new URL(page.url()).pathname}`);
+        const path = resolve(directory, `${name}-failure.png`);
+        await page.screenshot({ path, fullPage: true });
+        await info.attach(`setup-${name}-failure`, { path, contentType: 'image/png' });
+      }
+    }
+    throw error;
   } finally {
-    await context.close();
-    await managerContext.close();
+    await Promise.allSettled([context.close(), managerContext.close(), setupContext.close()]);
   }
 });
 
@@ -205,7 +412,8 @@ for (const locale of locales)
       test.use({ viewport: view.viewport });
       test.beforeEach(async ({ page }) => {
         test.setTimeout(180_000);
-        await signInAtAccounts(page, `/${locale}/settings`, credentials().member);
+        page.setDefaultTimeout(30_000);
+        await page.goto(`/${locale}/settings`);
       });
       test.afterEach(async ({ page }, info) => {
         if (info.status !== info.expectedStatus) await screenshot(page, info, 'failure');
@@ -264,6 +472,28 @@ for (const locale of locales)
       test('account menu: second-level Language and Appearance show their current values', async ({
         page,
       }, info) => {
+        const preferences = await page.request.get('/api/preferences');
+        expect(preferences.status()).toBe(200);
+        const current = (await preferences.json()) as {
+          revision: number;
+          displayMode: string;
+          showZoneThemes: boolean;
+        };
+        if (current.displayMode !== 'system') {
+          const reset = await page.request.put('/api/preferences', {
+            headers: { origin: new URL(page.url()).origin },
+            data: {
+              expectedRevision: current.revision,
+              displayMode: 'system',
+              showZoneThemes: current.showZoneThemes,
+            },
+          });
+          expect(reset.status()).toBe(200);
+        }
+        await page
+          .context()
+          .addCookies([{ name: 'rezics_theme', value: 'system', url: new URL(page.url()).origin }]);
+        await page.reload();
         const t = authMessages[locale];
         const shell = locale === 'en' ? shellEnglish : shellChinese;
         const phone = view.name === 'phone';
@@ -351,7 +581,9 @@ for (const locale of locales)
       test('Discover: type tabs, topic picker chips and Communities continuation', async ({
         page,
       }, info) => {
+        await readyDirection(new PublicCommands(page.request), fixture, 'communities');
         const t = browseMessages[locale];
+        const topicName = fixture.topic.names[locale];
         await page.goto(`/${locale}/discover`);
         for (const [tab, label] of [
           ['works', t.works],
@@ -365,33 +597,37 @@ for (const locale of locales)
             .getByRole('navigation', { name: t.type, exact: true })
             .getByRole('link', { name: label, exact: true });
           await link.click();
-          expect(new URL(page.url()).searchParams.get('tab')).toBe(tab);
+          await expect.poll(() => new URL(page.url()).searchParams.get('tab')).toBe(tab);
           await expect(link).toHaveAttribute('aria-current', 'page');
           await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
           await screenshot(page, info, `discover-${tab}`);
         }
-        await page.getByRole('combobox', { name: t.topics, exact: true }).fill(fixture.topic.name);
-        await page.getByRole('option', { name: new RegExp(fixture.topic.name) }).click();
-        expect(new URL(page.url()).searchParams.get('ci')).toContain(short(fixture.topic.concept));
+        await page.getByRole('combobox', { name: t.topics, exact: true }).fill(topicName);
+        await page.getByRole('option', { name: new RegExp(topicName) }).click();
+        await expect
+          .poll(() => new URL(page.url()).searchParams.get('ci') ?? '')
+          .toContain(short(fixture.topic.concept));
         await screenshot(page, info, 'topic-included');
         const picker = entityPickerMessages[locale];
         await page
           .getByRole('button', {
-            name: picker.exclude.replace('{label}', fixture.topic.name),
+            name: picker.exclude.replace('{label}', topicName),
             exact: true,
           })
           .click();
-        expect(new URL(page.url()).searchParams.get('ce')).toContain(short(fixture.topic.concept));
-        expect(new URL(page.url()).searchParams.has('ci')).toBe(false);
+        await expect
+          .poll(() => new URL(page.url()).searchParams.get('ce') ?? '')
+          .toContain(short(fixture.topic.concept));
+        await expect.poll(() => new URL(page.url()).searchParams.has('ci')).toBe(false);
         await screenshot(page, info, 'topic-excluded');
         // EntityPicker localizes these actions independently of Discover.
         await page
           .getByRole('button', {
-            name: picker.remove.replace('{label}', fixture.topic.name),
+            name: picker.remove.replace('{label}', topicName),
             exact: true,
           })
           .click();
-        expect(new URL(page.url()).searchParams.has('ce')).toBe(false);
+        await expect.poll(() => new URL(page.url()).searchParams.has('ce')).toBe(false);
         await page.goto(`/${locale}/discover?tab=communities`);
         const firstNames = await page
           .getByRole('main')
@@ -399,7 +635,7 @@ for (const locale of locales)
           .getByRole('link')
           .allTextContents();
         await page.getByRole('link', { name: t.more, exact: true }).click();
-        expect(new URL(page.url()).searchParams.get('cursor')).toBeTruthy();
+        await expect.poll(() => new URL(page.url()).searchParams.get('cursor')).toBeTruthy();
         const secondNames = await page
           .getByRole('main')
           .getByRole('list')
@@ -413,7 +649,21 @@ for (const locale of locales)
         await screenshot(page, info, 'communities-next-page');
       });
 
-      test('rating scope: choose a population past page one', async ({ page }, info) => {
+      test('rating scope: choose a population past page one', async ({ page, browser }, info) => {
+        const administrator = setupCredentials() ?? credentials().operator;
+        const path = authStatePath(String(info.project.use.baseURL), administrator);
+        const setupContext = await browser.newContext({
+          baseURL: info.project.use.baseURL,
+          storageState: path,
+        });
+        try {
+          const setupPage = await setupContext.newPage();
+          await signInAtAccounts(setupPage, '/en/settings', administrator, true);
+          await seedRatingPopulations(new PublicCommands(setupContext.request), fixture);
+        } finally {
+          await setupContext.close();
+        }
+        await readyDirection(new PublicCommands(page.request), fixture, 'ratings');
         const t = browseMessages[locale];
         const workAddress = await address(page, 'work', fixture.work.work, locale);
         await page.goto(canonicalHref(workAddress.canonical, locale));
@@ -428,20 +678,28 @@ for (const locale of locales)
         const later = options.find((name) => !first.includes(name));
         expect(later, 'a population beyond the first page is selectable').toBeTruthy();
         await page.getByRole('option').nth(options.indexOf(later!)).click();
-        expect(new URL(page.url()).searchParams.get('scope')).toBe('realm');
-        expect(new URL(page.url()).searchParams.get('realm')).toBeTruthy();
+        await expect.poll(() => new URL(page.url()).searchParams.get('scope')).toBe('realm');
+        await expect.poll(() => new URL(page.url()).searchParams.get('realm')).toBeTruthy();
         await screenshot(page, info, 'population-selected');
       });
 
       test('submission: find a Realm by search and submit a published text', async ({
         page,
+        browser,
       }, info) => {
         const t = browseMessages[locale];
         const community =
           fixture.spaces[7 + locales.indexOf(locale) * views.length + views.indexOf(view)]!;
+        await setupCommands(browser, info, (api) =>
+          prepareSubmissionReview(api, fixture, community),
+        );
+        const submitted = { ...fixture, work: fixture.story };
         await selectActor(page, fixture.actor, `/${locale}/settings`);
+        await phase(`reset submission ${locale} ${view.name}`, () =>
+          resetSubmission(new PublicCommands(page.request), submitted, community),
+        );
         await page.goto(
-          `/${locale}/studio/@agent-${short(fixture.actor)}/works/${short(fixture.work.work)}?tab=realms`,
+          `/${locale}/studio/@agent-${short(fixture.actor)}/works/${short(submitted.work.work)}?tab=realms`,
         );
         await page
           .getByRole('combobox', { name: t.chooseCommunity, exact: true })
@@ -465,6 +723,7 @@ for (const locale of locales)
       test('wiki position: search for a chapter beyond the initial window', async ({
         page,
       }, info) => {
+        await readyDirection(new PublicCommands(page.request), fixture, 'chapters');
         const t = browseMessages[locale],
           wiki = wikiCopy(locale);
         const read = await address(page, 'space', fixture.named.space, locale);
@@ -487,9 +746,9 @@ for (const locale of locales)
           .getByRole('combobox', { name: t.searchChapters, exact: true })
           .fill(fixture.laterChapter.name);
         await page.getByRole('option', { name: fixture.laterChapter.name, exact: true }).click();
-        expect(new URL(page.url()).searchParams.get('position')).toBe(
-          short(fixture.laterChapter.occurrence),
-        );
+        await expect
+          .poll(() => new URL(page.url()).searchParams.get('position'))
+          .toBe(short(fixture.laterChapter.occurrence));
         await expect(trigger).toContainText(fixture.laterChapter.name);
         await screenshot(page, info, 'wiki-later-chapter-selected');
       });
@@ -503,6 +762,9 @@ for (const locale of locales)
           fixture.privateSpaces[locales.indexOf(locale) * views.length + views.indexOf(view)]!;
         const path = `/${locale}/r/${privateSpace.handle}`;
         await selectActor(page, fixture.actor, `/${locale}/settings`);
+        const previous = await phase(`reset admission ${locale} ${view.name}`, () =>
+          resetAdmission(new PublicCommands(page.request), fixture, privateSpace),
+        );
         const anonymous = await browser.newContext({
           baseURL: info.project.use.baseURL,
           viewport: view.viewport,
@@ -510,6 +772,7 @@ for (const locale of locales)
         const managerContext = await browser.newContext({
           baseURL: info.project.use.baseURL,
           viewport: view.viewport,
+          storageState: operatorState,
         });
         try {
           const outsider = await anonymous.newPage();
@@ -527,7 +790,7 @@ for (const locale of locales)
           await expect(page.getByText(t.pending, { exact: true })).toBeVisible();
           await screenshot(page, info, 'private-request-pending');
           const manager = await managerContext.newPage();
-          await signInAtAccounts(manager, `/${locale}/manage`, credentials().operator);
+          await manager.goto(`/${locale}/manage`);
           await selectActor(
             manager,
             fixture.manager,
@@ -542,10 +805,10 @@ for (const locale of locales)
           await expect(manager.getByText(t.approved, { exact: true })).toBeVisible();
           await screenshot(manager, info, 'private-manager-approved');
           await page.reload();
-          const own = await new PublicCommands(page.request).read<{ items: { state: string }[] }>(
-            `/realms/${short(privateSpace.realm)}/join-requests/mine?actingSubject=${encodeURIComponent(fixture.actor)}`,
-          );
-          expect(own.items.map((item) => item.state)).toEqual(['accepted']);
+          const own = await ownRequests(new PublicCommands(page.request), fixture, privateSpace);
+          expect(own.filter((item) => !previous.has(item.id)).map((item) => item.state)).toEqual([
+            'accepted',
+          ]);
           const realm = materializeData(locale === 'en' ? realmMessages : realmChinese, { locale });
           await expect(page.getByRole('button', { name: realm.joined, exact: true })).toBeVisible();
           await expect(page.getByText(t.pending, { exact: true })).toHaveCount(0);
