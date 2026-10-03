@@ -110,8 +110,10 @@ conventions below come from the first backend Goal:
 
 In a shared worktree (the brief names `worktree:`), other workers edit the same
 tree: start no dev server, Storybook, type-check watcher, browser or QA tier;
-read the shared ones listed in `.temp/goal/shared.md`; run only the unit tests
-of your files; and leave integration, Storybook and browser runs to the manager.
+read the shared ones listed in `.temp/goal/shared.md`; and leave Storybook and
+browser runs to the manager. A task that fixes or adds integration tests still
+runs those files itself through `task goal -- test <file>`, one run at a time:
+an unverified integration fix is not done.
 Otherwise:
 
 Run only what proves the claimed work, through the QA slot wrapper so concurrent
