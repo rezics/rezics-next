@@ -60,13 +60,13 @@ export const JOIN_REQUEST_SEARCH_SQL = `WITH query AS MATERIALIZED (
       AND strpos(access.realm_member_search_key(p.display_name), q.text) > 0
     ORDER BY pending.request_id LIMIT $4)
   UNION
-  (SELECT pending.request_id AS id FROM access.agent_handle h
-    JOIN access.authority_subject s ON s.id = h.agent_id AND s.active
-    JOIN access.realm_join_request_pending pending ON pending.realm = $1 AND pending.member = h.agent_id
+  (SELECT pending.request_id AS id FROM access.name_registry h
+    JOIN access.authority_subject s ON s.id = h.holder AND s.active
+    JOIN access.realm_join_request_pending pending ON pending.realm = $1 AND pending.member = h.holder
     CROSS JOIN terms q
-    WHERE ($2::uuid IS NULL OR pending.request_id > $2) AND h.state = 'current'
-      AND access.realm_member_search_terms(access.realm_member_search_key(h.handle)) @> q.tokens
-      AND strpos(access.realm_member_search_key(h.handle), q.text) > 0
+    WHERE ($2::uuid IS NULL OR pending.request_id > $2) AND h.scope = 'agent' AND h.state = 'current'
+      AND access.realm_member_search_terms(access.realm_member_search_key(h.key)) @> q.tokens
+      AND strpos(access.realm_member_search_key(h.key), q.text) > 0
     ORDER BY pending.request_id LIMIT $4)
   UNION
   (SELECT pending.request_id AS id FROM access.realm_join_request_pending pending

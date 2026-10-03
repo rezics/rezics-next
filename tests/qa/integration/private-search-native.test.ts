@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -128,7 +129,7 @@ beforeAll(async () => {
   app = createMainApp(fuseki, { environment: env,
     account: { verify: async () => principal }, access });
   const migrations = join(root, 'services/main/migrations/access');
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+  for (const file of schemaFiles(root, 'access')) {
     await pool.query(readFileSync(join(migrations, file), 'utf8'));
   }
   await pool.query('INSERT INTO access.authority_subject (id, kind) VALUES ($1, $2)', [actor, 'agent']);
@@ -727,13 +728,13 @@ test('SEARCH12: migration 160 keeps historical outcomes and in-flight arms acros
   const upgrade = new Pool({ ...accessConfig, database, max: 2 });
   try {
     const migrations = join(root, 'services/main/migrations/access');
-    const files = [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort();
+    const files = schemaFiles(root, 'access');
     const apply = async (select: (file: string) => boolean) => {
       for (const file of files.filter(select)) {
         await upgrade.query(readFileSync(join(migrations, file), 'utf8'));
       }
     };
-    await apply(file => file < '010');
+    await apply(file => migrationVersion(file) < 10);
     const reader = randomUUID();
     const identity = { issuer: principal.issuer, subject: randomUUID() };
     const contribution = ID + randomUUID();
@@ -755,13 +756,13 @@ test('SEARCH12: migration 160 keeps historical outcomes and in-flight arms acros
     await registry.beginContributionSearchDelivery(historical.id, identity, actor, contribution);
     await upgrade.query(`UPDATE access.search_read_lease SET state = 'delivered',
       finished_at = clock_timestamp() WHERE id = $1`, [historical.id]);
-    await apply(file => file >= '010' && file < '160');
+    await apply(file => migrationVersion(file) >= 10 && migrationVersion(file) < 160);
     // A delivery armed under 010 whose session is still live during the upgrade.
     const inflight = await registry.admitContributionSearchRead(identity, actor, contribution);
     await registry.beginContributionSearchDelivery(inflight.id, identity, actor, contribution);
     const token = 'ab'.repeat(32);
     await registry.armContributionSearchSend(inflight.id, token);
-    await apply(file => file >= '160' && file < '170');
+    await apply(file => migrationVersion(file) >= 160 && migrationVersion(file) < 170);
     const sweepIndexes = await upgrade.query<{ indexname: string; indexdef: string }>(
       `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'access'
        AND indexname IN ('search_read_armed_window', 'search_read_unarmed_expiry')

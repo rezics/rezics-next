@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
@@ -13,7 +14,7 @@ import { rightsTables } from '../src/modules/rights/schema.ts';
 const root = resolve(import.meta.dir, '../../..');
 const accessDir = join(root, 'services/main/migrations/access');
 const contentDir = join(root, 'services/content/migrations');
-const ACCESS_HEAD = '033';
+const ACCESS_HEAD = 33;
 const CONTENT_HEAD = 21;
 const id = () => Bun.randomUUIDv7();
 const iri = () => `https://rezics.com/id/${id()}`;
@@ -58,9 +59,9 @@ beforeAll(async () => {
   await applyAccess(accessEmpty, () => true);
   // Upgrade from the current Access head with a real 027 proof already present.
   accessUpgrade = database('access_upgrade');
-  await applyAccess(accessUpgrade, file => file.slice(0, 3) <= ACCESS_HEAD);
+  await applyAccess(accessUpgrade, file => migrationVersion(file) <= ACCESS_HEAD);
   upgradedProof = await seedOrganizationModeration(accessUpgrade);
-  await applyAccess(accessUpgrade, file => file.slice(0, 3) > ACCESS_HEAD);
+  await applyAccess(accessUpgrade, file => migrationVersion(file) > ACCESS_HEAD);
 
   contentEmpty = database('content_empty');
   await migrateContent(contentEmpty);
@@ -69,10 +70,10 @@ beforeAll(async () => {
   await contentUpgrade.query('CREATE SCHEMA content');
   await contentUpgrade.query(`CREATE TABLE content.schema_migration (
     version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  for (const file of files(contentDir).filter(name => Number(name.slice(0, 3)) <= CONTENT_HEAD)) {
+  for (const file of schemaFiles(root, 'content').filter(name => migrationVersion(name) <= CONTENT_HEAD)) {
     await contentUpgrade.query(readFileSync(join(contentDir, file), 'utf8'));
     await contentUpgrade.query('INSERT INTO content.schema_migration (version) VALUES ($1)',
-      [Number(file.slice(0, 3))]);
+      [migrationVersion(file)]);
   }
   upgradedRecord = id();
   await contentUpgrade.query(`INSERT INTO source.record (id, provider, namespace, external_id)
@@ -96,9 +97,8 @@ function database(name: string): Pool {
   return pool;
 }
 
-const files = (directory: string) => [...new Bun.Glob('*.sql').scanSync({ cwd: directory })].sort();
 async function applyAccess(pool: Pool, include: (file: string) => boolean): Promise<void> {
-  for (const file of files(accessDir).filter(include)) {
+  for (const file of schemaFiles(root, 'access').filter(include)) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
 }
@@ -454,7 +454,7 @@ test('LIVE13-LIVE17 schema foundation: Content 080 installs empty and upgrades f
   expect((await pool.query('SELECT count(*)::int AS n FROM source.observation WHERE record_id = $1', [record]))
     .rows[0].n).toBe(1);
   expect((await pool.query('SELECT max(version)::int AS version FROM content.schema_migration')).rows[0].version)
-    .toBe(Number(files(contentDir).at(-1)!.slice(0, 3)));
+    .toBe(migrationVersion(schemaFiles(root, 'content').at(-1)!));
 
   const synopsis = id(); const facts = id(); const terms = id(); const principal = id();
   const material = `INSERT INTO rights.material (id, scope_kind, source_record_id, provider, namespace, component,

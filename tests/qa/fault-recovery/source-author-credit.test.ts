@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -44,7 +45,7 @@ test('LIVE04/LIVE05/MODEL06/OPS03: native credit, field proof and withdrawals su
     relay = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
     for (const [owner, pool] of [['access', access], ['relay', relay]] as const) {
       const path = join(root, `services/main/migrations/${owner}`);
-      for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: path })].sort()) await pool.query(readFileSync(join(path, file), 'utf8'));
+      for (const file of schemaFiles(root, owner)) await pool.query(readFileSync(join(path, file), 'utf8'));
     }
     await access.end();
     // The restore protocol uses monotonic decimal epochs; stack config defaults

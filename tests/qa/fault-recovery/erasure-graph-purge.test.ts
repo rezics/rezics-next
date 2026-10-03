@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -33,7 +34,7 @@ test('OPS10/SEARCH08/SEARCH20/WORK10: offline sanitized graph and Lucene copy ex
     rootCommand(['stack:up', ...stack.args], 180_000);
     relay = new Pool({ connectionString: stack.apps.ACCOUNT_RELAY_DATABASE_URL });
     const migrations = join(root, 'services/main/migrations/relay');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+    for (const file of schemaFiles(root, 'relay')) {
       await relay.query(readFileSync(join(migrations, file), 'utf8'));
     }
     const lineage = { dataEpoch: stack.apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };

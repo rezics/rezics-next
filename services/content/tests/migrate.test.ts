@@ -1,11 +1,11 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import type { Pool } from 'pg';
 import { migrateContent } from '../src/migrate.ts';
 
-const local = readdirSync(join(import.meta.dir, '../migrations')).filter(name => name.endsWith('.sql'))
-  .sort().map(name => Number(name.slice(0, 3)));
+const root = resolve(import.meta.dir, '../../..');
+const local = schemaFiles(root, 'content').map(migrationVersion);
 
 function fakePool(applied: number[]) {
   const inserted: number[] = [];
@@ -30,6 +30,6 @@ test('a lower migration merged after higher ones were applied is applied, in ver
 });
 
 test('an applied migration missing locally still stops startup', async () => {
-  const { pool } = fakePool([...local, 999]);
+  const { pool } = fakePool([...local, local.at(-1)! + 1]);
   await expect(migrateContent(pool)).rejects.toThrow('Content schema history differs from local migrations');
 });

@@ -1,7 +1,8 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
@@ -44,10 +45,8 @@ async function freePort(): Promise<number> {
 }
 
 function migrationFiles(): Array<{ version: number; name: string }> {
-  return readdirSync(migrationDirectory)
-    .filter((name) => name.endsWith('.sql'))
-    .sort()
-    .map((name) => ({ version: Number(name.slice(0, 3)), name }));
+  return schemaFiles(root, 'content')
+    .map((name) => ({ version: migrationVersion(name), name }));
 }
 
 async function database(name: string): Promise<Pool> {

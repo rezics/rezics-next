@@ -1,7 +1,8 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
@@ -54,7 +55,7 @@ afterAll(async () => {
   finally { rmSync(state, { recursive: true, force: true }); }
 });
 
-const files = () => readdirSync(migrations).filter(name => /^\d{3}_[a-z0-9_]+\.sql$/.test(name)).sort();
+const files = () => schemaFiles(root, 'content');
 const variantIdentity = (): VariantIdentity => ({ id: `urn:rezics:variant:${randomUUID()}`,
   resourceId: `https://rezics.com/id/${randomUUID()}`, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
   direction: 'ltr' });
@@ -66,9 +67,9 @@ async function upgradedOwner(name: string) {
   const pool = await database(name);
   await pool.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration (version integer PRIMARY KEY,
     applied_at timestamptz NOT NULL DEFAULT now())`);
-  for (const file of files().filter(file => Number(file.slice(0, 3)) < PROTECTION_VERSION)) {
+  for (const file of files().filter(file => migrationVersion(file) < PROTECTION_VERSION)) {
     await pool.query(readFileSync(join(migrations, file), 'utf8'));
-    await pool.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [Number(file.slice(0, 3))]);
+    await pool.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [migrationVersion(file)]);
   }
   const content = new ContentCore(pool);
   const variant = variantIdentity();
@@ -166,7 +167,7 @@ test('G-052 protection schema: empty install and upgrade from the current Conten
   await migrateContent(fresh);
   await migrateContent(fresh);
   const versions = await fresh.query<{ version: number }>('SELECT version FROM content.schema_migration ORDER BY version');
-  expect(versions.rows.map(row => row.version)).toEqual(files().map(file => Number(file.slice(0, 3))));
+  expect(versions.rows.map(row => row.version)).toEqual(files().map(file => migrationVersion(file)));
   const tables = await fresh.query<{ name: string | null }>(`SELECT to_regclass(name)::text AS name FROM unnest(ARRAY[
     'content.protection_revision', 'content.correction_proposal', 'content.correction_decision',
     'content.correction_application']) name`);

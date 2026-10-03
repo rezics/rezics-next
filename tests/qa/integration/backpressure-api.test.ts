@@ -1,7 +1,8 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -59,7 +60,7 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     // Content and relay are separate owners; one disposable server hosts both schemas.
     await migrateContent(pool);
     const relayDir = join(root, 'services/main/migrations/relay');
-    for (const file of readdirSync(relayDir).filter(name => name.endsWith('.sql')).sort()) {
+    for (const file of schemaFiles(root, 'relay')) {
       await pool.query(readFileSync(join(relayDir, file), 'utf8'));
     }
     let contentCalls = 0;

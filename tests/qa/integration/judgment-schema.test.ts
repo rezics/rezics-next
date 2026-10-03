@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -29,8 +30,8 @@ test('GOV09/GOV10: Access 230 to 231 upgrade baselines an existing judgment aggr
     const db = new Client({ connectionString: url.toString() });
     await db.connect();
     try {
-      const migrations = [...new Bun.Glob('*.sql').scanSync({ cwd: migrationDirectory })].sort();
-      for (const file of migrations.filter(file => Number(file.slice(0, 3)) <= 230)) {
+      const migrations = schemaFiles(root, 'access');
+      for (const file of migrations.filter(file => migrationVersion(file) <= 230)) {
         await db.query(readFileSync(join(migrationDirectory, file), 'utf8'));
       }
       const principal = randomUUID(), receipt = randomUUID();

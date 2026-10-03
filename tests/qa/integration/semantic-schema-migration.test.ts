@@ -1,6 +1,7 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -34,8 +35,8 @@ test('MODEL21/MODEL22 schema: semantic staging installs empty and upgrades the c
     const empty = new Pool({ connectionString: `${adminUrl}/${names.empty}`, max: 4 });
     const upgrade = new Pool({ connectionString: `${adminUrl}/${names.upgrade}`, max: 4 });
     pools.push(empty, upgrade);
-    const files = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort();
-    const all = files.map(name => Number(name.slice(0, 3)));
+    const files = schemaFiles(root, 'content');
+    const all = files.map(name => migrationVersion(name));
     expect(all).toContain(STAGE_MIGRATION);
 
     // Empty install: the runner applies every migration once and is idempotent.
@@ -45,12 +46,12 @@ test('MODEL21/MODEL22 schema: semantic staging installs empty and upgrades the c
       .rows.map(row => row.version)).toEqual(all);
 
     // Upgrade: a database at the current head before this range keeps its rows.
-    const before = files.filter(name => Number(name.slice(0, 3)) < STAGE_MIGRATION);
+    const before = files.filter(name => migrationVersion(name) < STAGE_MIGRATION);
     await upgrade.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration (
       version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
     for (const name of before) {
       await upgrade.query(readFileSync(join(migrations, name), 'utf8'));
-      await upgrade.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [Number(name.slice(0, 3))]);
+      await upgrade.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [migrationVersion(name)]);
     }
     const record = randomUUID();
     await upgrade.query(`INSERT INTO source.record (id, provider, namespace, external_id)

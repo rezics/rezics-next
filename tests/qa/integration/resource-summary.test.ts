@@ -304,8 +304,9 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     const body = await response.json() as { summaries: Summary[];
       cost: { graphQueries: number; mediaQueries: number; accessChecks: number; accessQueries: number };
       generation: { graph: string; media: string } };
-    // Owner hydration stays bounded as batch size changes.
-    expect(fuseki.queries - graphBefore).toBeLessThanOrEqual(5);
+    // The transport adds one recovery gate and two graph-position fences.
+    // Space batches also include both visibility reads and the canonical address read.
+    expect(fuseki.queries - graphBefore).toBe(body.cost.graphQueries + 3);
     expect(mediaAccess.batches - accessBefore).toBe(body.cost.accessQueries);
     return body;
   };
@@ -314,7 +315,7 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     ['available', 'work'], ['available', 'work'], ['available', 'work'], ['available', 'main-version'],
     ['available', 'work'], ['unavailable', null], ['available', 'space'], ['available', 'concept'],
     ['unavailable', null]]);
-  expect(mixed.cost).toEqual({ graphQueries: 1, mediaQueries: 1, accessChecks: 2, accessQueries: 1 });
+  expect(mixed.cost).toEqual({ graphQueries: 4, mediaQueries: 1, accessChecks: 2, accessQueries: 1 });
   expect(mixed.summaries[5]).toEqual({ reference: unreadable.work, status: 'unavailable' });
   for (const summary of mixed.summaries.filter(item => item.status === 'available')) {
     expect(summary.name!.value.length).toBeGreaterThan(0);

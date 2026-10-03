@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -24,7 +25,6 @@ const accessDirectory = join(root, 'services/main/migrations/access');
 const contentDirectory = join(root, 'services/content/migrations');
 const ownAccess = /^11[0-9]_/;
 const ownContent = /^14[0-9]_/;
-const sqlFiles = (directory: string) => [...new Bun.Glob('*.sql').scanSync({ cwd: directory })].sort();
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const hex = (seed: string) => new Bun.CryptoHasher('sha256').update(seed).digest('hex');
 const accessDeclarations: TableDeclaration<never>[] = [...derivedGenerationTables, ...rankingTables, ...eventTables];
@@ -54,7 +54,7 @@ async function applyAccess(pool: Pool, include: (file: string) => boolean): Prom
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const file of sqlFiles(accessDirectory).filter(include)) {
+    for (const file of schemaFiles(root, 'access').filter(include)) {
       await client.query(readFileSync(join(accessDirectory, file), 'utf8'));
     }
     await client.query('COMMIT');
@@ -125,33 +125,33 @@ afterAll(async () => {
 }, 60_000);
 
 test('REC01/RATE07/GRAPH06 partial: owner schemas install empty and upgrade from current head', async () => {
-  expect(sqlFiles(accessDirectory).filter(file => ownAccess.test(file)))
+  expect(schemaFiles(root, 'access').filter(file => ownAccess.test(file)))
     .toEqual(['110_derived_generation.sql', '111_ranking_generation.sql',
       '112_event_interval.sql', '113_ranking_signal_slot.sql',
       '114_ranking_private_selection_revision.sql', '115_ranking_signal_contributor.sql']);
-  expect(sqlFiles(contentDirectory).filter(file => ownContent.test(file))).toEqual(['140_graph_layout.sql']);
+  expect(schemaFiles(root, 'content').filter(file => ownContent.test(file))).toEqual(['140_graph_layout.sql']);
 
   await applyAccess(accessEmpty, () => true);
   // Start at the preceding head, then apply the owner and all later dependants in order.
-  await applyAccess(accessUpgraded, file => file < '110_');
+  await applyAccess(accessUpgraded, file => migrationVersion(file) < 110);
   seededPrincipal = randomUUID();
   await accessUpgraded.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
     VALUES ($1, 'https://account.rezics.test', 'g058-upgrade')`, [seededPrincipal]);
   expect((await accessUpgraded.query("SELECT to_regclass('access.derived_generation') AS name")).rows[0].name)
     .toBeNull();
-  await applyAccess(accessUpgraded, file => file >= '110_');
+  await applyAccess(accessUpgraded, file => migrationVersion(file) >= 110);
   expect((await accessUpgraded.query('SELECT account_subject FROM access.principal WHERE id = $1',
     [seededPrincipal])).rows).toEqual([{ account_subject: 'g058-upgrade' }]);
 
   await migrateContent(contentEmpty);
   await migrateContent(contentEmpty);
-  const headFiles = sqlFiles(contentDirectory).filter(file => Number(file.slice(0, 3)) < 140);
+  const headFiles = schemaFiles(root, 'content').filter(file => migrationVersion(file) < 140);
   await contentUpgraded.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration (
     version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   for (const file of headFiles) {
     await contentUpgraded.query(readFileSync(join(contentDirectory, file), 'utf8'));
     await contentUpgraded.query('INSERT INTO content.schema_migration (version) VALUES ($1)',
-      [Number(file.slice(0, 3))]);
+      [migrationVersion(file)]);
   }
   await migrateContent(contentUpgraded);
   const versions = (pool: Pool) => pool.query<{ version: number }>(

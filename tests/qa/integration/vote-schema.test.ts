@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -14,9 +15,9 @@ import { pollScopeId, voteAccessTables, voteOperationAction,
 // DDL, and the private vote/proposal state rejects inconsistent writes.
 const root = resolve(import.meta.dir, '../../..');
 const migrationDir = join(root, 'services/main/migrations/access');
-const migrations = [...new Bun.Glob('*.sql').scanSync({ cwd: migrationDir })].sort();
-const beforeVote = migrations.filter(file => Number(file.slice(0, 3)) < 70);
-const fromVote = migrations.filter(file => Number(file.slice(0, 3)) >= 70);
+const migrations = schemaFiles(root, 'access');
+const beforeVote = migrations.filter(file => migrationVersion(file) < 70);
+const fromVote = migrations.filter(file => migrationVersion(file) >= 70);
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const hex = (value: string) => createHash('sha256').update(value).digest('hex');
 
