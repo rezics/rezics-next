@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { EntityPickerItem, EntityPickerLoad } from '@rezics/ui/entity-picker';
 import type { ConceptChoice, ListPage, ResourceCard } from './api.ts';
 import { topicItem, type TopicItem } from './topic-picker.tsx';
@@ -7,7 +8,7 @@ export const browseId = (n: number) =>
 const name = (value: string, language = 'en') => ({
   value,
   language,
-  direction: 'ltr' as const,
+  direction: direction(language, value),
   basis: 'requested' as const,
 });
 export const browseConcepts: ConceptChoice[] = Array.from({ length: 2400 }, (_, index) => ({

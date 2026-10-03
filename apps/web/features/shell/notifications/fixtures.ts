@@ -1,4 +1,4 @@
-import { spaceHref } from '../../address/path.ts';
+import { resourceHref, spaceHref } from '../../address/path.ts';
 import type { MainClient } from '../../feed/types.ts';
 import type { PendingInvitation } from './invitations-read.ts';
 import type { NotificationWindow, StreamItem } from './window.ts';
@@ -138,10 +138,10 @@ export function memoryInbox(stream: StreamItem[], options: { refuse?: boolean; r
 /** Current topic/view names; Work address resolved by Main rather than guessed from its UUID. */
 export const newWorks: StreamItem[] = [
   { ...item(121, { kind: 'new_work', actor: null, realm: null, ...nowhere, groupKey: null,
-    target: { ...target('雨夜书店', null, iri(701), 'zh-Hans'), topicName: 'Fantasy', href: '/w/rainy-bookshop' } }),
+    target: { ...target('雨夜书店', null, iri(701), 'zh-Hans'), topicName: 'Fantasy', href: resourceHref('/w/', 'rainy-bookshop') } }),
     purpose: 'subscription', topic: 'new-work' },
   { ...item(122, { kind: 'new_work', actor: null, realm: null, ...nowhere, groupKey: null,
-    target: { ...target('Middlemarch', null, iri(703)), topicName: 'English novels without spoilers', href: '/w/middlemarch' } }),
+    target: { ...target('Middlemarch', null, iri(703)), topicName: 'English novels without spoilers', href: resourceHref('/w/', 'middlemarch') } }),
     purpose: 'subscription', topic: 'new-work' },
   { ...item(123, null), purpose: 'subscription', topic: 'new-work', state: 'active' },
 ];

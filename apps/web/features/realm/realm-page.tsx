@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import { cookies, headers } from 'next/headers';
@@ -364,11 +365,11 @@ export async function RealmFrame({
                 links: [
                   {
                     href: siteHref(locale, realm.ref, []),
-                    label: { value: messages.home, lang: locale, dir: 'ltr' as const },
+                    label: { value: messages.home, lang: locale, dir: direction(locale, messages.home) },
                   },
                   ...presentation.navigation.map((item) => ({
                     href: zoneNavigationHref(item.href, realm.ref),
-                    label: { value: item.label, lang: locale, dir: 'ltr' as const },
+                    label: { value: item.label, lang: locale, dir: direction(locale, item.label) },
                   })),
                   ...mountLinks(view),
                 ].filter(

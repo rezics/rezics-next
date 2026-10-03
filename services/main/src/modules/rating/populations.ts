@@ -14,6 +14,11 @@ import { resolveTargets } from '../target/resolve.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { indexedNameMatch, labelIndexReady, fenceLabelIndex } from '../search/labels.ts';
 import { discoveryReader, fenceDiscoveryReader } from '../discovery/reader.ts';
+import { selectDisplayName, type LocalizedText } from '../display-language/select.ts';
+
+// This system population has an authored name, rather than a synthetic name
+// tagged with the reader's language. Additional labels retain their own tags.
+const globalPopulationName: LocalizedText = { original: 'en', labels: { en: 'Global' } };
 
 export const ratingPopulationsQuery = t.Object(
   { ...listRequestFields, target: readId, actingSubject: t.Optional(readId) },
@@ -250,12 +255,7 @@ export async function readRatingPopulations(
         ratingCount,
         readerCommunity: flags.get(id)?.community ?? false,
         name: global
-          ? {
-              value: 'Global',
-              language: 'en',
-              direction: 'ltr' as const,
-              basis: 'fallback' as const,
-            }
+          ? selectDisplayName(globalPopulationName, session.displayLanguages)!
           : summary!.status === 'available'
             ? summary!.name
             : null!,

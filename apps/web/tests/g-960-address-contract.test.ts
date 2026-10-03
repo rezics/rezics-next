@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { uuidToSid } from '@rezics/model/address';
+import { uuidToSid, type CanonicalAddress } from '@rezics/model/address';
 import { readAddress, resolvedAddress, type ResolvedAddress } from '../features/address/client.ts';
-import { canonicalHref, resourceHref } from '../features/address/path.ts';
+import { canonicalHref, resourceHref, spaceHref } from '../features/address/path.ts';
 import { decideAddress } from '../features/address/redirect.ts';
 import type { AvailableSummary } from '../features/work-levels/types.ts';
 import { workRefFromAddress } from '../features/work-page/read.ts';
@@ -52,7 +52,7 @@ describe('G-960 merged address contract', () => {
     expect(read).toEqual({ kind: 'resolved', data: merged });
     if (read.kind !== 'resolved') throw new Error('Expected a resolved address');
     expect(read.data.canonical).toEqual(summary.address);
-    expect(resourceHref('/w/', canonical)).toBe('/w/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E');
+    expect(resourceHref('/w/', canonical)).toBe(`${canonical.prefix}${encodeURIComponent(canonical.key)}`);
     expect(canonicalHref(read.data.canonical, 'ja')).toBe(`/ja${resourceHref('/w/', canonical)}`);
   });
 
@@ -71,11 +71,14 @@ describe('G-960 merged address contract', () => {
       id: uuid,
     });
     const resolve = async () => ({ kind: 'resolved' as const, data: merged });
-    const target =
-      '/ja/w/%E6%98%A5%E3%81%AE%E7%89%A9%E8%AA%9E/contents?language=sv&version=first#part';
+    const suffix = { search: '?language=sv&version=first', hash: '#part' };
+    const target = canonicalHref(canonical, 'ja', canonical.slugSource, { tail: ['contents'], ...suffix });
+    const legacy = canonicalHref({ prefix: '/w/', key: uuid, slugSource: '' }, 'ja', '', {
+      tail: ['contents', ''], ...suffix,
+    });
     expect(
       await decideAddress(
-        new URL(`https://rezics.test/ja/w/${uuid}/contents/?language=sv&version=first#part`),
+        new URL(legacy, 'https://rezics.test'),
         'ja',
         resolve,
       ),
@@ -102,7 +105,7 @@ describe('G-960 merged address contract', () => {
       ...merged,
       scope: `zone:${survivor}`,
       key: 'old-character',
-      canonical: { prefix: '/z/books/characters/', key: 'キリト', slugSource: 'Kirito' },
+      canonical: { prefix: `${spaceHref('books', 'site', ['characters'])}/` as CanonicalAddress['prefix'], key: 'キリト', slugSource: 'Kirito' },
       capabilities: undefined,
       resolution: undefined,
     };

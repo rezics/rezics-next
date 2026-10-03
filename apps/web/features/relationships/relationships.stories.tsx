@@ -47,7 +47,7 @@ function RelationshipsScene({ state, locale }: { state: State; locale: UiLocale 
   lastMemory = memory;
   const signedIn = state !== 'signed-out';
   const data: CommunityNavigation = { signedIn, avatarQuery: '', followed: state === 'failed-read' ? { realms: [], zones: [] } : null,
-    official: [{ id: target(6), kind: 'zone', name: 'Official Fiction', language: 'en', href: '/r/fiction', icon: null, activity: 'unknown' }],
+    official: [{ id: target(6), kind: 'zone', name: 'Official Fiction', language: 'en', href: spaceHref('fiction', 'community'), icon: null, activity: 'unknown' }],
     moderated: state === 'thousands' ? [{ realm: target(10010), href: '/manage/r/fiction', open: 2, more: false }] : [],
     relationships: { actingSubject: signedIn ? actor : null, hasFollows: state === 'failed-read' ? null : memory.follows.size > 0,
       pinned: null, spaces: null } };
@@ -81,7 +81,8 @@ export const Thousands: Story = {
     await userEvent.click(inventory.getByRole('button', { name: 'Load more' }));
     await expect(await inventory.findByText('Community 30')).toBeVisible();
     await expect(inventory.getByText('Selected: 1')).toBeVisible();
-    await userEvent.selectOptions(inventory.getByLabelText('Notification level for selected'), 'off');
+    await userEvent.click(inventory.getByRole('combobox', { name: 'Notification level for selected' }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: /^Off$/ }));
     await expect(await inventory.findByRole('button', { name: 'Notifications: Off' })).toBeVisible();
     await expect(inventory.queryByText('Selected: 1')).toBeNull();
     const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
@@ -115,6 +116,22 @@ export const BulkSelection: Story = {
     await userEvent.click(await inventory.findByRole('checkbox', { name: 'Select · 中文网络小说' }));
     await expect(inventory.getByText('Selected: 1')).toBeVisible();
   } };
+export const StyledFilters: Story = {
+  async play({ canvasElement }) {
+    const inventory = within(within(canvasElement).getByRole('region', { name: 'Following' }));
+    await inventory.findByText('Community 29');
+    await userEvent.click(inventory.getByRole('combobox', { name: /^Type$/ }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: /^Works$/ }));
+    await expect(await inventory.findByText(messages.en.noResults)).toBeVisible();
+    await userEvent.click(inventory.getByRole('combobox', { name: /^Type$/ }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: /^All types$/ }));
+    await expect(await inventory.findByText('Community 29')).toBeVisible();
+    await userEvent.click(inventory.getByRole('combobox', { name: /^Sort$/ }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: /^Pinned$/ }));
+    await expect(inventory.getByRole('combobox', { name: /^Sort$/ })).toHaveTextContent('Pinned');
+    await expect(await inventory.findByText('中文网络小说')).toBeVisible();
+  },
+};
 export const FailedWrite: Story = { args: { state: 'failed-write' },
   async play({ canvasElement }) {
     const inventory = within(within(canvasElement).getByRole('region', { name: 'Following' }));

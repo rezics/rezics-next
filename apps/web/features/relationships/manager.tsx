@@ -3,6 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Input } from '@rezics/ui/input';
+import { ChoiceSelect } from '@rezics/ui/select';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -15,8 +16,6 @@ import { observeRelationships } from './events.ts';
 import { relationshipSource } from './list.ts';
 import { messages } from './messages.ts';
 import type { Follow, FollowEdit, Level, Membership, Order, RelationshipsApi } from './types.ts';
-
-const selectClass = 'h-10 min-w-0 max-w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /** A selection names exact targets across pages; it never means the unseen remainder of a query. */
 export function FollowingManager({ locale, signedIn, actingSubject, signInHref, api: supplied }: {
@@ -117,13 +116,12 @@ export function FollowingManager({ locale, signedIn, actingSubject, signInHref, 
     <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
       <label className="grid min-w-0 gap-1 text-sm">{t.search}<Input type="search" value={q} maxLength={80}
         onChange={event => setQ(event.target.value)} /></label>
-      {view === 'follows' ? <label className="grid min-w-0 gap-1 text-sm">{t.type}
-        <select className={`${selectClass} sm:max-w-64`} value={kind} onChange={event => setKind(event.target.value)}>
-          <option value="">{t.allTypes}</option>{kinds.map(value => <option key={value} value={value}>{kindLabel(value, locale)}</option>)}
-        </select></label> : null}
-      <label className="grid min-w-0 gap-1 text-sm">{t.sort}<select className={selectClass} value={order}
-        onChange={event => setOrder(event.target.value as Order)}><option value="recent">{t.recent}</option>
-        <option value="pinned">{t.pinned}</option></select></label>
+      {view === 'follows' ? <div className="grid min-w-0 gap-1 text-sm"><span>{t.type}</span>
+        <ChoiceSelect label={t.type} className="min-w-0 max-w-full sm:max-w-64" value={kind} onValueChange={setKind}
+          options={[{ value: '', label: t.allTypes }, ...kinds.map(value => ({ value, label: kindLabel(value, locale) }))]} />
+        </div> : null}
+      <div className="grid min-w-0 gap-1 text-sm"><span>{t.sort}</span><ChoiceSelect label={t.sort} className="min-w-0 max-w-full" value={order}
+        onValueChange={value => setOrder(value as Order)} options={[{ value: 'recent', label: t.recent }, { value: 'pinned', label: t.pinned }]} /></div>
     </div>
     {selected.size ? <div className="grid gap-3 rounded-2xl border border-border bg-card p-4" aria-label={t.selected}>
       <div className="flex flex-wrap items-center gap-2"><p className="flex-1 text-sm">{t.selected}: {new Intl.NumberFormat(locale).format(selected.size)}</p>
@@ -131,10 +129,9 @@ export function FollowingManager({ locale, signedIn, actingSubject, signInHref, 
       <p className="text-muted-foreground text-sm">{t.bulkHelp}</p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void bulk({ following: false })}>{t.bulkUnfollow}</Button>
-        <label className="grid gap-1 text-sm">{t.bulkLevel}<select className={selectClass} disabled={busy} defaultValue=""
-          onChange={event => { if (event.target.value) void bulk({ level: event.target.value as Level }); event.target.value = ''; }}>
-          <option value="" disabled>—</option><option value="all">{t.all}</option><option value="highlights">{t.highlights}</option><option value="off">{t.off}</option>
-        </select></label>
+        <div className="grid min-w-0 gap-1 text-sm"><span>{t.bulkLevel}</span><ChoiceSelect label={t.bulkLevel} disabled={busy} value="" placeholder="—"
+          onValueChange={value => { if (value) void bulk({ level: value as Level }); }}
+          options={[{ value: 'all', label: t.all }, { value: 'highlights', label: t.highlights }, { value: 'off', label: t.off }]} /></div>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void bulk({ pinPosition: 0 })}>{t.bulkPin}</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void bulk({ pinPosition: null })}>{t.bulkUnpin}</Button>
       </div>

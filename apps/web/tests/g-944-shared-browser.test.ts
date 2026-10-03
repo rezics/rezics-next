@@ -5,6 +5,8 @@ import { signInAtAccounts } from './account-sign-in.ts';
 import { people } from '../../../scripts/dev/seed/plan.ts';
 import { mainRelationships } from '../features/relationships/api.ts';
 import { actor } from '../features/relationships/fixtures.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import { spaceHref } from '../features/address/path.ts';
 import type { FollowState, JoinPolicy } from '../features/relationships/types.ts';
 
 // Run through goalctl against the shared stack. By default create dedicated open test Spaces through Main.
@@ -84,7 +86,7 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
           route = created.realm.slice(-36);
           fixtureRoute = route;
         }
-        await page.goto(`/en/r/${route}`);
+        await page.goto(localizedPath(spaceHref(route, 'community'), 'en'));
         await visible(page.getByRole('button', { name: 'Account menu' })).toHaveAttribute('data-hydrated', 'true');
         const control = page.locator('[data-relationship]').first();
         const realm = (await control.getAttribute('data-relationship'))!;
