@@ -13,6 +13,7 @@ import { SerialStatisticsProjection } from '../../../services/main/src/modules/w
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { startMediaStack } from './media-support.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const book = 'https://schema.org/Book';
@@ -21,9 +22,15 @@ type Page = { items: { id: string; mod?: unknown }[]; facets: Record<string, unk
 // Real owner commands create the Fiction population. A fixed, restore-fenced composition
 // projection fixture isolates query admission from the separate Content relay pipeline.
 test('G657: registry Facets drive Fiction browse and Query; removed and unsupported inputs read no graph', async () => {
-  const stack = await startMediaStack('g-657-zone-facets');
-  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const stack = await startMediaStack('g-657-zone-facets', { ownerUrls: databases.urls })
+    .catch(async error => { await databases.close(); throw error; });
+  const relay = new Pool({ connectionString: databases.urls.relay });
   try {
+    const graphSequence = async () => (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence }
+    } LIMIT 1`)).results!.bindings[0]!.sequence!.value;
+    const startSequence = await graphSequence();
     const actor = `https://rezics.com/id/${randomUUID()}`;
     const admission = (scope: string, action: string, digest: string) => stack.admission(actor, scope, action, digest);
     const input = { name: `Fiction ${randomUUID()}`, actingSubject: actor };
@@ -53,23 +60,22 @@ test('G657: registry Facets drive Fiction browse and Query; removed and unsuppor
       expect((await selectRealmLocal(stack.env, admission(`publication:adopt:${realm}`,
         'publication.adopt', realmSelectionDigest(adoption)), adoption)).outcome).toBe('succeeded');
     }
-    const rows = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence }
-    } LIMIT 1`)).results!.bindings;
-    const sequence = rows[0]!.sequence!.value;
+    const sequence = await graphSequence();
     const generation = randomUUID();
     const deliver = async () => {
       const consumer = `g657-facets-${randomUUID()}`;
       await initializeRelayCheckpoint(relay, consumer, stack.env.lineage.dataEpoch);
-      let delivered = '0';
+      await relay.query('UPDATE relay.checkpoint SET sequence=$2 WHERE consumer=$1 AND data_epoch=$3',
+        [consumer, startSequence, stack.env.lineage.dataEpoch]);
+      let delivered = startSequence;
       while (BigInt(delivered) < BigInt(sequence)) {
         const batch = await relayMainOutboxOnce(stack.fuseki, relay, consumer);
         if (!batch) throw new Error('Facet fixture relay did not reach its graph cut');
         delivered = batch.sequence;
       }
     };
-    // Retain the actual graph headers and events. A fabricated zero-event
-    // header at this shared epoch would poison a later Home relay consumer.
+    // Retain real headers and events for this fixture's cut in its own relay;
+    // preceding files' events and projection generations are not fixture work.
     await deliver();
     await stack.accessPool.query(`INSERT INTO access.serial_stats_checkpoint
       (singleton, generation, graph_epoch, sequence) VALUES (true,$1,$2,$3)
@@ -139,8 +145,9 @@ test('G657: registry Facets drive Fiction browse and Query; removed and unsuppor
     expect(unknownGlobal.status).toBe(422);
     expect(await unknownGlobal.json()).toMatchObject({ code: 'invalid_query' });
     expect(stack.fuseki.queries).toBe(before);
-    // Another consumer can replay this fixture's retained cut, as Home does
-    // when its journey follows this file in the same integration shard.
+    // A second consumer can replay the same file-owned cut without conflicts.
     await deliver();
-  } finally { await relay.end(); await stack.stop(); }
+  } finally {
+    try { await relay.end(); await stack.stop(); } finally { await databases.close(); }
+  }
 }, 120_000);
