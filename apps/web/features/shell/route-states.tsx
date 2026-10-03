@@ -26,7 +26,7 @@ export function RouteNotFound() {
   return <PageContainer>
     <EmptyState icon={SearchXIcon} headingLevel={1} title={t.notFoundTitle} description={t.notFoundBody}>
       <Link href={localizedPath('/', locale)} className={buttonVariants()}>{t.backHome}</Link>
-      <Link href={localizedPath('/search', locale)} className={buttonVariants({ variant: 'outline' })}>{t.searchWorks}</Link>
+      <Link href={localizedPath('/discover', locale)} className={buttonVariants({ variant: 'outline' })}>{t.searchWorks}</Link>
     </EmptyState>
   </PageContainer>;
 }

@@ -1,10 +1,10 @@
 'use client';
 
 import { Kbd } from '@rezics/ui/kbd';
+import { Input } from '@rezics/ui/input';
 import { SearchIcon } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
-import { TypeaheadInput } from '../search/typeahead.tsx';
 import { useShell } from './shell-provider.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
 
@@ -13,13 +13,13 @@ function isEditable(target: EventTarget | null): boolean {
     && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-/** The global search with title suggestions. `/` (outside text fields) or Cmd/Ctrl-K focuses it. */
+/** Discover's All search. `/` (outside text fields) or Cmd/Ctrl-K focuses it. */
 export function SearchField() {
   const { t, locale } = useShell();
   const input = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const phrase = useSearchParams().get('q') ?? '';
-  const current = pathname === localizedPath('/search', locale) ? phrase : '';
+  const current = pathname === localizedPath('/discover', locale) ? phrase : '';
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent) {
@@ -36,10 +36,13 @@ export function SearchField() {
     return () => window.removeEventListener('keydown', focusSearch);
   }, []);
 
-  return <form role="search" aria-label={t.searchRegion} action={localizedPath('/search', locale)} method="get" className="relative w-full">
-    <TypeaheadInput ref={input} key={current} locale={locale} defaultValue={current} name="q" type="search" size="lg"
-      aria-label={t.searchLabel} placeholder={t.searchPlaceholder} minLength={2} maxLength={80}
+  return <form role="search" aria-label={t.searchRegion} action={localizedPath('/discover', locale)} method="get" className="relative w-full">
+    <Input ref={input} key={current} defaultValue={current} name="q" type="search" size="lg"
+      aria-label={t.searchLabel} placeholder={t.searchPlaceholder} maxLength={80}
       autoComplete="off" enterKeyHint="search"
+      onKeyDown={event => {
+        if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault();
+      }}
       className="rounded-full ps-11 md:pe-12 [&::-webkit-search-cancel-button]:hidden" />
     <button type="submit" aria-label={t.search} title={t.search} className="absolute inset-y-1 start-1 grid w-9
       place-items-center rounded-full text-muted-foreground outline-none transition-colors

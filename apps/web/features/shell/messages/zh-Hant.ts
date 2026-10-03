@@ -3,7 +3,7 @@ import type { ShellMessages } from '../messages.ts';
 
 export default {
   home: 'REZICS 首頁', skipToContent: '跳至主要內容',
-  searchRegion: '站內搜尋', searchLabel: '搜尋作品', searchPlaceholder: '搜尋作品…',
+  searchRegion: '站內搜尋', searchLabel: '搜尋所有內容', searchPlaceholder: '搜尋所有內容…',
   search: '搜尋', searchShortcut: '按 / 搜尋',
   navigation: '主要導覽', menu: '選單', openNavigation: '開啟導覽', close: '關閉',
   collapseNavigation: '收合導覽', expandNavigation: '展開導覽',
@@ -16,7 +16,7 @@ export default {
   language: '語言', displayMode: '顯示模式',
   displayModeNotSaved: '無法將顯示模式儲存至帳戶，但仍會套用在這台裝置上。',
   themeSystem: '配合系統設定', themeLight: '淺色', themeDark: '深色',
-  soon: '即將推出', comingSoonTitle: insert('即將推出 {{feature}}', { feature: String }), backHome: '返回首頁', searchWorks: '搜尋作品',
+  soon: '即將推出', comingSoonTitle: insert('即將推出 {{feature}}', { feature: String }), backHome: '返回首頁', searchWorks: '搜尋所有內容',
   notFoundTitle: '找不到頁面',
   notFoundBody: '網址可能輸入錯誤，或頁面已移動。',
   errorTitle: '發生錯誤',

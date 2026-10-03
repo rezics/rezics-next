@@ -39,6 +39,7 @@ export async function loadDiscoverState(
     !state.q &&
     !state.conditions.include.length &&
     !state.conditions.exclude.length &&
+    !state.includeTypes?.length && !state.excludeTypes?.length && !state.language &&
     state.scope.kind === 'global';
   const [topics, results, sections] = await Promise.all([
     readBrowse(() =>

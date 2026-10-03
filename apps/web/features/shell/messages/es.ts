@@ -3,7 +3,7 @@ import type { ShellMessages } from '../messages.ts';
 
 export default {
   home: 'Inicio de REZICS', skipToContent: 'Saltar al contenido',
-  searchRegion: 'Búsqueda del sitio', searchLabel: 'Buscar obras', searchPlaceholder: 'Buscar obras…',
+  searchRegion: 'Búsqueda del sitio', searchLabel: 'Buscar en todo', searchPlaceholder: 'Buscar en todo…',
   search: 'Buscar', searchShortcut: 'Pulsa / para buscar',
   navigation: 'Navegación principal', menu: 'Menú', openNavigation: 'Abrir navegación', close: 'Cerrar',
   collapseNavigation: 'Contraer navegación', expandNavigation: 'Expandir navegación',
@@ -17,7 +17,7 @@ export default {
   displayModeNotSaved: 'No se pudo guardar el modo de visualización en tu cuenta. Seguirá activo en este dispositivo.',
   themeSystem: 'Usar el del sistema', themeLight: 'Claro', themeDark: 'Oscuro',
   soon: 'Próximamente', comingSoonTitle: insert('Pronto llegará {{feature}}', { feature: String }),
-  backHome: 'Volver al inicio', searchWorks: 'Buscar obras',
+  backHome: 'Volver al inicio', searchWorks: 'Buscar en todo',
   notFoundTitle: 'No se encontró la página',
   notFoundBody: 'Puede que la dirección esté mal escrita o que la página se haya movido.',
   errorTitle: 'Algo salió mal',

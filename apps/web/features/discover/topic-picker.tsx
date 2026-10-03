@@ -7,9 +7,11 @@ import {
   type EntityPickerSelection,
 } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
+import { materializeData } from 'native-i18n';
 import { browserMainApi } from '../api/browser.ts';
 import { discoveryApi, type ConceptChoice } from './api.ts';
 import { browseMessages } from './browse-messages.ts';
+import { browseCounts } from './count-messages.ts';
 
 export interface TopicItem extends EntityPickerItem {
   language?: string;
@@ -66,6 +68,7 @@ export function TopicPicker({
   disabled?: boolean;
 }) {
   const t = browseMessages[locale];
+  const counts = materializeData(browseCounts[locale], { locale });
   const read = load ?? topicLoader(locale, actingSubject, realm);
   return (
     <EntityPicker
@@ -113,7 +116,7 @@ export function TopicPicker({
             ))}
             {item.usageCount !== undefined ? (
               <span>
-                {new Intl.NumberFormat(locale).format(item.usageCount)} {t.usage}
+                {counts.usage(item.usageCount)}
               </span>
             ) : null}
           </span>

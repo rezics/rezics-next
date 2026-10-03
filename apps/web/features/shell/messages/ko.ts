@@ -3,7 +3,7 @@ import type { ShellMessages } from '../messages.ts';
 
 export default {
   home: 'REZICS 홈', skipToContent: '본문으로 건너뛰기',
-  searchRegion: '사이트 검색', searchLabel: '작품 검색', searchPlaceholder: '작품 검색…',
+  searchRegion: '사이트 검색', searchLabel: '모든 콘텐츠 검색', searchPlaceholder: '모든 콘텐츠 검색…',
   search: '검색', searchShortcut: '/ 키를 눌러 검색',
   navigation: '주요 탐색', menu: '메뉴', openNavigation: '탐색 메뉴 열기', close: '닫기',
   collapseNavigation: '탐색 메뉴 접기', expandNavigation: '탐색 메뉴 펼치기',
@@ -17,7 +17,7 @@ export default {
   displayModeNotSaved: '계정에 화면 모드를 저장하지 못했어요. 이 기기에서는 계속 적용됩니다.',
   themeSystem: '시스템 설정 따르기', themeLight: '밝게', themeDark: '어둡게',
   soon: '곧', comingSoonTitle: insert('{{feature}} 기능이 곧 제공됩니다', { feature: String }),
-  backHome: '홈으로', searchWorks: '작품 검색',
+  backHome: '홈으로', searchWorks: '모든 콘텐츠 검색',
   notFoundTitle: '페이지를 찾을 수 없어요',
   notFoundBody: '주소가 잘못 입력되었거나 페이지가 이동했을 수 있어요.',
   errorTitle: '문제가 발생했어요',

@@ -82,7 +82,7 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
     const page = await discoveryApi(browserMainApi(), locale, actingSubject).populations(target, {
       q, ...(cursor ? { cursor } : {}) });
     return { ...page, items: page.items.filter(item => !item.global).map(item => ({ value: item.id,
-      label: item.name.value, description: `${new Intl.NumberFormat(locale).format(item.ratingCount)} · ${t.ratings}` })) };
+      label: item.name.value, description: t.ratingCount(item.ratingCount) })) };
   });
   return <nav aria-label={t.scope} className="grid min-w-0 gap-2">
     <ul className="flex min-w-0 flex-wrap gap-1">

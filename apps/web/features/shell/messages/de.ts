@@ -3,7 +3,7 @@ import type { ShellMessages } from '../messages.ts';
 
 export default {
   home: 'REZICS-Startseite', skipToContent: 'Zum Inhalt springen',
-  searchRegion: 'Seitensuche', searchLabel: 'Werke durchsuchen', searchPlaceholder: 'Werke suchen…',
+  searchRegion: 'Seitensuche', searchLabel: 'Alles durchsuchen', searchPlaceholder: 'Alles durchsuchen…',
   search: 'Suchen', searchShortcut: 'Drücke / zum Suchen',
   navigation: 'Hauptnavigation', menu: 'Menü', openNavigation: 'Navigation öffnen', close: 'Schließen',
   collapseNavigation: 'Navigation einklappen', expandNavigation: 'Navigation ausklappen',
@@ -17,7 +17,7 @@ export default {
   displayModeNotSaved: 'Deine Darstellung konnte nicht im Konto gespeichert werden. Auf diesem Gerät gilt sie trotzdem.',
   themeSystem: 'Systemeinstellung', themeLight: 'Hell', themeDark: 'Dunkel',
   soon: 'Demnächst', comingSoonTitle: insert('{{feature}} kommt bald', { feature: String }),
-  backHome: 'Zurück zur Startseite', searchWorks: 'Werke durchsuchen',
+  backHome: 'Zurück zur Startseite', searchWorks: 'Alles durchsuchen',
   notFoundTitle: 'Seite nicht gefunden',
   notFoundBody: 'Vielleicht ist die Adresse falsch oder die Seite wurde verschoben.',
   errorTitle: 'Etwas ist schiefgelaufen',
