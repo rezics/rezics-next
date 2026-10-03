@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { fusekiEngineTime } from '../../packages/observability/src/http-measurement.ts';
+import type { CapturedFusekiQuery } from './fuseki-candidates.ts';
 
 export interface CallCounts { calls: number; sentBytes: number; receivedBytes: number; errors: number }
 export interface SearchProofCounts {
@@ -92,23 +94,38 @@ export function relayBacklogTrend(values: number[]) {
 
 /** Counts Main→Fuseki HTTP attempts and body bytes through a loopback proxy.
  * Native Jena operators, SQL plans and other-owner traffic remain unobserved. */
+export interface FusekiRequestObservation {
+  traceId: string | null; spanId: string | null;
+  sentBytes: number; receivedBytes: number; status: number;
+  httpLatencyMs: number; engineMs: number | null;
+}
+
 export function startFusekiMeter(upstream: string) {
   const target = new URL(upstream);
   const counts: CallCounts = { calls: 0, sentBytes: 0, receivedBytes: 0, errors: 0 };
   const searchProof: SearchProofCounts = { fullInventories: 0, deltaRequests: 0,
     deltaAvailable: 0, deltaUnavailable: 0 };
-  let capture: { path: string; sparql: string }[] | undefined;
+  let capture: CapturedFusekiQuery[] | undefined;
   let beforeNextPhrase: (() => Promise<void>) | undefined;
+  let traceCapture: FusekiRequestObservation[] | undefined;
+  let traceOverflow = false;
+  const timings = { httpMs: 0, engineMs: 0, measuredCalls: 0, unobservedCalls: 0 };
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    const started = performance.now();
+    const traceparent = request.headers.get('traceparent')?.match(/^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/);
     const incoming = new URL(request.url);
     const destination = new URL(incoming.pathname + incoming.search, target.origin);
     const body = ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
+    let capturedQuery: CapturedFusekiQuery | undefined;
     if (incoming.pathname.endsWith('/query') && body) {
       const sparql = new TextDecoder().decode(body);
       if (sparql.includes('COUNT(?indexedUnit)') && sparql.includes('"body:*"')) {
         searchProof.fullInventories++;
       }
-      if (capture) capture.push({ path: incoming.pathname, sparql });
+      if (capture) {
+        capturedQuery = { path: incoming.pathname, sparql };
+        capture.push(capturedQuery);
+      }
       if (beforeNextPhrase && sparql.includes('text:query') && sparql.includes('?rawUnit')
         && sparql.includes('?candidateCount')) {
         const run = beforeNextPhrase;
@@ -121,11 +138,27 @@ export function startFusekiMeter(upstream: string) {
     if (deltaRequest) searchProof.deltaRequests++;
     counts.calls++;
     counts.sentBytes += body?.byteLength ?? 0;
+    const observe = (status: number, receivedBytes: number, engineMs: number | null) => {
+      const httpLatencyMs = performance.now() - started;
+      timings.httpMs += httpLatencyMs;
+      if (engineMs === null) timings.unobservedCalls++;
+      else { timings.measuredCalls++; timings.engineMs += engineMs; }
+      if (traceCapture) {
+        if (traceCapture.length >= 10_000) traceOverflow = true;
+        else traceCapture.push({ traceId: traceparent?.[1] ?? null, spanId: traceparent?.[2] ?? null,
+          status, sentBytes: body?.byteLength ?? 0, receivedBytes, httpLatencyMs, engineMs });
+      }
+    };
     try {
       const response = await fetch(destination, { method: request.method,
         headers: request.headers, body, signal: request.signal });
       const bytes = await response.arrayBuffer();
+      if (capturedQuery && response.ok) {
+        try { capturedQuery.result = JSON.parse(new TextDecoder().decode(bytes)) as unknown; }
+        catch { /* Not a SPARQL JSON result: candidate work stays unobserved. */ }
+      }
       counts.receivedBytes += bytes.byteLength;
+      observe(response.status, bytes.byteLength, fusekiEngineTime(response.headers) ?? null);
       if (response.status >= 500) counts.errors++;
       if (deltaRequest) {
         try {
@@ -138,15 +171,25 @@ export function startFusekiMeter(upstream: string) {
       headers.delete('content-encoding');
       headers.delete('content-length');
       headers.delete('transfer-encoding');
-      return new Response(bytes, { status: response.status, headers });
+      return new Response([204, 205, 304].includes(response.status) ? null : bytes,
+        { status: response.status, headers });
     } catch {
       counts.errors++;
+      observe(502, 0, null);
       if (deltaRequest) searchProof.deltaUnavailable++;
       return new Response('upstream unavailable', { status: 502 });
     }
   } });
   return { url: `http://127.0.0.1:${server.port}/rezics/`,
     snapshot: (): CallCounts => ({ ...counts }),
+    timingSnapshot: () => ({ ...timings,
+      engineMs: timings.unobservedCalls ? null : timings.engineMs }),
+    beginTraceCapture: () => { traceCapture = []; traceOverflow = false; },
+    endTraceCapture: () => {
+      const observations = traceCapture ?? []; traceCapture = undefined;
+      if (traceOverflow) throw new Error('Fuseki trace capture overflowed; evidence is incomplete');
+      return observations;
+    },
     searchProofSnapshot: (): SearchProofCounts => ({ ...searchProof }),
     beginCapture: () => { capture = []; },
     endCapture: () => { const result = capture ?? []; capture = undefined; return result; },

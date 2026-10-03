@@ -8,7 +8,7 @@ message Attribute { string key=1; Value value=2; }
 message Resource { repeated Attribute attributes=1; }
 message Scope { string name=1; }
 message Status { string message=2; int32 code=3; }
-message Span { bytes traceId=1; bytes spanId=2; bytes parentSpanId=4; string name=5; int32 kind=6; repeated Attribute attributes=9; Status status=15; }
+message Span { bytes traceId=1; bytes spanId=2; bytes parentSpanId=4; string name=5; int32 kind=6; fixed64 startTimeUnixNano=7; fixed64 endTimeUnixNano=8; repeated Attribute attributes=9; Status status=15; }
 message ScopeSpans { Scope scope=1; repeated Span spans=2; }
 message ResourceSpans { Resource resource=1; repeated ScopeSpans scopeSpans=2; }
 message Traces { repeated ResourceSpans resourceSpans=1; }
