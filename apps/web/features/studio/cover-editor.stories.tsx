@@ -58,7 +58,7 @@ let server = coverServer();
 const meta = {
   title: 'Studio/CoverEditor',
   component: CoverEditor,
-  parameters: { route: { pathname: '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/'
+  parameters: { route: { pathname: '/en/studio/@111111114bZ6BZRUqUqZep/works/'
     + '00000000-0000-4000-8000-000000000101?tab=details' } },
   args: { agent: agents[0]!, work, cover: null, locale: 'en', messages, send: ((...args) => server.send(...args)) as typeof fetch },
   beforeEach() { server = coverServer(); },

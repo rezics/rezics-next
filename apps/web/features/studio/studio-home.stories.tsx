@@ -9,7 +9,7 @@ import { StudioHome } from './studio-home.tsx';
 
 type Props = ComponentProps<typeof StudioHome> & { session?: (typeof agents)[number] | null };
 
-const home = '/en/studio/@agent-00000000-0000-4000-8000-000000000001';
+const home = '/en/studio/@111111114bZ6BZRUqUqZep';
 
 const meta = {
   title: 'Studio/Home',

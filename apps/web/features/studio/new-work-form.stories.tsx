@@ -9,7 +9,7 @@ import { StudioFrame } from './studio-frame.tsx';
 const meta = {
   title: 'Studio/New Work',
   component: NewWorkForm,
-  parameters: { route: { pathname: '/en/studio/@agent-00000000-0000-4000-8000-000000000001/new' } },
+  parameters: { route: { pathname: '/en/studio/@111111114bZ6BZRUqUqZep/new' } },
   args: { agent: agents[0]!, locale: 'en', messages,
     initialState: { status: 'idle', key: 'new-work-story' },
     action: async previous => previous },

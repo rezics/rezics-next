@@ -226,7 +226,8 @@ export const SearchUpdating: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement), page = within(canvasElement.ownerDocument.body);
     await userEvent.click(canvas.getByRole('combobox'));
-    await expect(await page.findByText('Search is still updating.')).toBeVisible();
+    // Presence precedes the popup's opening animation finishing.
+    await waitFor(() => expect(page.getByText('Search is still updating.')).toBeVisible());
     await expect(page.getByText('At least 0')).toBeVisible();
     await expect(page.queryByText('No matches.')).not.toBeInTheDocument();
     await userEvent.click(page.getByRole('button', { name: 'Try again' }));

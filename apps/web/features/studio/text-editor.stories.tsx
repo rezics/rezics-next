@@ -26,7 +26,7 @@ function page(options: Parameters<typeof storyMain>[0] = {}, seeded = true): Tex
 const meta = {
   title: 'Studio/Write',
   component: TextEditor,
-  parameters: { route: { pathname: '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/x/write' } },
+  parameters: { route: { pathname: '/en/studio/@111111114bZ6BZRUqUqZep/works/x/write' } },
   beforeEach({ args }) { localStorage.clear(); args.story?.reset(); },
   render: ({ story: _story, ...props }: TextEditorProps & { story?: ReturnType<typeof storyMain> }) => <TextEditor {...props} />,
 } satisfies Meta<TextEditorProps & { story?: ReturnType<typeof storyMain> }>;
