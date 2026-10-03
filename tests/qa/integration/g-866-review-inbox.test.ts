@@ -12,7 +12,7 @@ import {
 } from '../../../services/main/src/modules/notification/store.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { NotificationDispatcher } from '../../../services/main/src/modules/notification/dispatcher.ts';
-import { FakeDeliveryProvider } from '../support/fake-delivery.ts';
+import { cloneQaOwnerDatabases, FakeDeliveryProvider } from '../support/fake-delivery.ts';
 import { NotificationDigestWorker } from '../../../services/main/src/modules/notification/digest.ts';
 import { editorialNotificationSubjectReader, EDITORIAL_NOTIFICATION_TOPICS } from '../../../services/main/src/modules/notification-producers/editorial.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
@@ -30,7 +30,15 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
     preparation = Date.now();
   const scopes =
     'openid work:create work:edit work:read work:correct work:review notification:manage';
-  const f = await authorCreditFixture(Bun.env as Record<string, string>, directory, scopes);
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access', 'content']);
+  let f: Awaited<ReturnType<typeof authorCreditFixture>>;
+  try {
+    // The editorial cursor, inbox, deliveries and digest days belong to this
+    // file; earlier shard events cannot consume a producer tick or be delivered.
+    f = await authorCreditFixture({ ...Bun.env,
+      ACCESS_DATABASE_URL: databases.urls.access, CONTENT_DATABASE_URL: databases.urls.content,
+    } as Record<string, string>, directory, scopes);
+  } catch (error) { await databases.close(); throw error; }
   const reader = nativeId(),
     tokenB = await f.account.tokenFor(f.account.b, scopes);
   let statements = 0;
@@ -577,7 +585,8 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
     await json(await subscription(proposal.proposal, 'participating', null, tokenB), 404);
     expect(Date.now() - preparation).toBeLessThan(600_000);
   } finally {
-    await f.close();
-    rmSync(directory, { recursive: true, force: true });
+    try { await f.close(); } finally {
+      try { await databases.close(); } finally { rmSync(directory, { recursive: true, force: true }); }
+    }
   }
 }, 600_000);

@@ -21,6 +21,7 @@ import {
 } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { startHomeStack, seedHome } from './feed-read-support.ts';
 import type { Labels } from '../../../services/main/src/modules/suitability/policy.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 type Page = {
   items: { id: string; work?: string; chapterCount?: number | null; wordCount?: number | null }[];
@@ -30,8 +31,19 @@ type Page = {
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (ref: string) => ref.slice(-36);
 
-test('G-904: derived HTTP inventories, pages, continuations and counts admit only current readable targets', async () => {
-  const home = await startHomeStack('g904derived');
+test('G-904: interactive derived inventories retain rated targets and enforce current Access fences; sitemap keeps anonymous suitability', async () => {
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access', 'content', 'relay']);
+  const original = [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL];
+  let home: Awaited<ReturnType<typeof startHomeStack>>;
+  try {
+    // Own the ranking/serial inventories and project only this file's commands.
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] =
+      [databases.urls.access, databases.urls.content, databases.urls.relay];
+    home = await startHomeStack('g904derived', { projectionStart: 'current' });
+  } catch (error) { await databases.close(); throw error; }
+  finally {
+    [Bun.env.ACCESS_DATABASE_URL, Bun.env.CONTENT_DATABASE_URL, Bun.env.ACCOUNT_RELAY_DATABASE_URL] = original;
+  }
   try {
     const seeded = await seedHome(home, 3),
       works = seeded.works.toSorted((a, b) => a.work.localeCompare(b.work));
@@ -131,6 +143,11 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
         [randomUUID(), seeded.author, scope, action],
       );
     };
+    const readFence = async (work: string, open: boolean) => {
+      const changed = await home.stack.accessPool.query(`INSERT INTO access.scope_gate(id,open)
+        VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET open = EXCLUDED.open`, [`work:read:${work}`, open]);
+      expect(changed.rowCount).toBe(1);
+    };
     for (const work of works) {
       await grant(`work:edit:${work.work}`, 'work.edit');
       const head = (
@@ -202,6 +219,9 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
     }
     collections.sort();
     const releases: string[] = [];
+    const isbnPrefix = `978${String(BigInt(`0x${randomUUID().replaceAll('-', '').slice(0, 12)}`) % 1_000_000_000n).padStart(9, '0')}`;
+    const isbn13 = `${isbnPrefix}${(10 - [...isbnPrefix].reduce((sum, digit, index) =>
+      sum + Number(digit) * (index % 2 ? 3 : 1), 0) % 10) % 10}`;
     for (let n = 0; n < 3; n++) {
       const release = native();
       releases.push(release);
@@ -225,7 +245,7 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
             editionStatement: null,
             publisher: null,
             publicationYear: 2026,
-            isbn13: '9780316371247',
+            isbn13,
             originalUrl: null,
             fixedRelease: null,
             coverage: null,
@@ -319,50 +339,44 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
       `/v1/agents/${short(seeded.author)}/works?limit=2`,
       '/v1/rankings/trending?limit=2',
     ];
+    const pages = async (path: string, signed: boolean) => {
+      const first = await json<Page>(await get(path, signed));
+      expect(first.count.value, path).toBe(2);
+      expect(first.nextCursor, path).not.toBeNull();
+      const url = new URL(path, 'http://main.local');
+      url.searchParams.set('cursor', first.nextCursor!);
+      const second = await json<Page>(await get(`${url.pathname}${url.search}`, signed));
+      expect(second.count.value, path).toBe(1);
+      expect(second.nextCursor, path).toBeNull();
+      return [...first.items, ...second.items];
+    };
+    // The October 2 maintainer contract treats ratings as presentation metadata
+    // on interactive reads. They cannot replace Access authority or hide pages.
     for (const signed of [false, true]) {
       for (const path of inventoryPaths) {
-        const page = await json<Page>(await get(path, signed));
-        expect(page.items.map((item) => item.id).sort(), path).toEqual(
-          [publicWork.work, other.work].sort(),
-        );
-        expect(page.count.value, path).toBe(2);
-        expect(page.nextCursor, path).toBeNull();
+        expect((await pages(path, signed)).map(item => item.id).sort(), path)
+          .toEqual(works.map(work => work.work).sort());
       }
-      const decisions = await json<Page>(
-        await get(`/v1/realms/${short(seeded.realm.realm)}/decisions?limit=2`, signed),
-      );
-      expect(decisions.items.map((item) => item.work).sort()).toEqual(
-        [publicWork.work, other.work].sort(),
-      );
-      expect(decisions.count.value).toBe(2);
-      expect(decisions.nextCursor).toBeNull();
-      const lists = await json<Page>(
-        await get(`/v1/agents/${short(seeded.author)}/collections?limit=2`, signed),
-      );
-      expect(lists.items.map((item) => item.id)).toEqual(collections.slice(1));
-      expect(lists.nextCursor).toBeNull();
+      expect((await pages(`/v1/realms/${short(seeded.realm.realm)}/decisions?limit=2`, signed))
+        .map(item => item.work).sort()).toEqual(works.map(work => work.work).sort());
+      expect((await pages(`/v1/agents/${short(seeded.author)}/collections?limit=2`, signed))
+        .map(item => item.id).sort()).toEqual(collections);
       for (const path of [
         `/v1/works/${short(publicWork.work)}/releases?limit=2`,
-        '/v1/releases?isbn13=9780316371247&limit=2',
+        `/v1/releases?isbn13=${isbn13}&limit=2`,
       ]) {
-        const page = await json<Page>(await get(path, signed));
-        expect(
-          page.items.map((item) => item.id),
-          path,
-        ).toEqual(releases.slice(1));
-        expect(page.count.value).toBe(2);
-        expect(page.nextCursor).toBeNull();
+        expect((await pages(path, signed)).map(item => item.id).sort(), path).toEqual(releases);
       }
-      const denied = await get(
+      const rated = await json<{ id: string }>(await get(
         `/v1/works/${short(publicWork.work)}/releases/${short(releases[0]!)}`,
         signed,
-      );
+      ));
+      expect(rated.id).toBe(releases[0]);
       const absent = await get(
         `/v1/works/${short(publicWork.work)}/releases/${short(native())}`,
         signed,
       );
-      expect(denied.status).toBe(404);
-      expect(await denied.text()).toBe(await absent.text());
+      expect(absent.status).toBe(404);
       const sitemap = await json<{ entries: { reference: string }[]; next: string | null }>(
         await get('/v1/sitemap', signed),
       );
@@ -372,9 +386,23 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
       const relationsPage = await json<{ items: { relation: string }[]; next: string | null }>(
         await get(`/v1/resources/${short(publicWork.work)}/relations?limit=1`, signed),
       );
-      expect(relationsPage.items.map((item) => item.relation)).toEqual([relations[1]!]);
-      expect(relationsPage.next).toBeNull();
+      expect(relationsPage.items).toHaveLength(1);
+      expect(relationsPage.next).not.toBeNull();
+      const remainingRelations = await json<{ items: { relation: string }[]; next: string | null }>(
+        await get(`/v1/resources/${short(publicWork.work)}/relations?limit=1&after=${encodeURIComponent(relationsPage.next!)}`, signed),
+      );
+      expect([...relationsPage.items, ...remainingRelations.items].map(item => item.relation).sort())
+        .toEqual(relations.toSorted());
+      expect(remainingRelations.next).toBeNull();
     }
+    const assessments = await json<{ items: { target: { resource: string; base: string };
+      assessment: { status: string; labels: string[] }; eligible: boolean }[] }>(
+      await send('POST', '/v1/suitability/reads', { targets: [hidden.work, releases[0]!] }),
+    );
+    expect(assessments.items).toMatchObject([
+      { target: { resource: hidden.work, base: 'work' }, assessment: { status: 'assessed', labels: ['r18'] }, eligible: false },
+      { target: { resource: releases[0], base: 'release' }, assessment: { status: 'assessed', labels: ['r18g'] }, eligible: false },
+    ]);
     const candidates = await json<{ candidates: { work: string }[] }>(
       await send(
         'POST',
@@ -391,10 +419,10 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
         true,
       ),
     );
-    expect(candidates.candidates.map((item) => item.work)).not.toContain(hidden.work);
+    expect(candidates.candidates.map((item) => item.work)).toContain(hidden.work);
     expect(candidates.candidates.map((item) => item.work)).toContain(publicWork.work);
-    // A fixed read-model cut stays unchanged while the independent assessment
-    // owner restricts a child. The HTTP Work header must fence its cached totals.
+    // Ratings leave an interactive container's cached totals intact. An actual
+    // Work read fence on a child must still suppress those totals at the same cut.
     graphSequence = (
       await home.stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?sequence WHERE {
       GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:sequence ?sequence } }`)
@@ -427,6 +455,11 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
       ).toBe(1);
     await rate(child, ['r15']);
     for (const signed of [false, true]) {
+      expect(await json(await get(`/v1/works/${short(publicWork.work)}`, signed)))
+        .toMatchObject({ chapterCount: 1, wordCount: 8 });
+    }
+    await readFence(child, false);
+    for (const signed of [false, true]) {
       const header = await json<{
         chapterCount: number | null;
         wordCount: number | null;
@@ -434,6 +467,7 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
       }>(await get(`/v1/works/${short(publicWork.work)}`, signed));
       expect(header).toMatchObject({ chapterCount: null, wordCount: null, lastUpdatedAt: null });
     }
+    await readFence(child, true);
     await rate(child, []);
     expect(
       (
@@ -442,9 +476,23 @@ test('G-904: derived HTTP inventories, pages, continuations and counts admit onl
         )
       ).chapterCount,
     ).toBe(1);
-    await rate(hidden.work, []);
+    // Server authorization filters before counting and choosing continuations.
+    await readFence(hidden.work, false);
+    for (const signed of [false, true]) {
+      for (const path of [...inventoryPaths, `/v1/realms/${short(seeded.realm.realm)}/decisions?limit=2`]) {
+        const page = await json<Page>(await get(path, signed));
+        expect(page.items.map(item => item.work ?? item.id).sort(), path)
+          .toEqual([publicWork.work, other.work].sort());
+        expect(page.count.value, path).toBe(2);
+        expect(page.nextCursor, path).toBeNull();
+      }
+    }
+    await readFence(hidden.work, true);
     expect((await json<Page>(await get(inventoryPaths[0]!, false))).nextCursor).not.toBeNull();
+    await rate(hidden.work, []);
+    const clearedSitemap = await json<{ entries: { reference: string }[] }>(await get('/v1/sitemap', false));
+    expect(clearedSitemap.entries.map(item => item.reference)).toContain(hidden.work);
   } finally {
-    await home.stop();
+    try { await home.stop(); } finally { await databases.close(); }
   }
 }, 240_000);
