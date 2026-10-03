@@ -62,7 +62,7 @@ export const readOfficialZones = cache(async (_language: string): Promise<Commun
     const realm = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get());
     return realm.ok ? { id: zone.zone, kind: 'zone' as const, realm: zone.realm, name: realm.data.name.value,
       language: realm.data.name.language, direction: realm.data.name.direction,
-      icon: realm.data.icon, href: `/r/${zone.routeSegment}`,
+      icon: realm.data.icon, href: `/z/${zone.routeSegment}`,
       activity: 'unknown' as const } : null;
   }));
   return named.filter(item => item !== null);

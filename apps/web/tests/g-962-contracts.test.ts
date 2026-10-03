@@ -5,7 +5,7 @@ import { BrowseReadError, discoveryApi } from '../features/discover/api.ts';
 import { browseQuery, emptyBrowse } from '../features/discover/browse-state.ts';
 import { fixtureFollow, target } from '../features/relationships/fixtures.ts';
 import { followedCommunity, withZoneAddress } from '../features/shell/communities-relationships.ts';
-import type { Community } from '../features/shell/communities.ts';
+import { realmSegment, segmentsOf, type Community } from '../features/shell/communities.ts';
 
 const sourcePosition = { dataEpoch: 'merged-main', sequence: '42' };
 const list = { items: [], nextCursor: null, complete: true, count: { value: 0, kind: 'exact' as const } };
@@ -54,12 +54,14 @@ describe('G-962 merged browse and relationship contracts', () => {
     const follow = fixtureFollow(10);
     const community = followedCommunity(follow)!;
     const official: Community = { id: target(20), kind: 'zone', realm: follow.realm!, name: 'Fiction',
-      language: 'en', icon: null, href: spaceHref('fiction', 'community'), activity: 'unknown' };
+      language: 'en', icon: null, href: spaceHref('fiction', 'site'), activity: 'unknown' };
     const [named] = withZoneAddress([community], [official]);
-    expect(named).toEqual({ ...community, href: official.href });
+    expect(named).toEqual({ ...community, href: spaceHref('fiction', 'community') });
     expect(named!.id).toBe(follow.id);
     expect(named!.realm).toBe(follow.realm!);
     const unrelated = followedCommunity(fixtureFollow(11))!;
     expect(withZoneAddress([unrelated], [official])).toEqual([unrelated]);
+    expect(realmSegment(follow.realm!, [official])).toBe('fiction');
+    expect(segmentsOf([official])).toEqual({ [follow.realm!]: 'fiction' });
   });
 });

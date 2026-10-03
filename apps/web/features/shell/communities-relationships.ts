@@ -6,7 +6,7 @@ import { type Community, realmOf } from './communities.ts';
 export function withZoneAddress(realms: Community[], official: readonly Community[]): Community[] {
   return realms.map(realm => {
     const zone = official.find(item => item.realm === realmOf(realm));
-    return zone ? { ...realm, href: zone.href } : realm;
+    return zone ? { ...realm, href: zone.href.replace(/^\/z\//, '/r/') } : realm;
   });
 }
 
