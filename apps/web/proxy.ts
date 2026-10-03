@@ -54,6 +54,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       })
     : { kind: 'pass' as const };
   const path = pageRequest ? addressPath(pathname) : null;
+  // Work pages own their localized not-found boundary and recheck the live
+  // owner read. A missing/restricted address must reach it instead of returning
+  // an empty middleware 404; unavailable and retired addresses keep their status.
+  if (path?.lookup.scope === 'work' && addressed.kind === 'error' && addressed.status === 404)
+    addressed = { kind: 'pass' };
   let discoveryHeaders: Record<string, string> = {};
   // Resolve denied Space reads through Main's limited landing page. A missing
   // resolver answer alone neither admits a page nor invents its capabilities.
