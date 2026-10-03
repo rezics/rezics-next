@@ -12,7 +12,8 @@ Run commands from the repository root through Task. `task --list` shows the
 current facade; `task urls` and `task env` show running addresses and masked
 configuration. For a development stack and its cleanup, follow
 [installation](../operations/installation.md). The [disposable local web auth
-fixture](local-web-auth.md) has its own run procedure.
+fixture](local-web-auth.md) has its own run procedure, as does the optional
+[local real-world dataset corpus](local-datasets.md).
 
 To discard and recreate this checkout's dev data, run `task dev:reset -- --yes` (it prints the exact volumes and directories first).
 
