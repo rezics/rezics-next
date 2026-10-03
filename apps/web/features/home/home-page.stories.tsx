@@ -1,3 +1,6 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref } from '../address/path.ts';
+import { communityHref } from '../feed/discussion.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -141,7 +144,7 @@ export const ReturningReader: Story = {
 export const FollowStateEverywhere: Story = {
   args: props({ state: state({ tab: 'all' }),
     followed: { realms: [], complete: true, zones: [{ id: storyId(957, 'aaaa'), kind: 'zone', realm: realms.kitchen.id,
-      name: 'Kitchen · 厨房', language: 'en', icon: null, href: '/r/kitchen', activity: 'none' }] },
+      name: 'Kitchen · 厨房', language: 'en', icon: null, href: communityHref(realms.kitchen.id, 'kitchen'), activity: 'none' }] },
     page: { ok: true, data: page([
       post(40, { realm: realms.kitchen, reason: { kind: 'recommended', basis: 'all' }, target: { title: name('Ginger lemon tea') } }),
       post(41, { realm: realms.mods, reason: { kind: 'recommended', basis: 'all' }, target: { title: name('Fence planner') } }),
@@ -171,12 +174,12 @@ export const FollowStateEverywhere: Story = {
 export const ZoneAddresses: Story = {
   args: props({ state: state({ tab: 'all' }),
     official: [{ id: storyId(958, 'aaaa'), kind: 'zone', realm: realms.kitchen.id, name: 'Kitchen · 厨房', language: 'en',
-      icon: null, href: '/r/kitchen', activity: 'unknown' }],
+      icon: null, href: communityHref(realms.kitchen.id, 'kitchen'), activity: 'unknown' }],
     page: { ok: true, data: page([post(42, { realm: realms.kitchen, target: { title: name('Scallion pancakes') } })],
       { scope: 'all' }) } }),
   async play({ canvasElement }) {
     const post = within(canvasElement).getByRole('article', { name: 'Scallion pancakes' });
-    await expect(within(post).getByRole('link', { name: realms.kitchen.name.value })).toHaveAttribute('href', '/en/r/kitchen');
+    await expect(within(post).getByRole('link', { name: realms.kitchen.name.value })).toHaveAttribute('href', localizedPath(communityHref(realms.kitchen.id, 'kitchen'), 'en'));
   },
 };
 
@@ -244,7 +247,7 @@ export const PinnedTabEmpty: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Nothing about Fantasy yet' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Open Fantasy' }))
-      .toHaveAttribute('href', `/en/concepts/${topics.fantasy.id.slice(-36)}`);
+      .toHaveAttribute('href', localizedPath(resourceHref('/concepts/', topics.fantasy.id), 'en'));
     await expect(canvas.getByRole('link', { name: 'Browse All' })).toHaveAttribute('href', '/en?tab=all');
   },
 };

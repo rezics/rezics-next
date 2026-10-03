@@ -1,3 +1,4 @@
+import { zoneMemberHref } from '../address/path.ts';
 import { cache } from 'react';
 import { entityHref } from '../entity-page/route.ts';
 import { idOf } from '../work-page/route.ts';
@@ -46,11 +47,11 @@ export async function mountOf(site: ZoneSite, resource: string, kind: string | n
 export async function zoneLink(site: ZoneSite, resource: string, kind: string | null): Promise<string> {
   const segment = await mountOf(site, resource, kind);
   const id = idOf(resource) ?? resource;
-  return withPosition(segment ? `/r/${encodeURIComponent(site.ref)}/${encodeURIComponent(segment)}/${id}`
+  return withPosition(segment ? zoneMemberHref(site.ref, segment, id)
     : entityHref(resource), site.choice);
 }
 
 /** A page inside a mount, when the mount is known. */
 export const memberHref = (site: Pick<ZoneSite, 'ref' | 'choice'>, segment: string, resource: string) =>
-  withPosition(`/r/${encodeURIComponent(site.ref)}/${encodeURIComponent(segment)}/${idOf(resource) ?? resource}`,
+  withPosition(zoneMemberHref(site.ref, segment, resource),
     site.choice);

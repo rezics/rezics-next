@@ -1,5 +1,6 @@
 'use client';
 
+import { profileHref } from '../profile/route.ts';
 import { cn } from '@rezics/ui/utils';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ArrowRightIcon, CheckIcon, LinkIcon, MinusIcon, PlusIcon, ReplyIcon } from 'lucide-react';
@@ -120,7 +121,7 @@ export function ReplyByline({
         <span className="font-medium">{t.blockedUser}</span>
       ) : reply.author ? (
         <LocalizedLink
-          href={`/@${reply.author.handle}`}
+          href={profileHref(reply.author)}
           className="truncate font-semibold text-foreground
       outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >

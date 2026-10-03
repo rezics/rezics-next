@@ -1,3 +1,5 @@
+import { zoneMemberHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { ReportAction } from './report-action.tsx';
@@ -14,20 +16,28 @@ type Story = StoryObj<typeof meta>;
 export const Profile: Story = {
   async play({ canvasElement }) {
     const link = within(canvasElement).getByRole('link', { name: 'Report this profile' });
-    await expect(link.getAttribute('href')).toContain('/report?target=https%3A%2F%2Frezics.com%2Fid%2F');
+    await expect(link.getAttribute('href')).toContain(
+      '/report?target=https%3A%2F%2Frezics.com%2Fid%2F',
+    );
   },
 };
 
 export const Reply: Story = {
   args: { kind: 'reply', target: 'https://rezics.com/id/00000000-0000-4000-8000-000000000202' },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('link', { name: 'Report this reply' })).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole('link', { name: 'Report this reply' }),
+    ).toBeVisible();
   },
 };
 
 /** In a row of icon actions the name stays for assistive technology. */
 export const IconOnly: Story = {
-  args: { kind: 'post', iconOnly: true, target: '/en/r/rain/threads/1' },
+  args: {
+    kind: 'post',
+    iconOnly: true,
+    target: localizedPath(zoneMemberHref('rain', 'threads', '1'), 'en'),
+  },
   async play({ canvasElement }) {
     const link = within(canvasElement).getByRole('link', { name: 'Report this post' });
     await expect(link).toHaveAttribute('title', 'Report this post');
@@ -39,7 +49,8 @@ export const IconOnly: Story = {
 export const InRealm: Story = {
   args: { kind: 'post', realm: 'https://rezics.com/id/00000000-0000-4000-8000-0000000000e1' },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('link', { name: 'Report this post' }).getAttribute('href'))
-      .toContain('realm=');
+    await expect(
+      within(canvasElement).getByRole('link', { name: 'Report this post' }).getAttribute('href'),
+    ).toContain('realm=');
   },
 };

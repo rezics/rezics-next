@@ -2,6 +2,7 @@ import type { WorkCoverKind } from '@rezics/ui/work-cover';
 import type { UiLocale } from '../../i18n/define.ts';
 import { coverOf, entryLabel, typeEntry } from '../catalogue/types.ts';
 import type { OnboardingChoices } from '../feed/types.ts';
+import { topicLoader } from '../discover/topic-picker.tsx';
 
 // The setup's topic step, shared by the flow, its stories and tests.
 
@@ -10,6 +11,9 @@ export type Topic = Group['concepts'][number];
 
 /** At most as many topics as Home has tabs, so every chosen topic is pinned. */
 export const MAX_TOPICS = 8;
+
+/** Onboarding keeps its curated samples and searches the complete Concept inventory with the shared picker. */
+export const onboardingTopicLoader = (locale: UiLocale, actingSubject: string) => topicLoader(locale, actingSubject);
 
 export interface TopicGroup {
   /** The registry's plural word for the group's type ("Books", "Games"), in the reader's language; null without the registry. */

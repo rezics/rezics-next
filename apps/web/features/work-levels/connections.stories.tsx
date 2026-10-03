@@ -1,3 +1,5 @@
+import { resourceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -10,24 +12,81 @@ import type { ConnectionsQuery } from './route.ts';
 import type { Loaded, RelationsPage } from './types.ts';
 
 const franchise = (grain: 'series' | 'parts', paged = false): Franchise => ({
-  collection: fixture.summary(fixture.iri('900'), 'A Certain Magical Index franchise', 'en', 'collection'),
-  members: { ok: true, data: { collection: fixture.iri('900'), next: null, members: [fixture.iri('100'), fixture.iri('200'), fixture.iri('300')].map((target, index) => ({
-    occurrence: fixture.iri(`8${index}`), role: 'member', parent: fixture.iri('9'), target, orderKey: `o${index}`, labels: [] })) } },
-  parts: grain === 'parts' && fixture.parts.ok ? new Map([[fixture.iri('100'), paged ? fixture.pagedParts : fixture.parts]]) : new Map() });
+  collection: fixture.summary(
+    fixture.iri('900'),
+    'A Certain Magical Index franchise',
+    'en',
+    'collection',
+  ),
+  members: {
+    ok: true,
+    data: {
+      collection: fixture.iri('900'),
+      next: null,
+      members: [fixture.iri('100'), fixture.iri('200'), fixture.iri('300')].map(
+        (target, index) => ({
+          occurrence: fixture.iri(`8${index}`),
+          role: 'member',
+          parent: fixture.iri('9'),
+          target,
+          orderKey: `o${index}`,
+          labels: [],
+        }),
+      ),
+    },
+  },
+  parts:
+    grain === 'parts' && fixture.parts.ok
+      ? new Map([[fixture.iri('100'), paged ? fixture.pagedParts : fixture.parts]])
+      : new Map(),
+});
 
-function Page({ locale, grain = 'series', relations = fixture.relations, preview = false, paged = false }: {
-  locale: UiLocale; paged?: boolean; grain?: ConnectionsQuery['grain']; relations?: Loaded<RelationsPage>; preview?: boolean;
+function Page({
+  locale,
+  grain = 'series',
+  relations = fixture.relations,
+  preview = false,
+  paged = false,
+}: {
+  locale: UiLocale;
+  paged?: boolean;
+  grain?: ConnectionsQuery['grain'];
+  relations?: Loaded<RelationsPage>;
+  preview?: boolean;
 }) {
   const t = copyOf(locale);
-  return <div className="mx-auto grid max-w-[46rem] gap-8 px-4 py-8 sm:px-8">
-    {preview
-      ? <ConnectionsPreviewView relations={relations} workRef={fixture.workRef} locale={locale} pageMessages={pageMessages[locale]} t={t} />
-      : <ConnectionsSection relations={relations} franchises={[franchise(grain, paged)]} names={fixture.names} workRef={fixture.workRef}
-        current={fixture.current} query={{ grain }} locale={locale} t={t} pageMessages={pageMessages[locale]} />}
-  </div>;
+  return (
+    <div className="mx-auto grid max-w-[46rem] gap-8 px-4 py-8 sm:px-8">
+      {preview ? (
+        <ConnectionsPreviewView
+          relations={relations}
+          workRef={fixture.workRef}
+          locale={locale}
+          pageMessages={pageMessages[locale]}
+          t={t}
+        />
+      ) : (
+        <ConnectionsSection
+          relations={relations}
+          franchises={[franchise(grain, paged)]}
+          names={fixture.names}
+          workRef={fixture.workRef}
+          current={fixture.current}
+          query={{ grain }}
+          locale={locale}
+          t={t}
+          pageMessages={pageMessages[locale]}
+        />
+      )}
+    </div>
+  );
 }
 
-const meta = { title: 'Work levels/Connections', component: Page, args: { locale: 'en' } } satisfies Meta<typeof Page>;
+const meta = {
+  title: 'Work levels/Connections',
+  component: Page,
+  args: { locale: 'en' },
+} satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -60,44 +119,79 @@ export const LabelFallback: Story = {
 export const SeriesGrain: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: 'A Certain Magical Index franchise' })).toBeVisible();
+    await expect(
+      canvas.getByRole('heading', { name: 'A Certain Magical Index franchise' }),
+    ).toBeVisible();
     await expect(canvas.getByText('This Work')).toBeVisible();
     const switcher = canvas.getByRole('group', { name: 'Franchise level' });
-    await expect(within(switcher).getByRole('link', { name: 'Series' })).toHaveAttribute('aria-current', 'true');
-    await expect(within(switcher).getByRole('link', { name: 'Volumes and parts' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/connections?grain=parts#franchises`);
+    await expect(within(switcher).getByRole('link', { name: 'Series' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    await expect(within(switcher).getByRole('link', { name: 'Volumes and parts' })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/w/', fixture.workRef)}/connections?grain=parts#franchises`,
+        'en',
+      ),
+    );
     await expect(canvas.queryByText('A Certain Magical Index NT 22 Reverse')).toBeNull();
   },
 };
 
-export const PartsGrain: Story = { args: { grain: 'parts' },
+export const PartsGrain: Story = {
+  args: { grain: 'parts' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(within(canvas.getByRole('group', { name: 'Franchise level' })).getByRole('link', { name: 'Volumes and parts' }))
-      .toHaveAttribute('aria-current', 'true');
+    await expect(
+      within(canvas.getByRole('group', { name: 'Franchise level' })).getByRole('link', {
+        name: 'Volumes and parts',
+      }),
+    ).toHaveAttribute('aria-current', 'true');
     await expect(canvas.getByText('A Certain Magical Index NT 22 Reverse')).toBeVisible();
-  } };
+  },
+};
 
 /** A member with more parts than one page links to its own page for them. */
-export const MemberWithMoreParts: Story = { args: { grain: 'parts', paged: true },
+export const MemberWithMoreParts: Story = {
+  args: { grain: 'parts', paged: true },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('link', { name: 'More parts…' }))
-      .toHaveAttribute('href', `/en/w/${fixture.iri('100').slice(-36)}/connections#parts`);
-  } };
+    await expect(within(canvasElement).getByRole('link', { name: 'More parts…' })).toHaveAttribute(
+      'href',
+      localizedPath(
+        `${resourceHref('/w/', fixture.iri('100').slice(-36))}/connections#parts`,
+        'en',
+      ),
+    );
+  },
+};
 
-export const Japanese: Story = { args: { locale: 'ja' }, globals: { viewport: { value: 'phone' } },
+export const Japanese: Story = {
+  args: { locale: 'ja' },
+  globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('region', { name: 'つながり' })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-  } };
+  },
+};
 
-export const Preview: Story = { args: { preview: true },
+export const Preview: Story = {
+  args: { preview: true },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('link', { name: 'All connections' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/connections#relations`);
-  } };
+    await expect(
+      within(canvasElement).getByRole('link', { name: 'All connections' }),
+    ).toHaveAttribute(
+      'href',
+      localizedPath(`${resourceHref('/w/', fixture.workRef)}/connections#relations`, 'en'),
+    );
+  },
+};
 
-export const SignInNeeded: Story = { args: { relations: { ok: false, failure: 'sign-in' } },
+export const SignInNeeded: Story = {
+  args: { relations: { ok: false, failure: 'sign-in' } },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Connections could not be loaded.');
-  } };
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
+      'Connections could not be loaded.',
+    );
+  },
+};

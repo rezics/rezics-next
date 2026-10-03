@@ -21,7 +21,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (!handle || !status) return {};
   const locale = await requestLocale();
   const [resolved, messages] = await Promise.all([resolveProfile(handle, locale), getMessages('profile', locale)]);
-  if (resolved.kind !== 'profile') return {};
+  if (resolved.kind !== 'profile') return { robots: { index: false } };
   const t = materializeData(messages, { locale });
   return { title: t.pageTitle({ title: shelfLabel(status, t), name: resolved.profile.displayName }),
     ...(parseCursor((await searchParams).cursor) ? { robots: { index: false } } : {}) };

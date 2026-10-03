@@ -1,0 +1,24 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "rv:communityHandle": {
+      "@id": "https://rezics.com/vocab/communityHandle"
+    },
+    "rv:normalizedSlug": {
+      "@id": "https://rezics.com/vocab/normalizedSlug"
+    },
+    "rv:routeNamespace": {
+      "@id": "https://rezics.com/vocab/routeNamespace"
+    },
+    "rv:routeSegment": {
+      "@id": "https://rezics.com/vocab/routeSegment"
+    }
+  }
+}

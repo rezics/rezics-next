@@ -1,0 +1,142 @@
+id: web-links-use-address
+language: TypeScript
+severity: error
+message: Build entity links with apps/web/features/address instead of string paths.
+files:
+  - apps/web/**/*.ts
+ignores:
+  - apps/web/features/address/**
+  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
+  - apps/web/features/discover/scope.ts
+  - apps/web/features/realm/route.ts
+  - apps/web/features/shell/communities-read.ts
+  - apps/web/features/zones/fixtures.ts
+  - apps/web/features/zones/official-fixtures.ts
+  - apps/web/tests/g-644-entity-page.test.ts
+  - apps/web/tests/g-655-zone-site.test.ts
+  - apps/web/tests/g-921-zones.test.ts
+  - apps/web/tests/g-943-address.e2e.ts
+  - apps/web/tests/g-943-address.test.ts
+  - apps/web/tests/profile.test.ts
+  - apps/web/tests/realm.test.ts
+  - apps/web/tests/work-page.test.ts
+  - apps/web/tests/zone.test.ts
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  not:
+    any:
+      - regex: '^[\x22\x27\x60]/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/)?r/new[\x22\x27\x60]$'
+      - all:
+        # These literals select a builder's entity family; they are not links.
+        - regex: '^[''"\x60]/(?:@|(?:a|r|z|w|e|concepts)/)[''"\x60]$'
+        - any:
+            - inside:
+                kind: arguments
+                inside:
+                  kind: call_expression
+                  regex: '^(?:identityHref|resourceHref)\('
+            - inside:
+                kind: pair
+                has:
+                  field: key
+                  regex: '^prefix$'
+            - inside:
+                kind: as_expression
+                inside:
+                  kind: pair
+                  has:
+                    field: key
+                    regex: '^prefix$'
+  regex: '^["''`]((?:https?://[^/]+|\$\{[^}]+\})?/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?(?:r/|z/|w/|e/|a/|concepts/)|/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?@)'
+
+---
+id: web-links-use-address-tsx
+language: Tsx
+severity: error
+message: Build entity links with apps/web/features/address instead of string paths.
+files:
+  - apps/web/**/*.tsx
+ignores:
+  - apps/web/features/address/**
+  - apps/web/tests/g-952-router.test.tsx
+  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
+  - apps/web/app/\[locale\]/r/\[realm\]/not-found.tsx
+  - apps/web/features/communities/create-form.tsx
+  - apps/web/features/communities/setup-checklist.stories.tsx
+  - apps/web/features/discover/resource-list.tsx
+  - apps/web/features/home/rail.tsx
+  - apps/web/features/realm/membership.stories.tsx
+  - apps/web/features/realm/realm-tabs.stories.tsx
+  - apps/web/features/shell/app-shell.stories.tsx
+  - apps/web/features/zones/collection-home.stories.tsx
+  - apps/web/features/zones/official-zones.stories.tsx
+  - apps/web/features/zones/page-missing.stories.tsx
+  - apps/web/features/zones/site-pages.stories.tsx
+  - apps/web/features/zones/site-route.tsx
+  - apps/web/zones/official/light-novels/slots.tsx
+  - apps/web/zones/official/visual-novels/slots.tsx
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  not:
+    any:
+      - regex: '^[\x22\x27\x60]/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/)?r/new[\x22\x27\x60]$'
+      - all:
+        # These literals select a builder's entity family; they are not links.
+        - regex: '^[''"\x60]/(?:@|(?:a|r|z|w|e|concepts)/)[''"\x60]$'
+        - any:
+            - inside:
+                kind: arguments
+                inside:
+                  kind: call_expression
+                  regex: '^(?:identityHref|resourceHref)\('
+            - inside:
+                kind: pair
+                has:
+                  field: key
+                  regex: '^prefix$'
+            - inside:
+                kind: as_expression
+                inside:
+                  kind: pair
+                  has:
+                    field: key
+                    regex: '^prefix$'
+  regex: '^["''`]((?:https?://[^/]+|\$\{[^}]+\})?/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?(?:r/|z/|w/|e/|a/|concepts/)|/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?@)'
+
+---
+id: web-links-use-address-js
+language: JavaScript
+severity: error
+message: Build entity links with apps/web/features/address instead of string paths.
+files:
+  - apps/web/**/*.js
+  - apps/web/**/*.jsx
+ignores:
+  - apps/web/features/address/**
+  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
+rule:
+  any:
+    - kind: string
+    - kind: template_string
+  not:
+    any:
+      - regex: '^[\x22\x27\x60]/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/)?r/new[\x22\x27\x60]$'
+      - all:
+        # These literals select a builder's entity family; they are not links.
+        - regex: '^[''"\x60]/(?:@|(?:a|r|z|w|e|concepts)/)[''"\x60]$'
+        - any:
+            - inside:
+                kind: arguments
+                inside:
+                  kind: call_expression
+                  regex: '^(?:identityHref|resourceHref)\('
+            - inside:
+                kind: pair
+                has:
+                  field: key
+                  regex: '^prefix$'
+  regex: '^["''`]((?:https?://[^/]+|\$\{[^}]+\})?/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?(?:r/|z/|w/|e/|a/|concepts/)|/(?:[A-Za-z]{2}(?:-[A-Za-z]+)?/|\$\{[^}]+\}/)?@)'

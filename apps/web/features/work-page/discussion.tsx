@@ -1,3 +1,4 @@
+import { spaceHref, threadHref } from '../address/path.ts';
 import { buttonVariants } from '@rezics/ui/button';
 import { MessagesSquareIcon, UsersRoundIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
@@ -46,7 +47,7 @@ export function DiscussionList({ items, realmLabel: label, realmHref, locale, me
           <div className="grid gap-2 text-pretty break-words text-sm/7">
             {paragraphs(item.body).map((line, index) => <p key={index}>{line}</p>)}
           </div>
-          {realm && reply ? <Link href={`/r/${realm}/discussions/${reply}`} className="inline-flex w-fit items-center
+          {realm && reply ? <Link href={threadHref(spaceHref(realm, 'community'), reply)} className="inline-flex w-fit items-center
             gap-1.5 font-medium text-primary text-sm underline-offset-4 hover:underline">
             <MessagesSquareIcon aria-hidden="true" className="size-4" />{t.viewInThread}</Link> : null}
         </article>

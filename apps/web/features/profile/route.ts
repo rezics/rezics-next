@@ -10,11 +10,13 @@
 // siblings (`/discover`, `/w`, …) still win, since routers try them first.
 
 import type { ShelfStatus } from './types.ts';
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 
 // Main's handle forms (`services/main/src/modules/agent/handle.ts` and
 // `vanity.ts`): a native `agent-{uuid}`, or a vanity name Main matches without
 // regard to case and then redirects to its lower-case form.
-const vanity = /^[A-Za-z0-9_]{3,30}$/;
+// Main enforces claim policy; historical underscore forms still reach its resolver.
+const vanity = /^[A-Za-z0-9_-]{3,30}$/;
 const native = /^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The handle a `[handle]` segment names (`@lin_mei` → `lin_mei`), or null when it names none. */
@@ -41,8 +43,13 @@ export function parseShelfStatus(value: string): ShelfStatus | null {
 export type ProfileView = { kind: 'overview' } | { kind: 'works' } | { kind: 'shelf'; status: ShelfStatus };
 
 /** A profile view's address, before the locale prefix. */
-export function profileHref(handle: string, view: ProfileView = { kind: 'overview' }, cursor?: string): string {
-  const path = `/@${handle}${view.kind === 'works' ? '/works' : view.kind === 'shelf' ? `/shelves/${view.status}` : ''}`;
+export function profileHref(profile: string | { handle: string; address?: AddressTarget },
+  view: ProfileView = { kind: 'overview' }, cursor?: string): string {
+  const handle = typeof profile === 'string' ? profile : profile.handle;
+  const address = typeof profile === 'string' ? undefined : profile.address;
+  const base = address ? resourceHref('/a/', address) : isNativeHandle(handle)
+    ? resourceHref('/a/', handle.slice(6)) : resourceHref('/a/', { prefix: '/@', key: handle, slugSource: '' });
+  const path = `${base}${view.kind === 'works' ? '/works' : view.kind === 'shelf' ? `/shelves/${view.status}` : ''}`;
   return cursor ? `${path}?${new URLSearchParams({ cursor })}` : path;
 }
 

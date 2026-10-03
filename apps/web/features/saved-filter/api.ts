@@ -1,5 +1,6 @@
 import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
 import { browserMainApi } from '../api/browser.ts';
+import { discoveryApi, type ConceptChoice, type ListInput, type ListPage } from '../discover/api.ts';
 import { type Loaded, type MainClient, settle } from '../feed/types.ts';
 import type { CommandFailure, CommandResult, ConceptDetail, ConceptSearchItem, SavedFilter, SavedFilterReceipt,
   SavedFiltersPage } from './types.ts';
@@ -24,6 +25,8 @@ export interface SavedFilterApi {
   concept(id: string, locale: string): Promise<Loaded<ConceptDetail>>;
   /** Topics public Works carry most, as onboarding offers them, to start from before searching. */
   popularConcepts(locale: string): Promise<Loaded<{ id: string; name: { value: string; language: string } }[]>>;
+  /** Indexed Concepts: followed first for an empty query, with continuation over the whole vocabulary. */
+  conceptChoices?(query: ListInput, locale: string): Promise<Loaded<ListPage<ConceptChoice>>>;
 }
 
 type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null };
@@ -75,24 +78,22 @@ export function mainSavedFilterApi(actingSubject: string, main: MainClient = bro
     },
 
     async searchConcepts(phrase, locale) {
-      // The reader's language first, then English, as the Condition bar searches.
-      const languages = locale === 'en' ? ['en'] : [locale, 'en'];
-      const reads = await Promise.all(languages.map(language => settle(() => main.v1.concepts.get({ query: {
-        q: phrase, language, limit: 8 } }))));
-      const found = reads.flatMap(read => read.ok ? read.data.items : []);
-      if (!found.length && reads.every(read => !read.ok)) return reads[0] as Loaded<never>;
-      return { ok: true, data: [...new Map(found.filter(item => !item.realm).map(item => [item.concept, item] as const))
-        .values()] };
+      try {
+        const page = await discoveryApi(main, locale, actingSubject).concepts({ q: phrase });
+        return { ok: true, data: page.items.map(item => ({ concept: item.id, label: item.name.value,
+          language: item.name.language, realm: null })) };
+      } catch { return { ok: false, failure: 'unavailable' }; }
     },
 
     concept: (id, locale) => settle(() => main.v1.concepts({ id: id.slice(-36) }).get({ query: { language: locale } })),
 
     async popularConcepts(locale) {
-      const read = await settle(() => main.v1.onboarding.choices.get({ query: { locale } }));
-      if (!read.ok) return read;
-      const concepts = read.data.groups.flatMap(group => group.concepts.map(concept => ({ id: concept.id,
-        name: concept.name })));
-      return { ok: true, data: [...new Map(concepts.map(concept => [concept.id, concept] as const)).values()].slice(0, 12) };
+      try { return { ok: true, data: (await discoveryApi(main, locale, actingSubject).concepts({ limit: 12 })).items }; }
+      catch { return { ok: false, failure: 'unavailable' }; }
+    },
+    async conceptChoices(query, locale) {
+      try { return { ok: true, data: await discoveryApi(main, locale, actingSubject).concepts(query) }; }
+      catch { return { ok: false, failure: 'unavailable' }; }
     },
   };
 }

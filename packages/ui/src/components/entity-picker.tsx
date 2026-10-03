@@ -25,6 +25,7 @@ export type {
   EntityPickerLoad,
   EntityPickerPage,
 } from './entity-picker-state.ts';
+export { EntityPickerSource } from './entity-picker-state.ts';
 export interface EntityPickerSelection<T extends EntityPickerItem = EntityPickerItem> {
   item: T;
   mode?: 'include' | 'exclude';

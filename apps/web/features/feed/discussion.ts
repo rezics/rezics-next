@@ -1,3 +1,4 @@
+import { spaceHref, threadHref, type AddressTarget } from '../address/path.ts';
 // How a discussion reads. Main titles a discussion by its author's first line
 // (`services/main/src/modules/realm-reply/discussion-text.ts`) but keeps no
 // spoiler flag: people announce spoilers in that title ("【剧透】…",
@@ -14,5 +15,10 @@ export function announcesSpoilers(title: string): boolean {
 
 /** A thread's page: `/r/{realm}/discussions/{reply}`, under the Realm's Zone segment when it has one. */
 export function threadPath(realmPath: string, reply: string): string {
-  return `${realmPath}/discussions/${reply.slice(-36)}`;
+  return threadHref(realmPath, reply);
+}
+
+/** A community's native identity or known name, through the shared address builder. */
+export function communityHref(realm: AddressTarget, name?: string): string {
+  return spaceHref(typeof realm === 'string' ? name ?? realm : realm, 'community');
 }

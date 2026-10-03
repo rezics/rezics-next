@@ -1,6 +1,15 @@
+import { resourceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { type Browser, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
+import {
+  type Browser,
+  expect,
+  type Locator,
+  type Page,
+  test,
+  type TestInfo,
+} from '@playwright/test';
 import type { Catalogue } from './g-838-catalogue.ts';
 import { chooseOption } from './g-934-choose.ts';
 
@@ -11,10 +20,16 @@ let catalogue: Catalogue;
 test.use({ actionTimeout: 15_000 });
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  const result = spawnSync('bun', ['apps/web/tests/g-838-seed.ts'], { cwd: process.cwd(), env: process.env,
-    encoding: 'utf8', timeout: 240_000 });
+  const result = spawnSync('bun', ['apps/web/tests/g-838-seed.ts'], {
+    cwd: process.cwd(),
+    env: process.env,
+    encoding: 'utf8',
+    timeout: 240_000,
+  });
   if (result.status !== 0 || result.error) {
-    throw new Error(`G-838 seed failed: ${result.stderr || result.error?.message || result.status}`);
+    throw new Error(
+      `G-838 seed failed: ${result.stderr || result.error?.message || result.status}`,
+    );
   }
   catalogue = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Catalogue;
   // Main keeps processing the seed's events for a while, moving the graph under every read (409).
@@ -23,10 +38,12 @@ test.beforeAll(async () => {
   let still = 0;
   for (const deadline = Date.now() + 90_000; Date.now() < deadline && still < 4;) {
     const response = await fetch(main).catch(() => null);
-    const position = response?.ok ? JSON.stringify((await response.json() as { sourcePosition: unknown }).sourcePosition) : '';
+    const position = response?.ok
+      ? JSON.stringify(((await response.json()) as { sourcePosition: unknown }).sourcePosition)
+      : '';
     still = position && position === last ? still + 1 : 0;
     last = position;
-    await new Promise(done => setTimeout(done, 500));
+    await new Promise((done) => setTimeout(done, 500));
   }
   if (still < 4) throw new Error('Main’s graph kept moving for 90 seconds after the seed');
 });
@@ -34,12 +51,17 @@ test.beforeAll(async () => {
 const uuid = (iri: string) => iri.slice(-36);
 const desktop = { width: 1280, height: 860 };
 const phone = { width: 390, height: 844 };
-const at = (work: { work: string }, tab = '') => `/en/w/${uuid(work.work)}${tab}`;
+const at = (work: { work: string }, tab = '') =>
+  localizedPath(`${resourceHref('/w/', uuid(work.work))}${tab}`, 'en');
 
 function credentials() {
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
-  if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
-  return JSON.parse(readFileSync(path, 'utf8')) as { actingSubject: string; member: { email: string; password: string } };
+  if (!path)
+    throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
+  return JSON.parse(readFileSync(path, 'utf8')) as {
+    actingSubject: string;
+    member: { email: string; password: string };
+  };
 }
 
 /**
@@ -47,11 +69,15 @@ function credentials() {
  * sometimes slow to answer, and the QA run gives this whole file five minutes. The Accounts origin is
  * whatever the web app redirects to, so it is not compared with the environment.
  */
-async function signIn(page: Page, next: string, member: { email: string; password: string }): Promise<void> {
+async function signIn(
+  page: Page,
+  next: string,
+  member: { email: string; password: string },
+): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
       await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
-      await page.waitForURL(url => url.pathname === '/sign-in', { timeout: 40_000 });
+      await page.waitForURL((url) => url.pathname === '/sign-in', { timeout: 40_000 });
       await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
       await page.getByRole('textbox', { name: 'Email' }).fill(member.email);
       await page.getByRole('button', { name: 'Next' }).click();
@@ -66,9 +92,18 @@ async function signIn(page: Page, next: string, member: { email: string; passwor
 }
 
 /** A device: its own browser context, signed in as the reader, at the first page it is asked for. */
-async function device(browser: Browser, info: TestInfo, viewport: { width: number; height: number }, first: string): Promise<Page> {
-  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport, hasTouch: viewport.width < 600,
-    isMobile: viewport.width < 600 });
+async function device(
+  browser: Browser,
+  info: TestInfo,
+  viewport: { width: number; height: number },
+  first: string,
+): Promise<Page> {
+  const context = await browser.newContext({
+    baseURL: info.project.use.baseURL,
+    viewport,
+    hasTouch: viewport.width < 600,
+    isMobile: viewport.width < 600,
+  });
   const page = await context.newPage();
   await signIn(page, first, credentials().member);
   return page;
@@ -80,7 +115,7 @@ async function openDetails(page: Page): Promise<Locator> {
   const details = page.getByRole('menuitem', { name: 'Details' });
   await expect(async () => {
     const more = page.getByRole('button', { name: 'More shelves' });
-    await (await more.count() ? more : page.getByRole('button', { name: /— Shelve/ })).click();
+    await ((await more.count()) ? more : page.getByRole('button', { name: /— Shelve/ })).click();
     await expect(details).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 30_000 });
   await details.click();
@@ -90,14 +125,17 @@ async function openDetails(page: Page): Promise<Locator> {
   return dialog;
 }
 
-const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+const overflows = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 
 async function shot(page: Page, info: TestInfo, name: string, target?: Locator) {
   expect(await overflows(page), `${name} overflows`).toBe(false);
   await (target ?? page).screenshot({ path: info.outputPath(`${name}.png`) });
 }
 
-test('attempts on two devices, series progress and the offered correspondence', async ({ browser }, info) => {
+test('attempts on two devices, series progress and the offered correspondence', async ({
+  browser,
+}, info) => {
   test.setTimeout(240_000);
   const { sao, index, spider } = catalogue;
   const volume = sao.volumes[0]!;
@@ -175,7 +213,10 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await a.goto(at(sao.series, '/connections'));
   const saoPanel = a.getByRole('region', { name: 'Series progress' });
   await expect(saoPanel).toBeVisible();
-  await expect(saoPanel.locator('[data-state="finishedPublishedParts"]')).toHaveAttribute('data-value', 'true');
+  await expect(saoPanel.locator('[data-state="finishedPublishedParts"]')).toHaveAttribute(
+    'data-value',
+    'true',
+  );
   await expect(saoPanel).toContainText('3 of 3 required parts finished');
   await expect(saoPanel).toContainText('3 parts finished in all');
   await shot(a, info, 'series-sao-desktop', saoPanel);
@@ -183,8 +224,10 @@ test('attempts on two devices, series progress and the offered correspondence', 
   // Index in Traditional Chinese: volumes 1 and 2 are finished (in any language), volume 3 has no such text.
   const { actingSubject } = credentials();
   for (const finished of index.volumes.slice(0, 2)) {
-    const response = await a.request.post('/api/main/v1/me/sessions', { headers: { 'idempotency-key': crypto.randomUUID() },
-      data: { actingSubject, target: finished.work, expectedVersion: 0, state: 'finished' } });
+    const response = await a.request.post('/api/main/v1/me/sessions', {
+      headers: { 'idempotency-key': crypto.randomUUID() },
+      data: { actingSubject, target: finished.work, expectedVersion: 0, state: 'finished' },
+    });
     expect(response.status(), await response.text()).toBe(201);
   }
   await a.goto(at(index.series, '/connections'));
@@ -193,12 +236,20 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await chooseOption(indexPanel, a, 'Language', 'Traditional Chinese');
   await indexPanel.getByRole('button', { name: 'Save choice' }).click();
   await expect(indexPanel.getByText('Saved.')).toBeVisible();
-  await expect(indexPanel.locator('[data-state="caughtUpWithAvailableMaterial"]')).toHaveAttribute('data-value', 'true');
-  await expect(indexPanel.locator('[data-state="finishedPublishedParts"]')).toHaveAttribute('data-value', 'false');
+  await expect(indexPanel.locator('[data-state="caughtUpWithAvailableMaterial"]')).toHaveAttribute(
+    'data-value',
+    'true',
+  );
+  await expect(indexPanel.locator('[data-state="finishedPublishedParts"]')).toHaveAttribute(
+    'data-value',
+    'false',
+  );
   await expect(indexPanel.locator('dl > [data-state]')).toHaveCount(4);
   await expect(indexPanel).toContainText('Caught up with available material');
   await expect(indexPanel).toContainText('Finished the published parts');
-  await expect(indexPanel).toContainText('The next required part, which has no text in this language yet.');
+  await expect(indexPanel).toContainText(
+    'The next required part, which has no text in this language yet.',
+  );
   await shot(a, info, 'series-index-desktop', indexPanel);
   await b.goto(at(index.series, '/connections'));
   await expect(b.getByRole('region', { name: 'Series progress' })).toBeVisible();
@@ -225,7 +276,9 @@ test('attempts on two devices, series progress and the offered correspondence', 
   await expect(book.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
 
   // The same panel in Simplified Chinese.
-  await a.goto(`/zh-Hans/w/${uuid(index.series.work)}/connections`);
+  await a.goto(
+    localizedPath(`${resourceHref('/w/', uuid(index.series.work))}/connections`, 'zh-Hans'),
+  );
   await expect(a.getByRole('region', { name: '系列进度' })).toBeVisible();
   await expect(a.getByText('已追上现有内容')).toBeVisible();
   await expect(a.getByText('已读完已出版的各部')).toBeVisible();

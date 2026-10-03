@@ -1,10 +1,15 @@
 import { cookies } from 'next/headers';
 import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { cache } from 'react';
+import { resolveAddress } from '../address/server.ts';
+import type { ResolvedAddress } from '../address/client.ts';
+import { addressKey } from '../address/path.ts';
+import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
 import { failureOf } from './failure.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
+import { BrowseReadError, discoveryApi, type ListPage, type RatingPopulation } from '../discover/api.ts';
 import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
@@ -35,6 +40,13 @@ export const reader = cache(async () => {
   const state = token ? await sessionAgentState() : null;
   const acting = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
   return { main: mainApiWithToken(acting ? token : undefined), actingSubject: acting, signedIn: Boolean(token) };
+});
+
+/** Main ranks rating populations by current votes and supplies the reader-community flag. */
+export const readRatingPopulations = cache(async (target: string, locale: UiLocale): Promise<Loaded<ListPage<RatingPopulation>>> => {
+  const { main, actingSubject } = await reader();
+  try { return { ok: true, data: await discoveryApi(main, locale, actingSubject).populations(idOf(target) ? target : iriOf(target), { limit: 20 }) }; }
+  catch (error) { return { ok: false, failure: error instanceof BrowseReadError && error.status === 409 ? 'moved' : 'unavailable' }; }
 });
 
 /** The session Agent the page reads as, for client components that write as it (reading progress). */
@@ -87,23 +99,22 @@ export type ResolvedRef =
   | { kind: 'missing' }
   | { kind: 'unavailable' };
 
+/** Retained names and merged identities use Main's current canonical key. */
+export function workRefFromAddress(address: ResolvedAddress): ResolvedRef {
+  // Main's summary-derived canonical address already selects a merged Work's
+  // survivor and current name. Keep it intact instead of taking another UUID hop.
+  return mergedSurvivor(address) || address.state === 'redirect'
+    ? { kind: 'moved', slug: addressKey(address.canonical) }
+    : { kind: 'work', id: address.holder.slice(-36) };
+}
+
 /** A `/w/{ref}` segment to a Work UUID. Slugs never become alternate Work identities. */
 export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> => {
   if (ref.kind === 'id') return { kind: 'work', id: ref.id };
-  const { main } = await reader();
-  try {
-    // The shared resolver reports a retained alias and its current canonical key.
-    const { data, error } = await main.v1.addresses.resolve.get({ query: { scope: 'work',key: ref.slug } });
-    if (data && data.status === 'resolved') {
-      // A merged Work's page is its survivor's: the hub moves there rather than showing the duplicate.
-      const survivor = mergedSurvivor(data);
-      return survivor ? { kind: 'moved', slug: survivor } : data.state === 'redirect'
-        ? { kind: 'moved',slug: data.canonical.key } : { kind: 'work', id: data.holder.slice(-36) };
-    }
-    return error && failureOf(error.status) === 'missing' ? { kind: 'missing' } : { kind: 'unavailable' };
-  } catch {
-    return { kind: 'unavailable' };
-  }
+  const resolved = await resolveAddress('work', ref.slug, await requestLocale());
+  if (resolved.kind !== 'resolved')
+    return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+  return workRefFromAddress(resolved.data);
 });
 
 export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promise<Loaded<WorkHeader>> => {

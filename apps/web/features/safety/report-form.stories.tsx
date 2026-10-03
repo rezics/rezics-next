@@ -1,3 +1,4 @@
+import { resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { ReportForm } from './report-form.tsx';
@@ -119,7 +120,7 @@ export const CopyrightNotice: Story = {
     await expect(canvas.getByText(/legal statement made under penalty of perjury/)).toBeVisible();
     for (const [name, value] of [['Your full name', 'Ada Lovelace'], ['Postal address', '1 Analytical Way'],
       ['Phone number', '+44 20 7946 0000'], ['The work you say was copied', 'The Rain Bookshop'],
-      ['Where the copy is on REZICS', '/w/0001'], ['Signature (type your full name)', 'Ada Lovelace'],
+      ['Where the copy is on REZICS', resourceHref('/w/', '00000001-4b5a-4c6d-8e7f-9a0b1c2d3e4f')], ['Signature (type your full name)', 'Ada Lovelace'],
       ['What is wrong?', 'This is my novel.'], ['Contact email', 'ada@example.com']] as const) {
       await userEvent.type(canvas.getByRole('textbox', { name }), value);
     }

@@ -81,9 +81,10 @@ test('fixture: restore compatibility applies only appended migrations and reject
   expect(same).toEqual({ compatible: true, reasons: [], pendingMigrations: [], engineChanged: false });
 
   const appended = current(manifest);
-  appended.migrations['services/main/migrations/access/999_later.sql'] = 'f'.repeat(64);
+  // Number it past any real migration so it always sorts as appended.
+  appended.migrations['services/main/migrations/access/99999_later.sql'] = 'f'.repeat(64);
   expect(restoreCompatibility(manifest, appended)).toMatchObject({ compatible: true,
-    pendingMigrations: ['services/main/migrations/access/999_later.sql'] });
+    pendingMigrations: ['services/main/migrations/access/99999_later.sql'] });
 
   const inserted = current(manifest);
   inserted.migrations['services/main/migrations/access/000_first.sql'] = 'f'.repeat(64);

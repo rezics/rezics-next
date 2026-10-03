@@ -1,3 +1,4 @@
+import { spaceHref } from '../address/path.ts';
 import type { StatementGroup } from '../entity-page/types.ts';
 import type { AvailableSummary, RelationsPage } from '../work-levels/types.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
@@ -30,7 +31,7 @@ export const wikiRoutes = [
   { key: 'timeline', path: 'events' },
 ] as const;
 
-export const wikiHref = (realm: string, path?: string) => `/r/${realm}${path ? `/${path}` : ''}`;
+export const wikiHref = (realm: string, path?: string) => spaceHref(realm, 'site', path ? path.split('/') : []);
 
 /**
  * The characters the Work's relations name, in Main's order. Main answers the relations read at the reader's

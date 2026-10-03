@@ -1,36 +1,36 @@
-import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
-import { signInPath } from '../auth/paths.ts';
-import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
-import { Providers } from '../shell/providers.tsx';
-import { shelfTitle } from './discover-view.tsx';
-import { loadDiscover } from './load.ts';
-import { DiscoverShelf } from './shelf.tsx';
-import { fills } from './fills.ts';
-import { discoverHref } from './state.ts';
+import { discoveryApi } from './api.ts';
+import { browseHref, emptyBrowse } from './browse-state.ts';
+import { browseMessages } from './browse-messages.ts';
+import { readBrowse } from './load.ts';
+import { ResourceList } from './resource-list.tsx';
+import { browseReader } from './server.ts';
+import Link from '../shell/localized-link.tsx';
 
-/**
- * Discover's leading overview rows for another page (the home feed): readers'
- * favorites and recently added books, read on the server.
- */
+/** Home's preview uses Main's section and offers its complete traversal. */
 export async function RecentShelf({ locale }: { locale: UiLocale }) {
-  const page = await loadDiscover({}, locale, { genres: false });
-  const t = materializeData(page.messages, { locale });
-  // Sign-in from a shelf control returns to the home page.
-  const signInHref = signInPath(localizedPath('/', locale));
-  // A row that cannot fill is left out; the home page has its own content around it.
-  const shelves = page.shelves.filter(shelf => shelf.spec.type === 'book' && !shelf.spec.term && fills(shelf)).slice(0, 2);
-  return <Providers>
-    <ReaderActionsProvider signedIn={page.signedIn} signInHref={signInHref} actingSubject={page.actingSubject}
-      seed={page.readerSeed}>
-      <div className="grid gap-10">
-        {shelves.map(shelf => <DiscoverShelf key={shelf.spec.key} mode="row" scope={{ kind: 'global' }}
-          heading={{ title: shelfTitle(shelf, t), seeAll: { href: discoverHref({ scope: { kind: 'global' }, context: null,
-            type: 'book', term: null }) } }}
-          query={shelf.query} initial={shelf.initial} signInHref={signInHref} avatarQuery={page.avatarQuery}
-          locale={locale} messages={page.messages} />)}
+  const reader = await browseReader();
+  const read = await readBrowse(() =>
+    discoveryApi(reader.personal, locale, reader.actingSubject).sections({
+      section: 'popular',
+      limit: 6,
+    }),
+  );
+  if (!read.ok || !read.data.items[0]?.page.items.length) return null;
+  const section = read.data.items[0],
+    t = browseMessages[locale];
+  return (
+    <section aria-label={t.popular} className="grid gap-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="font-semibold text-xl">{t.popular}</h2>
+        <Link
+          href={browseHref({ ...emptyBrowse, section: section.id })}
+          className="text-primary text-sm hover:underline"
+        >
+          {t.seeAll}
+        </Link>
       </div>
-    </ReaderActionsProvider>
-  </Providers>;
+      <ResourceList items={section.page.items} locale={locale} avatarQuery={reader.avatarQuery} />
+    </section>
+  );
 }

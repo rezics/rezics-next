@@ -1,3 +1,6 @@
+import { profileHref } from '../profile/route.ts';
+import { workHref } from '../work-page/route.ts';
+import { resourceHref } from '../address/path.ts';
 import { chinese, classics, memoryReaderActions } from '../catalogue/fixtures.ts';
 import type { ReaderWorkState } from '../catalogue/reader-actions.tsx';
 import type { CatalogueWork } from '../catalogue/work.ts';
@@ -44,10 +47,10 @@ function review(work: CatalogueWork, text: string, language: string, rating: num
 /** A reader part-way through three Works, with a read history of four and five more to read. */
 export const libraryItems: LibraryRow[] = [
   item(serial, 'reading', 20, { lastReadAt: hoursAgo(3), customShelves: [bookClub],
-    progress: { next: { title: '第十章 · 雨停之前', href: `/w/${serial.id.slice(-36)}/read/chapter-10` },
+    progress: { next: { title: '第十章 · 雨停之前', href: `${resourceHref('/w/', serial.id)}/read/chapter-10` },
       left: { value: 3, kind: 'exact' }, chapters: { read: 9, total: 12 } } }),
   item(byTitle(classics, 'Middlemarch'), 'reading', 200, { lastReadAt: hoursAgo(50),
-    progress: { next: { title: 'Book II: Old and Young', href: '/w/middlemarch/read/book-2' },
+    progress: { next: { title: 'Book II: Old and Young', href: `${workHref('middlemarch')}/read/book-2` },
       left: { value: 20, kind: 'lower-bound' }, chapters: null } }),
   item(byTitle(classics, 'Jane Eyre'), 'reading', 400, { progress: null }),
   item(byTitle(classics, 'Pride and Prejudice'), 'read', 900, { startedOn: '2026-01-02', finishedOn: '2026-01-12',
@@ -159,8 +162,8 @@ function followed(id: string, kind: FollowedAuthor['kind'], name: string, href: 
 export const followedAuthors: FollowedAuthors = { profile: 'followed-authors-v1', items: [
   followed('open-library:OL21594A', 'external-author', 'Jane Austen', '/authors/open-library/OL21594A',
     byTitle(classics, 'Pride and Prejudice')),
-  followed('https://rezics.com/id/00000801-7c1d-4e2f-9a3b-5c6d7e8f9a0b', 'agent', 'Lin Mei 林梅', '/@lin_mei', serial),
-  followed('https://rezics.com/id/00000804-7c1d-4e2f-9a3b-5c6d7e8f9a0b', 'agent', 'Leo Sun', '/@leo_sun', null),
+  followed('https://rezics.com/id/00000801-7c1d-4e2f-9a3b-5c6d7e8f9a0b', 'agent', 'Lin Mei 林梅', profileHref('lin_mei'), serial),
+  followed('https://rezics.com/id/00000804-7c1d-4e2f-9a3b-5c6d7e8f9a0b', 'agent', 'Leo Sun', profileHref('leo_sun'), null),
   { id: 'open-library:OL1A', kind: 'external-author', available: false, revision: '0192e0aa-0000-7000-8000-000000000002',
     name: null, icon: null, realm: null, href: null, newestWork: null },
 ], nextCursor: null, sourcePosition: { dataEpoch: 'story', sequence: '42' },

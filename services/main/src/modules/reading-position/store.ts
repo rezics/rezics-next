@@ -2,6 +2,16 @@ import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
+import { READING_POSITION_COST } from './contract.ts';
+
+/** Literal substring search across every carried label, independent of display
+ * language. NFKC also lets a full-width chapter number find its Arabic ordinal. */
+export function normalizePositionQuery(q?: string): string {
+  if (q !== undefined && q.length > READING_POSITION_COST.chooserQueryChars) {
+    throw new WorkReadInvalid('Reading position query is too long');
+  }
+  return (q ?? '').normalize('NFKC').trim().toLowerCase();
+}
 
 export const REVELATION_COST = { batch: 50, lookupSql: 1, requiredSql: 1, writeSql: 1, progressSql: 1, snapshotSql: 1 } as const;
 export interface Revelation {
@@ -89,6 +99,17 @@ export class ReadingPositionStore {
       FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
         AND structure = ANY($3::text[]) AND completed`, [principal.issuer, principal.subject, structures]);
     return new Set(result.rows.map(row => row.occurrence));
+  }
+  /** Indexed reader-owned progress pages; no inventory-sized response. */
+  async completedPage(principal: VerifiedPrincipal, structures: readonly string[], after?: string) {
+    if (structures.length > REVELATION_COST.batch) throw new WorkReadInvalid('Progress structure batch exceeds its cost');
+    if (!structures.length) return { items: [], next: null };
+    const result = await this.pool.query<{ occurrence: string }>(`SELECT DISTINCT occurrence
+      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
+        AND structure = ANY($3::text[]) AND completed AND ($4::text IS NULL OR occurrence > $4)
+      ORDER BY occurrence LIMIT $5`, [principal.issuer, principal.subject, structures, after ?? null, REVELATION_COST.batch + 1]);
+    const items = result.rows.slice(0, REVELATION_COST.batch).map(row => row.occurrence);
+    return { items, next: result.rows.length > REVELATION_COST.batch ? items.at(-1)! : null };
   }
   async finishedWorks(agent: string, works: readonly string[]): Promise<Set<string>> {
     if (works.length > REVELATION_COST.batch) throw new WorkReadInvalid('Finished Work batch exceeds 50 records');

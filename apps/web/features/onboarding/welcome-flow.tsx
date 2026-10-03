@@ -15,7 +15,9 @@ import { CommunityIcon } from '../shell/community-icon.tsx';
 import { preferenceCookie } from '../shell/preferences.ts';
 import type { OnboardingMessages } from './messages.ts';
 import { LanguagePicker } from './language-picker.tsx';
-import { broaderName, MAX_TOPICS, startingLanguages, toggled, topicGroups } from './topics.ts';
+import { broaderName, MAX_TOPICS, startingLanguages, toggled, topicGroups, onboardingTopicLoader } from './topics.ts';
+import { TopicPicker, type TopicItem } from '../discover/topic-picker.tsx';
+import type { EntityPickerLoad } from '@rezics/ui/entity-picker';
 import { mainWelcomeApi, type WelcomeApi } from './welcome-api.ts';
 
 type T = ReturnType<typeof materializeData<OnboardingMessages>>;
@@ -44,6 +46,7 @@ export interface WelcomeFlowProps {
   /** Stories: an in-memory Main, and a start step. */
   api?: WelcomeApi;
   initialStep?: 1 | 2 | 3;
+  topicLoad?: EntityPickerLoad<TopicItem>;
 }
 
 /**
@@ -54,7 +57,7 @@ export interface WelcomeFlowProps {
  * that already has something to read.
  */
 export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choices, savedLanguages, next, api: given,
-  initialStep = 1 }: WelcomeFlowProps) {
+  initialStep = 1, topicLoad }: WelcomeFlowProps) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
   const api = useRef<WelcomeApi | null>(given ?? null);
@@ -68,6 +71,7 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
   /** The reader confirmed languages with Next; skipping the step changes no setting. */
   const [languagesChosen, setLanguagesChosen] = useState(false);
   const [topics, setTopics] = useState<string[]>([]);
+  const [topicNames, setTopicNames] = useState<TopicItem[]>([]);
   const [suggested, setSuggested] = useState<Loaded<SuggestedFollow[]> | null>(null);
   const [communities, setCommunities] = useState<string[]>([]);
   const [saving, setSaving] = useState<'idle' | 'busy' | 'failed'>('idle');
@@ -134,7 +138,12 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
     {step === 1 ? <LanguagePicker t={t} locale={locale} suggested={offered} value={languages}
       onChange={setLanguages} /> : null}
 
-    {step === 2 ? groups.length ? <div className="grid gap-6">
+    {step === 2 ? <div className="grid gap-6">
+      <TopicPicker locale={locale} actingSubject={actingSubject} max={MAX_TOPICS}
+        load={topicLoad ?? onboardingTopicLoader(locale, actingSubject)}
+        value={topics.map(id => ({ item: topicNames.find(item => item.value === id) ?? {
+          value: id, label: groups.flatMap(group => group.topics).find(topic => topic.id === id)?.name.value ?? id.slice(-8) } }))}
+        onChange={next => { setTopics(next.map(entry => entry.item.value)); setTopicNames(next.map(entry => entry.item)); }} />
       <p role="status" className="font-medium text-muted-foreground text-sm">
         {topics.length >= MAX_TOPICS ? t.topicsFull : t.topicsChosen(topics.length)}</p>
       {groups.map(group => <section key={group.heading} aria-label={group.heading ?? t.typeOther} className="grid gap-3">
@@ -162,7 +171,7 @@ export function WelcomeFlow({ locale, messages, actingSubject, avatarQuery, choi
           })}
         </ul>
       </section>)}
-    </div> : <p className="text-muted-foreground">{t.noTopics}</p> : null}
+    </div> : null}
 
     {step === 3 ? !suggested ? <p role="status" className="flex items-center gap-2 text-muted-foreground">
       <Spinner aria-hidden="true" />{t.findingCommunities}</p>

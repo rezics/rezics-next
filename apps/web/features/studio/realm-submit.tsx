@@ -1,9 +1,12 @@
 'use client';
 
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
+import { EntityPicker, type EntityPickerItem, type EntityPickerLoad, type EntityPickerSelection } from '@rezics/ui/entity-picker';
+import { browserMainApi } from '../api/browser.ts';
+import { browseTypes, discoveryApi } from '../discover/api.ts';
+import { browseMessages } from '../discover/browse-messages.ts';
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
-import { Badge } from '@rezics/ui/badge';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { CircleCheckIcon, GavelIcon, InfoIcon, TriangleAlertIcon, UsersIcon, ZapIcon } from 'lucide-react';
 import { type ContractOf, materializeData } from 'native-i18n';
@@ -34,7 +37,9 @@ export interface RealmSubmitProps {
   messages: StudioMessages;
   /** Stories pass a stand-in Main; the app uses the browser client through the BFF. */
   main?: MainClient;
+  loadRealms?: EntityPickerLoad<RealmPickerItem>;
 }
+export interface RealmPickerItem extends EntityPickerItem { realm: RealmOption }
 
 function ModeIcon({ mode }: { mode: ReviewMode | null }) {
   const Icon = mode === 'open' ? ZapIcon : mode === 'trusted-members' ? UsersIcon : GavelIcon;
@@ -55,15 +60,25 @@ function outcomeText(outcome: string, state: string | undefined, realm: string, 
  * trusted members are accepted at once, or anyone is). Each submission is its
  * own command, and Main's answer is said as it is.
  */
-export function RealmSubmit({ agent, work, texts, realms, open, locale, messages, main }: RealmSubmitProps) {
+export function RealmSubmit({ agent, work, texts, realms, open, locale, messages, main, loadRealms }: RealmSubmitProps) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
   const candidates = texts.ok ? texts.data : [];
   const [text, setText] = useState(candidates[0]?.contribution ?? '');
-  const [realm, setRealm] = useState('');
+  const [selection, setSelection] = useState<EntityPickerSelection<RealmPickerItem>[]>([]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const keys = useRef<Record<string, string>>({});
+  const realm = selection[0]?.item.realm;
+  const load: EntityPickerLoad<RealmPickerItem> = loadRealms ?? (async ({ q, cursor }) => {
+    const page = await discoveryApi(main ?? browserMainApi(), locale).resources({ profile: 'resource-list-v1',
+      context: 'global', scope: { kind: 'all' }, sort: q ? 'relevance' : 'newest', limit: 20,
+      ...(q ? { q } : {}), ...(cursor ? { cursor } : {}),
+      filter: { all: [{ facet: 'type', any: [browseTypes.communities] }] } });
+    return { ...page, items: page.items.map(item => ({ value: item.id, label: item.name.value,
+      disabled: open.includes(item.id), realm: realms.ok && realms.data.find(option => option.id === item.id)
+        || { id: item.id, name: item.name, reviewMode: null } })) };
+  });
 
   if (!candidates.length) {
     return <div className="grid justify-items-start gap-3 rounded-2xl border border-border/80 border-dashed p-5">
@@ -75,13 +90,13 @@ export function RealmSubmit({ agent, work, texts, realms, open, locale, messages
   }
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const chosen = realms.ok ? realms.data.find(item => item.id === realm) : undefined;
+    const chosen = realm;
     const candidate = candidates.find(item => item.contribution === text);
     if (!chosen || !candidate) return;
     setBusy(true);
     setResult(null);
     // One key per Realm and text: a retry after a lost answer replays instead of submitting twice.
-    const key = keys.current[`${realm}\0${text}`] ??= crypto.randomUUID();
+    const key = keys.current[`${chosen.id}\0${text}`] ??= crypto.randomUUID();
     const answer = await submitToRealm({ actingSubject: agent.iri, realm: chosen.id, work: work.id,
       mainVersion: work.mainVersion, text: candidate.contribution, publication: {
         publicationDecision: candidate.publicationDecision, selectedDraft: candidate.selectedDraft }, key }, main)
@@ -104,23 +119,23 @@ export function RealmSubmit({ agent, work, texts, realms, open, locale, messages
       {t.submittingText({ language: languageName(candidates[0]!.language, locale) })}</p>}
     <fieldset className="grid min-w-0 gap-2">
       <legend className="mb-1 font-medium text-sm">{t.chooseRealm}</legend>
-      <RadioGroup name="realm" value={realm} onValueChange={({ value }) => setRealm(value ?? '')} aria-label={t.chooseRealm}>
-        {realms.ok ? realms.data.length ? <div className="grid gap-2">{realms.data.map(option => {
-          const reviewing = open.includes(option.id);
-          return <RadioGroupItem key={option.id} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border/60
-            px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/5 has-disabled:cursor-not-allowed
-            has-disabled:opacity-64 has-focus-visible:ring-[3px] has-focus-visible:ring-ring/32" value={option.id} disabled={reviewing}>
-            <span className="grid min-w-0 flex-1 gap-0.5">
-              <span className="flex flex-wrap items-center gap-2">
-                <span lang={option.name.language} className="min-w-0 truncate font-medium text-sm">{option.name.value}</span>
-                {reviewing ? <Badge variant="info" size="sm">{t.alreadyInReview}</Badge> : null}</span>
-              <span className="flex items-start gap-1.5 text-muted-foreground text-xs">
-                <ModeIcon mode={option.reviewMode} />{reviewModeText(option.reviewMode, t)}</span>
-            </span>
-          </RadioGroupItem>;
-        })}</div> : <p className="text-muted-foreground text-sm">{t.noRealms}</p>
-          : <p className="text-muted-foreground text-sm">{t.realmsFailed}</p>}
-      </RadioGroup>
+      <EntityPicker label={browseMessages[locale].chooseCommunity} locale={locale} load={load} value={selection}
+        disabled={busy} onValueChange={next => {
+          if (next[0]?.item.disabled) return;
+          setSelection(next);
+          setResult(null);
+          const chosen = next[0]?.item.realm;
+          if (!chosen || chosen.reviewMode) return;
+          void (main ?? browserMainApi()).v1.realms({ realm: chosen.id.slice(-36) }).get({ query: { actingSubject: agent.iri } })
+            .then(read => {
+              if (!read.data) return;
+              const reviewMode = read.data.reviewMode;
+              setSelection(current => current[0]?.item.value === chosen.id
+                ? current.map(entry => ({ ...entry, item: { ...entry.item, realm: { ...entry.item.realm, reviewMode } } })) : current);
+            }).catch(() => {});
+        }} />
+      {realm ? <p className="flex items-start gap-1.5 text-muted-foreground text-xs">
+        <ModeIcon mode={realm.reviewMode} />{reviewModeText(realm.reviewMode, t)}</p> : null}
     </fieldset>
     {result ? result.ok ? <p role="status" className="flex items-center gap-2 text-sm text-success-foreground">
       <CircleCheckIcon aria-hidden="true" className="size-4 shrink-0" />{result.text}</p>

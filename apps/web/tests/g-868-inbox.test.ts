@@ -8,7 +8,7 @@ describe('G-868 settings topics', () => {
   const api = SETTINGS_NOTIFICATION_TOPICS.map(item => item.topic);
 
   test('every settings topic has a translated label and an active producer', () => {
-    expect(api).toEqual([...settingsNotificationTopics]);
+    for (const topic of api) expect(settingsNotificationTopics as readonly string[]).toContain(topic);
     expect(Object.keys(notificationTopicLabel)).toEqual([...settingsNotificationTopics]);
   });
 

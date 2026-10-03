@@ -8,6 +8,7 @@ import { materializeData } from 'native-i18n';
 import { direction } from '@rezics/main/language';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { browseMessages } from '../discover/browse-messages.ts';
 import { isolate } from '../language/untagged.ts';
 import { ProfileAvatar } from '../profile/profile-avatar.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
@@ -130,7 +131,7 @@ function PersonRow({ person, note }: { person: AboutPerson; note?: string }) {
 }
 
 /** The About tab: what the community is, its rules and the people who run it. */
-export function RealmAbout({ realmName, description, rules, moderators, members, listed, others, locale, messages }: {
+export function RealmAbout({ realmName, description, rules, moderators, members, listed, others, locale, messages, only, children }: {
   realmName: string; description: { value: string; lang: string } | null; rules: readonly AboutRule[] | null;
   /** Null when the Realm does not publish its moderators. */
   moderators: readonly AboutPerson[] | null; members: string | null;
@@ -139,18 +140,20 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
   /** Other communities to look at, from the Realm directory. */
   others: readonly { href: string; name: { value: string; lang: string }; members: string | null }[];
   locale: UiLocale; messages: RealmMessages;
+  /** Dedicated fixed community routes reuse these sections without repeating the About page. */
+  only?: 'rules' | 'members'; children?: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
-  return <PageContainer className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18.5rem] lg:items-start">
-    <div className="grid min-w-0 grid-cols-1 gap-6">
-      <section aria-labelledby="realm-about" className="grid grid-cols-1 gap-3 rounded-(--zone-radius-card) bg-(--zone-panel)
+  return <PageContainer className={cn('grid grid-cols-1 gap-6', !only && 'lg:grid-cols-[minmax(0,1fr)_18.5rem] lg:items-start')}>
+    {only !== 'members' ? <div className="grid min-w-0 grid-cols-1 gap-6">
+      {!only ? <section aria-labelledby="realm-about" className="grid grid-cols-1 gap-3 rounded-(--zone-radius-card) bg-(--zone-panel)
         p-(--zone-panel-pad)">
         <ModuleHeading id="realm-about">{t.aboutTitle({ realm: isolate(realmName) })}</ModuleHeading>
         {description ? <p lang={description.lang} dir={direction(description.lang, description.value)}
           className="max-w-2xl whitespace-pre-line text-pretty leading-relaxed">
           {description.value}</p> : null}
         {members ? <p className="text-muted-foreground text-sm">{members}</p> : null}
-      </section>
+      </section> : null}
       <section aria-labelledby="realm-rules" className="grid grid-cols-1 gap-3 rounded-(--zone-radius-card) bg-(--zone-panel)
         p-(--zone-panel-pad)">
         <ModuleHeading id="realm-rules">{messages.rules}</ModuleHeading>
@@ -169,9 +172,9 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
           </li>)}
         </ol> : <p className="text-muted-foreground">{messages.noRules}</p>}
       </section>
-    </div>
-    <div className="grid min-w-0 grid-cols-1 gap-6">
-      <section aria-labelledby="realm-moderators" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card) bg-(--zone-panel)
+    </div> : null}
+    {only !== 'rules' ? <div className="grid min-w-0 grid-cols-1 gap-6">
+      {!only ? <section aria-labelledby="realm-moderators" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card) bg-(--zone-panel)
         p-(--zone-panel-pad)">
         <ModuleHeading id="realm-moderators">{messages.moderators}</ModuleHeading>
         {moderators?.length ? <ul className="grid grid-cols-1">
@@ -179,7 +182,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
         </ul> : <p className="flex items-center gap-2 text-muted-foreground text-sm">
           <ShieldIcon aria-hidden="true" className="size-4 shrink-0" />
           {moderators === null ? messages.moderatorsHidden : messages.moderatorsNone}</p>}
-      </section>
+      </section> : null}
       {listed ? <section aria-labelledby="realm-members" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)
         bg-(--zone-panel) p-(--zone-panel-pad)">
         <ModuleHeading id="realm-members">{messages.membersTitle}</ModuleHeading>
@@ -191,7 +194,7 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
           </ul>
         </> : <p className="text-muted-foreground text-sm">{messages.membersNone}</p>}
       </section> : null}
-      {others.length ? <nav aria-labelledby="realm-others" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)
+      {!only && others.length ? <nav aria-labelledby="realm-others" className="grid grid-cols-1 gap-2 rounded-(--zone-radius-card)
         bg-(--zone-panel) p-(--zone-panel-pad)">
         <ModuleHeading id="realm-others">{messages.otherCommunities}</ModuleHeading>
         <ul className="grid grid-cols-1">
@@ -202,7 +205,10 @@ export function RealmAbout({ realmName, description, rules, moderators, members,
               {other.members ? <span className="text-muted-foreground text-xs">{other.members}</span> : null}
             </LocalizedLink></li>)}
         </ul>
+        <LocalizedLink href="/discover?tab=communities" className="text-primary text-sm underline-offset-4 hover:underline">
+          {browseMessages[locale].seeAll}</LocalizedLink>
       </nav> : null}
-    </div>
+    </div> : null}
+    {children}
   </PageContainer>;
 }

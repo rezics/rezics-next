@@ -24,13 +24,16 @@ const initial: Record<Case, Membership | null> = {
 function actions(which: Case): MembershipActions {
   if (which === 'signed-out') return { kind: 'signed-out', signInHref: '/auth/start?returnTo=%2Fen%2Fr%2Ffiction' };
   let revision = 0;
+  let current = initial[which]!;
   const outcome: JoinOutcome = which === 'changed-terms' ? { kind: 'stale' }
     : which === 'closed-by-now' ? { kind: 'denied' } : { kind: 'joined' };
   return {
     kind: 'ready',
-    join: async () => outcome,
-    follow: async following => ({ kind: 'saved', following, revision: `r${++revision}` }),
-    refresh: async () => ({ policy: policy({ termsRevision: 'rules-8' }), following: false, followRevision: null }),
+    join: async () => { if (outcome.kind === 'joined') current = { ...current, policy: policy({ state: 'joined', membershipGeneration: '1' }),
+      following: true, followRevision: 'r1', level: 'highlights', source: 'join' }; return outcome; },
+    follow: async following => { current = { ...current, following, followRevision: `r${++revision}` };
+      return { kind: 'saved', following, revision: current.followRevision! }; },
+    refresh: async () => which === 'changed-terms' ? { ...current, policy: policy({ termsRevision: 'rules-8' }) } : current,
   };
 }
 
@@ -46,6 +49,12 @@ const meta = {
   args: { which: 'open', locale: 'en' },
   parameters: { route: { pathname: '/en/r/fiction' } },
   render: (args, { globals }) => <Page {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+  async afterEach(context) {
+    if (import.meta.env.VITE_G944_CAPTURE !== '1') return;
+    const { page } = await import('vitest/browser');
+    await document.fonts.ready;
+    await page.screenshot({ path: `../../../../.temp/g-944/screenshots/${context.id}.png` });
+  },
 } satisfies Meta<typeof Page>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -54,7 +63,7 @@ type Story = StoryObj<typeof meta>;
 export const SignedOut: Story = {
   args: { which: 'signed-out' },
   async play({ canvasElement }) {
-    const join = within(canvasElement).getByRole('link', { name: 'Join — sign in to join' });
+    const join = within(canvasElement).getByRole('link', { name: /Join.*Sign in/ });
     await expect(join).toHaveAttribute('href', '/auth/start?returnTo=%2Fen%2Fr%2Ffiction');
   },
 };
@@ -63,7 +72,7 @@ export const SignedOut: Story = {
 export const JoinOnYourOwn: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Join' }));
+    await userEvent.click(canvas.getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
     const dialog = within(await waitFor(() => within(document.body).getByRole('dialog')));
     // The dialog fades in; wait for its title rather than catching it mid-animation.
     await waitFor(() => expect(dialog.getByRole('heading', { name: 'Join Fiction 小说' })).toBeVisible());
@@ -71,14 +80,13 @@ export const JoinOnYourOwn: Story = {
     const listed = dialog.getByRole('checkbox', { name: /Show me on the public member list/ });
     await expect(listed).not.toBeChecked();
     await userEvent.click(listed);
-    await userEvent.click(dialog.getByRole('button', { name: 'Join' }));
+    await userEvent.click(dialog.getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
     const joined = await canvas.findByRole('button', { name: /Joined/ });
     // The follow that joining starts must not bring back the offer to join.
     await new Promise(resolve => setTimeout(resolve, 100));
-    await expect(canvas.queryByRole('button', { name: 'Join' })).toBeNull();
-    await userEvent.click(joined);
-    await expect(await within(document.body).findByRole('menuitemcheckbox', { name: 'Show its posts in my Home' }))
-      .toHaveAttribute('aria-checked', 'true');
+    await expect(canvas.queryByRole('button', { name: /^Join(?: · Fiction 小说)?$/ })).toBeNull();
+    await expect(joined).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Notifications: Highlights' })).toBeVisible();
   },
 };
 
@@ -90,9 +98,9 @@ export const FollowOnly: Story = {
   args: { which: 'invitation' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.queryByRole('button', { name: 'Join' })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: /^Join(?: · Fiction 小说)?$/ })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Follow · Fiction 小说' }));
-    await expect(await canvas.findByRole('button', { name: 'Following · Stop following Fiction 小说' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Following · Fiction 小说 · Unfollow' })).toBeVisible();
   },
 };
 
@@ -100,9 +108,10 @@ export const FollowOnly: Story = {
 export const Joined: Story = {
   args: { which: 'joined' },
   async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: /Joined/ }));
-    const follow = await within(document.body).findByRole('menuitemcheckbox', { name: 'Show its posts in my Home' });
-    await expect(follow).toHaveAttribute('aria-checked', 'true');
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: /Joined/ })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Relationship options · Fiction 小说' }));
+    await waitFor(() => expect(within(document.body).getByRole('menuitem', { name: 'Unfollow' })).toBeVisible());
   },
 };
 
@@ -112,9 +121,9 @@ export const JoinedDark: Story = { args: { which: 'joined' }, globals: { theme: 
 export const TermsChanged: Story = {
   args: { which: 'changed-terms' },
   async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Join' }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
     const dialog = within(await waitFor(() => within(document.body).getByRole('dialog')));
-    await userEvent.click(dialog.getByRole('button', { name: 'Join' }));
+    await userEvent.click(dialog.getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
     await expect(await dialog.findByRole('alert')).toHaveTextContent('changed how people join');
   },
 };
@@ -122,9 +131,9 @@ export const TermsChanged: Story = {
 export const NoLongerOpen: Story = {
   args: { which: 'closed-by-now' },
   async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Join' }));
+    await userEvent.click(within(canvasElement).getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
     const dialog = within(await waitFor(() => within(document.body).getByRole('dialog')));
-    await userEvent.click(dialog.getByRole('button', { name: 'Join' }));
-    await expect(await dialog.findByRole('alert')).toHaveTextContent('isn’t taking new members');
+    await userEvent.click(dialog.getByRole('button', { name: /^Join(?: · Fiction 小说)?$/ }));
+    await expect(await dialog.findByRole('alert')).toHaveTextContent('You can’t join this community.');
   },
 };

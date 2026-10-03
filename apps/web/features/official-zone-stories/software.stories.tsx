@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref, spaceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ZoneContext, ZoneWork } from '@rezics/zone-sdk';
 import { expect, within } from 'storybook/test';
@@ -10,21 +12,22 @@ const text = (value: string) => ({ value, lang: 'en', dir: 'ltr' as const });
 const titles = ['Firefox', 'GIMP', 'Blender', 'Krita'];
 const works: ZoneWork[] = titles.map((title, index) => {
   const id = `00000000-0000-7000-8001-${String(index + 1).padStart(12, '0')}`;
-  return { id: `https://rezics.com/id/${id}`, href: `/w/${id}`, title: text(title), cover: null,
+  return { id: `https://rezics.com/id/${id}`, href: resourceHref('/w/', id), title: text(title), cover: null,
     kind: 'package', author: null, tagline: text(['Browse the web.', 'Edit raster images.',
       'Create 3D scenes.', 'Paint and illustrate.'][index]!), status: null, chapters: null, words: null,
-    updatedAt: null, decision: `/r/software/decisions#decision-${index}` };
+    updatedAt: null, decision: `${spaceHref('software', 'community')}/decisions#decision-${index}` };
 });
 
 function Page({ locale = 'en' }: { locale?: 'en' | 'zh-Hans' }) {
   const zh = locale === 'zh-Hans';
-  const home = `/${locale}/r/software`;
+  const home = localizedPath(spaceHref('software', 'site'), locale);
+  const community = localizedPath(spaceHref('software', 'community'), locale);
   const zone: ZoneContext = { slug: 'software', realm: 'https://rezics.com/id/00000000-0000-7000-8001-000000000099',
     name: { value: zh ? '软件' : 'Software', lang: locale, dir: 'ltr' },
     description: { value: zh ? '开源应用与获取途径。' : 'Open-source apps and where to get them.',
       lang: locale, dir: 'ltr' }, icon: null, hero: null, tokens: presetTokens.clean, locale,
-    links: { home, browse: `${home}/browse`, works: `${home}/browse`, discussions: `${home}/discussions`,
-      decisions: `${home}/decisions`, about: `${home}/about` } };
+    links: { home, browse: `${home}/browse`, works: `${home}/browse`, discussions: `${community}/discussions`,
+      decisions: `${community}/decisions`, about: `${community}/about` } };
   const modules = [
     { module: { id: 'picks', type: 'hero-carousel', title: zh ? '精选应用' : 'Featured apps',
       rail: false, layout: 'covers', shuffle: false, more: null }, state: { state: 'ready', data: {

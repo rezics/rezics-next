@@ -1,3 +1,4 @@
+import { resourceHref } from '../address/path.ts';
 import type { ReaderActions, ReaderWorkState, ReadingStatus } from './reader-actions.tsx';
 import type { CatalogueWork } from './work.ts';
 import { authorHref } from '../author/route.ts';
@@ -9,7 +10,7 @@ export const storyWorkId = (n: number) => `https://rezics.com/id/${String(n).pad
 
 function work(n: number, title: string, language: string, kind: CatalogueWork['kind'], authors: string[],
   rating: [mean: number, count: number] | null): CatalogueWork {
-  return { id: storyWorkId(n), href: `/w/${storyWorkId(n).slice(-36)}`, kind,
+  return { id: storyWorkId(n), href: resourceHref('/w/', storyWorkId(n)), kind,
     authors: authors.map(name => ({ name, href: name === 'Jane Austen'
       ? authorHref({ kind: 'external', key: '/authors/OL21594A' }) : null })),
     title: { value: title, language, direction: 'ltr', basis: 'requested' },

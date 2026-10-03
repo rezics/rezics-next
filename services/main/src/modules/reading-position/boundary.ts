@@ -7,15 +7,21 @@ import { parseStoredRelease } from '../release/schema.ts';
 import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import { REVELATION_COST, type Revelation } from './store.ts';
+import { READING_POSITION_COST } from './contract.ts';
+import { ReadingPositionTraversal } from './traversal.ts';
+import { chooserPosition } from './chooser-position.ts';
+export { READING_POSITION_COST } from './contract.ts';
 
 /** Linear in the selected composition, never the wiki/catalogue inventory.
  * A 1000-chapter, two-volume composition uses two graph batches (one per Work
  * level), not a query per chapter. Cycles, ambiguity and overflow fail closed. */
-export const READING_POSITION_COST = { occurrences: 10_000, workDepth: 16, workBatch: 50,
-  queryBytes: 4 * 1024 * 1024, chooserPage: 100, sessionPages: 32, releasePins: 4096 } as const;
 export interface ReadingOccurrence {
   occurrence: string; work: string; structure: string; revision: string;
   parent: string; segmentKey: string; orderKey: string; role: 'part' | 'chapter' | 'group'; target: string | null;
+  labels?: Array<{ value: string; language: string }>;
+  /** One-based among siblings, as in the composition owner's occurrence context. */
+  ordinal?: number;
+  displayLabel?: string;
 }
 export interface ReadingComposition { work: string; occurrences: ReadingOccurrence[]; structures: string[]; works: string[] }
 
@@ -33,7 +39,7 @@ export async function readReadingComposition(session: WorkReadSession, work: str
   if (root.generation.graph !== `${session.position.dataEpoch}:${session.position.sequence}`) throw new WorkReadMoved('Reading composition changed');
   if (root.summaries[0]?.status !== 'available' || root.summaries[0].type !== 'work') throw new WorkReadMissing('Work is unavailable');
   const byWork = new Map<string, ReadingOccurrence[]>();
-  const identities = new Set<string>();
+  const identities = new Map<string, { placement: string; item: ReadingOccurrence }>();
   const structures = new Set<string>();
   let pending = [work], size = 0;
   for (let depth = 0; pending.length; depth++) {
@@ -42,7 +48,7 @@ export async function readReadingComposition(session: WorkReadSession, work: str
     for (let at = 0; at < pending.length; at += READING_POSITION_COST.workBatch) {
       const works = pending.slice(at, at + READING_POSITION_COST.workBatch);
       const result = await session.deps.environment.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        SELECT ?work ?structure ?revision ?occurrence ?parent ?segmentKey ?orderKey ?role ?target WHERE {
+        SELECT ?work ?structure ?revision ?placement ?occurrence ?parent ?segmentKey ?orderKey ?role ?target ?label ?displayLabel WHERE {
         VALUES ?work { ${works.map(iri).join(' ')} }
         GRAPH ${iri(GRAPHS.current)} {
           ?work rv:mainVersion ?main .
@@ -55,27 +61,42 @@ export async function readReadingComposition(session: WorkReadSession, work: str
           FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
           ?segment rv:parent ?parent ; rv:segmentKey ?segmentKey .
           OPTIONAL { ?placement schema:item ?target }
-        } } LIMIT ${READING_POSITION_COST.occurrences + 1}`, READING_POSITION_COST.queryBytes);
+          OPTIONAL { ?placement rv:occurrenceLabel ?label }
+          OPTIONAL { ?placement rv:qualifier/rv:displayLabel ?displayLabel }
+        } } LIMIT ${READING_POSITION_COST.occurrences * READING_POSITION_COST.labels + 1}`, READING_POSITION_COST.queryBytes);
       const rows = result.results?.bindings ?? [];
-      size += rows.length;
-      if (size > READING_POSITION_COST.occurrences) throw new WorkReadUnavailable('Reading composition exceeds its cost');
       for (const row of rows) {
         const value = (key: string) => row[key]?.value;
         const role = value('role') === `${RV}PartRole` ? 'part' : value('role') === `${RV}ChapterRole` ? 'chapter'
           : value('role') === `${RV}GroupRole` ? 'group' : null;
-        if (!role || ['work', 'structure', 'revision', 'occurrence', 'parent', 'segmentKey', 'orderKey'].some(key => !value(key))) {
+        if (!role || ['work', 'structure', 'revision', 'placement', 'occurrence', 'parent', 'segmentKey', 'orderKey'].some(key => !value(key))) {
           throw new WorkReadUnavailable('Reading composition is incomplete');
         }
         const item: ReadingOccurrence = { work: value('work')!, structure: value('structure')!, revision: value('revision')!,
           occurrence: value('occurrence')!, parent: value('parent')!, segmentKey: value('segmentKey')!, orderKey: value('orderKey')!,
-          role, target: value('target') ?? null };
+          role, target: value('target') ?? null,
+          ...(value('displayLabel') ? { displayLabel: value('displayLabel')! } : {}) };
         const inventory = byWork.get(item.work) ?? [];
         const identity = `${item.work}|${item.occurrence}`;
-        if (identities.has(identity)
+        const previous = identities.get(identity);
+        if (previous && (previous.placement !== value('placement')
+            || JSON.stringify({ ...previous.item, labels: undefined }) !== JSON.stringify(item))
           || inventory[0] && (inventory[0].structure !== item.structure || inventory[0].revision !== item.revision)) {
           throw new WorkReadUnavailable('Reading composition is ambiguous');
         }
-        identities.add(identity);
+        const selected = previous?.item ?? item;
+        if (row.label) {
+          const language = row.label['xml:lang'];
+          if (!language) throw new WorkReadUnavailable('Reading label language is unavailable');
+          selected.labels ??= [];
+          if (!selected.labels.some(label => label.value === row.label!.value && label.language === language)) {
+            selected.labels.push({ value: row.label.value, language });
+          }
+          if (selected.labels.length > READING_POSITION_COST.labels) throw new WorkReadUnavailable('Reading labels exceed their cost');
+        }
+        if (previous) continue;
+        if (++size > READING_POSITION_COST.occurrences) throw new WorkReadUnavailable('Reading composition exceeds its cost');
+        identities.set(identity, { placement: value('placement')!, item });
         inventory.push(item);
         byWork.set(item.work, inventory);
         structures.add(item.structure);
@@ -103,7 +124,8 @@ export async function readReadingComposition(session: WorkReadSession, work: str
         const ak = `${a.segmentKey}\0${a.orderKey}`, bk = `${b.segmentKey}\0${b.orderKey}`;
         return ak < bk ? -1 : ak > bk ? 1 : 0;
       });
-      for (const item of siblings) {
+      for (const [index, item] of siblings.entries()) {
+        item.ordinal = index + 1;
         if (visited.has(item.occurrence)) throw new WorkReadUnavailable('Reading placement is cyclic');
         visited.add(item.occurrence);
         if (item.role === 'group') visit(item.occurrence);
@@ -291,27 +313,24 @@ export class ReadingBoundary {
       throw new WorkReadMoved('Reader position changed during the read');
     }
   }
-  async chooser(work: string, limit: number, after?: string) {
-    const composition = await this.composition(work);
-    const disclosed = new Set<string>();
-    for (let at = 0; at < composition.works.length; at += 24) {
-      const targets = await disclosureSummaries(this.session, composition.works.slice(at, at + 24));
-      if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
-        throw new WorkReadMoved('Reading composition changed');
+  async chooser(work: string, limit: number, after?: string, q?: string) {
+    const disclosed = async (resources: string[]) => {
+      const available = new Set<string>();
+      for (let at = 0; at < resources.length; at += 24) {
+        const targets = await disclosureSummaries(this.session, resources.slice(at, at + 24));
+        if (targets.generation.graph !== `${this.session.position.dataEpoch}:${this.session.position.sequence}`) {
+          throw new WorkReadMoved('Reading composition changed');
+        }
+        for (const target of targets.summaries) if (target.status === 'available') available.add(target.reference);
       }
-      targets.summaries.forEach(target => { if (target.status === 'available') disclosed.add(target.reference); });
-    }
-    const items = composition.occurrences.filter(item => disclosed.has(item.work)
-      && !(item.role === 'part' && item.target && !disclosed.has(item.target)));
-    const offset = after ? items.findIndex(item => item.occurrence === after) + 1 : 0;
-    if (after && !offset) throw new WorkReadInvalid('Reading position cursor is invalid');
-    const page = items.slice(offset, offset + limit);
-    const resolved = this.selection === 'all' ? 'all' : await this.position(work) ?? 'start';
-    if (resolved !== 'all' && resolved !== 'start' && !items.some(item => item.occurrence === resolved)) {
-      throw new WorkReadMissing('Reading position is unavailable');
-    }
+      return available;
+    };
+    const traversal = new ReadingPositionTraversal(this.session, work, disclosed);
+    const page = await traversal.page({ limit, after, q });
+    const resolved = await chooserPosition(this.session, traversal, this.selection,
+      this.selection === 'mine' && await this.ownReader());
     await this.fence();
-    return { work, resolved, items: page, next: offset + limit < items.length ? page.at(-1)!.occurrence : null };
+    return { work, resolved, ...page };
   }
 }
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { communityHref, threadPath } from '../feed/discussion.ts';
+
 import { Button } from '@rezics/ui/button';
 import { materializeData } from 'native-i18n';
 import { useEffect, useId, useState, type ReactNode } from 'react';
@@ -57,7 +59,7 @@ export function ProfileContributions({ agent, actingSubject, locale, messages, c
           : failed ? <p role="alert" className="text-destructive-foreground">{t.contributionsFailed}</p>
             : page?.items.length ? <ol className="divide-y divide-border rounded-xl border border-border bg-card
               px-4">{page.items.map(item => <li key={item.reply} className="grid gap-1 py-4">
-              <Link href={`/r/${item.realm.slice(-36)}/discussions/${item.reply.slice(-36)}`}
+              <Link href={threadPath(communityHref(item.realm), item.reply)}
                 className="font-semibold underline-offset-2 hover:underline">
                 {item.title || (kind === 'comments' ? t.comment : t.post)}</Link>
               <time dateTime={item.time} className="text-muted-foreground text-xs">

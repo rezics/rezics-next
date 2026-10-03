@@ -1,32 +1,65 @@
+import { uuidToSid } from '@rezics/model/address';
+import { spaceHref } from '../features/address/path.ts';
 import { describe, expect, test } from 'bun:test';
 import { announcesSpoilers, threadPath } from '../features/feed/discussion.ts';
-import { parseThreadSort, parseThreadWindow, replyTree, type ThreadReply } from '../features/feed/thread.ts';
+import {
+  parseThreadSort,
+  parseThreadWindow,
+  replyTree,
+  type ThreadReply,
+} from '../features/feed/thread.ts';
 
-const id = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
+const id = (value: number) =>
+  `https://rezics.com/id/00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
 function reply(value: number, parent: number | null): ThreadReply {
-  return { reply: id(value), placement: id(1000 + value), parent: parent === null ? null : id(parent), author: null,
-    time: '2026-09-28T07:38:50.000Z', language: 'en', revisionId: '00000000-0000-4000-a000-000000000001',
-    title: parent === null ? `Discussion ${value}` : null, body: `Reply ${value}`, vote: { score: 0, value: 0, revision: null, open: true } };
+  return {
+    reply: id(value),
+    placement: id(1000 + value),
+    parent: parent === null ? null : id(parent),
+    author: null,
+    time: '2026-09-28T07:38:50.000Z',
+    language: 'en',
+    revisionId: '00000000-0000-4000-a000-000000000001',
+    title: parent === null ? `Discussion ${value}` : null,
+    body: `Reply ${value}`,
+    vote: { score: 0, value: 0, revision: null, open: true },
+  };
 }
 
 describe('how a discussion reads', () => {
   test('only a spoiler the author announced at the start of the title veils the body', () => {
-    for (const title of ['【剧透】《雨夜书店》第二章：那张旧车票', 'Spoilers (chapter 35): Darcy’s letter',
-      '[Spoiler] the ending', 'ネタバレ注意：最終章']) expect(announcesSpoilers(title)).toBe(true);
-    for (const title of ['No spoilers please: first impressions', 'Which edition of Jane Eyre for a first read?',
-      '[Solved] Lumen Lanterns render as black cubes']) expect(announcesSpoilers(title)).toBe(false);
+    for (const title of [
+      '【剧透】《雨夜书店》第二章：那张旧车票',
+      'Spoilers (chapter 35): Darcy’s letter',
+      '[Spoiler] the ending',
+      'ネタバレ注意：最終章',
+    ])
+      expect(announcesSpoilers(title)).toBe(true);
+    for (const title of [
+      'No spoilers please: first impressions',
+      'Which edition of Jane Eyre for a first read?',
+      '[Solved] Lumen Lanterns render as black cubes',
+    ])
+      expect(announcesSpoilers(title)).toBe(false);
   });
 
-  test('a thread lives under its Realm’s address, by the reply’s UUID', () => {
-    expect(threadPath('/r/fiction', id(7))).toBe('/r/fiction/discussions/00000000-0000-4000-8000-000000000007');
+  test('a thread lives under its Realm’s address, by the reply’s SID', () => {
+    // ast-grep-ignore: web-links-use-address -- Independent expected SID guards the discussion builder's identity encoding.
+    expect(threadPath(spaceHref('fiction', 'community'), id(7))).toBe(
+      // ast-grep-ignore: web-links-use-address -- Independent canonical expectation verifies the address builder without calling it again.
+      `/r/fiction/discussions/${uuidToSid(id(7).slice(-36))}`,
+    );
   });
 });
 
 describe('a thread laid out for reading', () => {
   test('replies nest under their parents in Main’s order, and each knows how many replies it holds', () => {
     const tree = replyTree([reply(1, null), reply(2, 1), reply(4, 2), reply(3, 1), reply(5, 4)])!;
-    expect(tree.children.map(node => node.reply.reply)).toEqual([id(2), id(3)]);
-    expect(tree.children[0]!.children[0]!.children[0]).toMatchObject({ depth: 3, reply: { reply: id(5) } });
+    expect(tree.children.map((node) => node.reply.reply)).toEqual([id(2), id(3)]);
+    expect(tree.children[0]!.children[0]!.children[0]).toMatchObject({
+      depth: 3,
+      reply: { reply: id(5) },
+    });
     expect(tree.descendants).toBe(4);
     expect(tree.children[0]!.descendants).toBe(2);
   });

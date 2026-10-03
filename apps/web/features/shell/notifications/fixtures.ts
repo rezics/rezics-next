@@ -1,3 +1,4 @@
+import { spaceHref } from '../../address/path.ts';
 import type { MainClient } from '../../feed/types.ts';
 import type { PendingInvitation } from './invitations-read.ts';
 import type { NotificationWindow, StreamItem } from './window.ts';
@@ -63,7 +64,7 @@ export const roleTaken: StreamItem = item(114, { kind: 'realm_role_change', acto
 
 /** An open invitation from Daniel to join Fiction. */
 export const invitations: PendingInvitation[] = [{ id: id(501), realm: iri(901), realmName: 'Fiction · 小说',
-  realmLanguage: 'en', realmIcon: { kind: 'fallback', key: 'fiction' }, realmHref: '/r/fiction', inviterName: 'Daniel Chen',
+  realmLanguage: 'en', realmIcon: { kind: 'fallback', key: 'fiction' }, realmHref: spaceHref('fiction', 'community'), inviterName: 'Daniel Chen',
   expiresAt: new Date(NOW + 5 * 86_400_000).toISOString() }];
 
 /** The invitation answer Main records; each call is kept in `calls`. */

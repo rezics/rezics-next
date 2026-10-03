@@ -1,5 +1,7 @@
 import { cookies } from 'next/headers';
 import { cache } from 'react';
+import { resolveAddress } from '../address/server.ts';
+import { isNativeHandle } from './route.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState } from '../auth/session.ts';
@@ -54,12 +56,14 @@ export type ProfileResolution =
   | { kind: 'unavailable' };
 
 /** The Agent behind a handle, shared by a profile page and its metadata. */
-export const resolveProfile = cache(async (handle: string, _locale: UiLocale): Promise<ProfileResolution> => {
+export const resolveProfile = cache(async (handle: string, locale: UiLocale): Promise<ProfileResolution> => {
   const { main, actingSubject } = await profileReader();
-  const read = await settle(() => main.v1.handles({ handle }).get({ query: { actingSubject } }));
+  const address = await resolveAddress('agent', isNativeHandle(handle) ? handle.slice(6) : handle, locale);
+  if (address.kind !== 'resolved') return { kind: address.kind === 'unavailable' ? 'unavailable' : 'missing' };
+  const read = await settle(() => main.v1.agents({ id: address.data.holder.slice(-36) }).get({ query: { actingSubject } }));
   if (!read.ok) return { kind: read.failure === 'missing' || read.failure === 'invalid' ? 'missing' : 'unavailable' };
-  return read.data.resolution?.redirect && read.data.handle !== handle ? { kind: 'moved', handle: read.data.handle }
-    : { kind: 'profile', profile: read.data };
+  const profile = { ...read.data, address: address.data.canonical };
+  return { kind: 'profile', profile };
 });
 
 /**

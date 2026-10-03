@@ -1,22 +1,25 @@
 'use client';
 
 import { Alert, AlertDescription } from '@rezics/ui/alert';
-import { Button, buttonVariants } from '@rezics/ui/button';
+import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@rezics/ui/field';
-import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
 import { cn } from '@rezics/ui/utils';
-import { CheckIcon, ChevronDownIcon, CircleAlertIcon, PlusIcon } from 'lucide-react';
+import { CircleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { mainRelationships, RelationshipError } from '../relationships/api.ts';
+import { RelationshipControl } from '../relationships/control.tsx';
+import { relationshipsChanged } from '../relationships/events.ts';
+import { storyFollowApi } from '../relationships/legacy.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
+import type { RelationshipsApi } from '../relationships/types.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { browserMainApi } from '../api/browser.ts';
-import type { MainClient } from '../discover/types.ts';
 import Link from '../shell/localized-link.tsx';
 import type { RealmMessages } from './messages.ts';
-import { type JoinPolicy, type Membership, offerOf, readMembership } from './membership-state.ts';
+import { type JoinPolicy, type Membership, offerOf } from './membership-state.ts';
 
 export type JoinOutcome = { kind: 'joined' } | { kind: 'stale' } | { kind: 'denied' } | { kind: 'failed' };
 export type FollowOutcome = { kind: 'saved'; following: boolean; revision: string } | { kind: 'stale' }
@@ -33,146 +36,107 @@ export type MembershipActions =
   | {
     kind: 'ready';
     /** Self-join on the policy's terms; `listed` puts the reader on the public roster. */
-    join: (policy: JoinPolicy, listed: boolean) => Promise<JoinOutcome>;
+    join: (policy: JoinPolicy, listed: boolean, key?: string) => Promise<JoinOutcome>;
     follow: (following: boolean, expectedRevision: string | null) => Promise<FollowOutcome>;
     /** The reader's membership and follow, read again after a stale write. */
     refresh: () => Promise<Membership | null>;
   };
 
 /** Joins and follows through the BFF as the session's Agent. Each press is its own idempotent command. */
-export function mainMembershipActions(realm: string, actingSubject: string,
-  main: () => MainClient = browserMainApi): Extract<MembershipActions, { kind: 'ready' }> {
-  const id = realm.slice(-36);
-  const key = () => ({ headers: { 'idempotency-key': crypto.randomUUID() } });
+export function mainMembershipActions(realm: string, actingSubject: string): Extract<MembershipActions, { kind: 'ready' }> {
+  const api = mainRelationships(actingSubject);
   return {
     kind: 'ready',
-    async join(policy, listed) {
-      const { data, error } = await main().v1.realms({ realm: id }).join.post({ actingSubject,
-        expectedMembershipGeneration: policy.membershipGeneration, expectedPolicyRevision: policy.policyRevision,
-        termsRevision: policy.termsRevision, listed }, key());
-      if (data) return { kind: 'joined' };
-      return error?.status === 409 ? { kind: 'stale' } : error?.status === 403 ? { kind: 'denied' } : { kind: 'failed' };
+    async join(policy, listed, key) {
+      try { await api.join(realm, policy, listed, key); return { kind: 'joined' }; }
+      catch (error) { return error instanceof RelationshipError && error.status === 409 ? { kind: 'stale' }
+        : error instanceof RelationshipError && error.status === 403 ? { kind: 'denied' } : { kind: 'failed' }; }
     },
     async follow(following, expectedRevision) {
-      const { data, error } = await main().v1.follows.post({ profile: 'follow-command-v1', target: realm, kind: 'realm',
-        actingSubject, following, expectedRevision }, key());
-      if (data) return { kind: 'saved', following: data.following, revision: data.revision };
-      return error?.status === 409 ? { kind: 'stale' } : { kind: 'failed' };
+      try { const receipt = await api.set({ target: realm, following, expectedRevision });
+        return { kind: 'saved', following: receipt.following, revision: receipt.revision }; }
+      catch (error) { return error instanceof RelationshipError && error.status === 409 ? { kind: 'stale' } : { kind: 'failed' }; }
     },
-    refresh: () => readMembership(main(), realm, actingSubject),
+    async refresh() {
+      const [policy, follow] = await Promise.all([api.joining(realm).catch(() => null), api.state(realm, 'realm').catch(() => null)]);
+      return { policy, following: follow?.following ?? null, followRevision: follow?.revision ?? null,
+        level: follow?.level ?? null, source: follow?.source ?? null, pinPosition: follow?.pinPosition ?? null };
+    },
   };
 }
 
-type Status = 'idle' | 'saving' | 'follow-failed';
+/** Realm membership supplies admission and consent; the shared control owns its follow, level and pin. */
+export function RealmMembership(props: Parameters<typeof RealmMembershipState>[0]) {
+  return <RealmMembershipState key={`${props.realm}:${props.signedIn}:${props.actingSubject ?? "guest"}`} {...props} />;
+}
 
-/**
- * Join or Follow in a Realm's header. A Realm that lets people join on their
- * own asks for consent to its rules (and whether to appear on its public
- * member list) before joining; joining also follows it into Home. Any other
- * Realm can be followed. Members see that they joined, with their Home follow
- * in a menu.
- */
-export function RealmMembership({ realm, realmName, initial, signedIn, actingSubject, signInHref, rulesHref,
-  actions, locale, messages, className }: {
-  /** The Realm IRI. */
-  realm: string; realmName: string;
-  /** The reader's membership as the page read it; nothing is known for a signed-out reader. */
-  initial: Membership | null;
-  signedIn: boolean; actingSubject?: string | null; signInHref: string;
-  /** The About tab, where the rules are. */
-  rulesHref: string;
-  /** Stories supply these; pages derive them from the session. */
-  actions?: MembershipActions;
-  locale: UiLocale; messages: RealmMessages; className?: string;
+function RealmMembershipState({ realm, realmName, initial, signedIn, actingSubject, signInHref, rulesHref,
+  actions, locale, messages, className, relationshipApi }: {
+  realm: string; realmName: string; initial: Membership | null; signedIn: boolean; actingSubject?: string | null;
+  signInHref: string; rulesHref: string; actions?: MembershipActions; locale: UiLocale; messages: RealmMessages; className?: string;
+  relationshipApi?: RelationshipsApi;
 }) {
-  const t = materializeData(messages, { locale });
   const router = useRouter();
-  const [adapter] = useState<MembershipActions>(() => actions ?? (!signedIn ? { kind: 'signed-out', signInHref }
-    : actingSubject ? mainMembershipActions(realm, actingSubject) : { kind: 'unavailable' }));
+  const copy = relationshipMessages[locale];
   const [state, setState] = useState<Membership>(initial ?? { policy: null, following: null, followRevision: null });
-  const [status, setStatus] = useState<Status>('idle');
   const [joining, setJoining] = useState(false);
-
-  if (adapter.kind === 'unavailable') return null;
-  if (adapter.kind === 'signed-out') {
-    return <Link href={adapter.signInHref} className={cn(buttonVariants({ size: 'sm', pill: true }), 'min-w-24', className)}>
-      <PlusIcon aria-hidden="true" />{t.join}<span className="sr-only"> — {t.signInToJoin}</span></Link>;
-  }
-  const ready = adapter;
-
-  /**
-   * Sets the Home follow; a follow changed elsewhere is read again and the
-   * reader's choice applied once more. Only the follow fields change, so a
-   * join that just landed stays.
-   */
-  async function follow(next: boolean): Promise<boolean> {
-    if (status === 'saving') return false;
-    const { following: before, followRevision } = state;
-    setState(current => ({ ...current, following: next }));
-    setStatus('saving');
-    let outcome = await ready.follow(next, followRevision).catch((): FollowOutcome => ({ kind: 'failed' }));
-    if (outcome.kind === 'stale') {
-      const fresh = await ready.refresh().catch(() => null);
-      outcome = !fresh || fresh.following === null ? { kind: 'failed' }
-        : fresh.following === next && fresh.followRevision
-          ? { kind: 'saved', following: next, revision: fresh.followRevision }
-          : await ready.follow(next, fresh.followRevision).catch((): FollowOutcome => ({ kind: 'failed' }));
-    }
-    if (outcome.kind === 'saved') {
-      const saved = outcome;
-      setState(current => ({ ...current, following: saved.following, followRevision: saved.revision }));
-      setStatus('idle');
-      return true;
-    }
-    setState(current => ({ ...current, following: before }));
-    setStatus('follow-failed');
-    return false;
-  }
-
+  const pendingJoin = useRef<{ policy: JoinPolicy; listed: boolean; key: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [adapter] = useState(() => actions ?? (!signedIn ? { kind: 'signed-out' as const, signInHref }
+    : actingSubject ? mainMembershipActions(realm, actingSubject) : { kind: 'unavailable' as const }));
+  const follow = { following: state.following, revision: state.followRevision, level: state.level ?? null,
+    source: state.source ?? null, pinPosition: state.pinPosition ?? null };
+  const api = useMemo(() => {
+    if (relationshipApi) return relationshipApi;
+    const base = mainRelationships(actingSubject ?? '');
+    return actions?.kind === 'ready' ? storyFollowApi(base, { send: actions.follow, refresh: async () => {
+      const fresh = await actions.refresh();
+      return fresh && fresh.following !== null ? { following: fresh.following, revision: fresh.followRevision } : null;
+    } }, { ...follow, level: state.level ?? 'highlights' }) : base;
+  }, [actions, actingSubject, realm, relationshipApi]);
   const offer = offerOf(state);
-  const failed = status === 'follow-failed'
-    ? <p role="status" className="basis-full text-destructive-foreground text-sm">{t.followFailed}</p> : null;
-  let control;
-  if (offer === 'joined') {
-    control = <Menu>
-      <MenuTrigger asChild>
-        <Button size="sm" pill variant="outline" className="min-w-24 bg-card/80 backdrop-blur">
-          <CheckIcon aria-hidden="true" className="text-primary" />{t.joined}
-          <ChevronDownIcon aria-hidden="true" className="opacity-60" /></Button>
-      </MenuTrigger>
-      <MenuContent className="w-64">
-        <MenuCheckboxItem value="follow" checked={state.following === true}
-          onCheckedChange={checked => void follow(checked === true)}>{t.showInHome}</MenuCheckboxItem>
-        <MenuItem value="rules" asChild><Link href={rulesHref}>{t.readRules}</Link></MenuItem>
-      </MenuContent>
-    </Menu>;
-  } else if (offer === 'join') {
-    control = <Button size="sm" pill className="min-w-24" onClick={() => setJoining(true)}>
-      <PlusIcon aria-hidden="true" />{t.join}</Button>;
-  } else {
-    // The label says the state; while following, its hidden end says what a press does.
-    control = <Button size="sm" pill variant={state.following ? 'outline' : 'default'}
-      className={cn('min-w-24', state.following && 'bg-card/80 backdrop-blur')}
-      aria-disabled={status === 'saving' || undefined} onClick={() => void follow(!state.following)}>
-      {state.following ? <><CheckIcon aria-hidden="true" className="text-primary" />{t.following}
-        <span className="sr-only"> · {t.unfollowRealm({ realm: realmName })}</span></>
-        : <><PlusIcon aria-hidden="true" />{t.follow}<span className="sr-only"> · {realmName}</span></>}</Button>;
-  }
   return <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
-    {control}
-    {failed}
-    {state.policy && offer === 'join' ? <JoinDialog open={joining} realmName={realmName}
-      rulesHref={rulesHref} locale={locale} messages={messages} onClose={() => setJoining(false)}
+    <RelationshipControl target={realm} kind="realm" realm={realm} name={realmName} locale={locale}
+      signedIn={signedIn} actingSubject={adapter.kind === 'unavailable' ? null : actingSubject}
+      signInHref={adapter.kind === 'signed-out' ? adapter.signInHref : signInHref} api={adapter.kind === 'ready' ? api : undefined} initial={follow}
+      membership={offer === 'joined' ? { joined: true, leave: api.canLeave ? () => {
+        if (!state.policy || !window.confirm(copy.confirmLeave + '\n' + copy.leaveHelp)) return;
+        void api.leave(realm, state.policy.membershipGeneration).then(async () => {
+          const fresh = adapter.kind === 'ready' ? await adapter.refresh() : null;
+          if (fresh) setState(fresh);
+          router.refresh();
+        }).catch(async error => {
+          if (error instanceof RelationshipError && error.status === 409 && adapter.kind === 'ready') {
+            const fresh = await adapter.refresh().catch(() => null);
+            if (fresh) setState(fresh);
+            setNotice(copy.stale);
+          } else setNotice(copy.failed);
+        });
+      } : undefined } : offer === 'join' || !signedIn ? { joined: false, join: () => setJoining(true) } : undefined}
+      onChange={fresh => setState(previous => ({ ...previous, following: fresh.following, followRevision: fresh.revision,
+        level: fresh.level, source: fresh.source, pinPosition: fresh.pinPosition }))} />
+    {notice ? <p role="status" className="basis-full text-sm">{notice}</p> : null}
+    {offer === 'joined' && !api.canLeave ? <p role="status" className="basis-full text-muted-foreground text-xs">{copy.leaveUnavailable}</p> : null}
+    {state.policy && adapter.kind === 'ready' ? <JoinDialog open={joining} realmName={realmName}
+      rulesHref={rulesHref} locale={locale} messages={{ ...messages, joinDenied: copy.joinDenied }} onClose={() => setJoining(false)}
       join={async listed => {
-        const outcome = await ready.join(state.policy!, listed).catch((): JoinOutcome => ({ kind: 'failed' }));
+        const pending = pendingJoin.current && pendingJoin.current.listed === listed ? pendingJoin.current
+          : { policy: state.policy!, listed, key: crypto.randomUUID() };
+        pendingJoin.current = pending;
+        const outcome = await adapter.join(pending.policy, listed, pending.key).catch((): JoinOutcome => ({ kind: 'failed' }));
         if (outcome.kind === 'joined') {
-          setState(current => ({ ...current, policy: current.policy && { ...current.policy, state: 'joined' } }));
+          pendingJoin.current = null;
+          // Main's Join writes its follow atomically. Never issue a second Follow command.
           setJoining(false);
-          // Joining follows the Realm into Home, as joining a community does elsewhere.
-          if (!state.following) await follow(true);
+          relationshipsChanged();
+          const fresh = await adapter.refresh().catch(() => null);
+          if (fresh?.policy?.state === 'joined') setState(fresh);
+          else { setState(previous => ({ ...previous, policy: previous.policy && { ...previous.policy, state: 'joined' } }));
+            setNotice(copy.unavailable); }
           router.refresh();
         } else if (outcome.kind === 'stale') {
-          const fresh = await ready.refresh().catch(() => null);
+          pendingJoin.current = null;
+          const fresh = await adapter.refresh().catch(() => null);
           if (fresh) setState(fresh);
         }
         return outcome;

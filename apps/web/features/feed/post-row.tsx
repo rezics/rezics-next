@@ -1,5 +1,6 @@
 'use client';
 
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { cn } from '@rezics/ui/utils';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
@@ -82,7 +83,7 @@ export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonl
 
 const leading = 'font-semibold text-foreground';
 
-type Person = Pick<FeedItem['actor'], 'name' | 'handle'>;
+type Person = Pick<FeedItem['actor'], 'name' | 'handle'> & { address?: AddressTarget };
 
 /** People's names as one list in the reader's language ("Mei, Leo and Aria"), each leading to their profile. */
 function People({ people, className }: { people: readonly Person[]; className?: string }) {
@@ -92,7 +93,7 @@ function People({ people, className }: { people: readonly Person[]; className?: 
     .formatToParts(people.map(person => person.name)).map((part, index) => {
       if (part.type === 'literal') return <span key={index}>{part.value}</span>;
       const person = people[next++]!;
-      return <LocalizedLink key={person.handle} href={authorHref({ kind: 'agent', handle: person.handle })}
+      return <LocalizedLink key={person.handle} href={authorHref({ ...person, kind: 'agent' })}
         className={cn(rowLink, className)}>{part.value}</LocalizedLink>;
     });
 }
@@ -107,7 +108,7 @@ export function useIdentity({ lead, realm, people, someone }: { lead: MetaLead; 
   people: readonly Person[] | null; someone?: string }): { icon: ReactNode; parts: MetaPart[] } {
   const { avatarQuery, realmPath } = useFeed();
   const venue = lead === 'realm' ? realm : null;
-  const realmPart: MetaPart[] = realm ? [{ name: true, node: <LocalizedLink href={realmPath(realm.id)}
+  const realmPart: MetaPart[] = realm ? [{ name: true, node: <LocalizedLink href={realmPath(realm.id, 'address' in realm ? realm.address as AddressTarget : undefined)}
     lang={realm.name.language} dir={realm.name.direction}
     className={cn(rowLink, venue && leading)}>{realm.name.value}</LocalizedLink> }] : [];
   const peoplePart: MetaPart[] = !people ? []
@@ -120,12 +121,12 @@ export function useIdentity({ lead, realm, people, someone }: { lead: MetaLead; 
   };
 }
 
-export interface AttachedWork { id: string; title: Name; cover: Avatar; types: readonly string[]; byline: string | null }
+export interface AttachedWork { id: string; address?: AddressTarget; title: Name; cover: Avatar; types: readonly string[]; byline: string | null }
 
 /** The Work a post is about, on its own line as X attaches a link: its cover and one line of title and author. */
 export function WorkAttachment({ work }: { work: AttachedWork }) {
   const { avatarQuery } = useFeed();
-  return <LocalizedLink href={`/w/${work.id.slice(-36)}`} className="relative z-10 flex h-11 w-fit min-w-0 max-w-full
+  return <LocalizedLink href={resourceHref('/w/', work.address ?? work.id)} className="relative z-10 flex h-11 w-fit min-w-0 max-w-full
     items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 py-1 ps-1 pe-3 text-sm outline-none
     transition-colors hover:border-border hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring sm:max-w-md">
     <CatalogueCover work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types),

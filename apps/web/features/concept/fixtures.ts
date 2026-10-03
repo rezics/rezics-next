@@ -1,3 +1,4 @@
+import { resourceHref } from '../address/path.ts';
 import { works as discoveryWorks } from '../discover/fixtures.ts';
 import type { DiscoveryItem } from '../discover/types.ts';
 import type { ConceptSearch } from './condition-bar.tsx';
@@ -90,10 +91,11 @@ export const state = (extra: Partial<ConceptState> = {}): ConceptState =>
   ({ concept: conceptUuid(1), scope: { kind: 'global' }, include: [], exclude: [], match: 'all', ...extra });
 
 export const follow = (followers: number, following: boolean | null = null): ConceptFollowState => ({
-  level: following === null ? null : 'off', source: following === null ? null : 'explicit', pinPosition: null,
+  ...{ level: following === null ? null : 'off' as const,
+    source: following === null ? null : 'explicit' as const, pinPosition: null },
   profile: 'follow-state-v1', target: { id: concepts.fantasy.id, kind: 'concept', name: concepts.fantasy.name,
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'concept-1', resourceType: 'concept' }, realm: null,
-    href: `/concepts/${conceptUuid(1)}` }, following, revision: following ? '0192e0aa-0000-7000-8000-000000000001' : null,
+    href: resourceHref('/concepts/', conceptUuid(1)) }, following, revision: following ? '0192e0aa-0000-7000-8000-000000000001' : null,
   followers: { value: followers, kind: 'exact' } });
 
 /** Later pages from memory: one more Work, then the end. */

@@ -1,3 +1,5 @@
+import { spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ZoneReleaseFilterSpec } from '@rezics/zone-sdk';
@@ -17,55 +19,148 @@ import { parseReleaseFilter } from './state.ts';
 // conditions as chips and the paging and empty states. A Zone's own cards and words are in
 // `official-zone-stories`. Books could use the same control for edition format and language.
 
-const spec: ZoneReleaseFilterSpec = { label: 'Find an edition', apply: 'Show matching books', clear: 'Clear filters',
-  summary: 'Books with one edition that meets every filter', coverKind: 'book',
-  noMatch: { title: 'No edition meets every filter', body: 'A book is listed only when one edition has them all.' },
+const spec: ZoneReleaseFilterSpec = {
+  label: 'Find an edition',
+  apply: 'Show matching books',
+  clear: 'Clear filters',
+  summary: 'Books with one edition that meets every filter',
+  coverKind: 'book',
+  noMatch: {
+    title: 'No edition meets every filter',
+    body: 'A book is listed only when one edition has them all.',
+  },
   keepLooking: 'Nothing in this stretch matched. Show the next page to keep looking.',
-  fields: [{ facet: 'releaseLanguage', label: 'Language', any: 'Any language',
-    options: [{ value: 'en', label: 'English' }, { value: 'ja', label: 'Japanese' }] },
-  { facet: 'releasePlatform', label: 'Format', any: 'Any format',
-    options: [{ value: 'paperback', label: 'Paperback' }, { value: 'ebook', label: 'E-book' }] }] };
+  fields: [
+    {
+      facet: 'releaseLanguage',
+      label: 'Language',
+      any: 'Any language',
+      options: [
+        { value: 'en', label: 'English' },
+        { value: 'ja', label: 'Japanese' },
+      ],
+    },
+    {
+      facet: 'releasePlatform',
+      label: 'Format',
+      any: 'Any format',
+      options: [
+        { value: 'paperback', label: 'Paperback' },
+        { value: 'ebook', label: 'E-book' },
+      ],
+    },
+  ],
+};
 const served = Object.values(facetRegistry) as unknown as ServedFacet[];
 const filter = resolveReleaseFilter(spec, served, 'en')!;
 
-function Browse({ locale, params, withResults, next = null }: {
-  locale: UiLocale; params: Record<string, string>; withResults: boolean; next?: string | null;
+function Browse({
+  locale,
+  params,
+  withResults,
+  next = null,
+}: {
+  locale: UiLocale;
+  params: Record<string, string>;
+  withResults: boolean;
+  next?: string | null;
 }) {
   const zone = zoneFor(locale);
   const messages = zoneMessagesFor(locale);
   const state = parseReleaseFilter(params, filter);
   const base = zone.links.browse;
-  const context = { locale, ref: 'books', realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001' };
-  const items = withResults ? ['Pride and Prejudice', 'Persuasion'].map((title, index) => releaseWork({
-    id: `https://rezics.com/id/00000000-0000-7000-8000-00000000000${index + 2}`,
-    title: { value: title, language: 'en', direction: direction('en', title), basis: 'requested' } as never, cover: null,
-    matchedReleases: [], moreMatchedReleases: false }, state, spec, context,
-  { releases: new Map(), realizations: new Map(), translators: new Map() })) : [];
-  return <RealmPageStory zone={zone} locale={locale}>
-    <ReleaseBrowse header={<ReleaseBrowseHeader zone={zone} pkg={null} spec={spec} filter={filter} state={state} base={base} />}
-      spec={spec} filter={filter} state={state} base={base} items={items} next={next} locale={locale}
-      messages={messages} firstPage="Back to the first page" card={cardRenderer(zone, null, locale, messages)} />
-  </RealmPageStory>;
+  const context = {
+    locale,
+    ref: 'books',
+    realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001',
+  };
+  const items = withResults
+    ? ['Pride and Prejudice', 'Persuasion'].map((title, index) =>
+        releaseWork(
+          {
+            id: `https://rezics.com/id/00000000-0000-7000-8000-00000000000${index + 2}`,
+            title: {
+              value: title,
+              language: 'en',
+              direction: direction('en', title),
+              basis: 'requested',
+            } as never,
+            cover: null,
+            matchedReleases: [],
+            moreMatchedReleases: false,
+          },
+          state,
+          spec,
+          context,
+          { releases: new Map(), realizations: new Map(), translators: new Map() },
+        ),
+      )
+    : [];
+  return (
+    <RealmPageStory zone={zone} locale={locale}>
+      <ReleaseBrowse
+        header={
+          <ReleaseBrowseHeader
+            zone={zone}
+            pkg={null}
+            spec={spec}
+            filter={filter}
+            state={state}
+            base={base}
+          />
+        }
+        spec={spec}
+        filter={filter}
+        state={state}
+        base={base}
+        items={items}
+        next={next}
+        locale={locale}
+        messages={messages}
+        firstPage="Back to the first page"
+        card={cardRenderer(zone, null, locale, messages)}
+      />
+    </RealmPageStory>
+  );
 }
 
 function zoneFor(locale: UiLocale) {
-  const home = `/${locale}/r/books`;
-  return { slug: 'books', realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001',
-    name: { value: 'Books', lang: 'en', dir: direction('en', 'Books') }, description: null, icon: null, hero: null,
-    tokens: presetTokens.editorial, locale, links: { home, browse: `${home}/browse`, works: `${home}/browse`,
-      discussions: `${home}/discussions`, decisions: `${home}/decisions`, about: `${home}/about` } };
+  const home = localizedPath(spaceHref('books', 'community'), locale);
+  return {
+    slug: 'books',
+    realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000001',
+    name: { value: 'Books', lang: 'en', dir: direction('en', 'Books') },
+    description: null,
+    icon: null,
+    hero: null,
+    tokens: presetTokens.editorial,
+    locale,
+    links: {
+      home,
+      browse: `${home}/browse`,
+      works: `${home}/browse`,
+      discussions: `${home}/discussions`,
+      decisions: `${home}/decisions`,
+      about: `${home}/about`,
+    },
+  };
 }
 
 const meta = {
   title: 'Zones/Release filter',
   component: Browse,
-  args: { locale: 'en', params: { releaseLanguage: 'en', releasePlatform: 'ebook' }, withResults: true },
-  parameters: { route: { pathname: '/en/r/books/browse' } },
+  args: {
+    locale: 'en',
+    params: { releaseLanguage: 'en', releasePlatform: 'ebook' },
+    withResults: true,
+  },
+  parameters: { route: { pathname: localizedPath(spaceHref('books', 'site', ['browse']), 'en') } },
 } satisfies Meta<typeof Browse>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const fits = async () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+const fits = async () =>
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
 /** Each chosen condition is a removable chip, and the control keeps its values. */
 export const Filtered: Story = {
@@ -74,8 +169,10 @@ export const Filtered: Story = {
     await expect(canvas.getByRole('form', { name: 'Find an edition' })).toBeVisible();
     await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
     await expect(canvas.getByRole('combobox', { name: 'Format' })).toHaveTextContent('E-book');
-    await expect(canvas.getByRole('link', { name: 'Remove filter: E-book' })).toHaveAttribute('href',
-      '/en/r/books/browse?releaseLanguage=en');
+    await expect(canvas.getByRole('link', { name: 'Remove filter: E-book' })).toHaveAttribute(
+      'href',
+      localizedPath(`${spaceHref('books', 'site', ['browse'])}?releaseLanguage=en`, 'en'),
+    );
     await fits();
   },
 };
@@ -85,8 +182,13 @@ export const NoMatch: Story = {
   args: { params: { releaseLanguage: 'th' }, withResults: false },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: 'No edition meets every filter' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Clear all filters' })).toHaveAttribute('href', '/en/r/books/browse');
+    await expect(
+      canvas.getByRole('heading', { name: 'No edition meets every filter' }),
+    ).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Clear all filters' })).toHaveAttribute(
+      'href',
+      localizedPath(spaceHref('books', 'site', ['browse']), 'en'),
+    );
   },
 };
 
@@ -96,8 +198,13 @@ export const KeepLooking: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText(/Nothing in this stretch matched/)).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Next' })).toHaveAttribute('href', expect.stringContaining('cursor=cursor-2'));
-    await expect(canvas.queryByRole('heading', { name: 'No edition meets every filter' })).toBeNull();
+    await expect(canvas.getByRole('link', { name: 'Next' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('cursor=cursor-2'),
+    );
+    await expect(
+      canvas.queryByRole('heading', { name: 'No edition meets every filter' }),
+    ).toBeNull();
   },
 };
 
@@ -105,8 +212,12 @@ export const KeepLooking: Story = {
 export const SecondPage: Story = {
   args: { params: { releaseLanguage: 'en', cursor: 'cursor-2' } },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('link', { name: 'Back to the first page' })).toHaveAttribute('href',
-      '/en/r/books/browse?releaseLanguage=en');
+    await expect(
+      within(canvasElement).getByRole('link', { name: 'Back to the first page' }),
+    ).toHaveAttribute(
+      'href',
+      localizedPath(`${spaceHref('books', 'site', ['browse'])}?releaseLanguage=en`, 'en'),
+    );
   },
 };
 
@@ -126,7 +237,9 @@ export const Keyboard: Story = {
 export const Phone: Story = {
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('form', { name: 'Find an edition' })).toBeVisible();
+    await expect(
+      within(canvasElement).getByRole('form', { name: 'Find an edition' }),
+    ).toBeVisible();
     await fits();
   },
 };

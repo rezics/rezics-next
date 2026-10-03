@@ -1,3 +1,4 @@
+import { spaceHref } from '../../address/path.ts';
 import { type Community, realmOf } from '../communities.ts';
 import { type MainClient, settle, uuidOf } from '../../feed/types.ts';
 
@@ -34,7 +35,7 @@ export async function readInvitations(main: MainClient, anonymous: MainClient, a
     if (!realm.ok) return null;
     const zone = official.find(community => realmOf(community) === item.realm);
     return { id: item.id, realm: item.realm, realmName: realm.data.name.value, realmLanguage: realm.data.name.language,
-      realmIcon: realm.data.icon, realmHref: zone?.href ?? `/r/${uuidOf(item.realm)}`,
+      realmIcon: realm.data.icon, realmHref: zone?.href ?? spaceHref(item.realm, 'community'),
       inviterName: inviter.ok ? inviter.data.displayName : null, expiresAt: item.expiresAt } satisfies PendingInvitation;
   }));
   return named.filter(item => item !== null);

@@ -1,3 +1,5 @@
+import { conceptPath } from '../concept/state.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { direction, selectDisplayName } from '@rezics/main/language';
 import { materializeData } from 'native-i18n';
@@ -19,7 +21,7 @@ import { languageName } from './format.ts';
 import { messages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
 import { WorkRecord } from './record.tsx';
-import { type WorkScope, workHref } from './route.ts';
+import { chapterHref, type WorkScope, workHref } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
 import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage, CreditPage, Loaded, RatingRead,
   WorkHeader, WorkStats } from './types.ts';
@@ -56,7 +58,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
       href: authorHref({ kind: 'external', key: credit.key }) })) : []];
   return <WorkFrame workRef={fixture.workRef} work={work} authors={authors} locale={locale} messages={t}
     readerActions={readerActions} sections={hubLabels(t, hubSections)}
-    signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=%2F${locale}%2Fw%2F${fixture.workRef}`}
+    signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=${encodeURIComponent(localizedPath(workHref(fixture.workRef), locale))}`}
     credits={<WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={t} />}
     ratingLine={scope?.kind === 'global' ? <RatingLine ratings={ratings} stats={stats} locale={locale} messages={t} />
       : null}
@@ -70,7 +72,7 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
         locale={locale} messages={t} /> : null}
       adoption={view ? <AdoptionRegion adoptions={adoptions} view={view} locale={locale} messages={t} /> : null}
       record={<WorkRecord work={work} locale={locale} messages={t}
-        citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com/${locale}/w/${fixture.workRef}`} />}
+        citation={`${work.title.value}. Maren Osei. REZICS. https://rezics.com${localizedPath(workHref(fixture.workRef), locale)}`} />}
       alsoEnjoyed={alsoEnjoyed ? <AlsoEnjoyedSection alsoEnjoyed={alsoEnjoyed} book realms={realms} locale={locale}
         messages={t} /> : null}
       author={authorOverride ? <AuthorSection author={authorOverride} work={fixture.workRef} locale={locale}
@@ -104,10 +106,10 @@ export const Global: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'The Cartographer of Tides' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
-    await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('link', { name: 'Read' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef, 'contents'), 'en'));
     // Authors by name: a native author opens their profile, a source author the source's page.
     const byline = canvas.getByRole('heading', { level: 1 }).parentElement!;
-    await expect(within(byline).getByRole('link', { name: 'Maren Osei' })).toHaveAttribute('href', '/en/@maren');
+    await expect(within(byline).getByRole('link', { name: 'Maren Osei' })).toHaveAttribute('href', localizedPath(authorHref({ kind: 'agent', handle: 'maren' }), 'en'));
     await expect(within(byline).getByRole('link', { name: /^Idris Vale/ }))
       .toHaveAttribute('href', '/en/authors/open-library/OL2162284A');
     await expect(within(byline).getByRole('link', { name: /Open Library author OL7654321A/ })).toBeVisible();
@@ -155,10 +157,10 @@ export const Global: Story = {
     await expect(within(canvas.getByRole('region', { name: 'Readers also enjoyed' })).getAllByRole('article'))
       .toHaveLength(9);
     await expect(within(canvas.getByRole('region', { name: 'Communities' })).getByRole('link', { name: /Tidewater Readers/ }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}?scope=realm&realm=${fixture.realms[0]!.id}`);
+      .toHaveAttribute('href', localizedPath(workHref(fixture.workRef, 'overview', { kind: 'realm', realm: fixture.realms[0]!.id }), 'en'));
     const author = canvas.getByRole('region', { name: 'About the author' });
     await expect(within(author).getAllByRole('link', { name: /Maren Osei/ })[0])
-      .toHaveAttribute('href', '/en/@maren');
+      .toHaveAttribute('href', localizedPath(authorHref({ kind: 'agent', handle: 'maren' }), 'en'));
     const more = within(author).getByRole('region', { name: 'More by Maren Osei' });
     // The Work itself is not offered again.
     await expect(within(more).getAllByRole('article')).toHaveLength(3);
@@ -218,12 +220,14 @@ export const Realm: Story = {
     const local = within(values).getByRole('list', { name: 'Accepted in Tidewater Readers' });
     await expect(within(values).getByRole('list', { name: 'Accepted by everyone' })).toBeVisible();
     // In a community, every value opens its Concept page in that community.
+    if (!fixture.realmClassifications.ok) throw new Error('Expected classification fixture');
     await expect(within(local).getByRole('link', { name: 'Estuary cycle' })).toHaveAttribute('href',
-      expect.stringMatching(new RegExp(`^/en/concepts/[0-9a-f-]{36}\\?scope=realm&realm=${fixture.realms[0]!.id}$`)));
+      localizedPath(conceptPath(fixture.realmClassifications.data.items[0]!.concept,
+        { kind: 'realm', realm: fixture.realms[0]!.id }), 'en'));
     await expect(canvas.getByRole('region', { name: 'Communities' })).toHaveTextContent('Showing');
     // The chosen scope travels with the tabs.
     await expect(canvas.getByRole('link', { name: 'Versions' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/versions?scope=realm&realm=${fixture.realms[0]!.id}`);
+      .toHaveAttribute('href', localizedPath(workHref(fixture.workRef, 'versions', { kind: 'realm', realm: fixture.realms[0]!.id }), 'en'));
   },
 };
 
@@ -233,7 +237,7 @@ export const MineSignedOut: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Sign in' }))
-      .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(`/en/w/${fixture.workRef}?scope=mine`)}`);
+      .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(localizedPath(workHref(fixture.workRef, 'overview', { kind: 'mine' }), 'en'))}`);
     await expect(canvas.getByRole('region', { name: 'Classification' })).toHaveTextContent('Classification isn’t personal');
     await expect(canvas.getByRole('link', { name: 'See everyone' })).toBeVisible();
   },
@@ -278,7 +282,7 @@ export const CommunityGenresOnly: Story = {
     await expect(within(tidewater).getAllByRole('listitem').map(item => item.textContent))
       .toEqual(['Book club pick 2026Relevance: Central', 'Estuary cycle']);
     await expect(within(tidewater).getByRole('link', { name: 'Estuary cycle' })).toHaveAttribute('href',
-      expect.stringMatching(new RegExp(`^/en/concepts/[0-9a-f-]{36}\\?scope=realm&realm=${fixture.realms[0]!.id}$`)));
+      localizedPath(conceptPath(fixture.communityGenres[0]!.items[0]!.concept, { kind: 'realm', realm: fixture.realms[0]!.id }), 'en'));
     await expect(within(values).getByRole('list', { name: 'Accepted in 海洋文学研究会' })).toHaveTextContent('海洋文学');
   },
 };
@@ -318,7 +322,7 @@ export const EmptyRealm: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('No ratings in Tidewater Readers yet')).toBeVisible();
     await expect(canvas.getByText('Tidewater Readers hasn’t classified this Work')).toBeVisible();
-    await expect(canvas.getAllByRole('link', { name: 'See everyone' })[0]).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
+    await expect(canvas.getAllByRole('link', { name: 'See everyone' })[0]).toHaveAttribute('href', localizedPath(workHref(fixture.workRef), 'en'));
   },
 };
 
@@ -347,7 +351,7 @@ export const PartialFailure: Story = {
 
 export const InvalidScope: Story = {
   args: { scope: null },
-  parameters: { route: { pathname: `/en/w/${fixture.workRef}`, search: 'scope=everyone' } },
+  parameters: { route: { pathname: localizedPath(workHref(fixture.workRef), 'en'), search: 'scope=everyone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent('This view isn’t available');
@@ -446,23 +450,23 @@ export const TitleAlreadyInReadersLanguage: Story = {
 
 /** A reader part-way through continues at the next unread chapter, which is named under the button. */
 export const ContinueReading: Story = {
-  args: { readAction: { kind: 'continue', href: `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000004`,
+  args: { readAction: { kind: 'continue', href: chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000004'),
     chapter: 'Chapter 4: Neap Tide' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Continue reading' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000004`);
+      .toHaveAttribute('href', localizedPath(chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000004'), 'en'));
     await expect(canvas.getByText('Chapter 4: Neap Tide')).toBeVisible();
   },
 };
 
 /** Anyone else starts at chapter 1; a Work with nothing to read has no Read button. */
 export const StartReading: Story = {
-  args: { readAction: { kind: 'start', href: `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`,
+  args: { readAction: { kind: 'start', href: chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000002'),
     chapter: 'Low Water' } },
   async play({ canvasElement }) {
     await expect(within(canvasElement).getByRole('link', { name: 'Start reading' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
+      .toHaveAttribute('href', localizedPath(chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000002'), 'en'));
   },
 };
 

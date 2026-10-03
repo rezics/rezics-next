@@ -23,6 +23,8 @@ export const settingsNotificationTopics = [
   'post-vote',
   'followed-chapter',
   'new-work',
+  'new-release',
+  'collection-change',
   'review-helpful',
   'review',
   'review-requested',
@@ -39,6 +41,8 @@ export const notificationTopicLabel: Record<SettingsNotificationTopic, keyof Set
   'post-vote': 'notificationPostVote',
   'followed-chapter': 'notificationFollowedChapter',
   'new-work': 'notificationNewWork',
+  'new-release': 'notificationNewRelease',
+  'collection-change': 'notificationCollectionChange',
   'review-helpful': 'notificationReviewHelpful',
   review: 'notificationReview',
   'review-requested': 'notificationReviewRequested',
@@ -70,7 +74,13 @@ const governanceTopics = new Set<string>([
   'proposal-reverted',
 ]);
 function purposeOf(topic: string): NotificationChoice['purpose'] {
-  if (topic === 'followed-chapter' || topic === 'new-work') return 'subscription';
+  if (
+    topic === 'followed-chapter' ||
+    topic === 'new-work' ||
+    topic === 'new-release' ||
+    topic === 'collection-change'
+  )
+    return 'subscription';
   return governanceTopics.has(topic) ? 'governance' : 'social';
 }
 function labelFor(topic: string, t: SettingsMessages): string {

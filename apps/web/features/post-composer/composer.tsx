@@ -1,5 +1,8 @@
 'use client';
 
+import { type AddressTarget } from '../address/path.ts';
+import { communityHref, threadPath } from '../feed/discussion.ts';
+
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
@@ -23,6 +26,7 @@ import { postText as words } from './messages.ts';
 
 export interface CommunityChoice {
   id: string;
+  address?: AddressTarget;
   name: string;
 }
 /** What a post is about: a Work found by search (with its Main Version), or a target a page named (with its revision). */
@@ -147,7 +151,8 @@ export function PostComposer({
             setCommunityState('failed');
             return;
           }
-          setCommunities(data.items.map((item) => ({ id: item.id, name: item.name.value })));
+          setCommunities(data.items.map((item) => ({ id: item.id, name: item.name.value,
+            address: 'address' in item ? item.address as AddressTarget : undefined })));
           setCommunityState('idle');
         } catch {
           if (current) setCommunityState('failed');
@@ -294,7 +299,7 @@ export function PostComposer({
       }
       router.push(
         localizedPath(
-          `/r/${draft.community.id.slice(-36)}/discussions/${result.reply.slice(-36)}`,
+          threadPath(communityHref(draft.community.address ?? draft.community.id), result.reply),
           locale,
         ),
       );
@@ -407,7 +412,7 @@ export function PostComposer({
               <AlertDescription>
                 {notice}{' '}
                 <Link
-                  href={`/r/${draft.community.id.slice(-36)}`}
+                  href={communityHref(draft.community.address ?? draft.community.id)}
                   className="font-medium underline"
                 >
                   {words.viewCommunity[locale]}

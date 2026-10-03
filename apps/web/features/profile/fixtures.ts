@@ -1,3 +1,4 @@
+import { profileHref } from './route.ts';
 import type { FollowActions, FollowOutcome } from './follow-button.tsx';
 import type { AgentProfile, AgentWorksPage, CreditedWork, FollowState, LibraryView, ShelfCard } from './types.ts';
 
@@ -23,9 +24,9 @@ export function storyProfile(overrides: Partial<AgentProfile> = {}): AgentProfil
       + 'this, enough of that, and a pot that has seen forty winters. New chapters arrive on rainy weekends.' },
     avatarSelection: null, avatarUrl: null, handle, disclosure: 'public', sourcePosition: position,
     library: { visibility: 'public', statusShelvesVisible: true },
-    links: { profile: `/@${handle}`, works: `${path}/works`, collections: `${path}/collections`,
+    links: { profile: profileHref(handle), works: `${path}/works`, collections: `${path}/collections`,
       statusShelves: `${path}/shelves` },
-    resolution: { requestedHandle: handle, state: 'current', redirect: false, canonical: `/@${handle}` },
+    resolution: { requestedHandle: handle, state: 'current', redirect: false, canonical: profileHref(handle) },
     ...overrides };
 }
 
@@ -88,10 +89,11 @@ export function publicLibrary(own = false): LibraryView {
 export function followState(followers: number, following: boolean | null = null,
   kind: 'exact' | 'lower-bound' = 'exact'): FollowState {
   return { profile: 'follow-state-v1', following, revision: following === null ? null : '0192e0aa-0000-7000-8000-000000000001',
-    level: following === null ? null : 'highlights', source: following === null ? null : 'explicit', pinPosition: null,
+    ...{ level: following === null ? null : 'highlights' as const,
+      source: following === null ? null : 'explicit' as const, pinPosition: null },
     target: { id: storyId(1), kind: 'agent', name: name('Lin Mei 林梅', 'und'),
       icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: storyId(1), resourceType: 'agent' },
-      realm: null, href: '/@lin_mei' },
+      realm: null, href: profileHref('lin_mei') },
     followers: { value: followers, kind } };
 }
 

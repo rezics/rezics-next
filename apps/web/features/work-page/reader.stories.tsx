@@ -1,3 +1,5 @@
+import { chapterHref, textHref, workHref } from './route.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import * as fixture from './fixtures.ts';
@@ -8,7 +10,7 @@ import { ChapterNotFound, ChapterReader, ChapterUnavailable, TextNotFound, TextR
 import { defaultReaderSettings } from './reader-settings.ts';
 import { ChapterSkeleton } from './work-states.tsx';
 
-const chapterPath = `/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000003`;
+const chapterPath = chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000003');
 
 const meta = {
   title: 'Work page/Reader',
@@ -30,9 +32,9 @@ export const Reading: Story = {
     await expect(canvas.getByRole('link', { name: 'Continue where you left off' })).toHaveAttribute('href', '#p-2');
     const chapters = canvas.getByRole('navigation', { name: 'Chapters' });
     await expect(within(chapters).getByRole('link', { name: 'Previous chapter' }))
-      .toHaveAttribute('href', `/en/w/${fixture.workRef}/read/b5c7d9e1-f3a5-4b7c-9d1e-000000000002`);
+      .toHaveAttribute('href', localizedPath(chapterHref(fixture.workRef, 'b5c7d9e1-f3a5-4b7c-9d1e-000000000002'), 'en'));
     await expect(within(chapters).getByRole('link', { name: 'Next chapter' })).toHaveAttribute('rel', 'next');
-    await expect(canvas.getByRole('link', { name: 'The Cartographer of Tides' })).toHaveAttribute('href', `/en/w/${fixture.workRef}`);
+    await expect(canvas.getByRole('link', { name: 'The Cartographer of Tides' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef), 'en'));
     await expect(canvas.getByRole('button', { name: 'Mark chapter as read' })).toBeEnabled();
   },
 };
@@ -172,7 +174,7 @@ export const PhoneChromeTap: Story = {
 export const OneText: Story = {
   render: () => <TextReader workRef={fixture.workRef} work={fixture.oneTextWork} text={fixture.text} language={undefined}
     settings={defaultReaderSettings} actingSubject={null} locale="en" messages={messages.en} />,
-  parameters: { route: { pathname: `/w/${fixture.workRef}/read` } },
+  parameters: { route: { pathname: textHref(fixture.workRef) } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Pride and Prejudice' })).toBeVisible();
@@ -183,7 +185,7 @@ export const OneText: Story = {
     await expect(paragraphs).toHaveLength(2);
     await expect(paragraphs[0]).toHaveTextContent(/^It is a truth universally acknowledged/);
     await expect(canvas.queryByRole('navigation', { name: 'Chapters' })).toBeNull();
-    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef, 'contents'), 'en'));
     await expect(canvas.getByRole('button', { name: 'Reading settings' })).toBeVisible();
   },
 };
@@ -193,7 +195,7 @@ export const OneTextNotFound: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Nothing to read here' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef, 'contents'), 'en'));
   },
 };
 
@@ -202,7 +204,7 @@ export const NotFound: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Chapter not found' })).toBeVisible();
-    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', `/en/w/${fixture.workRef}/contents`);
+    await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href', localizedPath(workHref(fixture.workRef, 'contents'), 'en'));
   },
 };
 
@@ -291,10 +293,10 @@ export const InAVolume: Story = {
     const header = canvas.getByRole('article').querySelector('header')!;
     await expect(header).toHaveTextContent('Volume 2·Chapter 3');
     await expect(within(header).getByRole('link', { name: 'Volume 2' })).toHaveAttribute('href',
-      `/en/w/${fixture.workRef}/contents?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000902`);
+      localizedPath(`${workHref(fixture.workRef, 'contents')}?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000902`, 'en'));
     await expect(canvas.getByRole('heading', { level: 1 })).toHaveTextContent('The Surveyor’s Chain');
     await expect(canvas.getByRole('link', { name: 'Contents' })).toHaveAttribute('href',
-      `/en/w/${fixture.workRef}/contents?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000902`);
+      localizedPath(`${workHref(fixture.workRef, 'contents')}?open=b5c7d9e1-f3a5-4b7c-9d1e-000000000902`, 'en'));
   },
 };
 

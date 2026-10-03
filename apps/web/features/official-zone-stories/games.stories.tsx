@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref, spaceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ZoneContext, ZoneWork } from '@rezics/zone-sdk';
 import { expect, within } from 'storybook/test';
@@ -10,23 +12,24 @@ const text = (value: string) => ({ value, lang: 'en', dir: 'ltr' as const });
 const titles = ['Stardew Valley', 'Hades II', 'Witchbrook', 'Outer Wilds'];
 const works: ZoneWork[] = titles.map((title, index) => {
   const id = `00000000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`;
-  return { id: `https://rezics.com/id/${id}`, href: `/w/${id}`, title: text(title), cover: null,
+  return { id: `https://rezics.com/id/${id}`, href: resourceHref('/w/', id), title: text(title), cover: null,
     kind: 'document', author: null, tagline: text([
       'Build a farm and settle into a small town.', 'Take on the Titan of Time as Melinoë.',
       'Study magic in a seaside town.', 'Investigate a solar system caught in a time loop.'][index]!),
     status: null, chapters: null, words: null, updatedAt: null,
-    decision: `/r/games/decisions#decision-${index}` };
+    decision: `${spaceHref('games', 'community')}/decisions#decision-${index}` };
 });
 
 function Page({ locale = 'en' }: { locale?: 'en' | 'zh-Hans' }) {
   const zh = locale === 'zh-Hans';
-  const home = `/${locale}/r/games`;
+  const home = localizedPath(spaceHref('games', 'site'), locale);
+  const community = localizedPath(spaceHref('games', 'community'), locale);
   const zone: ZoneContext = { slug: 'games', realm: 'https://rezics.com/id/00000000-0000-7000-8000-000000000099',
     name: { value: zh ? '游戏' : 'Games', lang: locale, dir: 'ltr' },
     description: { value: zh ? '发现游戏与编辑推荐。' : 'Discover games and the reasons editors picked them.',
       lang: locale, dir: 'ltr' }, icon: null, hero: null, tokens: presetTokens.vibrant, locale,
-    links: { home, browse: `${home}/browse`, works: `${home}/browse`, discussions: `${home}/discussions`,
-      decisions: `${home}/decisions`, about: `${home}/about` } };
+    links: { home, browse: `${home}/browse`, works: `${home}/browse`, discussions: `${community}/discussions`,
+      decisions: `${community}/decisions`, about: `${community}/about` } };
   const modules = [
     { module: { id: 'picks', type: 'hero-carousel', title: zh ? '精选游戏' : 'Featured games',
       rail: false, layout: 'covers', shuffle: false, more: null }, state: { state: 'ready', data: {

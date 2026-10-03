@@ -28,7 +28,7 @@ import { DiscussionRegion } from './discussion.tsx';
 import { oneTextLanguage, readAdoptions, readAgentCredits, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readCredits, readDiscussion, readHistory, readingAgent, readRatings, readReaderState, readRealm,
   readReviewer, readReviews, readVersions, readWorkStats, readRecipeWorkPage,
-  readHubWorkPage, readText } from './read.ts';
+  readHubWorkPage, readText, readRatingPopulations } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
 import { type ContentsQuery, EVERYONE, mainScope, type HistoryFilter, idOf, type VersionQuery, type WorkAt, type WorkScope,
@@ -68,6 +68,17 @@ async function scopeRealms(id: string, scope: WorkScope | null, locale: UiLocale
   }) : [];
   if (scope?.kind === 'realm' && !realms.some(realm => realm.id === scope.realm)) {
     realms.unshift({ id: scope.realm, name: current?.ok ? current.data.name : null });
+  }
+  return realms;
+}
+
+async function ratingRealms(id: string, scope: WorkScope | null, locale: UiLocale): Promise<ScopeRealm[]> {
+  const [populations, current] = await Promise.all([readRatingPopulations(id, locale),
+    scope?.kind === 'realm' ? readRealm(scope.realm, locale) : null]);
+  const realms: ScopeRealm[] = populations.ok ? populations.data.items.filter(item => !item.global)
+    .map(item => ({ id: item.id.slice(-36), name: item.name, ratingCount: item.ratingCount, readerCommunity: item.readerCommunity })) : [];
+  if (scope?.kind === 'realm' && !realms.some(realm => realm.id === scope.realm)) {
+    realms.push({ id: scope.realm, name: current?.ok ? current.data.name : null });
   }
   return realms;
 }
@@ -171,7 +182,9 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
 async function ScopeBarSlot({ workRef, id, scope, tab = 'overview', locale, messages }: Common & {
   workRef: WorkAt; id: string; scope: WorkScope | null; tab?: 'overview' | 'discussion';
 }) {
-  return <ScopeBar workRef={workRef} scope={scope} realms={await scopeRealms(id, scope, locale)} tab={tab}
+  const [realms, agent] = await Promise.all([tab === 'overview' ? ratingRealms(id, scope, locale) : scopeRealms(id, scope, locale), readingAgent()]);
+  return <ScopeBar workRef={workRef} scope={scope} realms={realms} tab={tab}
+    target={tab === 'overview' ? `https://rezics.com/id/${id}` : undefined} actingSubject={agent.actingSubject ?? undefined}
     locale={locale} messages={messages} />;
 }
 
@@ -182,9 +195,12 @@ async function view({ workRef, id, scope, locale }: ScopedProps): Promise<ScopeV
 }
 
 async function Ratings(props: ScopedProps & { context: string | undefined }) {
-  const [scopeView, ratings] = await Promise.all([view(props), readRatings(props.id, props.scope, props.context)]);
+  const [realms, ratings, agent] = await Promise.all([ratingRealms(props.id, props.scope, props.locale),
+    readRatings(props.id, props.scope, props.context), readingAgent()]);
+  const scopeView: ScopeView = { workRef: props.workRef, scope: props.scope, realms };
   return <RatingSummaryRegion ratings={ratings} view={scopeView} locale={props.locale} messages={props.messages}
     scopeBar={<ScopeBar workRef={props.workRef} scope={props.scope} realms={scopeView.realms} locale={props.locale}
+      target={`https://rezics.com/id/${props.id}`} actingSubject={agent.actingSubject ?? undefined}
       messages={props.messages} />} />;
 }
 

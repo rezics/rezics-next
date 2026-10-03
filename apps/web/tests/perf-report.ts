@@ -7,17 +7,35 @@
 //
 // Build and serve with `task web:preview` (QA stack) or `vinext build` and
 // `wrangler dev --config dist/server/wrangler.json` against the shared backend.
+import { profileHref } from '../features/profile/route.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import { resourceHref, spaceHref } from '../features/address/path.ts';
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { chromium, type Page } from '@playwright/test';
 import { startPerfEdge } from './perf-edge.ts';
-import { formatSamples, measure, perfProfiles, type PerfSample, type PerfTarget } from './perf-measure.ts';
+import {
+  formatSamples,
+  measure,
+  perfProfiles,
+  type PerfSample,
+  type PerfTarget,
+} from './perf-measure.ts';
 import { signIn } from './perf-targets.ts';
 
-const { values } = parseArgs({ options: { base: { type: 'string' }, work: { type: 'string' },
-  chapter: { type: 'string' }, profile: { type: 'string' }, realm: { type: 'string', default: 'fiction' },
-  author: { type: 'string' }, runs: { type: 'string', default: '3' }, only: { type: 'string' },
-  json: { type: 'string' } } });
+const { values } = parseArgs({
+  options: {
+    base: { type: 'string' },
+    work: { type: 'string' },
+    chapter: { type: 'string' },
+    profile: { type: 'string' },
+    realm: { type: 'string', default: 'fiction' },
+    author: { type: 'string' },
+    runs: { type: 'string', default: '3' },
+    only: { type: 'string' },
+    json: { type: 'string' },
+  },
+});
 if (!values.base || !values.work || !values.chapter || !values.profile) {
   throw new Error('--base, --work, --chapter and --profile are required');
 }
@@ -33,11 +51,23 @@ const targets: PerfTarget[] = [
   { name: 'home', path: '/en', interact: typeSearch },
   { name: 'discover', path: '/en/discover', interact: typeSearch },
   { name: 'search', path: '/en/search?q=tide', interact: typeSearch },
-  { name: 'work', path: `/en/w/${values.work}`, interact: typeSearch },
-  { name: 'reader', path: `/en/w/${values.work}/read/${values.chapter}`, interact: typeSearch },
-  { name: 'realm', path: `/en/r/${values.realm}`, interact: typeSearch },
-  { name: 'profile', path: `/en/@${values.profile}`, interact: typeSearch },
-].filter(target => !values.only || values.only.split(',').includes(target.name));
+  {
+    name: 'work',
+    path: localizedPath(resourceHref('/w/', values.work), 'en'),
+    interact: typeSearch,
+  },
+  {
+    name: 'reader',
+    path: localizedPath(`${resourceHref('/w/', values.work)}/read/${values.chapter}`, 'en'),
+    interact: typeSearch,
+  },
+  {
+    name: 'realm',
+    path: localizedPath(spaceHref(values.realm, 'community'), 'en'),
+    interact: typeSearch,
+  },
+  { name: 'profile', path: localizedPath(profileHref(values.profile), 'en'), interact: typeSearch },
+].filter((target) => !values.only || values.only.split(',').includes(target.name));
 
 const browser = await chromium.launch();
 const edge = await startPerfEdge(values.base);
@@ -47,17 +77,24 @@ try {
   type State = Awaited<ReturnType<import('@playwright/test').BrowserContext['storageState']>>;
   let session: (() => Promise<State>) | undefined;
   if (values.author) {
-    const [email, password] = [values.author.slice(0, values.author.indexOf(':')),
-      values.author.slice(values.author.indexOf(':') + 1)];
+    const [email, password] = [
+      values.author.slice(0, values.author.indexOf(':')),
+      values.author.slice(values.author.indexOf(':') + 1),
+    ];
     session = async () => {
       const context = await browser.newContext({ baseURL: values.base });
       try {
         await signIn(await context.newPage(), '/en', { email, password });
         return await context.storageState();
-      } finally { await context.close(); }
+      } finally {
+        await context.close();
+      }
     };
     // Studio redirects to the signed-in person's own desk; measure the desk, not the redirect.
-    const context = await browser.newContext({ baseURL: values.base, storageState: await session() });
+    const context = await browser.newContext({
+      baseURL: values.base,
+      storageState: await session(),
+    });
     const page = await context.newPage();
     await page.goto('/en/studio');
     await page.waitForURL(/\/studio\/@/);
@@ -71,8 +108,15 @@ try {
     for (const profile of perfProfiles) {
       const runs: PerfSample[] = [];
       for (let run = 0; run < Number(values.runs); run += 1) {
-        runs.push(await measure(browser, edge.origin, target, profile,
-          target.name === 'studio' && session ? { storageState: await session() } : {}));
+        runs.push(
+          await measure(
+            browser,
+            edge.origin,
+            target,
+            profile,
+            target.name === 'studio' && session ? { storageState: await session() } : {},
+          ),
+        );
       }
       samples.push(median(runs));
       console.error(`${target.name} ${profile.name} done`);

@@ -1,3 +1,4 @@
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { idOf, iriOf, isUuid, type SearchParams, single, withQuery } from '../discover/scope.ts';
 import type { ResourceQuery } from '../../../../model/definitions/filter-document-v1.ts';
 
@@ -11,6 +12,8 @@ export type ConceptScope = { kind: 'global' } | { kind: 'realm'; realm: string }
 export interface ConceptState {
   /** The page's Concept, a UUID; always the first included value. */
   concept: string;
+  /** Main's canonical form, retained while conditions change. */
+  address?: AddressTarget;
   scope: ConceptScope;
   /** More Concepts, as UUIDs in the order they were added. */
   include: string[];
@@ -48,7 +51,7 @@ export function parseConceptState(concept: string, params: SearchParams,
 
 /** The page for a state; defaults (everyone, no more values, all) add nothing. */
 export function conceptHref(state: ConceptState): string {
-  return withQuery(`/concepts/${state.concept}`, {
+  return withQuery(resourceHref('/concepts/', state.address ?? state.concept), {
     ...(state.scope.kind === 'realm' ? { scope: 'realm', realm: state.scope.realm } : {}),
     include: state.include.join(','), exclude: state.exclude.join(','),
     match: state.include.length && state.match === 'any' ? 'any' : null });

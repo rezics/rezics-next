@@ -1,3 +1,6 @@
+import { resourceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
+import type { UiLocale } from '../i18n/define.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
@@ -7,16 +10,30 @@ import { signInAtAccounts } from './account-sign-in.ts';
 // a chapter occurrence and a release, a character, a resource of a type nobody registered (named in Arabic) and a
 // community. The browser reads them on the generic page, on desktop and on a phone, in English, Traditional Chinese
 // and a right-to-left content language, and starts a discussion from the chapter.
-interface Seeded { work: string; occurrence: string; release: string; character: string; hologram: string; realm: string }
+interface Seeded {
+  work: string;
+  occurrence: string;
+  release: string;
+  character: string;
+  hologram: string;
+  realm: string;
+}
 let seeded: Seeded;
 const started = Date.now();
-const lap = (step: string) => console.log(`[g-644] ${step} at ${Math.round((Date.now() - started) / 1000)}s`);
+const lap = (step: string) =>
+  console.log(`[g-644] ${step} at ${Math.round((Date.now() - started) / 1000)}s`);
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  const result = spawnSync('bun', ['apps/web/tests/g-644-seed.ts'], { cwd: process.cwd(), env: process.env,
-    encoding: 'utf8', timeout: 240_000 });
+  const result = spawnSync('bun', ['apps/web/tests/g-644-seed.ts'], {
+    cwd: process.cwd(),
+    env: process.env,
+    encoding: 'utf8',
+    timeout: 240_000,
+  });
   if (result.status !== 0 || result.error) {
-    throw new Error(`G-644 seed failed: ${result.stderr || result.error?.message || result.status}`);
+    throw new Error(
+      `G-644 seed failed: ${result.stderr || result.error?.message || result.status}`,
+    );
   }
   seeded = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as Seeded;
   lap('seeded');
@@ -26,10 +43,12 @@ test.beforeAll(async () => {
   let still = 0;
   for (const deadline = Date.now() + 90_000; Date.now() < deadline && still < 4;) {
     const response = await fetch(main).catch(() => null);
-    const position = response?.ok ? JSON.stringify((await response.json() as { sourcePosition: unknown }).sourcePosition) : '';
+    const position = response?.ok
+      ? JSON.stringify(((await response.json()) as { sourcePosition: unknown }).sourcePosition)
+      : '';
     still = position && position === last ? still + 1 : 0;
     last = position;
-    await new Promise(done => setTimeout(done, 500));
+    await new Promise((done) => setTimeout(done, 500));
   }
   if (still < 4) throw new Error('Main’s graph kept moving for 90 seconds after the seed');
   lap('graph still');
@@ -38,12 +57,16 @@ test.beforeAll(async () => {
 const uuid = (iri: string) => iri.slice(-36);
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
-const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+const overflows = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
 const bookControls = /^(read|start reading|continue reading)$/i;
 
 /** One screenshot per viewport, none with horizontal overflow. */
 async function shoot(page: Page, path: string, name: string, info: TestInfo) {
-  for (const [label, viewport] of [['desktop', desktop], ['phone', phone]] as const) {
+  for (const [label, viewport] of [
+    ['desktop', desktop],
+    ['phone', phone],
+  ] as const) {
     await page.setViewportSize(viewport);
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -54,12 +77,18 @@ async function shoot(page: Page, path: string, name: string, info: TestInfo) {
   await page.setViewportSize(desktop);
 }
 
-test('any admitted resource has a page, and a discussion starts from it', async ({ page }, info) => {
+test('any admitted resource has a page, and a discussion starts from it', async ({
+  page,
+}, info) => {
   test.setTimeout(420_000);
   const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
-  if (!path) throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
-  const { member } = JSON.parse(readFileSync(path, 'utf8')) as { member: { email: string; password: string } };
-  const at = (resource: string, locale = 'en') => `/${locale}/e/${uuid(resource)}`;
+  if (!path)
+    throw new Error('REZICS_WEB_AUTH_PRIVATE_PATH must point to the isolated QA web-auth fixture');
+  const { member } = JSON.parse(readFileSync(path, 'utf8')) as {
+    member: { email: string; password: string };
+  };
+  const at = (resource: string, locale: UiLocale = 'en') =>
+    localizedPath(resourceHref('/e/', uuid(resource)), locale);
   await page.setViewportSize(desktop);
 
   // Signed out: the page reads, relations ask for a sign-in and "Discuss" leads to sign-in rather than a dead end.
@@ -77,7 +106,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
     // Relations are public: signed out, the section asks for no sign-in.
     await expect(page.getByText(/Sign in to see/)).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Relations' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Discuss this list item' }).first()).toHaveAttribute('href', /\/auth\/start\?next=/);
+    await expect(
+      page.getByRole('link', { name: 'Discuss this list item' }).first(),
+    ).toHaveAttribute('href', /\/auth\/start\?next=/);
   } else {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Nothing here');
   }
@@ -88,7 +119,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   // Start a discussion on the chapter occurrence, reload, and come back to it.
   await expect(page.getByRole('heading', { name: 'Discussion' })).toBeVisible();
   await page.getByRole('link', { name: 'Discuss this list item' }).first().click();
-  await expect(page).toHaveURL(new RegExp(`/en/submit\\?target=${uuid(seeded.occurrence)}$`), { timeout: 30_000 });
+  await expect(page).toHaveURL(new RegExp(`/en/submit\\?target=${uuid(seeded.occurrence)}$`), {
+    timeout: 30_000,
+  });
   await page.getByRole('searchbox', { name: 'Find a community' }).fill('Aincrad');
   await page.getByRole('button', { name: 'Aincrad readers' }).click();
   // The target is fixed by the page that asked; it cannot be searched away.
@@ -96,7 +129,9 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByText('Sword Art Online (web)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Change Work' })).toHaveCount(0);
   await page.locator('#post-title').fill('Who is Asuna in chapter one?');
-  await page.getByRole('textbox', { name: 'Your post' }).fill('Does anyone else think chapter one is slow on purpose?');
+  await page
+    .getByRole('textbox', { name: 'Your post' })
+    .fill('Does anyone else think chapter one is slow on purpose?');
   // The composer is ready to publish at the chapter. Publishing itself is not driven here: Main gives an author no way to
   // read a realm draft's revision digest before its placement (member-replies answers 404 until then), which the
   // composer needs for the placement; the handoff names it. The draft survives a reload and the way back.
@@ -132,9 +167,11 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await expect(page.getByRole('button', { name: bookControls })).toHaveCount(0);
 
   // A missing resource and a Work at /e: the first is a 404, the second moves to the Work's own host.
-  expect((await page.goto(`/en/e/${crypto.randomUUID()}`))?.status()).toBe(404);
+  expect(
+    (await page.goto(localizedPath(resourceHref('/e/', crypto.randomUUID()), 'en')))?.status(),
+  ).toBe(404);
   await page.goto(at(seeded.work));
-  await expect(page).toHaveURL(`/en/w/${uuid(seeded.work)}`);
+  await expect(page).toHaveURL(localizedPath(resourceHref('/w/', uuid(seeded.work)), 'en'));
 
   // The same pages in Traditional Chinese keep the content in its own language and the interface in the reader's.
   await page.goto(at(seeded.character, 'zh-Hant'));
@@ -149,4 +186,3 @@ test('any admitted resource has a page, and a discussion starts from it', async 
   await shoot(page, at(seeded.hologram), 'hologram-rtl', info);
   await shoot(page, at(seeded.occurrence, 'zh-Hant'), 'occurrence-zh-Hant', info);
 });
-

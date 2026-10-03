@@ -1,9 +1,20 @@
+import { spaceHref, zoneMemberHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { direction } from '@rezics/main/language';
 import type { ZoneContext, ZoneReleaseFilterSpec, ZoneWork } from '@rezics/zone-sdk';
 import { facetRegistry } from '../../../../packages/model/src/generated/facets.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { type ReleaseHit, type ReleaseRecords, type ReleaseResult, releaseWork } from '../release-filter/adapt.ts';
-import { resolveReleaseFilter, type ResolvedReleaseFilter, type ServedFacet } from '../release-filter/registry.ts';
+import {
+  type ReleaseHit,
+  type ReleaseRecords,
+  type ReleaseResult,
+  releaseWork,
+} from '../release-filter/adapt.ts';
+import {
+  resolveReleaseFilter,
+  type ResolvedReleaseFilter,
+  type ServedFacet,
+} from '../release-filter/registry.ts';
 import type { ReleaseFilterState } from '../release-filter/state.ts';
 import { presetTokens } from '../zones/presentation.ts';
 import type { Realization, Release } from '../work-levels/types.ts';
@@ -16,25 +27,53 @@ import type { Realization, Release } from '../work-levels/types.ts';
 export const served = Object.values(facetRegistry) as unknown as ServedFacet[];
 
 /** The Zone's filter spec (read from its package by the story, as the host loader would) against the served registry. */
-export const resolvedFilter = (spec: ZoneReleaseFilterSpec, locale: UiLocale): ResolvedReleaseFilter =>
-  resolveReleaseFilter(spec, served, locale)!;
+export const resolvedFilter = (
+  spec: ZoneReleaseFilterSpec,
+  locale: UiLocale,
+): ResolvedReleaseFilter => resolveReleaseFilter(spec, served, locale)!;
 
 const text = (value: string, lang = 'en') => ({ value, lang, dir: direction(lang, value) });
-const id = (name: string) => `https://rezics.com/id/00000000-0000-7000-8000-${name.padStart(12, '0')}`;
+const id = (name: string) =>
+  `https://rezics.com/id/00000000-0000-7000-8000-${name.padStart(12, '0')}`;
 
 export function zoneFor(slug: 'visual-novels' | 'light-novels', locale: UiLocale): ZoneContext {
-  const home = `/${locale}/r/${slug}`;
-  return { slug, realm: id('1'), name: text(slug === 'visual-novels' ? 'Visual Novels' : 'Light Novels'),
-    description: null, icon: null, hero: null, tokens: presetTokens.editorial, locale,
-    links: { home, browse: `${home}/browse`, works: `${home}/browse`, discussions: `${home}/discussions`,
-      decisions: `${home}/decisions`, about: `${home}/about` } };
+  const home = localizedPath(spaceHref(slug, 'site'), locale);
+  return {
+    slug,
+    realm: id('1'),
+    name: text(slug === 'visual-novels' ? 'Visual Novels' : 'Light Novels'),
+    description: null,
+    icon: null,
+    hero: null,
+    tokens: presetTokens.editorial,
+    locale,
+    links: {
+      home,
+      browse: `${home}/browse`,
+      works: `${home}/browse`,
+      discussions: localizedPath(spaceHref(slug, 'community', ['discussions']), locale),
+      decisions: localizedPath(spaceHref(slug, 'community', ['decisions']), locale),
+      about: localizedPath(spaceHref(slug, 'community', ['about']), locale),
+    },
+  };
 }
 
 const novel = { garden: id('a1'), fable: id('a2'), crossing: id('a3'), tale: id('a4') } as const;
-const coverage = (work: string, language: string, completeness: 'complete' | 'partial' | 'trial' | 'unknown',
-  realization: string | null) => ({ work, mainVersion: id('9'), language, completeness, realization, revision: null });
-const release = (key: string, overrides: Partial<Release>) => ({ id: id(key), platform: 'Windows', status: 'official',
-  contentLanguages: ['en'], coverage: [], ...overrides }) as unknown as Release;
+const coverage = (
+  work: string,
+  language: string,
+  completeness: 'complete' | 'partial' | 'trial' | 'unknown',
+  realization: string | null,
+) => ({ work, mainVersion: id('9'), language, completeness, realization, revision: null });
+const release = (key: string, overrides: Partial<Release>) =>
+  ({
+    id: id(key),
+    platform: 'Windows',
+    status: 'official',
+    contentLanguages: ['en'],
+    coverage: [],
+    ...overrides,
+  }) as unknown as Release;
 const realization = (key: string, language: string, translators: string[]) =>
   ({ id: id(key), language, translators }) as unknown as Realization;
 
@@ -45,30 +84,71 @@ const records: ReleaseRecords = {
     [id('r1'), release('r1', { coverage: [coverage(novel.garden, 'en', 'complete', id('t1'))] })],
     [id('r6'), release('r6', { coverage: [coverage(novel.garden, 'en', 'complete', id('t1'))] })],
     // Fan Translated Fable: Japanese complete and an English fan translation of it, complete.
-    [id('r2'), release('r2', { status: 'unofficial', coverage: [coverage(novel.fable, 'en', 'complete', id('t2'))] })],
+    [
+      id('r2'),
+      release('r2', {
+        status: 'unofficial',
+        coverage: [coverage(novel.fable, 'en', 'complete', id('t2'))],
+      }),
+    ],
     // Starlit Crossing: an English Switch release and an English Windows one, complete.
-    [id('r3'), release('r3', { platform: 'Switch', coverage: [coverage(novel.crossing, 'en', 'complete', id('t1'))] })],
+    [
+      id('r3'),
+      release('r3', {
+        platform: 'Switch',
+        coverage: [coverage(novel.crossing, 'en', 'complete', id('t1'))],
+      }),
+    ],
     [id('r4'), release('r4', { coverage: [coverage(novel.crossing, 'en', 'complete', id('t1'))] })],
     // A fan release of a Japanese novel with no platform recorded and an unknown completeness.
-    [id('r5'), release('r5', { status: 'unofficial', platform: null, contentLanguages: ['ja'],
-      coverage: [coverage(novel.tale, 'ja', 'unknown', null)] })],
+    [
+      id('r5'),
+      release('r5', {
+        status: 'unofficial',
+        platform: null,
+        contentLanguages: ['ja'],
+        coverage: [coverage(novel.tale, 'ja', 'unknown', null)],
+      }),
+    ],
   ]),
-  realizations: new Map([[id('t1'), realization('t1', 'en', [])],
-    [id('t2'), realization('t2', 'en', [id('g1'), id('g2')])]]),
-  translators: new Map([[id('g1'), text('Moonlight Translators')], [id('g2'), text('Aoi')]]),
+  realizations: new Map([
+    [id('t1'), realization('t1', 'en', [])],
+    [id('t2'), realization('t2', 'en', [id('g1'), id('g2')])],
+  ]),
+  translators: new Map([
+    [id('g1'), text('Moonlight Translators')],
+    [id('g2'), text('Aoi')],
+  ]),
 };
 
-const hit = (work: string, title: string, matched: string[], more = false, lang = 'en'): ReleaseHit => ({ id: work,
-  title: { value: title, language: lang, direction: direction(lang, title), basis: 'requested' } as ReleaseHit['title'], cover: null,
-  matchedReleases: matched, moreMatchedReleases: more });
+const hit = (
+  work: string,
+  title: string,
+  matched: string[],
+  more = false,
+  lang = 'en',
+): ReleaseHit => ({
+  id: work,
+  title: {
+    value: title,
+    language: lang,
+    direction: direction(lang, title),
+    basis: 'requested',
+  } as ReleaseHit['title'],
+  cover: null,
+  matchedReleases: matched,
+  moreMatchedReleases: more,
+});
 
 /** The Main answers each story's filter would get: only Works with a release meeting every condition. */
 const answers: Record<string, ReleaseHit[]> = {
   // English + Windows + complete: the fan Fable, the Garden through both its Windows releases, and Crossing through
   // its Windows one (its Switch release does not meet the platform condition, so Main does not name it).
-  windows: [hit(novel.fable, 'Fan Translated Fable', [id('r2')]),
+  windows: [
+    hit(novel.fable, 'Fan Translated Fable', [id('r2')]),
     hit(novel.garden, 'Moonlit Garden', [id('r1'), id('r6')]),
-    hit(novel.crossing, 'Starlit Crossing', [id('r4')])],
+    hit(novel.crossing, 'Starlit Crossing', [id('r4')]),
+  ],
   // English + Switch: only Crossing.
   switch: [hit(novel.crossing, 'Starlit Crossing', [id('r3')])],
   // English + Windows with more matching releases than a card lists.
@@ -80,12 +160,35 @@ const answers: Record<string, ReleaseHit[]> = {
 export type Answer = keyof typeof answers;
 
 /** The cards of a filtered page, from the records for `answer`. */
-export function results(answer: Answer, locale: UiLocale, state: ReleaseFilterState): ReleaseResult[] {
+export function results(
+  answer: Answer,
+  locale: UiLocale,
+  state: ReleaseFilterState,
+): ReleaseResult[] {
   const context = { locale, ref: 'visual-novels', realm: id('1') };
-  return answers[answer]!.map(item => releaseWork(item, state, { coverKind: 'game' }, context, records));
+  return answers[answer]!.map((item) =>
+    releaseWork(item, state, { coverKind: 'game' }, context, records),
+  );
 }
 
-export const seriesWorks: ZoneWork[] = ['Sword Art Online', 'A Certain Magical Index', 'Spice and Wolf'].map((title, index) => ({
-  id: id(`b${index}`), href: `/en/r/light-novels/catalogue/${id(`b${index}`).slice(-36)}`, title: text(title), cover: null,
-  kind: 'book' as const, author: null, tagline: null, status: null, chapters: null, words: null, updatedAt: null,
-  decision: null }));
+export const seriesWorks: ZoneWork[] = [
+  'Sword Art Online',
+  'A Certain Magical Index',
+  'Spice and Wolf',
+].map((title, index) => ({
+  id: id(`b${index}`),
+  href: localizedPath(
+    zoneMemberHref('light-novels', 'catalogue', id(`b${index}`).slice(-36)),
+    'en',
+  ),
+  title: text(title),
+  cover: null,
+  kind: 'book' as const,
+  author: null,
+  tagline: null,
+  status: null,
+  chapters: null,
+  words: null,
+  updatedAt: null,
+  decision: null,
+}));

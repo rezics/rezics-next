@@ -16,14 +16,24 @@ const locales = { en: messages, 'zh-Hant': zhHant, 'zh-Hans': zhHans, ja, ko, de
 const meta = {
   title: 'Zones/Missing page',
   component: ZonePageMissing,
-  args: { title: messages.pageMissingTitle, body: messages.pageMissingBody,
-    back: messages.pageMissingBack, href: '/r/franchise-wiki' },
-  parameters: { route: { pathname: '/en/r/franchise-wiki/missing' } },
+  args: {
+    title: messages.pageMissingTitle,
+    body: messages.pageMissingBody,
+    back: messages.pageMissingBack,
+    href: '/z/franchise-wiki',
+  },
+  parameters: { route: { pathname: '/en/z/franchise-wiki/missing' } },
   render: (_args, { globals }) => {
     const locale = (globals.locale as UiLocale | undefined) ?? 'en';
     const copy = { ...messages, ...locales[locale] };
-    return <ZonePageMissing title={copy.pageMissingTitle} body={copy.pageMissingBody}
-      back={copy.pageMissingBack} href="/r/franchise-wiki" />;
+    return (
+      <ZonePageMissing
+        title={copy.pageMissingTitle}
+        body={copy.pageMissingBody}
+        back={copy.pageMissingBack}
+        href="/z/franchise-wiki"
+      />
+    );
   },
 } satisfies Meta<typeof ZonePageMissing>;
 export default meta;
@@ -33,21 +43,31 @@ type Story = StoryObj<typeof meta>;
 export const Missing: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { level: 1, name: 'This page isn’t here' })).toBeVisible();
-    await expect(canvas.getByText('The address may be wrong, or the page may have moved.')).toBeVisible();
+    await expect(
+      canvas.getByRole('heading', { level: 1, name: 'This page isn’t here' }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByText('The address may be wrong, or the page may have moved.'),
+    ).toBeVisible();
     await expect(canvas.queryByRole('heading', { name: 'This community isn’t here' })).toBeNull();
-    await expect(canvas.getByRole('link', { name: 'Back to this community' })).toHaveAttribute('href',
-      '/en/r/franchise-wiki');
+    await expect(canvas.getByRole('link', { name: 'Back to this community' })).toHaveAttribute(
+      'href',
+      '/en/z/franchise-wiki',
+    );
   },
 };
 
 export const MissingJapanese: Story = {
   globals: { locale: 'ja' },
-  parameters: { route: { pathname: '/ja/r/franchise-wiki/missing' } },
+  parameters: { route: { pathname: '/ja/z/franchise-wiki/missing' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { level: 1, name: 'このページは見つかりません' })).toBeVisible();
-    await expect(canvas.queryByRole('heading', { name: 'このコミュニティは見つかりません' })).toBeNull();
+    await expect(
+      canvas.getByRole('heading', { level: 1, name: 'このページは見つかりません' }),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByRole('heading', { name: 'このコミュニティは見つかりません' }),
+    ).toBeNull();
   },
 };
 

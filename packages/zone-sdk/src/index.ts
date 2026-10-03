@@ -180,8 +180,8 @@ export interface ZoneModule<Type extends ZoneModuleType = ZoneModuleType> {
 export interface ZoneContext {
   /** The official route segment, or null for a community Zone. */
   slug: string | null;
-  /** The Realm's native IRI. */
-  realm: string;
+  /** The Realm's native IRI, or null for a site with no community capability. */
+  realm: string | null;
   name: ZoneText;
   description: ZoneText | null;
   icon: ZoneImage | null;

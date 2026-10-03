@@ -1,3 +1,4 @@
+import { type AddressTarget } from '../address/path.ts';
 import type { Metadata } from 'next';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localeAlternates, pageUrl } from '../seo/address.ts';
@@ -22,7 +23,8 @@ export async function entityMetadata(ref: string, query: SearchParams, locale: U
   const { summary, target } = projection.data;
   if (summary.status !== 'available') return { title: copyOf(locale).notFoundTitle };
   const origin = (await pageUrl())?.origin ?? null;
-  const alternates = origin ? localeAlternates(origin, entityHref(id), locale) : null;
+  const address = 'address' in summary ? summary.address as AddressTarget : id;
+  const alternates = origin ? localeAlternates(origin, entityHref(address), locale) : null;
   const cursors = parseEntityCursors(query);
   const paged = !cursors || Object.keys(cursors).length > 0;
   return { title: summary.name.value, ...(alternates ? { alternates } : {}),

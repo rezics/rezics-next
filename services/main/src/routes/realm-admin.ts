@@ -11,9 +11,11 @@ import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPage, joinRequestWithdraw,
-  joinRequestDecision, joinRequestDecisionReceipt, RealmJoinRequestMissing } from '../modules/realm-admin/join-requests.ts';
+  joinRequestDecision, joinRequestDecisionReceipt, RealmJoinRequestMissing, joinRequestQuery,
+  ownJoinRequestQuery, ownJoinRequestPage } from '../modules/realm-admin/join-requests.ts';
 
 export const openApiOperations = {
+  '/v1/realms/{realm}/join-requests/mine': { get: { bearer: true } },
   '/v1/realms/{realm}/join-requests/{request}/withdraw': { post: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/join-requests/{request}/decisions': { post: { bearer: true, idempotencyKey: true } },
   '/v1/realms/{realm}/join-requests/basis': { get: { bearer: true } },
@@ -95,15 +97,23 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
         return Response.json(result, { headers, status: result.replayed ? 200 : 201 });
       } catch (error) { return errorResponse(error); }
     })
-    .get('/v1/realms/:realm/join-requests', { params,
-      query: t.Object({ actingSubject: readId, after: t.Optional(readUuid), limit: t.Optional(t.Integer({ minimum: 1, maximum: 50 })) },
-        { additionalProperties: false }), response: { 200: joinRequestPage, ...authorizedReadProblems, ...problems },
+    .get('/v1/realms/:realm/join-requests/mine', { params, query: ownJoinRequestQuery,
+      response: { 200: ownJoinRequestPage, ...authorizedReadProblems, ...problems },
+    }, async ({ request, params: path, query: options }) => {
+      try {
+        const principal = await work.account.verify(request, ['access:membership-consent']);
+        if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
+        return Response.json(await work.realmJoinRequests.own(principal, `https://rezics.com/id/${path.realm}`, options), { headers });
+      } catch (error) { return errorResponse(error); }
+    })
+    .get('/v1/realms/:realm/join-requests', { params, query: joinRequestQuery,
+      response: { 200: joinRequestPage, ...authorizedReadProblems, ...problems },
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
         if (!work.realmJoinRequests) throw new RealmAdminUnavailable('Join requests are unavailable');
         return Response.json(await work.realmJoinRequests.list(principal, `https://rezics.com/id/${path.realm}`,
-          options.actingSubject, options.after, options.limit), { headers });
+          options), { headers });
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/spaces/:space/settings', { params: t.Object({ space: readUuid }), query,

@@ -1,5 +1,6 @@
 'use client';
 
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/radio-group';
 
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
@@ -88,6 +89,7 @@ function Results({ candidates, t, busy, onTranslate, onAlias, onCreate, canStart
         const creators = attributesOf(candidate, 'creator').map(creator => creator.value);
         const unverified = attributeOf(candidate, 'verification')?.value === 'unverified';
         const id = idOf(candidate.work);
+        const address = 'address' in candidate ? candidate.address as AddressTarget : candidate.work;
         return <li key={candidate.work} data-candidate={id} className="grid gap-3 rounded-2xl border border-border/70
           bg-card p-4">
           <div className="grid min-w-0 gap-1">
@@ -103,11 +105,11 @@ function Results({ candidates, t, busy, onTranslate, onAlias, onCreate, canStart
                 {index ? ' · ' : ''}<span lang={alias.language ?? undefined}>{alias.value}</span></span>)}</p> : null}
           </div>
           <div role="group" aria-label={t.candidateActions({ title: title?.value ?? id })} className="flex flex-wrap gap-2">
-            <Link href={`/w/${id}`} className={buttonVariants({ size: 'sm' })}>{t.useExisting}</Link>
+            <Link href={resourceHref('/w/', address)} className={buttonVariants({ size: 'sm' })}>{t.useExisting}</Link>
             <Button type="button" variant="outline" size="sm" onClick={() => onAlias(candidate)}>{t.addAlias}</Button>
             <Button type="button" variant="outline" size="sm" isLoading={busy === candidate.work}
               disabled={busy !== null} onClick={() => onTranslate(candidate)}>{t.addTranslation}</Button>
-            <Link href={`/w/${id}/edit/parts`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.addPart}</Link>
+            <Link href={`${resourceHref('/w/', address)}/edit/parts`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.addPart}</Link>
           </div>
         </li>;
       })}
@@ -303,8 +305,8 @@ export function IntakeWizard({ actingSubject, locale, port, types = [], saveAlia
         <AlertDescription>{t.createdBody}</AlertDescription></Alert>
       <ProvisionalNotice verification={step.verification} provenance={step.provenance} locale={locale} />
       <div className="flex flex-wrap gap-2">
-        <Link href={`/w/${idOf(step.work)}`} className={buttonVariants()}>{t.openRecord}</Link>
-        {step.parent ? <Link href={`/w/${idOf(step.parent.work)}/edit/parts`}
+        <Link href={resourceHref('/w/', step.work)} className={buttonVariants()}>{t.openRecord}</Link>
+        {step.parent ? <Link href={`${resourceHref('/w/', step.parent.work)}/edit/parts`}
           className={buttonVariants({ variant: 'outline' })}>
           {t.addToSeries({ series: attributeOf(step.parent, 'title')?.value ?? idOf(step.parent.work) })}</Link> : null}
         <Button type="button" variant="ghost" onClick={() => { polling.current++; setStep({ name: 'search' }); setText(''); setNotice(null); setKind('story'); }}>

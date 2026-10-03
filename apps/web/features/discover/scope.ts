@@ -2,6 +2,8 @@
 // (`?scope=realm&realm={uuid}`), so a reader keeps their scope between pages.
 // Pure functions shared by routes, components and tests.
 
+import { type AddressTarget, resourceHref } from '../address/path.ts';
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const idPrefix = 'https://rezics.com/id/';
 
@@ -14,9 +16,11 @@ export type BrowseScope = { kind: 'global' } | { kind: 'realm'; realm: string } 
 export type SearchParams = Record<string, string | string[] | undefined>;
 
 /** A query value given once; callers refuse repeated keys rather than pick one. */
-export const single = (value: string | string[] | undefined) => (Array.isArray(value) ? undefined : value);
+export const single = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? undefined : value;
 
-export const isUuid = (value: string | null | undefined): value is string => !!value && uuid.test(value);
+export const isUuid = (value: string | null | undefined): value is string =>
+  !!value && uuid.test(value);
 
 /** The UUID of a native IRI (`https://rezics.com/id/{uuid}`), or null. */
 export function idOf(iri: string): string | null {
@@ -34,7 +38,8 @@ export function parseScope(params: SearchParams): BrowseScope | null {
   if (Array.isArray(params.scope) || Array.isArray(params.realm)) return null;
   const scope = single(params.scope);
   const realm = single(params.realm);
-  if (scope === undefined || scope === 'global') return realm === undefined ? { kind: 'global' } : null;
+  if (scope === undefined || scope === 'global')
+    return realm === undefined ? { kind: 'global' } : null;
   if (scope === 'mine') return realm === undefined ? { kind: 'mine' } : null;
   if (scope === 'realm' && isUuid(realm)) return { kind: 'realm', realm };
   return null;
@@ -56,11 +61,13 @@ export function neighbourScope(scope: BrowseScope): BrowseScope | null {
 
 /** `path?query`, dropping empty values, with keys in the order given. */
 export function withQuery(path: string, query: Record<string, string | null | undefined>): string {
-  const entries = Object.entries(query).filter((entry): entry is [string, string] => Boolean(entry[1]));
+  const entries = Object.entries(query).filter((entry): entry is [string, string] =>
+    Boolean(entry[1]),
+  );
   return entries.length ? `${path}?${new URLSearchParams(entries)}` : path;
 }
 
-/** A Work's page (`/w/{id}`) in the scope the reader was browsing. */
-export function workHref(work: string, scope: BrowseScope): string {
-  return withQuery(`/w/${idOf(work) ?? encodeURIComponent(work)}`, scopeQuery(scope));
+/** A Work's durable address in the scope the reader was browsing. */
+export function workHref(work: AddressTarget, scope: BrowseScope): string {
+  return withQuery(resourceHref('/w/', work), scopeQuery(scope));
 }
