@@ -23,6 +23,7 @@ import { seedModeration } from './moderation-step.ts';
 import { seedOfficialZones } from './official-zones-step.ts';
 import { seedZoneSites } from './zone-sites-step.ts';
 import { seedOfficialThemes } from './official-theme-step.ts';
+import { seedOfficialWiki } from './official-wiki-step.ts';
 import { people, realms, works } from './plan.ts';
 import { seedProfileBios } from './profile-bios-step.ts';
 import { seedProfileCredits } from './profile-credits-step.ts';
@@ -41,16 +42,16 @@ import { refreshSeedTokens, type SeedState, type SeedStep } from './state.ts';
 import { seedVnCatalogue } from './vn-catalogue-step.ts';
 import { seedWorks } from './works-step.ts';
 
-interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean }
+interface Options { dryRun: boolean; resetOwn: boolean; themesOnly: boolean; zonesOnly: boolean; wikiOnly: boolean }
 
 export function parseOptions(args: string[]): Options {
-  if (args.some(arg => !['--dry-run', '--reset-own', '--themes-only', '--zones-only'].includes(arg))
+  if (args.some(arg => !['--dry-run', '--reset-own', '--themes-only', '--zones-only', '--wiki-only'].includes(arg))
     || new Set(args).size !== args.length
-    || args.includes('--themes-only') && args.includes('--zones-only')) {
-    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own] [--themes-only | --zones-only]');
+    || args.filter(arg => ['--themes-only', '--zones-only', '--wiki-only'].includes(arg)).length > 1) {
+    throw new Error('Usage: bun scripts/dev/seed/cli.ts [--dry-run] [--reset-own] [--themes-only | --zones-only | --wiki-only]');
   }
   return { dryRun: args.includes('--dry-run'), resetOwn: args.includes('--reset-own'),
-    themesOnly: args.includes('--themes-only'), zonesOnly: args.includes('--zones-only') };
+    themesOnly: args.includes('--themes-only'), zonesOnly: args.includes('--zones-only'), wikiOnly: args.includes('--wiki-only') };
 }
 
 function commonRoot(): string {
@@ -130,6 +131,7 @@ export const steps: readonly SeedStep[] = [
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedZoneSites, seedBookConcepts,
   seedOfficialThemes,
+  seedOfficialWiki,
   seedProfileShelves, seedCommunityRealms, seedCommunityDiscussions, seedReadingLives, seedRatings,
   seedReviews, seedCommunityVotes, seedCoReaders,
   checkPublicReads, printSeedReport,
@@ -173,7 +175,7 @@ async function run(options: Options): Promise<boolean> {
     commentCount: 0, replyCount: 0, reviewCount: 0, profileCreditCount: 0, profileFollowCount: 0 };
   const timings: string[] = [];
   const started = performance.now();
-  const plan: readonly SeedStep[] = options.themesOnly
+  const plan: readonly SeedStep[] = options.wikiOnly ? [seedAccounts, seedOfficialWiki] : options.themesOnly
     ? [seedAccounts, state => seedOfficialThemes(state, realms.map(realm => realm.id))]
     : options.zonesOnly ? [seedAccounts, seedClassics, seedWorks, seedRealms, seedOfficialThemes] : steps;
   for (const step of plan) {
@@ -196,7 +198,7 @@ async function run(options: Options): Promise<boolean> {
   for (const line of timings) console.log(line);
   console.log(`Seed record writes: ${writeCounts.written}; receipt replays: ${writeCounts.replayed}; already match: ${
     writeCounts.reconciled}; lookups: ${writeCounts.lookups}.`);
-  if ((options.themesOnly || options.zonesOnly) && findings.size) {
+  if ((options.themesOnly || options.zonesOnly || options.wikiOnly) && findings.size) {
     console.log('Zone seed findings:');
     for (const finding of findings) console.log(`  ${finding}`);
   }

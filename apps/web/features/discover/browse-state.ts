@@ -1,5 +1,7 @@
 import type { FilterCondition } from '../../../../model/definitions/filter-document-v1.ts';
 import { browseCategories } from '../catalogue/registry.ts';
+import { normalizeLanguage } from '../search/state.ts';
+import { workTypeKeys, workTypes, type WorkTypeKey } from './state.ts';
 import { browseTypeCondition, type ResourceQuery, type SectionId } from './api.ts';
 import {
   idOf,
@@ -26,6 +28,10 @@ export interface BrowseState {
   cursor: string | null;
   section: SectionId | null;
   personalized: boolean;
+  /** Retired /search type and content-language Conditions remain explicit. */
+  includeTypes?: WorkTypeKey[];
+  excludeTypes?: WorkTypeKey[];
+  language?: string;
 }
 export const emptyBrowse: BrowseState = {
   scope: { kind: 'global' },
@@ -52,6 +58,9 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
       'cursor',
       'section',
       'personalization',
+      'include',
+      'exclude',
+      'lang',
     ].some((key) => Array.isArray(params[key]))
   )
     return null;
@@ -72,6 +81,15 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
   const cursor = single(params.cursor) ?? null,
     section = single(params.section) ?? null;
   const personalization = single(params.personalization);
+  const types = (raw: string | undefined): WorkTypeKey[] | null => {
+    if (raw === undefined) return [];
+    const values = raw.split(',');
+    return values.every(value => workTypeKeys.some(key => key === value))
+      && new Set(values).size === values.length ? values as WorkTypeKey[] : null;
+  };
+  const includeTypes = types(single(params.include)), excludeTypes = types(single(params.exclude));
+  const rawLanguage = single(params.lang);
+  const language = rawLanguage ? normalizeLanguage(rawLanguage) : null;
   // Refuse legacy selectors rather than silently display a wider catalogue.
   if (
     (params.type !== undefined &&
@@ -81,6 +99,8 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
     !scope ||
     scope.kind === 'mine' ||
     !browseTabs().some((value) => value === tab) ||
+    !includeTypes || !excludeTypes || includeTypes.some(type => excludeTypes.includes(type)) ||
+    (rawLanguage && !language) ||
     q.length > 80 ||
     /[\u0000-\u001f\u007f]/u.test(q) ||
     ![...include, ...exclude].every(isUuid) ||
@@ -91,7 +111,8 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
     (cursor !== null && (!cursor || cursor.length > 2048)) ||
     (section !== null && !['popular', 'communities', 'sites'].includes(section)) ||
     (section !== null &&
-      (tab !== 'all' || q || include.length || exclude.length || scope.kind !== 'global')) ||
+      (tab !== 'all' || q || include.length || exclude.length || includeTypes.length || excludeTypes.length
+        || language || scope.kind !== 'global')) ||
     (personalization !== undefined && personalization !== 'off')
   )
     return null;
@@ -103,6 +124,9 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
     cursor,
     section: section as SectionId | null,
     personalized: personalization !== 'off',
+    ...(includeTypes.length ? { includeTypes } : {}),
+    ...(excludeTypes.length ? { excludeTypes } : {}),
+    ...(language ? { language } : {}),
   };
 }
 export function browseHref(state: BrowseState): string {
@@ -116,6 +140,9 @@ export function browseHref(state: BrowseState): string {
     section: state.section,
     cursor: state.cursor,
     personalization: state.personalized ? null : 'off',
+    include: state.includeTypes?.join(','),
+    exclude: state.excludeTypes?.join(','),
+    lang: state.language,
   });
 }
 /** Every change of selection starts a new traversal; continuations never cross query meaning. */
@@ -125,6 +152,14 @@ export function changeBrowse(state: BrowseState, patch: Partial<BrowseState>): B
 export function browseQuery(state: BrowseState, limit = 20): ResourceQuery {
   const all: FilterCondition[] = [];
   if (state.tab !== 'all') all.push(browseTypeCondition(state.tab));
+  const typeIris = (keys: readonly WorkTypeKey[]) => keys.map(key => {
+    const type = workTypes().find(type => type.key === key);
+    if (!type) throw new Error(`Browse type is unavailable: ${key}`);
+    return type.iri;
+  });
+  if (state.includeTypes?.length) all.push({ facet: 'type', any: typeIris(state.includeTypes) });
+  if (state.excludeTypes?.length) all.push({ facet: 'type', none: typeIris(state.excludeTypes) });
+  if (state.language) all.push({ facet: 'language', any: [state.language] });
   if (state.conditions.include.length)
     all.push({ facet: 'concept', [state.conditions.match]: state.conditions.include.map(iriOf) });
   if (state.conditions.exclude.length)

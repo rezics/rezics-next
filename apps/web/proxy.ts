@@ -28,6 +28,7 @@ import { displayLanguages } from './i18n/display-languages.ts';
 import { privateDiscovery, readSpacePage, realmDiscovery } from './features/address/space-read.ts';
 import { spaceDiscoveryHeaders } from './features/space-access/discovery.tsx';
 import { serviceOrigin } from './features/api/origins.ts';
+import { mainReadHeaders } from './features/api/main-read.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -48,6 +49,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         const read = await readAddress(
           lookup,
           displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
+          undefined,
+          request.headers,
         );
         if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
         return read;
@@ -68,10 +71,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     if (token && addressed.kind === 'error') {
       try {
         const response = await fetch(`${serviceOrigin('MAIN_ORIGIN')}/v1/me/session-agent`, {
-          headers: {
+          headers: await mainReadHeaders({
             authorization: `Bearer ${token}`,
             'x-session-key': request.cookies.get(SESSION_KEY_COOKIE)?.value ?? '',
-          },
+          }, request.headers),
           cache: 'no-store',
           signal: AbortSignal.timeout(10_000),
         });
@@ -88,7 +91,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     const page = await readSpacePage(
       path.lookup.key,
       displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
-      { address: spaceAddress, token, actingSubject },
+      { address: spaceAddress, token, actingSubject, incoming: request.headers },
     );
     if (page.kind === 'join' || page.kind === 'realm') {
       const discovery =
@@ -111,6 +114,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       headers: {
         'cache-control': 'no-store',
         'x-robots-tag': 'noindex',
+        ...(addressed.status === 503 ? { 'retry-after': '5' } : {}),
+        ...(addressed.retryAfter ? { 'retry-after': addressed.retryAfter } : {}),
         ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
       },
     });

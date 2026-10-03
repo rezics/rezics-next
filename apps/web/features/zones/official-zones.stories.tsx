@@ -50,7 +50,7 @@ const meta = {
   title: 'Zones/Official packages',
   component: Page,
   args: { slug: 'books', look: 'package', catalogue: 'rich', locale: 'en' },
-  parameters: { route: { pathname: '/en/z/books' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('books', 'site'), 'en') } },
   render: (args, { globals }) => (
     <Page {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
   ),
@@ -192,7 +192,7 @@ export const BooksDark: Story = { globals: { theme: 'dark' }, play: holds('books
 
 export const BooksChinese: Story = {
   globals: { locale: 'zh-Hans' },
-  parameters: { route: { pathname: '/zh-Hans/z/books' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('books', 'site'), 'zh-Hans') } },
   async play(context) {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '图书' })).toBeVisible();
@@ -207,7 +207,7 @@ export const BooksPhone: Story = { globals: phone, play: holds('books') };
 
 export const BooksPhoneChineseDark: Story = {
   globals: { ...phone, locale: 'zh-Hans', theme: 'dark' },
-  parameters: { route: { pathname: '/zh-Hans/z/books' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('books', 'site'), 'zh-Hans') } },
   play: holds('books'),
 };
 
@@ -240,7 +240,7 @@ export const BooksFallbackPhoneDark: Story = {
 
 // Mods
 
-const modsRoute = { route: { pathname: '/en/z/mods' } };
+const modsRoute = { route: { pathname: localizedPath(spaceHref('mods', 'site'), 'en') } };
 
 /** Mods as result rows: search and status first, then each pick's title, hook and last change. */
 export const Mods: Story = {
@@ -254,10 +254,10 @@ export const Mods: Story = {
     await expect(canvas.getByRole('button', { name: 'Page style' })).toBeVisible();
     // The home leads with search and one-filter links into Browse, each with its count.
     const search = canvas.getByRole('search', { name: 'Search Mods' });
-    await expect(search).toHaveAttribute('action', '/en/z/mods/browse');
+    await expect(search).toHaveAttribute('action', localizedPath(spaceHref('mods', 'site', ['browse']), 'en'));
     await expect(canvas.getByRole('link', { name: 'Ongoing 6' })).toHaveAttribute(
       'href',
-      '/en/z/mods/browse?status=ongoing',
+      localizedPath(spaceHref('mods', 'site', ['browse']), 'en') + '?status=ongoing',
     );
     await expect(canvas.queryByRole('link', { name: /Fabric \d/ })).toBeNull();
     const featured = canvas.getByRole('region', { name: 'Featured' });
@@ -301,7 +301,7 @@ export const ModsDark: Story = {
 export const ModsChinese: Story = {
   args: { slug: 'mods' },
   globals: { locale: 'zh-Hans' },
-  parameters: { route: { pathname: '/zh-Hans/z/mods' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('mods', 'site'), 'zh-Hans') } },
   async play(context) {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '模组' })).toBeVisible();
@@ -330,7 +330,7 @@ export const ModsPhone: Story = {
 export const ModsPhoneChineseDark: Story = {
   args: { slug: 'mods' },
   globals: { ...phone, locale: 'zh-Hans', theme: 'dark' },
-  parameters: { route: { pathname: '/zh-Hans/z/mods' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('mods', 'site'), 'zh-Hans') } },
   play: holds('mods'),
 };
 
@@ -377,7 +377,7 @@ export const ModsFallbackPhoneDark: Story = {
 
 // AI Workshop
 
-const workshopRoute = { route: { pathname: '/en/z/ai-workshop' } };
+const workshopRoute = { route: { pathname: localizedPath(spaceHref('ai-workshop', 'site'), 'en') } };
 
 /** Records what the page copies, in place of the system clipboard. */
 function clipboard() {
@@ -413,7 +413,7 @@ export const AiWorkshop: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'AI Workshop' })).toBeVisible();
     await expect(
       canvas.getByRole('link', { name: 'Browse every prompt and skill' }),
-    ).toHaveAttribute('href', '/en/z/ai-workshop/browse');
+    ).toHaveAttribute('href', localizedPath(spaceHref('ai-workshop', 'site', ['browse']), 'en'));
     const featured = canvas.getByRole('region', { name: 'Featured' });
     const spotlight = within(featured.querySelector<HTMLElement>('.aw-spotlight')!);
     await expect(spotlight.getByText('Prompt')).toBeVisible();
@@ -459,7 +459,7 @@ export const AiWorkshopDark: Story = {
 export const AiWorkshopChinese: Story = {
   args: { slug: 'ai-workshop' },
   globals: { locale: 'zh-Hans' },
-  parameters: { route: { pathname: '/zh-Hans/z/ai-workshop' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('ai-workshop', 'site'), 'zh-Hans') } },
   async play(context) {
     const canvas = within(context.canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'AI 工作坊' })).toBeVisible();
@@ -493,7 +493,7 @@ export const AiWorkshopPhone: Story = {
 export const AiWorkshopPhoneChineseDark: Story = {
   args: { slug: 'ai-workshop' },
   globals: { ...phone, locale: 'zh-Hans', theme: 'dark' },
-  parameters: { route: { pathname: '/zh-Hans/z/ai-workshop' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('ai-workshop', 'site'), 'zh-Hans') } },
   play: holds('ai-workshop'),
 };
 

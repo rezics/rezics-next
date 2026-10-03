@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { spaceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -147,7 +149,7 @@ const meta = {
   title: 'Realm/Tabs',
   component: TabPage,
   args: { tab: 'browse', locale: 'en' },
-  parameters: { route: { pathname: '/en/z/fiction/browse' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'site', ['browse']), 'en') } },
   render: (args, { globals }) => (
     <TabPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
   ),
@@ -169,7 +171,7 @@ export const Browse: Story = {
     );
     await expect(canvas.getByRole('link', { name: /Next/ })).toHaveAttribute(
       'href',
-      '/en/z/fiction/browse?view=grid&cursor=page-2',
+      localizedPath(spaceHref('fiction', 'site', ['browse']), 'en') + '?view=grid&cursor=page-2',
     );
     await expect(canvas.getAllByRole('link', { name: /^Why .* is here$/ })).toHaveLength(
       works.length,
@@ -190,7 +192,7 @@ export const BrowseMoved: Story = {
     );
     await expect(canvas.getByRole('link', { name: 'Start over' })).toHaveAttribute(
       'href',
-      '/en/z/fiction/browse',
+      localizedPath(spaceHref('fiction', 'site', ['browse']), 'en'),
     );
   },
 };
@@ -205,7 +207,7 @@ async function captureSection(name: string) {
 
 export const Rules: Story = {
   args: { tab: 'rules' },
-  parameters: { route: { pathname: '/en/r/fiction/rules' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['rules']), 'en') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Community rules' })).toBeVisible();
@@ -216,7 +218,7 @@ export const Rules: Story = {
 };
 export const Members: Story = {
   args: { tab: 'members' },
-  parameters: { route: { pathname: '/en/r/fiction/members' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['members']), 'en') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Members' })).toBeVisible();
@@ -228,7 +230,7 @@ export const Members: Story = {
 
 export const Decisions: Story = {
   args: { tab: 'decisions' },
-  parameters: { route: { pathname: '/en/r/fiction/decisions' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['decisions']), 'en') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('link', { name: 'Decisions' })).toHaveAttribute(
@@ -245,12 +247,12 @@ export const Decisions: Story = {
 export const DecisionsChinese: Story = {
   args: { tab: 'decisions' },
   globals: { locale: 'zh-Hans' },
-  parameters: { route: { pathname: '/zh-Hans/r/fiction/decisions' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['decisions']), 'zh-Hans') } },
 };
 
 export const About: Story = {
   args: { tab: 'about' },
-  parameters: { route: { pathname: '/en/r/fiction/about' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['about']), 'en') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(
@@ -259,14 +261,14 @@ export const About: Story = {
     const team = canvas.getByRole('region', { name: 'Moderators' });
     await expect(within(team).getByRole('link', { name: /Lin Mei 林梅/ })).toHaveAttribute(
       'href',
-      '/en/@lin_mei',
+      localizedPath(profileHref('lin_mei'), 'en'),
     );
     const members = canvas.getByRole('region', { name: 'Members' });
     await expect(within(members).getAllByRole('listitem')[0]).toHaveTextContent('北岛听风Featured');
     await expect(within(members).getByText('12,408 members')).toBeVisible();
     await expect(canvas.getByRole('link', { name: /Classic Literature/ })).toHaveAttribute(
       'href',
-      '/en/r/classics',
+      localizedPath(spaceHref('classics', 'community'), 'en'),
     );
   },
 };
@@ -274,7 +276,7 @@ export const About: Story = {
 export const AboutDark: Story = {
   args: { tab: 'about' },
   globals: { theme: 'dark' },
-  parameters: { route: { pathname: '/en/r/fiction/about' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community', ['about']), 'en') } },
 };
 
 export const NotFound: Story = {

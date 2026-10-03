@@ -15,16 +15,14 @@ import {
 } from './direction-9-fixture.ts';
 
 describe('Direction 9 public fixture commands', () => {
-  function wikiRecipe(options: { missing?: boolean; fallback?: boolean; document?: boolean } = {}) {
+  function wikiRecipe(options: { missing?: boolean; fallback?: boolean; document?: boolean; short?: boolean } = {}) {
     const iri = () => `https://rezics.com/id/${randomUUID()}`;
     const space = iri(), zone = iri(), work = iri(), structure = iri();
     const fixture = { owner: iri(), actor: iri(), work: { work: iri() }, story: { work: iri() }, chapterText: { work: iri() } } as DirectionFixture;
-    const items = Array.from({ length: 3 }, (_, index) => ({
-      occurrence: iri(), structure, labels: [{ value: `Chapter ${index + 1}`, language: 'en' }],
+    const items = Array.from({ length: options.short ? 3 : 51 }, (_, index) => ({
+      occurrence: iri(), structure, labels: [{ value: index === 50 ? 'Chapter 51: 遠方' : `Chapter ${index + 1}`, language: 'en' }],
     }));
     const writes: { path: string; data: Record<string, unknown> }[] = [];
-    let failAfter: number | undefined;
-    let head = iri();
     const api = new PublicCommands({
       get: async (path) => {
         const url = new URL(path, 'http://fixture.test');
@@ -41,64 +39,50 @@ describe('Direction 9 public fixture commands', () => {
           const q = url.searchParams.get('q') ?? '';
           const selected = items.filter((item) => item.labels.some((label) => label.value.includes(q)));
           const limit = Number(url.searchParams.get('limit') ?? 50);
-          body = { items: selected.slice(0, limit), complete: selected.length <= limit,
-            nextCursor: selected.length > limit ? 'next' : null };
-        } else if (url.pathname.includes('/compositions/')) body = { revision: head };
+          const offset = url.searchParams.get('cursor') ? 50 : 0;
+          body = { items: selected.slice(offset, offset + limit), complete: selected.length <= offset + limit,
+            nextCursor: selected.length > offset + limit ? 'next' : null };
+        }
         else throw new Error(`Unexpected wiki read ${path}`);
         return { status: () => options.missing && url.pathname.endsWith('/addresses/resolve') ? 404 : 200,
           json: async () => body };
       },
       fetch: async (path, options) => {
-        if (failAfter === writes.length) throw new Error('interrupted setup');
         const data = options.data as Record<string, unknown>;
-        expect(data.expectedHead).toBe(head);
         writes.push({ path, data });
-        for (const operation of data.operations as { label: { value: string; language: string } }[])
-          items.push({ occurrence: iri(), structure, labels: [operation.label] });
-        head = iri();
-        return { status: () => 200, json: async () => ({ revision: head }) };
+        throw new Error('Wiki journey must only read seeded content');
       },
     });
-    return { api, fixture, items, writes, space, zone, work, interruptAfter: (count?: number) => { failAfter = count; } };
+    return { api, fixture, items, writes, space, zone, work };
   }
 
-  test('wiki positions extend the seeded package story beyond page one and reuse its chapters', async () => {
+  test('wiki positions read the seeded package story beyond page one without extending shared content', async () => {
     const recipe = wikiRecipe();
     const wiki = await seedWikiPosition(recipe.api, recipe.fixture);
     expect(wiki).toMatchObject({ space: recipe.space, zone: recipe.zone, work: recipe.work, mount: 'franchise' });
     expect(wiki.work).not.toBe(recipe.fixture.story.work);
-    expect(recipe.items).toHaveLength(54);
+    expect(recipe.items).toHaveLength(51);
     expect(recipe.items.at(-1)?.occurrence).toBe(wiki.laterChapter.occurrence);
     expect(recipe.items.slice(0, 50).some((item) => item.occurrence === wiki.laterChapter.occurrence)).toBe(false);
-    expect(wiki.laterChapter.name).toContain('遠方 chapter 51');
-    expect(recipe.writes).toHaveLength(4);
-    expect(recipe.writes.every(({ path, data }) =>
-      path === `/api/main/v1/compositions/${recipe.items[0]!.structure.slice(-36)}/changes`
-      && data.actingSubject === recipe.fixture.owner,
-    )).toBe(true);
-    expect(recipe.writes.flatMap(({ data }) => data.operations as { target: string }[])
-      .every(({ target }) => target === recipe.fixture.chapterText.work)).toBe(true);
+    expect(wiki.laterChapter.name).toContain('Chapter 51: 遠方');
     expect(await seedWikiPosition(recipe.api, recipe.fixture)).toEqual(wiki);
-    expect(recipe.writes).toHaveLength(4);
+    expect(recipe.writes).toHaveLength(0);
   });
 
-  test('an interrupted wiki extension resumes without replacing seeded chapters or repeating inserts', async () => {
+  test('wiki fixtures for different readers reuse the same chapter inventory', async () => {
     const recipe = wikiRecipe();
     const originals = recipe.items.map((item) => item.occurrence);
-    recipe.interruptAfter(1);
-    await expect(seedWikiPosition(recipe.api, recipe.fixture)).rejects.toThrow('interrupted setup');
-    expect(recipe.items).toHaveLength(19);
-    recipe.interruptAfter();
-    await seedWikiPosition(recipe.api, recipe.fixture);
-    expect(recipe.items).toHaveLength(54);
-    expect(recipe.items.slice(0, 3).map((item) => item.occurrence)).toEqual(originals);
-    expect(new Set(recipe.items.map((item) => item.labels[0]!.value)).size).toBe(54);
+    const wiki = await seedWikiPosition(recipe.api, recipe.fixture);
+    expect(await seedWikiPosition(recipe.api, { ...recipe.fixture, actor: `https://rezics.com/id/${randomUUID()}` })).toEqual(wiki);
+    expect(recipe.items.map((item) => item.occurrence)).toEqual(originals);
+    expect(recipe.writes).toHaveLength(0);
   });
 
   for (const [options, message] of [
     [{ missing: true }, 'seeded official franchise-wiki Space and Zone'],
     [{ fallback: true }, 'active franchise-wiki package approval'],
     [{ document: true }, 'story in the franchise mount'],
+    [{ short: true }, 'beyond the chooser first page'],
   ] as const)
     test(`wiki setup fails without ${message}`, async () => {
       const recipe = wikiRecipe(options);

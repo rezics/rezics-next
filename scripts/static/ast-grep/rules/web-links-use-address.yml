@@ -6,17 +6,15 @@ files:
   - apps/web/**/*.ts
 ignores:
   - apps/web/features/address/**
-  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
-  - apps/web/features/discover/scope.ts
-  - apps/web/features/realm/route.ts
-  - apps/web/features/shell/communities-read.ts
-  - apps/web/features/zones/fixtures.ts
-  - apps/web/features/zones/official-fixtures.ts
+  # Address conformance oracles: raw inputs and independent expected paths must
+  # not call the address builder under test (including legacy redirect forms).
+  # Keep this list explicit; ordinary tests, stories and product code stay checked.
+  - apps/web/tests/g-990-uuid-address.test.ts
+  - apps/web/tests/g-943-address.e2e.ts
+  - apps/web/tests/g-943-address.test.ts
   - apps/web/tests/g-644-entity-page.test.ts
   - apps/web/tests/g-655-zone-site.test.ts
   - apps/web/tests/g-921-zones.test.ts
-  - apps/web/tests/g-943-address.e2e.ts
-  - apps/web/tests/g-943-address.test.ts
   - apps/web/tests/profile.test.ts
   - apps/web/tests/realm.test.ts
   - apps/web/tests/work-page.test.ts
@@ -60,23 +58,8 @@ files:
   - apps/web/**/*.tsx
 ignores:
   - apps/web/features/address/**
+  # Router conformance oracle: legacy paths are inputs to normalization, not links.
   - apps/web/tests/g-952-router.test.tsx
-  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
-  - apps/web/app/\[locale\]/r/\[realm\]/not-found.tsx
-  - apps/web/features/communities/create-form.tsx
-  - apps/web/features/communities/setup-checklist.stories.tsx
-  - apps/web/features/discover/resource-list.tsx
-  - apps/web/features/home/rail.tsx
-  - apps/web/features/realm/membership.stories.tsx
-  - apps/web/features/realm/realm-tabs.stories.tsx
-  - apps/web/features/shell/app-shell.stories.tsx
-  - apps/web/features/zones/collection-home.stories.tsx
-  - apps/web/features/zones/official-zones.stories.tsx
-  - apps/web/features/zones/page-missing.stories.tsx
-  - apps/web/features/zones/site-pages.stories.tsx
-  - apps/web/features/zones/site-route.tsx
-  - apps/web/zones/official/light-novels/slots.tsx
-  - apps/web/zones/official/visual-novels/slots.tsx
 rule:
   any:
     - kind: string
@@ -117,7 +100,6 @@ files:
   - apps/web/**/*.jsx
 ignores:
   - apps/web/features/address/**
-  # Temporary wave-9 owner exceptions. The manager removes this list after the wave.
 rule:
   any:
     - kind: string

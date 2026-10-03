@@ -3,7 +3,7 @@ import type { ShellMessages } from '../messages.ts';
 
 export default {
   home: 'REZICS ホーム', skipToContent: '本文へスキップ',
-  searchRegion: 'サイト内検索', searchLabel: '作品を検索', searchPlaceholder: '作品を検索…',
+  searchRegion: 'サイト内検索', searchLabel: 'すべてのコンテンツを検索', searchPlaceholder: 'すべてのコンテンツを検索…',
   search: '検索', searchShortcut: '/ キーで検索',
   navigation: 'メインナビゲーション', menu: 'メニュー', openNavigation: 'ナビゲーションを開く', close: '閉じる',
   collapseNavigation: 'ナビゲーションを折りたたむ', expandNavigation: 'ナビゲーションを展開',
@@ -17,7 +17,7 @@ export default {
   displayModeNotSaved: 'アカウントに表示モードを保存できませんでした。この端末では引き続き適用されます。',
   themeSystem: 'システム設定に合わせる', themeLight: 'ライト', themeDark: 'ダーク',
   soon: '近日公開', comingSoonTitle: insert('{{feature}}は近日公開予定です', { feature: String }),
-  backHome: 'ホームに戻る', searchWorks: '作品を検索',
+  backHome: 'ホームに戻る', searchWorks: 'すべてのコンテンツを検索',
   notFoundTitle: 'ページが見つかりません',
   notFoundBody: 'URLが間違っているか、ページが移動した可能性があります。',
   errorTitle: '問題が発生しました',

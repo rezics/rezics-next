@@ -167,7 +167,7 @@ export function DiscoverView({
                   </Link>
                 ) : null}
               </div>
-              <ResourceList items={section.page.items} locale={locale} avatarQuery={avatarQuery} />
+              <ResourceList items={section.page.items} locale={locale} avatarQuery={avatarQuery} scope={state.scope} />
               {state.section ? (
                 <BrowseContinuation page={section.page} state={state} locale={locale} />
               ) : null}
@@ -183,7 +183,8 @@ export function DiscoverView({
             aria-label={tabs.find((tab) => tab.id === state.tab)?.label ?? t.type}
             className="grid gap-4"
           >
-            <ResourceList items={results.data.items} locale={locale} avatarQuery={avatarQuery} />
+            <ResourceList items={results.data.items} locale={locale} avatarQuery={avatarQuery} scope={state.scope}
+              headingLevel={2} />
             <BrowseContinuation page={results.data} state={state} locale={locale} />
           </section>
         ) : (

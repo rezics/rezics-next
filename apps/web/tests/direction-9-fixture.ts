@@ -140,7 +140,7 @@ export interface Credentials {
   operator: { email: string; password: string };
 }
 export function credentials(): Credentials {
-  // Never follow a brief's absolute path back into the main checkout.
+  // The manager can explicitly supply read-only credentials from the shared stack.
   const path =
     process.env.REZICS_WEB_AUTH_PRIVATE_PATH ??
     resolve('.temp/stack/rezics-dev/web-auth/private.json');
@@ -217,7 +217,8 @@ interface PositionPage {
 
 /** Approvals are host-bound, and the web loads packages by official Space key.
  * Use the seeded franchise wiki rather than copying its approval to our Zone.
- * Keep its story separate from the synthetic Work used by submission journeys. */
+ * `task dev:seed -- --wiki-only` owns its public story and chapter inventory;
+ * journey setup only reads it, so running another locale never extends shared content. */
 export async function seedWikiPosition(
   api: PublicCommands,
   fixture: DirectionFixture,
@@ -246,47 +247,22 @@ export async function seedWikiPosition(
   if (!story) throw new Error('Direction 9 wiki needs a story in the franchise mount');
   const work = story.id;
   const positions = `/reading-positions/${short(work)}`;
-  const prefix = `Direction 9 wiki ${short(fixture.story.work)}`;
-  const labels = Array.from({ length: chapterCount }, (_, index) =>
-    `${prefix} 遠方 chapter ${index + 1}`,
+  const first = await api.read<PositionPage>(`${positions}?${query}&limit=50`);
+  if (!first.items[0]?.structure) throw new Error('Direction 9 wiki needs a composed story in the franchise mount');
+  if (first.complete || !first.nextCursor)
+    throw new Error('Direction 9 wiki chapter must be beyond the chooser first page; run task dev:seed -- --wiki-only');
+  const later = await api.read<PositionPage>(
+    `${positions}?${query}&${new URLSearchParams({ limit: '50', cursor: first.nextCursor })}`,
   );
-  api = api.reusable(`${fixtureName}:${fixture.actor}:wiki:${zone}`);
-  const initial = await api.read<PositionPage>(`${positions}?${query}&limit=50`);
-  const structure = initial.items[0]?.structure;
-  if (!structure) throw new Error('Direction 9 wiki needs a composed story in the franchise mount');
-  const existing = await api.read<PositionPage>(
-    `${positions}?${query}&${new URLSearchParams({ q: prefix, limit: '100' })}`,
-  );
-  const present = new Set(existing.items.flatMap((item) => item.labels?.map((label) => label.value) ?? []));
-  const missing = labels.filter((label) => !present.has(label));
-  if (missing.length) {
-    const composition = await api.read<{ revision: string }>(
-      `/compositions/${short(structure)}?${query}`,
-    );
-    let head = composition.revision;
-    for (let offset = 0; offset < missing.length; offset += 16) {
-      const changed = await api.write<{ revision: string }>(
-        `/compositions/${short(structure)}/changes`,
-        {
-          profile: 'book-composition', expectedHead: head, actingSubject: fixture.owner,
-          operations: missing.slice(offset, offset + 16).map((value) => ({
-            op: 'insert', parent: structure, role: 'chapter', position: 'last',
-            target: fixture.chapterText.work, label: { value, language: 'en' },
-          })),
-        },
-      );
-      head = changed.revision;
-    }
-  }
-  const name = labels.at(-1)!;
+  const chapter = later.items.find(item => item.labels?.some(label => label.value.trim()));
+  const name = chapter?.labels?.find(label => label.value.trim())?.value;
+  if (!chapter || !name || first.items.some(item => item.occurrence === chapter.occurrence))
+    throw new Error('Direction 9 wiki chapter must be beyond the chooser first page');
   const found = await api.until<PositionPage>(
     `${positions}?${query}&${new URLSearchParams({ q: name })}`,
-    (page) => page.items.some((item) => item.labels?.some((label) => label.value === name)),
+    (page) => page.items.some((item) => item.occurrence === chapter.occurrence),
   );
-  const occurrence = found.items.find((item) => item.labels?.some((label) => label.value === name))!.occurrence;
-  const first = await api.read<PositionPage>(`${positions}?${query}&limit=50`);
-  if (first.complete || !first.nextCursor || first.items.some((item) => item.occurrence === occurrence))
-    throw new Error('Direction 9 wiki chapter must be beyond the chooser first page');
+  const occurrence = found.items.find((item) => item.occurrence === chapter.occurrence)!.occurrence;
   return { space: address.holder, zone, work, mount, laterChapter: { occurrence, name } };
 }
 

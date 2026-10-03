@@ -2,7 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 
 export const messages = {
   home: 'REZICS home', skipToContent: 'Skip to content',
-  searchRegion: 'Site search', searchLabel: 'Search works', searchPlaceholder: 'Search works…',
+  searchRegion: 'Site search', searchLabel: 'Search everything', searchPlaceholder: 'Search everything…',
   search: 'Search', searchShortcut: 'Press / to search',
   navigation: 'Main navigation', menu: 'Menu', openNavigation: 'Open navigation', close: 'Close',
   collapseNavigation: 'Collapse navigation', expandNavigation: 'Expand navigation',
@@ -16,7 +16,7 @@ export const messages = {
   displayModeNotSaved: 'Couldn’t save your display mode to your account. It still applies on this device.',
   themeSystem: 'Match system', themeLight: 'Light', themeDark: 'Dark',
   soon: 'Soon', comingSoonTitle: insert('{{feature}} is on its way', { feature: String }),
-  backHome: 'Back to home', searchWorks: 'Search works',
+  backHome: 'Back to home', searchWorks: 'Search everything',
   notFoundTitle: 'Page not found',
   notFoundBody: 'The address may be mistyped, or the page may have moved.',
   errorTitle: 'Something went wrong',

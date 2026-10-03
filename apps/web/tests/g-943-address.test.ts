@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { uuidToSid } from '@rezics/model/address';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { FeedProvider } from '../features/feed/feed-context.tsx';
+import { messages as feedMessages } from '../features/feed/messages.ts';
+import { railData } from '../features/home/fixtures.ts';
+import { messages as homeMessages } from '../features/home/messages.ts';
+import { Rail } from '../features/home/rail.tsx';
 import { NextRequest } from 'next/server';
 import { proxy } from '../proxy.ts';
 import { ADDRESS_HEADER, type AddressRead, readAddress, type ResolvedAddress } from '../features/address/client.ts';
@@ -222,4 +231,77 @@ test('G-943 native-script addresses pass through real HTTP headers without a Byt
   const carried = response.headers.get(`x-middleware-request-${ADDRESS_HEADER}`)!;
   expect(carried).toMatch(/^[\x20-\x7e]+$/);
   expect(JSON.parse(decodeURIComponent(carried)).canonical).toEqual(read.canonical);
+});
+
+test('G-1002 address rule exempts explicit conformance oracles and checks ordinary tests, stories and product links', () => {
+  const root = resolve(import.meta.dir, '../../..');
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const fixture = mkdtempSync(join(root, '.temp/g-1002-address-rule-'));
+  try {
+    const files = {
+      'tests/g-943-address.test.ts': "const raw = '/a/0199a0fe-0b21-7000-8000-123456789abc';",
+      'tests/g-990-uuid-address.test.ts': "const raw = '/@agent-0199a0fe-0b21-7000-8000-123456789abc';",
+      'tests/g-943-address.e2e.ts': "const legacy = '/en/r/fiction/browse';",
+      'tests/g-952-router.test.tsx': 'const raw = <Link href="/en/r/fiction/works" />;',
+      'tests/ordinary-journey.test.ts': "const href = '/en/r/fiction';",
+      'tests/ordinary-journey.test.tsx': 'const link = <Link href="/@reader" />;',
+      'features/realm/route.ts': "const href = '/en/r/fiction';",
+      'features/zones/official-fixtures.ts': "const href = '/en/z/books';",
+      'features/g-943-address.ts': "const href = '/a/0199a0fe-0b21-7000-8000-123456789abc';",
+      'features/ordinary-page.tsx': 'const link = <Link href="/en/z/books" />;',
+      'features/ordinary-page.js': "const href = '/w/story';",
+      'features/ordinary-page.jsx': 'const link = <Link href="/w/story" />;',
+      'features/ordinary-page.stories.tsx': 'const link = <Link href="/en/r/fiction" />;',
+      'features/builder-page.ts': "const href = resourceHref('/w/', id);",
+      'features/builder-page.tsx': "const link = <Link href={spaceHref(space, 'site')} />;",
+      'features/builder-page.js': "const href = resourceHref('/w/', id);",
+    };
+    for (const [path, source] of Object.entries(files)) {
+      const file = join(fixture, 'apps/web', path);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, source);
+    }
+    // Run the real file filters: ast-grep's YAML snippet tests only test AST matches.
+    writeFileSync(join(fixture, 'Taskfile.yml'), `version: '3'
+tasks:
+  scan:
+    cmds:
+      - '${join(root, 'node_modules/.bin/ast-grep')} scan --rule ${join(root, 'scripts/static/ast-grep/rules/web-links-use-address.yml')} --json=compact apps/web'
+`);
+    const result = Bun.spawnSync(['task', 'scan'], { cwd: fixture });
+    expect(result.exitCode).not.toBe(0);
+    const diagnostics = JSON.parse(result.stdout.toString()) as { file: string; ruleId: string }[];
+    expect(diagnostics.map(({ file, ruleId }) => [file, ruleId]).sort()).toEqual([
+      ['apps/web/tests/ordinary-journey.test.ts', 'web-links-use-address'],
+      ['apps/web/tests/ordinary-journey.test.tsx', 'web-links-use-address-tsx'],
+      ['apps/web/features/realm/route.ts', 'web-links-use-address'],
+      ['apps/web/features/zones/official-fixtures.ts', 'web-links-use-address'],
+      ['apps/web/features/g-943-address.ts', 'web-links-use-address'],
+      ['apps/web/features/ordinary-page.tsx', 'web-links-use-address-tsx'],
+      ['apps/web/features/ordinary-page.js', 'web-links-use-address-js'],
+      ['apps/web/features/ordinary-page.jsx', 'web-links-use-address-js'],
+      ['apps/web/features/ordinary-page.stories.tsx', 'web-links-use-address-tsx'],
+    ].sort());
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('G-1002 Home rail emits short Work and unnamed community identities and keeps a named community', () => {
+  const unnamed = railData.suggestions[0]!;
+  const named = railData.suggestions[1]!;
+  const html = renderToStaticMarkup(createElement(FeedProvider, {
+    locale: 'en', messages: feedMessages, now: 0, signedIn: false, actingSubject: null,
+    signInHref: '/sign-in', avatarQuery: '', tab: 'all', followedRealms: null,
+    children: createElement(Rail, {
+      data: { ...railData, moderated: [], realmSegments: { [named.realm]: 'fiction' } },
+      signedIn: false, locale: 'en', messages: homeMessages,
+    }),
+  }));
+  const work = railData.trending.items[0]!.item.work.slice(-36);
+  expect(html).toContain(`href="/en/w/${uuidToSid(work)}"`);
+  expect(html).toContain(`href="/en/r/${uuidToSid(unnamed.realm.slice(-36))}"`);
+  expect(html).toContain('href="/en/r/fiction"');
+  expect(html).not.toContain(`href="/en/w/${work}"`);
+  expect(html).not.toContain(`href="/en/r/${unnamed.realm.slice(-36)}"`);
 });

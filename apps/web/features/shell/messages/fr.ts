@@ -3,7 +3,7 @@ import type { ShellMessages } from '../messages.ts';
 
 export default {
   home: 'Accueil REZICS', skipToContent: 'Aller au contenu',
-  searchRegion: 'Recherche sur le site', searchLabel: 'Rechercher des œuvres', searchPlaceholder: 'Rechercher des œuvres…',
+  searchRegion: 'Recherche sur le site', searchLabel: 'Tout rechercher', searchPlaceholder: 'Tout rechercher…',
   search: 'Rechercher', searchShortcut: 'Appuyez sur / pour rechercher',
   navigation: 'Navigation principale', menu: 'Menu', openNavigation: 'Ouvrir la navigation', close: 'Fermer',
   collapseNavigation: 'Réduire la navigation', expandNavigation: 'Développer la navigation',
@@ -17,7 +17,7 @@ export default {
   displayModeNotSaved: 'Impossible d’enregistrer le mode d’affichage sur votre compte. Il reste actif sur cet appareil.',
   themeSystem: 'Selon le système', themeLight: 'Clair', themeDark: 'Sombre',
   soon: 'Bientôt', comingSoonTitle: insert('{{feature}} arrive bientôt', { feature: String }),
-  backHome: 'Retour à l’accueil', searchWorks: 'Rechercher des œuvres',
+  backHome: 'Retour à l’accueil', searchWorks: 'Tout rechercher',
   notFoundTitle: 'Page introuvable',
   notFoundBody: 'L’adresse est peut-être incorrecte ou la page a peut-être été déplacée.',
   errorTitle: 'Une erreur est survenue',

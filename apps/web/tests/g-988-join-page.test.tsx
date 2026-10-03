@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { uiLocales } from '../i18n/define.ts';
+import { realmHref } from '../features/realm/route.ts';
 import { signInPath } from '../features/auth/paths.ts';
 import {
   accessActor,
@@ -12,7 +13,7 @@ import { PrivateSpaceJoinPage } from '../features/space-access/join-page.tsx';
 
 for (const locale of uiLocales) {
   test(`G-988 ${locale}: the signed-out join page offers sign-in before hydration and returns to the request`, () => {
-    const next = `/${locale}/r/private-books?direction9=preserved`;
+    const next = realmHref(locale, 'private-books', 'home', { direction9: 'preserved' });
     const href = signInPath(next);
     const html = renderToStaticMarkup(
       <PrivateSpaceJoinPage

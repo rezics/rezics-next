@@ -1,4 +1,5 @@
 import { serviceOrigin } from '../api/origins.ts';
+import { mainReadHeaders } from '../api/main-read.ts';
 import { normalizedHandle } from './handle.ts';
 
 export type ChangeHandleResult =
@@ -30,7 +31,8 @@ export async function changeHandle(
           `/v1/addresses/current?${new URLSearchParams({ scope: 'agent', holder: agent, actingSubject: agent })}`,
           serviceOrigin('MAIN_ORIGIN'),
         ),
-        { method: 'GET', headers: { authorization: `Bearer ${token}` }, cache: 'no-store' },
+        { method: 'GET', headers: await mainReadHeaders({ authorization: `Bearer ${token}` }),
+          cache: 'no-store', signal: AbortSignal.timeout(10_000) },
       );
       if (!current.ok)
         return current.status === 404

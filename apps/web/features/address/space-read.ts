@@ -1,6 +1,7 @@
 import type { Discovery, JoinPage } from '../manage/settings-api.ts';
 import type { RealmHeader } from '../realm/types.ts';
 import { serviceOrigin } from '../api/origins.ts';
+import { mainReadHeaders } from '../api/main-read.ts';
 import type { ResolvedAddress } from './client.ts';
 import { parseAddressSegment } from './path.ts';
 
@@ -20,16 +21,17 @@ export async function readSpacePage(
     token?: string;
     actingSubject?: string;
     origin?: string;
+    incoming?: Headers;
   } = {},
 ): Promise<SpacePage> {
   const origin = options.origin ?? serviceOrigin('MAIN_ORIGIN');
   const headers = { 'accept-language': languages, 'x-rezics-display-languages': languages };
-  const read = (path: string, personal = false) =>
+  const read = async (path: string, personal = false) =>
     fetch(`${origin}${path}`, {
-      headers: {
+      headers: await mainReadHeaders({
         ...headers,
         ...(personal && options.token ? { authorization: `Bearer ${options.token}` } : {}),
-      },
+      }, options.incoming),
       redirect: 'manual',
       cache: 'no-store',
       signal: AbortSignal.timeout(10_000),

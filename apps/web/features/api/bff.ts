@@ -1,4 +1,4 @@
-import { isClientIp } from '../../worker/client-ip.ts';
+import { forwardClientIp } from './main-read.ts';
 import { SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from './browser.ts';
@@ -42,10 +42,7 @@ export function mainRequestHeaders(incoming: Headers, accessToken: string | unde
     if (value) headers.set(name, value);
   }
   if (accessToken) headers.set('authorization', `Bearer ${accessToken}`);
-  // The ingress must replace this source header. Never forward a caller's
-  // x-rezics-client-ip/XFF; Main additionally checks the proxy's peer address.
-  const clientIp = incoming.get(clientIpHeader)?.trim();
-  if (clientIp && isClientIp(clientIp)) headers.set('x-rezics-client-ip', clientIp);
+  forwardClientIp(incoming, headers, clientIpHeader);
   return headers;
 }
 
@@ -97,20 +94,25 @@ function rememberReadingLanguages(token: string, languages: string[]) {
 
 /** Main's ordered reading languages for a signed-in browser call. Never the cookie. */
 async function signedInReadingLanguages(mainOrigin: string, accessToken: string, sessionKey: string,
-  fetchImpl: typeof fetch): Promise<string[]> {
+  fetchImpl: typeof fetch, clientHeaders: Headers): Promise<string[]> {
   const cached = cachedReadingLanguages(accessToken);
   if (cached) return cached;
   try {
-    const session = await fetchImpl(`${mainOrigin}/v1/me/session-agent`, { headers: {
-      authorization: `Bearer ${accessToken}`, ...(sessionKey ? { 'x-session-key': sessionKey } : {}) },
-      cache: 'no-store' });
+    const headers = new Headers();
+    const clientIp = clientHeaders.get('x-rezics-client-ip');
+    if (clientIp) headers.set('x-rezics-client-ip', clientIp);
+    headers.set('authorization', `Bearer ${accessToken}`);
+    if (sessionKey) headers.set('x-session-key', sessionKey);
+    const session = await fetchImpl(`${mainOrigin}/v1/me/session-agent`, { headers,
+      cache: 'no-store', signal: AbortSignal.timeout(10_000) });
     if (!session.ok) return [];
     const state = await session.json() as { sessionAgent?: { actingSubject?: string; eligible?: boolean } };
     const actor = state.sessionAgent?.eligible ? state.sessionAgent.actingSubject : null;
     if (!actor) return [];
+    headers.delete('x-session-key');
     const preferences = await fetchImpl(
       `${mainOrigin}/v1/me/person-preferences?actingSubject=${encodeURIComponent(actor)}`,
-      { headers: { authorization: `Bearer ${accessToken}` }, cache: 'no-store' });
+      { headers, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
     if (!preferences.ok) return [];
     const value = await preferences.json() as { contentLanguages?: unknown };
     const languages = Array.isArray(value.contentLanguages)
@@ -134,7 +136,8 @@ async function applyDisplayLanguages(request: Request, headers: Headers, input: 
     && (input.segments[2] === 'session-agent' || input.segments[2] === 'person-preferences');
   const signedIn = Boolean(input.accessToken);
   const profile = signedIn && !lookup && !input.writing ? await signedInReadingLanguages(input.mainOrigin,
-    input.accessToken!, cookieValue(request.headers.get('cookie'), SESSION_KEY_COOKIE) ?? '', input.fetch) : [];
+    input.accessToken!, cookieValue(request.headers.get('cookie'), SESSION_KEY_COOKIE) ?? '', input.fetch,
+    headers) : [];
   const languageHeaders = displayLanguageHeaders({ signedIn, profile,
     cookie: cookieValue(request.headers.get('cookie'), CONTENT_LANGUAGES_COOKIE),
     pageUrl: request.headers.get('x-rezics-page-url'), browser: request.headers.get('accept-language') });

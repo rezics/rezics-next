@@ -1,7 +1,8 @@
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { mainApiWithToken } from '../api/main.ts';
 import { serviceOrigin } from '../api/origins.ts';
-import type { AddressLookup } from './path.ts';
+import { mainReadHeaders } from '../api/main-read.ts';
+import { parseAddressSegment, type AddressLookup } from './path.ts';
 
 type MainClient = ReturnType<typeof mainApiWithToken>;
 type AddressResponse = NonNullable<
@@ -16,7 +17,9 @@ export type ResolvedAddress = Extract<AddressResponse, { profile: 'address-resol
 };
 export type AddressRead =
   | { kind: 'resolved'; data: ResolvedAddress }
-  | { kind: 'missing' | 'retired' | 'unavailable' };
+  | { kind: 'missing' }
+  | { kind: 'retired' }
+  | { kind: 'unavailable'; status?: 429; retryAfter?: string };
 export const ADDRESS_HEADER = 'x-rezics-resolved-address';
 const nativeIri = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
@@ -36,6 +39,10 @@ export function resolvedAddress(value: unknown): ResolvedAddress | null {
     !nativeIri.test(data.holder) ||
     !address ||
     typeof address.key !== 'string' ||
+    // A UUID is a legacy lookup, never a canonical policy. Refuse a malformed
+    // Main answer instead of permanently redirecting to a lowercase UUID.
+    !parseAddressSegment(address.key) ||
+    parseAddressSegment(address.key)?.kind === 'uuid' ||
     typeof address.slugSource !== 'string' ||
     !/^\/(?:@|(?:a|r|z|w|e|concepts)\/|z\/[^/]+\/[^/]+\/)$/.test(address.prefix) ||
     (data.capabilities &&
@@ -52,6 +59,7 @@ export async function readAddress(
   lookup: AddressLookup,
   languages: string,
   origin?: string,
+  incoming?: Headers,
 ): Promise<AddressRead> {
   try {
     const query = new URLSearchParams({
@@ -62,7 +70,9 @@ export async function readAddress(
     const response = await fetch(
       `${origin ?? serviceOrigin('MAIN_ORIGIN')}/v1/addresses/resolve?${query}`,
       {
-        headers: { 'accept-language': languages, 'x-rezics-display-languages': languages },
+        headers: await mainReadHeaders(
+          { 'accept-language': languages, 'x-rezics-display-languages': languages }, incoming,
+        ),
         cache: 'no-store',
         redirect: 'manual',
         signal: AbortSignal.timeout(10_000),
@@ -71,6 +81,11 @@ export async function readAddress(
     if (response.status === 404 || response.status === 400 || response.status === 422)
       return { kind: 'missing' };
     if (response.status === 410) return { kind: 'retired' };
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('retry-after'));
+      return { kind: 'unavailable', status: 429,
+        retryAfter: String(Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60) };
+    }
     if (!response.ok) return { kind: 'unavailable' };
     const data = resolvedAddress(await response.json());
     return data?.scope === lookup.scope ? { kind: 'resolved', data } : { kind: 'unavailable' };

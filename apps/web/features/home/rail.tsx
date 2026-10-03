@@ -4,6 +4,7 @@ import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { resourceHref, spaceHref } from '../address/path.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import type { SuggestedFollow } from '../feed/types.ts';
@@ -82,7 +83,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
           <CatalogueCover work={{ id: item.work, title: item.title, cover: item.cover, kind: coverKindOf(item.types),
             authors: [] }} avatarQuery={avatarQuery} size="xs" />
           <span className="grid min-w-0 gap-0.5">
-            <LocalizedLink href={`/w/${item.work.slice(-36)}`} lang={item.title.language}
+            <LocalizedLink href={resourceHref('/w/', item.work)} lang={item.title.language}
               className="line-clamp-2 font-medium font-work-title text-sm/snug outline-none after:absolute
                 after:inset-0 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{item.title.value}</LocalizedLink>
             {realm ? <span lang={realm.language} className="truncate text-muted-foreground text-xs">{realm.name}</span>
@@ -98,7 +99,7 @@ export function Rail({ data, signedIn, locale, messages, avatarQuery = '' }: {
           return <li key={item.id} className="flex items-center gap-3">
             <CommunityIcon icon={item.icon} name={item.name.value} size="md" avatarQuery={avatarQuery} />
             <span className="grid min-w-0 flex-1">
-              <LocalizedLink href={localizedPath(`/r/${data.realmSegments?.[item.realm] ?? item.realm.slice(-36)}`, locale)}
+              <LocalizedLink href={localizedPath(spaceHref(data.realmSegments?.[item.realm] ?? item.realm, 'community'), locale)}
                 lang={item.name.language}
                 className="truncate font-medium text-sm hover:underline">{item.name.value}</LocalizedLink>
               <span className="truncate text-muted-foreground text-xs">

@@ -31,7 +31,7 @@ export async function beforePathNormalization(
   const languages = displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(',');
   let spaceAddress: ResolvedAddress | undefined;
   const decision = await decideAddress(url, locale, async (lookup) => {
-    const read = await readAddress(lookup, languages, mainOrigin);
+    const read = await readAddress(lookup, languages, mainOrigin, request.headers);
     if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
     return read;
   });
@@ -40,6 +40,7 @@ export async function beforePathNormalization(
     const page = await readSpacePage(spaceAddress.key, languages, {
       address: spaceAddress,
       origin: mainOrigin,
+      incoming: request.headers,
     });
     if (page.kind === 'realm') {
       const discovery = realmDiscovery(page.header);
@@ -60,6 +61,8 @@ export async function beforePathNormalization(
       headers: {
         'cache-control': 'no-store',
         'x-robots-tag': 'noindex',
+        ...(decision.status === 503 ? { 'retry-after': '5' } : {}),
+        ...(decision.retryAfter ? { 'retry-after': decision.retryAfter } : {}),
         ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
       },
     });

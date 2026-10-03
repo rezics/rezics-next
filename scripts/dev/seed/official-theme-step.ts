@@ -22,6 +22,7 @@ const packages = {
   'ai-workshop': ['header', 'hero', 'footer', 'workCard', 'module:shelf', 'module:editorial-list'],
   games: ['hero', 'workCard', 'module:shelf', 'module:editorial-list'],
   software: ['hero', 'workCard', 'module:shelf', 'module:editorial-list'],
+  'franchise-wiki': ['home', 'memberIndex', 'entity'],
 } as const;
 type Slug = keyof typeof packages;
 
@@ -89,7 +90,7 @@ async function firstPartyView(state: SeedState, theme: string) {
 
 /** Dev fixture review uses a second account; each state transition still passes through Main. */
 export async function seedOfficialThemes(state: SeedState,
-  selected: readonly OfficialRealmId[] = state.createdRealms.map(realm => realm.id as OfficialRealmId)) {
+  selected: readonly (OfficialRealmId | 'franchise-wiki')[] = state.createdRealms.map(realm => realm.id as OfficialRealmId)) {
   const operator = state.operatorSession, input = state.operatorInput;
   const reviewer = state.sessions.find(session => session.id === 'daniel');
   if (!operator || !input || !reviewer) {

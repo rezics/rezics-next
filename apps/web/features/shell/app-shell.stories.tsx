@@ -78,7 +78,7 @@ type Story = StoryObj<typeof meta>;
 export const SignedOut: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const search = canvas.getByRole('combobox', { name: 'Search works' });
+    const search = canvas.getByRole('searchbox', { name: 'Search everything' });
     await expect(canvas.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main-content');
     await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/auth/start?next=%2F');
     await userEvent.keyboard('/');
@@ -138,10 +138,10 @@ export const SignedIn: Story = {
 
 export const LongNames: Story = {
   args: { signedIn: true, account: <AccountMenu accountOrigin="https://account.rezics.test" session={longNames} messages={auth.en} />, notifications: <NotificationsLink /> },
-  parameters: { route: { pathname: '/en/search', search: 'q=A+very+long+search+phrase+about+rivers+and+cities+across+centuries' } },
+  parameters: { route: { pathname: '/en/discover', search: 'q=A+very+long+search+phrase+about+rivers+and+cities+across+centuries' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('combobox', { name: 'Search works' }))
+    await expect(canvas.getByRole('searchbox', { name: 'Search everything' }))
       .toHaveValue('A very long search phrase about rivers and cities across centuries');
     await userEvent.click(canvas.getByRole('button', { name: 'Account menu' }));
     const menu = within(await within(document.body).findByRole('menu'));
@@ -209,7 +209,7 @@ export const Chinese: Story = {
     await userEvent.click(within(document.body).getByRole('menuitem', { name: '语言: 简体中文' }));
     await waitFor(() => expect(within(document.body).getByRole('menuitemradio', { name: '简体中文' }))
       .toHaveAttribute('aria-checked', 'true'));
-    await expect(canvas.getByRole('combobox', { name: '搜索作品' })).toBeVisible();
+    await expect(canvas.getByRole('searchbox', { name: '搜索所有内容' })).toBeVisible();
   },
 };
 

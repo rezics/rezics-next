@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { spaceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -47,7 +49,7 @@ const meta = {
   title: 'Realm/Join and follow',
   component: Page,
   args: { which: 'open', locale: 'en' },
-  parameters: { route: { pathname: '/en/r/fiction' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'community'), 'en') } },
   render: (args, { globals }) => <Page {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
   async afterEach(context) {
     if (import.meta.env.VITE_G944_CAPTURE !== '1') return;
@@ -76,7 +78,7 @@ export const JoinOnYourOwn: Story = {
     const dialog = within(await waitFor(() => within(document.body).getByRole('dialog')));
     // The dialog fades in; wait for its title rather than catching it mid-animation.
     await waitFor(() => expect(dialog.getByRole('heading', { name: 'Join Fiction 小说' })).toBeVisible());
-    await expect(dialog.getByRole('link', { name: 'Read the community rules' })).toHaveAttribute('href', '/en/r/fiction/about');
+    await expect(dialog.getByRole('link', { name: 'Read the community rules' })).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community', ['about']), 'en'));
     const listed = dialog.getByRole('checkbox', { name: /Show me on the public member list/ });
     await expect(listed).not.toBeChecked();
     await userEvent.click(listed);
