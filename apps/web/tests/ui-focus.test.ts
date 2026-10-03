@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { focusForTyping, waitForFocus } from './focus.ts';
+import { focusForTyping, waitForFocus } from '../../../packages/ui/src/test/focus.ts';
 
 /** Control frame order without a DOM: these are the focus transitions that lose typed keys. */
 function focusJourney() {
