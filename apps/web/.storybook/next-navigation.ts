@@ -2,7 +2,12 @@
 // (see main.ts). A story sets the route with `parameters.route`.
 import { createContext, use } from 'react';
 
-export interface StoryRoute { pathname: string; search?: string }
+export interface StoryRoute {
+  pathname: string;
+  search?: string;
+  /** Observe navigation commands without changing the Storybook iframe's address. */
+  onPush?: (href: string, options?: { scroll?: boolean }) => void;
+}
 
 export const StoryRouteContext = createContext<StoryRoute>({ pathname: '/' });
 
@@ -15,8 +20,9 @@ export function useSearchParams(): URLSearchParams {
 }
 
 export function useRouter() {
+  const route = use(StoryRouteContext);
   const ignore = () => undefined;
-  return { push: ignore, replace: ignore, refresh: ignore, back: ignore, forward: ignore, prefetch: ignore };
+  return { push: route.onPush ?? ignore, replace: ignore, refresh: ignore, back: ignore, forward: ignore, prefetch: ignore };
 }
 
 export function notFound(): never {

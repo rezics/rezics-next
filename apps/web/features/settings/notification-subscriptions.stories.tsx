@@ -17,7 +17,9 @@ const meta = { title: 'Settings/Subscription notifications', component: Preferen
     for (const label of [t.notificationNewWork, t.notificationNewRelease, t.notificationCollectionChange]) {
       await expect(canvas.getByText(label)).toBeVisible();
       await expect(canvas.getByRole('switch', { name: `${label} · ${t.notificationInbox}` })).toBeVisible();
-      await expect(canvas.getByRole('switch', { name: `${label} · ${t.notificationEmail}` })).toBeVisible();
+      await expect(canvas.getByRole('switch', { name: `${label} · ${t.notificationPush}` })).toBeVisible();
+      // Optional subscription mail is delivered as a digest, in every locale.
+      await expect(canvas.getByRole('switch', { name: `${label} · ${t.notificationEmailDigest}` })).toBeVisible();
     }
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },

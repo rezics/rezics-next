@@ -47,15 +47,16 @@ function Page({ mode, locale }: { mode: Mode; locale: UiLocale }) {
       modules={fictionModules(locale)}
       locale={locale}
       members={members}
+      site
       pkg={mode === 'package' ? fiction : null}
       execution={execution}
       look={mode !== 'standard-look'}
       navigation={[
         {
           label: t.rankings,
-          href: localizedPath(`${spaceHref('fiction', 'site')}#zone-module-charts`, 'en'),
+          href: localizedPath(`${spaceHref('fiction', 'site')}#zone-module-charts`, locale),
         },
-        { label: t.completed, href: localizedPath(spaceHref('fiction', 'site', ['browse']), 'en') },
+        { label: t.completed, href: localizedPath(spaceHref('fiction', 'site', ['browse']), locale) },
       ]}
     />
   );
@@ -134,6 +135,7 @@ export const PackageDark: Story = { globals: { theme: 'dark' } };
 
 export const PackageChinese: Story = {
   globals: { locale: 'zh-Hans' },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'site'), 'zh-Hans') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: '小说 Fiction' })).toBeVisible();

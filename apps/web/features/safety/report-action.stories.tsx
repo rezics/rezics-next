@@ -41,7 +41,10 @@ export const IconOnly: Story = {
   async play({ canvasElement }) {
     const link = within(canvasElement).getByRole('link', { name: 'Report this post' });
     await expect(link).toHaveAttribute('title', 'Report this post');
-    await expect(link.getAttribute('href')).toContain('target=%2Fen%2Fr%2Frain%2Fthreads%2F1');
+    const report = new URL(link.getAttribute('href')!, window.location.origin);
+    await expect(report.searchParams.get('target')).toBe(
+      localizedPath(zoneMemberHref('rain', 'threads', '1'), 'en'),
+    );
   },
 };
 

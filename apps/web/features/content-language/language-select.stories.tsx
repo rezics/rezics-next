@@ -63,11 +63,13 @@ type Story = StoryObj<typeof meta>;
 const body = () => within(document.body);
 const open = async (canvas: ReturnType<typeof within>, name: RegExp) => {
   await userEvent.click(canvas.getByRole('button', { name }));
-  const overlay = await body().findByRole('dialog');
-  await waitForFocus(overlay);
+  const overlay = await body().findByRole('dialog', { name: 'Language of your post' });
+  // A loaded parallel Storybook run can schedule the overlay's autofocus after one second.
+  // Keep the two-frame focus check before typing, with the same budget as other overlay waits.
+  await waitForFocus(overlay, 5000);
   const search = within(overlay).getByRole('searchbox');
   await userEvent.click(search);
-  await waitForFocus(search);
+  await waitForFocus(search, 5000);
   return search;
 };
 

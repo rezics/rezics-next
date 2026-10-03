@@ -15,10 +15,11 @@ type Story = StoryObj<typeof meta>;
 export const NewWorkChannels: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    for (const channel of ['In-app', 'Push', 'Email digest']) {
+    for (const channel of [englishMessages.notificationInbox, englishMessages.notificationPush,
+      englishMessages.notificationEmailDigest]) {
       await expect(
         canvas.getByRole('switch', {
-          name: `New Works in followed topics and saved views · ${channel}`,
+          name: `${englishMessages.notificationNewWork} · ${channel}`,
         }),
       ).toBeVisible();
     }
@@ -63,14 +64,16 @@ export const SaveEmailDigest: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const digest = await canvas.findByRole('switch', {
-      name: 'New Works in followed topics and saved views · Email digest',
+      name: `${englishMessages.notificationNewWork} · ${englishMessages.notificationEmailDigest}`,
     });
     await expect(digest).not.toBeChecked();
     await userEvent.click(digest);
     await expect(await canvas.findByRole('status')).toHaveTextContent('Notification choice saved.');
     await expect(digest).toBeChecked();
     await expect(
-      canvas.getByRole('switch', { name: 'New Works in followed topics and saved views · Push' }),
+      canvas.getByRole('switch', {
+        name: `${englishMessages.notificationNewWork} · ${englishMessages.notificationPush}`,
+      }),
     ).toBeChecked();
   },
 };

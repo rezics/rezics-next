@@ -131,7 +131,7 @@ export const Global: Story = {
     await expect(within(byline).getByText('38 people are currently reading')).toBeVisible();
     // Signed out, the shelf and rating controls lead to sign-in, which returns here.
     await expect(canvas.getByRole('link', { name: /^Want to read/ }))
-      .toHaveAttribute('href', `/auth/start?next=%2Fen%2Fw%2F${fixture.workRef}`);
+      .toHaveAttribute('href', `/auth/start?next=${encodeURIComponent(localizedPath(workHref(fixture.workRef), 'en'))}`);
     const ratings = canvas.getByRole('region', { name: 'Ratings' });
     const scope = within(ratings).getByRole('navigation', { name: 'Community' });
     await expect(within(scope).getByRole('link', { name: 'Everyone' })).toHaveAttribute('aria-current', 'true');
