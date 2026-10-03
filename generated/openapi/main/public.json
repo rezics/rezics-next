@@ -420055,6 +420055,82 @@
                           ],
                           "type": "string"
                         },
+                        "browse": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^(?!all$)[a-z][a-z0-9-]{0,63}$",
+                              "type": "string"
+                            },
+                            "labels": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "de": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "en": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "es": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "fr": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ja": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ko": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "zh-Hans": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "zh-Hant": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "en",
+                                "zh-Hant",
+                                "zh-Hans",
+                                "ja",
+                                "ko",
+                                "de",
+                                "fr",
+                                "es"
+                              ],
+                              "type": "object"
+                            },
+                            "order": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "order",
+                            "labels"
+                          ],
+                          "type": "object"
+                        },
                         "cover": {
                           "enum": [
                             "portrait",
@@ -494759,6 +494835,82 @@
                             ],
                             "type": "string"
                           },
+                          "browse": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^(?!all$)[a-z][a-z0-9-]{0,63}$",
+                                "type": "string"
+                              },
+                              "labels": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "de": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "en": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "es": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "fr": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ja": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "ko": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "zh-Hans": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "zh-Hant": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "en",
+                                  "zh-Hant",
+                                  "zh-Hans",
+                                  "ja",
+                                  "ko",
+                                  "de",
+                                  "fr",
+                                  "es"
+                                ],
+                                "type": "object"
+                              },
+                              "order": {
+                                "maximum": 9007199254740991,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "order",
+                              "labels"
+                            ],
+                            "type": "object"
+                          },
                           "cover": {
                             "enum": [
                               "portrait",
@@ -496032,6 +496184,82 @@
                           ],
                           "type": "string"
                         },
+                        "browse": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^(?!all$)[a-z][a-z0-9-]{0,63}$",
+                              "type": "string"
+                            },
+                            "labels": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "de": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "en": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "es": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "fr": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ja": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ko": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "zh-Hans": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "zh-Hant": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "en",
+                                "zh-Hant",
+                                "zh-Hans",
+                                "ja",
+                                "ko",
+                                "de",
+                                "fr",
+                                "es"
+                              ],
+                              "type": "object"
+                            },
+                            "order": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "order",
+                            "labels"
+                          ],
+                          "type": "object"
+                        },
                         "cover": {
                           "enum": [
                             "portrait",
@@ -496728,6 +496956,82 @@
                             "record"
                           ],
                           "type": "string"
+                        },
+                        "browse": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "pattern": "^(?!all$)[a-z][a-z0-9-]{0,63}$",
+                              "type": "string"
+                            },
+                            "labels": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "de": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "en": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "es": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "fr": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ja": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "ko": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "zh-Hans": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "zh-Hant": {
+                                  "maxLength": 64,
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "en",
+                                "zh-Hant",
+                                "zh-Hans",
+                                "ja",
+                                "ko",
+                                "de",
+                                "fr",
+                                "es"
+                              ],
+                              "type": "object"
+                            },
+                            "order": {
+                              "maximum": 9007199254740991,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "order",
+                            "labels"
+                          ],
+                          "type": "object"
                         },
                         "cover": {
                           "enum": [

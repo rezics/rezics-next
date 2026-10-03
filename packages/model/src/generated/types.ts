@@ -58,6 +58,126 @@ export const typeRegistry = {
       }
     }
   },
+  "http://www.w3.org/2004/02/skos/core#Concept": {
+    "type": "http://www.w3.org/2004/02/skos/core#Concept",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "browse": {
+      "id": "topics",
+      "order": 5,
+      "labels": {
+        "en": "Topics",
+        "zh-Hant": "主題",
+        "zh-Hans": "主题",
+        "ja": "トピック",
+        "ko": "주제",
+        "de": "Themen",
+        "fr": "Sujets",
+        "es": "Temas"
+      }
+    },
+    "labels": {
+      "en": {
+        "one": "Topic",
+        "other": "Topics"
+      },
+      "zh-Hant": {
+        "one": "主題",
+        "other": "主題"
+      },
+      "zh-Hans": {
+        "one": "主题",
+        "other": "主题"
+      },
+      "ja": {
+        "one": "トピック",
+        "other": "トピック"
+      },
+      "ko": {
+        "one": "주제",
+        "other": "주제"
+      },
+      "de": {
+        "one": "Thema",
+        "other": "Themen"
+      },
+      "fr": {
+        "one": "Sujet",
+        "other": "Sujets"
+      },
+      "es": {
+        "one": "Tema",
+        "other": "Temas"
+      }
+    }
+  },
+  "https://rezics.com/vocab/Agent": {
+    "type": "https://rezics.com/vocab/Agent",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "square",
+    "priority": 100,
+    "browse": {
+      "id": "people",
+      "order": 3,
+      "labels": {
+        "en": "People",
+        "zh-Hant": "人物",
+        "zh-Hans": "人物",
+        "ja": "人物",
+        "ko": "인물",
+        "de": "Personen",
+        "fr": "Personnes",
+        "es": "Personas"
+      }
+    },
+    "labels": {
+      "en": {
+        "one": "Agent",
+        "other": "Agents"
+      },
+      "zh-Hant": {
+        "one": "行動主體",
+        "other": "行動主體"
+      },
+      "zh-Hans": {
+        "one": "行动主体",
+        "other": "行动主体"
+      },
+      "ja": {
+        "one": "エージェント",
+        "other": "エージェント"
+      },
+      "ko": {
+        "one": "에이전트",
+        "other": "에이전트"
+      },
+      "de": {
+        "one": "Akteur",
+        "other": "Akteure"
+      },
+      "fr": {
+        "one": "Acteur",
+        "other": "Acteurs"
+      },
+      "es": {
+        "one": "Agente",
+        "other": "Agentes"
+      }
+    }
+  },
   "https://rezics.com/vocab/Character": {
     "type": "https://rezics.com/vocab/Character",
     "base": "resource",
@@ -102,6 +222,66 @@ export const typeRegistry = {
       "es": {
         "one": "Personaje",
         "other": "Personajes"
+      }
+    }
+  },
+  "https://rezics.com/vocab/Collection": {
+    "type": "https://rezics.com/vocab/Collection",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "browse": {
+      "id": "lists",
+      "order": 4,
+      "labels": {
+        "en": "Lists",
+        "zh-Hant": "清單",
+        "zh-Hans": "列表",
+        "ja": "リスト",
+        "ko": "목록",
+        "de": "Listen",
+        "fr": "Listes",
+        "es": "Listas"
+      }
+    },
+    "labels": {
+      "en": {
+        "one": "List",
+        "other": "Lists"
+      },
+      "zh-Hant": {
+        "one": "清單",
+        "other": "清單"
+      },
+      "zh-Hans": {
+        "one": "列表",
+        "other": "列表"
+      },
+      "ja": {
+        "one": "リスト",
+        "other": "リスト"
+      },
+      "ko": {
+        "one": "목록",
+        "other": "목록"
+      },
+      "de": {
+        "one": "Liste",
+        "other": "Listen"
+      },
+      "fr": {
+        "one": "Liste",
+        "other": "Listes"
+      },
+      "es": {
+        "one": "Lista",
+        "other": "Listas"
       }
     }
   },
@@ -240,6 +420,66 @@ export const typeRegistry = {
       "es": {
         "one": "Prompt",
         "other": "Prompts"
+      }
+    }
+  },
+  "https://rezics.com/vocab/Realm": {
+    "type": "https://rezics.com/vocab/Realm",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "square",
+    "priority": 100,
+    "browse": {
+      "id": "communities",
+      "order": 1,
+      "labels": {
+        "en": "Communities",
+        "zh-Hant": "社群",
+        "zh-Hans": "社区",
+        "ja": "コミュニティ",
+        "ko": "커뮤니티",
+        "de": "Communitys",
+        "fr": "Communautés",
+        "es": "Comunidades"
+      }
+    },
+    "labels": {
+      "en": {
+        "one": "Community",
+        "other": "Communities"
+      },
+      "zh-Hant": {
+        "one": "社群",
+        "other": "社群"
+      },
+      "zh-Hans": {
+        "one": "社区",
+        "other": "社区"
+      },
+      "ja": {
+        "one": "コミュニティ",
+        "other": "コミュニティ"
+      },
+      "ko": {
+        "one": "커뮤니티",
+        "other": "커뮤니티"
+      },
+      "de": {
+        "one": "Gemeinschaft",
+        "other": "Gemeinschaften"
+      },
+      "fr": {
+        "one": "Communauté",
+        "other": "Communautés"
+      },
+      "es": {
+        "one": "Comunidad",
+        "other": "Comunidades"
       }
     }
   },
@@ -474,6 +714,66 @@ export const typeRegistry = {
       }
     }
   },
+  "https://rezics.com/vocab/Zone": {
+    "type": "https://rezics.com/vocab/Zone",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "square",
+    "priority": 100,
+    "browse": {
+      "id": "sites",
+      "order": 2,
+      "labels": {
+        "en": "Sites",
+        "zh-Hant": "網站",
+        "zh-Hans": "网站",
+        "ja": "サイト",
+        "ko": "사이트",
+        "de": "Websites",
+        "fr": "Sites",
+        "es": "Sitios"
+      }
+    },
+    "labels": {
+      "en": {
+        "one": "Site",
+        "other": "Sites"
+      },
+      "zh-Hant": {
+        "one": "網站",
+        "other": "網站"
+      },
+      "zh-Hans": {
+        "one": "网站",
+        "other": "网站"
+      },
+      "ja": {
+        "one": "サイト",
+        "other": "サイト"
+      },
+      "ko": {
+        "one": "사이트",
+        "other": "사이트"
+      },
+      "de": {
+        "one": "Website",
+        "other": "Websites"
+      },
+      "fr": {
+        "one": "Site",
+        "other": "Sites"
+      },
+      "es": {
+        "one": "Sitio",
+        "other": "Sitios"
+      }
+    }
+  },
   "https://schema.org/AudioObject": {
     "type": "https://schema.org/AudioObject",
     "base": "work",
@@ -623,6 +923,20 @@ export const typeRegistry = {
     "presentation": "default",
     "cover": "document",
     "priority": 100,
+    "browse": {
+      "id": "works",
+      "order": 0,
+      "labels": {
+        "en": "Works",
+        "zh-Hant": "作品",
+        "zh-Hans": "作品",
+        "ja": "作品",
+        "ko": "작품",
+        "de": "Werke",
+        "fr": "Œuvres",
+        "es": "Obras"
+      }
+    },
     "labels": {
       "en": {
         "one": "Work",
@@ -1260,4 +1574,4 @@ export const typeRegistry = {
   }
 } as const;
 export type AdmittedType = keyof typeof typeRegistry;
-export const typeRegistryDigest = "e6841decac6b823229658e87aaaeebb5584574518e7ba168e532e331148a0f96";
+export const typeRegistryDigest = "99695eee3fafb50f07921fcb4c8bcc0c6c8eb4615fd5c127d33d65b1f4fa78f4";
