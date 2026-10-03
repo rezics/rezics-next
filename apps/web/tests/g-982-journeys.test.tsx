@@ -2,6 +2,7 @@ import { afterEach, beforeAll, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { renderMetadataToHtml } from 'vinext/shims/metadata';
 import { readSpacePage } from '../features/address/space-read.ts';
+import { realmHref } from '../features/realm/route.ts';
 import { decideAddress } from '../features/address/redirect.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
 import { joinPageFixture } from '../features/manage/settings-fixtures.ts';
@@ -37,7 +38,7 @@ test('G982: a named private request address reaches only the join page with its 
       : new Response(null, { status: 404 });
   }) as typeof fetch;
   expect(
-    await decideAddress(new URL('https://web.test/en/r/private-books'), 'en', async () => ({
+    await decideAddress(new URL(realmHref('en', 'private-books'), 'https://web.test'), 'en', async () => ({
       kind: 'resolved',
       data: address,
     })),

@@ -3,6 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { accessActor, accessFixtureApi, captureAccessStory, joinPageFixture, ownRequestFixture } from '../manage/settings-fixtures.ts';
 import { emptyRequestJournal, requestStorageKey } from './request-state.ts';
 import { PrivateSpaceJoinPage } from './join-page.tsx';
+import { realmHref } from '../realm/route.ts';
 import { signInPath } from '../auth/paths.ts';
 import { accessMessages } from '../manage/settings-messages.ts';
 
@@ -38,9 +39,9 @@ export const RequestToPending: Story = {
 };
 export const Declined: Story = { args: { api: accessFixtureApi({}, ownRequestFixture('declined')) }, async play() { await captureAccessStory('join-declined'); } };
 export const Pending: Story = { args: { api: accessFixtureApi({}, ownRequestFixture('pending')) } };
-export const SignedOut: Story = { args: { actingSubject: null, signInHref: signInPath('/en/r/private-books') }, async play({ canvasElement }) {
+export const SignedOut: Story = { args: { actingSubject: null, signInHref: signInPath(realmHref('en', 'private-books')) }, async play({ canvasElement }) {
   const canvas = within(canvasElement);
-  await expect(canvas.getByRole('link', { name: 'Sign in to request to join' })).toHaveAttribute('href', signInPath('/en/r/private-books'));
+  await expect(canvas.getByRole('link', { name: 'Sign in to request to join' })).toHaveAttribute('href', signInPath(realmHref('en', 'private-books')));
   await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
   await expect(canvas.queryByText(accessMessages.en.statusLoading)).not.toBeInTheDocument();
   await captureAccessStory('g-988-join-signed-out-en');
@@ -138,10 +139,10 @@ export const DeclinedTraditionalChinese: Story = { args: { locale: 'zh-Hant', ap
 export const WithdrawnTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'zh-Hant' } };
 export const AcceptedTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: acceptedApi() }, globals: { locale: 'zh-Hant' } };
 export const SignedOutTraditionalChinese: Story = { args: { locale: 'zh-Hant', actingSubject: null,
-  signInHref: signInPath('/zh-Hant/r/private-books') }, globals: { locale: 'zh-Hant' },
+  signInHref: signInPath(realmHref('zh-Hant', 'private-books')) }, globals: { locale: 'zh-Hant' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: accessMessages['zh-Hant'].signIn })).toHaveAttribute('href', signInPath('/zh-Hant/r/private-books'));
+    await expect(canvas.getByRole('link', { name: accessMessages['zh-Hant'].signIn })).toHaveAttribute('href', signInPath(realmHref('zh-Hant', 'private-books')));
     await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
     await captureAccessStory('g-988-join-signed-out-zh-Hant');
   },
