@@ -106,6 +106,16 @@ export const Communities: Story = {
       data: fixturePage(browseResources.filter((item) => item.kind === 'realm')),
     },
   },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const communities = within(canvas.getByRole('region', { name: 'Communities', exact: true }));
+    const page = fixturePage(browseResources.filter((item) => item.kind === 'realm'));
+    const links = within(communities.getByRole('list')).getAllByRole('link');
+    await expect(links).toHaveLength(page.items.length);
+    await expect(links.every((link) => link.getAttribute('href')?.startsWith('/en/r/'))).toBe(true);
+    // Topic suggestions also use a list, but are outside the results region.
+    await expect(canvas.getByRole('region', { name: 'Conditions' }).querySelector('ul')).not.toBeNull();
+  },
 };
 export const LastPage: Story = {
   args: {

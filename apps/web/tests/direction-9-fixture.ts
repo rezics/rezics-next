@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { isSessionKey, SESSION_KEY_COOKIE } from '../features/auth/cookies.ts';
 
 export interface PublicResponse {
   status(): number;
@@ -8,11 +9,32 @@ export interface PublicResponse {
   headers?(): Record<string, string>;
 }
 export interface PublicRequest {
-  get(path: string): Promise<PublicResponse>;
+  get(path: string, options?: { headers: Record<string, string> }): Promise<PublicResponse>;
   fetch(
     path: string,
     options: { method: string; data: unknown; headers: Record<string, string> },
   ): Promise<PublicResponse>;
+}
+
+/** Main owns the web session's selected Agent; the legacy subject cookie is
+ * cleared on sign-in and the Account's default Agent can differ from selection. */
+export async function selectedSessionAgent(
+  request: Pick<PublicRequest, 'get'>,
+  cookies: readonly { name: string; value: string }[],
+): Promise<string> {
+  const sessionKey = cookies.find((cookie) => cookie.name === SESSION_KEY_COOKIE)?.value;
+  if (!isSessionKey(sessionKey)) throw new Error('Authenticated address read needs a web session key');
+  const response = await request.get('/api/main/v1/me/session-agent', {
+    headers: { 'x-session-key': sessionKey },
+  });
+  if (response.status() !== 200)
+    throw new Error(`Session Agent read: HTTP ${response.status()}`);
+  const { sessionAgent } = await response.json() as {
+    sessionAgent: { actingSubject: string | null; eligible: boolean };
+  };
+  if (!sessionAgent.eligible || !sessionAgent.actingSubject)
+    throw new Error('Authenticated address read needs an eligible selected Agent');
+  return sessionAgent.actingSubject;
 }
 
 /** Every setup write goes through the browser's authenticated public BFF. */
