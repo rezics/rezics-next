@@ -34591,6 +34591,26 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "address": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "slugSource": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "prefix",
+                        "key",
+                        "slugSource"
+                      ],
+                      "type": "object"
+                    },
                     "avatarSelection": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -34707,8 +34727,13 @@
                       ]
                     },
                     "handle": {
-                      "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9])$",
-                      "type": "string"
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "id": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -46358,9 +46383,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "kind": {
                                           "const": "agent",
@@ -47729,9 +47759,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "kind": {
                                       "const": "agent",
@@ -82776,6 +82811,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -82786,9 +82841,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -111970,6 +112030,26 @@
                                               },
                                               {
                                                 "properties": {
+                                                  "address": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "key": {
+                                                        "type": "string"
+                                                      },
+                                                      "prefix": {
+                                                        "type": "string"
+                                                      },
+                                                      "slugSource": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "prefix",
+                                                      "key",
+                                                      "slugSource"
+                                                    ],
+                                                    "type": "object"
+                                                  },
                                                   "agent": {
                                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                     "type": "string"
@@ -111980,9 +112060,14 @@
                                                     "type": "string"
                                                   },
                                                   "handle": {
-                                                    "maxLength": 100,
+                                                    "~elyTyp": 7,
+                                                    "maxLength": 30,
                                                     "minLength": 1,
-                                                    "type": "string"
+                                                    "nullable": true,
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
                                                   },
                                                   "id": {
                                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -137477,7 +137562,12 @@
                           "actor": {
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -137607,6 +137697,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -137617,9 +137727,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -138141,7 +138256,12 @@
                                 "items": {
                                   "properties": {
                                     "handle": {
-                                      "type": "string"
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -149808,6 +149928,26 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "address": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "slugSource": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "prefix",
+                        "key",
+                        "slugSource"
+                      ],
+                      "type": "object"
+                    },
                     "avatarSelection": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -149924,8 +150064,13 @@
                       ]
                     },
                     "handle": {
-                      "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9])$",
-                      "type": "string"
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "id": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -187693,6 +187838,25 @@
                                 "~elyTyp": 7,
                                 "nullable": true,
                                 "properties": {
+                                  "address": {
+                                    "properties": {
+                                      "key": {
+                                        "type": "string"
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      },
+                                      "slugSource": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "prefix",
+                                      "key",
+                                      "slugSource"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "avatar": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -187702,7 +187866,12 @@
                                     ]
                                   },
                                   "handle": {
-                                    "type": "string"
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
                                   },
                                   "id": {
                                     "type": "string"
@@ -319021,6 +319190,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -319031,9 +319220,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -320971,6 +321165,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -320981,9 +321195,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -322930,6 +323149,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -322940,9 +323179,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -325040,6 +325284,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -325050,9 +325314,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -327161,6 +327430,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -327171,9 +327460,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -329309,6 +329603,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -329319,9 +329633,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -334137,6 +334456,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -334147,9 +334486,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -334898,6 +335242,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -334908,9 +335272,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -335671,6 +336040,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -335681,9 +336070,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -336592,6 +336986,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -336602,9 +337016,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -337523,6 +337942,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -337533,9 +337972,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -338481,6 +338925,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -338491,9 +338955,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -340878,6 +341347,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -340888,9 +341377,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -341639,6 +342133,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -341649,9 +342163,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -342412,6 +342931,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -342422,9 +342961,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -343333,6 +343877,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -343343,9 +343907,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -344264,6 +344833,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -344274,9 +344863,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -345222,6 +345816,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -345232,9 +345846,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -346049,6 +346668,26 @@
                                         },
                                         {
                                           "properties": {
+                                            "address": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "prefix": {
+                                                  "type": "string"
+                                                },
+                                                "slugSource": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "prefix",
+                                                "key",
+                                                "slugSource"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "agent": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
@@ -346059,9 +346698,14 @@
                                               "type": "string"
                                             },
                                             "handle": {
-                                              "maxLength": 100,
+                                              "~elyTyp": 7,
+                                              "maxLength": 30,
                                               "minLength": 1,
-                                              "type": "string"
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
                                             },
                                             "id": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -346842,6 +347486,26 @@
                                         },
                                         {
                                           "properties": {
+                                            "address": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "prefix": {
+                                                  "type": "string"
+                                                },
+                                                "slugSource": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "prefix",
+                                                "key",
+                                                "slugSource"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "agent": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
@@ -346852,9 +347516,14 @@
                                               "type": "string"
                                             },
                                             "handle": {
-                                              "maxLength": 100,
+                                              "~elyTyp": 7,
+                                              "maxLength": 30,
                                               "minLength": 1,
-                                              "type": "string"
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
                                             },
                                             "id": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -347640,6 +348309,26 @@
                                         },
                                         {
                                           "properties": {
+                                            "address": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "prefix": {
+                                                  "type": "string"
+                                                },
+                                                "slugSource": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "prefix",
+                                                "key",
+                                                "slugSource"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "agent": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
@@ -347650,9 +348339,14 @@
                                               "type": "string"
                                             },
                                             "handle": {
-                                              "maxLength": 100,
+                                              "~elyTyp": 7,
+                                              "maxLength": 30,
                                               "minLength": 1,
-                                              "type": "string"
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
                                             },
                                             "id": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -348578,6 +349272,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "slugSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "slugSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -348588,9 +349302,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -381252,6 +381971,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -381262,9 +382001,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -383999,6 +384743,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "slugSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "slugSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -384009,9 +384773,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -384917,6 +385686,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -384927,9 +385716,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -386885,6 +387679,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -386895,9 +387709,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -401051,7 +401870,12 @@
                             "nullable": true,
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -401755,7 +402579,12 @@
                             "nullable": true,
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -401918,7 +402747,12 @@
                             "nullable": true,
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -443336,6 +444170,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -443346,9 +444200,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -444147,6 +445006,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -444157,9 +445036,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -508533,6 +509417,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -508543,9 +509447,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -512239,6 +513148,26 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "address": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "prefix": {
+                                "type": "string"
+                              },
+                              "slugSource": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "prefix",
+                              "key",
+                              "slugSource"
+                            ],
+                            "type": "object"
+                          },
                           "agent": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -512247,8 +513176,13 @@
                             "type": "string"
                           },
                           "handle": {
-                            "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9])$",
-                            "type": "string"
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "pattern": "^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -513625,6 +514559,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "slugSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "slugSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -513635,9 +514589,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
