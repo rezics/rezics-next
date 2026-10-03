@@ -10,6 +10,7 @@ import { operatorRole, rolePermits } from '../../services/account/src/operators.
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { createAgentGraph } from '../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../services/main/src/modules/agent/provision.ts';
+import { repairJoiningFixtureConsent } from '../../services/main/src/modules/access/join-fixture-consent.ts';
 import { MAIN_SITE_SCOPE, MAIN_SITE_SCOPES } from '../../apps/web/features/auth/scopes.ts';
 import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
 
@@ -298,6 +299,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     { id: provisionId, agent: actor, ...agent, digest });
     const principalId = await grantWorkCreation(accessPool, discovery.issuer, member.id, actor,
       { id: provisionId, digest, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence });
+    await repairJoiningFixtureConsent(accessPool, principalId, actor);
     const publicConfigPath = join(outputDir, 'public.json');
     const privateConfigPath = join(outputDir, 'private.json');
     const runtimeEnvPath = join(outputDir, 'runtime.env');
@@ -368,17 +370,22 @@ export async function assertWebInstallationReady(apps: Record<string, string>, p
 /** A stack prepared before the main site's current scopes or refresh grant
  * keeps a web client whose installation ceiling refuses them. Register a new
  * client with the fixture's operator and point the public config at it; the
- * old client stays installed until the stack is reset. Returns whether it did. */
+ * old client stays installed until the stack is reset. Also align the local
+ * person's consent grant with normal provisioning, even if OAuth is current.
+ * Returns whether it registered a new client. */
 export async function upgradeWebClient(options: { runId: string; profile?: 'dev' | 'qa' }): Promise<boolean> {
   const profile = options.profile ?? 'qa';
   const stackDir = stackDirectory(root, profile === 'dev' ? { profile } : { profile, runId: options.runId });
   const publicPath = join(stackDir, 'web-auth', 'public.json');
   const current = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; grantTypes?: string[] };
-  const { operator } = JSON.parse(readFileSync(join(stackDir, 'web-auth', 'private.json'), 'utf8')) as {
-    operator: { id: string; email: string; password: string } };
+  const { operator, principalId, actingSubject } = JSON.parse(readFileSync(join(stackDir, 'web-auth', 'private.json'), 'utf8')) as {
+    operator: { id: string; email: string; password: string }; principalId: string; actingSubject: string };
   const apps = readEnv(join(stackDir, 'apps.env'));
   requireLocalApps(apps);
+  const access = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
+  try { await repairJoiningFixtureConsent(access, principalId, actingSubject); }
+  finally { await access.end(); }
   const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
   try {
     const registered = await pool.query<{ name: string; scopes: string[]; grantTypes: string[];
