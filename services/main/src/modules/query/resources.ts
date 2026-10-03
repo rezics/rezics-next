@@ -30,6 +30,7 @@ import type { ResourceCard, ResourceCondition, ResourceListPlan } from './resour
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import type { DiscoveryReadGeneration } from '../discovery/store.ts';
 import { resourceWorkCards } from './work-cards.ts';
+import { optionalPreview } from './optional-preview.ts';
 
 /** Ownership establishes the read path; descriptive rdf:type only filters it.
  * Public catalogue reads never use private grants, including a reader's own. */
@@ -173,10 +174,16 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
   const refs = [
     ...new Set(candidates.filter((row) => row.kind !== 'agent').map((row) => row.summary)),
   ];
+  const media = session.deps.media?.store;
+  const summaryMedia = media ? {
+    async avatarRows(targets: readonly string[], context: string) {
+      return optionalPreview(session, () => media.avatarRows(targets, context));
+    },
+  } : undefined;
   const readSummaries = () =>
     readResourceSummaries(
       session.deps.environment,
-      session.deps.media?.store,
+      summaryMedia,
       { viewer: session.viewer },
       {
         resources: refs,
