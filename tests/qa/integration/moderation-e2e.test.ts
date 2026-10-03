@@ -213,7 +213,9 @@ test('G314 self-join: only explicitly open public Realms, bans and revoked conse
       termsRevision: 'realm-membership-v1',listed: true };
     expect((await s.call(member,'POST',`${s.root}/join`,input)).status).toBe(403);
     await s.settings(true);
-    expect(await json(await s.read(member,`${s.root}/joining`))).toMatchObject({ selfJoin: true,state: 'absent' });
+    const policy = await json<{ policyRevision: string }>(await s.read(member,`${s.root}/joining`));
+    expect(policy).toMatchObject({ selfJoin: true,state: 'absent' });
+    input.expectedPolicyRevision = policy.policyRevision;
     await s.stack.accessPool.query(`INSERT INTO access.membership_ban (kind,owner_subject,member_subject,active,reason_ref)
       VALUES ('realm',$1,$2,true,'fixture-ban')`,[s.realm,member.actor]);
     expect((await s.call(member,'POST',`${s.root}/join`,input)).status).toBe(403);
@@ -394,8 +396,9 @@ test('G314 roster: bounded public pages, consent revocation and membership episo
     const people = [];
     for (const name of ['One','Two','Three']) {
       const person = await s.person(name); people.push(person);
+      const policy = await json<{ policyRevision: string }>(await s.read(person,`${s.root}/joining`));
       await json(await s.call(person,'POST',`${s.root}/join`,{ actingSubject: person.actor,expectedMembershipGeneration: '0',
-        expectedPolicyRevision: '0',termsRevision: 'realm-membership-v1',listed: true }));
+        expectedPolicyRevision: policy.policyRevision,termsRevision: 'realm-membership-v1',listed: true }));
     }
     const collected: string[] = [];
     let after: string | null = null;
@@ -414,8 +417,9 @@ test('G314 roster: bounded public pages, consent revocation and membership episo
     const generation = (await json<{ generation: string }>(await s.read(s.owner,`${s.root}/roles`))).generation;
     await json(await s.call(s.owner,'POST',`${s.root}/members`,{ actingSubject: s.owner.actor,expectedGeneration: generation,
       member: person.actor,expectedMembershipGeneration: '1',action: 'remove',reason: 'Remove old episode',consent: null,durationSeconds: null }),201);
+    const policy = await json<{ policyRevision: string }>(await s.read(person,`${s.root}/joining`));
     await json(await s.call(person,'POST',`${s.root}/join`,{ actingSubject: person.actor,expectedMembershipGeneration: '2',
-      expectedPolicyRevision: '0',termsRevision: 'realm-membership-v1',listed: false }));
+      expectedPolicyRevision: policy.policyRevision,termsRevision: 'realm-membership-v1',listed: false }));
     expect(await json(await s.call(null,'GET',`${s.root}/roster?featured=true`))).toEqual({ items: [],nextCursor: null });
     expect((await s.call(person,'PUT',`${s.root}/roster/listing`,{
       actingSubject: person.actor,expectedMembershipGeneration: '1',listed: true })).status).toBe(409);

@@ -7,6 +7,8 @@ import { changeRealmMember } from './realm-management-members.ts';
 import { membershipRoot, realmActor, realmIdPattern, realmKeyPattern, realmManager, realmTransaction } from './realm-management-authority.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale } from '../realm-admin/contract.ts';
 import { readRealmPolicy } from '../space/policy.ts';
+import { followSpace, registerFollowSpace, type SpaceIdentity } from '../follows/targets.ts';
+import { publicTargetRead } from '../target/resolve.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { REALM_JOIN_COST, type InvitationCommand, type InvitationResponse, type SelfJoinCommand } from './realm-management-joining-contract.ts';
 
@@ -63,12 +65,12 @@ export class AccessRealmJoining {
       FROM access.membership WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2 FOR SHARE`,[realm,actor])).rows[0];
   }
 
-  policyFor(principal: VerifiedPrincipal, realm: string, actor: string) {
+  async policyFor(principal: VerifiedPrincipal, realm: string, actor: string) {
+    const graph = await readRealmPolicy(this.env,realm);
     return realmTransaction(this.pool,realm,false,async client => {
       await realmActor(client,principal,actor,'access.membership.consent');
       const policy = await this.policy(client,realm);
       const member = await this.member(client,realm,actor);
-      const graph = await readRealmPolicy(this.env,realm);
       const invited = (await client.query(`SELECT 1 FROM access.realm_invitation WHERE realm = $1 AND member = $2
         AND state = 'pending' AND expires_at > clock_timestamp() LIMIT 1`,[realm,actor])).rowCount;
       if (!graph || (graph.visibility !== 'public' || policy.visibility !== 'public') && !invited && member?.state !== 'joined') {
@@ -135,7 +137,9 @@ export class AccessRealmJoining {
   }
 
   private async join(client: PoolClient, principal: VerifiedPrincipal, principalId: string, realm: string,
-    input: SelfJoinCommand, key: string) {
+    input: SelfJoinCommand, key: string, identity: SpaceIdentity | null) {
+    if (!identity) throw new RealmAdminDenied('Realm Space is unavailable');
+    await registerFollowSpace(client,identity);
     let consent;
     try { consent = await new AccessMembershipConsents(this.pool).issue({ principal,kind: 'realm',ownerSubject: realm,
       memberSubject: input.actingSubject,expectedGeneration: input.expectedMembershipGeneration,
@@ -149,7 +153,7 @@ export class AccessRealmJoining {
     }
     await changeRealmMember(client,realm,{ actingSubject: input.actingSubject,member: input.actingSubject,
       expectedGeneration: '0',expectedMembershipGeneration: input.expectedMembershipGeneration,
-      reason: 'Recipient accepted Realm membership',action: 'add',consent: consent.consentReference,durationSeconds: null },principalId,randomUUID());
+      reason: 'Recipient accepted Realm membership',action: 'add',consent: consent.consentReference,durationSeconds: null },principalId,randomUUID(),this.env);
     const member = (await this.member(client,realm,input.actingSubject))!;
     await client.query(`INSERT INTO access.realm_roster_listing (membership_id,membership_generation,realm,member,listed)
       VALUES ($1,$2,$3,$4,$5)`,[member.id,member.generation,realm,input.actingSubject,input.listed]);
@@ -158,22 +162,25 @@ export class AccessRealmJoining {
       listed: input.listed,replayed: false };
   }
 
-  selfJoin(principal: VerifiedPrincipal, realm: string, input: SelfJoinCommand, key: string) {
+  async selfJoin(principal: VerifiedPrincipal, realm: string, input: SelfJoinCommand, key: string) {
+    const graph = await readRealmPolicy(this.env,realm);
+    const identity = await publicTargetRead(this.env.fuseki,session => followSpace(session,realm));
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
       return this.receipt(client,actor.id,key,['self-join',realm,input],async () => {
         const policy = await this.policy(client,realm);
-        const graph = await readRealmPolicy(this.env,realm);
-        if (!policy.self_join || !policy.open || policy.visibility !== 'public' || graph?.visibility !== 'public') {
+          if (!policy.self_join || !policy.open || policy.visibility !== 'public' || graph?.visibility !== 'public') {
           throw new RealmAdminDenied('This Realm does not allow self-joining');
         }
-        return this.join(client,principal,actor.id,realm,input,key);
+        return this.join(client,principal,actor.id,realm,input,key,identity);
       });
     });
   }
 
-  respond(principal: VerifiedPrincipal, realm: string, id: string, input: InvitationResponse, key: string) {
+  async respond(principal: VerifiedPrincipal, realm: string, id: string, input: InvitationResponse, key: string) {
+    const identity = input.action === 'accept'
+      ? await publicTargetRead(this.env.fuseki,session => followSpace(session,realm)) : null;
     return realmTransaction(this.pool,realm,true,async client => {
       const actor = await realmActor(client,principal,input.actingSubject,'access.membership.consent');
       await membershipRoot(client);
@@ -199,7 +206,7 @@ export class AccessRealmJoining {
           await this.policy(client,realm);
           await this.join(client,principal,actor.id,realm,{ actingSubject: input.actingSubject,
             expectedMembershipGeneration: row.membership_generation,expectedPolicyRevision: row.policy_revision,
-            termsRevision: row.terms_revision,listed: input.listed },key);
+            termsRevision: row.terms_revision,listed: input.listed },key,identity);
         }
         row.state = input.action === 'accept' ? 'accepted' : 'declined';
         await client.query(`UPDATE access.realm_invitation SET state = $2,responded_at = clock_timestamp() WHERE id = $1`,[id,row.state]);

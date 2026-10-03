@@ -76,6 +76,11 @@ class CapturingFuseki extends FusekiClient {
     }] } };
     if (query.includes('SELECT ?main ?type')) return { results: { bindings: [{ main: uri(main), type: uri('https://schema.org/CreativeWork'),
       workManifest: uri(this.priorManifest) }] } };
+    if (query.includes('SELECT ?work ?name ?namePredicate ?state')) return { results: { bindings: [{
+      work: uri(work), name: { ...lit('元の名前'), 'xml:lang': this.language },
+      namePredicate: uri('http://www.w3.org/2000/01/rdf-schema#label'),
+    }, { work: uri(work), name: { ...lit('Original name'), 'xml:lang': 'en' },
+      namePredicate: uri('https://schema.org/name') }] } };
     if (query.includes('SELECT ?main WHERE')) return { results: { bindings: [{ main: uri(main) }] } };
     if (query.includes('SELECT ?admission WHERE')) return { results: { bindings: [{ admission: lit('proposal-admission') }] } };
     if (query.includes('SELECT ?main ?manifest')) return { results: { bindings: [{ main: uri(main), manifest: uri(this.priorManifest) }] } };
@@ -172,7 +177,8 @@ for (const [submitted, language] of [['ja', 'ja'], ['zh-Hant', 'zh-Hant'], ['und
               conversion: ids[7]!, proposal: ids[8]!, initialHead: head, mapping: 'open-library-work-map-v1' } };
           const command = await titleControlCommand(f.env, f.admitted(action, titleControlDigest(intent)), intent);
           expect(command.update).toContain(`rdfs:label "新しい名前"@${language}`);
-          expect(command.update).toContain(`rv:publicTitle "新しい名前"@${language}`);
+          expect(command.update).toContain(`?titleUnit rv:publicTitle "Original name"@en, "新しい名前"@${language} .`);
+          expect(command.update).not.toContain(`rv:publicTitle "元の名前"@${language}`);
           const saved = manifest(command, work, f.directory);
           expect((await readWorkPayloadForRevision(f.env, saved.manifest, work)).language).toBe(language);
           expect(saved.state.localizedTitle).toEqual({ value: 'Original name', language: 'en' });
@@ -432,12 +438,15 @@ test('G-512 Space and protected correction HTTP commands accept languages outsid
     expect(correction.status).toBe(201);
     expect(manifest(f.fuseki.commands.at(-1)!, work, f.directory).state.language).toBe('zh-Hant');
     f.fuseki.receipts.clear();
+    const writes = f.fuseki.commands.length;
     const invalid = await post('/v1/work-title-corrections', { profile: 'work-title-correction-v1', ...basis,
       title: '新的名稱', language: 'zh--Hant', predecessor: null });
     expect(invalid.status).toBe(422);
     const malformed = await post('/v1/work-title-corrections', { profile: 'work-title-correction-v1', ...basis,
       title: '新的名稱', language: 'ja-12', predecessor: null });
-    expect(malformed.status).toBe(400);
+    // The shared language schema rejects malformed RFC 5646 syntax before dispatch.
+    expect(malformed.status).toBe(422);
+    expect(f.fuseki.commands).toHaveLength(writes);
   } finally { f.cleanup(); }
 });
 

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { requireMandate, requirePrincipal } from '../access/topology-control.ts';
+import { defaultNameListingProjection, type NameListingProjection } from '../search/name-preferences.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
@@ -21,7 +22,7 @@ const state = (row?: Row): AgentListingState => ({ listing: row?.listing ?? 'lis
 /** Access owns discovery listing, independently of library and profile disclosure.
  * The active Agent row serializes first writes; retries recheck controller authority. */
 export class AgentListingStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly projectNames?: NameListingProjection) {}
 
   private async transaction<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect().catch(() => { throw new AgentListingUnavailable('Access is unavailable'); });
@@ -88,7 +89,12 @@ export class AgentListingStore {
       throw new InvalidAgentListing('Invalid listing command');
     }
     const digest = createHash('sha256').update(JSON.stringify([agent, listing, expectedVersion])).digest('hex');
-    return this.transaction(async client => {
+    const projection = this.projectNames ?? defaultNameListingProjection();
+    const projectNames: NameListingProjection = async (agent, listing, version) => {
+      try { await projection?.(agent, listing, version); }
+      catch { throw new AgentListingUnavailable('Name projection is unavailable'); }
+    };
+    const result = await this.transaction(async client => {
       const actor = await requirePrincipal(client, principal);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`agent-listing:${actor.id}:${idempotencyKey}`]);
       const agentRow = await client.query(`SELECT id FROM access.authority_subject
@@ -101,11 +107,13 @@ export class AgentListingStore {
         WHERE principal_id = $1 AND idempotency_key = $2`, [actor.id, idempotencyKey])).rows[0];
       if (prior) {
         if (prior.request_digest !== digest) throw new AgentListingConflict('Idempotency key reused');
+        if (prior.listing === 'unlisted') await projectNames(agent, 'unlisted', prior.version);
         return { ...state(prior), replayed: true };
       }
       const current = (await client.query<Row>(`SELECT listing, version, changed_at
         FROM access.agent_listing WHERE agent_id = $1 FOR UPDATE`, [agent])).rows[0];
       if ((current?.version ?? 0) !== expectedVersion) throw new StaleAgentListing('Listing changed');
+      if (listing === 'unlisted') await projectNames(agent, 'unlisted', expectedVersion + 1);
       const written = (await client.query<Row>(`INSERT INTO access.agent_listing
         (agent_id, listing, version) VALUES ($1,$2,$3)
         ON CONFLICT (agent_id) DO UPDATE SET listing = EXCLUDED.listing,
@@ -117,5 +125,7 @@ export class AgentListingStore {
         written.listing, written.version, written.changed_at]);
       return { ...state(written), replayed: false };
     });
+    if (result.listing === 'listed') await projectNames(agent, 'listed', result.version);
+    return result;
   }
 }

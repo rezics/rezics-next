@@ -113,10 +113,21 @@ test('G394: Work reader stats count public Person libraries and visible reviews 
     }
 
     // Both probes seek their indexes rather than scan the tables.
-    const plan = async (pool: typeof stack.contentPool, sql: string, params: unknown[]) => {
+    const plan = async (pool: typeof stack.contentPool, sql: string, params: unknown[], reviews = false) => {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        if (reviews) {
+          // A five-row table can legitimately choose the merge inventory index.
+          // Other questions about this same Work make the Context seek matter.
+          await client.query(`INSERT INTO access.reader_review (principal_id, acting_subject, context, work,
+            main_version, rating_observation, rating_revision, rating, language, body, spoiler, revision)
+            SELECT $1, $2, 'https://rezics.com/id/' || gen_random_uuid(), $3, $4,
+              $5, $5, 4, 'en', 'Unrelated question', false, gen_random_uuid()
+            FROM generate_series(1, 5000)`, [writer.principalId, writer.actor, book.work,
+            book.mainVersion, `https://rezics.com/id/${randomUUID()}`]);
+          await client.query('ANALYZE access.reader_review');
+        }
         await client.query('SET LOCAL enable_seqscan = off');
         return (await client.query<{ 'QUERY PLAN': string }>(`EXPLAIN ${sql}`, params)).rows
           .map(row => row['QUERY PLAN']).join('\n');
@@ -125,8 +136,11 @@ test('G394: Work reader stats count public Person libraries and visible reviews 
     expect(await plan(stack.contentPool, `SELECT agent FROM reader.library_status WHERE work = $1
       AND status = 'reading' ORDER BY agent LIMIT 10001`, [book.work]))
       .toMatch(/library_status_(?:readers_idx|also_enjoyed_work)/);
-    expect(await plan(stack.accessPool, `SELECT 1 FROM access.reader_review r WHERE r.context = $1 AND r.work = $2
-      AND NOT r.deleted LIMIT 10001`, [context, book.work])).toMatch(/reader_review_(?:new|helpful)/);
+    const reviewPlan = await plan(stack.accessPool, `SELECT 1 FROM access.reader_review r WHERE r.context = $1 AND r.work = $2
+      AND NOT r.deleted LIMIT 10001`, [context, book.work], true);
+    expect(reviewPlan).toMatch(/Index (?:Only )?Scan|Bitmap Index Scan/);
+    expect(reviewPlan).toMatch(/Index Cond:.*context =.*work =/);
+    expect(reviewPlan).not.toContain('Seq Scan');
   } finally {
     meter.restore();
     await stack.stop();

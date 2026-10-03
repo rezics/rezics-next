@@ -22,6 +22,7 @@ import { LibraryImportRetentionWorker } from './modules/library-import/retention
 import { AuthorReaders } from './modules/author-page/readers.ts';
 import { WorkReaderStats } from './modules/work/read-stats.ts';
 import { DiscoveryProjection } from './modules/discovery/store.ts';
+import { DiscoveryAudienceStore } from './modules/discovery/audience.ts';
 import { AlsoEnjoyedStore } from './modules/also-enjoyed/store.ts';
 import { FollowsStore } from './modules/follows/store.ts';
 import { FeedStore } from './modules/feed/store.ts';
@@ -54,6 +55,7 @@ import { NameRegistry } from './modules/address/registry.ts';
 import { AgentPublicProfiles } from './modules/agent/profile.ts';
 import { ProfilesAccess } from './modules/profiles/access.ts';
 import { StudioAccess } from './modules/studio/access.ts';
+import { configureNamePreferences } from './modules/search/name-preferences.ts';
 import { configureLibraryShelves, prepareLibraryShelves } from './modules/library/backfill.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ConsumptionSessionStore } from './modules/session/store.ts';
@@ -159,6 +161,9 @@ import { NotificationRealtimeHub } from './modules/notification/realtime.ts';
 import { NotificationDispatcher } from './modules/notification/dispatcher.ts';
 import { NotificationDeliveryWorker } from './modules/notification/delivery-worker.ts';
 import { NotificationProducer, NotificationProducerWorker } from './modules/notification-producers/producer.ts';
+import { configureFollowGraph } from './modules/follows/recovery.ts';
+import { configureLibraryFollows } from './modules/library/follows.ts';
+import { resourceNotificationSubjectReader } from './modules/notification-producers/resources.ts';
 import { notificationProducerSubjectReader } from './modules/notification-producers/subjects.ts';
 import { editorialNotificationSubjectReader } from './modules/notification-producers/editorial.ts';
 import { feedNotificationSubjectReader } from './modules/notification-producers/feed-subjects.ts';
@@ -314,6 +319,9 @@ notificationStore.setReadAgentReader(currentNotificationAgentReader(fuseki, envi
 notificationStore.registerReadSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 const notificationSourceReader = notificationProducerSubjectReader(pool, contentPool, environment);
+const notificationResourceReader = resourceNotificationSubjectReader(pool, environment);
+notificationStore.registerReadSubjectReader('relationship-resource-v1', notificationResourceReader);
+notificationStore.registerReadSubjectReader('relationship-reply-v1', notificationSourceReader);
 const notificationEditorialReader = editorialNotificationSubjectReader(pool, environment);
 notificationStore.registerReadSubjectReader('editorial-proposal-v1', notificationEditorialReader);
 const notificationFeedReader = feedNotificationSubjectReader(pool, environment, content, new ReaderReviews(pool));
@@ -346,6 +354,8 @@ if (safetyAlerts) notificationDispatcher?.registerSubjectReader(SAFETY_ALERT_BAS
 notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
   verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
 notificationDispatcher?.registerSubjectReader('editorial-proposal-v1', notificationEditorialReader);
+notificationDispatcher?.registerSubjectReader('relationship-resource-v1', notificationResourceReader);
+notificationDispatcher?.registerSubjectReader('relationship-reply-v1', notificationSourceReader);
 for (const basis of ['realm-reply-v1', 'submission-decision-v1', 'moderation-outcome-v1',
   'realm-role-change-v1', 'review-created-v1', 'review-helpful-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationSourceReader);
 for (const basis of ['followed-chapter-v1', 'post-vote-v1']) notificationDispatcher?.registerSubjectReader(basis, notificationFeedReader);
@@ -372,7 +382,10 @@ const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrec
 const actingContextDiscovery = new AccessActingContexts(pool, environment);
 const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
   ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
+await configureNamePreferences(environment, pool);
 configureLibraryShelves(contentPool, pool, fuseki);
+configureFollowGraph(pool, fuseki);
+configureLibraryFollows(contentPool, pool);
 const libraryImport = new ReaderLibraryImportStore(contentPool, {
   sourceSearchesPerDay: config.MAIN_READER_IMPORT_SEARCHES_PER_DAY,
   acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,
@@ -398,6 +411,7 @@ const app = createMainApp(fuseki, {
   savedFilters: new SavedFilterStore(pool),
   homeTrending: new RankingHomeTrendingReader(readRankings),
   discovery: new DiscoveryProjection(pool),
+  discoveryAudience: new DiscoveryAudienceStore(pool),
   alsoEnjoyed: new AlsoEnjoyedStore(pool, contentPool),
   profiles: new ProfilesAccess(pool),
   studioAccess: new StudioAccess(pool, fuseki),

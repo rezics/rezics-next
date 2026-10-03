@@ -17,7 +17,7 @@ import type { shelfWork } from './read-contract.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { readWorkRating } from '../work/read-rating.ts';
-import { selectDisplayName, type LocalizedText } from '../display-language/select.ts';
+import { selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
 import { admittedPage } from '../disclosure/admitted-page.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
@@ -190,6 +190,7 @@ export async function readAgent(session: WorkReadSession, agent: string) {
 export interface AgentCard {
   id: string;
   displayName: string;
+  displayNameInfo?: DisplayName;
   handle: string;
   links: { profile: string };
 }
@@ -273,7 +274,8 @@ export async function readAgentCards(session: WorkReadSession, agents: readonly 
       throw new WorkReadUnavailable('Agent bio is invalid');
     }
     const handle = handles.get(agent) ?? field(row, 'handle');
-    cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` } });
+    cards.set(agent, { id: agent, displayName, handle, links: { profile: `/@${handle}` },
+      ...(names ? { displayNameInfo: selectDisplayName(names, session.displayLanguages)! } : {}) });
   }
   const after = await owner.agentFences([...cards.keys()]);
   if ([...cards.keys()].some((agent) => after.get(agent) !== before.get(agent))) {

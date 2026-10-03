@@ -23,13 +23,17 @@ import type { ReadAssessment } from '../suitability/contract.ts';
 import { UNASSESSED } from '../suitability/policy.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { identityCanonical, canonicalAddresses } from '../address/canonical.ts';
+import { readSummaryPages, SUMMARY_PAGE_COST } from './summary-pages.ts';
 
 export { direction } from '../display-language/select.ts';
 
-export const MAX_SUMMARY_BATCH = 64;
+export const MAX_SUMMARY_BATCH = SUMMARY_PAGE_COST.batch;
 export const FALLBACK_POLICY = 'avatar-fallback-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const languageTag = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
+export const SUMMARY_REFERENCE_PATTERN = '^[A-Za-z][A-Za-z0-9+.-]*:[^\\s<>]*$';
+export const MAX_SUMMARY_REFERENCE_LENGTH = 2048;
+const summaryReference = new RegExp(SUMMARY_REFERENCE_PATTERN);
 
 export type ResourceType = 'work' | 'main-version' | 'space' | 'realm' | 'concept'
   | 'agent' | 'zone'
@@ -275,7 +279,11 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
         OPTIONAL { FILTER(${workType})
           GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
-        OPTIONAL { FILTER(?type IN ("agent","zone")) GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
+        OPTIONAL { FILTER(?type IN ("agent","zone")) GRAPH ${iri(GRAPHS.current)} {
+          { ?r rdfs:label ?label }
+          UNION { FILTER(?type = "zone") FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
+            ?r rv:space ?zoneSpace . ?zoneSpace rdfs:label ?label }
+        } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r schema:name ?label } }
         OPTIONAL { FILTER(?type = "collection") GRAPH ${iri(GRAPHS.current)} { ?r rv:collectionNameHead ?nameHead }
           OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?nameHead a rv:CollectionNameRevision ;
@@ -363,12 +371,14 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
 async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore | undefined,
   reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch & { redirects: Map<string, string> }> {
   if (!input.resources.length || input.resources.length > MAX_SUMMARY_BATCH
-    || input.resources.some(resource => !nativeId.test(resource))
+    || input.resources.some(resource => resource.length > MAX_SUMMARY_REFERENCE_LENGTH || !summaryReference.test(resource))
     || (input.context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(input.context))
     || (input.language !== null && !languageTag.test(input.language))) {
     throw new MediaInvalid('resource summary request is invalid');
   }
-  const unique = [...new Set(input.resources)];
+  // Foreign references never enter graph, disclosure or Access queries. They
+  // retain their input position and the same minimal unavailable item.
+  const unique = [...new Set(input.resources.filter(resource => nativeId.test(resource)))];
   const graph = await graphRows(env, unique);
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
   // Check the entire requested batch, including missing identities, before
@@ -387,6 +397,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
   const readable = new Map<string, GraphRow>();
   const restricted = new Map<string, string>();
   const special = new Map<string, GraphRow>();
+  const pages = new Map<string, GraphRow>();
   for (const reference of unique) {
     const row = graph.rows.get(reference);
     if (!row) continue;
@@ -396,6 +407,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
       continue;
     }
     if (!selectName(row.labels, null)) continue;
+    if (row.type === 'space' || row.type === 'zone') {
+      pages.set(reference, row);
+      continue;
+    }
     if (row.public) { readable.set(reference, row); continue; }
     if (row.work) {
       restricted.set(reference, row.work);
@@ -415,6 +430,14 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
   }
   for (const [reference, work] of restricted) {
     if (admitted.has(work)) readable.set(reference, graph.rows.get(reference)!);
+  }
+  const countPageAccess = () => { cost.accessChecks++; cost.accessQueries++; };
+  const pageVisibility = await readSummaryPages(env, [...pages.keys()], reader, countPageAccess);
+  if (pages.size) cost.graphQueries++;
+  for (const [reference, isPublic] of pageVisibility) {
+    const row = pages.get(reference)!;
+    row.public = isPublic;
+    readable.set(reference, row);
   }
   // Owner reads validate current state and disclosure before a name or avatar is hydrated.
   const realms = [...special].filter(([, row]) => row.type === 'realm').map(([reference]) => reference);
@@ -535,6 +558,13 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: MediaStore
     const proof = realmProofs.get(realm);
     if (proof) { cost.accessChecks++; cost.accessQueries++; }
     if (!fencedNames.has(realm) || proof && await reader.realmReadProof!(realm) !== proof) readable.delete(realm);
+  }
+  const fencedPages = await readSummaryPages(env, [...pageVisibility.keys()], reader, countPageAccess);
+  if (pageVisibility.size) cost.graphQueries++;
+  for (const [reference, isPublic] of pageVisibility) {
+    // A visibility change during hydration requires a fresh read. Never emit
+    // a public summary/cache policy based on a now-private page.
+    if (fencedPages.get(reference) !== isPublic) readable.delete(reference);
   }
   if (reader.visibleRecords) {
     const visible = await reader.visibleRecords([...readable.keys()]);

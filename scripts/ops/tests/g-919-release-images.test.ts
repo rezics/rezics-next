@@ -83,6 +83,7 @@ function fixture() {
   }
   write(repository, 'apps/frontend/package.json', JSON.stringify({ name: '@test/frontend' }));
   write(repository, 'apps/frontend/src/index.ts', 'private frontend source');
+  write(repository, '.yarn/patches/runtime.patch', 'pinned resolver patch');
   for (const path of [
     'scripts/ops/migrate.ts',
     'scripts/ops/production-env.ts',
@@ -118,6 +119,10 @@ function fixture() {
     'services/main/.storybook/main.ts',
     'services/main/dist/stale.js',
     'packages/direct/examples/private.ts',
+    '.yarn/cache/private.zip',
+    '.yarn/patches/private.json',
+    '.yarn/patches/.env.patch',
+    '.yarn/patches/.temp/private.patch',
   ])
     write(repository, path, 'excluded');
   git(repository, 'add', '--all');
@@ -161,12 +166,19 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
     'services/main/.storybook/main.ts',
     'services/main/dist/stale.js',
     'packages/direct/examples/private.ts',
+    '.yarn/cache/private.zip',
+    '.yarn/patches/private.json',
+    '.yarn/patches/.env.patch',
+    '.yarn/patches/.temp/private.patch',
   ])
     expect(existsSync(join(options.context, path))).toBe(false);
   expect(existsSync(join(options.context, 'packages/dev/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'apps/frontend/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/openapi/main/public.json'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/migration-order.ts'))).toBe(true);
+  expect(readFileSync(join(options.context, '.yarn/patches/runtime.patch'), 'utf8')).toBe(
+    'pinned resolver patch',
+  );
   expect(JSON.parse(readFileSync(join(options.context, 'release.json'), 'utf8'))).toEqual({
     sourceCommit: options.revision,
     base: 'test-base',
@@ -181,6 +193,7 @@ test('G-919 context pins source, graph, generated contracts and release pins to 
     'services/main/package.json',
     'generated/openapi/main/public.json',
     'scripts/dev/release-manifest.ts',
+    '.yarn/patches/runtime.patch',
   ])
     write(options.repository, path, 'changed checkout');
   git(options.repository, 'add', '--all');
@@ -197,6 +210,9 @@ test('G-919 context pins source, graph, generated contracts and release pins to 
     '{}',
   );
   expect(readFileSync(join(options.context, 'yarn.cjs'), 'utf8')).toBe('pinned test CLI');
+  expect(readFileSync(join(options.context, '.yarn/patches/runtime.patch'), 'utf8')).toBe(
+    'pinned resolver patch',
+  );
 });
 
 test('G-919 reused context loads release pins from the newly selected commit', async () => {
@@ -247,10 +263,24 @@ test('G-919 source symlinks cannot include private files', async () => {
   ).rejects.toThrow('Release payload must be a regular Git file');
 });
 
+test('G-919 patch symlinks cannot include private files', async () => {
+  const options = fixture();
+  symlinkSync(
+    '../../.temp/corepack/v1/yarn/test-pin/yarn.js',
+    join(options.repository, '.yarn/patches/private.patch'),
+  );
+  git(options.repository, 'add', '--all');
+  git(options.repository, 'commit', '--quiet', '-m', 'Unsafe patch symlink');
+  await expect(
+    prepareImageContext(options.context, { ...options, revision: 'HEAD' }),
+  ).rejects.toThrow('Release payload must be a regular Git file');
+});
+
 test('G-919 repository context resolves wiki-toolkit and Account public contract through production Yarn', async () => {
   const context = join(temporaryDirectory(), 'context');
   await prepareImageContext(context);
   expect(existsSync(join(context, 'packages/wiki-toolkit/protocol/locator.ts'))).toBe(true);
+  expect(existsSync(join(context, '.yarn/patches/elysia-opentelemetry-status.patch'))).toBe(true);
   const document = JSON.parse(
     readFileSync(join(context, 'generated/openapi/main/public.json'), 'utf8'),
   );

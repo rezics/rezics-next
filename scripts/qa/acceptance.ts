@@ -16,6 +16,9 @@ export interface TestResult {
   seed?: number;
 }
 
+export const UNEXECUTED_FILE_TEST = 'QA file did not complete';
+export const unitHarnessFiles = ['tests/qa/g-955-harness.test.ts'];
+
 export function caseInventory(_root?: string): Case[] {
   const found = new Set<string>();
   for (const item of declaredCases) {
@@ -192,8 +195,11 @@ export function e2eArgs(selection?: FailedSelection,
   return [...files, ...(grep ? ['--grep', grep] : [])];
 }
 
-export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recovery' | 'load', selection?: FailedSelection,
-  chosen?: { files?: string[]; id?: string }): string[] {
+export function testArgs(
+  tier: 'unit' | 'integration' | 'model' | 'fault/recovery' | 'load',
+  selection?: FailedSelection,
+  chosen?: { files?: string[]; id?: string },
+): string[] {
   const base = tier === 'model' ? '' : tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
@@ -219,10 +225,17 @@ export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recover
       'model/tests/release-rating.test.ts',
       'scripts/operations/search-state.test.ts'];
   const defaults = [...(base ? [base] : []), ...extraGates];
+  const supportedGates = tier === 'unit' ? [...extraGates, ...unitHarnessFiles] : extraGates;
   if (chosen) {
     const files = chosen.files?.length ? chosen.files : defaults;
-    if (files.some(file => !(file === base || file.startsWith(`${base}/`) || extraGates.includes(file))
-      || file.includes('..'))) throw new Error(`Selected ${tier} path is not registered`);
+    if (
+      files.some(
+        (file) =>
+          !(file === base || file.startsWith(`${base}/`) || supportedGates.includes(file)) ||
+          file.includes('..'),
+      )
+    )
+      throw new Error(`Selected ${tier} path is not registered`);
     const pattern = chosen.id ? ['-t', `^(?:[A-Z][A-Z0-9]*\\d{2,}/)*${chosen.id}(?:/|:)`] : [];
     return [...new Set(files), ...pattern];
   }
@@ -230,10 +243,17 @@ export function testArgs(tier: 'unit' | 'integration' | 'model' | 'fault/recover
   const tests = selection.tests.filter(test => test.tier === tier);
   if (!tests.length) return defaults;
   const files = [...new Set(tests.map(test => test.file))].sort();
-  if (files.some(file => !(file.startsWith(`${base}/`) || extraGates.includes(file))
-    || file.includes('..'))) {
+  if (
+    files.some(
+      (file) =>
+        !(file.startsWith(`${base}/`) || supportedGates.includes(file)) || file.includes('..'),
+    )
+  ) {
     throw new Error(`Prior ${tier} result contains an unsupported test path`);
   }
+  // A synthetic missing-file result has no real test title to grep. Rerun the
+  // selected files completely so interrupted files can recover on the next run.
+  if (tests.some((test) => test.name === UNEXECUTED_FILE_TEST)) return files;
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Bun matches describe ancestry as part of the full test title, while JUnit
   // stores the leaf name separately in each testcase.

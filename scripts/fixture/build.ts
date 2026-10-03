@@ -30,34 +30,41 @@ export function readManifest(id: string): FixtureManifest | undefined {
  * Build one deterministic background corpus directly into owner storage, stop
  * every service and keep the stopped named volumes as the fixture backup.
  */
-export async function buildFixture(profile: FixtureProfile, seed?: string): Promise<FixtureManifest> {
-  return buildFixtureCorpus(fixtureCorpus(profile, seed));
+export async function buildFixture(
+  profile: FixtureProfile,
+  seed?: string,
+  budgetMs = 600_000,
+): Promise<FixtureManifest> {
+  return buildFixtureCorpus(fixtureCorpus(profile, seed), fixtureOwners, budgetMs);
 }
 
 /** Acceptance fixtures can exceed a former product bound without changing the
  * shared background profile or rebuilding its retained backup. */
-export async function buildFixtureCorpus(corpus: Corpus,
-  owners: readonly FixtureOwner[] = fixtureOwners): Promise<FixtureManifest> {
+export async function buildFixtureCorpus(
+  corpus: Corpus,
+  owners: readonly FixtureOwner[] = fixtureOwners,
+  budgetMs = 600_000,
+): Promise<FixtureManifest> {
+  const deadline = Date.now() + budgetMs;
   const docker = dockerEnvironment();
   const planned = performance.now();
   const core = manifestCore(root, corpus, owners, currentEngines(docker));
   const planMs = Math.round(performance.now() - planned);
   const { id } = manifestIdentity(core);
-  return withBuildLock(id, async () => {
+  return withBuildLock(id, deadline, async () => {
     const existing = readManifest(id);
     if (existing) {
       console.log(`Fixture ${id} is already built; restore it with task fixture:restore -- --fixture ${id}`);
       return existing;
     }
-    return buildLocked(docker, corpus, core, planMs, owners);
+    return buildLocked(docker, corpus, core, planMs, owners, deadline);
   });
 }
 
 /** One builder per fixture ID; a dead holder's lock is stale. */
-async function withBuildLock<T>(id: string, work: () => Promise<T>): Promise<T> {
+async function withBuildLock<T>(id: string, deadline: number, work: () => Promise<T>): Promise<T> {
   const lock = `${fixtureDirectory(id)}.lock`;
   mkdirSync(dirname(lock), { recursive: true });
-  const deadline = Date.now() + 1_800_000;
   for (;;) {
     try {
       writeFileSync(lock, String(process.pid), { flag: 'wx' });
@@ -68,15 +75,29 @@ async function withBuildLock<T>(id: string, work: () => Promise<T>): Promise<T> 
       let alive = !Number.isSafeInteger(holder) || holder <= 0;
       try { if (!alive) { process.kill(holder, 0); alive = true; } } catch { /* holder exited */ }
       if (!alive) { rmSync(lock, { force: true }); continue; }
-      if (Date.now() > deadline) throw new Error(`fixture ${id} build lock is held by process ${holder}`);
-      await Bun.sleep(2_000);
+      if (Date.now() >= deadline)
+        throw new Error(
+          `fixture ${id} preparation exceeded 600 seconds while waiting for process ${holder}`,
+        );
+      await Bun.sleep(Math.min(2_000, deadline - Date.now()));
     }
   }
   try { return await work(); } finally { rmSync(lock, { force: true }); }
 }
 
-async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
-  core: FixtureManifestCore, planMs: number, owners: readonly FixtureOwner[]): Promise<FixtureManifest> {
+async function buildLocked(
+  docker: NodeJS.ProcessEnv,
+  corpus: Corpus,
+  core: FixtureManifestCore,
+  planMs: number,
+  owners: readonly FixtureOwner[],
+  deadline: number,
+): Promise<FixtureManifest> {
+  const remaining = () => {
+    const left = deadline - Date.now();
+    if (left <= 0) throw new Error('Fixture preparation exceeded 600 seconds');
+    return left;
+  };
   // Planning summarizes every owner's records; lock waiting is excluded.
   const started = Date.now() - planMs;
   const { digest, id } = manifestIdentity(core);
@@ -98,8 +119,13 @@ async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
   const phases: Record<string, number> = { plan: planMs };
   const loads: Record<string, unknown> = {};
   const phase = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
+    remaining();
     const at = performance.now();
-    try { return await work(); } finally {
+    try {
+      const result = await work();
+      remaining();
+      return result;
+    } finally {
       phases[name] = Math.round(performance.now() - at);
       console.log(`fixture ${id}: ${name} ${phases[name]} ms`);
     }
@@ -110,15 +136,27 @@ async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
   savePrivate(envFile, saved);
   const apps = appEnvironment(saved, dir);
   const env = composeProcessEnvironment(docker, readEnv(envFile));
-  const compose = (command: string[], timeout = 300_000) => run('docker', composeArgs(project, envFile, command), env, timeout);
+  const compose = (command: string[], timeout = 300_000) =>
+    run('docker', composeArgs(project, envFile, command), env, Math.min(timeout, remaining()));
   // Pools connect lazily, only once PostgreSQL is up for the online owners.
   let pools: LoadTarget['pools'] | undefined = {
     access: new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 2 }),
     content: new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 2 }) };
   try {
-    const target: LoadTarget = { root, apps, pools,
-      fusekiOffline: (script, input) => stream('docker', composeArgs(project, envFile,
-        ['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script]), env, input) };
+    const target: LoadTarget = {
+      root,
+      apps,
+      pools,
+      fusekiOffline: (script, input) =>
+        stream(
+          'docker',
+          composeArgs(project, envFile,
+        ['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script]),
+          env,
+          input,
+          remaining(),
+        ),
+    };
     await phase('start', async () => { compose(['up', '-d', '--wait', ...ONLINE_SERVICES]); });
     await phase('migrate', async () => { await migrateFixtureOwners(apps); });
     // The command module bootstraps only an empty dataset, so the real bootstrap
@@ -170,7 +208,15 @@ async function buildLocked(docker: NodeJS.ProcessEnv, corpus: Corpus,
       failure: error instanceof Error ? error.message : String(error),
       ...(error instanceof CommandRejected ? { command: error.result } : {}) }, null, 2)}\n`);
     if (pools) await Promise.all([pools.access.end(), pools.content.end()]).catch(() => undefined);
-    try { compose(['down', '--volumes', '--remove-orphans'], 120_000); } catch { /* volumes removed below */ }
+    // Cleanup still runs after the preparation deadline has elapsed.
+    try {
+      run(
+        'docker',
+        composeArgs(project, envFile, ['down', '--volumes', '--remove-orphans']),
+        env,
+        120_000,
+      );
+    } catch { /* volumes removed below */ }
     removeVolumes(volumes, docker);
     rmSync(dir, { recursive: true, force: true });
     throw error;

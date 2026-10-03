@@ -6,7 +6,7 @@ import { selectAdmittedAvatar } from '../modules/media/commands.ts';
 import { publicAgent } from '../modules/profiles/read.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaInvalid, MediaMissing } from '../modules/media/store.ts';
 import { MAX_SUMMARY_BATCH, readContentAvailability, readResourceSummaries,
-  type SummaryReader } from '../modules/media/summary.ts';
+  MAX_SUMMARY_REFERENCE_LENGTH, SUMMARY_REFERENCE_PATTERN, type SummaryReader } from '../modules/media/summary.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { readSitemap } from '../modules/disclosure/sitemap.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
@@ -52,6 +52,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     canReadWork: async resource => work.access.canReadWork(await workPrincipal(), actingSubject, resource),
     canReadSemantic: async resource => !!work.access.canReadSemanticResource
       && work.access.canReadSemanticResource(await workPrincipal(), actingSubject, resource, undefined, fuseki),
+    realmReadProof: async realm => work.access.realmReadProof?.(await workPrincipal(), actingSubject, realm) ?? null,
     canReadSemantics: work.mediaAccess
       ? async resources => work.mediaAccess!.canReadSemantics(await workPrincipal(), actingSubject, resources, fuseki)
       : undefined,
@@ -106,7 +107,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .post('/v1/resources/summaries', {
       body: t.Object({ profile: t.Literal('resource-summary-batch-v1'),
-        resources: t.Array(nativeId, { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
+        resources: t.Array(t.String({ pattern: SUMMARY_REFERENCE_PATTERN, maxLength: MAX_SUMMARY_REFERENCE_LENGTH }),
+          { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
         actingSubject: t.Optional(nativeId), context: t.Optional(context), language: t.Optional(language),position: readingPositionQuery },
       { additionalProperties: false }),
       response: { 200: resourceSummaryBatch, ...authorizedReadProblems },

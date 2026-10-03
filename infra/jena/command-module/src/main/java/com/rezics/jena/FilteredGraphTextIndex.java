@@ -49,8 +49,9 @@ public final class FilteredGraphTextIndex implements TextIndex {
         public RankAfter(String id, float score, long commit) { this(id, score, commit, null); }
     }
     public record RankPage(List<RankHit> hits, long count, String precision, long commit, boolean more) {}
-    public record RankScope(String realm, String language, String author, boolean catalogue) {
-        public RankScope(String realm, String language, String author) { this(realm, language, author, false); }
+    public record RankScope(String realm, String language, String author, boolean catalogue, String names, List<String> resources) {
+        public RankScope(String realm, String language, String author, boolean catalogue) { this(realm, language, author, catalogue, null, null); }
+        public RankScope(String realm, String language, String author) { this(realm, language, author, false, null, null); }
     }
     static final class RankRestart extends TextIndexException {
         RankRestart() { super("ranked continuation requires restart"); }
@@ -80,6 +81,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             QueryParser parser = new QueryParser(field, lucene.getQueryAnalyzer());
             // The API supplies a literal phrase, never Lucene operators.
             Query body = parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            boolean names = scope != null && scope.names() != null;
             boolean catalogue = scope != null && scope.catalogue();
             Query text = body;
             if (catalogue) {
@@ -120,9 +122,30 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                     .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
             }
+            if (names) query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField,
+                    PublicNameProjection.PREFIX + (scope.names().equals("all") ? "" : scope.names() + ":"))),
+                    BooleanClause.Occur.FILTER).build();
+            else query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                // Public resource names must not consume the Work candidate budget.
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX)),
+                    BooleanClause.Occur.MUST_NOT)
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.DIRECTORY)),
+                    BooleanClause.Occur.MUST_NOT).build();
+            if (names && scope.resources() != null) {
+                if (scope.resources().size() > 64) throw new TextIndexException("name candidate bound exceeded");
+                List<org.apache.lucene.util.BytesRef> units = new ArrayList<>();
+                for (String resource : scope.resources()) {
+                    var members = data.find(PUBLIC_GRAPH, Node.ANY, uri(RV + "resource"), uri(resource));
+                    try { while (members.hasNext()) units.add(new org.apache.lucene.util.BytesRef(members.next().getSubject().getURI())); }
+                    finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                }
+                query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                    .add(new org.apache.lucene.search.TermInSetQuery(entityField, units), BooleanClause.Occur.FILTER).build();
+            }
             ScoreDoc cursor = null;
             if (after != null) {
-                if (catalogue) {
+                if (catalogue || names) {
                     // One unit can have a body and many name documents. Its
                     // URI alone cannot identify a searchAfter position.
                     if (after.document() == null || after.document() < 0 || after.document() >= reader.maxDoc()
@@ -151,10 +174,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 var hit = top.scoreDocs[n];
                 String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
                 if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("ranked document is incomplete");
-                String key = scope == null ? id : admittedMain(data, id, scope);
-                if (key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
+                String key = names ? id : scope == null ? id : admittedMain(data, id, scope);
+                if (names) {
+                    Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+                        .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
+                    var best = searcher.search(entity, 1);
+                    if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc) key = null;
+                }
+                if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
                     id, hit.doc, entityField)) key = null;
-                ordered.add(new RankHit(id, hit.score, key, catalogue ? hit.doc : null));
+                ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null));
             }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
@@ -163,6 +192,44 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
 
     private static final String RV = "https://rezics.com/vocab/";
+    /** A sorted, maintained projection in the existing entity term dictionary.
+     * Retains <=64 terms. Deleted terms advance with a null key, so even merge
+     * lag has a declared candidate bound and an advancing continuation.
+     * TermsEnum orders UTF-8 keys and seekCeil finds the next key:
+     * https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/index/TermsEnum.html */
+    RankPage directory(String kind, String order, int size, RankAfter after,
+                       org.apache.jena.sparql.core.DatasetGraph data) {
+        if (size < 1 || size > 64 || !java.util.Set.of("concept", "space", "realm", "site", "agent", "collection", "work").contains(kind)
+            || !java.util.Set.of("identity", "newest", "updated").contains(order))
+            throw new TextIndexException("directory query is not admitted");
+        boolean identity = order.equals("identity");
+        String prefix = identity ? PublicNameProjection.PREFIX + kind + ":"
+            : PublicNameProjection.DIRECTORY + kind + ":" + order + ":";
+        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            long commit = reader.getIndexCommit().getGeneration();
+            if (after != null && (after.commit() != commit || !after.id().startsWith(prefix))) throw new RankRestart();
+            var terms = org.apache.lucene.index.MultiTerms.getTerms(reader, lucene.getDocDef().getEntityField());
+            if (terms == null) return new RankPage(List.of(), 0, "exact", commit, false);
+            var iterator = terms.iterator();
+            String start = after == null ? prefix : after.id();
+            if (iterator.seekCeil(new org.apache.lucene.util.BytesRef(start)) == org.apache.lucene.index.TermsEnum.SeekStatus.END)
+                return new RankPage(List.of(), 0, "exact", commit, false);
+            var term = iterator.term();
+            if (after != null && term.utf8ToString().equals(after.id())) term = iterator.next();
+            List<RankHit> hits = new ArrayList<>();
+            while (term != null && term.utf8ToString().startsWith(prefix) && hits.size() < size) {
+                String id = term.utf8ToString();
+                var members = data.find(PUBLIC_GRAPH, uri(id), uri(RV + (identity ? "resource" : "nameDirectoryResource")), Node.ANY);
+                Node resource = null;
+                try { if (members.hasNext()) resource = members.next().getObject(); }
+                finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                hits.add(new RankHit(id, 0f, resource != null && resource.isURI() ? resource.getURI() : null));
+                term = iterator.next();
+            }
+            boolean more = term != null && term.utf8ToString().startsWith(prefix);
+            return new RankPage(List.copyOf(hits), hits.size(), more ? "lower-bound" : "exact", commit, more);
+        } catch (IOException ex) { throw new TextIndexException("directory query failed", ex); }
+    }
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static final Node PUBLIC_GRAPH = uri(CommandPolicy.PUBLIC_SEARCH);
     private static final Node CURRENT_GRAPH = uri(CommandPolicy.CURRENT);
@@ -292,11 +359,20 @@ public final class FilteredGraphTextIndex implements TextIndex {
             JsonObject response = new JsonObject();
             try {
                 JsonObject scopeValue = org.apache.jena.atlas.json.JSON.parse(args.get(4).asString());
+                List<String> resources = null;
+                if (scopeValue.hasKey("resources")) {
+                    resources = new ArrayList<>();
+                    for (var resource : scopeValue.get("resources").getAsArray()) resources.add(resource.getAsString().value());
+                }
                 RankScope scope = new RankScope(optionalString(scopeValue, "realm"),
                     optionalString(scopeValue, "language"), optionalString(scopeValue, "author"),
-                    scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value());
-                RankPage page = index.ranked(args.get(0).asNode(), args.get(1).asString(),
-                    args.get(2).getInteger().intValueExact(), after, env.getDataset(), scope);
+                    scopeValue.hasKey("catalogue") && scopeValue.get("catalogue").getAsBoolean().value(),
+                    optionalString(scopeValue, "names"), resources);
+                RankPage page = scopeValue.hasKey("directory")
+                    ? index.directory(scope.names(), optionalString(scopeValue, "directory"),
+                        args.get(2).getInteger().intValueExact(), after, env.getDataset())
+                    : index.ranked(args.get(0).asNode(), args.get(1).asString(),
+                        args.get(2).getInteger().intValueExact(), after, env.getDataset(), scope);
                 JsonArray hits = new JsonArray();
                 for (RankHit hit : page.hits()) {
                     JsonObject row = new JsonObject();
@@ -375,6 +451,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
             BooleanQuery.Builder filtered = new BooleanQuery.Builder()
                 .add(body, BooleanClause.Occur.MUST)
                 .add(new TermQuery(new Term(definition.getGraphField(), graph)), BooleanClause.Occur.FILTER);
+            if (CommandPolicy.PUBLIC_SEARCH.equals(graph)) {
+                filtered.add(new org.apache.lucene.search.PrefixQuery(new Term(definition.getEntityField(), PublicNameProjection.PREFIX)),
+                    BooleanClause.Occur.MUST_NOT);
+                filtered.add(new org.apache.lucene.search.PrefixQuery(new Term(definition.getEntityField(), PublicNameProjection.DIRECTORY)),
+                    BooleanClause.Occur.MUST_NOT);
+            }
             if (subject != null) filtered.add(new TermQuery(new Term(definition.getEntityField(), subject)),
                 BooleanClause.Occur.FILTER);
             IndexSearcher searcher = new IndexSearcher(reader);

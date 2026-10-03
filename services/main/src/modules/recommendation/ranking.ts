@@ -31,7 +31,10 @@ export interface RankingBasis {
   candidateGrain: 'work';
   semantic: RankingSemanticBasis | null;
 }
-export interface RankingViewer { principal: VerifiedPrincipal; actingSubject: string }
+export type RankingViewer = { principal: VerifiedPrincipal; actingSubject: string } | { public: true; principal: null; actingSubject: null };
+/** Selection uses the existing immutable Discovery term membership, including
+ * the zero-score tail. It is sealed into the ranking cursor. */
+export interface RankingTopics { generation: string; concepts: readonly string[] }
 export interface RankingPage { generation: string; items: { candidate: string }[]; continuation: string | null }
 export interface GenerationView {
   generation: string; state: string; population: RankingPopulation['kind']; leaseEpoch: string;
@@ -524,29 +527,34 @@ export class RankingGenerations {
 
   /** First page from the active generation, or the next page of the cursor's own generation. */
   async page(viewer: RankingViewer, basis: RankingBasis, pageSize: number,
-    continuation?: string): Promise<RankingPage> {
+    continuation?: string, topics?: RankingTopics): Promise<RankingPage> {
     validBasis(basis);
+    if (topics && (!/^[0-9a-f-]{36}$/.test(topics.generation) || !topics.concepts.length
+      || topics.concepts.length > 1000 || topics.concepts.some(id => !nativeIri.test(id))
+      || basis.population.kind !== 'public')) throw new RecommendationDenied('Topic selection is not admitted');
+    if (!viewer.principal && (basis.population.kind !== 'public' || basis.semantic)) throw new RecommendationDenied('Public viewer requires public ranking');
+
     if (basis.semantic && this.options.verifySemantic
       && !await this.options.verifySemantic(viewer, basis)) {
       if (continuation) throw new RecommendationRestart('ranking semantic basis changed');
       throw new RecommendationMissing('ranking semantic basis is unavailable');
     }
-    if (!nativeIri.test(viewer.actingSubject) || !Number.isInteger(pageSize)
+    if ((viewer.principal && !nativeIri.test(viewer.actingSubject)) || !Number.isInteger(pageSize)
       || pageSize < 1 || pageSize > MAX_RANKING_PAGE) {
       throw new RecommendationDenied('ranking page request is not admitted');
     }
     try {
-      const erasedViewer = await this.options.relay.query(`SELECT 1 FROM relay.erasure
+      const erasedViewer = viewer.principal ? await this.options.relay.query(`SELECT 1 FROM relay.erasure
         WHERE kind = 'account' AND account_issuer = $1 AND account_subject = $2
-          AND stage <> 'blocked' LIMIT 1`, [viewer.principal.issuer, viewer.principal.subject]);
-      if (erasedViewer.rowCount) throw new RecommendationMissing('ranking viewer is unavailable');
+          AND stage <> 'blocked' LIMIT 1`, [viewer.principal.issuer, viewer.principal.subject]) : null;
+      if (erasedViewer?.rowCount) throw new RecommendationMissing('ranking viewer is unavailable');
     } catch (error) {
       if (error instanceof RecommendationMissing) throw error;
       throw new RecommendationUnavailable('erasure journal is unavailable');
     }
-    const viewerDigest = digest({ issuer: viewer.principal.issuer, subject: viewer.principal.subject,
+    const viewerDigest = digest({ issuer: viewer.principal?.issuer ?? null, subject: viewer.principal?.subject ?? null,
       actingSubject: viewer.actingSubject });
-    const basisDigest = digest(basis);
+    const basisDigest = topics ? digest({ basis, topics }) : digest(basis);
     const token = continuation === undefined ? undefined : this.open(continuation);
     if (token && (token.v !== 1 || token.viewer !== viewerDigest || token.basis !== basisDigest
       || token.expiresAt < Date.now())) {
@@ -559,7 +567,7 @@ export class RankingGenerations {
       if (basis.population.kind === 'personal') {
         owner = (await client.query<{ id: string }>(`SELECT id FROM access.principal
           WHERE account_issuer = $1 AND account_subject = $2 AND active`,
-        [viewer.principal.issuer, viewer.principal.subject])).rows[0]?.id ?? null;
+        [viewer.principal!.issuer, viewer.principal!.subject])).rows[0]?.id ?? null;
         if (!owner) throw new RecommendationMissing('no active ranking');
       }
       const scope = scopeKey(basis, owner, this.options.dataEpoch);
@@ -578,7 +586,14 @@ export class RankingGenerations {
         generation = head.active_generation;
       }
       // Order on the numeric column; the text form only carries it exactly to the cursor.
-      const rows = token?.after.score === '0' ? [] : (await client.query<{ candidate: string; score: string }>(token
+      const rows = token?.after.score === '0' ? [] : topics ? (await client.query<{ candidate: string; score: string }>(`
+        SELECT s.candidate,s.score::text AS score FROM access.ranking_score s
+        WHERE s.generation_id=$1 AND ($4::numeric IS NULL OR s.score<$4 OR s.score=$4 AND s.candidate>$5)
+          AND EXISTS (SELECT 1 FROM access.discovery_entry e
+            JOIN access.discovery_term_count t ON t.generation_id=e.generation_id AND t.term=e.term
+            WHERE e.generation_id=$2 AND e.work_type='' AND e.work=s.candidate AND t.concept=ANY($3::text[]))
+        ORDER BY s.score DESC,s.candidate LIMIT $6`,
+      [generation,topics.generation,topics.concepts,token?.after.score ?? null,token?.after.candidate ?? '',scanLimit+1])).rows : (await client.query<{ candidate: string; score: string }>(token
         ? `SELECT candidate, score::text AS score FROM (
              (SELECT candidate, score FROM access.ranking_score
               WHERE generation_id = $1 AND score = $2::numeric AND candidate > $3
@@ -606,11 +621,21 @@ export class RankingGenerations {
     // A zero tail starts only after the positive window is exhausted. The graph
     // window is bounded by the same candidate budget and retains IRI ordering.
     let rows = window.rows;
-    if (this.options.zeroCandidates && window.zeroSnapshot !== null && rows.length <= scanLimit) {
+    if ((topics || this.options.zeroCandidates && window.zeroSnapshot !== null) && rows.length <= scanLimit) {
       const after = token?.after.score === '0' ? token.after.candidate : null;
       let zero: string[];
       try {
-        zero = await this.options.zeroCandidates(after, window.zeroSnapshot, scanLimit - rows.length + 1);
+        zero = topics ? (await inAccess(this.options.access, async client =>
+          (await client.query<{ candidate: string }>(`SELECT DISTINCT e.work AS candidate
+            FROM access.discovery_entry e JOIN access.discovery_term_count t
+              ON t.generation_id=e.generation_id AND t.term=e.term
+            WHERE e.generation_id=$1 AND e.work_type='' AND t.concept=ANY($2::text[])
+              AND e.work>$3 AND NOT EXISTS (SELECT 1 FROM access.ranking_score s
+                WHERE s.generation_id=$4 AND s.candidate=e.work)
+            ORDER BY e.work LIMIT $5`,
+          [topics.generation,topics.concepts,after ?? '',window.generation,scanLimit-rows.length+1])).rows
+            .map(row => row.candidate)))
+          : await this.options.zeroCandidates!(after, window.zeroSnapshot!, scanLimit - rows.length + 1);
       } catch { throw new RecommendationUnavailable('zero-score candidate source is unavailable'); }
       rows = [...rows, ...zero.map(candidate => ({ candidate, score: '0' }))];
     }
@@ -634,7 +659,7 @@ export class RankingGenerations {
       if (unverified.has(row.candidate)) continue;
       let visible: boolean;
       try {
-        visible = await this.options.canReadWork(viewer.principal, viewer.actingSubject, row.candidate);
+        visible = viewer.principal ? await this.options.canReadWork(viewer.principal, viewer.actingSubject!, row.candidate) : true;
       } catch { throw new RecommendationUnavailable('candidate disclosure is unavailable'); }
       if (visible) items.push({ candidate: row.candidate });
     }

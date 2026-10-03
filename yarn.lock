@@ -12970,6 +12970,7 @@ __metadata:
     "@ast-grep/cli": "npm:0.45.3"
     "@playwright/test": "npm:1.63.0"
     dependency-cruiser: "npm:18.4.0"
+    fflate: "npm:0.8.3"
     knip: "npm:6.38.0"
     oxfmt: "npm:0.70.0"
     oxlint: "npm:1.85.0"

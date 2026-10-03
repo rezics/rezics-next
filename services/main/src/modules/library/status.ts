@@ -13,6 +13,10 @@ export const STATUS_SHELF_COST = { candidateBatch: 20, countBatch: 64, pageSize:
   ordering: 'SQL keyset', fence: 'SQL aggregate O(N)', nulls: 'last' } as const;
 export type ShelfMetadata = { titleKey: string | null; ownRating: number | null; lastReadAt: string | null };
 const metadataReaders = new WeakMap<Pool, (agent: string, work: string, transaction: PoolClient) => Promise<ShelfMetadata>>();
+const followWriters = new WeakMap<Pool, (agent: string, work: string) => Promise<void>>();
+export function configureLibraryFollow(pool: Pool, write: (agent: string, work: string) => Promise<void>) {
+  followWriters.set(pool,write);
+}
 export function configureShelfMetadata(pool: Pool, read: (agent: string, work: string, transaction: PoolClient) => Promise<ShelfMetadata>) {
   metadataReaders.set(pool, read);
 }
@@ -383,6 +387,17 @@ export class ReaderLibraryStatusStore {
   /** An owner composing this command may supply its Content transaction. It
    * owns commit/rollback; status validation, CAS and receipts remain here. */
   async write(input: StatusCommand, transaction?: PoolClient): Promise<StatusState & { replayed: boolean }> {
+    const result = await this.writeStatus(input,transaction);
+    // Content has committed and released its connection before cross-owner
+    // delivery. Supplied transactions are recovered from their standing slots.
+    if (!transaction) {
+      try { await followWriters.get(this.pool)?.(input.agent,input.work); }
+      catch (error) { console.warn('Library follow deferred to recovery', error); }
+    }
+    return result;
+  }
+
+  private async writeStatus(input: StatusCommand, transaction?: PoolClient): Promise<StatusState & { replayed: boolean }> {
     if (!ID.test(input.agent) || !ID.test(input.work) || !KEY.test(input.idempotencyKey)
       || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0
       || ![null, 'want-to-read', 'reading', 'read'].includes(input.status)

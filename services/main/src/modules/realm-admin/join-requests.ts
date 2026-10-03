@@ -14,6 +14,8 @@ import { generation, reason, commandFields, RealmAdminConflict, RealmAdminDenied
 import { recordRealmHistoryAdmission } from './history.ts';
 import { JOIN_REQUEST_READ_COST, JOIN_REQUEST_SEARCH_SQL, joinRequestCursor, requestSearch,
   requestCursorBinding, encodeRequestCursor, decodeRequestCursor } from './join-requests-read.ts';
+import { prepareRealmFollow } from '../follows/recovery.ts';
+import { registerFollowSpace } from '../follows/targets.ts';
 
 const PAGE = JOIN_REQUEST_READ_COST.page;
 export const joinRequestCommand = t.Object({ actingSubject: readId, expectedMembershipGeneration: generation,
@@ -263,9 +265,10 @@ export class RealmJoinRequests {
       return this.finish(client,realm,request,actor.id,input.actingSubject,key,hash,'withdrawn',input.reason,await this.revision(client,realm));
     });
   }
-  decide(principal: VerifiedPrincipal, realm: string, request: string, input: JoinRequestDecision, key: string) {
+  async decide(principal: VerifiedPrincipal, realm: string, request: string, input: JoinRequestDecision, key: string) {
     validKey(key);
     if (!Value.Check(joinRequestDecision,input) || !input.reason.trim()) throw new RealmAdminInvalid('Invalid request decision');
+    const identity = input.decision==='accepted' ? await prepareRealmFollow(this.pool,realm,this.env.fuseki) : null;
     return realmTransaction(this.pool,realm,true,async client => {
       const manager = await realmManager(client,principal,realm,input.actingSubject);
       await membershipRoot(client);
@@ -292,6 +295,7 @@ export class RealmJoinRequests {
       if (!authority.rowCount) throw new RealmAdminDenied('Requester authority is no longer available');
       const id = member?.id ?? randomUUID(), generation = (BigInt(row.membership_generation) + 1n).toString();
       const reference = `urn:rezics:realm-join-request:${request}`;
+      if (identity) await registerFollowSpace(client,identity);
       await client.query(`INSERT INTO access.membership (id,kind,owner_subject,member_subject,state,generation,policy_revision,terms_revision,consent_reference)
         VALUES ($1,'realm',$2,$3,'joined',$4,$5,$6,$7) ON CONFLICT (kind,owner_subject,member_subject) DO UPDATE SET state = 'joined',
           generation = EXCLUDED.generation,policy_revision = EXCLUDED.policy_revision,terms_revision = EXCLUDED.terms_revision,

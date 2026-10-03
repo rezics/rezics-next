@@ -355,12 +355,16 @@ test('P0.8: admitted public eligibility binds current head, rights, scope and re
       ...(!change.omitDecision ? [profileValidation('content-search-eligibility-v1','decision',
         eligibility,graphs.revisions)] : []),
     ];
-    return {receipt,eligibility,result:await command(receipt,update,checks)};
+    const epochBefore = BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch);
+    return {receipt,eligibility,epochBefore,result:await command(receipt,update,checks)};
   };
-  const epochBefore = BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch);
   const good = await run('valid');
   if (good.result.status !== 'committed') throw new Error(JSON.stringify(good.result));
-  expect(BigInt((await (await fetch(`${base}/command`)).json()).publicSearchWriteEpoch)).toBe(epochBefore);
+  // The text wrapper fences every commit, including mapped fields outside the
+  // public graph. Measure only this command, after its raw fixture preparation.
+  const health = await (await fetch(`${base}/command`)).json();
+  expect(BigInt(health.publicSearchWriteEpoch)).toBe(good.epochBefore + 2n);
+  expect(health.publicSearchWriteActive).toBe(false);
   expect(await ask(`ASK { GRAPH <${graphs.revisions}> {
     <${good.eligibility}> <${rv}rightsBasis> <${rv}OriginalContribution> } }`)).toBe(true);
   for (const [name, change, report] of [

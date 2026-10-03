@@ -12,6 +12,7 @@ import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import type { MediaStore } from '../media/store.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
+import { identityCanonical } from '../address/canonical.ts';
 
 export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
   officialPageSize: 50, maxModules: 24, maxBanners: 6, maxBannerMediaReads: 6,
@@ -25,14 +26,18 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
   const disclosure = state.disclosure === 'private' || state.spaceVisibility === 'private' ? 'private' as const : 'public' as const;
   const presentation = typeof state.configuration.presentation === 'object'
     ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
+  const name = (await env.addresses?.currents([state.space]).catch(() => new Map()))?.get(`space\0${state.space}`);
+  const address = { ...identityCanonical('zone', state.space, disclosure === 'public' ? state.name ?? '' : ''),
+    ...(name ? { key: name.key } : {}) };
   return { zone, realm: state.configuration.defaultRealm ?? null,
+    address,
     name: state.name, language: state.language, direction: state.direction,
-    official: state.configuration.official ? (await env.addresses?.currents([state.space]))?.get(`space\0${state.space}`)?.key ?? uuidToSid(state.space.slice(-36)) : null,
+    official: state.configuration.official ? address.key : null,
     revision: state.revision,
     disclosure,storedDisclosure: state.disclosure,space:state.space,listing: state.listing,
     discovery: pageDiscoveryPolicy(disclosure,state.listing),presentation,
     configuration: state.configuration,
-    etag: `"${hash(JSON.stringify({ revision: state.revision, presentation,disclosure,listing:state.listing }))}"`,
+    etag: `"${hash(JSON.stringify({ revision: state.revision, presentation,disclosure,listing:state.listing,address }))}"`,
     cost: ZONE_PUBLICATION_COST };
 }
 
@@ -132,18 +137,26 @@ export async function listOfficialZones(env: WorkActivationEnvironment,
   input: { after?: string; limit: number }) {
   await assertGraphAdmissionOpen(env.fuseki,env.lineage);
   if (input.after && !/^v2:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.after)) throw new InvalidZoneConfiguration('Unsupported official Zone cursor; restart the listing');
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?realm ?space WHERE {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?zone ?realm ?space ?name WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:official true ; rv:zoneState rv:Active ;
       rv:disclosure rv:Public ; rv:defaultRealm ?realm ; rv:space ?space .
       ?space rv:disclosure rv:Public .
+      OPTIONAL { ?zone rdfs:label ?name }
       FILTER NOT EXISTS { ?space rv:listing "unlisted" }
+      FILTER NOT EXISTS { ?space rv:protectionHead ?protection }
+      FILTER NOT EXISTS { ?zone rv:protectionHead ?zoneProtection }
       ${input.after ? `FILTER(STR(?zone) > ${lit(input.after.slice(3))})` : ''}
     } } ORDER BY STR(?zone) LIMIT ${input.limit + 1}`)).results?.bindings ?? [];
   const selected = rows.slice(0,input.limit);
   const spaces = [...new Set(selected.map(row => row.space!.value))];
   const names = await env.addresses?.currents(spaces).catch(() => new Map());
-  const items = selected.map(row => ({ zone: row.zone!.value,realm: row.realm!.value,
-    routeSegment: names?.get(`space\0${row.space!.value}`)?.key ?? uuidToSid(row.space!.value.slice(-36)) }));
+  const items = selected.map(row => {
+    const address = { ...identityCanonical('zone', row.space!.value, row.name?.value ?? ''),
+      key: names?.get(`space\0${row.space!.value}`)?.key ?? uuidToSid(row.space!.value.slice(-36)) };
+    return { zone: row.zone!.value,realm: row.realm!.value,routeSegment: address.key,address };
+  });
   return { items,next: rows.length > input.limit ? `v2:${selected.at(-1)!.zone!.value}` : null,
     cost: { graphReads: 1,rows: rows.length } };
 }

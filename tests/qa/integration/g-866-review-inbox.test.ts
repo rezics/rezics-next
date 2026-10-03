@@ -379,7 +379,8 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
       message: 'Muted change request', actingSubject: reader,
     }, tokenB));
     await producer.runEditorialOnce();
-    expect((await inbox()).items).toHaveLength(beforeReplay);
+    // Watch Ignore preserves direct involvement in the author's own proposal.
+    expect((await inbox()).items).toHaveLength(beforeReplay + 1);
     await json(await subscription(proposal.proposal, 'participating', '2'));
     await json(await subscription(proposal.proposal, 'ignore', '1'), 409);
     await json(

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import { defaultNamePreferencesProjection, type NamePreferencesProjection } from '../search/name-preferences.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { agentPattern, controlRead, controlTransaction, ControlConflict, ControlDenied,
   ControlInvalid, ControlStale, requirePrincipal } from '../access/topology-control.ts';
@@ -41,7 +42,7 @@ function valid(value: PersonChoices): boolean {
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
 export class PersonPreferencesStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly projectNames?: NamePreferencesProjection) {}
 
   /** Display-language selection follows the reader's first active Person,
    * independently of an Organization or Service acting context. Two indexed
@@ -75,7 +76,8 @@ export class PersonPreferencesStore {
     if (!agentPattern.test(agent) || !valid(value) || !Number.isSafeInteger(expectedVersion)
       || expectedVersion < 0 || !keyPattern.test(key)) throw new ControlInvalid('Invalid preferences command');
     value = { ...value, contentLanguages: canonicalReadingLanguages(value.contentLanguages) };
-    return controlTransaction(this.pool, async client => {
+    const projectNames = this.projectNames ?? defaultNamePreferencesProjection();
+    const result = await controlTransaction(this.pool, async client => {
       await lockReadingPreferences(client, agent);
       const owner = await followPrincipal(client, principal, agent);
       // A target follow takes a share lock on this row. Changing who may follow
@@ -92,6 +94,7 @@ export class PersonPreferencesStore {
       const current = (await client.query<Row>(`SELECT * FROM access.person_preferences
         WHERE agent_id = $1 FOR UPDATE`, [agent])).rows[0];
       if ((current?.version ?? 0) !== expectedVersion) throw new ControlStale('Preferences changed');
+      if (value.profileVisibility === 'private') await projectNames?.(agent, 'private', expectedVersion + 1);
       const row = (await client.query<Row>(`INSERT INTO access.person_preferences (agent_id, profile_visibility,
         follow_policy, hide_reading_activity, content_languages, spoiler_policy, version)
         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (agent_id) DO UPDATE SET
@@ -112,6 +115,8 @@ export class PersonPreferencesStore {
         (principal_id, idempotency_key, request_digest, result) VALUES ($1,$2,$3,$4)`, [owner, key, intent, result]);
       return result;
     });
+    if (result.profileVisibility === 'public') await projectNames?.(agent, 'public', result.version);
+    return result;
   }
 
   async block(principal: VerifiedPrincipal, agent: string, target: string, blocked: boolean,

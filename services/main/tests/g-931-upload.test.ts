@@ -12,8 +12,12 @@ test('G931-M1: only file intake consumes uploads; import review and apply retain
   for (const [method, path] of [
     ['GET', '/v1/me/library-imports/1/rows'], ['PUT', '/v1/me/library-imports/1/rows/0'],
     ['POST', '/v1/me/library-imports/1/apply'], ['POST', '/v1/me/library-imports/1/rows/0/adoptions'],
-    ['DELETE', '/v1/me/library-imports/1'], ['POST', '/v1/me/library-import/batches'],
+    ['DELETE', '/v1/me/library-imports/1'],
   ]) expect(rateLimitFamily(method!, path!)).toBe('write');
+  // The old direct-batch endpoint was removed; review/apply use retained imports.
+  expect(rateLimitFamily('POST', '/v1/me/library-import/batches')).toBeUndefined();
+  expect(libraryImportsRoutes({} as MainWorkDependencies).routes.some(route =>
+    route.method === 'POST' && route.path === '/v1/me/library-import/batches')).toBe(false);
 });
 
 for (const principalClass of principalClasses.filter(name => name !== 'anonymous')) {

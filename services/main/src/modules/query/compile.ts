@@ -8,6 +8,7 @@ import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
 import { CONCEPT_WORKS_COST, type ConceptWorksQuery, type FilteredWorksQuery } from '../concept-page/contract.ts';
 import { compileReleaseQuery, relatedCondition, type ReleaseQuery } from '../facets/release-query.ts';
+import type { ResourceListQuery, ResourceListPlan, ResourceCondition } from './resource-contract.ts';
 
 export const QUERY_COST = {
   nodes: 32, depth: 4, graphReads: 7, candidateRows: 512,
@@ -34,6 +35,7 @@ type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 
 export type CompiledQuery =
+  | { template: 'resource-list'; request: ResourceListPlan; facets: string[]; graphReads: number }
   | { template: 'release-works'; request: ReleaseQuery; facets: string[]; graphReads: number }
   | { template: 'search'; request: SearchRequest; concept?: { value: string; revision?: string };
     facets: string[]; graphReads: number }
@@ -172,7 +174,33 @@ export type AdmittedQuery = ResourceQuery | ResourceQueryV2;
  * snapshot); Zone browse delegates its 60-candidate window and 20-item page.
  * Release inventories filter before paging and continue over the complete graph population.
  */
-export function compileQuery(query: AdmittedQuery): CompiledQuery {
+export function compileQuery(query: AdmittedQuery | ResourceListQuery): CompiledQuery {
+  if ('profile' in query && query.profile === 'resource-list-v1') {
+    const input = query as ResourceListQuery;
+    const admitted = admit(input.filter as FilterDocument | undefined, true);
+    if (input.sort === 'relevance' && !input.q?.trim()) fail('Relevance needs text');
+    if (input.scope.kind === 'realm' && (input.context === 'global' || input.context.realm !== input.scope.realm)) {
+      fail('A Realm scope needs the same Realm Context');
+    }
+    if (input.scope.kind === 'all' && input.context !== 'global') fail('All uses the global Context');
+    if (!Number.isInteger(input.limit ?? 20) || (input.limit ?? 20) < 1 || (input.limit ?? 20) > 64) {
+      throw new QueryRejected('query_budget_exceeded', 'Resource page exceeds its bound');
+    }
+    const conditions: ResourceCondition[] = admitted.conditions.map(condition => {
+      const name = resolveFacet(condition.facet)!.name;
+      if (!['type', 'concept', 'language'].includes(name) || condition.bind || condition.interpretation
+        || condition.applicability || condition.where || condition.range) fail(`${name} has no resource list template`);
+      const operator = condition.any ? 'any' : condition.all ? 'all' : 'none';
+      return { facet: name as ResourceCondition['facet'], operator, values: values(condition, operator) };
+    });
+    return { template: 'resource-list', request: { input, conditions },
+      facets: admitted.facets, graphReads: admitted.graphReads };
+  }
+  const legacy = query as ResourceQuery | ResourceQueryV2;
+  return compileLegacyQuery(legacy);
+}
+
+function compileLegacyQuery(query: ResourceQuery | ResourceQueryV2): CompiledQuery {
   if (query.sourcePolicy !== undefined || query.asOf !== undefined) {
     throw new QueryRejected('unsupported_query_source', 'Only the current product source is admitted');
   }

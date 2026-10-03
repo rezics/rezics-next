@@ -58,7 +58,8 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
       if (failOnce) { failOnce = false; throw new Error('simulated Access write failure'); }
       return store.enqueue(event);
     } };
-    const fakeContent = { query: async () => ({ rows: [{ author: member }] }) } as unknown as Pool;
+    const fakeContent = { query: async (sql: string) => ({ rows: sql.includes('SELECT p.id AS reply')
+      ? [] : [{ author: member }] }) } as unknown as Pool;
     const syntaxGraph = new FusekiClient(Bun.env.FUSEKI_URL);
     const fakeGraph = { query: async (sparql: string, budget: number) => {
       await syntaxGraph.query(sparql, budget);

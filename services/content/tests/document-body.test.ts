@@ -3,6 +3,17 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import { authoredDocumentBody, retainedDocumentBody } from '../src/document-body.ts';
 import { resolveParagraphSelector } from '../src/comments.ts';
 
+test('retained Unicode Content is checked against its revision bound, while ingress keeps its own text budget', () => {
+  const body = '字'.repeat(65_536);
+  expect(() => authoredDocumentBody({ body })).toThrow('invalid text body');
+  expect(authoredDocumentBody({ body }, 3 * 65_536)).toEqual({ body });
+  expect(retainedDocumentBody({ body })).toEqual({ body });
+  const document = fromPlainText(body);
+  expect(retainedDocumentBody({ body, document })).toMatchObject({ body, document });
+  expect(() => retainedDocumentBody({ body: 'a'.repeat(1_000_001) })).toThrow('invalid text body');
+  expect(() => retainedDocumentBody({ body: 'different', document })).toThrow('document text projection differs');
+});
+
 test('structured bodies retain formatting and derive paragraph selectors from base text', () => {
   // Normalized snapshots are frozen; a fixture edits its own copy.
   const document = structuredClone(fromPlainText('Opening\n漢字\nClosing'));

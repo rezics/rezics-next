@@ -116,11 +116,12 @@ export class RealmDirectoryIndex {
     } finally { client.release(); }
   }
 
-  async page(session: WorkReadSession, input: { sort: RealmDirectorySort; q: string; topic?: string }) {
-    const limit = session.options.limit ?? REALM_DIRECTORY_COST.pageSize;
+  async page(session: WorkReadSession, input: { sort: RealmDirectorySort; q: string; topic?: string; limit?: number; cursor?: string; seek?: { id: string; key: string } }) {
+    const limit = input.limit ?? session.options.limit ?? REALM_DIRECTORY_COST.pageSize;
     const binding = ['realm-directory-v3', input.sort, input.q, input.topic ?? null,
       session.options.language ?? null];
-    const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
+    const cursor = input.seek ? { after: input.seek.id, order: input.seek.key }
+      : decodeReadCursor(input.cursor ?? session.options.cursor, binding, session.position);
     if (!await this.refresh(session)) throw new WorkReadUnavailable('Realm directory is refreshing; retry');
     const column = input.sort === 'members' ? 'count_value' : input.sort === 'newest' ? 'created' : 'activity';
     const growing = input.sort === 'growing';

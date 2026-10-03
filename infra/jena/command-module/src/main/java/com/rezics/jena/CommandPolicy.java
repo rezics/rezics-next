@@ -126,8 +126,7 @@ final class CommandPolicy {
                 || !current.isEmpty() || !revisions.isEmpty()
                 || java.util.stream.Stream.concat(insert.stream(), delete.stream())
                     .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI()))
-                    .anyMatch(quad -> !quad.getPredicate().isURI()
-                        || !quad.getPredicate().getURI().equals("https://rezics.com/vocab/publicTitle"))
+                    .anyMatch(quad -> !PublicNameProjection.nameMaintenanceQuad(quad))
                 || java.util.stream.Stream.concat(insert.stream(), delete.stream())
                     .filter(quad -> CONTROL.equals(quad.getGraph().getURI()))
                     .anyMatch(quad -> !isControlSequence(quad))) {

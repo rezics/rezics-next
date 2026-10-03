@@ -1,0 +1,966 @@
+[
+  {
+    "operation": "GET /v1/access/grants",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/access/grants response[work-create-agent-grants-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/access/role-bindings",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/access/role-bindings response[work-create-role-bindings-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/agents/{id}/collections response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/agents/{id}/realm-contributions",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/agents/{id}/realm-contributions response[agent-realm-contributions-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/agents/{id}/shelves/status/{status}/works response[agent-status-shelf-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/agents/{id}/works response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/authors/open-library/{author}/works response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/classification-vocabulary",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/classification-vocabulary response[shared-vocabulary-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/collections/{id}/works response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/concepts",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/concepts response[0]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/concepts/{id}/works response[concept-works-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/context-rule-dependencies",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/context-rule-dependencies response[context-rule-invalidation-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/corrections",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/corrections response[0]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/discovery/popular-terms",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/discovery/popular-terms response[discovery-popular-terms-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/editorial/proposals response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/editorial/proposals/{proposal} response[editorial-proposal-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/feed response[home-feed-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/lexicon/definitions response[relation-definition-list-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/lexicon/presentations",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/lexicon/presentations response[relation-rendering-batch-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/agents",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/agents response[agent-discovery-v1]",
+    "fields": [
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/agents/{agent}/works response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/continue",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/continue response[home-continue-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/contributions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/feed-watermarks",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/feed-watermarks response[home-watermarks-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/follows/authors response[followed-authors-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/import-reviews",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/import-reviews response[0]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/library-export response[rezics-library-export-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/library-imports/{id}/rows",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/library-imports/{id}/rows response[0]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/managed-realms",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/managed-realms response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/mutes",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/mutes response[home-mutes-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/notification-preferences",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/notification-preferences response[notification-settings-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/notifications",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/notifications response[notification-stream-page-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/private-memberships",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/private-memberships response[access-private-memberships-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/ratings response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/realm-invitations",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/realm-invitations response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/saved-filters",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/saved-filters response[saved-filters-v1]",
+    "fields": [
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/sessions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/shelves response[reader-shelves-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/shelves/status/{status}/works response[reader-status-shelf-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/work-states",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/me/work-states response[reader-work-state-batch-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/member-replies",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/member-replies response[0]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/mod-releases/{work} response[mod-releases-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/my/submissions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/onboarding/suggested-follows",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/onboarding/suggested-follows response[home-suggested-follows-v2]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/public-reports/{caseId}",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/public-reports/{caseId} response[public-report-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/public-reports/mine",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/public-reports/mine response[public-report-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/rankings/trending response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/rating-contexts response[standing-rating-contexts-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms response[realm-directory-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/audit response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/decisions response[realm-decisions-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/invitations",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/invitations response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-requests",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/join-requests response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/members",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/members response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/moderation response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/moderation/{caseId} response[0]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/browse response[zone-browse-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/discussions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/genres/{context} response[zone-genres-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/latest-chapters response[zone-latest-chapters-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/new-adoptions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/reader-quotes response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/recent-decisions response[zone-recent-decisions-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/recently-completed response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/modules/rising response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/rankings response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/roster",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/roster response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/submitted-publications response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/threads response[realm-threads-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/threads/{reply}",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/threads/{reply} response[realm-thread-v1]",
+    "fields": [
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/realms/{realm}/works response[realm-works-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/releases response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/discussion response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/rating-contexts response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/relations",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/relations response[resource-relations-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/reviews response[reader-review-page-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/resources/{resource}/statements response[subject-statements-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/review-quotes/realms/{id}",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/review-quotes/realms/{id} response[realm-reader-quotes-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/safety-cases response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/safety-cases/due-steps",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/safety-cases/due-steps response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/safety-notices",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/safety-notices response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/search/typeahead",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/search/typeahead response[public-work-typeahead-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/trending",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/trending response[home-trending-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/wiki/{work}/history response[wiki-history-v1]",
+    "fields": [
+      "response.complete",
+      "response.items"
+    ]
+  },
+  {
+    "operation": "GET /v1/works response[discovery-works-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/adoptions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/agent-credits response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/also-enjoyed response[also-enjoyed-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/classifications response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/content-variants response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/contents response[work-contents-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/credits response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/editions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/history response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/realizations response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/releases response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/works/{id}/versions response[0]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "GET /v1/zones",
+    "fields": [
+      "request.cursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/zones response[0]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "GET /v1/zones/{id}/routes",
+    "fields": [
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "GET /v1/zones/{id}/routes response[zone-route-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "POST /v1/editorial-state-queries request[0]",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "POST /v1/editorial-state-queries response[0]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "POST /v1/events/queries request[event-query-v1]",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "POST /v1/events/queries response[event-query-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "POST /v1/query request[0]",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "POST /v1/query request[filter-document-v2]",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "POST /v1/query response[concept-works-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "POST /v1/query response[release-works-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "POST /v1/query response[zone-browse-v1]",
+    "fields": [
+      "response.complete"
+    ]
+  },
+  {
+    "operation": "POST /v1/recommendations/pages request[ranking-page-v1]",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "POST /v1/recommendations/pages response[ranking-page-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  },
+  {
+    "operation": "POST /v1/recommendations/queries request[ranking-page-v1]",
+    "fields": [
+      "request.cursor",
+      "request.limit"
+    ]
+  },
+  {
+    "operation": "POST /v1/recommendations/queries response[ranking-page-v1]",
+    "fields": [
+      "response.complete",
+      "response.nextCursor"
+    ]
+  }
+]

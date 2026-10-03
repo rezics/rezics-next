@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { Elysia } from 'elysia';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { mcpRoutes } from '../../../services/main/src/routes/mcp.ts';
+import { operationTools, type CapabilityDocument } from '../../../services/main/src/modules/mcp/capabilities.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { accountFixture, freePort } from '../../../services/account/tests/account-fixture.ts';
@@ -46,16 +48,18 @@ test('G-580: official remote MCP client registers, consents with PKCE, reads/sea
       mcp: { issuer: verifierConfig.issuer, resource: origin } });
     main.listen({ hostname: '127.0.0.1', port });
     const headers = { authorization: `Bearer ${tokens.access_token}` };
+    const declaredTools = operationTools(JSON.parse(readFileSync('generated/openapi/main/public.json', 'utf8')) as CapabilityDocument);
+    const declaredScopes = [...new Set(declaredTools.flatMap(tool => tool.operation['x-rezics-capability']!.mcp!.scopes))].sort();
     const metadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp`);
     expect(await metadata.json()).toMatchObject({ authorization_servers: [verifierConfig.issuer], resource: origin,
-      scopes_supported: ['context:read', 'wiki:propose', 'work:read'] });
+      scopes_supported: declaredScopes });
     const issuerMetadata = await fetch(`${account.baseURL}/api/auth/.well-known/openid-configuration`);
     expect(await issuerMetadata.json()).toMatchObject({ registration_endpoint: `${account.baseURL}/api/auth/oauth2/register` });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), { requestInit: { headers } }));
     const tools = await client.listTools();
     expect(tools.tools.some(tool => tool.name === 'search_catalogue')).toBe(true);
     expect(tools.tools.some(tool => tool.name === 'read_resource')).toBe(true);
-    expect(tools.tools.some(tool => tool.name === 'work_create')).toBe(false);
+    expect(tools.tools.map(tool => tool.name).sort()).toEqual(declaredTools.map(tool => tool.name).sort());
     const compare = async (tool: string, arguments_: Record<string, unknown>, path: string) => {
       const direct = await fetch(new URL(path, origin), { headers });
       const viaMcp = await client.callTool({ name: tool, arguments: arguments_ });
@@ -86,7 +90,7 @@ test('G-580: official remote MCP client registers, consents with PKCE, reads/sea
     const cursor = firstPage.body.next;
     await compare('search_catalogue', { query: { q: 'g580', limit: 1, cursor } },
       `/v1/search/catalogue?${new URLSearchParams({ q: 'g580', limit: '1', cursor })}`);
-    await expect(client.callTool({ name: 'work_create', arguments: {} })).rejects.toThrow('Tool is not declared');
+    await expect(client.callTool({ name: 'undeclared_g580_tool', arguments: {} })).rejects.toThrow('Tool is not declared');
     // The same Account-signed token is refused by a resource with a different audience.
     const other = new Elysia().use(mcpRoutes({ account: new AccountAssertionVerifier({ ...verifierConfig, audience: 'https://other.test' }),
       mcp: { issuer: verifierConfig.issuer, resource: 'https://other.test' } }, async () => { throw new Error('must not dispatch'); }));

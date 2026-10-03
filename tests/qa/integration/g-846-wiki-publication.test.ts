@@ -266,9 +266,17 @@ test('G-846: reviewed Pride and Prejudice chapters publish once, resume partial 
     await steward.grant(`semantic:edit:${elizabeth}`,'semantic.change');
     await f.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.edit'`,[steward.actor,`work:edit:${shown.work.work}`]);
-    const matchedProposal = await proposalFor(matched.bundle), matchedReceipt = await apply(matchedProposal.proposal,1);
-    expect(matchedReceipt.commands!.find(command => command.key.endsWith(':entity:elizabeth')))
-      .toMatchObject({ outcome: 'rejected',receipt: null,result: { code: 'owner_authority_required' } });
+    const matchedProposal = await proposalFor(matched.bundle);
+    const writesBeforeDenial = semanticWrites;
+    // Known missing authority is refused before application. Mid-delivery
+    // revocation is exercised separately through revokeAtClaim below.
+    expect(await json(await decide(matchedProposal.proposal,1),403)).toMatchObject({
+      code: 'editorial_owner_authority_required',
+      blocker: { code: 'owner_authority_required', action: 'semantic.change', scope: `semantic:edit:${elizabeth}` },
+    });
+    expect(semanticWrites).toBe(writesBeforeDenial);
+    expect((await f.accessPool.query('SELECT 1 FROM access.editorial_application WHERE proposal = $1',
+      [matchedProposal.proposal])).rows).toEqual([]);
     expect((await f.fuseki.query(`ASK { GRAPH <${GRAPHS.current}> { <${elizabeth}> <https://schema.org/alternateName> "Foreign-work alias"@en } }`)).boolean).toBe(false);
     await f.accessPool.query(`UPDATE access.permission_grant SET active = true
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.edit'`,[steward.actor,`work:edit:${shown.work.work}`]);

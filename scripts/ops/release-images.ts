@@ -235,6 +235,14 @@ export async function prepareImageContext(
   // only the production closure gets source payloads and installed dependencies.
   for (const file of manifests) selected.set(file.path, file);
   for (const file of files) {
+    // Yarn resolves the pinned lockfile's patches during production focus too.
+    // Retain Git patch inputs while keeping .yarn caches and other state out.
+    if (
+      file.path.startsWith('.yarn/patches/') && file.path.endsWith('.patch')
+      && productionPath(file.path.slice('.yarn/patches/'.length))
+    ) {
+      selected.set(file.path, file);
+    }
     if (
       directories.some((directory) => file.path.startsWith(`${directory}/`)) &&
       productionPath(file.path)

@@ -135,14 +135,18 @@ export const graphOwner: FixtureOwner = {
   },
   async load(corpus, target) {
     const started = performance.now();
+    const heap = corpus.profile === 'small' ? '512m' : '4g';
     // No server holds the stopped TDB2; it already has the bootstrap control graph.
     const loader = await target.fusekiOffline(
-      `java -Xmx4g -cp ${JAR} tdb2.tdbloader --loc ${TDB2} --loader=phased --syntax=nquads`,
-      nquads(corpus));
+      `java -Xmx${heap} -cp ${JAR} tdb2.tdbloader --loc ${TDB2} --loader=phased --syntax=nquads`,
+      nquads(corpus),
+    );
     const loaded = performance.now();
     // Same offline index construction as search:rebuild, for this new generation only.
-    const indexer = await target.fusekiOffline(`rm -rf ${LUCENE} && mkdir -p ${LUCENE} && cd /fuseki `
-      + `&& java -Xmx4g -cp ${COMMAND_JAR}:${JAR} com.rezics.jena.ErasureTextIndexer --desc=/fuseki/fuseki-text.ttl`);
+    const indexer = await target.fusekiOffline(
+      `rm -rf ${LUCENE} && mkdir -p ${LUCENE} && cd /fuseki ` +
+        `&& java -Xmx${heap} -cp ${COMMAND_JAR}:${JAR} com.rezics.jena.ErasureTextIndexer --desc=/fuseki/fuseki-text.ttl`,
+    );
     return { elapsedMs: performance.now() - started, detail: {
       loaderMs: Math.round(loaded - started), textIndexMs: Math.round(performance.now() - loaded),
       loaderTail: loader.trim().split('\n').slice(-3), indexerTail: indexer.trim().split('\n').slice(-2) } };

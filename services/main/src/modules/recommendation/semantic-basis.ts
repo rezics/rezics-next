@@ -11,11 +11,13 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  * The exact head check also withholds a page immediately after a selection change. */
 export async function verifyRankingSemanticBasis(env: WorkActivationEnvironment, access: Pool,
   selections: PrivateContextSelections, viewer: RankingViewer, basis: RankingBasis): Promise<boolean> {
+  if (!viewer.principal) return basis.population.kind === 'public' && !basis.semantic;
+  const principal = viewer.principal, actor = viewer.actingSubject;
   const semantic = basis.semantic;
   if (!semantic) return true;
   try {
     const definition = await readContextRevision(env, semantic.context, semantic.contextRevision,
-      context => selections.canReadPrivate(viewer.principal, viewer.actingSubject, context));
+      context => selections.canReadPrivate(principal, actor, context));
     if (definition.state !== 'active' || (basis.population.kind !== 'personal'
       && definition.disclosure === 'private')) return false;
     const preference = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {

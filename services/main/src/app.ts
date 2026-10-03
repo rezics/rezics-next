@@ -1,4 +1,5 @@
 import { safetyCaseRoutes } from './routes/safety-cases.ts';
+import { membershipsRoutes } from './routes/memberships.ts';
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia';
 import { httpTelemetry } from '@rezics/observability/elysia';
 import { mcpRoutes } from './routes/mcp.ts';
@@ -108,6 +109,7 @@ import { releaseRoutes } from './routes/releases.ts';
 import { realizationRoutes } from './routes/realizations.ts';
 import { webPublicationRoutes } from './routes/web-publications.ts';
 import { discoveryRoutes } from './routes/discovery.ts';
+import { ratingPopulationRoutes } from './routes/rating-populations.ts';
 import { followsRoutes } from './routes/follows.ts';
 import { feedRoutes } from './routes/feed.ts';
 import { reviewRoutes } from './routes/reviews.ts';
@@ -189,6 +191,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(reviewRoutes(work))
     .use(managedRealmRoutes(work))
     .use(resourceRelationRoutes(fuseki, work))
+    .use(membershipsRoutes(work))
     .use(studioRoutes(work));
 }
 
@@ -292,11 +295,15 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workStatsRoutes(work))
     .use(facetRoutes())
     .use(typeAdministrationRoutes(work))
-    .use(typeRoutes());
+    .use(typeRoutes())
+    .use(ratingPopulationRoutes(work));
 }
 
 /** Composition root: each domain plugin under `routes/` owns its registrations. */
 export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependencies) {
+  work?.memberships?.configureFollowGraph?.(fuseki);
+  work?.privateMemberships?.configureFollowGraph?.(fuseki);
+  work?.realmAdmin?.configureFollowGraph?.(fuseki);
   if (work) composeDisclosure(work);
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()

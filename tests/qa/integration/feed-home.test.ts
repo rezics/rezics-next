@@ -17,7 +17,7 @@ import { FollowsStore } from '../../../services/main/src/modules/follows/store.t
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
-import type { FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
+import { FOLLOWS_COST, type FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { SavedFilterStore } from '../../../services/main/src/modules/saved-filter/store.ts';
@@ -143,11 +143,11 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     expect(await json(await call('GET', `/v1/follows/${pen.slice(-36)}?kind=agent`)))
       .toMatchObject({ following: null, followers: { value: 1 } });
     await json(await call('POST', '/v1/follows', follow(pen, 'agent', reader, false, personFollow.revision), b.token));
-    await json(await call('POST', '/v1/follows', follow(zone, 'zone'), b.token));
+    expect((await call('POST', '/v1/follows', follow(zone, 'zone'), b.token)).status).toBe(409);
     await json(await call('POST', '/v1/follows', follow(first.work, 'work'), b.token));
     const navigation = await json<{ items: { id: string; name: { value: string }; icon: unknown }[] }>(
-      await call('GET', `/v1/me/follows?actingSubject=${encodeURIComponent(reader)}&kind=realm`, undefined, b.token));
-    expect(navigation.items).toEqual([expect.objectContaining({ id: realm.realm, name: expect.objectContaining({ value: 'Feed community' }) })]);
+      await call('GET', `/v1/me/follows?actingSubject=${encodeURIComponent(reader)}&kind=space`, undefined, b.token));
+    expect(navigation.items).toEqual([expect.objectContaining({ id: realm.space, name: expect.objectContaining({ value: 'Feed community' }) })]);
     expect(navigation.items[0]?.icon).toBeDefined();
     const mine = await json<{ items: unknown[] }>(await call('GET', `/v1/me/follows?actingSubject=${encodeURIComponent(author)}`, undefined, a.token));
     expect(mine.items).toEqual([]);
@@ -287,8 +287,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       .toMatchObject({ items: [expect.objectContaining({ scope: watermarkScope,
         sequence: checkpoint.sequence })] });
     const zoneNav = await json<{ items: { id: string; newSince?: { state: string; count: { value: number } } }[] }>(
-      await call('GET', `/v1/me/follows?${authQuery}&kind=zone&include=newSince`, undefined, b.token));
-    expect(zoneNav.items.find(item => item.id === zone)?.newSince).toMatchObject({ state: 'none', count: { value: 0 } });
+      await call('GET', `/v1/me/follows?${authQuery}&kind=space&include=newSince`, undefined, b.token));
+    expect(zoneNav.items.find(item => item.id === realm.space)?.newSince).toMatchObject({ state: 'none', count: { value: 0 } });
     // Onboarding offers the shared scheme's Concepts grouped by their Works' type: a Concept on a media Work
     // becomes a choice once that Work is one, and following it pins a Home tab whose feed is filtered to it.
     for (const [scope, action] of [['classification:define:global', 'classification.proposition.define'],
@@ -466,6 +466,9 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     };
     const discussion = await makeReply('A reviewed discussion');
     const accepted = await approve(discussion);
+    const watchedThread = await json<{ target: string; kind: string; level: string }>(await call('POST','/v1/me/watches',{
+      target: discussion.reply,kind: 'thread',level: 'all',actingSubject: reader,expectedRevision: null },b.token));
+    expect(watchedThread).toMatchObject({ target: discussion.reply,kind: 'thread',level: 'all' });
     const reply = await makeReply('A reviewed response', discussion);
     await approve(reply);
     // A second discussion of the same Work in the same Realm on the same day is a post of its own.
@@ -770,9 +773,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     // size. Tombstones remain removable without disclosing a hidden target.
     await stack.accessPool.query(`INSERT INTO access.follow (principal_id, target, kind, acting_subject, following, revision)
       SELECT $1, 'https://rezics.com/id/' || gen_random_uuid(), 'work', $2, true, gen_random_uuid()
-      FROM generate_series(1, 1000 - (SELECT active_count FROM access.follow_inventory WHERE principal_id = $1))`,
-    [b.principalId, reader]);
-    await stack.accessPool.query('UPDATE access.follow_inventory SET active_count = 1000 WHERE principal_id = $1', [b.principalId]);
+      FROM generate_series(1, $3 - (SELECT active_count FROM access.follow_inventory WHERE principal_id = $1))`,
+    [b.principalId, reader, FOLLOWS_COST.maximumFollowing]);
     expect((await call('POST', '/v1/follows', follow(author, 'agent'), b.token)).status).toBe(400);
     await expect(stack.accessPool.query("UPDATE access.follow_receipt SET result = '{}' WHERE principal_id = $1",
       [b.principalId])).rejects.toThrow('immutable');

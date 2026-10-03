@@ -17,6 +17,7 @@ import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { mainRequestHeaders } from '../../../apps/web/features/api/bff.ts';
 import { PrincipalBudgetCache } from '../src/modules/rate-limit/principal-cache.ts';
 import { appEnvironment } from '../../../scripts/dev/config.ts';
+import { compareMigrationPaths } from '../../../scripts/lib/migration-order.ts';
 import { ReaderLibraryImportStore } from '../src/modules/library-import/reader-import.ts';
 
 const options: RateLimitOptions = { secret: 'g543-test-counter-secret-at-least-32-characters',
@@ -28,11 +29,13 @@ test('G-543: every generated operation has an explicit policy and path boundarie
     paths: Record<string, Record<string, unknown>>;
   };
   let mutations = 0;
+  const missing: string[] = [];
   for (const [path, methods] of Object.entries(spec.paths)) for (const method of Object.keys(methods)) {
     if (method === 'parameters') continue;
-    expect(rateLimitFamily(method.toUpperCase(), path)).not.toBeUndefined();
+    if (rateLimitFamily(method.toUpperCase(), path) === undefined) missing.push(`${method.toUpperCase()} ${path}`);
     mutations++;
   }
+  expect(missing).toEqual([]);
   expect(mutations).toBeGreaterThan(50);
   expect(rateLimitFamily('GET', '/v1/works')).toBeNull();
   expect(rateLimitFamily('POST', '/v1/query')).toBe('search');
@@ -251,7 +254,7 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
   const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
   try {
     const migrations = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort(compareMigrationPaths)) {
       await pool.query(readFileSync(join(migrations, file), 'utf8'));
     }
     const store = new PostgresRateLimitStore(pool, options);

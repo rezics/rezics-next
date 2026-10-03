@@ -104,7 +104,9 @@ test('a new pen-name person with default follow policy accepts a follower throug
   const statements: string[] = [];
   let disclosed = 0;
   const store = new FollowsStore(pool(sql => {
-    if (sql.includes('UPDATE access.follow_inventory')) return { rowCount: 1 };
+    if (sql.includes('SELECT active_count FROM access.follow_inventory')) return { rows: [{ active_count: 0 }] };
+    if (sql.includes('INSERT INTO access.follow\n')) return { rows: [{ target,kind: 'agent',following: true,
+      revision: owner,level: 'highlights',source: 'explicit',pin_position: null }] };
     return {};
   }, statements));
   const result = await store.set(principal, { profile: 'follow-command-v1', actingSubject: agent,
@@ -113,6 +115,6 @@ test('a new pen-name person with default follow policy accepts a follower throug
     });
   expect(result.following).toBe(true);
   expect(disclosed).toBe(1);
-  expect(statements).toContain('SELECT follow_policy FROM access.person_preferences WHERE agent_id = $1');
-  expect(statements.some(sql => sql.includes('INSERT INTO access.follow ('))).toBe(true);
+  expect(statements).toContain('SELECT follow_policy FROM access.person_preferences WHERE agent_id=$1');
+  expect(statements.some(sql => sql.includes('INSERT INTO access.follow\n'))).toBe(true);
 });

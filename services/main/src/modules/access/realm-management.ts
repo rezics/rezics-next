@@ -7,6 +7,9 @@ import { REALM_ADMIN_COST, RealmAdminConflict, RealmAdminDenied, RealmAdminInval
   realmPermissions, type EscalationCommand, type RealmPermission, type RoleCommand,
   type RoleImpact, memberCommand, type MemberCommand, settingsCommand, type SettingsCommand } from '../realm-admin/contract.ts';
 import { changeRealmMember } from './realm-management-members.ts';
+import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { registerFollowSpace } from '../follows/targets.ts';
 import { searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings } from './realm-management-settings.ts';
 import { spaceSettingsCommand, type SpaceSettingsCommand } from '../realm-admin/contract.ts';
@@ -31,6 +34,7 @@ interface Receipt { receiptId: string; generation: string; replayed: boolean }
  * assignments atomically. Other direct grants remain independent. */
 export class AccessRealmManagement {
   constructor(private readonly pool: Pool) {}
+  configureFollowGraph(graph: Pick<FusekiClient,'query'>) { configureFollowGraph(this.pool,graph); }
 
   private async transaction<T>(realm: string, run: (client: PoolClient, generation: string) => Promise<T>, initialize = false) {
     if (!native.test(realm)) throw new RealmAdminInvalid('Invalid Realm');
@@ -170,11 +174,15 @@ export class AccessRealmManagement {
     });
   }
 
-  changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string, env?: WorkActivationEnvironment) {
+  async changeMember(principal: VerifiedPrincipal, realm: string, input: MemberCommand, key: string, env?: WorkActivationEnvironment) {
     if (!Value.Check(memberCommand, input)) throw new RealmAdminInvalid('Invalid member change');
+    const identity = input.action==='add' ? await prepareRealmFollow(this.pool,realm,env?.fuseki) : null;
     return this.write(principal, realm, input, key, 'realm.members.manage',
-      async (client, principalId, receiptId, generation) => ({ receiptId, generation, replayed: false,
-        ...await changeRealmMember(client, realm, input, principalId, receiptId, env) }));
+      async (client, principalId, receiptId, generation) => {
+        if (identity) await registerFollowSpace(client,identity);
+        return { receiptId, generation, replayed: false,
+          ...await changeRealmMember(client, realm, input, principalId, receiptId, env) };
+      });
   }
 
   private async settlePolicy(realm: string, env?: WorkActivationEnvironment) {

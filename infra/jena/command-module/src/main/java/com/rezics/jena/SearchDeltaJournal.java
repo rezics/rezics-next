@@ -312,6 +312,7 @@ final class SearchDeltaJournal {
     static final class Capture implements TextDatasetChanges {
         private final DatasetGraph data;
         private final Map<Node, Boolean> before = new LinkedHashMap<>();
+        private final Map<Node, Node> works = new LinkedHashMap<>();
         private boolean reset;
 
         Capture(DatasetGraph data) { this(data, false); }
@@ -321,7 +322,11 @@ final class SearchDeltaJournal {
         @Override public void finish() {}
         @Override public void reset() {}
         @Override public void change(TextQuadAction action, Node graph, Node subject, Node predicate, Node object) {
+            if (subject.isURI() && (subject.getURI().startsWith(PublicNameProjection.PREFIX)
+                || subject.getURI().startsWith(PublicNameProjection.DIRECTORY))) return;
             if (!PUBLIC.equals(graph) || action != TextQuadAction.ADD && action != TextQuadAction.DELETE) return;
+            if (action == TextQuadAction.DELETE && uri(RV + "work").equals(predicate) && object.isURI())
+                works.put(subject, object);
             if (ANCHOR.equals(subject)) { reset = true; return; }
             if (!subject.isURI()) throw new IllegalArgumentException("public search subject is not an IRI");
             if (!reset && subject.getURI().getBytes(StandardCharsets.UTF_8).length > 128)
@@ -355,12 +360,14 @@ final class SearchDeltaJournal {
                 boolean after = indexed(data, subject);
                 if (!candidate.getValue() && !after && data.contains(PUBLIC, subject, BODY, Node.ANY))
                     throw new IllegalArgumentException("untyped indexed body in public search");
-                result.add(new Change(subject.getURI(), candidate.getValue(), after));
+                result.add(new Change(subject.getURI(), candidate.getValue(), after, works.get(subject)));
             }
             return result;
         }
     }
-    record Change(String unit, boolean before, boolean after) {}
+    record Change(String unit, boolean before, boolean after, Node work) {
+        Change(String unit, boolean before, boolean after) { this(unit, before, after, null); }
+    }
     static boolean matchesClaim(List<Change> changes, String claimed) {
         Set<String> live = new LinkedHashSet<>();
         for (Change change : changes) if (change.after()) live.add(change.unit());

@@ -21,6 +21,8 @@ import { commandError, problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
 import { releaseWorksPage } from '../modules/facets/release-contract.ts';
 import { readReleaseWorks, withReleaseQueryBudget } from '../modules/facets/release-read.ts';
+import { resourceListQuery, resourceListPage, type ResourceListQuery } from '../modules/query/resource-contract.ts';
+import { readResourceList } from '../modules/query/resources.ts';
 
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const closed = { additionalProperties: false } as const;
@@ -45,7 +47,7 @@ export const resourceQueryV1 = t.Object({ ...documentFields, scope: scopeV1, sor
 /** filter-document-v2 admits top-rated, Mine, and the rating Context and reader. */
 export const resourceQueryV2 = t.Object({ profile: t.Literal('filter-document-v2'), ...documentFields,
   scope, sort, ratingContext: t.Optional(nativeId), actingSubject: t.Optional(nativeId) }, closed);
-const body = t.Union([resourceQueryV1, resourceQueryV2]);
+const body = t.Union([resourceQueryV1, resourceQueryV2, resourceListQuery]);
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phrase-v1'),
   resultGrain: t.Literal('mainVersion'),
@@ -58,7 +60,8 @@ const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phras
     indexGeneration: t.String(), presentationDigest: digest,
     nextOffset: t.Integer({ minimum: 1, maximum: 512 }), expiresAt: t.Integer({ minimum: 0 }) })),
 });
-const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(text), sort,
+const selectionText = t.Union([text, t.Object({ phrase: t.String({ minLength: 1, maxLength: 80 }) }, closed)]);
+const querySelection = t.Object({ context, scope, filter: t.Unknown(), text: t.Nullable(selectionText), sort,
   pageSize: t.Integer({ minimum: 1, maximum: QUERY_COST.searchPageSize }),
   facetRefs: t.Array(t.String(), { maxItems: QUERY_COST.nodes }),
   semanticRevisions: t.Array(nativeId, { maxItems: QUERY_COST.conceptReads }),
@@ -88,12 +91,22 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
   return new Elysia().post('/v1/query', { body, response: {
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
-      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage]) }),
+      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage]) }),
     400: problemResult(400), 404: problemResult(404), 409: problemResult(409),
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   } }, async ({ body: input, request }) => {
     try {
-      const compiled = compileQuery(input as AdmittedQuery);
+      const compiled = compileQuery(input as AdmittedQuery | ResourceListQuery);
+      if (compiled.template === 'resource-list') {
+        const query = compiled.request.input;
+        const result = await publicWorkRead(work, request, { limit: query.limit, cursor: query.cursor },
+          session => readResourceList(session, compiled.request));
+        return Response.json({ profile: 'query-v1', template: 'resource-list-v1',
+          selection: { context: query.context, scope: query.scope, filter: query.filter ?? { all: [] },
+            text: query.q?.trim() ? { phrase: query.q } : null, sort: query.sort,
+            pageSize: query.limit ?? 20, facetRefs: compiled.facets, semanticRevisions: [] }, result },
+          { headers: { 'cache-control': 'private, no-store' } });
+      }
       if (compiled.template === 'release-works') {
         try {
           const result = await publicWorkRead(work, request, {
@@ -213,7 +226,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     } catch (error) {
       if (error instanceof QueryRejected) return problem(error.refusal.startsWith('stale_') ? 409 : 422,
         error.refusal, error.message);
-      if (input.scope.kind === 'realm') return workReadError(error);
+      if (input.scope.kind === 'realm' || 'profile' in input && input.profile === 'resource-list-v1') return workReadError(error);
       return commandError(error);
     }
   });

@@ -317,6 +317,8 @@ final class CommandService extends ActionService {
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
+            PublicNameProjection.refresh(delta == null ? dataset : delta.observed(), plan, receipt, validations, delta == null ? List.of() : delta.changes());
+            RatingPopulationProjection.refresh(dataset, plan, receipt, validations);
             if (delta != null) {
                 if (touchesPublicIndex && !plan.bootstrap() && !plan.rebuild()
                     && !receipt.startsWith("urn:rezics:receipt:chapter-search-index:")) {

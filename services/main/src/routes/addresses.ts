@@ -47,6 +47,8 @@ const lookup = t.Object(
   },
   { additionalProperties: false },
 );
+const viewerLookup = t.Object({ ...lookup.properties, actingSubject: t.Optional(holder) },
+  { additionalProperties: false });
 const state = t.Union([t.Literal('current'), t.Literal('redirect'), t.Literal('retired')]);
 const resolved = t.Union([
   t.Object(
@@ -202,13 +204,13 @@ export function addressRoutes(work: MainWorkDependencies) {
     )
     .get(
       '/v1/addresses/resolve',
-      { query: lookup, response: { 200: resolved, 410: resolved, ...readProblems } },
+      { query: viewerLookup, response: { 200: resolved, 410: resolved, ...readProblems } },
       async ({ request, query }) => {
         try {
           const result = (
             await resolveAddresses(work, request, [
               { ...query, scope: query.scope as AddressScope },
-            ])
+            ], query.actingSubject)
           )[0]!;
           if (result.status === 'unavailable')
             return problem(404, 'address_not_found', 'Address is unavailable');
@@ -225,7 +227,7 @@ export function addressRoutes(work: MainWorkDependencies) {
       '/v1/addresses/resolutions',
       {
         body: t.Object(
-          { lookups: t.Array(lookup, { minItems: 1, maxItems: NAME_COST.batch }) },
+          { lookups: t.Array(lookup, { minItems: 1, maxItems: NAME_COST.batch }), actingSubject: t.Optional(holder) },
           { additionalProperties: false },
         ),
         response: { 200: t.Object({ results: t.Array(resolved) }), ...readProblems },
@@ -233,7 +235,7 @@ export function addressRoutes(work: MainWorkDependencies) {
       async ({ request, body }) => {
         try {
           return Response.json(
-            { results: await resolveAddresses(work, request, body.lookups as AddressLookup[]) },
+            { results: await resolveAddresses(work, request, body.lookups as AddressLookup[], body.actingSubject) },
             { headers: { 'cache-control': 'no-store' } },
           );
         } catch (error) {
@@ -277,12 +279,12 @@ export function addressRoutes(work: MainWorkDependencies) {
       '/v1/addresses/revisions/:revision',
       {
         params: t.Object({ revision }),
-        query: lookup,
+        query: viewerLookup,
         response: { 200: t.Object({}, { additionalProperties: true }), ...readProblems },
       },
       async ({ request, query, params }) => {
         try {
-          const current = (await resolveAddresses(work, request, [query as AddressLookup]))[0]!;
+          const current = (await resolveAddresses(work, request, [query as AddressLookup], query.actingSubject))[0]!;
           if (current.status === 'unavailable')
             return problem(404, 'address_not_found', 'Address is unavailable');
           const registry = work.environment.addresses!;

@@ -25,8 +25,10 @@ export function authoredDocumentBody(input: AuthoredBodyInput, maxTextBytes = 65
 /** Exact reads check the projection as well as byte custody, before consumers use it. */
 export function retainedDocumentBody(value: Record<string, unknown>): DocumentBody {
   if (typeof value.body !== 'string') throw new Error('source has no text body');
-  if (value.document === undefined) return authoredDocumentBody({ body: value.body });
-  const projected = authoredDocumentBody({ document: value.document as DocumentSnapshot });
+  // Retention checks the revision bound, not an ingress owner's text budget.
+  // Content, Contributions and replies admit different text sizes.
+  if (value.document === undefined) return authoredDocumentBody({ body: value.body }, 1_000_000);
+  const projected = authoredDocumentBody({ document: value.document as DocumentSnapshot }, 1_000_000);
   if (projected.body !== value.body) throw new Error('document text projection differs');
   return projected;
 }

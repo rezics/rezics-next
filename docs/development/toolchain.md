@@ -240,7 +240,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | envalid | 8.2.0 | apps/accounts, apps/web, packages/observability, services/account, services/main |
 | exact-mirror | 1.2.6 | packages/observability, services/account, services/main |
 | fast-check | 4.10.2 | packages/model |
-| fflate | 0.8.3 | packages/wiki-toolkit |
+| fflate | 0.8.3 | ., packages/wiki-toolkit |
 | iconv-lite | 0.7.3 | packages/wiki-toolkit |
 | jose | 6.2.12 | services/account, services/main |
 | knip | 6.38.0 | . |
@@ -293,7 +293,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | Source | Image and digest |
 | --- | --- |
 | Compose | postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722 |
-| Compose | rezics/fuseki:6.2.0-cmd0.5.34-a8067e35fbbc |
+| Compose | rezics/fuseki:6.2.0-cmd0.5.35-a0e0047a921c |
 | Compose | rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff |
 | Compose | ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e |
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |
@@ -399,6 +399,16 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task api:fuzz` | Run Schemathesis against Main's generated OpenAPI contract on an isolated stack. |
 | `task gen` | Regenerate model, OpenAPI and pinned-image artifacts and the toolchain inventory. |
 | `task gen:check` | Fail if generated artifacts are stale. |
+| `task toolchain:inventory` | Regenerate the toolchain inventory from manifests and root commands. |
+| `task dataset:fetch` | Explicitly capture complete real-world series into the external local dataset store. |
+| `task dataset:verify` | Verify an external dataset snapshot and all referenced local bytes without network access. |
+| `task dataset:import` | Import a captured dataset through existing public APIs and write the Markdown URL index. |
+| `task dataset:bootstrap-admin` | Create and authorize the dedicated local dataset administrator without resetting existing data. |
+| `task dataset:bootstrap-model` | Align the local fixture model generation with the current build while preserving all prior data and revisions. |
+| `task dataset:test` | Run the opt-in offline real-dataset conformance suite. |
+| `task dataset:typecheck` | Type-check the independent local dataset tools. |
+| `task dataset:check` | Check the dataset tools types, lint and formatting without capturing or importing data. |
+| `task dataset:format` | Format the local dataset tools and their unit tests. |
 | `task fixture:build` | Build a deterministic background corpus into owner storage. |
 | `task fixture:restore` | Restore a fixture backup into a new persistent QA stack. |
 | `task fixtures:pull` | Replay verified factual fixtures from the cache or committed seed. |
@@ -412,6 +422,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task ops:bootstrap` | Provision launch Realms, Zones and vocabulary, then admit bounded catalogue records through public APIs. |
 | `task release:install` | Verify a release artifact and provision a project from it. |
 | `task search:rebuild` | Rebuild the public search index on a stopped-writer stack. |
+| `task search:names:backfill` | Resume public names, browse directories and rating counters online. |
 | `task access:pending-search` | List unresolved private search deliveries (needs ACCESS_DATABASE_URL). |
 | `task research:architecture` | Run the storage architecture research lab. |
 | `task package:go-oracle` | Compare Go module resolution with the pinned native Go. |

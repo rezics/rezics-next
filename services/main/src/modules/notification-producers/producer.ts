@@ -8,6 +8,11 @@ import { reviewNotification } from '../notification/producer-review.ts';
 import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
 import { editorialNotification, EDITORIAL_NOTIFICATION_COST } from './editorial.ts';
 import type { EditorialEvent } from '../editorial-review/store.ts';
+import { relationshipRecipients, type RelationshipRecipients } from '../follows/recipients.ts';
+import { recoverSpaceFollows } from '../follows/recovery.ts';
+import { recoverLibraryFollows } from '../library/follows.ts';
+import { resourceNotification } from './resources.ts';
+import { normalizeAddressName } from '@rezics/model/address/names';
 
 /** One serialized source position, one bounded owner read and at most 256 inbox writes per event. */
 export const PRODUCER_COST = { accessEventsPerTick: 16, relayEventsPerBatch: 256,
@@ -67,18 +72,17 @@ export class NotificationProducer {
         FROM access.chapter_notification_event WHERE id = $1`, [event.event_id])).rows[0];
       if (!row) return null;
       const authors = new Set(await represented(this.access, row.author, null));
-      const followed = (await this.access.query<{ id: string }>(`SELECT DISTINCT p.id::text AS id
-        FROM access.follow f JOIN access.principal p ON p.id = f.principal_id AND p.active
-        WHERE f.following AND ((f.kind = 'work' AND f.target = $1)
-          OR (f.kind = 'agent' AND f.target = $2)) ORDER BY id LIMIT $3`,
-      [row.work, row.author, PRODUCER_COST.recipientsPerEvent + 1])).rows;
-      if (followed.length > PRODUCER_COST.recipientsPerEvent) throw new Error('chapter follower bound exceeded');
-      const recipients = followed.map(item => item.id).filter(id => !authors.has(id));
+      const language = (await this.content.query<{ language_tag: string | null }>(`SELECT v.language_tag
+        FROM content.revision r JOIN content.variant v ON v.id=r.variant_id WHERE r.id=$1`,
+      [row.content_revision.replace(/^urn:rezics:content:revision:/,'')])).rows[0]?.language_tag;
+      const relationshipPlan: RelationshipRecipients = { targets: [row.work,row.author],highlights: false,
+        except: [...authors],languages: language ? [language] : [] };
+      const recipients = (await relationshipRecipients(this.access,relationshipPlan)).filter(id => !authors.has(id));
       if (!recipients.length) return null;
       return { sourceOwner: 'access', sourceEvent: `chapter:${event.event_id}`,
         purpose: 'subscription', topic: 'followed-chapter',
         subject: { owner: 'graph', ref: row.activity, revision: row.content_revision },
-        disclosureBasis: 'followed-chapter-v1', recipients,
+        disclosureBasis: 'followed-chapter-v1', recipients, relationshipPlan,
         display: { kind: 'chapter', actorAgent: row.author, realm: null, groupKey: row.work } };
     }
     if (event.kind === 'feed_post_vote') {
@@ -268,6 +272,26 @@ export class NotificationProducer {
     }
   }
 
+  async runRelationshipRecoveryOnce(): Promise<number> {
+    // Bounded expiry batches; no feed writer or global head is involved.
+    await this.access.query(`DELETE FROM access.watch WHERE (principal_id,target) IN
+      (SELECT principal_id,target FROM access.watch WHERE kind='thread' AND reason<>'manual' AND NOT manual_choice
+        AND changed_at<clock_timestamp()-interval '90 days' ORDER BY changed_at,principal_id,target LIMIT 256)`);
+    await this.access.query(`DELETE FROM access.follow_activity WHERE target IN
+      (SELECT target FROM access.follow_activity WHERE activity_at<clock_timestamp()-interval '90 days'
+        ORDER BY activity_at,target LIMIT 256)`);
+    await this.access.query(`DELETE FROM access.notification_recipient_progress WHERE (source_owner,source_event,topic) IN
+      (SELECT source_owner,source_event,topic FROM access.notification_recipient_progress
+        WHERE updated_at<clock_timestamp()-interval '30 days' ORDER BY updated_at LIMIT 256)`);
+    let count = 0;
+    for (const recover of [() => recoverSpaceFollows(this.access,this.graph),
+      () => recoverLibraryFollows(this.content,this.access)]) {
+      try { count += await recover(); }
+      catch (error) { console.warn('Relationship recovery deferred', error); }
+    }
+    return count;
+  }
+
   private async runOtherAccessOnce(): Promise<number> {
     const client = await this.access.connect();
     let count = 0;
@@ -286,7 +310,7 @@ export class NotificationProducer {
       [cursor.position, PRODUCER_COST.accessEventsPerTick])).rows;
       for (const event of events) {
         const notice = await this.accessNotification(event);
-        if (notice) await this.notifications.enqueue(notice);
+        if (notice && (await this.notifications.enqueue(notice))?.complete === false) { count++; break; }
         await client.query(`UPDATE access.notification_producer_cursor
           SET position = $2, updated_at = clock_timestamp() WHERE consumer = $1`,
         [cursorName, event.position]);
@@ -383,7 +407,7 @@ export class NotificationProducer {
       ).rows;
       for (const event of events) {
         const notice = await editorialNotification(this.access, event);
-        if (notice) await this.notifications.enqueue(notice);
+        if (notice && (await this.notifications.enqueue(notice))?.complete === false) break;
         await client.query(
           `UPDATE access.notification_producer_cursor SET position = $1,
           updated_at = clock_timestamp() WHERE consumer = 'editorial-notification-v1'`,
@@ -437,12 +461,15 @@ export class NotificationProducer {
     }
     const current = await new RealmReplyContentStore(this.content).readCurrent(reply as string);
     if (current && current.author === author && revision === `urn:rezics:content:revision:${current.revisionId}`) {
-      const handles = [...new Set([...current.body.matchAll(/(?:^|[^\p{L}\p{N}_])@([a-z0-9_]{3,30})\b/giu)]
-        .map(match => match[1]!.toLowerCase()))].slice(0, 20);
+      const handles = [...new Set([...current.body.matchAll(/(?:^|[^\p{L}\p{N}_-])@([a-z0-9_-]+)(?![\p{L}\p{N}_-])/giu)]
+        .flatMap(match => {
+          try { return [normalizeAddressName(match[1]!, 'ascii-handle').key]; }
+          catch { return []; }
+        }))].slice(0, 20);
       if (handles.length) {
-        const mentioned = (await this.access.query<{ agent_id: string }>(`SELECT agent_id
-          FROM access.agent_handle WHERE handle = ANY($1::text[]) AND state = 'current'
-          ORDER BY agent_id LIMIT 21`, [handles])).rows;
+        const mentioned = (await this.access.query<{ agent_id: string }>(`SELECT holder AS agent_id
+          FROM access.name_registry WHERE scope = 'agent' AND key = ANY($1::text[]) AND state = 'current'
+          ORDER BY holder LIMIT 21`, [handles])).rows;
         if (mentioned.length > 20) throw new Error('mention target bound exceeded');
         const recipients = new Set<string>();
         for (const agent of mentioned) {
@@ -453,6 +480,22 @@ export class NotificationProducer {
         if (recipients.size) events.push(event('mention', [...recipients]));
       }
     }
+    const direct = [...new Set(events.filter(notice => notice.topic === 'reply').flatMap(notice => [...notice.recipients]))];
+    const participants = await represented(this.access,author as string,null,'agent.control');
+    const watchTargets = [root as string, ...typeof parent === 'string' ? [parent] : []];
+    if (participants.length) {
+      await this.access.query(`INSERT INTO access.watch(principal_id,target,kind,reason,level)
+        SELECT id,target,'thread','reviewer','participating' FROM unnest($1::uuid[]) id
+          CROSS JOIN unnest($2::text[]) target ON CONFLICT DO NOTHING`, [participants,watchTargets]);
+      await this.access.query(`INSERT INTO access.watch_participation(principal_id,target)
+        SELECT principal_id,target FROM access.watch WHERE principal_id=ANY($1::uuid[]) AND target=ANY($2::text[])
+        ON CONFLICT DO NOTHING`, [participants,watchTargets]);
+    }
+    const relationshipPlan: RelationshipRecipients = { targets: [realm as string,author as string],
+      highlights: false, watches: watchTargets,
+      except: [actor,...direct] };
+    const related = await relationshipRecipients(this.access,relationshipPlan);
+    if (related.length) events.push({ ...event('reply',related), disclosureBasis: 'relationship-reply-v1', relationshipPlan });
     return events;
   }
 
@@ -497,12 +540,20 @@ export class NotificationProducer {
       [cursor.data_epoch, batch.sequence, PRODUCER_COST.relayEventsPerBatch + 1])).rows;
       if (events.length !== batch.event_count) throw new Error('relay batch is incomplete');
       let produced = 0;
+      let pending = false;
       for (const event of events) {
-        for (const notice of await this.replyNotifications(event.envelope)) {
-          await this.notifications.enqueue(notice); produced++;
+        const resource = await resourceNotification(this.access,this.graph,event.envelope);
+        if (resource) {
+          const result = await this.notifications.enqueue(resource); produced++;
+          if (result?.complete === false) { pending = true; break; }
         }
+        for (const notice of await this.replyNotifications(event.envelope)) {
+          const result = await this.notifications.enqueue(notice); produced++;
+          if (result?.complete === false) { pending = true; break; }
+        }
+        if (pending) break;
       }
-      await client.query(`UPDATE relay.notification_producer_cursor SET sequence = $2,
+      if (!pending) await client.query(`UPDATE relay.notification_producer_cursor SET sequence = $2,
         updated_at = clock_timestamp() WHERE consumer = $1`, [cursorName, batch.sequence]);
       await client.query('COMMIT');
       return produced;
@@ -523,6 +574,7 @@ export class NotificationProducerWorker {
     const poll = () => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.notification.producer', async () => {
+        await this.producer.runRelationshipRecoveryOnce().catch(error => { console.warn('Relationship recovery paused',error); });
         const access = await this.producer.runAccessOnce();
         return access + await this.producer.runRelayOnce();
       }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' }))

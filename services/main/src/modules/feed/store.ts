@@ -79,6 +79,10 @@ export class FeedStore {
         const { time, basis } = activityTime(source.id, fallbackTime);
         if ((await client.query('SELECT 1 FROM access.feed_item WHERE data_epoch = $1 AND id = $2',
           [expected.data_epoch, source.id])).rowCount) continue;
+        await client.query(`INSERT INTO access.follow_activity(target,activity_at)
+          SELECT target,$2 FROM unnest($1::text[]) target ON CONFLICT(target) DO UPDATE SET
+          activity_at=GREATEST(access.follow_activity.activity_at,EXCLUDED.activity_at)`,
+        [[...new Set([source.target === source.id ? null : source.target,source.work,source.realm,source.actor].filter(Boolean))],time]);
         // A discussion or reply is a post of its own, never grouped (migration 820 promoted earlier ones).
         const bucket = soloKinds.has(source.kind) ? digest(['home-solo-v1', source.id])
           : digest([source.groupKind ?? source.kind, source.realm ?? null,

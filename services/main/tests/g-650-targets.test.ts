@@ -48,6 +48,7 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realiz
     else if (query.includes('SELECT ?root WHERE')) rows = options.erasedRoot ? [] : [{ root: uri(id(9)) }];
     else if (query.includes('SELECT ?context')) rows = [];
     else if (query.includes('SELECT ?grain WHERE')) rows = [];
+    else if (query.includes('SELECT ?r ?mergedInto WHERE')) rows = [];
     else if (query.includes('SELECT ?resource ?manifest')) rows = [{ resource: uri(id(1)),
       manifest: uri(`urn:rezics:sha256:${semanticManifest}`) }];
     else throw new Error(`Unexpected query: ${query}`);
@@ -171,6 +172,7 @@ test('G-650: generalized sessions preserve report-owner resolution and duplicate
   expect(targets[0]).toEqual(owned);
   expect(targets[2]).toEqual(owned);
   expect(targets[1]).toMatchObject({ base: 'work', revision: id(2) });
+  expect(f.queries.some(query => query.includes('SELECT ?r ?mergedInto WHERE'))).toBe(true);
   await expect(resolveTargets(f.session, [id(1)], 'report', undefined,
     async () => new Map([[id(5), owned]]))).rejects.toBeInstanceOf(WorkReadUnavailable);
   expect(await targetSummaryReader(f.session).canReadWork!(id(1))).toBe(true);

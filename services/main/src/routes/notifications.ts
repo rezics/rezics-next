@@ -9,6 +9,13 @@ import { NotificationConflict, NotificationDenied, NotificationInvalid, Notifica
   NotificationUnavailable, sha256, type NotificationStore } from '../modules/notification/store.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { WatchStore, watchCommand, watchKind, watchReceipt, watchState, watchTarget } from '../modules/notification/watch.ts';
+import { readId } from '../modules/work/read-contract.ts';
+import { GRAPHS, iri } from '../modules/work/activate.ts';
+import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
+import { readFollowTarget } from '../modules/follows/read.ts';
+import { resolveFollowIdentity } from '../modules/follows/targets.ts';
+import { homeError } from './follows.ts';
 
 /** Bearer scope for the recipient's own notification state. */
 export const NOTIFICATION_SCOPE = 'notification:manage';
@@ -19,6 +26,7 @@ export const openApiOperations = {
   '/v1/me/notifications/{item}/read': { put: { bearer: true } },
   '/v1/me/notifications/{item}/triage': { put: { bearer: true } },
   '/v1/me/proposal-subscriptions/{proposal}': { get: { bearer: true }, put: { bearer: true } },
+  '/v1/me/watches': { get: { bearer: true }, post: { bearer: true, idempotencyKey: true } },
   '/v1/me/notifications/hint': { get: { bearer: true } },
   '/v1/me/notification-read-watermarks/inbox': { put: { bearer: true } },
   '/v1/me/notification-streams/inbox/resets': { post: { bearer: true } },
@@ -121,8 +129,55 @@ export function notificationRoutes(work: MainWorkDependencies) {
   const principals = new WeakMap<Request, VerifiedPrincipal>();
   const subscriptions = new Map<string, { closed: boolean; unsubscribe?: () => void }>();
   const unavailable = () => problem(503, 'notification_unavailable', 'Notifications are unavailable');
+  const watchDisclosure = (request: Request, principal: VerifiedPrincipal, target: string, kind: string) => async () => {
+    if (kind === 'proposal') {
+      if (!target.startsWith('urn:rezics:proposal:') || !owner) throw new NotificationDenied('Proposal is unavailable');
+      await owner.store.readProposalSubscription(principal,target.slice('urn:rezics:proposal:'.length));
+      return;
+    }
+    await workRead(work,new Request(request.url),{},async session => {
+      if (kind === 'thread') {
+        const rows = await session.query(`SELECT DISTINCT ?realm WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ?slot a rv:RealmReplySlot ; rv:replyPlacementHead ?placement ; rv:reply ?reply ; rv:realm ?realm ; rv:rootTarget ?root .
+          FILTER(?root=${iri(target)} || ?reply=${iri(target)})
+          ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
+          ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+          FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+          FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
+        } GRAPH ${iri(GRAPHS.revisions)} { ?placement a rv:RealmReplyPlacement ; rv:placementOutcome rv:Accepted }
+        } LIMIT 2`,1);
+        if (!rows.length) throw new WorkReadMissing('Thread is unavailable');
+        const root = await session.query(`SELECT ?root WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ?slot a rv:RealmReplySlot ; rv:replyPlacementHead ?placement ; rv:reply ${iri(target)} ; rv:rootTarget ?root }
+        } LIMIT 2`,1);
+        if (root.length && !await work.realmReplies?.visible(rows[0]!.realm!.value,target)) throw new WorkReadMissing('Thread is unavailable');
+        return;
+      }
+      const identity = await resolveFollowIdentity(session,target);
+      await readFollowTarget(session,identity.target,identity.kind);
+      if (identity.kind!==kind) throw new NotificationInvalid('Watch kind does not match target');
+    });
+  };
   return new Elysia()
     .use(websocket({ sendPings: false }))
+    .get('/v1/me/watches', { query: t.Object({ target: watchTarget, kind: watchKind, actingSubject: readId }, { additionalProperties: false }),
+      response: { 200: t.Object({ watch: t.Nullable(watchState) }), ...authorizedReadProblems } },async ({ request,query }) => {
+      try {
+        const principal = await work.account.verify(request,[NOTIFICATION_SCOPE]);
+        if (!work.follows) return unavailable();
+        const watch = await new WatchStore(work.follows.pool).read(principal,query.actingSubject,query.target,
+          watchDisclosure(request,principal,query.target,query.kind));
+        return Response.json({ watch },noStore);
+      } catch (error) { return homeError(error); }
+    })
+    .post('/v1/me/watches', { body: watchCommand, response: { 200: watchReceipt, ...writeProblems, ...authorizedReadProblems } },async ({ request,body }) => {
+      try {
+        const principal = await work.account.verify(request,[NOTIFICATION_SCOPE]);
+        if (!work.follows) return unavailable();
+        return Response.json(await new WatchStore(work.follows.pool).set(principal,body,request.headers.get('idempotency-key') ?? '',
+          watchDisclosure(request,principal,body.target,body.kind)),noStore);
+      } catch (error) { return homeError(error); }
+    })
     .get('/v1/me/notifications', {
       query: t.Object({ after: t.Optional(t.String({ pattern: '^[1-9][0-9]{0,18}:(0|[1-9][0-9]{0,18})$' })),
               view: t.Optional(
@@ -232,7 +287,7 @@ export function notificationRoutes(work: MainWorkDependencies) {
           body: t.Object(
             {
               profile: t.Literal('proposal-subscription-v1'),
-              level: t.Union([t.Literal('participating'), t.Literal('ignore')]),
+              level: t.Union([t.Literal('participating'), t.Literal('all'), t.Literal('ignore')]),
               expectedRevision: t.Nullable(generation),
             },
             { additionalProperties: false },
