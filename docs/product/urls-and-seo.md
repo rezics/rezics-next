@@ -10,25 +10,28 @@ implementation owners.
 ## Durable addresses
 
 Maintainer and manager, 2026-10-02, revising the 2026-09-29 adoption: one
-address model for every resource, with an opaque identity, optional names and a
-canonical form that each name scope tunes. Identity must survive renaming, and
-a page must open whether or not anyone chose a name for it.
+address model for every resource — a stable ID, optional aliases and
+alias-first canonical URLs that each alias scope tunes. Identity must survive
+renaming, and a page must open whether or not anyone chose an alias for it.
+Vocabulary, 2026-10-03: "alias" replaces "name" for the chosen key, because a
+display name is a different thing, and "readable suffix" replaces "slug",
+because nothing is stored or resolved by it.
 
 | Layer | What it is | Set by | Used to resolve |
 | --- | --- | --- | --- |
 | `sid` | All 128 UUID bits as a fixed, case-sensitive 22-character Base58 value with a frozen alphabet | Main, at creation | Always |
-| Name | A unique key a person chose within a scope: an Agent or Space handle, a Work address, a Zone page title | Holder or editors; optional | Yes |
-| Slug | Readable words from the name the page shows in its language | Derived when rendering | Never |
+| Alias | A unique key a person chose within a scope: an Agent or Space handle, a Work address, a Zone page title | Holder or editors; optional | Yes |
+| Readable suffix | Words from the display name the page shows in its language | Derived when rendering | Never |
 
-| Resource | Name form | Identity form |
+| Resource | Alias form | Identity form |
 | --- | --- | --- |
-| Agent (person or organization) | `/@{handle}` | `/a/{sid}[-{slug}]` |
-| Space as a community (Realm) | `/r/{handle}` | `/r/{sid}[-{slug}]` |
-| Space as a site (Zone) | `/z/{handle}` | `/z/{sid}[-{slug}]` |
-| Work | `/w/{address}` | `/w/{sid}[-{slug}]` |
-| Concept | none | `/concepts/{sid}[-{slug}]` |
-| Any other resource | none | `/e/{sid}[-{slug}]`; a Work redirects to `/w/` |
-| A Zone's detail route | `/z/{space}/{route}/{title}` on a name-keyed route | `/z/{space}/{route}/{sid}[-{slug}]` |
+| Agent (person or organization) | `/@{handle}` | `/a/{sid}[-{suffix}]` |
+| Space as a community (Realm) | `/r/{handle}` | `/r/{sid}[-{suffix}]` |
+| Space as a site (Zone) | `/z/{handle}` | `/z/{sid}[-{suffix}]` |
+| Work | `/w/{address}` | `/w/{sid}[-{suffix}]` |
+| Concept | none | `/concepts/{sid}[-{suffix}]` |
+| Any other resource | none | `/e/{sid}[-{suffix}]`; a Work redirects to `/w/` |
+| A Zone's detail route | `/z/{space}/{route}/{title}` on an alias-keyed route | `/z/{space}/{route}/{sid}[-{suffix}]` |
 
 Every form sits under `/{locale}`; following segments are tabs and actions.
 Keep UUIDs and canonical entity IRIs; the `sid` is an encoding, not a second
@@ -42,36 +45,41 @@ a permanent ID beside changeable human names is how
 aliases, one canonical alias) and the
 [AT Protocol](https://atproto.com/specs/handle) (DID and handle) work.
 
-**Canonical form, name first by default.** Each name scope declares a policy.
-`name` makes the current name canonical when one exists and is the default for
+**Canonical form, alias first by default.** Each alias scope declares a policy.
+`alias` makes the current alias canonical when one exists and is the default for
 Agents, Spaces and Works, because handles and titles are what people share and
-type. `id` makes `{sid}-{slug}` canonical, the pattern of Stack Overflow and
+type. `id` makes `{sid}-{suffix}` canonical, the pattern of Stack Overflow and
 Reddit posts, for content whose names are not unique or not chosen; a Zone
-picks `name` or `id` per detail route, so a franchise wiki can use titles as
-Fandom and Wikipedia do. Resolution reads the `sid` or the name and ignores the
-slug. Any other form (a bare or stale-slug `sid`, an old name, a UUID link)
+picks `alias` or `id` per detail route, so a franchise wiki can use titles as
+Fandom and Wikipedia do. Resolution reads the `sid` or the alias and ignores the
+readable suffix. Any other form (a bare `sid` or one with a stale suffix, a former alias, a UUID link)
 answers one 301 to the canonical URL, which answers 200; a page without a name
 is complete at its identity form. Keep tab and meaningful language or version
 selections, and preserve anchors where applicable. Normalize host, HTTPS and
 trailing slash without redirect chains. Share copies the canonical URL; a short
 link is the bare `sid` form.
 
-**Names.** One registry and one resolver serve every scope; scopes differ only
-in policy: character set, reserved words, cooldown and who may claim.
+**Aliases.** One registry and one resolver serve every scope; scopes differ only
+in policy: character set, reserved words, cooldown and who may claim. A handle
+is the alias of an Agent or Space. An alias has one stored form, its folded
+key: the owner's input is shown back in that form while they type, and the page
+keeps showing the resource's display name, so the registry keeps no second
+"display" copy (2026-10-03: no reader used it, and one form per alias leaves
+no case variants to impersonate).
 
 - Handles (Agents and Spaces) use ASCII letters, digits, `_` and `-`, 3–30
   characters, starting and ending with a letter or digit, compared without case
   as the [PRECIS username profile](https://www.rfc-editor.org/info/rfc8265/)
-  recommends. Display names and slugs already carry every script, and a handle
+  recommends. Display names and readable suffixes already carry every script, and a handle
   is the namespace where impersonation pays. Single-script native handles may
   open later under the "Highly Restrictive" level of
   [UTS #39](https://unicode.org/reports/tr39/).
 - Work addresses and Zone titles accept any script, NFC-normalized, compared
   without case, with whitespace as `-`, and limited to the UTS #39 "Highly
   Restrictive" mixtures so that one title cannot impersonate another.
-- No name may decode as a valid `sid`, so each segment has one reading.
-- A rename keeps the old name as a permanent redirect to the same resource. A
-  retired or replaced name is never given to another holder: abandoned Twitter
+- No alias may decode as a valid `sid`, so each segment has one reading.
+- A rename keeps the former alias as a permanent redirect to the same resource. A
+  retired or replaced alias is never given to another holder: abandoned Twitter
   names were reclaimed for malicious content and SEO
   ([Mariconti et al., WWW 2017](https://arxiv.org/abs/1702.04256)). Merges
   redirect only to equivalent successors.
@@ -81,14 +89,14 @@ in policy: character set, reserved words, cooldown and who may claim.
 - Later: an organization may prove a handle against a domain it controls, by
   the AT Protocol's bidirectional DNS or `/.well-known` binding.
 
-**Slugs are derived, not stored.** The slug comes from the name an anonymous
+**Readable suffixes are derived, not stored.** The suffix comes from the display name an anonymous
 reader of that locale sees ([language order](#language-and-anonymous-representation)),
 NFC-normalized, keeping native script, with whitespace and punctuation collapsed
 to `-` and cut at a word boundary near 60 characters. Because resolution never
 reads it, a title change or a new translation moves the canonical URL with one
 301. This replaces the 2026-09-29 store of approved per-language slugs: it
 needed an editorial workflow for a value that identifies nothing, and Stack
-Overflow shows that derived slugs with redirects suffice.
+Overflow shows that derived suffixes with redirects suffice.
 
 **Addresses never grant reading.** Private resources answer 404 to readers
 Access does not admit, unless their Space shows a join request page
@@ -123,7 +131,7 @@ redirects to it.
 
 [Google's URL guidance](https://developers.google.com/search/docs/crawling-indexing/url-structure)
 supports audience-language words and correct percent-encoding; it does not show
-romanized slugs rank above CJK. [Permanent redirects](https://developers.google.com/search/docs/crawling-indexing/301-redirects)
+romanized URL words rank above CJK. [Permanent redirects](https://developers.google.com/search/docs/crawling-indexing/301-redirects)
 and canonical annotations are signals, not indexing guarantees.
 
 ## Language and anonymous representation
@@ -136,7 +144,7 @@ representations; use reciprocal, self-inclusive `hreflang` and a configured
 changing navigation. [Google's localized-page guidance](https://developers.google.com/search/docs/specialty/international/localized-versions)
 allows localized templates but may consolidate untranslated main content.
 
-Page, metadata, slug, share preview, JSON-LD and sitemap consume the same
+Page, metadata, readable suffix, share preview, JSON-LD and sitemap consume the same
 general-eligible anonymous representation. Private, unassessed or adult material
 cannot leak through a derivative. Policy changes invalidate hosted derivatives;
 previously delivered independent copies cannot be recalled by assertion.
