@@ -225,7 +225,14 @@ export function EntityPicker<T extends EntityPickerItem>({
                 )}
               </p>
             ) : null}
-            {!state.complete && state.nextCursor ? (
+            {state.updating && !state.error ? (
+              <>
+                <p role="status">{t.updating}</p>
+                <Button type="button" variant="ghost" size="sm" disabled={state.loading}
+                  onClick={() => void source.retry()}>{t.retry}</Button>
+              </>
+            ) : null}
+            {!state.updating && !state.complete && state.nextCursor ? (
               <Button
                 type="button"
                 variant="ghost"

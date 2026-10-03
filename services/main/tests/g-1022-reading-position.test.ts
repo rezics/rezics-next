@@ -50,17 +50,17 @@ test('G1022: wiki prefix resolves explicit and Mine boundaries with exact batche
   }
 });
 
-test('G1022: index pages merge numeric rank, validate seek order and never turn missing coverage into exact empty', async () => {
+test('G1022: index pages merge numeric rank, validate seek order and report incomplete coverage honestly', async () => {
   const work = id(), structure = id(), generation = id(), revision = id(), a = id(), b = id();
   const meta = { work, structure, generation, revision };
-  let page: unknown = { items: [{ occurrence: a, segmentKey: 'a', orderKey: 'b', matches: true }], reads: 3 };
+  let page: unknown = { items: [{ occurrence: a, segmentKey: 'a', orderKey: 'b', matches: true }], reads: 3, current: false };
   const session = { query: async (query: string) => query.includes('numbered-placement')
     ? [{ segmentKey: binding('a'), orderKey: binding('a') }]
     : [{ page: binding(JSON.stringify(page)) }] } as unknown as WorkReadSession;
   const order = { hydrate: async (_meta: unknown, entries: Array<{ occurrence: string; parent: string; segmentKey: string; orderKey: string }>) =>
     entries.map(entry => ({ ...entry, work, structure, revision, role: 'chapter', target: null })) } as unknown as ReadingOrderIndex;
   const merged = await searchOccurrenceLabels(session, order, meta, structure, '1', undefined, 1, b);
-  expect(merged.map(candidate => candidate.item.occurrence)).toEqual([b]); expect(merged[0]!.matches).toBe(true);
+  expect(merged.candidates.map(candidate => candidate.item.occurrence)).toEqual([b]); expect(merged.candidates[0]!.matches).toBe(true); expect(merged.current).toBe(false);
   for (const invalid of [null, { items: [], reads: 100_000 }, { items: [
     { occurrence: a, segmentKey: 'b', orderKey: 'a', matches: true },
     { occurrence: b, segmentKey: 'a', orderKey: 'a', matches: true },
@@ -72,15 +72,17 @@ test('G1022: index pages merge numeric rank, validate seek order and never turn 
   await expect(searchOccurrenceLabels(session, order, meta, structure, 'a', undefined, 2, null)).rejects.toBeInstanceOf(WorkReadUnavailable);
 });
 
-test('G1022: backfill accepts derived placement URNs and resumes after a lost committed response', async () => {
-  const generation = id(), placement = `urn:rezics:placement:${'a'.repeat(64)}`;
+test('G1022: backfill uses revision-fenced batches and resumes after a lost committed response', async () => {
+  const generation = id(), revision = id(), textGeneration = id();
   let covered = false, commands = 0;
   const interruption = new AbortController();
   const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
-    query: async (query: string) => ({ results: { bindings: query.includes('rv:indexVersion') || covered ? []
-      : [{ generation: binding(generation), placement: binding(placement) }] } }),
+    query: async (query: string) => ({ results: { bindings: query.includes('occurrenceProjectedCount')
+      ? [{ count: binding('1') }] : covered ? []
+      : [{ generation: binding(generation), revision: binding(revision), checkpoint: binding('0'),
+        build: binding(revision), targetText: binding(textGeneration), textGeneration: binding(textGeneration) }] } }),
     commandWithReceipt: async (request: { update: string }) => {
-      commands++; expect(request.update).toContain(`rv:occurrenceSearchPlacement <${placement}>`);
+      commands++; expect(request.update).toContain(`rv:occurrenceSearchRevision <${revision}>`);
       covered = true; interruption.abort(new Error('lost response'));
       return { status: 'committed', position: { dataEpoch: 'epoch', sequence: '2' } };
     },
@@ -88,4 +90,15 @@ test('G1022: backfill accepts derived placement URNs and resumes after a lost co
   await expect(backfillOccurrenceLabels(env, { generation, signal: interruption.signal })).rejects.toThrow('lost response');
   expect(await backfillOccurrenceLabels(env, { generation })).toMatchObject({ indexed: 0, batches: 0 });
   expect(commands).toBe(1);
+});
+
+
+test('G1022: missing order storage cannot fall back to scanning chapter labels', async () => {
+  const work = id(), structure = id(), revision = id(), generation = id();
+  const session = { deps: {}, checkDeadline: () => {}, query: async (query: string) => {
+    expect(query).not.toContain('CONTAINS');
+    return [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(generation) }];
+  } } as unknown as WorkReadSession;
+  const traversal = new ReadingPositionTraversal(session, work, async ids => new Set(ids));
+  await expect(traversal.page({ limit: 2, q: 'chapter' })).rejects.toBeInstanceOf(WorkReadUnavailable);
 });

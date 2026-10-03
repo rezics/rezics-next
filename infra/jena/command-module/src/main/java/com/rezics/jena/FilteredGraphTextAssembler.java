@@ -11,17 +11,16 @@ import org.apache.jena.rdf.model.Resource;
  * only the graph-scoped read behavior. */
 public final class FilteredGraphTextAssembler extends TextIndexLuceneAssembler {
     private static final String SEARCH_TRANSFORM = "Traditional-Simplified; Hiragana-Katakana";
-    /** Scalar substring keys use the same character normalization and script
-     * folding as the token analyzer, before its per-script token boundaries. */
-    static String foldSearchText(String value) {
-        return com.ibm.icu.text.Transliterator.getInstance(SEARCH_TRANSFORM).transliterate(
-            com.ibm.icu.text.Normalizer2.getNFKCCasefoldInstance().normalize(value));
-    }
     /** cjk-bigram-v2. Fold before bigram generation on both index and query;
      * stored values and their languages are never transformed. Each token
      * stream owns its ICU transliterator (which is mutable, not thread-safe).
      * Cost is streaming O(input characters), with Lucene's bounded tokenizer. */
     public static final class CjkBigramV2 extends org.apache.lucene.analysis.Analyzer {
+        @Override public int getPositionIncrementGap(String field) {
+            // No phrase can cross carried label/language boundaries. The API
+            // query's character budget is smaller than this positional gap.
+            return field.equals("occurrenceLabel") ? 10_000 : super.getPositionIncrementGap(field);
+        }
         @Override protected java.io.Reader initReader(String field, java.io.Reader reader) {
             // Normalize before tokenization: half-width voiced kana must compose
             // before the tokenizer assigns script types and token boundaries.

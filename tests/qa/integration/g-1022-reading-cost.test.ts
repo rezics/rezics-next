@@ -3,12 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
-import { RV, GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { RV, GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { StructureStageStore } from '../../../services/main/src/modules/structure/stage.ts';
 import { startMediaStack } from './media-support.ts';
+import { fusekiMemoryProbe } from './g-1022-fuseki-memory.ts';
 import { projectName } from '../../../scripts/dev/config.ts';
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 
@@ -28,6 +29,14 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 test('G1022: maintained label search, numbered seeks, saved positions and interrupted backfill at 100, 1000 and 10000 chapters', async () => {
   const stack = await startMediaStack('g-1022-reading-cost');
   try {
+    let measuringCount = 0, projectionCommands = 0, heapMs = 0;
+    const memory = await fusekiMemoryProbe();
+    const heap = async (phase: string, collect = false) => {
+      const started = performance.now(), reading = await memory(collect);
+      heapMs += performance.now() - started;
+      expect(reading.containerLimit).toBe(2 * 1024 ** 3);
+      console.log('G1022 heap', JSON.stringify({ revision: 'lucene-after', count: measuringCount, phase, memory: reading }));
+    };
     const member = await stack.member('reading-cost-editor');
     const originalObjects = stack.objects('semantic/structure/'); await originalObjects.initialize();
     let objectReads = 0, objectBytes = 0;
@@ -49,7 +58,11 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
     };
     const graphCommand = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
     stack.fuseki.commandWithReceipt = async envelope => {
-      try { return await graphCommand(envelope); }
+      try {
+        const result = await graphCommand(envelope);
+        if (envelope.update.includes('structure.project') && ++projectionCommands % 10 === 0) await heap('projection');
+        return result;
+      }
       catch (error) {
         console.error('G1022 command failure', envelope.receipt,
           error instanceof Error ? `${error.name}: ${error.message}` : String(error));
@@ -71,8 +84,6 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
         if (request.headers.get('authorization') !== `Bearer ${member.token}`) throw new AccountAssertionDenied('Unknown bearer');
         return member.principal;
       } } });
-    const legacy = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      media: stack.media, mediaAccess: stack.mediaAccess, readingPositions: new ReadingPositionStore(stack.contentPool) });
     const call = (method: string, path: string, body?: object) => app.handle(new Request(`http://main.local${path}`, {
       method, headers: { authorization: `Bearer ${member.token}`, 'idempotency-key': randomUUID(),
         ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));
@@ -91,7 +102,9 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
     };
     const samples: object[] = [];
     for (const count of [100, 1000, 10000]) {
-      const buildStarted = performance.now();
+      measuringCount = count;
+      await heap('before-build');
+      const buildStarted = performance.now(), heapBeforeBuild = heapMs;
       const rootWork = await makeWork(`G1022 ${count} chapters`);
       const chapter = await makeWork(`G1022 ${count} chapter`, ['https://schema.org/DigitalDocument']);
       const root = await json<Composition>(await call('POST', '/v1/compositions', { profile: 'work-composition',
@@ -125,14 +138,42 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
         }
         await json(await call('POST', `${path}/${stage.id}/seal`, { actingSubject: member.actor,
           holder: stage.holder, fence: stage.fence }));
+        await heap(`sealed-volume-${index}`);
         await json(await call('POST', `${path}/${stage.id}/activate`, { actingSubject: member.actor }));
+        await heap(`activated-volume-${index}`);
       }
-      const buildMs = performance.now() - buildStarted;
+      const buildWallMs = performance.now() - buildStarted;
+      const buildMs = buildWallMs - (heapMs - heapBeforeBuild);
+      await heap('after-build');
+      await heap('after-build-collected', true);
+      const partial = await json<Page & { search: { status: string }; count: { kind: string } }>(await app.handle(new Request(
+        `http://main.local/v1/reading-positions/${short(rootWork.work)}?q=重逢&limit=1`)));
+      expect(partial).toMatchObject({ complete: false, search: { status: 'indexing' }, count: { kind: 'at-least' } });
+      const indexStarted = performance.now();
+      await backfillOccurrenceLabels(stack.env);
+      const indexMs = performance.now() - indexStarted;
+      await heap('after-index');
+      await heap('after-index-collected', true);
       expect(buildMs).toBeLessThan(600_000);
-      const measured = async (operation: string, params: Record<string, string>, appForRead = app) => {
+      const measured = async (operation: string, params: Record<string, string>, baseline = false) => {
         const start = performance.now(), calls = stack.fuseki.queries, rows = graphRows, bytes = graphBytes,
           reads = objectReads, objectSize = objectBytes, work = graphWork.length, postings = indexReads;
-        const page = await json<Page>(await appForRead.handle(new Request(
+        // Test-only baseline of the retired scalar-label scan. Production has
+        // no graph-only substring fallback, even when its order store is absent.
+        const page = baseline ? await (async () => {
+          const rows = (await stack.fuseki.query(`PREFIX rv: <${RV}>
+            SELECT ?occurrence WHERE { VALUES (?main ?volumeOrder) {
+              ${volumes.map((volume, index) => `(${iri(volume.mainVersion)} ${index})`).join(' ')} }
+              GRAPH ${iri(GRAPHS.current)} {
+                ?structure rv:structureOf ?main ; rv:selectedGeneration ?generation .
+                ?placement rv:generation ?generation ; rv:occurrence ?occurrence ; rv:occurrenceLabel ?label ;
+                  rv:orderSegment ?segment ; rv:orderKey ?key .
+                ?segment rv:segmentKey ?segmentKey . FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+                FILTER(CONTAINS(LCASE(STR(?label)), ${lit(params.q!)}))
+              } } ORDER BY ?volumeOrder ?segmentKey ?key LIMIT 3`)).results?.bindings ?? [];
+          return { items: rows.slice(0, 2).map(row => ({ occurrence: row.occurrence!.value, ordinal: 0 })),
+            complete: rows.length <= 2, nextCursor: null, resolved: 'start' };
+        })() : await json<Page>(await app.handle(new Request(
           `http://main.local/v1/reading-positions/${short(rootWork.work)}?${new URLSearchParams(params)}`)));
         samples.push({ count, operation, ms: performance.now() - start, graphCalls: stack.fuseki.queries - calls,
           graphRows: graphRows - rows, graphBytes: graphBytes - bytes, objectReads: objectReads - reads,
@@ -141,7 +182,7 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
       };
       for (const q of ['重逢', 'chapter', 'absent']) {
         const params = { q, limit: '2' };
-        const before = await measured(`before:${q}`, params, legacy);
+        const before = await measured(`before:${q}`, params, true);
         const after = await measured(`after:${q}`, params);
         expect(after.items.map(item => item.occurrence)).toEqual(before.items.map(item => item.occurrence));
         expect(after.complete).toBe(before.complete);
@@ -177,13 +218,14 @@ test('G1022: maintained label search, numbered seeks, saved positions and interr
             .rejects.toThrow('interrupted build');
         } finally { stack.fuseki.commandWithReceipt = nativeCommand; }
         const closed = await app.handle(new Request(`http://main.local/v1/reading-positions/${short(rootWork.work)}?q=重逢`));
-        expect(closed.status).toBe(503);
+        const pending = await json<{ complete: boolean; search: { status: string }; count: { kind: string } }>(closed);
+        expect(pending).toMatchObject({ complete: false, search: { status: 'indexing' }, count: { kind: 'at-least' } });
         await backfillOccurrenceLabels(stack.env, { generation });
         expect((await measured('backfilled', { q: '重逢', limit: '1' })).items.map(item => item.occurrence)).toEqual([last]);
         const retry = await backfillOccurrenceLabels(stack.env, { generation });
         expect(retry.indexed).toBe(0);
       }
-      console.log('G1022 scale', JSON.stringify({ count, buildMs, samples: samples.filter(sample => (sample as { count: number }).count === count) }));
+      console.log('G1022 scale', JSON.stringify({ count, buildMs, buildWallMs, indexMs, samples: samples.filter(sample => (sample as { count: number }).count === count) }));
     }
   } finally { await stack.stop(); }
 }, 600_000);

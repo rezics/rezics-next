@@ -62,8 +62,8 @@ export async function readReadingPositionPage(
   if (answer.error || !answer.data) throw new PositionReadError(answer.error?.status ?? 503);
   const page = answer.data;
   if (
-    (!page.complete && (!page.nextCursor || page.nextCursor === input.cursor)) ||
-    (page.complete && page.nextCursor !== null)
+    (!page.complete && page.search?.status !== 'indexing' && (!page.nextCursor || page.nextCursor === input.cursor)) ||
+    (page.complete && (page.nextCursor !== null || page.search?.status === 'indexing'))
   )
     throw new PositionReadError(503);
   return page;
@@ -71,7 +71,7 @@ export async function readReadingPositionPage(
 
 /** No labels or local filtering are loaded after pagination; a hidden name stays hidden. */
 export function positionPickerPage(
-  page: Pick<ReadingPositionPage, 'items' | 'nextCursor' | 'complete'>,
+  page: Pick<ReadingPositionPage, 'items' | 'nextCursor' | 'complete' | 'search'>,
   here: string,
   locale: string,
   current: string | null,
@@ -79,6 +79,7 @@ export function positionPickerPage(
   return {
     nextCursor: page.nextCursor,
     complete: page.complete,
+    updating: page.search?.status === 'indexing',
     items: page.items.map((item) => {
       const value = idOf(item.occurrence);
       if (!value) throw new PositionReadError(503);

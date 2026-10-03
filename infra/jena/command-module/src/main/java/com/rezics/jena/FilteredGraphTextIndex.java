@@ -191,6 +191,84 @@ public final class FilteredGraphTextIndex implements TextIndex {
         } catch (IOException | ParseException ex) { throw new TextIndexException("ranked query failed", ex); }
     }
 
+    static final int OCCURRENCE_VISITS = 4096;
+    /** Ordered token terms live in the same Lucene documents and writer as
+     * the text fields. Seek chooses the rarest analyzed token, then checks the
+     * full phrase only on <=101 candidates. Deleted/rejected terms advance with
+     * matches=false, following the search owner's bounded directory pattern. */
+    JsonObject occurrences(Node generation, Node revision, Node parent, String phrase, String after, int size) {
+        if (size < 1 || size > 101 || phrase.length() > 4000 || after.length() > 134)
+            throw new TextIndexException("occurrence search exceeds its input budget");
+        if (!"occurrenceLabel".equals(lucene.getDocDef().getField(OccurrenceLabelIndex.p("occurrenceSearchLabels"))))
+            throw new TextIndexException("occurrence label field is not installed");
+        try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
+            String field = lucene.getDocDef().getEntityField(), scope = OccurrenceLabelIndex.scope(generation, revision, parent);
+            String lower = scope + after.replace('\u0001', '!').replace("https://rezics.com/id/", "");
+            Query scopeQuery = new BooleanQuery.Builder()
+                .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), OccurrenceLabelIndex.TEXT.getURI())), BooleanClause.Occur.FILTER)
+                .add(new TermQuery(new Term("occurrenceScope", scope)), BooleanClause.Occur.FILTER).build();
+            QueryParser parser = new QueryParser("occurrenceLabel", lucene.getQueryAnalyzer());
+            Query text = parser.parse("\"" + phrase.replace("\\", "\\\\").replace("\"", "\\\"") + "\"");
+            IndexSearcher searcher = new IndexSearcher(reader);
+            long deadline = System.nanoTime() + 1_000_000_000L;
+            searcher.setTimeout(() -> System.nanoTime() >= deadline);
+            int reads = 0;
+            String rarest = null; int frequency = Integer.MAX_VALUE;
+            var labels = org.apache.lucene.index.MultiTerms.getTerms(reader, "occurrenceLabel");
+            if (labels != null) {
+                var terms = labels.iterator();
+                for (String token : occurrenceTokens(lucene.getQueryAnalyzer(), phrase)) {
+                    reads++;
+                    if (!terms.seekExact(new org.apache.lucene.util.BytesRef(token))) { rarest = null; break; }
+                    if (terms.docFreq() < frequency) { rarest = token; frequency = terms.docFreq(); }
+                }
+            }
+            Map<String, Boolean> keys = new java.util.TreeMap<>();
+            var directory = org.apache.lucene.index.MultiTerms.getTerms(reader, "occurrenceDirectory");
+            if (directory != null) for (String token : java.util.Arrays.asList(rarest, "\u0000navigation")) {
+                if (token == null) continue;
+                boolean navigation = token.equals("\u0000navigation");
+                String prefix = scope + "\u0001" + token + "\u0001";
+                var iterator = directory.iterator();
+                var status = iterator.seekCeil(new org.apache.lucene.util.BytesRef(prefix + (after.isEmpty() ? scope : lower + ":~")));
+                if (status == org.apache.lucene.index.TermsEnum.SeekStatus.END) continue;
+                var term = iterator.term();
+                for (int n = 0; n < size && term != null && term.utf8ToString().startsWith(prefix); n++, term = iterator.next()) {
+                    if (System.nanoTime() >= deadline || ++reads > OCCURRENCE_VISITS)
+                        throw new TextIndexException("occurrence directory budget exceeded");
+                    String id = term.utf8ToString().substring(prefix.length());
+                    Query query = new BooleanQuery.Builder().add(scopeQuery, BooleanClause.Occur.FILTER)
+                        .add(new TermQuery(new Term(field, id)), BooleanClause.Occur.FILTER)
+                        .add(navigation ? new TermQuery(new Term("occurrenceNavigation", "true")) : text, BooleanClause.Occur.FILTER).build();
+                    // An entity has one document, including all label languages.
+                    boolean matches = searcher.search(query, 1).scoreDocs.length == 1;
+                    reads++;
+                    keys.merge(id, !navigation && matches, (x, y) -> x || y);
+                }
+            }
+            if (searcher.timedOut()) throw new TextIndexException("occurrence search deadline exceeded");
+            JsonArray items = new JsonArray();
+            for (var entry : keys.entrySet()) {
+                String encoded = entry.getKey().substring(scope.length());
+                String[] key = encoded.substring(0, encoded.lastIndexOf(':')).split("!", -1);
+                if (key.length != 3) throw new TextIndexException("occurrence text identity is invalid");
+                JsonObject item = new JsonObject(); item.put("segmentKey", key[0]); item.put("orderKey", key[1]);
+                item.put("occurrence", "https://rezics.com/id/" + key[2]); item.put("matches", entry.getValue());
+                items.add(item); if (items.size() == size) break;
+            }
+            JsonObject result = new JsonObject(); result.put("items", items); result.put("reads", reads);
+            result.put("commit", Long.toString(reader.getIndexCommit().getGeneration())); return result;
+        } catch (IOException | ParseException error) { throw new TextIndexException("occurrence search failed", error); }
+    }
+    static java.util.Set<String> occurrenceTokens(org.apache.lucene.analysis.Analyzer analyzer, String value) throws IOException {
+        var tokens = new java.util.LinkedHashSet<String>();
+        try (var stream = analyzer.tokenStream("occurrenceLabel", value)) {
+            var term = stream.addAttribute(org.apache.lucene.analysis.tokenattributes.CharTermAttribute.class);
+            stream.reset(); while (stream.incrementToken()) tokens.add(term.toString()); stream.end();
+        }
+        return tokens;
+    }
+
     private static final String RV = "https://rezics.com/vocab/";
     /** A sorted, maintained projection in the existing entity term dictionary.
      * Retains <=64 terms. Deleted terms advance with a null key, so even merge
@@ -399,7 +477,45 @@ public final class FilteredGraphTextIndex implements TextIndex {
     @Override public void commit() { lucene.commit(); }
     @Override public void rollback() { lucene.rollback(); }
     @Override public void close() { lucene.close(); }
-    @Override public void addEntity(Entity entity) { lucene.addEntity(entity); }
+    @Override public void addEntity(Entity entity) {
+        if (!entity.getMap().containsKey("occurrenceLabel")) { lucene.addEntity(entity); return; }
+        // Same writer, analyzer, rollback and commit as every existing text field.
+        // Ordered analyzed-token terms add no second engine, substring
+        // dictionary, page log or story-sized postings cache.
+        String field = lucene.getDocDef().getEntityField();
+        Document doc = new Document();
+        doc.add(new org.apache.lucene.document.Field(field, entity.getId(), TextIndexLucene.ftIRI));
+        String scope = entity.getId().substring(0, OccurrenceLabelIndex.PREFIX.length() + 3 * 37);
+        doc.add(new org.apache.lucene.document.StringField("occurrenceScope", scope, org.apache.lucene.document.Field.Store.NO));
+
+        doc.add(new org.apache.lucene.document.Field(lucene.getDocDef().getGraphField(), entity.getGraph(), TextIndexLucene.ftIRI));
+        if (entity.getId().endsWith(":navigation")) {
+            doc.add(new org.apache.lucene.document.StringField("occurrenceNavigation", "true", org.apache.lucene.document.Field.Store.NO));
+            doc.add(new org.apache.lucene.document.StringField("occurrenceDirectory", scope + "\u0001\u0000navigation\u0001" + entity.getId(), org.apache.lucene.document.Field.Store.NO));
+        }
+        var tokens = new java.util.LinkedHashSet<String>();
+        for (var entry : entity.getMap().entrySet()) {
+            String value = (String) entry.getValue();
+            // One document per occurrence. Multivalued text fields retain
+            // label boundaries through the analyzer's large position gap.
+            doc.add(new org.apache.lucene.document.StoredField(entry.getKey(), value));
+            JsonArray labels = org.apache.jena.atlas.json.JSON.parse(value).get("labels").getAsArray();
+            if (labels.size() > 18) throw new TextIndexException("occurrence labels exceed their write bound");
+            for (var item : labels) {
+                JsonObject label = item.getAsObject();
+                doc.add(new org.apache.lucene.document.TextField(entry.getKey(), label.get("value").getAsString().value(), org.apache.lucene.document.Field.Store.NO));
+                doc.add(new org.apache.lucene.document.StringField(lucene.getDocDef().getLangField(), label.get("language").getAsString().value(), org.apache.lucene.document.Field.Store.YES));
+                try { tokens.addAll(occurrenceTokens(lucene.getAnalyzer(), label.get("value").getAsString().value())); }
+                catch (IOException error) { throw new TextIndexException("occurrence analysis failed", error); }
+            }
+            doc.add(new org.apache.lucene.document.StringField(lucene.getDocDef().getUidField(),
+                entity.getChecksum(entry.getKey(), value), org.apache.lucene.document.Field.Store.NO));
+        }
+        for (String token : tokens) doc.add(new org.apache.lucene.document.StringField("occurrenceDirectory",
+            scope + "\u0001" + token + "\u0001" + entity.getId(), org.apache.lucene.document.Field.Store.NO));
+        try { lucene.getIndexWriter().addDocument(doc); }
+        catch (IOException error) { throw new TextIndexException("occurrence text write failed", error); }
+    }
     @Override public void updateEntity(Entity entity) { lucene.updateEntity(entity); }
     @Override public void deleteEntity(Entity entity) { lucene.deleteEntity(entity); }
     @Override public Map<String, Node> get(String uri) { return lucene.get(uri); }

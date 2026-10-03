@@ -6,7 +6,7 @@ import { parseOptions, readEnv, stackDirectory } from '../dev/config.ts';
 // task goal -- slot -- bun scripts/operations/rebuild-occurrence-labels.ts
 //   [--generation <IRI> --reset --job <stable-id>] [stack options]
 // No reset: online backfill, resumed from committed native descriptors.
-// Reset: rebuild one generation; search is unavailable until coverage returns.
+// Reset: rebuild one generation; search reports indexing and a lower bound until current.
 const root = resolve(import.meta.dir, '../..'), args = process.argv.slice(2);
 function option(name: string) {
   const at = args.indexOf(name);

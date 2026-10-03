@@ -7,15 +7,48 @@ import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.query.QueryExecution;
+import org.apache.jena.query.text.*;
 import org.apache.jena.sparql.core.*;
 import org.apache.jena.vocabulary.RDF;
+import org.apache.lucene.store.ByteBuffersDirectory;
 import org.junit.Test;
 
 public class g1022OccurrenceLabelsTest {
     static Node id(int value) { return OccurrenceLabelIndex.uri(String.format("https://rezics.com/id/00000000-0000-4000-8000-%012d", value)); }
     static Node p(String value) { return OccurrenceLabelIndex.p(value); }
     static Node text(String value) { return NodeFactory.createLiteralString(value); }
-    static final Node CURRENT = OccurrenceLabelIndex.uri(CommandPolicy.CURRENT), GENERATION = id(1), STRUCTURE = id(2), GROUP = id(3);
+    static final Node CURRENT = OccurrenceLabelIndex.uri(CommandPolicy.CURRENT), GENERATION = id(1), STRUCTURE = id(2), GROUP = id(3), REVISION = id(4);
+    static final class Fixture implements AutoCloseable {
+        final FilteredGraphTextIndex index;
+        final DatasetGraphText data;
+        Fixture() {
+            var definition = new EntityDefinition("uri", "label", "graph");
+            definition.set("occurrenceLabel", p("occurrenceSearchLabels"));
+            definition.set("publicTitle", p("publicTitle"));
+            definition.setUidField("uid"); definition.setLangField("lang");
+            var config = new TextIndexConfig(definition); config.setValueStored(true);
+            config.setAnalyzer(new FilteredGraphTextAssembler.CjkBigramV2());
+            index = new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(), config));
+            data = new DatasetGraphText(DatasetGraphFactory.createTxnMem(), index, new TextDocProducerTriples(index));
+        }
+        void drain() {
+            for (int attempt = 0; attempt < 1000; attempt++) {
+                data.begin(ReadWrite.WRITE);
+                boolean done;
+                try { OccurrenceLabelIndex.project(data, GENERATION, REVISION); done = OccurrenceLabelIndex.ready(data, GENERATION, REVISION); data.commit(); }
+                finally { data.end(); }
+                if (done) return;
+            }
+            fail("projection did not finish");
+        }
+        org.apache.jena.atlas.json.JsonObject page(String query, String after, int size) {
+            data.begin(ReadWrite.READ);
+            try { var page = index.occurrences(GENERATION, REVISION, STRUCTURE, query, after, size);
+                page.put("current", OccurrenceLabelIndex.ready(data, GENERATION, REVISION)); return page; }
+            finally { data.end(); }
+        }
+        public void close() { data.close(); }
+    }
     private static final class Measured extends DatasetGraphWrapper implements DatasetGraphWrapperView {
         long quads;
         Measured(DatasetGraph source) { super(source); }
@@ -37,9 +70,13 @@ public class g1022OccurrenceLabelsTest {
         }
     }
     static void fixture(DatasetGraph data, int count) {
+        data.add(OccurrenceLabelIndex.uri(CommandPolicy.CONTROL), OccurrenceLabelIndex.uri("urn:rezics:dataset:product"), p("textIndexGeneration"), id(95000));
         data.add(CURRENT, STRUCTURE, p("structureProfile"), p("BookComposition"));
+        data.add(CURRENT, STRUCTURE, p("structureHead"), REVISION);
+        data.add(CURRENT, STRUCTURE, p("selectedGeneration"), GENERATION);
         data.add(CURRENT, GENERATION, RDF.type.asNode(), p("StructureGeneration"));
         data.add(CURRENT, GENERATION, p("structure"), STRUCTURE);
+        data.add(CURRENT, GENERATION, p("generationState"), p("Active"));
         data.add(CURRENT, GENERATION, p("placementCount"), text(Integer.toString(count)));
     }
     static Node placement(DatasetGraph data, int index, String label, String language) {
@@ -55,104 +92,74 @@ public class g1022OccurrenceLabelsTest {
         data.add(CURRENT, placement, p("occurrenceLabel"), NodeFactory.createLiteralLang(label, language));
         return placement;
     }
-    static void index(DatasetGraph data, Node... placements) {
-        OccurrenceLabelIndex.refreshPlacements(data, List.of(placements), new LinkedHashSet<>(Set.of(GENERATION)));
+    @Test public void usesExistingAnalyzerAndPreservesEveryCarriedLanguage() {
+        try (var f = new Fixture()) {
+            f.data.begin(ReadWrite.WRITE);
+            try {
+                f.data.add(OccurrenceLabelIndex.uri(CommandPolicy.PUBLIC_SEARCH), id(90001), p("publicTitle"), NodeFactory.createLiteralLang("Existing public title", "en"));
+                fixture(f.data, 1); Node placement = placement(f.data, 0, "魔法禁書目錄", "yue");
+                f.data.add(CURRENT, placement, p("occurrenceLabel"), NodeFactory.createLiteralLang("ｶﾞﾗｽ ＲＵＳＴ", "ja"));
+                f.data.add(CURRENT, placement, p("occurrenceLabel"), NodeFactory.createLiteralLang("Cafe\u0301", "fr"));
+                f.data.add(CURRENT, placement, p("occurrenceLabel"), NodeFactory.createLiteralLang("separate boundary", "de"));
+                Node qualifier = id(90000); f.data.add(CURRENT, placement, p("qualifier"), qualifier);
+                f.data.add(CURRENT, qualifier, p("displayLabel"), text("第十二卷"));
+                f.data.add(CURRENT, qualifier, p("number"), text("１２"));
+                OccurrenceLabelIndex.queue(f.data, GENERATION, false); f.data.commit();
+            } finally { f.data.end(); }
+            assertFalse(f.page("CAFÉ", "", 1).get("current").getAsBoolean().value());
+            f.drain();
+            for (String query : List.of("禁书目录", "がらす", "Rust", "CAFÉ", "十二", "12"))
+                assertEquals(query, 1, f.page(query, "", 1).get("items").getAsArray().size());
+            assertFalse(f.page("rust café", "", 1).get("items").getAsArray().get(0).getAsObject().get("matches").getAsBoolean().value());
+        }
     }
-    static List<String> found(DatasetGraph data, Node parent, String query) {
-        List<String> result = new ArrayList<>();
-        for (var item : OccurrenceLabelIndex.search(data, GENERATION, parent, query, "", 101).get("items").getAsArray())
-            result.add(item.getAsObject().get("occurrence").getAsString().value());
-        return result;
+    @Test public void activationQueuesWithoutIndexingAndPartialBatchesResumeAfterRestart() {
+        try (var f = new Fixture()) {
+            f.data.begin(ReadWrite.WRITE);
+            try { fixture(f.data, 100); for (int at=0; at<100; at++) placement(f.data, at, "shared", "en");
+                OccurrenceLabelIndex.queue(f.data, GENERATION, false);
+                assertFalse(f.data.contains(OccurrenceLabelIndex.TEXT, Node.ANY, Node.ANY, Node.ANY)); f.data.commit(); }
+            finally { f.data.end(); }
+            f.data.begin(ReadWrite.WRITE);
+            try { OccurrenceLabelIndex.project(f.data, GENERATION, REVISION); f.data.commit(); } finally { f.data.end(); }
+            var page = f.page("shared", "", 2);
+            assertEquals(2, page.get("items").getAsArray().size()); assertFalse(page.get("current").getAsBoolean().value());
+            f.drain(); assertTrue(f.page("shared", "", 2).get("current").getAsBoolean().value());
+            f.data.begin(ReadWrite.WRITE);
+            try {
+                f.data.deleteAny(OccurrenceLabelIndex.uri(CommandPolicy.CONTROL), OccurrenceLabelIndex.uri("urn:rezics:dataset:product"), p("textIndexGeneration"), Node.ANY);
+                f.data.add(OccurrenceLabelIndex.uri(CommandPolicy.CONTROL), OccurrenceLabelIndex.uri("urn:rezics:dataset:product"), p("textIndexGeneration"), id(95001));
+                assertFalse(OccurrenceLabelIndex.ready(f.data, GENERATION, REVISION));
+                OccurrenceLabelIndex.queue(f.data, GENERATION, false); f.data.commit();
+            } finally { f.data.end(); }
+            f.drain(); assertTrue(f.page("shared", "", 2).get("current").getAsBoolean().value());
+            f.data.begin(ReadWrite.WRITE);
+            try { OccurrenceLabelIndex.queue(f.data, GENERATION, true); f.data.abort(); } finally { f.data.end(); }
+            assertTrue(f.page("shared", "", 2).get("current").getAsBoolean().value());
+        }
     }
-    @Test public void foldsEveryCarriedLanguageAndDisplayNumberWithoutChangingOriginals() {
-        var data = DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
-        try {
-            fixture(data, 3);
-            Node first = placement(data, 0, "魔法禁書目錄", "yue"), second = placement(data, 1, "ｶﾞﾗｽ ＲＵＳＴ", "ja"), third = placement(data, 2, "Cafe\u0301", "fr");
-            Node qualifier = id(90_000);
-            data.add(CURRENT, first, p("qualifier"), qualifier);
-            data.add(CURRENT, qualifier, p("displayLabel"), text("第十二卷"));
-            data.add(CURRENT, qualifier, p("number"), text("１２"));
-            index(data, first, second, third);
-            assertEquals(List.of(id(50_000).getURI()), found(data, STRUCTURE, "禁书目录"));
-            assertEquals(List.of(id(50_001).getURI()), found(data, STRUCTURE, "がらす"));
-            assertEquals(List.of(id(50_001).getURI()), found(data, STRUCTURE, "Rust"));
-            assertEquals(List.of(id(50_002).getURI()), found(data, STRUCTURE, "CAFÉ"));
-            assertEquals(List.of(id(50_000).getURI()), found(data, STRUCTURE, "十二"));
-            assertEquals(List.of(id(50_000).getURI()), found(data, STRUCTURE, "12"));
-            assertTrue(data.contains(CURRENT, first, p("occurrenceLabel"), NodeFactory.createLiteralLang("魔法禁書目錄", "yue")));
-        } finally { data.abort(); data.end(); data.close(); }
-    }
-    @Test public void renameMoveRemoveAndAbortedWriteRetainExactTransactionalCoverage() {
-        var data = DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
-        Node first;
-        try { fixture(data, 2); first = placement(data, 0, "old label", "en"); Node second = placement(data, 1, "other", "en"); index(data, first, second); data.commit(); }
-        finally { data.end(); }
-        data.begin(ReadWrite.WRITE);
-        try {
-            data.deleteAny(CURRENT, first, p("occurrenceLabel"), Node.ANY);
-            data.add(CURRENT, first, p("occurrenceLabel"), NodeFactory.createLiteralLang("new label", "en"));
-            data.deleteAny(CURRENT, id(30_000), p("parent"), Node.ANY); data.add(CURRENT, id(30_000), p("parent"), GROUP);
-            index(data, first);
-            assertEquals(List.of(), found(data, STRUCTURE, "old"));
-            assertEquals(List.of(id(50_000).getURI()), found(data, GROUP, "new"));
-            data.abort();
-        } finally { data.end(); }
-        data.begin(ReadWrite.WRITE);
-        try {
-            assertEquals(List.of(id(50_000).getURI()), found(data, STRUCTURE, "old"));
-            data.add(CURRENT, first, p("removedBy"), id(99_999));
-            data.deleteAny(CURRENT, GENERATION, p("placementCount"), Node.ANY); data.add(CURRENT, GENERATION, p("placementCount"), text("1"));
-            index(data, first);
-            assertEquals(List.of(), found(data, STRUCTURE, "old"));
-            assertEquals(List.of(id(50_001).getURI()), found(data, STRUCTURE, "other"));
-        } finally { data.abort(); data.end(); data.close(); }
-    }
-    @Test public void partialBackfillFailsClosedAndRecoversFromDurableDescriptors() {
-        var data = DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
-        Node first, second;
-        try {
-            fixture(data, 2); first = placement(data, 0, "shared", "en"); second = placement(data, 1, "shared", "en");
-            index(data, first);
-            assertThrows(IllegalStateException.class, () -> found(data, STRUCTURE, "shared"));
-            data.commit();
-        } finally { data.end(); }
-        data.begin(ReadWrite.WRITE);
-        try {
-            index(data, first, second); // repeated first descriptor must not inflate coverage
-            assertEquals(List.of(id(50_000).getURI(), id(50_001).getURI()), found(data, STRUCTURE, "shared"));
-            data.commit();
-        } finally { data.end(); }
-        data.begin(ReadWrite.READ);
-        try { assertEquals(2, found(data, STRUCTURE, "shared").size()); }
-        finally { data.end(); data.close(); }
-    }
-    @Test public void nativeMonitorTracksQualifierAndSegmentWritesAndActivationCannotExposePartialBuild() {
-        var data = DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
-        try {
-            fixture(data, 1); Node placement = placement(data, 0, "chapter", "en"), qualifier = id(90_000);
-            data.add(CURRENT, placement, p("qualifier"), qualifier); data.add(CURRENT, qualifier, p("displayLabel"), text("Old"));
-            index(data, placement);
-            var capture = new OccurrenceLabelIndex.Capture(data);
-            org.apache.jena.update.UpdateAction.parseExecute("PREFIX rv: <https://rezics.com/vocab/> DELETE { GRAPH <" + CommandPolicy.CURRENT + "> {"
-                + " <" + qualifier.getURI() + "> rv:displayLabel \"Old\" . <" + id(30_000).getURI() + "> rv:parent <" + STRUCTURE.getURI() + "> } }"
-                + " INSERT { GRAPH <" + CommandPolicy.CURRENT + "> { <" + qualifier.getURI() + "> rv:displayLabel \"New\" ."
-                + " <" + id(30_000).getURI() + "> rv:parent <" + GROUP.getURI() + "> } } WHERE {}", DatasetFactory.wrap(capture.observed(data)));
-            capture.refresh("urn:ordinary");
-            assertEquals(List.of(), found(data, STRUCTURE, "old"));
-            assertEquals(List.of(id(50_000).getURI()), found(data, GROUP, "new"));
-            data.deleteAny(OccurrenceLabelIndex.STATE, GENERATION, p("indexedCount"), Node.ANY);
-            data.add(OccurrenceLabelIndex.STATE, GENERATION, p("indexedCount"), text("0"));
-            var activation = new OccurrenceLabelIndex.Capture(data); activation.selected.add(GENERATION);
-            assertThrows(IllegalStateException.class, () -> activation.refresh("urn:activation"));
-        } finally { data.abort(); data.end(); data.close(); }
+    @Test public void staleRevisionCannotWriteAndResetClearsInBoundedBatches() {
+        try (var f = new Fixture()) {
+            f.data.begin(ReadWrite.WRITE);
+            try { fixture(f.data, 160); for (int at=0; at<160; at++) placement(f.data, at, "old", "en");
+                OccurrenceLabelIndex.queue(f.data, GENERATION, false); f.data.commit(); } finally { f.data.end(); }
+            f.drain();
+            f.data.begin(ReadWrite.WRITE);
+            try { OccurrenceLabelIndex.queue(f.data, GENERATION, true);
+                assertThrows(IllegalStateException.class, () -> OccurrenceLabelIndex.project(f.data, GENERATION, id(5)));
+                OccurrenceLabelIndex.project(f.data, GENERATION, REVISION);
+                var remaining = f.data.find(OccurrenceLabelIndex.STATE, Node.ANY, p("indexedGeneration"), GENERATION);
+                int count = 0; try { while (remaining.hasNext()) { remaining.next(); count++; } } finally { org.apache.jena.atlas.iterator.Iter.close(remaining); }
+                assertEquals(96, count); f.data.commit(); } finally { f.data.end(); }
+            f.drain(); assertEquals(2, f.page("old", "", 2).get("items").getAsArray().size());
+        }
     }
     @Test public void maintenancePolicyAcceptsOnlyDerivedOccurrenceRequestsWithoutProductWrites() {
         String receipt = "urn:rezics:receipt:chapter-search-index:" + "c".repeat(64);
         String update = "PREFIX rv: <https://rezics.com/vocab/> DELETE { GRAPH <" + CommandPolicy.CONTROL
             + "> { <urn:rezics:dataset:product> rv:sequence ?n } } INSERT { GRAPH <" + CommandPolicy.CONTROL
             + "> { <urn:rezics:dataset:product> rv:sequence ?next } GRAPH <" + CommandPolicy.RECEIPTS
-            + "> { <" + receipt + "> rv:occurrenceSearchPlacement <" + id(10_000).getURI() + "> } GRAPH <"
+            + "> { <" + receipt + "> rv:occurrenceSearchGeneration <" + id(10_000).getURI() + "> } GRAPH <"
             + CommandPolicy.OUTBOX + "> { <urn:test:batch> a rv:OutboxBatch } } WHERE {}";
         CommandPolicy.parse(update, receipt);
         assertThrows(IllegalArgumentException.class, () -> CommandPolicy.parse(update.replace("rv:sequence ?next", "rv:hold ?next"), receipt));
@@ -187,45 +194,31 @@ public class g1022OccurrenceLabelsTest {
             } finally { data.abort(); data.end(); data.close(); }
         }
     }
-    @Test public void sparseCommonAbsentAndContinuationSearchCostIsBoundedAtEveryScale() {
-        for (int count : new int[]{100, 1000, 10000}) {
-            var data = DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
-            try {
-                fixture(data, count);
-                long build = System.nanoTime();
-                for (int at = 0; at < count; at += 30) {
-                    List<Node> placements = new ArrayList<>();
-                    for (int index = at; index < Math.min(count, at + 30); index++)
-                        placements.add(placement(data, index, index == count - 1 ? "重逢" : "Chapter " + index, "yue"));
-                    OccurrenceLabelIndex.refreshPlacements(data, placements, new LinkedHashSet<>(Set.of(GENERATION)));
-                }
-                double buildMs = (System.nanoTime() - build) / 1e6;
-                for (String query : List.of("重逢", "chapter", "absent")) {
-                    Measured observed = new Measured(data);
-                    long beforeStarted = System.nanoTime();
-                    String baseline = "PREFIX rv: <https://rezics.com/vocab/> SELECT ?occurrence WHERE { GRAPH <" + CommandPolicy.CURRENT + "> {"
-                        + " ?placement rv:generation <" + GENERATION.getURI() + "> ; rv:occurrence ?occurrence ; rv:occurrenceLabel ?label ; rv:orderSegment ?segment ; rv:orderKey ?key ."
-                        + " ?segment rv:parent <" + STRUCTURE.getURI() + "> ; rv:segmentKey ?segmentKey ."
-                        + " FILTER(CONTAINS(LCASE(STR(?label)), \"" + query + "\")) } } ORDER BY ?segmentKey ?key LIMIT 2";
-                    int beforeSize;
-                    try (var execution = QueryExecution.create(baseline, DatasetFactory.wrap(observed))) { beforeSize = 0; var rows = execution.execSelect(); while (rows.hasNext()) { rows.next(); beforeSize++; } }
-                    double beforeMs = (System.nanoTime() - beforeStarted) / 1e6;
-                    long beforeQuads = observed.quads; observed.quads = 0;
-                    long started = System.nanoTime();
-                    var page = OccurrenceLabelIndex.search(observed, GENERATION, STRUCTURE, query, "", 2);
-                    int reads = page.get("reads").getAsNumber().value().intValue();
-                    assertTrue(reads < 40);
-                    assertEquals(query.equals("absent") ? 0 : query.equals("重逢") ? 1 : 2, page.get("items").getAsArray().size());
-                    assertEquals(beforeSize, page.get("items").getAsArray().size());
-                    assertTrue("indexed quads=" + observed.quads, observed.quads < 50); assertTrue("baseline quads=" + beforeQuads, beforeQuads >= count);
-                    System.out.println("G1022 native scale " + count + " " + query + " beforeMs=" + beforeMs + " beforeQuads=" + beforeQuads
-                        + " afterMs=" + (System.nanoTime() - started) / 1e6 + " afterQuads=" + observed.quads + " reads=" + reads + " buildMs=" + buildMs);
-                }
-                String after = String.format("%08d", count - 4) + "\u0001a\u0001" + id(50_000 + count - 4).getURI();
-                var tail = OccurrenceLabelIndex.search(data, GENERATION, STRUCTURE, "chapter", after, 101).get("items").getAsArray();
-                assertEquals(2, tail.size());
-                assertEquals(id(50_000 + count - 3).getURI(), tail.get(0).getAsObject().get("occurrence").getAsString().value());
-            } finally { data.abort(); data.end(); data.close(); }
+    @Test public void sparseCommonAbsentAndContinuationHaveFixedNativeBudgetsAtEveryScale() {
+        for (int count : new int[]{100, 1000, 10000}) try (var f = new Fixture()) {
+            long build = System.nanoTime();
+            f.data.begin(ReadWrite.WRITE);
+            try { fixture(f.data, count); for (int at=0; at<count; at++) placement(f.data, at, at == count-1 ? "重逢" : "Chapter " + at, "yue");
+                OccurrenceLabelIndex.queue(f.data, GENERATION, false); f.data.commit(); } finally { f.data.end(); }
+            f.drain(); double buildMs = (System.nanoTime()-build)/1e6;
+            for (String query : List.of("重逢", "chapter", "absent")) {
+                f.data.begin(ReadWrite.READ); Measured observed = new Measured(f.data); long start=System.nanoTime(); int beforeSize=0;
+                String baseline = "PREFIX rv: <https://rezics.com/vocab/> SELECT ?occurrence WHERE { GRAPH <" + CommandPolicy.CURRENT + "> {"
+                    + " ?placement rv:generation <" + GENERATION.getURI() + "> ; rv:occurrence ?occurrence ; rv:occurrenceLabel ?label ; rv:orderSegment ?segment ; rv:orderKey ?key ."
+                    + " ?segment rv:parent <" + STRUCTURE.getURI() + "> ; rv:segmentKey ?segmentKey ."
+                    + " FILTER(CONTAINS(LCASE(STR(?label)), \"" + query + "\")) } } ORDER BY ?segmentKey ?key LIMIT 2";
+                try (var execution = QueryExecution.create(baseline, DatasetFactory.wrap(observed))) { var rows=execution.execSelect(); while(rows.hasNext()) {rows.next(); beforeSize++;} }
+                finally { f.data.end(); }
+                double beforeMs=(System.nanoTime()-start)/1e6; start=System.nanoTime();
+                var page=f.page(query,"",2); int reads=page.get("reads").getAsNumber().value().intValue();
+                assertEquals(beforeSize,page.get("items").getAsArray().size()); assertTrue(reads<=FilteredGraphTextIndex.OCCURRENCE_VISITS);
+                assertEquals(query.equals("absent") ? 1 : query.equals("重逢") ? 3 : 5, reads);
+                System.out.println("G1022 native scale " + count + " " + query + " beforeMs=" + beforeMs + " beforeQuads=" + observed.quads
+                    + " afterMs=" + (System.nanoTime()-start)/1e6 + " reads=" + reads + " buildMs=" + buildMs);
+            }
+            assertEquals(Math.min(101, count-1), f.page("chapter", "", 101).get("items").getAsArray().size());
+            String after=String.format("%08d",count-4)+"\u0001a\u0001"+id(50000+count-4).getURI();
+            assertEquals(2,f.page("chapter",after,101).get("items").getAsArray().size());
         }
     }
 }

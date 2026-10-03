@@ -138,7 +138,7 @@ final class CommandPolicy {
                 .filter(quad -> PUBLIC_SEARCH.equals(quad.getGraph().getURI())).toList();
             boolean occurrenceBackfill = graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX))
                 && insert.stream().anyMatch(quad -> RECEIPTS.equals(quad.getGraph().getURI())
-                    && Set.of(OccurrenceLabelIndex.p("occurrenceSearchPlacement"), OccurrenceLabelIndex.p("occurrenceSearchReset"), OccurrenceLabelIndex.p("occurrenceSearchGeneration")).contains(quad.getPredicate()));
+                    && Set.of(OccurrenceLabelIndex.p("occurrenceSearchReset"), OccurrenceLabelIndex.p("occurrenceSearchGeneration"), OccurrenceLabelIndex.p("occurrenceSearchRevision"), OccurrenceLabelIndex.p("occurrenceSearchOffset")).contains(quad.getPredicate()));
             if (!occurrenceBackfill && (!graphs.equals(Set.of(CONTROL, RECEIPTS, OUTBOX, PUBLIC_SEARCH))
                 || !current.isEmpty() || !revisions.isEmpty() || publicInserts.size() != 3
                 || delete.stream().anyMatch(quad -> !isControlSequence(quad))

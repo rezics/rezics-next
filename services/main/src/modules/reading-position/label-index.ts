@@ -1,17 +1,23 @@
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { NATIVE_ID, placementIri } from '../structure/graph.ts';
+import { assertPublicTextReady } from '../work/search-readiness.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import type { ReadingOccurrence } from './boundary.ts';
 import type { ReadingWork } from './traversal.ts';
 import type { ReadingOrderIndex } from './immutable-order.ts';
 
-/** The native directory seeks exact normalized substring postings before its
- * limit. It also returns navigation roles, so depth-first traversal can enter
- * groups and composed Works without scanning unrelated chapter labels. */
-export const OCCURRENCE_SEARCH_COST = { keyChars: 134, probe: 101, directories: 2 } as const;
+/** Lucene seeks analyzed labels and navigation roles under one selected
+ * revision. A pending projection yields a bounded partial page, never a scan. */
+const readiness = new WeakMap<WorkReadSession, Promise<unknown>>();
+export const OCCURRENCE_SEARCH_COST = { keyChars: 134, normalizedQueryChars: 4000, probe: 101, directories: 2, visits: 4096 } as const;
 export async function searchOccurrenceLabels(session: WorkReadSession, order: ReadingOrderIndex,
   meta: ReadingWork, parent: string, q: string, after: ReadingOccurrence | undefined,
-  limit: number, numbered: string | null): Promise<Array<{ item: ReadingOccurrence; matches: boolean }>> {
+  limit: number, numbered: string | null): Promise<{ candidates: Array<{ item: ReadingOccurrence; matches: boolean }>; current: boolean }> {
+  if (session.deps?.environment) {
+    if (!readiness.has(session)) readiness.set(session,
+      assertPublicTextReady(session.deps.environment.fuseki, session.deps.environment.lineage));
+    await readiness.get(session);
+  }
   const afterKey = after ? `${after.segmentKey}\u0001${after.orderKey}\u0001${after.occurrence}` : '';
   const rows = await session.query(`# reading-position:label-index
     SELECT ?page WHERE { BIND(rv:occurrenceSearch(${iri(meta.generation!)}, ${iri(parent)},
@@ -19,9 +25,9 @@ export async function searchOccurrenceLabels(session: WorkReadSession, order: Re
   let page: unknown;
   try { page = JSON.parse(rows[0]?.page?.value ?? ''); }
   catch { throw new WorkReadUnavailable('Occurrence label index is unavailable; run its backfill'); }
-  const result = page as { items?: Array<{ occurrence: string; segmentKey: string; orderKey: string; matches: boolean }>; reads?: number };
+  const result = page as { items?: Array<{ occurrence: string; segmentKey: string; orderKey: string; matches: boolean }>; reads?: number; current?: boolean };
   if (!result || !Array.isArray(result.items) || result.items.length > limit || !Number.isSafeInteger(result.reads)
-    || result.reads! < 0 || result.reads! > (limit + 1) * (OCCURRENCE_SEARCH_COST.keyChars + 1) * OCCURRENCE_SEARCH_COST.directories) {
+    || result.reads! < 0 || result.reads! > OCCURRENCE_SEARCH_COST.visits || typeof result.current !== 'boolean') {
     throw new WorkReadUnavailable('Occurrence label index page exceeds its cost');
   }
   const key = (entry: { segmentKey: string; orderKey: string; occurrence: string }) =>
@@ -58,5 +64,5 @@ export async function searchOccurrenceLabels(session: WorkReadSession, order: Re
   entries.splice(limit);
   const matches = new Set(entries.filter(entry => entry.matches || entry.occurrence === numbered).map(entry => entry.occurrence));
   const items = await order.hydrate(meta, entries, true);
-  return items.map(item => ({ item, matches: matches.has(item.occurrence) }));
+  return { candidates: items.map(item => ({ item, matches: matches.has(item.occurrence) })), current: result.current };
 }

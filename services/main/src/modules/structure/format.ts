@@ -79,8 +79,7 @@ const qualifier = Type.Union([
     { additionalProperties: false }),
   Type.Object({
     type: Type.Literal('zone-mount'), zone: nativeId,
-    // Current Zone producers use alias; immutable v1 records may carry name.
-    key: Type.Optional(Type.Enum(['alias','id','name'])),
+    key: Type.Optional(Type.Enum(['alias','id'])),
     routeSegment: Type.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 }),
     disclosure: Type.Union([Type.Literal('public'), Type.Literal('private')]),
     presentation: Type.Optional(reference),
@@ -283,6 +282,9 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
   catalogTargetTypes: readonly string[] = [],
   selectionRequiredRoles: readonly OccurrenceRole[] = profile === 'book-composition' ? ['chapter'] : [],
   selectionOptionalRoles: readonly OccurrenceRole[] = []): void {
+  if (record.labels.length > 16 || new Set(record.labels.map(label => label.language.toLowerCase())).size !== record.labels.length) {
+    throw new InvalidStructureObject('occurrence labels repeat a language or exceed their bound');
+  }
   const active = record.state === 'active';
   const positioned = record.segmentKey !== undefined || record.orderKey !== undefined;
   const complete = record.segmentKey !== undefined && record.orderKey !== undefined;
