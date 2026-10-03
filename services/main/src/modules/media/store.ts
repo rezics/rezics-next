@@ -619,18 +619,28 @@ export class MediaStore {
   /** Delivery basis for one publication item Use. */
   async itemDelivery(use: string) {
     if (!uuid.test(use)) return null;
-    const result = await this.pool.query(`SELECT u.target, p.byte_digest, p.media_type, p.byte_length,
+    return (await this.itemDeliveryBatch([use])).get(use) ?? null;
+  }
+
+  /** One primary-key batch, O(B log M) in retained media M and O(B) output.
+   * The same exact representation and live clearance predicates as itemDelivery;
+   * duplicates share a lookup, invalid input never reaches PostgreSQL. */
+  async itemDeliveryBatch(uses: readonly string[]) {
+    if (uses.length > MAX_SUMMARY_TARGETS || uses.some(use => !uuid.test(use))) {
+      throw new MediaInvalid('Invalid publication item batch');
+    }
+    const rows = uses.length ? (await this.pool.query(`SELECT u.id AS use, u.target, p.byte_digest, p.media_type, p.byte_length,
       p.pixel_width, p.pixel_height, p.availability, media.delivery_clearance(p) AS clearance, s.disclosure, s.moderation, s.lifecycle, a.object_namespace
       FROM media.use u JOIN media.asset a ON a.id = u.asset_id JOIN media.asset_state s ON s.id = a.state_head
       JOIN media.representation p ON p.id = u.representation_id
-      WHERE u.id = $1 AND u.role = 'publication-item' AND media.delivery_clearance(p) = 'cleared'`, [use]);
-    const row = result.rows[0];
-    return row ? { target: row.target as string, sha256: row.byte_digest as string,
+      WHERE u.id = ANY($1::uuid[]) AND u.role = 'publication-item' AND media.delivery_clearance(p) = 'cleared'`,
+    [[...new Set(uses)]])).rows : [];
+    return new Map(rows.map(row => [row.use as string, { target: row.target as string, sha256: row.byte_digest as string,
       mediaType: row.media_type as string, byteLength: row.byte_length as number,
       width: row.pixel_width as number, height: row.pixel_height as number,
       availability: row.availability as string, clearance: row.clearance as Clearance, disclosure: row.disclosure as string,
       moderation: row.moderation as string, lifecycle: row.lifecycle as string,
-      objectNamespace: row.object_namespace as string } : null;
+      objectNamespace: row.object_namespace as string }] as const));
   }
 
   /** Exact current avatar bytes linked to the requested Work and context. */

@@ -9,13 +9,13 @@ import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from './query-budget.ts';
 import { InvalidZoneConfiguration,type ZoneConfiguration } from './config-format.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
-import type { MediaStore } from '../media/store.ts';
+import { MediaUnavailable, type MediaStore } from '../media/store.ts';
 import { ZONE_ROUTE_COST } from './route-cost.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import { identityCanonical } from '../address/canonical.ts';
 
 export const ZONE_PUBLICATION_COST = { graphReads: 1, objectReads: 2,
-  officialPageSize: 50, maxModules: 24, maxBanners: 6, maxBannerMediaReads: 6,
+  officialPageSize: 50, maxModules: 24, maxBanners: 6, maxBannerMediaReads: 1,
   maxResolvedBlocks: 4, maxResolvedCollections: 2, maxCollectionPlacements: 8,
   maxModuleGraphReads: 64, maxNavigation: ZONE_ROUTE_COST.maxNavigation,
   maxNavigationGraphReads: ZONE_ROUTE_COST.maxGraphReads } as const;
@@ -42,12 +42,29 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
 }
 
 /** A banner is delivered only from an active public Realm publication item.
- * At most six exact Content lookups; an unusable image leaves the banner's text intact. */
-export async function readZoneBannerMedia(store: Pick<MediaStore, 'itemDelivery'> | undefined,
+ * One exact Content batch for at most six distinct Uses, independent of corpus,
+ * memberships and history; an unusable image leaves the banner's text intact. */
+export async function readZoneBannerMedia(store: Pick<MediaStore, 'itemDeliveryBatch'>
+  | Pick<MediaStore, 'itemDelivery'> | undefined,
   realm: string | null, banners: readonly { id: string; image: string }[]) {
-  return Promise.all(banners.map(async banner => {
-    const use = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(banner.image)?.[1];
-    const item = use && store && realm ? await store.itemDelivery(use) : null;
+  const uses = banners.map(banner => /^https:\/\/rezics\.com\/id\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(banner.image)?.[1]);
+  const selected = uses.filter((use): use is string => !!use);
+  const items = new Map<string, NonNullable<Awaited<ReturnType<MediaStore['itemDelivery']>>>>();
+  if (store && realm && selected.length) {
+    if ('itemDeliveryBatch' in store) {
+      for (const [use, item] of await store.itemDeliveryBatch(selected)) items.set(use, item);
+    } else {
+      // A single-item adapter also meets the one-statement contract. Multiple
+      // distinct Uses require the batch owner rather than a point-read loop.
+      const unique = [...new Set(selected)];
+      if (unique.length !== 1) throw new MediaUnavailable('Zone banner batch owner is unavailable');
+      const item = await store.itemDelivery(unique[0]!);
+      if (item) items.set(unique[0]!, item);
+    }
+  }
+  return banners.map((banner, index) => {
+    const use = uses[index];
+    const item = use ? items.get(use) : null;
     return { id: banner.id, image: item && item.target === realm
       && item.availability === 'available' && item.disclosure === 'public'
       && item.moderation === 'none' && item.lifecycle === 'active'
@@ -55,7 +72,7 @@ export async function readZoneBannerMedia(store: Pick<MediaStore, 'itemDelivery'
       && Number.isSafeInteger(item.height) && item.height > 0
       ? { url: `/v1/media/uses/${use}`, width: item.width, height: item.height,
         mediaType: item.mediaType } : null };
-  }));
+  });
 }
 
 /** Public module data resolves only disclosed query definitions, within the Zone's shared budget. */

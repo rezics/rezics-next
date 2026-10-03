@@ -8,6 +8,11 @@ import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStal
   sha256, type RuleBasis } from './store.ts';
 
 export const RULE_PUBLISH_ACTION = 'governance.rule.publish';
+/** One indexed head probe per distinct reference, in one round trip. The
+ * Realm header's authored-rule bound is independent of members and history.
+ * Array equality semantics: https://www.postgresql.org/docs/18/functions-comparisons.html#FUNCTIONS-COMPARISONS-ANY-SOME */
+export const REALM_RULE_HEADS_SQL = `SELECT ref, revision::text, digest
+  FROM access.governance_rule_head WHERE ref = ANY($1::text[]) AND scope_id = $2`;
 const legacyRealmRules = t.Object({ profile: t.Literal('realm-settings-rules-v1'),
   public: t.Boolean(), rules: t.Array(communityRule, { maxItems: MAX_RULES }) }, { additionalProperties: false });
 const realmRulesDocument = t.Object({ profile: t.Literal('realm-settings-rules-v2'),
@@ -174,6 +179,19 @@ export class GovernanceRules implements RuleBasis {
       throw new GovernanceUnavailable('governance rule owner is unavailable');
     })).rows[0];
     return row ?? null;
+  }
+
+  /** Missing and differently scoped heads are absent, just as in current().
+   * Never a request cache: every call observes the live head revisions. */
+  async currentRealmHeads(realm: string, refs: readonly string[]) {
+    if (!agentPattern.test(realm) || refs.length > MAX_RULES
+      || refs.some(ref => !ref || ref.length > 512)) throw new GovernanceInvalid('Invalid Realm rule heads');
+    if (!refs.length) return new Map<string, { revision: string; digest: string }>();
+    const rows = (await this.pool.query<{ ref: string; revision: string; digest: string }>(
+      REALM_RULE_HEADS_SQL, [[...new Set(refs)], `governance:realm:${realm}`]).catch(() => {
+      throw new GovernanceUnavailable('governance rule owner is unavailable');
+    })).rows;
+    return new Map(rows.map(row => [row.ref, { revision: row.revision, digest: row.digest }]));
   }
 
   async read(principal: VerifiedPrincipal, actingSubject: string, ref: string,

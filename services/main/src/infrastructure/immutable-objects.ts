@@ -90,6 +90,9 @@ export class S3ImmutableObjects implements ImmutableObjects {
         method: 'PUT',
         headers: {
           'content-type': 'application/octet-stream',
+          // Signing turns the bytes into a Request stream. Keep their known
+          // length explicit for S3 peers that reject chunked uploads (411).
+          'content-length': String(body.byteLength),
           'if-none-match': '*',
           'x-amz-checksum-sha256': Buffer.from(digest, 'hex').toString('base64'),
         },
