@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { waitForFocus } from '../../../../packages/ui/src/test/focus.ts';
+import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
 import { bodyText } from '../document-editor/body.ts';
@@ -64,12 +64,9 @@ const body = () => within(document.body);
 const open = async (canvas: ReturnType<typeof within>, name: RegExp) => {
   await userEvent.click(canvas.getByRole('button', { name }));
   const overlay = await body().findByRole('dialog', { name: 'Language of your post' });
-  // A loaded parallel Storybook run can schedule the overlay's autofocus after one second.
-  // Keep the two-frame focus check before typing, with the same budget as other overlay waits.
-  await waitForFocus(overlay, 5000);
   const search = within(overlay).getByRole('searchbox');
   await userEvent.click(search);
-  await waitForFocus(search, 5000);
+  await focusForTyping(search, 5000);
   return search;
 };
 

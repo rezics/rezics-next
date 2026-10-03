@@ -1,3 +1,5 @@
+import { localizedPath } from '../../../i18n/locale.ts';
+import { isUiLocale } from '../../../i18n/define.ts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
@@ -23,13 +25,13 @@ function Thumb({ work, Link }: { work: ZoneWork; Link: ComponentType<ZoneLinkPro
  * Copy first, then try: the two things a reader does with a prompt. A
  * published prompt or Skill copies its own text; any other pick its address.
  */
-function Actions({ work, title, t, Link, compact }: {
-  work: ZoneWork; title: string; t: Strings; Link: ComponentType<ZoneLinkProps>; compact?: boolean;
+function Actions({ zone, work, title, t, Link, compact }: {
+  zone: ZoneSlotProps['zone']; work: ZoneWork; title: string; t: Strings; Link: ComponentType<ZoneLinkProps>; compact?: boolean;
 }) {
   const { hub } = work;
   const words = t.copy[hub?.kind ?? 'link'];
   return <div className="aw-actions">
-    <CopyButton text={hub?.copyText ?? null} href={work.href} title={title} label={words.label}
+    <CopyButton text={hub?.copyText ?? null} href={localizedPath(work.href, isUiLocale(zone.locale) ? zone.locale : 'en')} title={title} label={words.label}
       copied={words.copied} failed={words.failed} compact={compact} />
     <Link href={work.href} className="aw-try" data-compact={compact ? '' : undefined}>
       <span className={compact ? 'sr-only' : undefined}>{t.tryIt}</span><span className="sr-only"> {title}</span>
@@ -87,7 +89,7 @@ export function WorkshopCard({ zone, work, layout, Link }: WorkCardSlotProps) {
         {work.tagline.value}</p> : null}
       {work.hub ? <Disclosed hub={work.hub} t={t} /> : null}
     </div> : null}
-    <Actions work={work} title={title} t={t} Link={Link} compact={layout !== 'cover'} />
+    <Actions zone={zone} work={work} title={title} t={t} Link={Link} compact={layout !== 'cover'} />
   </article>;
 }
 
@@ -137,7 +139,7 @@ export function WorkshopHero({ zone, banners, card, whyHere, Link, fallback }: H
             {lead.tagline.value}</p> : null}
           {lead.hub ? <Disclosed hub={lead.hub} t={t} /> : null}
           <div className="aw-spotlight-foot">
-            <Actions work={lead} title={title} t={t} Link={Link} />
+            <Actions zone={zone} work={lead} title={title} t={t} Link={Link} />
             <span className="aw-stamp">{whyHere(lead)}</span>
           </div>
         </article>

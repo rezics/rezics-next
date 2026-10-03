@@ -1,3 +1,4 @@
+import { spaceHref } from '../../../features/address/path.ts';
 import type {
   BrowseHeaderSlotProps,
   WorkCardSlotProps,
@@ -150,7 +151,7 @@ export function VisualNovelFooter({ zone, Link }: ZoneSlotProps) {
           </h2>
           <p>{t.siblingBody}</p>
           <p>
-            <Link href="/z/light-novels">{t.siblingLink}</Link>
+            <Link href={spaceHref('light-novels', 'site')}>{t.siblingLink}</Link>
           </p>
         </section>
       </div>
