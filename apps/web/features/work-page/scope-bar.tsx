@@ -17,27 +17,15 @@ import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
-import { neighbourScope, sameScope, shortId, type WorkAt, workHref, type WorkScope, type WorkTab } from './route.ts';
+import { neighbourScope, sameScope, type WorkAt, workHref, type WorkScope, type WorkTab } from './route.ts';
+import { realmLabel, scopeName } from './scope-labels.ts';
 import type { WorkName } from './types.ts';
 
 /** A Realm the scope bar offers, with its public name when Main gave one. */
 export interface ScopeRealm { id: string; name: WorkName | null; ratingCount?: number; readerCommunity?: boolean }
 
-/** A Realm's display name, or "Realm 1a2b3c4d" when Main could not name it. */
-export function realmLabel(realm: ScopeRealm, messages: WorkPageMessages, locale: UiLocale): string {
-  return realm.name?.value ?? materializeData(messages, { locale }).realmFallback({ id: shortId(realm.id) });
-}
-
 /** What a scoped region shows and where: the page's scope and the Realms it can offer. */
 export interface ScopeView { workRef: WorkAt; scope: WorkScope; realms: readonly ScopeRealm[] }
-
-/** The scope in words, for headings and empty states ("No ratings in Fantasy Readers yet"). */
-export function scopeName(view: ScopeView, messages: WorkPageMessages, locale: UiLocale): string {
-  const { scope } = view;
-  if (scope.kind !== 'realm') return scope.kind === 'global' ? messages.global : messages.mine;
-  return realmLabel(view.realms.find(realm => realm.id === scope.realm) ?? { id: scope.realm, name: null },
-    messages, locale);
-}
 
 /** The neighbouring scope an empty state offers, as a link; none when there is nowhere else to look. */
 export function ScopeOffer({ view, locale, messages, tab = 'overview' }: {

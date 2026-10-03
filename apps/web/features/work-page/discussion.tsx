@@ -9,7 +9,8 @@ import { formatDate, mintedAt, paragraphs } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
-import { realmLabel, ScopeOffer, type ScopeView, scopeName } from './scope-bar.tsx';
+import { ScopeOffer, type ScopeView } from './scope-bar.tsx';
+import { realmLabel, scopeName } from './scope-labels.ts';
 import type { DiscussionPage, Loaded } from './types.ts';
 
 /**

@@ -5,7 +5,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { type ChipGroup, FacetRows } from './concept-chips.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RegionFailure } from './region.tsx';
-import { realmLabel, ScopeOffer, type ScopeRealm, type ScopeView, scopeName } from './scope-bar.tsx';
+import { ScopeOffer, type ScopeRealm, type ScopeView } from './scope-bar.tsx';
+import { realmLabel, scopeName } from './scope-labels.ts';
 import type { Classification, ClassificationPage, Loaded } from './types.ts';
 
 export const CLASSIFICATION_REGION = 'work-classification';

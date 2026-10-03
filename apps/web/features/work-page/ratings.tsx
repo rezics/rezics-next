@@ -13,7 +13,8 @@ import { formatNumber, formatShare } from './format.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { idOf, workHref } from './route.ts';
-import { ScopeOffer, type ScopeView, scopeName } from './scope-bar.tsx';
+import { ScopeOffer, type ScopeView } from './scope-bar.tsx';
+import { scopeName } from './scope-labels.ts';
 import type { Loaded, RatingRead, RatingSummary, StatCount, WorkStats } from './types.ts';
 
 export const RATINGS_REGION = 'work-ratings';
