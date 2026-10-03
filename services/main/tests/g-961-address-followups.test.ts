@@ -557,6 +557,6 @@ test('G961: reply mentions read only current Agent names from the registry', asy
   expect(registryQuery).toContain('LIMIT 21');
   expect(emitted).toMatchObject([{ topic: 'mention', recipients: [recipient] }]);
   expect(
-    readFileSync('services/main/migrations/access/1018_drop_agent_handle_bridge.sql', 'utf8'),
+    readFileSync('services/main/migrations/access/1024_drop_agent_handle_bridge.sql', 'utf8'),
   ).toContain('DROP VIEW IF EXISTS access.agent_handle');
 });
