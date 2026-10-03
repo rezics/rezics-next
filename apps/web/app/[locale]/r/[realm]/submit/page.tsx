@@ -6,9 +6,7 @@ import { resolveRealm } from '../../../../../features/realm/read.ts';
 import { privateJoinPage } from '../../../../../features/realm/realm-page.tsx';
 import { realmMetadata } from '../../../../../features/realm/routes.tsx';
 import { RealmUnavailable } from '../../../../../features/realm/states.tsx';
-import { realmDiscovery } from '../../../../../features/address/space-read.ts';
 import { spaceHref } from '../../../../../features/address/path.ts';
-import { SpaceDiscovery } from '../../../../../features/space-access/discovery.tsx';
 import { getMessages } from '../../../../../i18n/server.ts';
 import { requestLocale } from '../../../../../i18n/server.ts';
 
@@ -31,14 +29,10 @@ export default async function Page({ params }: Props) {
     return privateJoinPage(selected.page, locale, spaceHref(realm, 'community', ['submit']));
   if (selected.kind === 'unavailable')
     return <RealmUnavailable messages={await getMessages('realm', locale)} />;
-  const discovery = realmDiscovery(selected.header);
   return (
-    <>
-      {discovery ? <SpaceDiscovery discovery={discovery} /> : null}
-      <PostComposePage
-        locale={locale}
-        initial={{ id: selected.header.id, name: selected.header.name.value }}
-      />
-    </>
+    <PostComposePage
+      locale={locale}
+      initial={{ id: selected.header.id, name: selected.header.name.value }}
+    />
   );
 }

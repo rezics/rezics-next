@@ -90,8 +90,8 @@ export const resolveRealm = cache(
         return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
       const fallback = await readPrivateRealm(ref, locale);
       if (fallback.kind !== 'realm') return fallback;
-      // The public resolver cannot yet supply private capability mappings.
-      // Keep the admitted legacy address; never guess a Zone or Space name.
+      // Keep an admitted legacy identity when no public landing address exists;
+      // never guess a Zone or Space name from a private header.
       return {
         kind: 'realm',
         ref,
@@ -136,14 +136,12 @@ export const resolveSite = cache(async (ref: string, locale: UiLocale): Promise<
     return fallback.kind === 'realm' ? { kind: 'missing' } : fallback;
   }
   const zone = idOf(resolved.data.capabilities?.zone ?? '');
-  return zone
-    ? {
-        kind: 'site',
-        address: resolved.data,
-        zone,
-        realm: idOf(resolved.data.capabilities?.realm ?? ''),
-      }
-    : { kind: 'missing' };
+  if (!zone) {
+    const fallback = await readPrivateRealm(ref, locale, resolved.data);
+    return fallback.kind === 'realm' ? { kind: 'missing' } : fallback;
+  }
+  return { kind: 'site', address: resolved.data, zone,
+    realm: idOf(resolved.data.capabilities?.realm ?? '') };
 });
 
 const readPrivateRealm = cache(async (ref: string, locale: UiLocale, address?: ResolvedAddress) => {

@@ -4,6 +4,10 @@ import type { Discovery } from '../manage/settings-api.ts';
 import { accessMessages } from '../manage/settings-messages.ts';
 import { SpaceDiscovery } from './discovery.tsx';
 
-export function UnlistedSpaceNotice({ locale, discovery }: { locale: UiLocale; discovery: Discovery }) {
-  return <><SpaceDiscovery discovery={discovery} /><Alert><AlertDescription>{accessMessages[locale].unlistedNotice}</AlertDescription></Alert></>;
+export function UnlistedSpaceNotice({ locale, discovery, discoveryMetadata = true }: {
+  locale: UiLocale; discovery: Discovery;
+  /** Routed pages use generateMetadata as the single document policy owner. */
+  discoveryMetadata?: boolean;
+}) {
+  return <>{discoveryMetadata ? <SpaceDiscovery discovery={discovery} /> : null}<Alert><AlertDescription>{accessMessages[locale].unlistedNotice}</AlertDescription></Alert></>;
 }

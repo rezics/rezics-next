@@ -8,6 +8,10 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { resolveZoneRoute, zoneRouteViewer, ZoneRouteMissing } from '../zone/route.ts';
 import { uuidToSid, identityKeyUuid } from '@rezics/model/address/sid';
 import { fusekiReadBudget, FusekiReadBudgetExceeded } from '../../infrastructure/fuseki.ts';
+import { workRead, WorkReadMissing } from '../work/read-session.ts';
+import { publicLanguageRequest } from '../display-language/public-request.ts';
+import { readRealmLanding } from '../realm-reads/read-realm.ts';
+import { identityCanonical } from './canonical.ts';
 import {
   NAME_COST,
   NameInvalid,
@@ -183,7 +187,8 @@ async function resolveAddressBatch(
   // Scope membership is confidential even when the target is public. Retirement
   // must not turn a denied site into a readable name inventory.
   for (const item of selected) {
-    if (item.alias && summaries.get(item.alias)?.status !== 'available') item.holder = null;
+    if (item.alias && summaries.get(item.alias)?.status !== 'available'
+      && item.alias !== capabilities.get(item.holder!)?.realm) item.holder = null;
     if (item.input.scope.startsWith('zone:')
       && summaries.get(scopeZones.get(item.input.scope.slice(5)))?.status !== 'available') item.holder = null;
   }
@@ -205,8 +210,40 @@ async function resolveAddressBatch(
         wantedHeads.map((item) => item.holder),
       )
     : new Map();
+  // A request landing admits only its Space address and Realm request target.
+  // It never makes the private summary or a Zone capability readable. Cache by
+  // holder so duplicate batch inputs share the bounded landing and name reads.
+  const landings = new Map<string, Promise<{
+    canonical: ReturnType<typeof identityCanonical>; realm: string; head?: NameRow;
+  } | null>>();
+  const landing = (holder: string) => {
+    let pending = landings.get(holder);
+    if (!pending) {
+      pending = (async () => {
+        const realm = capabilities.get(holder)?.realm;
+        if (!realm) return null;
+        try {
+          return await workRead(work, publicLanguageRequest(request), {
+            publicViewer: disclosureViewer(viewer.principal),
+          }, async session => {
+            const page = await readRealmLanding(session, realm);
+            if (page.profile !== 'realm-join-page-v1' || page.space !== holder) return null;
+            const head = (await registry.heads(['space'], [holder])).get(`space\0${holder}`);
+            const canonical = identityCanonical('space', holder, '');
+            if (head?.state === 'current') canonical.key = head.key;
+            return { canonical, realm: page.id, head };
+          });
+        } catch (error) {
+          if (error instanceof WorkReadMissing) return null;
+          throw new NameUnavailable('Space request address is unavailable', { cause: error });
+        }
+      })();
+      landings.set(holder, pending);
+    }
+    return pending;
+  };
   return Promise.all(
-    selected.map(async ({ input, holder, name }) => {
+    selected.map(async ({ input, holder, name, alias }) => {
       const summary = holder ? summaries.get(holder) : null;
       const kind =
         input.scope === 'resource' || input.scope === 'concept'
@@ -215,8 +252,23 @@ async function resolveAddressBatch(
       if (
         !summary ||
         summary.status !== 'available' ||
+        (alias && summaries.get(alias)?.status !== 'available') ||
         (kind !== 'zone' && kind !== 'resource' && summary.type !== kind)
       ) {
+        const page = input.scope === 'space' && holder && !name?.successor
+          ? await landing(holder) : null;
+        if (page) {
+          const retired = name?.state === 'retired' || page.head?.state === 'retired';
+          return {
+            profile: 'address-resolution-v1' as const,
+            scope: input.scope, key: input.key, holder: holder!,
+            status: retired ? ('retired' as const) : ('resolved' as const),
+            state: retired ? ('retired' as const) : (name?.state ?? ('current' as const)),
+            canonical: page.canonical,
+            capabilities: { realm: page.realm },
+            ...(name ? { revision: name.revision } : {}),
+          };
+        }
         return { scope: input.scope, key: input.key, status: 'unavailable' as const };
       }
       if (name?.successor) {
