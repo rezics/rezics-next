@@ -13,7 +13,7 @@ import { resourceCard } from '../query/resource-contract.ts';
 import { resourceCards, publicResources } from '../query/resources.ts';
 import { discoveryReader, fenceDiscoveryReader } from './reader.ts';
 import { visibleConcept, conceptCountBasis } from './concepts.ts';
-import { RANKING_PROFILE } from '../recommendation/ranking.ts';
+import { PUBLIC_DISCOVERY_RANKING } from './public-ranking.ts';
 import {
   indexedNameMatch,
   labelIndexReady,
@@ -161,12 +161,7 @@ export async function readDiscoverySections(
           throw new WorkReadUnavailable('Public ranking owner is unavailable');
         const ranked = await session.deps.recommendations.page(
           { public: true, principal: null, actingSubject: null },
-          {
-            profile: RANKING_PROFILE,
-            population: { kind: 'public' },
-            candidateGrain: 'work',
-            semantic: null,
-          },
+          PUBLIC_DISCOVERY_RANKING,
           ask,
           next ?? undefined,
           topicSelection,

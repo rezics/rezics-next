@@ -10,16 +10,29 @@ export class RankingBuildWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<void> | undefined;
   private held: { generation: string; epoch: string } | undefined;
+  private publicRefresh = false;
 
   constructor(private readonly access: Pool, private readonly rankings: RankingGenerations,
     private readonly intervalMs = 1000) {}
 
+  /** Enabled by Main for Discover; manual/synthetic ranking runners keep their
+   * existing management lifecycle. No request can enable this authority. */
+  enablePublicRefresh(): void { this.publicRefresh = true; }
+
   async tick(): Promise<void> {
     recordWorkerOutcome({ outcome: 'idle', processed: 0, unit: 'batch' });
+    if (this.publicRefresh) {
+      try { await this.rankings.refreshPublicRanking(); }
+      catch (error) {
+        if (!(error instanceof RecommendationStale || error instanceof RecommendationUnavailable)) throw error;
+        recordWorkerOutcome({ outcome: error instanceof RecommendationStale ? 'deferred' : 'retry' });
+      }
+    }
     if (!this.held) {
-      const candidate = (await this.access.query<{ id: string }>(`SELECT id::text FROM access.derived_generation
-        WHERE family = 'ranking' AND state = 'building' AND lease_expires_at <= clock_timestamp()
-        ORDER BY lease_expires_at, id LIMIT 1`)).rows[0];
+      const candidate = (await this.access.query<{ id: string }>(`SELECT g.id::text FROM access.derived_generation g
+        JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
+        WHERE g.family = 'ranking' AND g.state = 'building' AND g.lease_expires_at <= clock_timestamp()
+          AND i.data_epoch=$1 ORDER BY g.lease_expires_at, g.id LIMIT 1`, [this.rankings.dataEpoch])).rows[0];
       if (!candidate) return;
       try { this.held = { generation: candidate.id, epoch: await this.rankings.claim(candidate.id) }; }
       catch (error) { if (error instanceof RecommendationStale) { recordWorkerOutcome({ outcome: 'deferred' }); return; } throw error; }
