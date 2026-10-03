@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { uuidToSid } from '@rezics/model/address';
+import { spaceHref } from '../features/address/path.ts';
 import { BrowseReadError, discoveryApi } from '../features/discover/api.ts';
 import { browseQuery, emptyBrowse } from '../features/discover/browse-state.ts';
 import { fixtureFollow, target } from '../features/relationships/fixtures.ts';
@@ -53,9 +54,9 @@ describe('G-962 merged browse and relationship contracts', () => {
     const follow = fixtureFollow(10);
     const community = followedCommunity(follow)!;
     const official: Community = { id: target(20), kind: 'zone', realm: follow.realm!, name: 'Fiction',
-      language: 'en', icon: null, href: '/r/fiction', activity: 'unknown' };
+      language: 'en', icon: null, href: spaceHref('fiction', 'community'), activity: 'unknown' };
     const [named] = withZoneAddress([community], [official]);
-    expect(named).toEqual({ ...community, href: '/r/fiction' });
+    expect(named).toEqual({ ...community, href: official.href });
     expect(named!.id).toBe(follow.id);
     expect(named!.realm).toBe(follow.realm!);
     const unrelated = followedCommunity(fixtureFollow(11))!;

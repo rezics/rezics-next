@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
@@ -29,7 +30,7 @@ const communities: RealmPickerItem[] = Array.from({ length: 2400 }, (_, index) =
   label: `Community ${index + 1}`,
   realm: {
     id: browseId(6000 + index),
-    name: { value: `Community ${index + 1}`, language: 'en', direction: 'ltr', basis: 'requested' },
+    name: { value: `Community ${index + 1}`, language: 'en', direction: direction('en', `Community ${index + 1}`), basis: 'requested' },
     reviewMode: 'mandatory',
   },
 }));
@@ -100,7 +101,7 @@ function Pickers({ locale, slow, fail }: { locale: UiLocale; slow?: boolean; fai
           at={{ kind: 'all' }}
           options={Array.from({ length: 20 }, (_, index) => ({
             id: browseId(index + 1),
-            label: { value: `Chapter ${index + 1}`, lang: 'en', dir: 'ltr' as const },
+            label: { value: `Chapter ${index + 1}`, lang: 'en', dir: direction('en', `Chapter ${index + 1}`) },
             href: `?position=${browseId(index + 1).slice(-36)}`,
             current: false,
           }))}

@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { ZoneBrowseEntry, ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { LibraryBigIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -58,8 +59,8 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
         discussions: messages.discussions,
         decisions: messages.decisions, about: messages.about }} />}
     site={site ? { label: zoneMessages.browseTab, links: [
-      { href: siteHref(locale, ref, []), label: { value: messages.home, lang: locale, dir: 'ltr' } },
-      { href: siteHref(locale, ref, ['browse']), label: { value: zoneMessages.browseTab, lang: locale, dir: 'ltr' } },
+      { href: siteHref(locale, ref, []), label: { value: messages.home, lang: locale, dir: direction(locale, messages.home) } },
+      { href: siteHref(locale, ref, ['browse']), label: { value: zoneMessages.browseTab, lang: locale, dir: direction(locale, zoneMessages.browseTab) } },
     ] } : undefined}
     position={position}
     notice={<ExecutionNotice execution={execution} showDesignHref={zone.links.home} messages={zoneMessages} />}>

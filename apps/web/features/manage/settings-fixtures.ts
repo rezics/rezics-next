@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { OwnRequestPage, JoinPage, JoinRequest, RequestPage, SpaceAccessApi, SpaceSettingsView } from './settings-api.ts';
 
 export const accessActor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000011';
@@ -10,11 +11,13 @@ export const requestFixture: JoinRequest = { id: '00000000-0000-4000-8000-000000
   requestGeneration: '0', termsRevision: 'rules-3', membershipGeneration: '4', policyRevision: '12',
   reason: 'I would like to discuss translated literature. 文学について話したいです。', createdAt: '2026-10-02T08:00:00Z' };
 export const requestsInitial: RequestPage = { generation: '12', items: [requestFixture], nextCursor: 'fixture-inbox-cursor', complete: false };
+const name = (value: string, language = 'en') => ({ value, language,
+  direction: direction(language, value), basis: 'requested' as const });
 export const joinPageFixture: JoinPage = { profile: 'realm-join-page-v1', id: accessInitial.realm, space: accessInitial.space,
-  name: { value: 'Literature across languages 文学', language: 'en', direction: 'ltr', basis: 'requested' },
-  description: { value: 'A private community for readers and translators.', language: 'en', direction: 'ltr', basis: 'requested' },
-  rules: [{ id: 'respect', title: { value: 'Respect other readers', language: 'en', direction: 'ltr', basis: 'requested' },
-    body: { value: 'Discuss the work, and respect the people discussing it.', language: 'en', direction: 'ltr', basis: 'requested' } }],
+  name: name('Literature across languages 文学'),
+  description: name('A private community for readers and translators.'),
+  rules: [{ id: 'respect', title: name('Respect other readers'),
+    body: name('Discuss the work, and respect the people discussing it.') }],
   listing: 'unlisted', discovery: { indexable: false, robots: 'noindex', referrerPolicy: 'no-referrer' },
   action: { kind: 'request', href: '/v1/realms/00000000-0000-4000-8000-000000000002/join-requests', method: 'POST',
     basis: '/v1/realms/00000000-0000-4000-8000-000000000002/join-requests/basis' },

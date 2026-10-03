@@ -7,6 +7,7 @@ import lightNovels from '../../zones/official/light-novels/index.tsx';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { messages as realmMessages } from '../realm/messages.ts';
 import { RealmPageStory } from '../realm/story-page.tsx';
+import { siteHref } from '../realm/route.ts';
 import * as tracking from '../tracking/fixtures.ts';
 import { createMemoryMain, memoryReader } from '../tracking/memory.ts';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
@@ -161,7 +162,7 @@ const meta = {
   title: 'Zones/Light Novels',
   component: Series,
   args: { locale: 'en', signedIn: true, surface: 'index' },
-  parameters: { route: { pathname: '/en/r/light-novels/catalogue' } },
+  parameters: { route: { pathname: siteHref('en', 'light-novels', ['catalogue']) } },
   render: (args, { globals }) => (
     <Series {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
   ),
@@ -178,7 +179,7 @@ export const Catalogue: Story = {
     await expect(canvas.getAllByText('Sword Art Online').length).toBeGreaterThan(1);
     await expect(canvas.getByRole('link', { name: 'Open the Visual Novels Zone' })).toHaveAttribute(
       'href',
-      '/en/r/visual-novels',
+      siteHref('en', 'visual-novels', []),
     );
     await expect(
       canvas.getByText(/does not sell books, link to stores, show prices/),

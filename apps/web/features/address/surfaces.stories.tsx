@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -24,9 +25,9 @@ function Surface({ site, paired, locale }: { site: boolean; paired: boolean; loc
       labels={{ home: messages.home, about: messages.about, discussions: messages.discussions,
         decisions: messages.decisions, browse: messages.browse, works: messages.works }} />}
     site={site ? { label: surfaceText.site[locale], links: [
-      { href: siteHref(locale, 'fiction', []), label: { value: messages.home, lang: locale, dir: 'ltr' } },
+      { href: siteHref(locale, 'fiction', []), label: { value: messages.home, lang: locale, dir: direction(locale, messages.home) } },
       // A site is free to mount the path that used to lose to the community's fixed tab.
-      { href: siteHref(locale, 'fiction', ['about']), label: { value: messages.about, lang: locale, dir: 'ltr' } },
+      { href: siteHref(locale, 'fiction', ['about']), label: { value: messages.about, lang: locale, dir: direction(locale, messages.about) } },
     ] } : undefined}>
     <PageContainer><p lang={zone.description?.lang}>{zone.description?.value}</p></PageContainer>
   </ZoneFrame>;

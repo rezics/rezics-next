@@ -1,3 +1,4 @@
+import { direction } from '@rezics/main/language';
 import { RelationshipError } from './api.ts';
 import { resourceHref, spaceHref } from '../address/path.ts';
 import { relationshipsChanged } from './events.ts';
@@ -5,15 +6,18 @@ import type { Follow, FollowEdit, FollowReceipt, FollowState, JoinPolicy, Member
 
 export const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 export const target = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-aaaa-4aaa-8aaa-000000000000`;
-export const fixtureFollow = (n: number, kind = 'space'): Follow => ({
-  id: target(n), kind, revision: `r${n}`, available: true,
-  name: { value: n === 10 ? '中文网络小说' : n === 11 ? 'مكتبة الخيال' : `Community ${n}`, language: n === 10 ? 'zh-Hans' : n === 11 ? 'ar' : 'en',
-    direction: n === 11 ? 'rtl' : 'ltr' },
-  icon: { kind: 'fallback', key: String(n) }, realm: kind === 'space' ? target(n + 10000) : null,
-  href: kind === 'space' ? spaceHref(target(n), 'community') : resourceHref('/e/', target(n)),
-  level: 'highlights', source: 'explicit', pinPosition: n === 10 ? 0 : null,
-  newSince: { state: n === 10 ? 'new' : 'none', count: null, updatedAt: '2026-10-02T00:00:00Z' },
-});
+export const fixtureFollow = (n: number, kind = 'space'): Follow => {
+  const value = n === 10 ? '中文网络小说' : n === 11 ? 'مكتبة الخيال' : `Community ${n}`;
+  const language = n === 10 ? 'zh-Hans' : n === 11 ? 'ar' : 'en';
+  return {
+    id: target(n), kind, revision: `r${n}`, available: true,
+    name: { value, language, direction: direction(language, value) },
+    icon: { kind: 'fallback', key: String(n) }, realm: kind === 'space' ? target(n + 10000) : null,
+    href: kind === 'space' ? spaceHref(target(n), 'community') : resourceHref('/e/', target(n)),
+    level: 'highlights', source: 'explicit', pinPosition: n === 10 ? 0 : null,
+    newSince: { state: n === 10 ? 'new' : 'none', count: null, updatedAt: '2026-10-02T00:00:00Z' },
+  };
+};
 
 export function memoryRelationships(initial: Follow[] = [], failure?: 'read' | 'write') {
   const follows = new Map(initial.map(item => [item.id, { ...item }]));
