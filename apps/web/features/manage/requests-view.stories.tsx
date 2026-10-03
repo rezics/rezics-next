@@ -43,10 +43,7 @@ export const SearchAndContinue: Story = {
 export const Approve: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Approve' }));
-    const dialog = within(await within(document.body).findByRole('dialog'));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Welcome to the reading group.');
-    await userEvent.click(dialog.getByRole('button', { name: 'Approve' }));
+    await decideInLocale(canvasElement, 'en', false, 'Welcome to the reading group.');
     await expect(await canvas.findByText('Member admitted.')).toBeVisible();
     await expect(canvas.queryByText(/I would like to discuss/)).not.toBeInTheDocument();
     await captureAccessStory('request-approved');
@@ -55,12 +52,7 @@ export const Approve: Story = {
 export const StaleRequest: Story = {
   args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }) },
   async play({ canvasElement }) {
-    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Approve' }));
-    const dialog = within(await within(document.body).findByRole('dialog'));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'Welcome.');
-    await userEvent.click(dialog.getByRole('button', { name: 'Approve' }));
-    await expect(await dialog.findByText(/The request or review basis changed/)).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Approve' })).toBeDisabled();
+    const dialog = await staleInLocale(canvasElement, 'en');
     await userEvent.click(dialog.getByRole('button', { name: 'Refresh requests' }));
     await expect(await within(canvasElement).findByText('A request on the next page.')).toBeVisible();
   },
@@ -79,10 +71,7 @@ export const RequestOnlyManager: Story = {
 export const Decline: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Decline' }));
-    const dialog = within(await within(document.body).findByRole('dialog'));
-    await userEvent.type(dialog.getByRole('textbox', { name: 'Reason' }), 'The group is at capacity.');
-    await userEvent.click(dialog.getByRole('button', { name: 'Decline' }));
+    await decideInLocale(canvasElement, 'en', true, 'The group is at capacity.');
     await expect(await canvas.findByText('Request declined.')).toBeVisible();
   },
 };
@@ -95,14 +84,36 @@ export const EmptyGerman: Story = { args: { locale: 'de', initial: { generation:
 export const EmptyFrench: Story = { args: { locale: 'fr', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'fr' } };
 export const EmptySpanish: Story = { args: { locale: 'es', initial: { generation: '12', items: [], nextCursor: null, complete: true } }, globals: { locale: 'es' } };
 
-async function decideInLocale(canvasElement: HTMLElement, locale: keyof typeof accessMessages, decline: boolean) {
+async function decideInLocale(canvasElement: HTMLElement, locale: keyof typeof accessMessages, decline: boolean, reason = 'Decision reason.') {
   const t = accessMessages[locale];
   const canvas = within(canvasElement);
   const label = decline ? t.decline : t.approve;
   await userEvent.click(canvas.getByRole('button', { name: label }));
-  const dialog = within(await within(document.body).findByRole('dialog'));
-  await userEvent.type(dialog.getByRole('textbox', { name: t.reason }), 'Decision reason.');
-  await userEvent.click(dialog.getByRole('button', { name: label }));
+  const content = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: label });
+  const dialog = within(content);
+  const input = dialog.getByRole('textbox', { name: t.reason });
+  // Mounting does not mean the animated dialog has applied its initial focus yet.
+  await waitFor(async () => {
+    await expect(content).toBeVisible();
+    await expect(input).toHaveFocus();
+  });
+  await userEvent.type(input, reason);
+  const confirm = dialog.getByRole('button', { name: label });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  await userEvent.click(confirm);
+  return dialog;
+}
+async function staleInLocale(canvasElement: HTMLElement, locale: keyof typeof accessMessages) {
+  const t = accessMessages[locale];
+  const dialog = await decideInLocale(canvasElement, locale, false);
+  // Wait for the settled refusal inside the open dialog, including rendered text.
+  await waitFor(async () => {
+    await expect(dialog.getByRole('alert')).toHaveTextContent(t.staleRequest);
+    await expect(dialog.getByText(t.staleRequest)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: t.refresh })).toBeEnabled();
+  });
+  await expect(dialog.getByRole('button', { name: t.approve })).toBeDisabled();
+  return dialog;
 }
 export const ApprovedEnglish: Story = { args: { locale: 'en' }, globals: { locale: 'en' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'en', false);
@@ -111,8 +122,7 @@ export const DeclinedEnglish: Story = { args: { locale: 'en' }, globals: { local
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'en', true);
     const t = accessMessages['en']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleEnglish: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'en' }, globals: { locale: 'en' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'en', false);
-    const t = accessMessages['en']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'en'); } };
 export const ApprovedTraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'zh-Hant', false);
     const t = accessMessages['zh-Hant']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -120,8 +130,7 @@ export const DeclinedTraditionalChinese: Story = { args: { locale: 'zh-Hant' }, 
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'zh-Hant', true);
     const t = accessMessages['zh-Hant']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleTraditionalChinese: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'zh-Hant', false);
-    const t = accessMessages['zh-Hant']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'zh-Hant'); } };
 export const ApprovedSimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'zh-Hans', false);
     const t = accessMessages['zh-Hans']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -129,8 +138,7 @@ export const DeclinedSimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, g
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'zh-Hans', true);
     const t = accessMessages['zh-Hans']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleSimplifiedChinese: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'zh-Hans', false);
-    const t = accessMessages['zh-Hans']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'zh-Hans'); } };
 export const ApprovedJapanese: Story = { args: { locale: 'ja' }, globals: { locale: 'ja' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'ja', false);
     const t = accessMessages['ja']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -138,8 +146,7 @@ export const DeclinedJapanese: Story = { args: { locale: 'ja' }, globals: { loca
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'ja', true);
     const t = accessMessages['ja']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleJapanese: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'ja' }, globals: { locale: 'ja' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'ja', false);
-    const t = accessMessages['ja']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'ja'); } };
 export const ApprovedKorean: Story = { args: { locale: 'ko' }, globals: { locale: 'ko' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'ko', false);
     const t = accessMessages['ko']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -147,8 +154,7 @@ export const DeclinedKorean: Story = { args: { locale: 'ko' }, globals: { locale
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'ko', true);
     const t = accessMessages['ko']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleKorean: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'ko' }, globals: { locale: 'ko' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'ko', false);
-    const t = accessMessages['ko']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'ko'); } };
 export const ApprovedGerman: Story = { args: { locale: 'de' }, globals: { locale: 'de' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'de', false);
     const t = accessMessages['de']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -156,8 +162,7 @@ export const DeclinedGerman: Story = { args: { locale: 'de' }, globals: { locale
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'de', true);
     const t = accessMessages['de']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleGerman: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'de' }, globals: { locale: 'de' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'de', false);
-    const t = accessMessages['de']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'de'); } };
 export const ApprovedFrench: Story = { args: { locale: 'fr' }, globals: { locale: 'fr' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'fr', false);
     const t = accessMessages['fr']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -165,8 +170,7 @@ export const DeclinedFrench: Story = { args: { locale: 'fr' }, globals: { locale
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'fr', true);
     const t = accessMessages['fr']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleFrench: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'fr' }, globals: { locale: 'fr' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'fr', false);
-    const t = accessMessages['fr']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'fr'); } };
 export const ApprovedSpanish: Story = { args: { locale: 'es' }, globals: { locale: 'es' },
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'es', false);
     const t = accessMessages['es']; await expect(await within(canvasElement).findByText(t.approved)).toBeVisible(); } };
@@ -174,8 +178,7 @@ export const DeclinedSpanish: Story = { args: { locale: 'es' }, globals: { local
   async play({ canvasElement }) { await decideInLocale(canvasElement, 'es', true);
     const t = accessMessages['es']; await expect(await within(canvasElement).findByText(t.decisionDeclined)).toBeVisible(); } };
 export const StaleSpanish: Story = { args: { api: accessFixtureApi({ decide: async () => ({ ok: false, failure: 'stale' }) }), locale: 'es' }, globals: { locale: 'es' },
-  async play({ canvasElement }) { await decideInLocale(canvasElement, 'es', false);
-    const t = accessMessages['es']; await expect(await within(await within(document.body).findByRole('dialog')).findByText(t.staleRequest)).toBeVisible(); } };
+  async play({ canvasElement }) { await staleInLocale(canvasElement, 'es'); } };
 
 export const BrowserInbox: Story = { name: 'Browser inbox', args: { api: undefined } };
 
