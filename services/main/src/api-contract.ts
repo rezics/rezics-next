@@ -1,7 +1,7 @@
 import { t } from 'elysia';
 import './modules/types/registry.ts';
 import { registryWorkType } from './modules/types/contract.ts';
-import { discoveryCredit, discoveryRating } from './modules/discovery/contract.ts';
+import { discoveryCredit, discoveryItem, discoveryRating } from './modules/discovery/contract.ts';
 import { readAvatar, readName } from './modules/work/read-contract.ts';
 import { mergedIdentity } from './modules/identity-merge/resolution.ts';
 
@@ -98,7 +98,9 @@ export const phraseMatch = t.Object({
   title: t.Optional(readName), cover: t.Optional(readAvatar),
   primaryCredits: t.Optional(t.Array(discoveryCredit, { maxItems: 3 })),
   rating: t.Optional(t.Nullable(discoveryRating)), tagline: t.Optional(t.Nullable(readName)),
-  ratingStatus: t.Optional(t.Union(['available', 'unrated', 'no-context', 'context-required'].map(value => t.Literal(value)))),
+  ratingStatus: t.Optional(t.Union([t.Literal('available'), t.Literal('unrated'), t.Literal('no-context'),
+    t.Literal('context-required'), t.Literal('unavailable')])),
+  unavailablePreviews: discoveryItem.properties.unavailablePreviews,
   completionStatus: t.Optional(t.Nullable(t.Union([t.Literal('ongoing'),
     t.Literal('completed'), t.Literal('hiatus')]))),
   chapterCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),

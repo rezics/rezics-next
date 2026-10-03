@@ -86,6 +86,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/resources/{resource}/discussion', 'read'],
   ['GET', '/health/live', 'read'],
   ['GET', '/health/ready', 'read'],
+  ['GET', '/health/rating-ready', 'read'],
   ['GET', '/health/search-ready', 'read'],
   ['GET', '/v1/access/eligible-org-member-set-grants/{grantId}', 'read'],
   ['GET', '/v1/access/grants', 'read'],

@@ -93,24 +93,54 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function selectPrimaryRelationshipAction(canvasElement: HTMLElement, label: string) {
+  const canvas = within(canvasElement);
+  const body = within(canvasElement.ownerDocument.body);
+  const options = await canvas.findByRole('button', {
+    name: `${messages['zh-Hant'].options} · ${name}`,
+  });
+  await waitFor(() => expect(options).toBeEnabled());
+  await userEvent.click(options);
+  const menu = await body.findByRole('menu');
+  const action = await within(menu).findByRole('menuitem', { name: label });
+  // Hydrating the trigger does not mean the relationship read or menu focus has settled.
+  await waitFor(async () => {
+    await expect(menu).toHaveFocus();
+    await expect(action).toBeVisible();
+    await expect(action).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(
+      menu.getAnimations({ subtree: true }).some((animation) => animation.playState === 'running'),
+    ).toBe(false);
+  });
+  // Selection uses the highlighted item; wait for that rendered state before confirming.
+  await userEvent.keyboard('{Home}');
+  await waitFor(() => expect(action).toHaveAttribute('data-highlighted'));
+  await userEvent.keyboard('{Enter}');
+}
+
+async function openNavigation(canvasElement: HTMLElement) {
+  await userEvent.click(within(canvasElement).getByRole('button', { name: shellHant.openNavigation }));
+  const content = await within(canvasElement.ownerDocument.body).findByRole('dialog', {
+    name: shellHant.menu,
+  });
+  // The drawer is mounted before its content becomes visible at the end of its entrance.
+  await waitFor(async () => {
+    await expect(content).toHaveAttribute('data-state', 'open');
+    await expect(content).toBeVisible();
+    await expect(
+      content.getAnimations({ subtree: true }).some((animation) => animation.playState === 'running'),
+    ).toBe(false);
+  });
+  return within(content);
+}
+
 export const PinBeforeOpeningDrawer: Story = {
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    const options = await canvas.findByRole('button', {
-      name: `${messages['zh-Hant'].options} · ${name}`,
-    });
-    await waitFor(() => expect(options).not.toBeDisabled());
-    await userEvent.click(options);
-    await userEvent.click(
-      await within(document.body).findByRole('menuitem', { name: messages['zh-Hant'].pin }),
-    );
+    await selectPrimaryRelationshipAction(canvasElement, messages['zh-Hant'].pin);
     await waitFor(() => expect(current.follows.get(target(700))?.pinPosition).toBe(0));
-    await userEvent.click(canvas.getByRole('button', { name: shellHant.openNavigation }));
-    const drawer = within(
-      await within(document.body).findByRole('dialog', { name: shellHant.menu }),
-    );
+    const drawer = await openNavigation(canvasElement);
     const pinned = within(drawer.getByRole('region', { name: messages['zh-Hant'].pinned }));
-    await expect(await pinned.findByRole('link', { name })).toBeVisible();
+    await waitFor(() => expect(pinned.getByRole('link', { name })).toBeVisible());
     await expect(pinned.getAllByRole('link', { name })).toHaveLength(1);
   },
 };
@@ -125,11 +155,8 @@ export const UnfollowBeforeOpeningDrawer: Story = {
     await waitFor(() => expect(follow).not.toBeDisabled());
     await userEvent.click(follow);
     await waitFor(() => expect(current.follows.has(target(700))).toBe(false));
-    await userEvent.click(canvas.getByRole('button', { name: shellHant.openNavigation }));
-    const drawer = within(
-      await within(document.body).findByRole('dialog', { name: shellHant.menu }),
-    );
-    await expect(await drawer.findByText(messages['zh-Hant'].emptyPins)).toBeVisible();
+    const drawer = await openNavigation(canvasElement);
+    await waitFor(() => expect(drawer.getByText(messages['zh-Hant'].emptyPins)).toBeVisible());
     await expect(drawer.queryByRole('link', { name })).toBeNull();
   },
 };
@@ -138,22 +165,15 @@ export const HydratedTraditionalChineseFollow: Story = {
   args: { mode: 'follow' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const options = await canvas.findByRole('button', {
-      name: `${messages['zh-Hant'].options} · ${name}`,
-    });
-    await waitFor(() => expect(options).not.toBeDisabled());
-    await userEvent.click(options);
-    await userEvent.click(
-      await within(document.body).findByRole('menuitem', {
-        name: messages['zh-Hant'].explicitFollow,
-      }),
+    await selectPrimaryRelationshipAction(canvasElement, messages['zh-Hant'].explicitFollow);
+    await waitFor(() =>
+      expect(
+        canvas.getByRole('button', {
+          name: `${messages['zh-Hant'].notifications}: ${messages['zh-Hant'].highlights}`,
+        }),
+      ).toBeVisible(),
     );
-    await waitFor(() => expect(current.follows.has(target(700))).toBe(true));
+    await expect(current.follows.has(target(700))).toBe(true);
     await expect(current.calls.filter((call) => call.operation === 'follow')).toHaveLength(1);
-    await expect(
-      await canvas.findByRole('button', {
-        name: `${messages['zh-Hant'].notifications}: ${messages['zh-Hant'].highlights}`,
-      }),
-    ).toBeVisible();
   },
 };

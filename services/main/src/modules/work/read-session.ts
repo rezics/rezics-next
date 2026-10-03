@@ -16,6 +16,7 @@ import { DATASET, GRAPHS, RV, iri, lit } from './activate.ts';
 import { WORK_READ_COST } from './read-contract.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { fenceAuthorNames } from '../source/author-name-read.ts';
+import { optionalPreview } from '../query/optional-preview.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
 import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
 import type { Viewer } from '../suitability/policy.ts';
@@ -135,14 +136,18 @@ export class WorkReadSession {
     return rows;
   }
 
-  async summaries(resources: string[]): Promise<ResourceSummary[]> {
+  async summaries(resources: string[], optionalMedia = false): Promise<ResourceSummary[]> {
     this.checkDeadline();
     if (!resources.length) return [];
     const reader = { viewer: this.viewer, realmReadProof: this.principal && this.options.actingSubject ? (realm: string) =>
       Promise.resolve(this.deps.access.realmReadProof?.(this.principal!, this.options.actingSubject!, realm) ?? null) : undefined,
     canReadWork: this.principal && this.options.actingSubject ? (work: string) =>
       this.deps.access.canReadWork(this.principal!, this.options.actingSubject!, work) : undefined };
-    const result = await readResourceSummaries(this.deps.environment, this.deps.media?.store, reader,
+    const media = this.deps.media?.store;
+    const summaryMedia = media && optionalMedia ? {
+      avatarRows: (...args: Parameters<typeof media.avatarRows>) => optionalPreview(this, () => media.avatarRows(...args)),
+    } : media;
+    const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
       { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
         languages: this.displayLanguages });
     if (result.generation.graph !== `${this.position.dataEpoch}:${this.position.sequence}`) {
