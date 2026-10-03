@@ -26,9 +26,11 @@ function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, pers
   const api = useMemo(() => provided ?? browserSpaceAccessApi(page.space, page.id, actingSubject ?? ''),
     [provided, page.space, page.id, actingSubject]);
   const journal = useRef<RequestJournal>(emptyRequestJournal());
-  const [current, setCurrent] = useState<'available' | RequestReceipt['state'] | null>(null);
+  // Signed-out readers need no owner status read. Render their sign-in link in
+  // the initial HTML so returning to this request does not depend on hydration.
+  const [current, setCurrent] = useState<'available' | RequestReceipt['state'] | null>(actingSubject === null ? 'available' : null);
   const [knownReceipt, setKnownReceipt] = useState<RequestReceipt | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(actingSubject === null);
   const [statusLoading, setStatusLoading] = useState(actingSubject !== null);
   const [reason, setReason] = useState('');
   const [withdrawReason, setWithdrawReason] = useState('');
