@@ -54,7 +54,7 @@ export class HomePersonalStore {
    * https://www.postgresql.org/docs/18/transaction-iso.html#XACT-READ-COMMITTED
    * (reviewed 2026-10-04). Reusing the opening snapshot or a cached permission
    * would miss changes; reloading the full inventory adds no fence evidence. */
-  async fence(principal: VerifiedPrincipal, agent: string) {
+  async fence(principal: VerifiedPrincipal, agent: string): Promise<{ revision: string | null }> {
     return controlRead(this.pool, async client => {
       const owner = await followPrincipal(client, principal, agent);
       const row = (await client.query<{ revision: string }>(
