@@ -3,15 +3,16 @@ import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { standingContextPattern } from '../rating/contexts.ts';
 import { digest, RecommendationRestart, RecommendationStale } from '../recommendation/derived-generation.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
-import { workRead, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { workRead, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { automaticDiscovery } from './automation.ts';
 import type { OwnedDiscoveryBasis } from './contract.ts';
-import { DISCOVERY_REFRESH_COST, DiscoveryRefreshStore, type RefreshJob } from './refresh-store.ts';
+import { DISCOVERY_REFRESH_COST, discoveryRetryDelay, DiscoveryRefreshStore, type RefreshJob } from './refresh-store.ts';
 import { admitDiscoveryBasis, discoveryAppendOnly, projectDiscoveryBatch } from './source.ts';
 import { discoveryChanges } from './changes.ts';
 import type { DiscoveryProjection } from './store.ts';
 
-export type RefreshOutcome = 'idle' | 'relay-behind' | 'current' | 'inactive' | 'advanced' | 'activated' | 'retry';
+export type RefreshOutcome = 'idle' | 'relay-behind' | 'current' | 'inactive' | 'advanced' | 'activated' | 'retry'
+  | 'basis-unavailable' | 'basis-invalid';
 const request = () => new Request('http://main.internal/discovery-refresh');
 
 /** Bounded source batches and conservative outbox deltas. Immutable completed
@@ -80,10 +81,17 @@ export class DiscoveryRefreshWorker {
         async session => {
           if (!await this.caughtUp(session)) return 'relay-behind';
           const state = await this.store.inspect(job, session.position);
-          if (state.fresh) { generationId = null; return 'current'; }
           if (state.inactive) return 'inactive';
           session.principal = state.principal;
-          await admitDiscoveryBasis(session, job.basis);
+          try { await admitDiscoveryBasis(session, job.basis); }
+          catch (error) {
+            // Return through workRead's final source fence: a missing policy
+            // during a moved graph is a retry, not stable ineligibility.
+            if (error instanceof WorkReadMissing) return 'basis-unavailable';
+            if (error instanceof WorkReadInvalid) return 'basis-invalid';
+            throw error;
+          }
+          if (state.fresh) { generationId = null; return 'current'; }
           const operator = automaticDiscovery(job.basis.owner);
           if (state.row && !state.row.complete && state.row.source_sequence !== session.position.sequence) {
             const after = state.row.validated_sequence ?? state.row.source_sequence;
@@ -145,7 +153,9 @@ export class DiscoveryRefreshWorker {
     }
     await this.store.finish(job, generationId, outcome, performance.now() - started,
       outcome === 'advanced' || moved ? DISCOVERY_REFRESH_COST.intervalMs
-        : outcome === 'retry' || outcome === 'inactive' ? DISCOVERY_REFRESH_COST.retryMs : DISCOVERY_REFRESH_COST.idleMs);
+        : outcome === 'retry' ? discoveryRetryDelay(job.attempts)
+          : outcome === 'inactive' || outcome === 'basis-unavailable' || outcome === 'basis-invalid'
+            ? DISCOVERY_REFRESH_COST.maximumRetryMs : DISCOVERY_REFRESH_COST.idleMs);
     return outcome;
   }
 
@@ -154,7 +164,8 @@ export class DiscoveryRefreshWorker {
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.discovery.refresh', () => this.tick(), outcome => ({
-        outcome: outcome === 'relay-behind' || outcome === 'inactive' ? 'deferred'
+        outcome: outcome === 'relay-behind' || outcome === 'inactive' || outcome === 'basis-unavailable'
+          || outcome === 'basis-invalid' ? 'deferred'
           : outcome === 'advanced' || outcome === 'activated' ? 'worked' : outcome,
       })).catch(error => { console.error('discovery refresh tick failed', error); })
         .finally(() => { this.running = undefined; });

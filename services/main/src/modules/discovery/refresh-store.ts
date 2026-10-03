@@ -8,10 +8,15 @@ import { DISCOVERY_COST, type OwnedDiscoveryBasis } from './contract.ts';
 import { discoveryScopeKey, generation, sourceFence, type DiscoveryGeneration } from './store.ts';
 import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
 
-export const DISCOVERY_REFRESH_COST = { intervalMs: 100, idleMs: 100, retryMs: 30_000,
+export const DISCOVERY_REFRESH_COST = { intervalMs: 100, idleMs: 100, retryMs: 30_000, maximumRetryMs: 300_000,
   leaseMs: 30_000, catalogSize: 20, jobsPerTick: 1, worksPerTick: DISCOVERY_COST.buildWorks, purgeEntries: 1000,
   graphCalls: WORK_READ_COST.graphCalls + 3 } as const;
-export interface RefreshJob { scope_key: string; basis: OwnedDiscoveryBasis; generation_id: string | null; lease_epoch: string }
+export interface RefreshJob { scope_key: string; basis: OwnedDiscoveryBasis; generation_id: string | null; lease_epoch: string;
+  attempts?: string }
+export function discoveryRetryDelay(attempts = '1'): number {
+  return Math.min(DISCOVERY_REFRESH_COST.maximumRetryMs,
+    DISCOVERY_REFRESH_COST.retryMs * 2 ** Math.min(4, Math.max(0, Number(attempts) - 1)));
+}
 export const discoveryGenerationCurrent = (row: Pick<DiscoveryGeneration, 'source_epoch' | 'source_sequence'
   | 'access_revision' | 'recovery_generation' | 'source_profile'>,
 position: ReadPosition, fence: { revision: string; generation: string }) =>
@@ -80,7 +85,7 @@ export class DiscoveryRefreshStore {
           attempts = attempts + 1
         FROM (SELECT scope_key FROM access.discovery_refresh WHERE due_at <= clock_timestamp()
           ORDER BY due_at, scope_key LIMIT 1 FOR UPDATE SKIP LOCKED) candidate
-        WHERE j.scope_key = candidate.scope_key RETURNING j.*, j.lease_epoch::text`)).rows[0] ?? null;
+        WHERE j.scope_key = candidate.scope_key RETURNING j.*, j.lease_epoch::text, j.attempts::text`)).rows[0] ?? null;
     });
   }
 
@@ -95,14 +100,14 @@ export class DiscoveryRefreshStore {
       const active = (await client.query<{ active_generation: string }>(`SELECT active_generation
         FROM access.derived_generation_head WHERE family = 'discovery' AND scope_key = $1`, [job.scope_key])).rows[0];
       const prior = active ? await generation(client, active.active_generation) : null;
-      if (prior && discoveryGenerationCurrent(prior, position, fence)) {
-        return { fresh: true, row: null, principal: null };
-      }
       let principal: VerifiedPrincipal | null = null;
       if (job.basis.owner) {
         principal = (await client.query<VerifiedPrincipal>(`SELECT account_issuer AS issuer, account_subject AS subject
           FROM access.principal WHERE id = $1 AND active FOR SHARE`, [job.basis.owner])).rows[0] ?? null;
         if (!principal) return { fresh: false, row: null, principal: null, inactive: true };
+      }
+      if (prior && discoveryGenerationCurrent(prior, position, fence)) {
+        return { fresh: true, row: null, principal };
       }
       const pending = (await client.query<{ id: string; validated_sequence: string | null }>(`SELECT g.id,
         i.checkpoint_sequence::text AS validated_sequence FROM access.derived_generation g
@@ -165,6 +170,7 @@ export class DiscoveryRefreshStore {
       await requireRecoveryOpen(client);
       const result = await client.query(`UPDATE access.discovery_refresh SET generation_id = $3,
         last_outcome = $4, last_duration_ms = $5,
+        attempts = CASE WHEN $4 = 'retry' THEN attempts ELSE 0 END,
         due_at = clock_timestamp() + make_interval(secs => $6::double precision / 1000)
         WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > clock_timestamp()`,
       [job.scope_key, job.lease_epoch, generationId, outcome, Math.ceil(duration), delay]);

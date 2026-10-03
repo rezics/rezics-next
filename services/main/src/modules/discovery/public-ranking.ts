@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import type { RankingBasis } from '../recommendation/ranking.ts';
 import { readPosition } from '../work/read-contract.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { discoveryRefreshHealth } from './refresh-health.ts';
 
 export const PUBLIC_DISCOVERY_RANKING: RankingBasis = {
   profile: 'ranking-rating-latest-per-slot-v1', population: { kind: 'public' }, candidateGrain: 'work', semantic: null,
@@ -27,6 +28,7 @@ export const discoveryRankingHealth = t.Object({
   projectionPosition: t.Nullable(readPosition),
   sequenceLag: t.Nullable(t.String({ pattern: '^(0|[1-9][0-9]*)$' })),
   stale: t.Boolean(),
+  refresh: t.Nullable(discoveryRefreshHealth),
 });
 
 /** Availability follows the serving public ranking, not the separate standing
@@ -35,6 +37,8 @@ export const discoveryRankingHealth = t.Object({
 export async function readDiscoveryRankingHealth(session: WorkReadSession) {
   if (!session.deps.recommendations) throw new WorkReadUnavailable('Public ranking owner is unavailable');
   const generation = await session.deps.recommendations.publicRankingStatus();
+  // A diagnostic owner outage must not take a serving public ranking offline.
+  const refresh = await session.deps.discovery?.refreshHealth().catch(() => null) ?? null;
   const lag = generation?.dataEpoch === session.position.dataEpoch
     ? BigInt(session.position.sequence) - BigInt(generation.sequence) : null;
   return {
@@ -43,5 +47,6 @@ export async function readDiscoveryRankingHealth(session: WorkReadSession) {
     projectionPosition: generation ? { dataEpoch: generation.dataEpoch, sequence: generation.sequence } : null,
     sequenceLag: lag !== null && lag >= 0n ? String(lag) : null,
     stale: lag !== 0n,
+    refresh,
   };
 }

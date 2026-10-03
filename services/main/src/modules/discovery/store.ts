@@ -10,6 +10,7 @@ import { DISCOVERY_COST, type DiscoveryBasis, type DiscoveryRow, type OwnedDisco
   type ProjectedWork } from './contract.ts';
 import { discoveryAutomation, DISCOVERY_SERVICE_PRINCIPAL, type DiscoveryAutomation } from './automation.ts';
 import { DISCOVERY_SOURCE_PROFILE } from './profile.ts';
+import { readDiscoveryRefreshHealth } from './refresh-health.ts';
 
 type DiscoveryOperator = ManageContext | DiscoveryAutomation;
 
@@ -193,6 +194,8 @@ const manager = (client: PoolClient, context: DiscoveryOperator, row: DiscoveryG
  * aggregates. Manager-driven advance calls do one Work and release their lease. */
 export class DiscoveryProjection {
   constructor(private readonly pool: Pool) {}
+
+  refreshHealth() { return readDiscoveryRefreshHealth(this.pool); }
 
   async register(context: DiscoveryOperator, basis: DiscoveryBasis, position: ReadPosition, key: ReceiptKey,
     reuse?: { generation: string; works: string[] }) {
