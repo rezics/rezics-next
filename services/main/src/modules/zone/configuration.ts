@@ -246,11 +246,13 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(input.expectedHead)} ;
           rv:zoneState ?oldState ; rv:defaultRealm ?oldRealm ; rv:official ?oldOfficial ;
           rv:presentation ?oldPresentation ;
-          rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision . } }
+          rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision .
+          ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName . } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(revision)} ;
           rv:zoneState rv:${config.state === 'active' ? 'Active' : 'Retired'} .
+          ${name.name !== null ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name.name)}@${name.language} .` : ''}
           ${config.defaultRealm ? `${iri(input.zone)} rv:defaultRealm ${iri(config.defaultRealm)} .` : ''}
           ${config.official ? `${iri(input.zone)} rv:official true .` : ''}
           ${config.defaultContext ? `${iri(input.zone)} rv:defaultContext ${iri(config.defaultContext.context)} ;
@@ -283,7 +285,8 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           OPTIONAL { ${iri(input.zone)} rv:official ?oldOfficial }
           OPTIONAL { ${iri(input.zone)} rv:presentation ?oldPresentation }
           OPTIONAL { ${iri(input.zone)} rv:defaultContext ?oldContext }
-          OPTIONAL { ${iri(input.zone)} rv:defaultContextRevision ?oldContextRevision } }
+          OPTIONAL { ${iri(input.zone)} rv:defaultContextRevision ?oldContextRevision }
+          OPTIONAL { ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName } }
         ${input.operation === 'retire' ? `GRAPH ${iri(GRAPHS.current)} {
           ${iri(head.navigation)} rv:selectedGeneration ?generation .
           ?generation rv:placementCount 0 . }` : ''}

@@ -8,24 +8,47 @@ import { messages } from './messages.ts';
 const available = async (): Promise<HandleAvailability> => 'available';
 const taken = async (): Promise<HandleAvailability> => 'taken';
 const held = async (): Promise<HandleAvailability> => 'held';
-const meta = { title: 'Onboarding/Choose handle', component: HandleField,
-  args: { action: '/en/onboarding/finish', initial: 'ada_lovelace', submit: messages.en.continue,
-    messages: messages.en, checkAvailability: available,
-    children: <div className="grid gap-1 rounded-lg border border-border bg-muted/40 p-4">
-      <span className="text-muted-foreground text-sm">{messages.en.displayName}</span>
-      <strong>Ada Lovelace</strong>
-      <span className="text-muted-foreground text-sm">{messages.en.displayNameHelp}</span>
-    </div> },
-  decorators: [(Story, context) => {
-    const t = messages[(context.globals.locale as keyof typeof messages) in messages
-      ? context.globals.locale as keyof typeof messages : 'en'];
-    return <PageContainer className="max-w-xl py-8 sm:py-16"><Card><CardContent
-    className="grid gap-6 p-6 sm:p-8"><header className="grid gap-2">
-      <h1 className="font-semibold text-2xl">{t.welcome}</h1>
-      <p className="text-muted-foreground">{t.welcomeHelp}</p>
-    </header><Story /><p className="text-muted-foreground text-sm">{t.topicsLater}</p>
-    </CardContent></Card></PageContainer>;
-  }],
+const meta = {
+  title: 'Onboarding/Choose handle',
+  component: HandleField,
+  args: {
+    action: '/en/onboarding/finish',
+    initial: 'ada_lovelace',
+    submit: messages.en.continue,
+    messages: messages.en,
+    checkAvailability: available,
+    children: (
+      <div className="grid gap-1 rounded-lg border border-border bg-muted/40 p-4">
+        <span className="text-muted-foreground text-sm">{messages.en.displayName}</span>
+        <strong>Ada Lovelace</strong>
+        <span className="text-muted-foreground text-sm">{messages.en.displayNameHelp}</span>
+      </div>
+    ),
+  },
+  decorators: [
+    (Story, context) => {
+      const t =
+        messages[
+          (context.globals.locale as keyof typeof messages) in messages
+            ? (context.globals.locale as keyof typeof messages)
+            : 'en'
+        ];
+      return (
+        <PageContainer className="max-w-xl py-8 sm:py-16">
+          <Card>
+            <CardContent className="grid gap-6 p-6 sm:p-8">
+              <header className="grid gap-2">
+                <h1 className="font-semibold text-2xl">{t.welcome}</h1>
+                <p className="text-muted-foreground">{t.welcomeHelp}</p>
+              </header>
+              <Story />
+              <p className="text-muted-foreground text-sm">{t.topicsLater}</p>
+            </CardContent>
+          </Card>
+        </PageContainer>
+      );
+    },
+  ],
 } satisfies Meta<typeof HandleField>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -51,12 +74,17 @@ export const AlreadyTaken: Story = {
 };
 
 export const Chinese: Story = {
-  args: { messages: messages['zh-Hans'], submit: messages['zh-Hans'].continue,
-    children: <div className="grid gap-1 rounded-lg border border-border bg-muted/40 p-4">
-      <span className="text-muted-foreground text-sm">{messages['zh-Hans'].displayName}</span>
-      <strong>Ada Lovelace</strong>
-      <span className="text-muted-foreground text-sm">{messages['zh-Hans'].displayNameHelp}</span>
-    </div> },
+  args: {
+    messages: messages['zh-Hans'],
+    submit: messages['zh-Hans'].continue,
+    children: (
+      <div className="grid gap-1 rounded-lg border border-border bg-muted/40 p-4">
+        <span className="text-muted-foreground text-sm">{messages['zh-Hans'].displayName}</span>
+        <strong>Ada Lovelace</strong>
+        <span className="text-muted-foreground text-sm">{messages['zh-Hans'].displayNameHelp}</span>
+      </div>
+    ),
+  },
   globals: { locale: 'zh-Hans' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -102,9 +130,30 @@ export const SuggestsFromTheTypedName: Story = {
   },
 };
 
+export const IdentityTokensAreNotSuggested: Story = {
+  args: { askName: true, initial: '', children: undefined },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const name = canvas.getByRole('textbox', { name: 'Public name' });
+    const handle = canvas.getByRole('textbox', { name: 'Your handle' });
+    await userEvent.type(name, '林梅 4adce769-09a8-48cc-9bbf-3b33938d0405');
+    await expect(handle).toHaveValue('');
+    await expect(canvas.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Reader-Name');
+    await expect(handle).toHaveValue('reader-name');
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Continue' })).toBeEnabled());
+  },
+};
+
 export const CjkPublicName: Story = {
-  args: { askName: true, initial: '', children: undefined, messages: messages['zh-Hant'],
-    submit: messages['zh-Hant'].continue },
+  args: {
+    askName: true,
+    initial: '',
+    children: undefined,
+    messages: messages['zh-Hant'],
+    submit: messages['zh-Hant'].continue,
+  },
   globals: { locale: 'zh-Hant' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -117,7 +166,12 @@ export const CjkPublicName: Story = {
 
 /** Settings: a retired handle, or a lookalike of one, may be the owner's own. Main decides on submit. */
 export const HeldInSettingsCanBeTakenBack: Story = {
-  args: { checkAvailability: held, current: 'ada_new', initial: 'ada_lovelace', submit: messages.en.continue },
+  args: {
+    checkAvailability: held,
+    current: 'ada_new',
+    initial: 'ada_lovelace',
+    submit: messages.en.continue,
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent('take it back'));
@@ -136,9 +190,16 @@ export const HeldInOnboardingStaysBlocked: Story = {
 };
 
 export const HeldJapanese: Story = {
-  args: { checkAvailability: held, current: 'ada_new', messages: messages.ja, submit: messages.ja.continue },
+  args: {
+    checkAvailability: held,
+    current: 'ada_new',
+    messages: messages.ja,
+    submit: messages.ja.continue,
+  },
   globals: { locale: 'ja' },
   async play({ canvasElement }) {
-    await waitFor(() => expect(within(canvasElement).getByRole('status')).toHaveTextContent('取り戻せます'));
+    await waitFor(() =>
+      expect(within(canvasElement).getByRole('status')).toHaveTextContent('取り戻せます'),
+    );
   },
 };

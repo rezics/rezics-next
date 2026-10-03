@@ -101,6 +101,7 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
     expect((await summaries([zone])).summaries[0]).toMatchObject({
       status: 'available',
       type: 'zone',
+      name: { value: 'A canonical Site', language: 'en' },
       address: canonical,
     });
     expect(
@@ -110,6 +111,24 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
       items: expect.arrayContaining([
         expect.objectContaining({ zone, routeSegment: key, address: canonical }),
       ]),
+    });
+    // Configuration revisions must replace the same projected title used by
+    // summaries, canonical Site presentation and the official directory.
+    await f.json(await f.call('PUT', `/v1/zones/${zone.slice(-36)}/configuration`, {
+      expectedHead: (await readZoneConfiguration(f.env, zone)).revision,
+      actingSubject: f.actor,
+      name: 'Renamed canonical Site',
+      language: 'en',
+    }), 200);
+    canonical.slugSource = 'Renamed canonical Site';
+    expect((await summaries([zone])).summaries[0]).toMatchObject({
+      name: { value: canonical.slugSource, language: 'en' },
+      address: canonical,
+    });
+    expect(await f.json(await publicCall(`/v1/zones/${zone.slice(-36)}/presentation`), 200))
+      .toMatchObject({ name: canonical.slugSource, address: canonical });
+    expect(await f.json(await publicCall('/v1/zones?official=true'), 200)).toMatchObject({
+      items: expect.arrayContaining([expect.objectContaining({ zone, address: canonical })]),
     });
     expect(
       (await f.accessPool.query("SELECT to_regclass('access.agent_handle') AS bridge")).rows[0]

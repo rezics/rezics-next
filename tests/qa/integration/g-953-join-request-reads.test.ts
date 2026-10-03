@@ -136,9 +136,10 @@ test('G-953: own status survives every decision and policy changes without discl
     expect(pending.body.items[0]).toMatchObject({ id: first,state: 'pending',decidedAt: null });
     expect((await f.call('GET',`${f.root}/mine`,undefined,other,person.actor)).status).toBe(403);
     // Even a current representative of the same Agent cannot inherit the
-    // original requester's private history by changing actingSubject.
+    // original requester's private history by changing actingSubject. Keep a
+    // second controller so the later revocation preserves Agent continuity.
     await f.s.accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
-      VALUES ($1,$2,$3,'access.membership.consent',now() + interval '1 hour')`,[randomUUID(),other.principalId,person.actor]);
+      VALUES ($1,$2,$3,'agent.control','infinity')`,[randomUUID(),other.principalId,person.actor]);
     const differentRequester = await f.call('GET',`${f.root}/mine`,undefined,other,person.actor);
     expect(differentRequester.status).toBe(404);
     expect(differentRequester.body).toEqual(absent.body);

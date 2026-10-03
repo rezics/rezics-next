@@ -198,6 +198,37 @@ export class NameRegistry {
     };
   }
 
+  /** The same reservation, retained-key and skeleton gates as availability,
+   * evaluated over one bounded candidate batch in its caller's read snapshot. */
+  async firstAvailable(scope: NameScope, candidates: readonly string[]): Promise<string | null> {
+    if (candidates.length > NAME_COST.batch)
+      throw new NameInvalid('Name candidate batch exceeds its bound');
+    const policy = this.policy(scope);
+    const names = candidates.flatMap((raw, ordinal) => {
+      try {
+        return [{ ...normalizeAddressName(raw, policy.characters), ordinal }];
+      } catch {
+        return [];
+      }
+    });
+    if (!names.length) return null;
+    const row = (
+      await (this.reading.getStore() ?? this.pool).query<{ key: string }>(
+        `
+      SELECT wanted.key FROM jsonb_to_recordset($1::jsonb)
+        AS wanted(key text, skeleton text, ordinal int)
+      WHERE NOT EXISTS (SELECT 1 FROM access.name_reserved_word WHERE word = wanted.key
+        AND CASE WHEN $2 IN ('agent','space') THEN handles ELSE titles END)
+        AND NOT EXISTS (SELECT 1 FROM access.name_registry WHERE scope = $2 AND key = wanted.key)
+        AND NOT EXISTS (SELECT 1 FROM access.name_registry WHERE skeleton = wanted.skeleton
+          AND (scope = $2 OR $2 IN ('agent','space') AND scope IN ('agent','space')))
+      ORDER BY wanted.ordinal LIMIT 1`,
+        [JSON.stringify(names), scope],
+      )
+    ).rows[0];
+    return row?.key ?? null;
+  }
+
   async heads(scopes: readonly NameScope[], holders: readonly string[]) {
     if (holders.length > NAME_COST.batch || scopes.length !== holders.length)
       throw new NameInvalid('Invalid name head batch');

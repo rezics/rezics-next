@@ -86,6 +86,7 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
       const ownerTriples = input.kind === 'zone'
         ? `${iri(input.owner)} a rv:Zone ; rv:space ${iri(input.space!)} ; rv:zoneState rv:Active ;
           rv:zoneHead ${iri(revision)} ; rv:disclosure rv:${disclosure} .
+          ${input.name !== undefined ? `${iri(input.owner)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(input.name)}@${language} .` : ''}
           ${iri(input.space!)} rv:zoneCapability ${iri(input.owner)} .`
         : input.kind === 'definition'
         ? `${iri(input.owner)} a rv:DynamicCollection ; rv:curator ${iri(input.actingSubject)} ;

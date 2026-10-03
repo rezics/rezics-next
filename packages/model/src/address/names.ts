@@ -81,8 +81,12 @@ export function normalizeAddressName(value: string, policy: NamePolicy): Normali
     throw new InvalidAddressName('Name exceeds its bound');
   const display = value.normalize('NFC');
   const key = foldAddressName(display).replace(/\s+/gu, '-');
-  if (identityKeyUuid(display) || identityKeyUuid(key) || hasSidCaseVariant(key)
-    || key[22] === '-' && hasSidCaseVariant(key.slice(0,22))) {
+  if (
+    identityKeyUuid(display) ||
+    identityKeyUuid(key) ||
+    hasSidCaseVariant(key) ||
+    (key[22] === '-' && hasSidCaseVariant(key.slice(0, 22)))
+  ) {
     throw new InvalidAddressName('Identity keys cannot be names');
   }
   if (policy === 'ascii-handle') {
@@ -97,4 +101,33 @@ export function normalizeAddressName(value: string, policy: NamePolicy): Normali
     throw new InvalidAddressName('Title must use a Highly Restrictive script combination');
   }
   return { key, display, skeleton: nameSkeleton(key) };
+}
+
+/** A readable ASCII candidate from the typed public name, never an identity
+ * token or Account data. Availability remains the name registry's decision. */
+export function asciiHandleSuggestion(value: string): string | null {
+  try {
+    return normalizeAddressName(value, 'ascii-handle').key;
+  } catch {
+    /* Derive a candidate from display-name words. */
+  }
+  // Remove identity tokens before truncation: truncating a UUID can otherwise
+  // turn it into a syntactically valid, misleading handle.
+  const words = value
+    .split(/\s+/u)
+    .filter((word) => !identityKeyUuid(word))
+    .join(' ');
+  const base = words
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 30)
+    .replace(/_+$/g, '');
+  try {
+    return normalizeAddressName(base, 'ascii-handle').key;
+  } catch {
+    return null;
+  }
 }

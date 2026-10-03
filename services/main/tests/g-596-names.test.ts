@@ -36,6 +36,7 @@ function ownerStorage(input: OwnerCreateInput, objectDirectory: string) {
       if (sql.includes('SELECT ?plain')) return { results: { bindings: plain ? [{ plain }] : [] } };
       if (sql.includes('ASK') && sql.includes('rv:restoreHold')) return { boolean: true };
       if (sql.includes('ASK') && sql.includes('rv:InvalidProfile')) return { boolean: false };
+      if (sql.includes('ASK') && sql.includes('rv:realmCapability')) return { boolean: true };
       throw new Error(`Unexpected graph query: ${sql}`);
     },
     commandHealth: async () => ({ profiles: Object.fromEntries(Object.entries(profileRegistry)
@@ -104,7 +105,10 @@ for (const kind of ['zone', 'collection', 'definition'] as const) {
         format: string; state?: { name: string; language: string } });
       expect(payloads.find(payload => payload.format === 'rezics-component-v1')?.state)
         .toMatchObject({ name, language: recordedLanguage });
-      if (kind === 'zone') expect(db.envelopes[0]!.update).not.toContain('<https://schema.org/name>');
+      if (kind === 'zone') {
+        expect(db.envelopes[0]!.update).not.toContain('<https://schema.org/name>');
+        expect(db.envelopes[0]!.update).toContain(`<${owner}> <http://www.w3.org/2000/01/rdf-schema#label> ${JSON.stringify(name)}@${recordedLanguage} .`);
+      }
       expect(db.envelopes[0]!.validations.length).toBeLessThanOrEqual(2);
       await expect(createAdmittedOwner(db.env, db.account, db.access, request,
         { ...input, language: 'ja', requestDigest: 'b'.repeat(64) })).rejects.toBeInstanceOf(IdempotencyConflict);
