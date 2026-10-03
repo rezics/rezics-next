@@ -1,6 +1,11 @@
 {
-  "commandModule": "0.5.35",
+  "commandModule": "0.5.36",
   "profiles": [
+    {
+      "id": "agent-profile-address-v1",
+      "sha256": "4fafde7ef02e94ffff6bd3b961d4feeb206e30405843a42b376c605bbac21547",
+      "file": "shapes/agent-profile-address-v1.ttl"
+    },
     {
       "id": "agent-profile-v1",
       "sha256": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
@@ -1745,6 +1750,26 @@
       "type": "https://rezics.com/vocab/Agent",
       "routes": [
         {
+          "profile": "agent-profile-address-v1",
+          "shape": "https://rezics.com/definition/agent-profile-address-v1/profile-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/profileNameFormat",
+              "value": "https://rezics.com/vocab/PlainNameAddressV1"
+            }
+          ]
+        },
+        {
+          "profile": "agent-profile-address-v1",
+          "shape": "https://rezics.com/definition/agent-profile-address-v1/localized-profile-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/profileNameFormat",
+              "value": "https://rezics.com/vocab/LocalizedNameAddressV1"
+            }
+          ]
+        },
+        {
           "profile": "agent-profile-v2",
           "shape": "https://rezics.com/definition/agent-profile-v2/profile-shape",
           "when": [
@@ -1764,6 +1789,30 @@
     {
       "type": "https://rezics.com/vocab/AgentPublicProfileRevision",
       "routes": [
+        {
+          "profile": "agent-profile-address-v1",
+          "shape": "https://rezics.com/definition/agent-profile-address-v1/localized-revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/agent-profile-address-v1"
+            },
+            {
+              "path": "https://rezics.com/vocab/profileNameFormat",
+              "value": "https://rezics.com/vocab/LocalizedNameAddressV1"
+            }
+          ]
+        },
+        {
+          "profile": "agent-profile-address-v1",
+          "shape": "https://rezics.com/definition/agent-profile-address-v1/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/agent-profile-address-v1"
+            }
+          ]
+        },
         {
           "profile": "agent-profile-v2",
           "shape": "https://rezics.com/definition/agent-profile-v2/revision-shape",
@@ -3483,6 +3532,7 @@
     }
   ],
   "artifacts": {
+    "contexts/agent-profile-address-v1.jsonld": "abc02086e82c967f320fb9f053d71e3021250cb4660cbe53593e415e77ed496d",
     "contexts/agent-profile-v1.jsonld": "835586193a661d61e69b42dfafd4fe9bf105d23d836afb9e785a7684c21c53ce",
     "contexts/agent-profile-v2.jsonld": "7df6a015f58224c2cd521bf032487a93cc9a88f3397c0c9d75727a43381bc2a5",
     "contexts/agent-provision-v1.jsonld": "62c2a4eda19710dab2b44d0742065e1248765ec65200654804cc16c052a21d22",
@@ -3606,6 +3656,7 @@
     "contexts/work-type-v3.jsonld": "9836e0759eba77a3e7a5648ca3b223a2973d9ada49038b4c8fcbe8c034f1ea5f",
     "contexts/zone-capability-v1.jsonld": "e2b55a2058a3b218a3fb2a7c4542886ff1f5c79b42101293a02c38b048869dcd",
     "contexts/zone-presentation-v1.jsonld": "4ddfab60aeda8dd3b43f27db9fb7f3cad3b59fc654d36f1a7b35078effacc428",
+    "shapes/agent-profile-address-v1.ttl": "4fafde7ef02e94ffff6bd3b961d4feeb206e30405843a42b376c605bbac21547",
     "shapes/agent-profile-v1.ttl": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
     "shapes/agent-profile-v2.ttl": "c4b8bb40f451f742d13887220ac6ed3288a192301f4295097ac85a1f94fb5e27",
     "shapes/agent-provision-v1.ttl": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028",
@@ -3729,9 +3780,9 @@
     "shapes/work-type-v3.ttl": "86360e7c7ec939c8ce2283b16e2ae825113f07132eef4891e48e174c72d9a718",
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
-    "packages/model/src/generated/arbitraries.ts": "9eb86b7693be40faa7d9a68c22b7ff24a79d4af802bedb4d93470ee106ca4a98",
-    "packages/model/src/generated/profiles.ts": "8f2f87739eca804d5e304298977f14425f5e0081a64be5896e7adaff3c4eb76d",
-    "packages/model/src/generated/schemas.ts": "670387e6866da6fd572dbf018653f3de3b33a552afa596d2bb3b648d9293bade",
-    "packages/model/src/generated/vocabulary.ts": "211e72f38853003cfa3d3a9408c89e0f51cb22f3487bba8ec7c98b8988ec44e6"
+    "packages/model/src/generated/arbitraries.ts": "f4216ef1d855b73d015908369f943b39da370b7f858bc1bf8d9558844ca5b711",
+    "packages/model/src/generated/profiles.ts": "7caa3b8e3b5dc24a30f5423bdab3dc37c8a925c502c376ef96503c0e8432aeaa",
+    "packages/model/src/generated/schemas.ts": "04f2bb52bc88e1a5244f230c9e2d70d6396cea089510832a4179da224eb0f49a",
+    "packages/model/src/generated/vocabulary.ts": "84b436ec0996bec5e4ba0eccc121fd5cea6ef9f2363b68ac05cf0e38b6f0b6b8"
   }
 }

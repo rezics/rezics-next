@@ -30572,7 +30572,7 @@
           },
           {
             "in": "query",
-            "name": "name",
+            "name": "alias",
             "required": true,
             "schema": {
               "maxLength": 512,
@@ -30809,6 +30809,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "type": "null"
                   },
@@ -30816,17 +30821,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "claim",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -30840,7 +30840,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -30854,6 +30854,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "type": "null"
                   },
@@ -30861,17 +30866,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "claim",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -30885,7 +30885,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -30899,6 +30899,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "type": "null"
                   },
@@ -30906,17 +30911,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "claim",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -30930,7 +30930,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -30946,9 +30946,6 @@
                 "schema": {
                   "properties": {
                     "changedAt": {
-                      "type": "string"
-                    },
-                    "display": {
                       "type": "string"
                     },
                     "holder": {
@@ -30967,7 +30964,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -30999,7 +30996,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -31020,9 +31016,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -31039,7 +31032,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -31071,7 +31064,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -31611,7 +31603,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31649,7 +31641,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31698,7 +31690,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31736,7 +31728,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31785,7 +31777,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31823,7 +31815,7 @@
                         "type": "string"
                       },
                       "profile": {
-                        "const": "name-write-v1",
+                        "const": "alias-write-v1",
                         "type": "string"
                       },
                       "scope": {
@@ -31861,9 +31853,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -31880,7 +31869,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -31912,7 +31901,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -31933,9 +31921,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -31952,7 +31937,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -31984,7 +31969,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -32276,6 +32260,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -32284,17 +32273,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "rename",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -32308,7 +32292,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -32322,6 +32306,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -32330,17 +32319,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "rename",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -32354,7 +32338,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -32368,6 +32352,11 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
+                  "alias": {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "expectedRevision": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -32376,17 +32365,12 @@
                     "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
                   },
-                  "name": {
-                    "maxLength": 512,
-                    "minLength": 1,
-                    "type": "string"
-                  },
                   "operation": {
                     "const": "rename",
                     "type": "string"
                   },
                   "profile": {
-                    "const": "name-write-v1",
+                    "const": "alias-write-v1",
                     "type": "string"
                   },
                   "scope": {
@@ -32400,7 +32384,7 @@
                   "holder",
                   "actingSubject",
                   "operation",
-                  "name",
+                  "alias",
                   "expectedRevision"
                 ],
                 "type": "object"
@@ -32416,9 +32400,6 @@
                 "schema": {
                   "properties": {
                     "changedAt": {
-                      "type": "string"
-                    },
-                    "display": {
                       "type": "string"
                     },
                     "holder": {
@@ -32437,7 +32418,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -32469,7 +32450,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -32490,9 +32470,6 @@
                     "changedAt": {
                       "type": "string"
                     },
-                    "display": {
-                      "type": "string"
-                    },
                     "holder": {
                       "pattern": "^https:\\/\\/rezics\\.com\\/id\\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                       "type": "string"
@@ -32509,7 +32486,7 @@
                       ]
                     },
                     "profile": {
-                      "const": "name-write-v1",
+                      "const": "alias-write-v1",
                       "type": "string"
                     },
                     "replayed": {
@@ -32541,7 +32518,6 @@
                     "scope",
                     "holder",
                     "key",
-                    "display",
                     "state",
                     "revision",
                     "previousKey",
@@ -32979,14 +32955,14 @@
                                   "prefix": {
                                     "type": "string"
                                   },
-                                  "slugSource": {
+                                  "suffixSource": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "prefix",
                                   "key",
-                                  "slugSource"
+                                  "suffixSource"
                                 ],
                                 "type": "object"
                               },
@@ -33336,14 +33312,14 @@
                             "prefix": {
                               "type": "string"
                             },
-                            "slugSource": {
+                            "suffixSource": {
                               "type": "string"
                             }
                           },
                           "required": [
                             "prefix",
                             "key",
-                            "slugSource"
+                            "suffixSource"
                           ],
                           "type": "object"
                         },
@@ -33560,14 +33536,14 @@
                             "prefix": {
                               "type": "string"
                             },
-                            "slugSource": {
+                            "suffixSource": {
                               "type": "string"
                             }
                           },
                           "required": [
                             "prefix",
                             "key",
-                            "slugSource"
+                            "suffixSource"
                           ],
                           "type": "object"
                         },
@@ -34591,6 +34567,26 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "address": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "suffixSource": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "prefix",
+                        "key",
+                        "suffixSource"
+                      ],
+                      "type": "object"
+                    },
                     "avatarSelection": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -34707,8 +34703,13 @@
                       ]
                     },
                     "handle": {
-                      "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9])$",
-                      "type": "string"
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "id": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -46358,9 +46359,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "kind": {
                                           "const": "agent",
@@ -47729,9 +47735,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "kind": {
                                       "const": "agent",
@@ -82776,6 +82787,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -82786,9 +82817,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -82960,6 +82996,18 @@
                               "type": "string"
                             },
                             "maxItems": 8,
+                            "type": "array"
+                          },
+                          "unavailablePreviews": {
+                            "items": {
+                              "enum": [
+                                "serial",
+                                "credits",
+                                "rating"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 3,
                             "type": "array"
                           },
                           "verification": {
@@ -111822,6 +111870,280 @@
                                       },
                                       "maxItems": 64,
                                       "type": "array"
+                                    },
+                                    "work": {
+                                      "properties": {
+                                        "creditCount": {
+                                          "properties": {
+                                            "kind": {
+                                              "enum": [
+                                                "exact",
+                                                "at-least"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "value": {
+                                              "minimum": 0,
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "value",
+                                            "kind"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "primaryCredits": {
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "properties": {
+                                                  "agent": {
+                                                    "type": "null"
+                                                  },
+                                                  "confirmation": {
+                                                    "const": "source-reported",
+                                                    "type": "string"
+                                                  },
+                                                  "displayName": {
+                                                    "~elyTyp": 7,
+                                                    "maxLength": 200,
+                                                    "minLength": 1,
+                                                    "nullable": true,
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "handle": {
+                                                    "type": "null"
+                                                  },
+                                                  "id": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "key": {
+                                                    "type": "string"
+                                                  },
+                                                  "nameSource": {
+                                                    "properties": {
+                                                      "basis": {
+                                                        "const": "facts",
+                                                        "type": "string"
+                                                      },
+                                                      "digest": {
+                                                        "type": "string"
+                                                      },
+                                                      "fetchedAt": {
+                                                        "type": "string"
+                                                      },
+                                                      "field": {
+                                                        "const": "/name",
+                                                        "type": "string"
+                                                      },
+                                                      "observation": {
+                                                        "type": "string"
+                                                      },
+                                                      "record": {
+                                                        "type": "string"
+                                                      },
+                                                      "revision": {
+                                                        "type": "string"
+                                                      },
+                                                      "sourceRevision": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      "url": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "record",
+                                                      "observation",
+                                                      "revision",
+                                                      "sourceRevision",
+                                                      "digest",
+                                                      "url",
+                                                      "fetchedAt",
+                                                      "basis",
+                                                      "field"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "ordinal": {
+                                                    "type": "integer"
+                                                  },
+                                                  "participantKind": {
+                                                    "const": "external-reference",
+                                                    "type": "string"
+                                                  },
+                                                  "provider": {
+                                                    "const": "open-library",
+                                                    "type": "string"
+                                                  },
+                                                  "role": {
+                                                    "const": "author",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "role",
+                                                  "participantKind",
+                                                  "provider",
+                                                  "key",
+                                                  "ordinal",
+                                                  "agent",
+                                                  "displayName",
+                                                  "handle"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "properties": {
+                                                  "address": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "key": {
+                                                        "type": "string"
+                                                      },
+                                                      "prefix": {
+                                                        "type": "string"
+                                                      },
+                                                      "suffixSource": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "prefix",
+                                                      "key",
+                                                      "suffixSource"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "agent": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "displayName": {
+                                                    "maxLength": 200,
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "handle": {
+                                                    "~elyTyp": 7,
+                                                    "maxLength": 30,
+                                                    "minLength": 1,
+                                                    "nullable": true,
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "id": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "key": {
+                                                    "type": "null"
+                                                  },
+                                                  "ordinal": {
+                                                    "type": "null"
+                                                  },
+                                                  "participantKind": {
+                                                    "const": "agent",
+                                                    "type": "string"
+                                                  },
+                                                  "provider": {
+                                                    "type": "null"
+                                                  },
+                                                  "role": {
+                                                    "const": "author",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "role",
+                                                  "participantKind",
+                                                  "provider",
+                                                  "key",
+                                                  "ordinal",
+                                                  "agent",
+                                                  "displayName",
+                                                  "handle"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            ]
+                                          },
+                                          "maxItems": 3,
+                                          "type": "array"
+                                        },
+                                        "rating": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "properties": {
+                                            "context": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                              "type": "string"
+                                            },
+                                            "count": {
+                                              "maximum": 100,
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            "mean": {
+                                              "type": "number"
+                                            },
+                                            "scale": {
+                                              "properties": {
+                                                "max": {
+                                                  "enum": [
+                                                    5,
+                                                    10
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "min": {
+                                                  "const": 1,
+                                                  "type": "number"
+                                                }
+                                              },
+                                              "required": [
+                                                "min",
+                                                "max"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "sum": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "context",
+                                            "count",
+                                            "sum",
+                                            "mean",
+                                            "scale"
+                                          ],
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "primaryCredits",
+                                        "creditCount",
+                                        "rating"
+                                      ],
+                                      "type": "object"
                                     }
                                   },
                                   "required": [
@@ -137216,7 +137538,12 @@
                           "actor": {
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -137346,6 +137673,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -137356,9 +137703,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -137880,7 +138232,12 @@
                                 "items": {
                                   "properties": {
                                     "handle": {
-                                      "type": "string"
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -149547,6 +149904,26 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "address": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "suffixSource": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "prefix",
+                        "key",
+                        "suffixSource"
+                      ],
+                      "type": "object"
+                    },
                     "avatarSelection": {
                       "~elyTyp": 7,
                       "nullable": true,
@@ -149663,8 +150040,13 @@
                       ]
                     },
                     "handle": {
-                      "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9])$",
-                      "type": "string"
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "id": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -187432,6 +187814,25 @@
                                 "~elyTyp": 7,
                                 "nullable": true,
                                 "properties": {
+                                  "address": {
+                                    "properties": {
+                                      "key": {
+                                        "type": "string"
+                                      },
+                                      "prefix": {
+                                        "type": "string"
+                                      },
+                                      "suffixSource": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "prefix",
+                                      "key",
+                                      "suffixSource"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "avatar": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -187441,7 +187842,12 @@
                                     ]
                                   },
                                   "handle": {
-                                    "type": "string"
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
                                   },
                                   "id": {
                                     "type": "string"
@@ -318760,6 +319166,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -318770,9 +319196,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -318871,7 +319302,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -318955,6 +319387,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -320697,6 +321141,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -320707,9 +321171,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -320808,7 +321277,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -320892,6 +321362,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -322643,6 +323125,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -322653,9 +323155,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -322754,7 +323261,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -322841,6 +323349,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -324740,6 +325260,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -324750,9 +325290,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -324851,7 +325396,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -324935,6 +325481,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -326848,6 +327406,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -326858,9 +327436,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -326959,7 +327542,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -327046,6 +327630,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -328983,6 +329579,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -328993,9 +329609,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -329086,7 +329707,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -329173,6 +329795,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -333798,6 +334432,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -333808,9 +334462,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -333909,7 +334568,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -333993,6 +334653,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -334546,6 +335218,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -334556,9 +335248,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -334657,7 +335354,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -334741,6 +335439,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -335306,6 +336016,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -335316,9 +336046,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -335417,7 +336152,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -335504,6 +336240,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -336214,6 +336962,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -336224,9 +336992,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -336325,7 +337098,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -336409,6 +337183,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -337132,6 +337918,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -337142,9 +337948,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -337243,7 +338054,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -337330,6 +338142,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -338077,6 +338901,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -338087,9 +338931,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -338180,7 +339029,8 @@
                                   "available",
                                   "unrated",
                                   "no-context",
-                                  "context-required"
+                                  "context-required",
+                                  "unavailable"
                                 ],
                                 "type": "string"
                               },
@@ -338267,6 +339117,18 @@
                               },
                               "types": {
                                 "items": {
+                                  "type": "string"
+                                },
+                                "maxItems": 3,
+                                "type": "array"
+                              },
+                              "unavailablePreviews": {
+                                "items": {
+                                  "enum": [
+                                    "serial",
+                                    "credits",
+                                    "rating"
+                                  ],
                                   "type": "string"
                                 },
                                 "maxItems": 3,
@@ -340461,6 +341323,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -340471,9 +341353,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -340572,7 +341459,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -340656,6 +341544,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -341209,6 +342109,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -341219,9 +342139,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -341320,7 +342245,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -341404,6 +342330,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -341969,6 +342907,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -341979,9 +342937,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -342080,7 +343043,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -342167,6 +343131,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -342877,6 +343853,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -342887,9 +343883,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -342988,7 +343989,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -343072,6 +344074,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -343795,6 +344809,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -343805,9 +344839,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -343906,7 +344945,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -343993,6 +345033,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -344740,6 +345792,26 @@
                                             },
                                             {
                                               "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
                                                 "agent": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                                   "type": "string"
@@ -344750,9 +345822,14 @@
                                                   "type": "string"
                                                 },
                                                 "handle": {
-                                                  "maxLength": 100,
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
                                                   "minLength": 1,
-                                                  "type": "string"
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
                                                 },
                                                 "id": {
                                                   "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -344843,7 +345920,8 @@
                                           "available",
                                           "unrated",
                                           "no-context",
-                                          "context-required"
+                                          "context-required",
+                                          "unavailable"
                                         ],
                                         "type": "string"
                                       },
@@ -344930,6 +346008,18 @@
                                       },
                                       "types": {
                                         "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "unavailablePreviews": {
+                                        "items": {
+                                          "enum": [
+                                            "serial",
+                                            "credits",
+                                            "rating"
+                                          ],
                                           "type": "string"
                                         },
                                         "maxItems": 3,
@@ -345554,6 +346644,26 @@
                                         },
                                         {
                                           "properties": {
+                                            "address": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "prefix": {
+                                                  "type": "string"
+                                                },
+                                                "suffixSource": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "prefix",
+                                                "key",
+                                                "suffixSource"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "agent": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
@@ -345564,9 +346674,14 @@
                                               "type": "string"
                                             },
                                             "handle": {
-                                              "maxLength": 100,
+                                              "~elyTyp": 7,
+                                              "maxLength": 30,
                                               "minLength": 1,
-                                              "type": "string"
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
                                             },
                                             "id": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -346347,6 +347462,26 @@
                                         },
                                         {
                                           "properties": {
+                                            "address": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "prefix": {
+                                                  "type": "string"
+                                                },
+                                                "suffixSource": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "prefix",
+                                                "key",
+                                                "suffixSource"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "agent": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
@@ -346357,9 +347492,14 @@
                                               "type": "string"
                                             },
                                             "handle": {
-                                              "maxLength": 100,
+                                              "~elyTyp": 7,
+                                              "maxLength": 30,
                                               "minLength": 1,
-                                              "type": "string"
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
                                             },
                                             "id": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -346458,7 +347598,8 @@
                                       "available",
                                       "unrated",
                                       "no-context",
-                                      "context-required"
+                                      "context-required",
+                                      "unavailable"
                                     ],
                                     "type": "string"
                                   },
@@ -346542,6 +347683,18 @@
                                   },
                                   "types": {
                                     "items": {
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
+                                    "type": "array"
+                                  },
+                                  "unavailablePreviews": {
+                                    "items": {
+                                      "enum": [
+                                        "serial",
+                                        "credits",
+                                        "rating"
+                                      ],
                                       "type": "string"
                                     },
                                     "maxItems": 3,
@@ -347132,6 +348285,26 @@
                                         },
                                         {
                                           "properties": {
+                                            "address": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "prefix": {
+                                                  "type": "string"
+                                                },
+                                                "suffixSource": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "prefix",
+                                                "key",
+                                                "suffixSource"
+                                              ],
+                                              "type": "object"
+                                            },
                                             "agent": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                               "type": "string"
@@ -347142,9 +348315,14 @@
                                               "type": "string"
                                             },
                                             "handle": {
-                                              "maxLength": 100,
+                                              "~elyTyp": 7,
+                                              "maxLength": 30,
                                               "minLength": 1,
-                                              "type": "string"
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
                                             },
                                             "id": {
                                               "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -347316,6 +348494,18 @@
                                       "type": "string"
                                     },
                                     "maxItems": 8,
+                                    "type": "array"
+                                  },
+                                  "unavailablePreviews": {
+                                    "items": {
+                                      "enum": [
+                                        "serial",
+                                        "credits",
+                                        "rating"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "maxItems": 3,
                                     "type": "array"
                                   },
                                   "verification": {
@@ -347922,6 +349112,280 @@
                                     },
                                     "maxItems": 64,
                                     "type": "array"
+                                  },
+                                  "work": {
+                                    "properties": {
+                                      "creditCount": {
+                                        "properties": {
+                                          "kind": {
+                                            "enum": [
+                                              "exact",
+                                              "at-least"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "value",
+                                          "kind"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "primaryCredits": {
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "properties": {
+                                                "agent": {
+                                                  "type": "null"
+                                                },
+                                                "confirmation": {
+                                                  "const": "source-reported",
+                                                  "type": "string"
+                                                },
+                                                "displayName": {
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 200,
+                                                  "minLength": 1,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "handle": {
+                                                  "type": "null"
+                                                },
+                                                "id": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "nameSource": {
+                                                  "properties": {
+                                                    "basis": {
+                                                      "const": "facts",
+                                                      "type": "string"
+                                                    },
+                                                    "digest": {
+                                                      "type": "string"
+                                                    },
+                                                    "fetchedAt": {
+                                                      "type": "string"
+                                                    },
+                                                    "field": {
+                                                      "const": "/name",
+                                                      "type": "string"
+                                                    },
+                                                    "observation": {
+                                                      "type": "string"
+                                                    },
+                                                    "record": {
+                                                      "type": "string"
+                                                    },
+                                                    "revision": {
+                                                      "type": "string"
+                                                    },
+                                                    "sourceRevision": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "url": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "record",
+                                                    "observation",
+                                                    "revision",
+                                                    "sourceRevision",
+                                                    "digest",
+                                                    "url",
+                                                    "fetchedAt",
+                                                    "basis",
+                                                    "field"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "ordinal": {
+                                                  "type": "integer"
+                                                },
+                                                "participantKind": {
+                                                  "const": "external-reference",
+                                                  "type": "string"
+                                                },
+                                                "provider": {
+                                                  "const": "open-library",
+                                                  "type": "string"
+                                                },
+                                                "role": {
+                                                  "const": "author",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "role",
+                                                "participantKind",
+                                                "provider",
+                                                "key",
+                                                "ordinal",
+                                                "agent",
+                                                "displayName",
+                                                "handle"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "properties": {
+                                                "address": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "key": {
+                                                      "type": "string"
+                                                    },
+                                                    "prefix": {
+                                                      "type": "string"
+                                                    },
+                                                    "suffixSource": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "prefix",
+                                                    "key",
+                                                    "suffixSource"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "agent": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "displayName": {
+                                                  "maxLength": 200,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "handle": {
+                                                  "~elyTyp": 7,
+                                                  "maxLength": 30,
+                                                  "minLength": 1,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "id": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                },
+                                                "key": {
+                                                  "type": "null"
+                                                },
+                                                "ordinal": {
+                                                  "type": "null"
+                                                },
+                                                "participantKind": {
+                                                  "const": "agent",
+                                                  "type": "string"
+                                                },
+                                                "provider": {
+                                                  "type": "null"
+                                                },
+                                                "role": {
+                                                  "const": "author",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "id",
+                                                "role",
+                                                "participantKind",
+                                                "provider",
+                                                "key",
+                                                "ordinal",
+                                                "agent",
+                                                "displayName",
+                                                "handle"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      },
+                                      "rating": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "properties": {
+                                          "context": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "count": {
+                                            "maximum": 100,
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "mean": {
+                                            "type": "number"
+                                          },
+                                          "scale": {
+                                            "properties": {
+                                              "max": {
+                                                "enum": [
+                                                  5,
+                                                  10
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "const": 1,
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "min",
+                                              "max"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "sum": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "context",
+                                          "count",
+                                          "sum",
+                                          "mean",
+                                          "scale"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "primaryCredits",
+                                      "creditCount",
+                                      "rating"
+                                    ],
+                                    "type": "object"
                                   }
                                 },
                                 "required": [
@@ -380483,6 +381947,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -380493,9 +381977,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -383230,6 +384719,26 @@
                                     },
                                     {
                                       "properties": {
+                                        "address": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "key": {
+                                              "type": "string"
+                                            },
+                                            "prefix": {
+                                              "type": "string"
+                                            },
+                                            "suffixSource": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "prefix",
+                                            "key",
+                                            "suffixSource"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "agent": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                           "type": "string"
@@ -383240,9 +384749,14 @@
                                           "type": "string"
                                         },
                                         "handle": {
-                                          "maxLength": 100,
+                                          "~elyTyp": 7,
+                                          "maxLength": 30,
                                           "minLength": 1,
-                                          "type": "string"
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
                                         },
                                         "id": {
                                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -384148,6 +385662,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -384158,9 +385692,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -386116,6 +387655,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -386126,9 +387685,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -400282,7 +401846,12 @@
                             "nullable": true,
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -400986,7 +402555,12 @@
                             "nullable": true,
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -401149,7 +402723,12 @@
                             "nullable": true,
                             "properties": {
                               "handle": {
-                                "type": "string"
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
                               },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -409658,7 +411237,7 @@
                                   },
                                   "key": {
                                     "enum": [
-                                      "name",
+                                      "alias",
                                       "id"
                                     ]
                                   },
@@ -420531,14 +422110,14 @@
                                 "prefix": {
                                   "type": "string"
                                 },
-                                "slugSource": {
+                                "suffixSource": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "prefix",
                                 "key",
-                                "slugSource"
+                                "suffixSource"
                               ],
                               "type": "object"
                             },
@@ -423856,14 +425435,14 @@
                                         "prefix": {
                                           "type": "string"
                                         },
-                                        "slugSource": {
+                                        "suffixSource": {
                                           "type": "string"
                                         }
                                       },
                                       "required": [
                                         "prefix",
                                         "key",
-                                        "slugSource"
+                                        "suffixSource"
                                       ],
                                       "type": "object"
                                     },
@@ -427290,14 +428869,14 @@
                                   "prefix": {
                                     "type": "string"
                                   },
-                                  "slugSource": {
+                                  "suffixSource": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
                                   "prefix",
                                   "key",
-                                  "slugSource"
+                                  "suffixSource"
                                 ],
                                 "type": "object"
                               },
@@ -442567,6 +444146,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -442577,9 +444176,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -442678,7 +444282,8 @@
                               "available",
                               "unrated",
                               "no-context",
-                              "context-required"
+                              "context-required",
+                              "unavailable"
                             ],
                             "type": "string"
                           },
@@ -442762,6 +444367,18 @@
                           },
                           "types": {
                             "items": {
+                              "type": "string"
+                            },
+                            "maxItems": 3,
+                            "type": "array"
+                          },
+                          "unavailablePreviews": {
+                            "items": {
+                              "enum": [
+                                "serial",
+                                "credits",
+                                "rating"
+                              ],
                               "type": "string"
                             },
                             "maxItems": 3,
@@ -443365,6 +444982,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -443375,9 +445012,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -507751,6 +509393,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -507761,9 +509423,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -507935,6 +509602,18 @@
                               "type": "string"
                             },
                             "maxItems": 8,
+                            "type": "array"
+                          },
+                          "unavailablePreviews": {
+                            "items": {
+                              "enum": [
+                                "serial",
+                                "credits",
+                                "rating"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 3,
                             "type": "array"
                           },
                           "verification": {
@@ -511445,6 +513124,26 @@
                     "items": {
                       "items": {
                         "properties": {
+                          "address": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "prefix": {
+                                "type": "string"
+                              },
+                              "suffixSource": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "prefix",
+                              "key",
+                              "suffixSource"
+                            ],
+                            "type": "object"
+                          },
                           "agent": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -511453,8 +513152,13 @@
                             "type": "string"
                           },
                           "handle": {
-                            "pattern": "^(?:agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9])$",
-                            "type": "string"
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "pattern": "^[a-z0-9](?:[a-z0-9_-]{1,28})[a-z0-9]$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -512831,6 +514535,26 @@
                                 },
                                 {
                                   "properties": {
+                                    "address": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "key": {
+                                          "type": "string"
+                                        },
+                                        "prefix": {
+                                          "type": "string"
+                                        },
+                                        "suffixSource": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "prefix",
+                                        "key",
+                                        "suffixSource"
+                                      ],
+                                      "type": "object"
+                                    },
                                     "agent": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                       "type": "string"
@@ -512841,9 +514565,14 @@
                                       "type": "string"
                                     },
                                     "handle": {
-                                      "maxLength": 100,
+                                      "~elyTyp": 7,
+                                      "maxLength": 30,
                                       "minLength": 1,
-                                      "type": "string"
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
                                     },
                                     "id": {
                                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -542782,14 +544511,14 @@
                               "prefix": {
                                 "type": "string"
                               },
-                              "slugSource": {
+                              "suffixSource": {
                                 "type": "string"
                               }
                             },
                             "required": [
                               "prefix",
                               "key",
-                              "slugSource"
+                              "suffixSource"
                             ],
                             "type": "object"
                           },
@@ -546971,7 +548700,7 @@
                   },
                   "key": {
                     "enum": [
-                      "name",
+                      "alias",
                       "id"
                     ],
                     "type": "string"
@@ -547049,7 +548778,7 @@
                   },
                   "key": {
                     "enum": [
-                      "name",
+                      "alias",
                       "id"
                     ],
                     "type": "string"
@@ -547127,7 +548856,7 @@
                   },
                   "key": {
                     "enum": [
-                      "name",
+                      "alias",
                       "id"
                     ],
                     "type": "string"
@@ -548267,14 +549996,14 @@
                         "prefix": {
                           "type": "string"
                         },
-                        "slugSource": {
+                        "suffixSource": {
                           "type": "string"
                         }
                       },
                       "required": [
                         "prefix",
                         "key",
-                        "slugSource"
+                        "suffixSource"
                       ],
                       "type": "object"
                     },
@@ -551728,14 +553457,14 @@
                                 "prefix": {
                                   "type": "string"
                                 },
-                                "slugSource": {
+                                "suffixSource": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "prefix",
                                 "key",
-                                "slugSource"
+                                "suffixSource"
                               ],
                               "type": "object"
                             },
@@ -552194,14 +553923,14 @@
                                       "prefix": {
                                         "type": "string"
                                       },
-                                      "slugSource": {
+                                      "suffixSource": {
                                         "type": "string"
                                       }
                                     },
                                     "required": [
                                       "prefix",
                                       "key",
-                                      "slugSource"
+                                      "suffixSource"
                                     ],
                                     "type": "object"
                                   },
@@ -552564,14 +554293,14 @@
                                 "prefix": {
                                   "type": "string"
                                 },
-                                "slugSource": {
+                                "suffixSource": {
                                   "type": "string"
                                 }
                               },
                               "required": [
                                 "prefix",
                                 "key",
-                                "slugSource"
+                                "suffixSource"
                               ],
                               "type": "object"
                             },
