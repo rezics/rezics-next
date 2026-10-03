@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import {
   AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionExpired,
   AdmissionUnavailable, engageAccessRecoveryFence, releaseAccessRecoveryFence,
@@ -41,7 +42,7 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     try {
       await client.query('BEGIN');
       const migrations = join(root, 'services/main/migrations/access');
-      for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+      for (const file of schemaFiles(root, 'access')) {
         await client.query(readFileSync(join(migrations, file), 'utf8'));
       }
       await client.query('COMMIT');

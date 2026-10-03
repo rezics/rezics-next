@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied,
   type AdmissionRequest } from '../src/modules/access/admission.ts';
 import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
@@ -48,7 +49,7 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
     try {
       await client.query('BEGIN');
       const migrations = join(root, 'services/main/migrations/access');
-      for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+      for (const file of schemaFiles(root, 'access')) {
         await client.query(readFileSync(join(migrations, file), 'utf8'));
       }
       await client.query('COMMIT');

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool, type PoolClient } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { agentControlTable, agentRecoveryTable, CONTROL_ACTION } from
   '../../../services/main/src/modules/access/agent-control-schema.ts';
 import { grantLineageTable } from '../../../services/main/src/modules/access/grant-lineage-schema.ts';
@@ -20,9 +21,9 @@ import { admissionObligationTable, authorityControlReceiptTable, GUARD_LIMIT, GU
 
 const root = resolve(import.meta.dir, '../../..');
 const migrationDirectory = join(root, 'services/main/migrations/access');
-const migrations = [...new Bun.Glob('*.sql').scanSync({ cwd: migrationDirectory })].sort();
+const migrations = schemaFiles(root, 'access');
 // This owner schema is exactly the reserved 050-059 range; everything else is head.
-const owned = migrations.filter(file => /^05[0-9]_/.test(file));
+const owned = migrations.filter(file => migrationVersion(file) >= 50 && migrationVersion(file) < 60);
 const SCOPE = 'work:create:root';
 const declarations: TableDeclaration[] = [representationEdgeTable, representationPathProofTable,
   representationPathStepTable, admissionObligationTable, authorityControlReceiptTable,
@@ -232,7 +233,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
 
     // Upgrade: the pre-050 head, its legacy authority rows, then owned migrations
     // and later dependents in order. Later migrations may alter 050 objects.
-    await migrate(upgrade, migrations.filter(file => Number(file.slice(0, 3)) < 50));
+    await migrate(upgrade, migrations.filter(file => migrationVersion(file) < 50));
     const legacy = owner(upgrade);
     await legacy.q(`INSERT INTO access.scope_gate (id, authority_epoch, group_generation)
       VALUES ($1, 3, 0) ON CONFLICT (id) DO UPDATE
@@ -299,7 +300,7 @@ describe('Access topology owner schema (G-047: IAM05 IAM08 IAM12 IAM13 IAM14 IAM
     [mandate])).rows[0]).toEqual({ max_path_edges: 0, representative_policy_id: null,
       automation_installation_id: null, protected_change_id: null });
     expect(await legacy.epoch()).toBe('0');
-    await migrate(upgrade, migrations.filter(file => Number(file.slice(0, 3)) >= 50 && !owned.includes(file)));
+    await migrate(upgrade, migrations.filter(file => migrationVersion(file) >= 50 && !owned.includes(file)));
     expect(await catalog(upgrade)).toEqual(await catalog(empty));
 
     // Legacy writers keep working on unprotected rows without lineage.
