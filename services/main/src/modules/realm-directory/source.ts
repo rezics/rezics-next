@@ -36,6 +36,10 @@ export async function directorySource(session: WorkReadSession,
     GRAPH ${iri(GRAPHS.current)} {
       ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space ; rv:head ?head .
       ?space a rv:Space ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
+      FILTER NOT EXISTS { ?space rv:listing ?listing FILTER(?listing != "listed") }
+      FILTER NOT EXISTS { ?space rv:protectionHead ?spaceProtection }
+      FILTER NOT EXISTS { ?realm rv:protectionHead ?realmProtection }
       OPTIONAL { ?realm rv:publicProfileHead ?profileHead }
       OPTIONAL { ?space rdfs:label ?label }
     }

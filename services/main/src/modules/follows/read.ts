@@ -134,21 +134,32 @@ async function spaceFollowTargets(session: WorkReadSession, spaces: readonly str
   reader?: { principal: VerifiedPrincipal; agent: string }) {
   const result = new Map<string, Static<typeof followTarget>>();
   if (!spaces.length) return result;
-  const rows = await session.query(`SELECT ?space ?realm WHERE { VALUES ?space { ${spaces.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space ; rv:realmCapability ?realm .
-      ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
-      FILTER NOT EXISTS { ?realm rv:protectionHead ?protection }
+  const rows = await session.query(`SELECT ?space ?realm ?zone WHERE { VALUES ?space { ${spaces.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.current)} { ?space a rv:Space .
+      OPTIONAL { ?space rv:realmCapability ?realm . ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
+        FILTER NOT EXISTS { ?realm rv:protectionHead ?protection } }
+      OPTIONAL { ?space rv:zoneCapability ?zone . ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active .
+        FILTER NOT EXISTS { ?zone rv:protectionHead ?zoneProtection } }
+      FILTER NOT EXISTS { ?space rv:realmCapability ?attachedRealm FILTER(!BOUND(?realm)) }
+      FILTER(BOUND(?realm) || BOUND(?zone))
     } } LIMIT ${spaces.length+1}`,spaces.length);
   if (new Set(rows.map(row => row.space?.value)).size !== rows.length) throw new WorkReadUnavailable('Space identities are ambiguous');
   const summaries = await readResourceSummaries(session.deps.environment,session.deps.media?.store,
     { realmReadProof: async realm => reader
-      ? await session.deps.access.realmReadProof?.(reader.principal,reader.agent,realm) ?? null : null },
-    { resources: rows.map(row => row.realm!.value),context: DEFAULT_MEDIA_CONTEXT,language: session.options.language ?? null });
+      ? await session.deps.access.realmReadProof?.(reader.principal,reader.agent,realm) ?? null : null,
+      canReadSemantic: async resource => {
+        // Only Zone-only Spaces use Zone authority. A semantic grant must never
+        // substitute for membership on a Space with an active Realm.
+        const row = rows.find(row => !row.realm && (row.space?.value === resource || row.zone?.value === resource));
+        return !!(row?.zone && reader && await session.deps.access.canReadSemanticResource?.(reader.principal, reader.agent, row.zone.value));
+      } },
+    { resources: rows.map(row => (row.realm ?? row.zone)!.value),context: DEFAULT_MEDIA_CONTEXT,language: session.options.language ?? null });
   const names = new Map(summaries.summaries.map(summary => [summary.reference,summary]));
   for (const row of rows) {
-    const summary = names.get(row.realm!.value);
+    const summary = names.get((row.realm ?? row.zone)!.value);
     if (summary?.status==='available') result.set(row.space!.value,{ id: row.space!.value,kind: 'space',
-      name: summary.name,icon: summary.avatar,realm: row.realm!.value,href: `/r/${row.realm!.value.slice(-36)}` });
+      name: summary.name,icon: summary.avatar,realm: row.realm?.value ?? null,
+      href: row.realm ? `/r/${row.realm.value.slice(-36)}` : summary.address.prefix + summary.address.key });
   }
   return result;
 }
@@ -236,10 +247,10 @@ export async function readFollows(session: WorkReadSession, store: FollowsStore,
   // Transitional Realm/Zone transports keep the existing shell's capability ids.
   // The inventory, CAS and source still belong to the canonical Space.
   if (kind==='realm' || kind==='zone') for (const [index,item] of items.entries()) {
-    if (item.kind!=='space' || !item.available || !item.realm) continue;
+    if (item.kind!=='space' || !item.available) continue;
     const alias = kind==='realm' ? item.realm : (await followSpace(session,item.id))?.aliases
       .find(id => id!==item.id && id!==item.realm);
-    items[index] = { ...item,id: alias ?? item.realm,kind: alias ? kind : 'realm' };
+    if (alias) items[index] = { ...item,id: alias,kind };
   }
   return { profile: 'follows-v1' as const, ...pageResult(session,items,nextCursor), complete: nextCursor === null };
 }

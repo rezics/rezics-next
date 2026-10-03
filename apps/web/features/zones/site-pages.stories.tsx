@@ -21,6 +21,7 @@ const items = works.slice(0, 6).map(work => ({ id: work.id, revision: work.id, m
   cover: { kind: 'fallback' as const, policy: 'zone', key: work.id, resourceType: 'work' }, types: [],
   tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null, inZone: true }));
 const route = { name: 'Books', language: 'en', direction: direction('en', 'Books'), profile: 'zone-route-v1' as const, zone: 'z', path: '/picks', realm: null, revision: 'r',
+  listing: 'listed' as const, discovery: { indexable: true, robots: 'index' as const, referrerPolicy: null },
   sourcePosition: { dataEpoch: 'e', sequence: '1' }, cost: {} as never, kind: 'index' as const,
   mount: { occurrence: 'o', segment: 'picks', target: 't' }, collection: 'c', items, nextCursor: 'next' };
 

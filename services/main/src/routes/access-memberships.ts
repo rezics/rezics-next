@@ -578,13 +578,20 @@ export function accessMembershipRoutes(work: MainWorkDependencies) {
       response: { 200: privateMembershipChangeResult, ...writeProblems },
     }, async ({ request, body }) => {
       try {
-        const principal = await work.account.verify(request, ['access:manage']);
+        let principal;
+        let selfLeaveOnly = false;
+        try { principal = await work.account.verify(request, ['access:manage']); }
+        catch (error) {
+          if (!(error instanceof AccountAssertionInsufficientScope) || body.action !== 'leave') throw error;
+          principal = await work.account.verify(request, ['access:membership-consent']);
+          selfLeaveOnly = true;
+        }
         if (!work.privateMemberships) return problem(503, 'membership_unavailable', 'Membership owner is unavailable');
         const key = request.headers.get('idempotency-key');
         if (!key || key.length > 128 || key.includes('\0')) {
           return problem(400, 'invalid_idempotency_key', 'A bounded idempotency key is required');
         }
-        const result = await work.privateMemberships.change({ ...body, principal, historyEnvironment: work.environment,
+        const result = await work.privateMemberships.change({ ...body, principal, selfLeaveOnly, historyEnvironment: work.environment,
           idempotencyKey: key, requestDigest: groupChangeIntentDigest(body) });
         return Response.json({ profile: 'access-private-membership-change-v1', ...result },
         { headers: { 'cache-control': 'no-store' } });

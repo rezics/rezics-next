@@ -16,8 +16,10 @@ const epoch = /^(0|[1-9][0-9]*)$/;
 const MAX_DEPENDENT_AUTHORITY = 256;
 type Principal = { id: string; enforcement_epoch: string };
 type Member = { id: string; principal_id: string; kind: MembershipKind;
-  owner_subject: string; state: 'joined' | 'left'; generation: string };
+  owner_subject: string; state: 'joined' | 'left'; generation: string; policy_revision?: string };
 type Policy = { revision: string; terms_revision: string; open: boolean };
+export const PRIVATE_MEMBERSHIP_LEAVE_COST = { recipientLookups: 1, membershipLookups: 1,
+  dependentAuthorityRows: MAX_DEPENDENT_AUTHORITY, lockTimeoutMs: 2000, statementTimeoutMs: 5000 } as const;
 
 export interface PrivateMembershipConsentRequest {
   principal: VerifiedPrincipal;
@@ -36,6 +38,7 @@ export interface PrivateMembershipConsentResult {
   replayed: boolean;
 }
 export interface PrivateMembershipChange {
+  selfLeaveOnly?: boolean;
   historyEnvironment?: WorkActivationEnvironment;
   principal: VerifiedPrincipal;
   kind: MembershipKind;
@@ -250,6 +253,7 @@ export class AccessPrivateMemberships {
     if (!agent.test(input.ownerSubject) || !epoch.test(input.expectedGeneration)
       || !epoch.test(input.expectedPolicyRevision)
       || !this.validKey(input.idempotencyKey, input.requestDigest)
+      || input.selfLeaveOnly && input.action !== 'leave'
       || input.action === 'join' && (!input.termsRevision || input.termsRevision.length > 128
         || !input.consentReference || !uuid.test(input.consentReference))
       || input.action === 'leave' && (!input.membershipId || !uuid.test(input.membershipId))) {
@@ -259,8 +263,19 @@ export class AccessPrivateMemberships {
       ? await prepareRealmFollow(this.pool,input.ownerSubject) : null;
     const client = await this.pool.connect();
     try {
-      await this.begin(client, true);
-      const managerId = await this.manager(client, input.principal, input.kind, input.ownerSubject);
+      const currentEpoch = await this.begin(client, true);
+      let owned: Member | undefined;
+      let recipientId: string | undefined;
+      if (input.action === 'leave') {
+        recipientId = (await this.recipient(client, input.principal, false)).id;
+        owned = (await client.query<Member>(`SELECT id, principal_id, kind, owner_subject, state,
+          generation, policy_revision FROM access.private_membership
+          WHERE id=$1 AND kind=$2 AND owner_subject=$3 AND principal_id=$4 FOR UPDATE`,
+        [input.membershipId, input.kind, input.ownerSubject, recipientId])).rows[0];
+      }
+      const selfLeave = !!owned;
+      if (input.selfLeaveOnly && !selfLeave) throw new MembershipDenied('membership unavailable to recipient');
+      const managerId = selfLeave ? recipientId! : await this.manager(client, input.principal, input.kind, input.ownerSubject);
       const prior = await client.query<{ request_digest: string; membership_id: string;
         result_generation: string; result_authority_epoch: string; action: 'join' | 'leave' }>(`
         SELECT request_digest, membership_id, result_generation, result_authority_epoch, action
@@ -290,7 +305,7 @@ export class AccessPrivateMemberships {
         FROM access.membership_policy WHERE kind = $1 AND owner_subject = $2 FOR SHARE`,
       [input.kind, input.ownerSubject]);
       if (!policy.rows[0]) throw new MembershipDenied('admission policy missing');
-      if (policy.rows[0].revision !== input.expectedPolicyRevision) {
+      if (!selfLeave && policy.rows[0].revision !== input.expectedPolicyRevision) {
         throw new MembershipStale('admission policy revision changed');
       }
       let member: Member | undefined;
@@ -352,7 +367,7 @@ export class AccessPrivateMemberships {
           kind: input.kind, owner_subject: input.ownerSubject,
           state: 'joined', generation: nextGeneration };
       } else {
-        const found = await client.query<Member>(`SELECT id, principal_id, kind,
+        const found = owned ? { rows: [owned] } : await client.query<Member>(`SELECT id, principal_id, kind,
           owner_subject, state, generation FROM access.private_membership
           WHERE id = $1 AND kind = $2 AND owner_subject = $3 FOR UPDATE`,
         [input.membershipId, input.kind, input.ownerSubject]);
@@ -360,6 +375,16 @@ export class AccessPrivateMemberships {
         if (!member) throw new MembershipDenied('membership unavailable');
         if (member.generation !== input.expectedGeneration) {
           throw new MembershipStale('admission generation changed');
+        }
+        if (selfLeave && member.state === 'left') {
+          await client.query(`INSERT INTO access.private_membership_change_receipt
+            (principal_id,idempotency_key,request_digest,membership_id,result_generation,result_authority_epoch,action)
+            VALUES ($1,$2,$3,$4,$5,$6,'leave')`,
+          [managerId,input.idempotencyKey,input.requestDigest,member.id,member.generation,currentEpoch]);
+          await client.query('COMMIT');
+          return { membershipId: member.id, kind: member.kind, ownerSubject: member.owner_subject,
+            action: 'leave', state: 'left', generation: member.generation, policyRevision: member.policy_revision!,
+            termsRevision: null, authorityEpoch: currentEpoch, replayed: false };
         }
         if (member.state !== 'joined') throw new MembershipDenied('already left');
         const grants = await client.query<{ id: string }>(`SELECT id
@@ -396,7 +421,7 @@ export class AccessPrivateMemberships {
         await client.query(`UPDATE access.private_membership SET state = 'left',
           generation = $2, policy_revision = $3, terms_revision = NULL,
           consent_reference = NULL, changed_at = now() WHERE id = $1`,
-        [member.id, member.generation, input.expectedPolicyRevision]);
+        [member.id, member.generation, selfLeave ? policy.rows[0].revision : input.expectedPolicyRevision]);
       }
       const bumped = await client.query<{ authority_epoch: string }>(`
         UPDATE access.scope_gate SET authority_epoch = authority_epoch + 1
@@ -407,7 +432,7 @@ export class AccessPrivateMemberships {
       await client.query(`INSERT INTO access.private_membership_history
         (membership_id, generation, state, policy_revision, terms_revision,
           consent_reference, changed_by_principal) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [member.id, member.generation, member.state, input.expectedPolicyRevision,
+      [member.id, member.generation, member.state, selfLeave ? policy.rows[0].revision : input.expectedPolicyRevision,
         input.action === 'join' ? input.termsRevision : null,
         input.action === 'join' ? input.consentReference : null, managerId]);
       await client.query(`INSERT INTO access.private_membership_change_receipt
@@ -418,7 +443,7 @@ export class AccessPrivateMemberships {
       await client.query('COMMIT');
       return { membershipId: member.id, kind: input.kind, ownerSubject: input.ownerSubject,
         action: input.action, state: member.state, generation: member.generation,
-        policyRevision: input.expectedPolicyRevision,
+        policyRevision: selfLeave ? policy.rows[0].revision : input.expectedPolicyRevision,
         termsRevision: input.action === 'join' ? input.termsRevision! : null,
         authorityEpoch, replayed: false };
     } catch (error) {

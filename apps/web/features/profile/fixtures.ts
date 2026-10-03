@@ -6,6 +6,7 @@ import type { AgentProfile, AgentWorksPage, CreditedWork, FollowState, LibraryVi
 
 export const storyId = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-7c1d-4e2f-9a3b-5c6d7e8f9a0b`;
 const position = { dataEpoch: 'story', sequence: '42' };
+const listedPage = { listing: 'listed', discovery: { indexable: true, robots: 'index', referrerPolicy: null } } as const;
 const name = (value: string, language: string) => ({ value, language, direction: 'ltr' as const,
   basis: 'requested' as const });
 const cover = (n: number) => ({ kind: 'fallback' as const, policy: 'avatar-fallback-v1', key: `work-${n}`,
@@ -39,6 +40,7 @@ const rating = (mean: number, count: number) => ({ context: storyId(500), count,
   scale: { min: 1 as const, max: 5 as const } });
 
 export const authorWorks: AgentWorksPage = {
+  ...listedPage,
   items: [
     credited(1, '雨夜书店 · 连载小说', 'zh-Hans', book, { completionStatus: 'ongoing', rating: rating(4.4, 128),
       tagline: name('一封没有地址的信，把雨夜书店带向二十年前的秘密。', 'zh-Hans') }),
@@ -54,13 +56,14 @@ export const authorWorks: AgentWorksPage = {
 };
 
 export const organizationWorks: AgentWorksPage = {
+  ...listedPage,
   items: ['Pride and Prejudice', 'Alice’s Adventures in Wonderland', 'Jane Eyre', 'Little Women']
     .map((title, index) => credited(20 + index, title, 'en', book, {
       attribution: [{ credit: storyId(420 + index), role: 'editor' }], rating: index % 2 ? null : rating(4.2, 60) })),
   nextCursor: 'story-next', sourcePosition: position, count: { value: 4, kind: 'exact-page', total: null },
 };
 
-export const noWorks: AgentWorksPage = { items: [], nextCursor: null, sourcePosition: position,
+export const noWorks: AgentWorksPage = { ...listedPage, items: [], nextCursor: null, sourcePosition: position,
   count: { value: 0, kind: 'exact-page', total: null } };
 
 const card = (n: number, title: string, language: string, types = ['https://schema.org/Book']): ShelfCard =>

@@ -44,6 +44,9 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 import { canonicalAddress } from '../modules/address/schema.ts';
+import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
+import { resourceListing } from '../modules/realm-admin/contract.ts';
+import { pageDiscoveryHeaders } from '../modules/space/visibility.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const disclosure = t.Union([t.Literal('public'), t.Literal('private')]);
@@ -135,6 +138,7 @@ const execution = t.Union([
     revision: ref, activation: ref }),
 ]);
 const publicationRead = t.Object({ profile: t.Literal('zone-presentation-response-v1'),
+  listing: resourceListing, discovery: pageDiscovery,
   ...ZoneName.properties,
   zone: ref, realm: t.Nullable(ref), official: t.Nullable(t.String()), revision: ref, address: canonicalAddress,
   presentation: ZonePresentation,
@@ -158,6 +162,7 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
 const mountBinding = t.Object({ occurrence: ref, segment: t.String(), target: ref });
 const resourceBinding = t.Object({ id: ref, types: t.Array(t.String(), { maxItems: 8 }),name: readName,address: canonicalAddress });
 const routeBasis = { profile: t.Literal('zone-route-v1'), zone: ref, path: t.String(),
+  listing: resourceListing, discovery: pageDiscovery,
   ...ZoneName.properties,
   realm: t.Nullable(ref), revision: ref, sourcePosition: readPosition,
   cost: t.Object(Object.fromEntries(Object.entries(ZONE_ROUTE_COST).map(([name, value]) =>
@@ -250,12 +255,15 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const execution = forced ?? (theme && state.disclosure === 'public'
             ? zonePackageExecution(await readFirstPartyTheme(work.environment, theme.slice(-36)), zone)
             : { state: 'fallback' as const, reason: 'none_approved' as const });
-          const etag = `"${hash(JSON.stringify({ revision: state.revision, address: state.address, navigation, moduleData, bannerMedia, execution }))}"`;
+          const etag = `"${hash(JSON.stringify({ revision: state.revision, address: state.address,
+            listing: state.listing, discovery: state.discovery, navigation, moduleData, bannerMedia, execution }))}"`;
           const headers = { etag, vary: 'accept-language, x-rezics-display-languages',
+            ...pageDiscoveryHeaders(state.discovery),
             'cache-control': !viewer.principal && state.disclosure === 'public' && execution.state === 'fallback'
               && execution.reason === 'none_approved' ? 'public, max-age=30' : 'no-store' };
           if (request.headers.get('if-none-match') === headers.etag) return new Response(null, { status: 304, headers });
           return Response.json({ profile: 'zone-presentation-response-v1', zone, realm: state.realm,
+            listing: state.listing, discovery: state.discovery,
             address: state.address,
             name: state.name, language: state.language, direction: state.direction,
             official: state.official, revision: state.revision, presentation: state.presentation,
@@ -274,8 +282,10 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ path: t.String({ maxLength: 1024 }), cursor: t.Optional(t.String({ maxLength: 2048 })),
         actingSubject: t.Optional(ref), position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: routeRead, ...errors } }, async ({ request, params, query }) => {
-      try { return Response.json(await resolveZoneRoute(work, request, {
-        zone: `https://rezics.com/id/${params.id}`, ...query }), { headers: { 'cache-control': 'no-store' } }); }
+      try {
+        const result = await resolveZoneRoute(work, request, { zone: `https://rezics.com/id/${params.id}`, ...query });
+        return Response.json(result, { headers: { 'cache-control': 'no-store', ...pageDiscoveryHeaders(result.discovery) } });
+      }
       catch (error) { return routeError(error); }
     })
     .post('/v1/zones', { body: t.Object({ zone: ref, space: ref, disclosure, actingSubject: ref,

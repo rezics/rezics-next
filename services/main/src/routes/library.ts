@@ -14,6 +14,10 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { readRichReadingYear } from '../modules/library/stats.ts';
+import { resourceListing } from '../modules/realm-admin/contract.ts';
+import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
+import { pageDiscoveryHeaders, pageDiscoveryPolicy } from '../modules/space/visibility.ts';
+import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../modules/work/read-session.ts';
 
 const shelfSort = t.Optional(t.Union([t.Literal('added'), t.Literal('title'), t.Literal('rating'),
   t.Literal('last-read'), t.Literal('finished')]));
@@ -54,10 +58,12 @@ const statusShelf = t.Object({ profile: t.Literal('reader-status-shelf-v1'),
   nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) });
 const publicShelves = t.Object({ profile: t.Literal('agent-status-shelves-v1'), agent: readId,
+  listing: resourceListing, discovery: pageDiscovery,
   statusShelves: t.Array(t.Object({ status: t.Exclude(status, t.Null()),
     count: t.Integer({ minimum: 0 }), changedAt: t.Nullable(t.String()) }), { maxItems: 3 }),
   sourcePosition: readPosition });
 const publicStatusShelf = t.Object({ profile: t.Literal('agent-status-shelf-v1'), agent: readId,
+  listing: resourceListing, discovery: pageDiscovery,
   status: t.Exclude(status, t.Null()), statusCount: t.Integer({ minimum: 0 }),
   items: t.Array(t.Object({ work: readId, card: shelfWork }), { maxItems: 20 }),
   nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
@@ -82,6 +88,22 @@ const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemR
   404: problemResult(404), 409: problemResult(409), 500: problemResult(500), 503: problemResult(503) };
 const privateHeaders = { 'cache-control': 'private, no-store' };
 const publicHeaders = { 'cache-control': 'public, max-age=60' };
+
+/** Two Access listing point reads fence the signals with the shelf read. The
+ * shelf owner separately fences profile/library visibility and its inventory. */
+async function publicShelfResponse(work: MainWorkDependencies, request: Request,
+  options: Parameters<typeof workRead>[2], agent: string, read: (session: WorkReadSession) => Promise<object>) {
+  const result = await workRead(work, request, options, async session => {
+    if (!work.profiles) throw new WorkReadUnavailable('Profile owner unavailable');
+    const listing = await work.profiles.listing.read(agent);
+    const value = await read(session);
+    if ((await work.profiles.listing.read(agent)).version !== listing.version) {
+      throw new WorkReadMoved('Agent listing changed');
+    }
+    return { ...value, listing: listing.listing, discovery: pageDiscoveryPolicy('public', listing.listing) };
+  });
+  return Response.json(result, { headers: { ...privateHeaders, ...pageDiscoveryHeaders(result.discovery) } });
+}
 
 export const openApiOperations = {
   '/v1/works/{id}/reader-state': { get: { bearer: false } },
@@ -229,9 +251,9 @@ export function libraryRoutes(work: MainWorkDependencies) {
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
-        return Response.json(await workRead(work, request, query,
-          session => readPublicShelves(session, `https://rezics.com/id/${params.id}`, work.libraryStatus!)),
-        { headers: privateHeaders });
+        const agent = `https://rezics.com/id/${params.id}`;
+        return await publicShelfResponse(work, request, query, agent,
+          session => readPublicShelves(session, agent, work.libraryStatus!));
       } catch (error) { return failure(error); }
     })
     .get('/v1/me/import-reviews', {
@@ -322,9 +344,9 @@ export function libraryRoutes(work: MainWorkDependencies) {
     }, async ({ request, params, query }) => {
       if (!work.libraryStatus) return problem(503, 'reader_library_unavailable', 'Reader library unavailable');
       try {
-        return Response.json(await workRead(work, request, query,
-          session => readPublicStatusShelf(session, `https://rezics.com/id/${params.id}`,
-            work.libraryStatus!, params.status, query)), { headers: privateHeaders });
+        const agent = `https://rezics.com/id/${params.id}`;
+        return await publicShelfResponse(work, request, query, agent,
+          session => readPublicStatusShelf(session, agent, work.libraryStatus!, params.status, query));
       } catch (error) { return failure(error); }
     });
 }
