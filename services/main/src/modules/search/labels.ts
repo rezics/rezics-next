@@ -106,6 +106,7 @@ export async function indexedLabels(
   limit: number,
   after?: LabelAfter,
   kind = 'all',
+  resources?: readonly string[],
 ) {
   const position = await labelIndexReady(session);
   const phrase = q.normalize('NFC').trim().replace(/\s+/gu, ' ');
@@ -114,7 +115,7 @@ export async function indexedLabels(
   }
   const rows = await session.query(
     `SELECT ?page WHERE {
-    BIND(rv:rankedText(rv:publicTitle, ${lit(phrase)}, ${limit}, ${lit(after ? JSON.stringify(after) : '')}, ${lit(JSON.stringify({ names: kind }))}) AS ?page)
+    BIND(rv:rankedText(rv:publicTitle, ${lit(phrase)}, ${limit}, ${lit(after ? JSON.stringify(after) : '')}, ${lit(JSON.stringify({ names: kind, ...(resources ? { resources } : {}) }))}) AS ?page)
   } LIMIT 1`,
     1,
   );

@@ -11,10 +11,10 @@ import { discloseSearchMatches } from '../disclosure/search.ts';
 import { knownSearchPosition } from './snapshot-state.ts';
 import { publicWork } from '../work/public-patterns.ts';
 
-/** Native body search bounds the public population at 20,000 units. This live
- * field join has no derived freshness gap: at most 513 candidate rows / 1 MiB,
+/** This live field join has no derived freshness gap: at most 513 candidate rows / 1 MiB,
  * one graph read plus one indexed source-name search and its final fence.
- * The graph engine may scan the admitted population and its metadata (O(U*F));
+ * There is no population admission cap. The graph engine may scan the public
+ * population and its metadata (O(U*F)); bounded output does not bound that work.
  * it remains subject to the same 1,500 ms deadline and 8 MiB request budget.
  * A field index can replace this scan when measured latency warrants it. */
 export const SEARCH_FIELD_COST = { candidates: 512, graphQueries: 2, sourceQueries: 4,
