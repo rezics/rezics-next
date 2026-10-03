@@ -44,7 +44,6 @@ export default {
   notificationPush: "Push",
   notificationEmailDigest: "Resumen por correo",
   notificationFollowedChapter: "Capítulos nuevos de obras y autores a los que sigues",
-  notificationNewWork: 'Nuevas obras de autores que sigues',
   notificationNewRelease: 'Nuevos lanzamientos de obras que sigues',
   notificationCollectionChange: 'Cambios en colecciones que sigues',
   notificationReviewHelpful: "Votos de utilidad en reseñas",

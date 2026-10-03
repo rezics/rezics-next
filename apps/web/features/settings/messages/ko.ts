@@ -39,7 +39,6 @@ export default {
   notificationPush: "푸시",
   notificationEmailDigest: "이메일 요약",
   notificationFollowedChapter: '팔로우 중인 작품과 작가의 새 챕터',
-  notificationNewWork: '팔로우하는 저자의 새 작품',
   notificationNewRelease: '팔로우하는 작품의 새 릴리스',
   notificationCollectionChange: '팔로우하는 컬렉션의 변경 사항',
   notificationReviewHelpful: '리뷰의 유용함 투표', notificationReview: '새 리뷰',

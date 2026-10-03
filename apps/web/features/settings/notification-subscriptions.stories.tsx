@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages } from './messages.ts';
-import { NotificationPreferences } from './settings-sections.tsx';
+import { NotificationSettings } from './notification-settings.tsx';
 
 function Preferences({ locale }: { locale: UiLocale }) {
-  return <main className="mx-auto w-full max-w-3xl p-4"><NotificationPreferences locale={locale}
+  return <main className="mx-auto w-full max-w-3xl p-4"><NotificationSettings
     t={messages[locale]} preview /></main>;
 }
 

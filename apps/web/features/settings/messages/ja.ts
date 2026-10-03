@@ -39,7 +39,6 @@ export default {
   notificationPush: "プッシュ",
   notificationEmailDigest: "メールダイジェスト",
   notificationFollowedChapter: 'フォロー中の作品や著者の新しい章',
-  notificationNewWork: 'フォロー中の著者の新しい作品',
   notificationNewRelease: 'フォロー中の作品の新リリース',
   notificationCollectionChange: 'フォロー中のコレクションの変更',
   notificationReviewHelpful: 'レビューへの「参考になった」投票', notificationReview: '新しいレビュー',
