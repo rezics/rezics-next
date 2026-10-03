@@ -3,7 +3,7 @@ import type {
   FilterDocument,
 } from '../../../../model/definitions/filter-document-v1.ts';
 import { browseCategories } from '../catalogue/registry.ts';
-import type { DiscoveryPage, WorkCover, WorkName } from './types.ts';
+import type { DiscoveryPage, MainClient, WorkName } from './types.ts';
 
 /** Main's shared list envelope for resource browsing and remote pickers. */
 export interface ListPage<T> {
@@ -12,13 +12,9 @@ export interface ListPage<T> {
   complete: boolean;
   count: { value: number; kind: 'exact' | 'at-least' };
 }
-export interface ResourceCard {
-  id: string;
-  kind: 'work' | 'space' | 'realm' | 'site' | 'agent' | 'collection' | 'concept';
-  types: string[];
-  name: WorkName;
-  icon: WorkCover;
-}
+type QueryResult = NonNullable<Awaited<ReturnType<MainClient['v1']['query']['post']>>['data']>['result'];
+/** The shared card is the served Query contract, also used by Discovery sections. */
+export type ResourceCard = Extract<QueryResult, { profile: 'resource-list-v1' }>['items'][number];
 export interface ConceptChoice {
   id: string;
   name: WorkName;

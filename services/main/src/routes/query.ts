@@ -99,8 +99,11 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const compiled = compileQuery(input as AdmittedQuery | ResourceListQuery);
       if (compiled.template === 'resource-list') {
         const query = compiled.request.input;
-        const result = await publicWorkRead(work, request, { limit: query.limit, cursor: query.cursor },
-          session => readResourceList(session, compiled.request));
+        let result;
+        try {
+          result = await publicWorkRead(work, request, { limit: query.limit, cursor: query.cursor },
+            session => readResourceList(session, compiled.request));
+        } catch (error) { return discoveryError(error); }
         return Response.json({ profile: 'query-v1', template: 'resource-list-v1',
           selection: { context: query.context, scope: query.scope, filter: query.filter ?? { all: [] },
             text: query.q?.trim() ? { phrase: query.q } : null, sort: query.sort,

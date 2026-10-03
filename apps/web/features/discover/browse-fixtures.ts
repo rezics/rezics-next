@@ -33,6 +33,12 @@ export const browseResources: ResourceCard[] = Array.from({ length: 2400 }, (_, 
     key: String(index),
     resourceType: kinds[index % kinds.length]!,
   },
+  ...(kinds[index % kinds.length] === 'work' ? { work: {
+    primaryCredits: [{ id: browseId(index + 10000), role: 'author' as const, participantKind: 'agent' as const,
+      agent: browseId(2900), provider: null, key: null, ordinal: null, displayName: '林美玲 · Lin Mei', handle: 'lin-mei' }],
+    creditCount: { value: 1, kind: 'exact' as const },
+    rating: { context: browseId(2901), count: 20, sum: 85, mean: 4.25, scale: { min: 1 as const, max: 5 as const } },
+  } } : {}),
 }));
 export function fixturePage<T>(items: readonly T[], offset = 0, size = 20): ListPage<T> {
   const end = Math.min(offset + size, items.length),

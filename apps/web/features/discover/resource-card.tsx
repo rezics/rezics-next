@@ -9,6 +9,9 @@ import { resourceHref, spaceHref } from '../address/path.ts';
 import type { ResourceCard } from './api.ts';
 import { browseMessages } from './browse-messages.ts';
 import { workHref, type BrowseScope } from './scope.ts';
+import { authorHref } from '../author/route.ts';
+import { materializeData } from 'native-i18n';
+import { browseCounts } from './count-messages.ts';
 
 export function browseResourceHref(item: Pick<ResourceCard, 'kind' | 'id'>): string {
   switch (item.kind) {
@@ -20,10 +23,19 @@ export function browseResourceHref(item: Pick<ResourceCard, 'kind' | 'id'>): str
   }
 }
 
-/** Resource-list-v1 currently serves identity only; richer Work fields belong in Main's card contract. */
-export function resourceWork(item: ResourceCard, scope: BrowseScope = { kind: 'global' }): CatalogueWork {
+/** Every list draws Main's same bounded credit preview and Global rating on the shared Work tile. */
+export function resourceWork(item: ResourceCard, scope: BrowseScope = { kind: 'global' }, locale: UiLocale = 'en'): CatalogueWork {
+  const t = materializeData(browseCounts[locale], { locale });
+  const details = item.work;
   return { id: item.id, href: workHref(item.id, scope), title: item.name, cover: item.icon,
-    kind: coverKindOf(item.types), authors: [], rating: null };
+    kind: coverKindOf(item.types), authors: (details?.primaryCredits ?? []).flatMap(credit => credit.displayName
+      ? [{ name: credit.displayName, href: credit.participantKind === 'agent'
+        ? credit.handle ? authorHref({ kind: 'agent', handle: credit.handle }) : null
+        : authorHref({ kind: 'external', key: credit.key }) }] : []),
+    ...(details?.creditCount.value ? { creditSummary: details.creditCount.kind === 'at-least'
+      ? t.atLeastCredits(details.creditCount.value) : t.credits(details.creditCount.value) } : {}),
+    rating: details?.rating ? { mean: details.rating.mean, count: details.rating.count,
+      max: details.rating.scale.max } : null };
 }
 
 interface CardProps { item: ResourceCard; locale: UiLocale; avatarQuery?: string; headingLevel?: 2 | 3 | 4 }
@@ -70,7 +82,7 @@ export function TopicCard(props: CardProps) {
 /** One card dispatch for Home's previews, Discover's sections and every complete type traversal. */
 export function DiscoverResourceCard(props: CardProps & { slot?: number; scope?: BrowseScope }) {
   switch (props.item.kind) {
-    case 'work': return <WorkTile work={resourceWork(props.item, props.scope)} locale={props.locale}
+    case 'work': return <WorkTile work={resourceWork(props.item, props.scope, props.locale)} locale={props.locale}
       avatarQuery={props.avatarQuery} slot={props.slot} headingLevel={props.headingLevel} />;
     case 'realm': return <CommunityCard {...props} />;
     case 'site': case 'space': return <SiteCard {...props} />;

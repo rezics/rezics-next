@@ -29,6 +29,7 @@ import {
 import type { ResourceCard, ResourceCondition, ResourceListPlan } from './resource-contract.ts';
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import type { DiscoveryReadGeneration } from '../discovery/store.ts';
+import { resourceWorkCards } from './work-cards.ts';
 
 /** Ownership establishes the read path; descriptive rdf:type only filters it.
  * Public catalogue reads never use private grants, including a reader's own. */
@@ -211,7 +212,7 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
         candidates.length * 64,
       )
     : [];
-  return candidates.flatMap((row, index): ResourceCard[] => {
+  const items = candidates.flatMap((row, index): ResourceCard[] => {
     if (decisions[index] !== 'visible') return [];
     const resourceTypes = [
       ...new Set(types.filter((type) => type.r?.value === row.id).map((type) => type.type!.value)),
@@ -253,6 +254,8 @@ export async function resourceCards(session: WorkReadSession, candidates: readon
       },
     ];
   });
+  const workCards = await resourceWorkCards(session, items.filter(item => item.kind === 'work').map(item => item.id));
+  return items.map(item => item.kind === 'work' ? { ...item, work: workCards.get(item.id)! } : item);
 }
 
 /** Match accepted Concept interpretations through the existing Discovery owner. */

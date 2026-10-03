@@ -20,6 +20,8 @@ export interface CatalogueWork {
   kind: WorkCoverKind;
   /** Display names and destinations in credit order. Empty when Main names no author. */
   authors: readonly CatalogueAuthor[];
+  /** A bounded credit preview's honest total, already worded by its consuming surface. */
+  creditSummary?: string;
   rating: CardRating | null;
   /** A one-line pitch in the reader's language, set under the title. */
   tagline?: WorkName | null;
