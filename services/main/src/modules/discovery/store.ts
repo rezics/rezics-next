@@ -110,6 +110,27 @@ export function discoverySeekSql(sort: 'recent' | 'top-rated', continuation: boo
     ORDER BY ${key}, work COLLATE "C" LIMIT $4`;
 }
 
+/** The existing (generation,type,term,recent_order,work) index supplies each
+ * positive posting list. Merge only <=8*(64+1) rows; dedup precedes the final
+ * page limit so overlapping interpretations cannot skip or repeat a Work.
+ * https://www.postgresql.org/docs/18/indexes-multicolumn.html */
+export function discoveryResourceSeekSql(continuation: boolean, scoped = true): string {
+  const after = continuation ? 'AND (e.recent_order, e.work COLLATE "C") > ($5::numeric, $6::text COLLATE "C")' : '';
+  if (!scoped) return `SELECT e.work, e.recent_order::text AS order_key FROM access.discovery_entry e
+    WHERE e.generation_id=$1 AND e.work_type=$2 AND e.term=$3 ${after}
+    ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $4`;
+  return `SELECT work, recent_order::text AS order_key FROM (
+    SELECT DISTINCT ON (d.work) d.work, d.recent_order
+    FROM unnest($3::text[]) AS drive(term) CROSS JOIN LATERAL (
+      SELECT e.work, e.recent_order FROM access.discovery_entry e
+      WHERE e.generation_id=$1 AND e.work_type=$2 AND e.term=drive.term
+        ${after}
+      ORDER BY e.recent_order, e.work COLLATE "C" LIMIT $4
+    ) d ORDER BY d.work, d.recent_order
+  ) merged ORDER BY recent_order, work COLLATE "C" LIMIT $4`;
+}
+interface ResourceSeekRow { work: string; order_key: string }
+
 export async function sourceFence(client: PoolClient) {
   await requireRecoveryOpen(client);
   const row = (await client.query<{ revision: string; generation: string }>(`SELECT
@@ -539,23 +560,31 @@ export class DiscoveryProjection {
     });
   }
 
-  /** Public query windows seek existing projected Works. No source aggregation. */
+  /** Public query windows seek keys only. Card payloads are read separately for
+   * delivered Works; no JSON payload is copied/sorted for rejected candidates. */
   async resourcePage(
     row: DiscoveryGeneration,
     limit: number,
     after?: { key: string; work: string },
+    drive?: readonly string[],
+    type = '',
   ) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 64)
+      throw new RecommendationUnavailable('Resource window exceeds its bound');
+    if (drive && (drive.length > DISCOVERY_CONDITION_COST.driveTerms
+      || new Set(drive).size !== drive.length
+      || drive.some(term => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(term))))
+      throw new RecommendationUnavailable('Resource drive exceeds its bound');
+    if (drive?.length === 0) return [];
     return inAccess(this.pool, async (client) => {
       const fence = await sourceFence(client);
       if (fence.generation !== row.recovery_generation)
         throw new RecommendationRestart('Discovery recovery basis expired');
-      if (!Number.isInteger(limit) || limit < 1 || limit > 64)
-        throw new RecommendationUnavailable('Resource window exceeds its bound');
       return (
-        await client.query<DiscoveryRow>(discoverySeekSql('recent', !!after), [
+        await client.query<ResourceSeekRow>(discoveryResourceSeekSql(!!after, !!drive), [
           row.generation_id,
-          '',
-          '',
+          type,
+          ...(drive ? [drive] : ['']),
           limit + 1,
           ...(after ? [after.key, after.work] : []),
         ])
@@ -565,6 +594,7 @@ export class DiscoveryProjection {
 
   async resourceMembership(row: DiscoveryGeneration, works: readonly string[]) {
     if (works.length > 64) throw new RecommendationUnavailable('Work membership exceeds its bound');
+    if (!works.length) return new Set<string>();
     return inAccess(this.pool, async (client) => {
       await requireRecoveryOpen(client);
       return new Set(

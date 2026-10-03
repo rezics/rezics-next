@@ -32,6 +32,108 @@ Jena operators, SQL plan rows or traffic through other owners. These remain
 unobserved even when a logical request budget passes. Extend the operation's
 owner instrumentation and tests when claiming those physical bounds.
 
+## API request work profiles
+
+Decision, maintainer, 2026-10-03: qualify the API's own work first. Page rendering
+and the web server's fan-out remain a separate follow-up; this method does not
+instrument the web application.
+
+[`profileRequest`](../../tests/qa/support/work-profile.ts) assigns a fresh sampled
+W3C parent, consumes the operation through a caller callback, and collects its
+server span and descendants. Assert the correct response in that callback.
+The profile counts Fuseki attempts, PostgreSQL query spans, Account calls, Main
+calls and other outbound fetches, and reports server and caller latency. It
+also retains each Fuseki call's bytes, headers/body-consumption timing and
+optional engine time, and each PostgreSQL statement's operation and duration.
+It deduplicates exporter retries and excludes sibling requests sharing a trace.
+Latency is not a sum of overlapping child spans.
+
+For isolated integration tests, start `startWorkProfileSink`, pass its `env` to
+each process, and initialize telemetry before importing `pg`. An in-process app
+must import its database/application modules dynamically after `startTelemetry`;
+`flushTelemetryTraces` drains completed spans without stopping that app. Existing
+QA files often import `pg` before test setup: use a child process, as the
+[calibration probe](../../packages/observability/tests/work-profile-child.ts)
+does, rather than trust a zero statement count. The sink requires a loopback
+bearer header, retains bounded data and fails on overflow or absent exports.
+Each request waits for its server span and a quiet export interval; this is a
+bounded collection window, not proof that a producer never dropped a span.
+Keep the calibration probe in the owning qualification run.
+
+Against a running stack,
+[`aspireWorkProfileSource`](../../tests/qa/support/work-profile-aspire.ts) reads
+the dashboard's [whole-trace API](https://github.com/microsoft/aspire/blob/main/docs/specs/dashboard-http-api.md),
+including Account descendants. Supply the discovered dashboard origin and API
+key through local configuration. It refuses truncated responses, missing traces,
+authentication errors and TLS failures; do not disable certificate verification.
+No live Aspire run has been qualified by the helper's wire-contract tests alone.
+Old producers without peer tags require the explicit `peers` origin map;
+unclassified fetches cannot pass a storage-call assertion. Missing Account/Main
+server descendants also invalidate an asserted aggregate statement bound.
+
+Fuseki response bytes are counted as the consumer reads, with no tee or eager
+drain. These are decoded body bytes; HTTP headers, compression and TLS bytes
+are outside the count. An unread, cancelled or failed stream is not a complete
+byte measurement. Unknown lengths and absent engine timers become `null`.
+`assertWorkCost` rejects unknown measurements for an asserted field, and accepts
+successful HTTP responses by default; pass explicit `statuses` when measuring
+a denied/unavailable branch. `assertWorkCostAtScales` applies the same absolute
+caps to at least three profiles. Result correctness, completeness and declared
+partial outcomes remain the operation owner's assertions.
+
+The runtime and [meter](../../scripts/load/measurement.ts) accept only a numeric
+`Server-Timing: jena;dur=<milliseconds>` as native engine timing; no description
+is exported. The current pinned Fuseki does not supply that timer. Engine time
+therefore remains unobserved, even when HTTP time and byte measurements pass.
+Adding a native timing producer belongs to the Jena owner. The meter's
+`beginTraceCapture`/`endTraceCapture` groups buffered request observations by
+W3C trace/span IDs; `timingSnapshot` keeps HTTP time separate from engine time
+and returns an unknown aggregate if any timer is absent.
+
+[`captureFusekiPlan`](../../scripts/load/fuseki-plan.ts) reuses the practical
+load runner's pinned `arq.qparse --explain` path in an offline container, with
+no live database mount. It retains the captured query, digest and optimized
+algebra in explicit local diagnostic files. Jena's
+[explanation facility](https://jena.apache.org/documentation/query/explain.html)
+describes query preparation; this is not a runtime TDB2/Lucene physical-cost
+plan. Query literals stay out of OTLP and routine logs. Native operator visits,
+SQL rows/buffers/WAL and work outside the request's trace remain unobserved.
+`captureFusekiQueryPlan` pairs a captured query with its original SPARQL JSON
+response and retains its reported `candidateCount` values and returned binding
+count. Repeated metadata counts once. Missing counters remain unknown; an empty
+page does not imply zero text-index work. These counters describe the query's
+reported candidates, including any probe cap, rather than native Lucene visits.
+The meter retains that response only when explicit query capture is enabled.
+
+[`work-profile-corpus`](../../scripts/load/work-profile-corpus.ts) defines three
+diagnostic scales for unrelated Works, unrelated posts, follows, memberships,
+history depth, Realm size and Concept vocabulary. Change one dimension and hold
+the others fixed.
+Scenario owners supply their existing public command flows and read-back
+verification, including publication, membership consent and expected heads.
+History revisions run serially; independent entities use two seed workers.
+Stable dataset identities include the recipe version and every dimension;
+retained manifests also check the existing load model/schema/engine compatibility.
+Preparation verifies all dimensions before retaining a stopped backup; later
+runs restore distinct writable copies. Bind the backup driver to the existing
+fixture/load backup and restore workflow, never copy live storage. Include
+startup/readiness in `startedAt`; preparation and restore each abort at 600
+seconds. The scale constants are diagnostic recipes, not evidence that every
+owner's command corpus already prepares under that ceiling. Qualify the actual
+recipe's preparation time and isolated restore before retaining its dataset.
+[`seedPublicProfileWork`](../../scripts/load/work-profile-work.ts) provides the
+Work dimension's real authoring, publication and selection sequence. The
+integration calibration grows 4, 16 and 64 public selected Works, checks every
+selected body and the real text-index candidate count, and records preparation
+time separately. It does not qualify physical backup/restore or the other axes.
+
+The [unit calibration](../../tests/qa/unit/g-1024-work-profile.test.ts) and
+[real-engine calibration](../../tests/qa/integration/g-1024-work-profile.test.ts)
+deliberately execute 1, 4 and 9 Fuseki queries and PostgreSQL statements, assert
+the returned rows, and verify that a three-call cap fails. Run both through
+`bun scripts/goal/goalctl.ts test <file>`; the integration file uses isolated
+real PostgreSQL/Fuseki. These are counter checks, not feed/search qualification.
+
 ## Small multi-scale experiments
 
 1. Hold other dimensions fixed while varying unrelated corpus size, affected

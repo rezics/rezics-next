@@ -86,13 +86,33 @@ export interface ResourceListPlan {
 }
 /** Native ranked reads retain 64 hits; graph pages retain 64+1 candidates.
  * Disclosure can shorten a page; the cursor advances over examined candidates.
- * No global result-size cap and no OFFSET. Graph ordering may sort on disk;
- * the enclosing WorkReadSession enforces time, calls and bytes. */
+ * A single-owner type selection enters the native collector before retrieval.
+ * Each ranked window needs one live population join and zero per-hit text
+ * collectors. Concept meaning needs one graph read per request, independent of
+ * refill count. Names/types/disclosure admit the full 64-candidate window once;
+ * credit/rating previews cover only the remaining page slots. An undecided
+ * hit stays after the cursor. Application matching is O(C*T*I + M), with C
+ * examined candidates, T selected Concepts, I interpretations and M membership
+ * rows, rather than rescanning the whole membership relation for every chip.
+ * Ordered Work seeks drive the smallest positive Concept group, merging at
+ * most 8*(64+1) indexed posting rows per window. Exclusion-only requests seek
+ * the wildcard Work list and perform bounded primary-key membership probes.
+ * A fresh type/positive-topic posting set is probed for at most 65 keys. Only a complete set
+ * of <=64 keys constrains ranked retrieval; larger/stale sets retain its
+ * existing continuation, never the ranking of a recent sample.
+ * No global result-size cap and no OFFSET. Native searchAfter still evaluates
+ * matching postings; bounded HTTP rows do not establish bounded engine work.
+ * https://lucene.apache.org/core/10_3_1/core/org/apache/lucene/search/IndexSearcher.html
+ * Negation and other low-selectivity joins can return advancing partial pages.
+ * The enclosing WorkReadSession enforces time, calls and bytes. */
 export const RESOURCE_LIST_COST = {
   candidates: 512,
   indexDocuments: 512,
   window: 64,
   types: 64,
+  rankedJoinsPerWindow: 1,
+  rankedCandidateTextRechecks: 0,
+  conceptResolutionReads: 1,
   graphCalls: WORK_READ_COST.graphCalls,
   deadlineMs: WORK_READ_COST.deadlineMs,
   graphBytes: WORK_READ_COST.graphBytes,

@@ -1,4 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { captureFusekiQueryPlan } from './fuseki-plan.ts';
+import type { CapturedFusekiQuery } from './fuseki-candidates.ts';
 import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -388,20 +390,10 @@ function storageSizes() {
   return { tdb2Bytes, luceneBytes, containerId: container };
 }
 
-function queryPlan(lane: string, captured: { sparql: string }[]) {
+function queryPlan(lane: string, captured: CapturedFusekiQuery[]) {
   const selected = selectPhraseQuery(captured);
-  const queryFile = `${lane}-phrase.sparql`, planFile = `${lane}-phrase.plan.txt`;
-  writeFileSync(join(artifacts, queryFile), selected + '\n');
-  const command = spawnSync('docker', ['run', '--rm', '--network', 'none',
-    '--volume', `${artifacts}:/artifacts:ro,Z`, '--entrypoint', 'java',
-    fusekiImage.image, '-cp', `/opt/apache-jena-fuseki-${fusekiImage.jenaVersion}/fuseki-server.jar`,
-    'arq.qparse', '--explain', '--query', `/artifacts/${queryFile}`],
-  { cwd: root, env: loadDockerEnvironment(), encoding: 'utf8', timeout: 30_000 });
-  writeFileSync(join(artifacts, planFile), command.stdout + command.stderr);
-  if (command.status !== 0 || !command.stdout.trim())
-    throw new Error(`Jena optimized algebra failed for ${lane}: ${command.stderr}`);
-  return { queryFile, planFile, bytes: Buffer.byteLength(command.stdout),
-    basis: 'Jena ARQ optimized algebra for the captured product phrase query; not a runtime TDB2 cost plan' };
+  return captureFusekiQueryPlan(captured.find(entry => entry.sparql === selected)!, { label: `${lane}-phrase`,
+    directory: artifacts, image: fusekiImage, dockerEnv: loadDockerEnvironment() });
 }
 
 function stackCommand(action: 'stack:down' | 'stack:up', name: string) {

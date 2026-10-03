@@ -23,6 +23,11 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { telemetryConfig } from './config.ts';
 import { telemetryLog } from './log.ts';
+import {
+  fusekiEngineTime,
+  requestBodyBytes,
+  preserveResponseMetadata,
+} from './http-measurement.ts';
 
 const spanAttributes = new Set([
   'http.request.method',
@@ -31,6 +36,12 @@ const spanAttributes = new Set([
   'url.scheme',
   'server.address',
   'server.port',
+  'http.request.body.size',
+  'http.response.body.size',
+  'rezics.http.body.complete',
+  'rezics.http.headers_ms',
+  'rezics.peer.service',
+  'rezics.fuseki.engine_ms',
   'db.system.name',
   'db.namespace',
   'db.operation.name',
@@ -228,12 +239,17 @@ export function safeTraceExporter(exporter: SpanExporter): SpanExporter {
 let sdk: NodeSDK | undefined;
 let stopPromise: Promise<void> | undefined;
 let restoreFetch: (() => void) | undefined;
+let traceProcessor: BatchSpanProcessor | undefined;
 export function telemetryEnabled() {
   return sdk !== undefined;
 }
 
-/** Bun's fetch is not Undici. Capture headers latency without reading/consuming the body. */
-export function instrumentFetch(origins: ReadonlySet<string>, exporterOrigin: string) {
+/** Bun's fetch is not Undici. Fuseki body counts follow the consumer's pulls. */
+export function instrumentFetch(
+  origins: ReadonlySet<string>,
+  exporterOrigin: string,
+  peers: ReadonlyMap<string, 'fuseki' | 'account' | 'main'> = new Map(),
+) {
   const original = globalThis.fetch;
   const wrapped: typeof fetch = Object.assign(
     async (input: string | URL | Request, init?: RequestInit) => {
@@ -242,6 +258,7 @@ export function instrumentFetch(origins: ReadonlySet<string>, exporterOrigin: st
       const method = (
         init?.method ?? (input instanceof Request ? input.method : 'GET')
       ).toUpperCase();
+      const peer = peers.get(url.origin) ?? 'other';
       return trace.getTracer('rezics-fetch').startActiveSpan(
         `HTTP ${method}`,
         {
@@ -251,10 +268,16 @@ export function instrumentFetch(origins: ReadonlySet<string>, exporterOrigin: st
             'server.address': url.hostname,
             'server.port': Number(url.port || (url.protocol === 'https:' ? 443 : 80)),
             'url.scheme': url.protocol.slice(0, -1),
+            'rezics.peer.service': peer,
           },
         },
         async (span) => {
+          const started = performance.now();
+          let streaming = false;
           try {
+            const sentBytes = requestBodyBytes(input, init);
+            if (peer === 'fuseki' && sentBytes !== undefined)
+              span.setAttribute('http.request.body.size', sentBytes);
             let options = init;
             if (origins.has(url.origin)) {
               const headers = new Headers(
@@ -266,15 +289,64 @@ export function instrumentFetch(origins: ReadonlySet<string>, exporterOrigin: st
               options = { ...init, headers };
             }
             const response = await original(input, options);
+            span.setAttribute('rezics.http.headers_ms', performance.now() - started);
             span.setAttribute('http.response.status_code', response.status);
             if (response.status >= 400) span.setStatus({ code: SpanStatusCode.ERROR });
+            if (peer === 'fuseki') {
+              const engineMs = fusekiEngineTime(response.headers);
+              if (engineMs !== undefined) span.setAttribute('rezics.fuseki.engine_ms', engineMs);
+              if (!response.body) {
+                span.setAttribute('http.response.body.size', 0);
+                span.setAttribute('rezics.http.body.complete', true);
+              } else {
+                // Pull with the consumer: no clone/tee, buffering or eager drain.
+                const reader = response.body.getReader();
+                let bytes = 0;
+                let ended = false;
+                const end = (complete: boolean) => {
+                  if (ended) return;
+                  ended = true;
+                  span.setAttribute('http.response.body.size', bytes);
+                  span.setAttribute('rezics.http.body.complete', complete);
+                  span.end();
+                };
+                const body = new ReadableStream<Uint8Array>(
+                  {
+                    async pull(controller) {
+                      try {
+                        const next = await reader.read();
+                        if (next.done) {
+                          end(true);
+                          controller.close();
+                        } else {
+                          bytes += next.value.byteLength;
+                          controller.enqueue(next.value);
+                        }
+                      } catch (error) {
+                        span.setAttribute('error.type', 'http.body_failed');
+                        span.setStatus({ code: SpanStatusCode.ERROR });
+                        end(false);
+                        controller.error(error);
+                      }
+                    },
+                    async cancel(reason) {
+                      end(false);
+                      await reader.cancel(reason);
+                    },
+                  },
+                  { highWaterMark: 0 },
+                );
+                streaming = true;
+                return preserveResponseMetadata(response, new Response(body, response));
+              }
+            }
             return response;
           } catch (error) {
             span.setAttribute('error.type', error instanceof Error ? error.name : 'Error');
             span.setStatus({ code: SpanStatusCode.ERROR });
             throw error;
           } finally {
-            span.end();
+            if (!streaming) span.end();
           }
         },
       );
@@ -314,6 +386,7 @@ export function startTelemetry(
       exportTimeoutMillis: config.OTEL_EXPORTER_OTLP_TIMEOUT,
     },
   );
+  traceProcessor = processor;
   sdk = new NodeSDK({
     autoDetectResources: false,
     resource: resourceFromAttributes({
@@ -372,10 +445,20 @@ export function startTelemetry(
   for (const name of ['FUSEKI_URL', 'ACCOUNT_JWKS_URL', 'ACCOUNT_INTROSPECT_URL'] as const) {
     if (env[name]) config.propagationOrigins.add(new URL(env[name]!).origin);
   }
-  restoreFetch = instrumentFetch(config.propagationOrigins, new URL(base).origin);
+  const peers = new Map<string, 'fuseki' | 'account' | 'main'>();
+  if (env.FUSEKI_URL) peers.set(new URL(env.FUSEKI_URL).origin, 'fuseki');
+  for (const name of ['ACCOUNT_JWKS_URL', 'ACCOUNT_INTROSPECT_URL', 'ACCOUNT_ORIGIN'] as const)
+    if (env[name]) peers.set(new URL(env[name]!).origin, 'account');
+  if (env.MAIN_ORIGIN) peers.set(new URL(env.MAIN_ORIGIN).origin, 'main');
+  restoreFetch = instrumentFetch(config.propagationOrigins, new URL(base).origin, peers);
   process.once('beforeExit', () => {
     void shutdownTelemetry();
   });
+}
+
+/** QA can drain request traces without shutting down a shared in-process app. */
+export function flushTelemetryTraces(): Promise<void> {
+  return traceProcessor?.forceFlush() ?? Promise.resolve();
 }
 
 export function withTelemetrySpan<T>(name: string, work: () => Promise<T>): Promise<T> {

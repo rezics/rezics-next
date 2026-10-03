@@ -29,7 +29,17 @@ The application owns SDK startup and bounded shutdown after requests, jobs and
 pools drain. Traces, metrics and selected structured service events use OTLP
 HTTP protobuf. Console output is not blindly forwarded: use `telemetryLog` with
 public event names and explicitly chosen attributes. Fetch spans measure time
-to response headers and preserve streaming bodies. Only configured internal
+to response headers and preserve streaming bodies. For the configured Fuseki
+origin, the client span stays open until body consumption or cancellation,
+counts decoded body bytes without buffering or teeing, and records headers
+latency separately. It exports a bounded peer service label and only a numeric
+Jena server timer when one is available. A partial or failed stream has
+`rezics.http.body.complete=false`, never a complete zero-byte observation.
+The current Fuseki build has no native timing producer; HTTP latency is not
+engine timing. The application and Collector allowlists retain these fields
+together. The [API profiling method](../testing/complexity.md#api-request-work-profiles)
+describes calibration, collection and the unobserved engine work.
+Only configured internal
 origins receive generated W3C headers; baggage is not propagated. `pg` query
 spans omit SQL text, parameters and results at export. These signals cover HTTP,
 outbound fetch, PostgreSQL and relay/mail jobs, not every business outcome or
