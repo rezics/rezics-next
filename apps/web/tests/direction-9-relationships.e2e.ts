@@ -416,8 +416,18 @@ for (const [localeIndex, locale] of locales.entries())
             page.getByRole('heading', { level: 1, name: space.name, exact: true }),
           ).toBeVisible();
           await hydrated(page, locale);
+          await expect(
+            control,
+            'relationship controls have attached their handlers',
+          ).toHaveAttribute('data-hydrated', 'true');
         }
         const mutations: string[] = [];
+        const mutationIntents: {
+          path: string;
+          target?: string;
+          actingSubject?: string;
+          following?: boolean;
+        }[] = [];
         page.on('request', (request) => {
           const path = new URL(request.url()).pathname;
           if (
@@ -425,8 +435,20 @@ for (const [localeIndex, locale] of locales.entries())
             /^\/api\/main\/v1\/(?:follows$|me\/follows\/batch$|realms\/[^/]+\/join$|access\/membership-changes$)/.test(
               path,
             )
-          )
+          ) {
             mutations.push(path);
+            const body = request.postDataJSON() as {
+              target?: string;
+              actingSubject?: string;
+              following?: boolean;
+            };
+            mutationIntents.push({
+              path,
+              target: body.target,
+              actingSubject: body.actingSubject,
+              following: body.following,
+            });
+          }
         });
         // Reruns may start after a prior failed step. Reset only this target
         // through its public commands; no global fixture or Account cleanup.
@@ -455,17 +477,36 @@ for (const [localeIndex, locale] of locales.entries())
         await checkSidebar(page, locale, view.name === 'phone', space, false, false);
 
         await test.step('Follow without joining', async () => {
+          expect(
+            await selectedSessionAgent(page.request, await page.context().cookies()),
+            'the UI and assertions use the same selected Agent',
+          ).toBe(fixture.actor);
+          const start = mutationIntents.length;
           await control
             .getByRole('button', { name: `${t.options} · ${space.name}`, exact: true })
             .click();
           await page.getByRole('menuitem', { name: t.explicitFollow, exact: true }).click();
-          await expect
-            .poll(() => followState(api, space))
-            .toMatchObject({
-              following: true,
-              source: 'explicit',
-              pinPosition: null,
+          try {
+            await expect
+              .poll(() => followState(api, space))
+              .toMatchObject({ following: true, source: 'explicit', pinPosition: null });
+          } finally {
+            await info.attach('follow-intents', {
+              body: JSON.stringify(mutationIntents.slice(start)),
+              contentType: 'application/json',
             });
+          }
+          expect(
+            mutationIntents.slice(start),
+            'Follow sends the selected Agent and an explicit positive intent once',
+          ).toEqual([
+            {
+              path: '/api/main/v1/follows',
+              target: space.realm,
+              actingSubject: fixture.actor,
+              following: true,
+            },
+          ]);
           // Main retains a person's previous notification choice on refollow.
           // A failed earlier run may have left that choice Off.
           const followed = await followState(api, space);
@@ -650,6 +691,7 @@ for (const [localeIndex, locale] of locales.entries())
           `/${locale}/z/${short(created.zone)}`,
           `/${locale}/z/${uuidToSid(short(created.zone))}`,
           `/${locale}/r/${short(created.zone)}`,
+          `/${locale}/r/${sid}`,
         ]);
         for (const form of forms)
           await test.step(`One permanent redirect: ${form}`, async () => {
@@ -668,14 +710,10 @@ for (const [localeIndex, locale] of locales.entries())
               `${new URL(canonical, page.url()).href}?direction9=preserved#direction9`,
             );
           });
-        // A Space identity under /r asks for a community capability. A Zone-only
-        // Space must not turn this into an apparently valid community address.
+        // A Realm-free /r home is a legacy site alias. Community subroutes still
+        // require a Realm capability and cannot become site pages.
         const communityResponses: { path: string; status: number; location: string | null }[] = [];
-        for (const form of [
-          `/${locale}/r/${sid}`,
-          `/${locale}/r/${sid}/members`,
-          `/${locale}/r/${sid}/rules`,
-        ]) {
+        for (const form of [`/${locale}/r/${sid}/members`, `/${locale}/r/${sid}/rules`]) {
           const read = await page.request.get(form, { maxRedirects: 0 });
           communityResponses.push({
             path: form,
