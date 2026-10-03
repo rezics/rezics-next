@@ -61,6 +61,10 @@ export function EntityPicker<T extends EntityPickerItem>({
   suggestions,
   renderItem,
 }: EntityPickerProps<T>) {
+  const [hydrated, setHydrated] = useState(false);
+  // Server-rendered controls cannot dispatch a remote search or selection yet.
+  // Keep them inert until React has attached the handlers, including on phones.
+  const unavailable = disabled || !hydrated;
   const loadRef = useRef(load);
   loadRef.current = load;
   // Inline loaders change identity on parent renders; keep traversal state for this mount.
@@ -70,6 +74,7 @@ export function EntityPicker<T extends EntityPickerItem>({
   const contextLocale = useLocale().locale;
   const t = entityPickerMessages[locale ?? uiCopyLocale(contextLocale)];
   useEffect(() => {
+    setHydrated(true);
     void source.search('');
     return source.cancel;
   }, [source]);
@@ -90,7 +95,7 @@ export function EntityPicker<T extends EntityPickerItem>({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={disabled}
+                  disabled={unavailable}
                   aria-label={text(
                     selection.mode === 'exclude' ? t.include : t.exclude,
                     selection.item,
@@ -115,7 +120,7 @@ export function EntityPicker<T extends EntityPickerItem>({
                 variant="ghost"
                 size="icon-xs"
                 aria-label={text(t.remove, selection.item)}
-                disabled={disabled}
+                disabled={unavailable}
                 onClick={() =>
                   onValueChange(value.filter((entry) => entry.item.value !== selection.item.value))
                 }
@@ -132,7 +137,7 @@ export function EntityPicker<T extends EntityPickerItem>({
       <Combobox
         collection={collection}
         multiple={multiple}
-        disabled={disabled}
+        disabled={unavailable}
         value={value.map((entry) => entry.item.value)}
         inputBehavior="none"
         selectionBehavior="clear"
