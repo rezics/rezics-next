@@ -39,8 +39,13 @@ export const ChooseDisplay: Story = {
     const canvas = within(canvasElement);
     await chooseOption(canvas.getByRole('combobox', { name: 'Display mode' }), 'dark');
     await expect(savedDisplay).toHaveBeenCalledWith({ revision: 0, displayMode: 'dark', showZoneThemes: true });
-    await chooseOption(canvas.getByRole('combobox', { name: 'Show Zone themes' }), 'no');
+    await waitFor(() => expect(canvas.getByRole('combobox', { name: 'Display mode' })).toHaveTextContent('Dark'));
+    const themes = canvas.getByRole('combobox', { name: 'Show Zone themes' });
+    await waitFor(() => expect(themes).toBeEnabled());
+    await chooseOption(themes, 'no');
     await expect(savedDisplay).toHaveBeenCalledWith({ revision: 1, displayMode: 'dark', showZoneThemes: false });
+    await waitFor(() => expect(themes).toHaveTextContent('Hide'));
+    await waitFor(() => expect(themes).toBeEnabled());
   },
 };
 
