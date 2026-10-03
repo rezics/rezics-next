@@ -14,10 +14,10 @@ import { shortId } from '../fixtures/author-credit.ts';
 import { startMediaStack } from './media-support.ts';
 import { startHomeStack } from './feed-read-support.ts';
 
-import { checked, publishedWiki } from './g-929-wiki-support.ts';
+import { checked, publishedWiki, wikiSuitability } from './g-929-wiki-support.ts';
 
 // Owner: wiki history/export (G-693), shared disclosure (G-897).
-test('G922-H1: wiki history with position=all withholds an r18 Work from an unknown-age reader', async () => {
+test('G922-H1: wiki history keeps r18 presentation separate from current Access denial', async () => {
   const wiki = await publishedWiki();
   try {
     const { call, work, reader, holder } = wiki;
@@ -41,12 +41,66 @@ test('G922-H1: wiki history with position=all withholds an r18 Work from an unkn
       undefined,
       reader.token,
     );
-    expect(direct.status).toBe(404);
+    // Maintainer revision 2026-10-02: interactive ratings classify presentation;
+    // the server returns Access-authorized content and the live assessment.
+    expect(direct.status).toBe(200);
+    const shown = await checked<{ claims: unknown[] }>(
+      await call('GET', history, undefined, reader.token),
+    );
+    expect(shown.claims).toHaveLength(1);
+    expect(JSON.stringify(shown)).toContain('Royal identity');
+    expect(JSON.stringify(shown)).toContain('Secret royal heir');
+    const presentation = await wikiSuitability(wiki);
+    expect(presentation.viewer.age).toBe('unknown');
+    expect(presentation.items[0]?.target.resource).toBe(work.work);
+    expect(presentation.items[0]?.assessment).toMatchObject({
+      status: 'assessed',
+      labels: ['r18'],
+    });
+    expect(presentation.items[0]?.eligible).toBe(false);
+    expect(presentation.items[0]?.reasons).toContain('age_unknown');
+    expect(presentation.items[0]?.reasons).toContain('sexual_opt_in_required');
+    await wiki.f.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1', [
+      `work:read:${work.work}`,
+    ]);
+    expect(
+      (
+        await call(
+          'GET',
+          `/v1/resources/${shortId(work.work)}?position=all&actingSubject=${encodeURIComponent(reader.actor)}`,
+          undefined,
+          reader.token,
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await call('GET', `/v1/resources/${shortId(work.work)}?position=all`, undefined, null))
+        .status,
+    ).toBe(404);
+    expect(
+      (await call('GET', `/v1/public-previews/${shortId(work.work)}`, undefined, null)).status,
+    ).toBe(404);
+    const summaries = await checked<{ summaries: { reference: string; status: string }[] }>(
+      await call(
+        'POST',
+        '/v1/resources/summaries',
+        {
+          profile: 'resource-summary-batch-v1',
+          resources: [work.work, work.mainVersion],
+          actingSubject: reader.actor,
+          position: 'all',
+        },
+        reader.token,
+      ),
+    );
+    expect(summaries.summaries).toEqual(
+      [work.work, work.mainVersion].map((reference) => ({ reference, status: 'unavailable' })),
+    );
     const response = await call('GET', history, undefined, reader.token);
     const body = await response.text();
     expect(
       body,
-      'Owner wiki history/export must use the shared suitability and enforcement boundary',
+      'A category choice or retained history selection cannot bypass current Access',
     ).not.toContain('Royal identity');
     expect(body).not.toContain('Secret royal heir');
     expect(response.status).toBe(404);
@@ -125,36 +179,38 @@ test('G922-H2: two source reviewers cannot merge a public Work into a private su
     // G-930 may refuse the merge as early as its proposal; any refusal before a
     // redirect is the defended outcome, which the final assertion checks.
     const created = await call(
-        '/v1/editorial/proposals',
-        {
-          profile: 'editorial-proposal-create-v1',
-          kind: 'merge',
-          target: {
-            resource: source.work,
-            revision: revision(source.work),
-            context: 'urn:rezics:context:global',
-          },
-          candidate,
-          baseHeads: heads.map((row) => ({ component: row.work!.value, head: row.head!.value })),
-          evidence: candidate.evidence,
-          actingSubject: proposer.actor,
+      '/v1/editorial/proposals',
+      {
+        profile: 'editorial-proposal-create-v1',
+        kind: 'merge',
+        target: {
+          resource: source.work,
+          revision: revision(source.work),
+          context: 'urn:rezics:context:global',
         },
-        proposer.token,
-      );
-    const proposal = created.status === 201 ? await checked<{ proposal: string }>(created, 201) : null;
-    if (proposal) await checked(
-      await call(
-        `/v1/editorial/proposals/${proposal.proposal}/reviews`,
-        {
-          profile: 'editorial-proposal-review-v1',
-          revision: 1,
-          outcome: 'approve',
-          message: 'Source review',
-          actingSubject: first.actor,
-        },
-        first.token,
-      ),
+        candidate,
+        baseHeads: heads.map((row) => ({ component: row.work!.value, head: row.head!.value })),
+        evidence: candidate.evidence,
+        actingSubject: proposer.actor,
+      },
+      proposer.token,
     );
+    const proposal =
+      created.status === 201 ? await checked<{ proposal: string }>(created, 201) : null;
+    if (proposal)
+      await checked(
+        await call(
+          `/v1/editorial/proposals/${proposal.proposal}/reviews`,
+          {
+            profile: 'editorial-proposal-review-v1',
+            revision: 1,
+            outcome: 'approve',
+            message: 'Source review',
+            actingSubject: first.actor,
+          },
+          first.token,
+        ),
+      );
     const key = randomUUID();
     for (let attempt = 0; proposal && attempt < 16; attempt++) {
       const response = await call(
