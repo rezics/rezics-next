@@ -901,7 +901,7 @@ for (const locale of locales)
           `/${locale}/discover?tab=communities&q=${encodeURIComponent(fixture.unlisted.name)}`,
         );
         await expect(
-          page.getByRole('main').getByRole('searchbox', { name: t.search, exact: true }),
+          page.getByRole('banner').getByRole('searchbox', { name: t.search, exact: true }),
         ).toHaveValue(fixture.unlisted.name);
         await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
         await expect(discoverResource(page, fixture.unlisted.name)).toHaveCount(0);
