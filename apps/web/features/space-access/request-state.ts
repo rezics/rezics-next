@@ -67,12 +67,35 @@ export async function readOwnRequest(api: Pick<SpaceAccessApi, 'mine'>): Promise
   return { ok: false, failure: 'stale' };
 }
 
-export function journalAfterStatus(saved: RequestJournal, current: OwnJoinRequest | null): RequestJournal {
+/** Acceptance is request history; Main's current basis says whether membership
+ * still exists. A former member can request admission again without deleting
+ * the earlier decision. A failed basis read never becomes an available action. */
+export interface CurrentRequest {
+  entry: OwnJoinRequest | null;
+  state: OwnJoinRequest['state'] | 'available';
+}
+export async function readCurrentRequest(
+  api: Pick<SpaceAccessApi, 'mine' | 'basis'>,
+): Promise<Outcome<CurrentRequest>> {
+  const request = await readOwnRequest(api);
+  if (!request.ok) return request;
+  const entry = request.data;
+  if (entry?.state !== 'accepted') return { ok: true, data: { entry, state: entry?.state ?? 'available' } };
+  const basis = await api.basis();
+  if (!basis.ok) return basis;
+  return { ok: true, data: { entry, state: basis.data.state === 'joined' ? 'accepted' : 'available' } };
+}
+
+/** Completed history resolves its matching retry, while an inactive decision
+ * cannot erase a later rejoining draft or uncertain command. */
+export function journalAfterStatus(saved: RequestJournal, current: OwnJoinRequest | null, active = true): RequestJournal {
   const command = saved.requestIntent?.command;
-  const resolved = current && (current.state === 'pending' || current.state === 'accepted' || command
+  const matching = current && command
     && current.reason === command.reason && current.membershipGeneration === command.expectedMembershipGeneration
-    && current.policyRevision === command.expectedPolicyRevision && current.termsRevision === command.termsRevision);
-  return { draftReason: current?.state === 'pending' || current?.state === 'accepted' ? '' : saved.draftReason,
+    && current.policyRevision === command.expectedPolicyRevision && current.termsRevision === command.termsRevision;
+  const resolved = current && (current.state === 'pending' || active && current.state === 'accepted' || matching);
+  return { draftReason: current?.state === 'pending' || current?.state === 'accepted'
+      && (active || matching && saved.draftReason === command?.reason) ? '' : saved.draftReason,
     requestIntent: resolved ? null : saved.requestIntent,
     withdrawIntent: current?.state === 'pending' && saved.withdrawIntent?.request === current.id
       && saved.withdrawIntent.command.expectedRequestGeneration === current.requestGeneration ? saved.withdrawIntent : null };

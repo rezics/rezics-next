@@ -12,6 +12,9 @@ const meta = { title: 'Space access/Join', component: PrivateSpaceJoinPage,
 } satisfies Meta<typeof PrivateSpaceJoinPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+const acceptedApi = () => accessFixtureApi({ basis: async () => ({ ok: true, data: {
+  policyRevision: '12', termsRevision: 'rules-3', membershipGeneration: '5', state: 'joined',
+} }) }, ownRequestFixture('accepted'));
 export const English: Story = { async play() { await captureAccessStory('join'); } };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' }, globals: { locale: 'zh-Hant' } };
 export const SimplifiedChinese: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans' } };
@@ -42,6 +45,37 @@ export const SignedOut: Story = { args: { actingSubject: null, signInHref: signI
   await expect(canvas.queryByText(accessMessages.en.statusLoading)).not.toBeInTheDocument();
   await captureAccessStory('g-988-join-signed-out-en');
 } };
+export const RequestAgainAfterLeaving: Story = {
+  args: { api: accessFixtureApi({}, ownRequestFixture('accepted')) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByRole('textbox', { name: accessMessages.en.joinReason }), 'I would like to return.');
+    await expect(canvas.queryByText(accessMessages.en.approved)).not.toBeInTheDocument();
+    await captureAccessStory('g-989-request-again-ready');
+    await userEvent.click(canvas.getByRole('button', { name: accessMessages.en.requestJoin }));
+    await expect(await canvas.findByText(accessMessages.en.pending)).toBeVisible();
+    await captureAccessStory('g-989-request-again');
+  },
+};
+export const AcceptedMembershipStillActive: Story = {
+  args: { api: acceptedApi() },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(accessMessages.en.approved)).toBeVisible();
+    await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('button', { name: accessMessages.en.requestJoin })).not.toBeInTheDocument();
+  },
+};
+export const AcceptedMembershipUnavailable: Story = {
+  args: { api: accessFixtureApi({ basis: async () => ({ ok: false, failure: 'unavailable' }) }, ownRequestFixture('accepted')) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('alert')).toHaveTextContent(accessMessages.en.failed);
+    await expect(canvas.queryByText(accessMessages.en.approved)).not.toBeInTheDocument();
+    await expect(canvas.queryByRole('textbox')).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: accessMessages.en.refreshStatus })).toBeEnabled();
+  },
+};
 export const LostResponseRetry: Story = {
   args: { api: (() => {
     let calls = 0;
@@ -97,12 +131,12 @@ export const WithdrawalStale: Story = {
 export const PendingEnglish: Story = { args: { locale: 'en', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'en' } };
 export const DeclinedEnglish: Story = { args: { locale: 'en', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'en' } };
 export const WithdrawnEnglish: Story = { args: { locale: 'en', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'en' } };
-export const AcceptedEnglish: Story = { args: { locale: 'en', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'en' } };
+export const AcceptedEnglish: Story = { args: { locale: 'en', api: acceptedApi() }, globals: { locale: 'en' } };
 export const SignedOutEnglish: Story = { args: { locale: 'en', actingSubject: null }, globals: { locale: 'en' } };
 export const PendingTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'zh-Hant' } };
 export const DeclinedTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'zh-Hant' } };
 export const WithdrawnTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'zh-Hant' } };
-export const AcceptedTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'zh-Hant' } };
+export const AcceptedTraditionalChinese: Story = { args: { locale: 'zh-Hant', api: acceptedApi() }, globals: { locale: 'zh-Hant' } };
 export const SignedOutTraditionalChinese: Story = { args: { locale: 'zh-Hant', actingSubject: null,
   signInHref: signInPath('/zh-Hant/r/private-books') }, globals: { locale: 'zh-Hant' },
   async play({ canvasElement }) {
@@ -115,32 +149,32 @@ export const SignedOutTraditionalChinese: Story = { args: { locale: 'zh-Hant', a
 export const PendingSimplifiedChinese: Story = { args: { locale: 'zh-Hans', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'zh-Hans' } };
 export const DeclinedSimplifiedChinese: Story = { args: { locale: 'zh-Hans', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'zh-Hans' } };
 export const WithdrawnSimplifiedChinese: Story = { args: { locale: 'zh-Hans', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'zh-Hans' } };
-export const AcceptedSimplifiedChinese: Story = { args: { locale: 'zh-Hans', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'zh-Hans' } };
+export const AcceptedSimplifiedChinese: Story = { args: { locale: 'zh-Hans', api: acceptedApi() }, globals: { locale: 'zh-Hans' } };
 export const SignedOutSimplifiedChinese: Story = { args: { locale: 'zh-Hans', actingSubject: null }, globals: { locale: 'zh-Hans' } };
 export const PendingJapanese: Story = { args: { locale: 'ja', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'ja' } };
 export const DeclinedJapanese: Story = { args: { locale: 'ja', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'ja' } };
 export const WithdrawnJapanese: Story = { args: { locale: 'ja', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'ja' } };
-export const AcceptedJapanese: Story = { args: { locale: 'ja', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'ja' } };
+export const AcceptedJapanese: Story = { args: { locale: 'ja', api: acceptedApi() }, globals: { locale: 'ja' } };
 export const SignedOutJapanese: Story = { args: { locale: 'ja', actingSubject: null }, globals: { locale: 'ja' } };
 export const PendingKorean: Story = { args: { locale: 'ko', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'ko' } };
 export const DeclinedKorean: Story = { args: { locale: 'ko', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'ko' } };
 export const WithdrawnKorean: Story = { args: { locale: 'ko', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'ko' } };
-export const AcceptedKorean: Story = { args: { locale: 'ko', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'ko' } };
+export const AcceptedKorean: Story = { args: { locale: 'ko', api: acceptedApi() }, globals: { locale: 'ko' } };
 export const SignedOutKorean: Story = { args: { locale: 'ko', actingSubject: null }, globals: { locale: 'ko' } };
 export const PendingGerman: Story = { args: { locale: 'de', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'de' } };
 export const DeclinedGerman: Story = { args: { locale: 'de', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'de' } };
 export const WithdrawnGerman: Story = { args: { locale: 'de', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'de' } };
-export const AcceptedGerman: Story = { args: { locale: 'de', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'de' } };
+export const AcceptedGerman: Story = { args: { locale: 'de', api: acceptedApi() }, globals: { locale: 'de' } };
 export const SignedOutGerman: Story = { args: { locale: 'de', actingSubject: null }, globals: { locale: 'de' } };
 export const PendingFrench: Story = { args: { locale: 'fr', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'fr' } };
 export const DeclinedFrench: Story = { args: { locale: 'fr', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'fr' } };
 export const WithdrawnFrench: Story = { args: { locale: 'fr', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'fr' } };
-export const AcceptedFrench: Story = { args: { locale: 'fr', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'fr' } };
+export const AcceptedFrench: Story = { args: { locale: 'fr', api: acceptedApi() }, globals: { locale: 'fr' } };
 export const SignedOutFrench: Story = { args: { locale: 'fr', actingSubject: null }, globals: { locale: 'fr' } };
 export const PendingSpanish: Story = { args: { locale: 'es', api: accessFixtureApi({}, ownRequestFixture('pending')) }, globals: { locale: 'es' } };
 export const DeclinedSpanish: Story = { args: { locale: 'es', api: accessFixtureApi({}, ownRequestFixture('declined')) }, globals: { locale: 'es' } };
 export const WithdrawnSpanish: Story = { args: { locale: 'es', api: accessFixtureApi({}, ownRequestFixture('withdrawn')) }, globals: { locale: 'es' } };
-export const AcceptedSpanish: Story = { args: { locale: 'es', api: accessFixtureApi({}, ownRequestFixture('accepted')) }, globals: { locale: 'es' } };
+export const AcceptedSpanish: Story = { args: { locale: 'es', api: acceptedApi() }, globals: { locale: 'es' } };
 export const SignedOutSpanish: Story = { args: { locale: 'es', actingSubject: null }, globals: { locale: 'es' } };
 
 /** Browser journeys intercept the real BFF client; no separate route is mounted. */
