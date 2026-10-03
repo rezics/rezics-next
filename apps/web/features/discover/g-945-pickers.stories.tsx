@@ -1,7 +1,7 @@
 import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, screen, userEvent, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { EntityPickerSelection } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
 import { Providers } from '../shell/providers.tsx';
@@ -125,17 +125,33 @@ type Story = StoryObj<typeof meta>;
 export const Thousands: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('combobox', { name: 'Topics' }));
-    await expect(await screen.findByRole('option', { name: /宇宙/ })).toBeVisible();
-    await userEvent.click(screen.getByRole('option', { name: /宇宙/ }));
+    const topics = canvas.getByRole('combobox', { name: 'Topics' });
+    await waitFor(() => expect(topics).toBeEnabled());
+    await userEvent.click(topics);
+    const topicList = await screen.findByRole('listbox', { name: 'Topics' });
+    await waitFor(() =>
+      expect(within(topicList).getByRole('option', { name: /宇宙/ })).toBeVisible(),
+    );
+    await userEvent.click(within(topicList).getByRole('option', { name: /宇宙/ }));
     await expect(canvas.getByRole('button', { name: /Exclude 宇宙/ })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: /Exclude 宇宙/ }));
     await expect(canvas.getByRole('button', { name: /Include 宇宙/ })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Other communities…' }));
-    const picker = screen.getByRole('combobox', { name: 'Find a community' });
+    const picker = await screen.findByRole('combobox', { name: 'Find a community' });
+    // The sheet mounts before its initial focus and the remote picker are ready.
+    await waitFor(async () => {
+      await expect(picker).toBeEnabled();
+      await expect(picker).toHaveFocus();
+    });
     await userEvent.click(picker);
-    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }));
-    await expect(await screen.findByRole('option', { name: 'Community 40' })).toBeVisible();
+    const communityList = await screen.findByRole('listbox', { name: 'Find a community' });
+    await waitFor(() => expect(communityList).toBeVisible());
+    const more = await screen.findByRole('button', { name: 'Show more' });
+    await waitFor(() => expect(more).toBeEnabled());
+    await userEvent.click(more);
+    await waitFor(() =>
+      expect(within(communityList).getByRole('option', { name: 'Community 40' })).toBeVisible(),
+    );
   },
 };
 export const SearchWikiPosition: Story = {
@@ -143,14 +159,29 @@ export const SearchWikiPosition: Story = {
     const bar = within(within(canvasElement).getByRole('region', { name: 'Reading position' }));
     await userEvent.click(bar.getByRole('button', { name: 'Showing everything' }));
     const search = await screen.findByRole('combobox', { name: browseMessages.en.searchChapters });
+    await waitFor(async () => {
+      await expect(search).toBeEnabled();
+      await expect(search).toHaveFocus();
+    });
     await userEvent.click(search);
-    await userEvent.click(await screen.findByRole('button', { name: 'Show more' }));
-    await expect(await screen.findByRole('option', { name: 'Chapter 40' })).toBeVisible();
+    const listbox = await screen.findByRole('listbox', { name: browseMessages.en.searchChapters });
+    await waitFor(async () => {
+      await expect(search).toHaveAttribute('aria-expanded', 'true');
+      await expect(listbox).toBeVisible();
+    });
+    const more = await screen.findByRole('button', { name: 'Show more' });
+    await waitFor(() => expect(more).toBeEnabled());
+    await userEvent.click(more);
+    await waitFor(() =>
+      expect(within(listbox).getByRole('option', { name: 'Chapter 40' })).toBeVisible(),
+    );
     await userEvent.clear(search);
     await userEvent.type(search, 'Chapter 2400');
-    await expect(await screen.findByRole('option', { name: 'Chapter 2400' })).toBeVisible();
-    await expect(screen.queryByRole('option', { name: 'Chapter 40' })).toBeNull();
-    await expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+    await waitFor(async () => {
+      await expect(within(listbox).getByRole('option', { name: 'Chapter 2400' })).toBeVisible();
+      await expect(within(listbox).queryByRole('option', { name: 'Chapter 40' })).toBeNull();
+      await expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+    });
   },
 };
 export const TraditionalChinese: Story = { args: { locale: 'zh-Hant' } };

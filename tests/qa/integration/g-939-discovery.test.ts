@@ -154,6 +154,10 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
         (await stack.catalogueWork(authorAgent, `${token} topic distractor ${i}`)).work,
       );
     rankedIds = [...distractors, publicWork.work, privateWork.work];
+    // Shared shards retain earlier catalogues. Preparation must traverse more
+    // than 30 candidates even when this file runs alone.
+    for (let i = 0; i < 32; i++)
+      await stack.catalogueWork(authorAgent, `G-993 background ${randomUUID()}`);
     await author.grant('space:create:root', 'space.create');
     const community = await home.json<{ realm: string; space: string }>(
       await call(
@@ -347,7 +351,10 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
           author.token,
         ),
       );
-      for (let step = 0; !row.complete && step < 30; step++)
+      // Discovery builds resume over the whole pinned population, not a fixed
+      // number of steps. Keep the preparation and harness wall-time budgets.
+      while (!row.complete) {
+        const checkpoint = row.checkpoint;
         row = await home.json(
           await call(
             `/v1/discovery/generations/${row.generation}/advance`,
@@ -355,6 +362,8 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
             author.token,
           ),
         );
+        expect(row.complete || row.checkpoint !== checkpoint).toBe(true);
+      }
       expect(row.complete).toBe(true);
       const head = await home.json<{ activeHeadRevision: string | null }>(
         await call(
@@ -462,7 +471,7 @@ test('G939: unified reads traverse large multilingual vocabulary, every owner, d
       [`${RV}Collection`, collection],
       ['https://schema.org/CreativeWork', publicWork.work],
     ] as const) {
-      const page = await query(type, undefined, 64);
+      const page = await query(type, undefined, 64, token);
       expect(page.items.map((item) => item.id)).toContain(expected);
       expect(page.items.map((item) => item.id)).not.toContain(privateWork.work);
       expect(page.items.map((item) => item.id)).not.toContain(hiddenCommunity.realm);

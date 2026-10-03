@@ -343,7 +343,18 @@ export async function loopStack(label: string, attach?: Roles) {
       201,
     );
   const inbox = async (who: Member, query = '') => {
-    await producer.runEditorialOnce();
+    // A shard retains earlier journeys' events. One production tick is a
+    // bounded page, so deliver through the writes captured before this read.
+    const through = (await f.accessPool.query<{ position: string }>(
+      'SELECT coalesce(max(sequence),0)::text AS position FROM access.editorial_event',
+    )).rows[0]!.position;
+    for (;;) {
+      const cursor = (await f.accessPool.query<{ position: string }>(
+        "SELECT position::text FROM access.notification_producer_cursor WHERE consumer = 'editorial-notification-v1'",
+      )).rows[0];
+      if (cursor && BigInt(cursor.position) >= BigInt(through)) break;
+      if (!await producer.runEditorialOnce()) throw new Error('Editorial notification delivery did not advance');
+    }
     return json<StreamPage>(
       await call('GET', `/v1/me/notifications${query}`, undefined, who.token),
     );

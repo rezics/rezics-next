@@ -14,11 +14,12 @@ import { NotificationProducer } from '../../../services/main/src/modules/notific
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { WatchStore } from '../../../services/main/src/modules/notification/watch.ts';
 import { RealmJoinRequests } from '../../../services/main/src/modules/realm-admin/join-requests.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 type Page = { items: Array<{ id: string; available: boolean; name: { value: string } | null; source: string }>;
   nextCursor: string | null; complete: boolean };
 test('G-938 Join races an explicit follow, private members keep notifications, and legacy collisions preserve Space settings', async () => {
-  const home = await startHomeStack('g-938-review-races');
+  const home = await startHomeStack('g-938-review-races', { projectionStart: 'current' });
   try {
     const { stack,call,json } = home;
     const owner = await home.provision('Review Space owner',home.author.token);
@@ -77,11 +78,23 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
     const bad = `https://rezics.com/id/${randomUUID()}`;
     await stack.accessPool.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision)
       VALUES($1,$2,'realm',$3,true,gen_random_uuid())`,[home.reader.principalId,bad,reader]);
+    let deferred = 0;
     const graph = { query: (sql: string, bound?: number) => {
-      if (sql.includes(bad)) throw new Error('one unavailable Space row');
+      if (sql.includes(bad)) { deferred++; throw new Error('one unavailable Space row'); }
       return stack.fuseki.query(sql,bound);
     } } as Pick<FusekiClient,'query'>;
-    await recoverSpaceFollows(stack.accessPool,graph);
+    const priorCursor = (await stack.accessPool.query<{ space_after_principal: string | null; space_after_target: string }>(
+      'SELECT space_after_principal,space_after_target FROM access.relationship_recovery_cursor WHERE id')).rows[0]!;
+    try {
+      // Recovery is paged; the fault row must belong to this tick's page.
+      await stack.accessPool.query("UPDATE access.relationship_recovery_cursor SET space_after_principal=$1,space_after_target='' WHERE id",
+        [home.reader.principalId]);
+      await recoverSpaceFollows(stack.accessPool,graph);
+      expect(deferred).toBe(1);
+    } finally {
+      await stack.accessPool.query('UPDATE access.relationship_recovery_cursor SET space_after_principal=$1,space_after_target=$2 WHERE id',
+        [priorCursor.space_after_principal,priorCursor.space_after_target]);
+    }
     configureFollowGraph(stack.accessPool,stack.fuseki);
     expect(await home.deps.follows.state(space.space,{ principal,agent: reader })).toMatchObject({ following: true,level: 'all',source: 'join',pinPosition: 2 });
     expect((await stack.accessPool.query("SELECT target FROM access.follow WHERE principal_id=$1 AND kind IN ('realm','zone')",[home.reader.principalId])).rows).toEqual([{ target: bad }]);
@@ -130,8 +143,12 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
     const membershipUrl = `/v1/me/memberships?actingSubject=${encodeURIComponent(reader)}&order=pinned&limit=1`;
     const first = await json<{ items: unknown[]; nextCursor: string }>(await call('GET',membershipUrl,undefined,home.reader.token));
     expect(first.items).toHaveLength(1);
-    await stack.publicWork(owner,['en'],'Feed activity between membership pages');
+    const activity = await stack.publicWork(owner,['en'],'Feed activity between membership pages');
     await home.project();
+    const selection = (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?selection WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(activity.mainVersion)} rv:selectionHead ?selection } }`)).results!.bindings[0]!.selection!.value;
+    expect((await stack.accessPool.query('SELECT id FROM access.feed_item WHERE data_epoch=$1 AND id=$2',
+      [stack.env.lineage.dataEpoch,selection])).rows).toEqual([{ id: selection }]);
     expect((await json<{ items: unknown[] }>(await call('GET',`${membershipUrl}&cursor=${encodeURIComponent(first.nextCursor)}`,undefined,home.reader.token))).items).toHaveLength(1);
   } finally { await home.stop(); }
 },180_000);
@@ -197,17 +214,26 @@ test('G-938 recovery expires automatic thread Watches and retains manual choices
 
 test('G-938 row failures do not stall library recovery and committed library writes survive projection failure', async () => {
   const home = await startHomeStack('g-938-review-library');
+  const priorCursor = (await home.stack.accessPool.query<{ library_agent: string; library_work: string }>(
+    'SELECT library_agent,library_work FROM access.relationship_recovery_cursor WHERE id')).rows[0]!;
   try {
     const { stack } = home;
     const actor = await home.provision('Recovery reader',home.reader.token);
     const author = await home.provision('Recovery author',home.author.token);
     const works = await Promise.all([stack.publicWork(author,['en'],'Bad recovery row'),stack.publicWork(author,['en'],'Good recovery row')]);
     await stack.contentPool.query(`INSERT INTO reader.library_status(agent,work,status,version) VALUES($1,$2,'reading',1),($1,$3,'reading',1)`,[actor,works[0]!.work,works[1]!.work]);
+    let deferred = 0;
     const faulty = { query: async (sql: string,params: unknown[]) => {
-      if (sql.startsWith('SELECT version::text') && params[1]===works[0]!.work) throw new Error('one unavailable row');
+      if (sql.startsWith('SELECT version::text') && params[1]===works[0]!.work) { deferred++; throw new Error('one unavailable row'); }
       return stack.contentPool.query(sql,params);
     } } as unknown as Pool;
-    await recoverLibraryFollows(faulty,stack.accessPool);
+    const recoverOwnRows = async (content: Pool) => {
+      // A tick reads 32 rows, so give this fixture's rows a known starting cut.
+      await stack.accessPool.query("UPDATE access.relationship_recovery_cursor SET library_agent=$1,library_work='' WHERE id",[actor]);
+      return recoverLibraryFollows(content,stack.accessPool);
+    };
+    await recoverOwnRows(faulty);
+    expect(deferred).toBe(1);
     expect(await home.deps.follows.state(works[1]!.work,{ principal: { ...home.reader.principal,emailVerified: true },agent: actor }))
       .toMatchObject({ following: true,source: 'library' });
     const cursor = (await stack.accessPool.query<{ library_work: string }>('SELECT library_work FROM access.relationship_recovery_cursor WHERE id')).rows[0]!;
@@ -223,12 +249,15 @@ test('G-938 row failures do not stall library recovery and committed library wri
     await stack.accessPool.query(`DELETE FROM access.follow WHERE (principal_id,target) IN
       (SELECT principal_id,target FROM access.follow WHERE principal_id=$1 AND target<>ALL($2::text[]) LIMIT 1)`,
       [home.reader.principalId,works.map(work => work.work)]);
-    await recoverLibraryFollows(stack.contentPool,stack.accessPool);
-    await recoverLibraryFollows(stack.contentPool,stack.accessPool);
+    await recoverOwnRows(stack.contentPool);
     expect(await home.deps.follows.state(works[0]!.work,{ principal: { ...home.reader.principal,emailVerified: true },agent: actor }))
       .toMatchObject({ following: true,source: 'library' });
     configureLibraryFollows(stack.contentPool,{ connect: async () => { throw new Error('Access temporarily unavailable'); } } as unknown as Pool);
     expect(await home.deps.libraryStatus.write({ agent: actor,work: works[0]!.work,status: 'reading',expectedVersion: 2,idempotencyKey: randomUUID() }))
       .toMatchObject({ status: 'reading',version: 3 });
-  } finally { await home.stop(); }
+  } finally {
+    await home.stack.accessPool.query('UPDATE access.relationship_recovery_cursor SET library_agent=$1,library_work=$2 WHERE id',
+      [priorCursor.library_agent,priorCursor.library_work]);
+    await home.stop();
+  }
 },180_000);

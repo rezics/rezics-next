@@ -395,16 +395,21 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
           () => work.media!.store.avatarDelivery(params.selection));
         if (!basis || !avatarImageEligible(basis)) return unavailable();
-        if (basis.context === DEFAULT_MEDIA_CONTEXT) {
-          const agents = (await fuseki.query(`PREFIX rv: <${RV}>
-            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-            SELECT ?avatar WHERE { ${publicAgent(iri(basis.target))}
+        const agents = (await fuseki.query(`PREFIX rv: <${RV}>
+          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+          SELECT ?avatar WHERE {
+            GRAPH ${iri(GRAPHS.current)} { ${iri(basis.target)} a rv:Agent }
+            OPTIONAL { ${publicAgent(iri(basis.target))}
               GRAPH ${iri(GRAPHS.current)} { ${iri(basis.target)} rv:profileAvatarSelection ?avatar }
-              FILTER(?avatar = ${lit(params.selection)}) } LIMIT 2`, 8192)).results?.bindings ?? [];
-          if (agents.length === 1 && agents[0]?.avatar?.value === params.selection) {
-            return await deliver(work.media, { objectNamespace: basis.objectNamespace,
-              sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
-          }
+              FILTER(?avatar = ${lit(params.selection)}) }
+          } LIMIT 2`, 8192)).results?.bindings ?? [];
+        if (agents.length) {
+          // An Agent's profile owns its avatar. A cleared or hidden profile
+          // cannot regain delivery through the generic resource-summary path.
+          if (basis.context !== DEFAULT_MEDIA_CONTEXT || agents.length !== 1
+            || agents[0]?.avatar?.value !== params.selection) return unavailable();
+          return await deliver(work.media, { objectNamespace: basis.objectNamespace,
+            sha256: basis.sha256!, mediaType: basis.mediaType! }, true);
         }
         if (publicOnly) throw new MediaInvalid('actingSubject is required for an authenticated read');
         const target = (await readResourceSummaries(work.environment, undefined,

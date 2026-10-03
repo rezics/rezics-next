@@ -147,15 +147,17 @@ export async function resolveCommandTarget(session: TargetReadSession, resource:
         rv:Realization rv:Release schema:ListItem } } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } }`,
   } satisfies Record<Base, string>;
+  // Only revision-bearing grains can be checked for erasure. MainVersion has
+  // no capability revision; an unrelated erased revision cannot hide its grain.
   const branches = capabilityBases.suitability.map(base => `{
     { ${revisionPatterns[base]} } ${ownership[base]} BIND("${base}" AS ?base)
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
   }`);
   const rows = await session.query(`SELECT ?epoch ?sequence ?r ?base ?work ?revision ?type WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
     OPTIONAL { VALUES ?r { ${iri(resource)} }
       { ${branches.join(' UNION ')}
         UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:MainVersion } BIND("main-version" AS ?base) } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
       OPTIONAL { { GRAPH ${iri(GRAPHS.current)} { ?r a ?type } }
         UNION { GRAPH ${iri(GRAPHS.revisions)} { ?r a rv:FixedRelease } BIND(rv:FixedRelease AS ?type) } }
     }
