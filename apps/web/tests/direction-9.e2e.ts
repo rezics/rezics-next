@@ -468,11 +468,6 @@ for (const locale of locales)
         await screenshot(page, info, 'legacy-zone-identity');
       });
 
-      test.fixme('addresses: a standalone Zone has canonical site forms', async () => {
-        // /v1/zones and zone/owner-create.ts require a live Realm capability.
-        // Remove this fixme when public Space creation admits a Zone without a Realm.
-      });
-
       test('account menu: second-level Language and Appearance show their current values', async ({
         page,
       }, info) => {
@@ -578,12 +573,6 @@ for (const locale of locales)
           await reset.getByText(shell.themeSystem, { exact: true }).click();
           await expect(reset.getByRole('radio', { name: shell.themeSystem, exact: true })).toBeChecked();
         } else await reset.getByRole('menuitemradio', { name: shell.themeSystem, exact: true }).click();
-      });
-
-      test.fixme('relationships: follow → bell → pin → one-command join → leave → unfollow; sidebar updates without duplicate Spaces', async () => {
-        // RealmMembership still uses separate join and follow commands; no Space
-        // bell/pin control or Following manager is mounted on this branch.
-        // Keep this entire journey pending instead of passing its old follow-only flow.
       });
 
       test('Discover: type tabs, topic picker chips and Communities continuation', async ({

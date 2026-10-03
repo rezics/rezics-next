@@ -360,7 +360,7 @@ describe('dev seed plan', () => {
   });
 
   test('accepts only the documented CLI switches', () => {
-    expect(parseOptions([])).toEqual({ dryRun: false, resetOwn: false, themesOnly: false, zonesOnly: false });
+    expect(parseOptions([])).toEqual({ dryRun: false, resetOwn: false, themesOnly: false, zonesOnly: false, wikiOnly: false });
     expect(parseOptions(['--dry-run', '--reset-own'])).toMatchObject({ dryRun: true, resetOwn: true });
     expect(parseOptions(['--zones-only'])).toMatchObject({ zonesOnly: true, themesOnly: false });
     expect(() => parseOptions(['--remove-all'])).toThrow('Usage:');
@@ -375,7 +375,7 @@ describe('dev seed plan', () => {
       'seedAccounts', 'seedClassics', 'seedWorks', 'seedFranchises', 'seedVnCatalogue', 'seedLnVnZones', 'seedReleases', 'seedContributions', 'seedRealms', 'seedAdoptions',
       'seedLibrary', 'seedChapters', 'seedModeration', 'seedHomeFeed',
       'seedProfileCredits', 'seedProfileBios', 'seedProfileFollows', 'seedOfficialZones', 'seedRecipes', 'seedZoneSites', 'seedBookConcepts',
-      'seedOfficialThemes',
+      'seedOfficialThemes', 'seedOfficialWiki',
       // Shelves, ratings and votes wait for readable classics and community Realms (G-385).
       'seedProfileShelves', 'seedCommunityRealms', 'seedCommunityDiscussions', 'seedReadingLives',
       'seedRatings', 'seedReviews', 'seedCommunityVotes', 'seedCoReaders',
