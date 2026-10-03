@@ -42,7 +42,8 @@ export async function primaryDiscoveryCredits(session: WorkReadSession, work: st
 
 /** At most 60 projected Agent mentions per page and one graph name read. */
 export async function namedDiscoveryCredits(session: WorkReadSession,
-  credits: readonly ProjectedWork['primaryCredits'][number][], maxWorks: number = DISCOVERY_COST.pageSize) {
+  credits: readonly ProjectedWork['primaryCredits'][number][], maxWorks: number = DISCOVERY_COST.pageSize,
+  preview = false) {
   const agents = [...new Set(credits.flatMap(credit => credit.agent ? [credit.agent] : []))];
   if (agents.length > maxWorks * DISCOVERY_COST.primaryCredits) {
     throw new WorkReadUnavailable('Discovery Agent credit batch is out of bounds');
@@ -52,17 +53,25 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
     VALUES ?agent { ${agents.map(iri).join(' ')} }
     ${publicAgent('?agent')}
   } LIMIT ${agents.length + 1}`, agents.length + 1);
-  if (new Set(rows.map(row => row.agent?.value)).size !== rows.length
+  if (!preview && (new Set(rows.map(row => row.agent?.value)).size !== rows.length
     || rows.some(row => !row.agent || !row.displayName || !agents.includes(row.agent.value)
-      || !row.displayName.value || row.displayName.value.length > 200)) {
+      || !row.displayName.value || row.displayName.value.length > 200))) {
     throw new WorkReadUnavailable('Discovery Agent names are ambiguous');
   }
   const named = new Map<string, { displayName: string; handle: string }>();
+  const seen = new Set<string>(), damaged = new Set<string>();
   for (const row of rows) {
+    if (preview && (!row.agent || !row.displayName || !agents.includes(row.agent.value)
+      || !row.displayName.value || row.displayName.value.length > 200 || seen.has(row.agent.value))) {
+      if (row.agent) damaged.add(row.agent.value);
+      continue;
+    }
     const agent = row.agent!.value;
+    seen.add(agent);
     const handle = await session.deps.agentHandles?.current(agent)
       ?? row.handle?.value ?? allocateAgentHandle(agent);
     named.set(agent, { displayName: row.displayName!.value, handle });
   }
+  for (const agent of damaged) named.delete(agent);
   return named;
 }

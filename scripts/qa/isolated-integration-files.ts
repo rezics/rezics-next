@@ -135,6 +135,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/g-851-release-query.test.ts',
   // Suitability's complete resource reads require matching global Rating Context and Access histories.
   'tests/qa/integration/g-897-suitability.test.ts',
+  // Optional hydration seeds one Global question and owns its fresh discovery generations.
+  'tests/qa/integration/g-1012-optional-hydration.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

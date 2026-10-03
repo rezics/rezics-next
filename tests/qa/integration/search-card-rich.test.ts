@@ -118,11 +118,17 @@ test('CTX02/CTX09: one and twenty rich cards use the same graph budget and exact
       }
       return result;
     };
-    await json(await search(20), 503);
+    const damaged = await json(await search(20));
+    expect(damaged.results).toHaveLength(20);
+    expect(damaged.results.filter((row: { ratingStatus: string }) => row.ratingStatus === 'unavailable')).toHaveLength(1);
+    expect(damaged.results.filter((row: { ratingStatus: string }) => row.ratingStatus === 'available')).toHaveLength(2);
     stack.fuseki.query = nativeQuery;
     const fence = stack.access.checkRatingAggregateFence.bind(stack.access);
     stack.access.checkRatingAggregateFence = async () => false;
-    await json(await search(20), 503);
+    const unfenced = await json(await search(20));
+    expect(unfenced.results).toHaveLength(20);
+    for (const row of unfenced.results) expect(row).toMatchObject({ rating: null,
+      ratingStatus: 'unavailable', unavailablePreviews: ['rating'] });
     stack.access.checkRatingAggregateFence = fence;
     expect((await json(await search(20))).results).toEqual(many.results);
   } finally { await stack.stop(); }

@@ -35,6 +35,7 @@ export type ProjectedCredit = Static<typeof creditItem> | {
   id: string; role: 'author'; participantKind: 'agent'; provider: null; key: null; ordinal: null;
   agent: string; displayName: null; handle: null };
 export const discoveryItem = t.Object({ ...workCard.properties,
+  unavailablePreviews: t.Optional(t.Array(t.Union([t.Literal('serial'), t.Literal('credits'), t.Literal('rating')]), { maxItems: 3 })),
   primaryCredits: t.Array(discoveryCredit, { maxItems: DISCOVERY_COST.primaryCredits }),
   classifications: t.Array(discoveryTag, { maxItems: DISCOVERY_COST.cardTags }),
   rating: t.Nullable(discoveryRating), match: t.Object({ publication: t.Literal('public-main'),

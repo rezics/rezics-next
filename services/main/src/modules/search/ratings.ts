@@ -14,9 +14,10 @@ export async function searchPageRatings(session: WorkReadSession,
   matches: readonly { work: string; mainVersion?: string; rating?: unknown }[],
   context?: 'main-version-default' | { kind: 'realm-local'; id: string }) {
   const ratings = new Map<string, ProjectedWork['rating']>();
+  const unavailable = new Set<string>();
   const targets = [...new Map(matches.filter(match => !match.rating)
     .map(match => [match.work, match])).values()];
-  if (!targets.length) return { values: ratings, status: 'selected' as const };
+  if (!targets.length) return { values: ratings, unavailable, status: 'selected' as const };
   if (targets.length > 64) throw new WorkReadUnavailable('Search rating page exceeds its bound');
   const realm = typeof context === 'object' ? context.id : null;
   const rows = await session.query(`SELECT ?context WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -28,9 +29,9 @@ export async function searchPageRatings(session: WorkReadSession,
   if (rows.length && !rows[0]?.context) {
     throw new WorkReadUnavailable('Search rating context is ambiguous');
   }
-  if (rows.length > 1) return { values: ratings, status: 'context-required' as const };
+  if (rows.length > 1) return { values: ratings, unavailable, status: 'context-required' as const };
   const selected = rows[0]?.context?.value;
-  if (!selected) return { values: ratings, status: 'no-context' as const };
+  if (!selected) return { values: ratings, unavailable, status: 'no-context' as const };
   const access = session.deps.access;
   if (!access.readRatingAggregateInventory || !access.checkRatingAggregateFence) {
     throw new WorkReadUnavailable('Rating inventory owner is unavailable');
@@ -42,15 +43,15 @@ export async function searchPageRatings(session: WorkReadSession,
   const batch = await queryWorkStandingRatings(session.deps.environment, {
       readRatingAggregateInventory: (ctx, main, signal) => access.readRatingAggregateInventory!(ctx, main, signal),
       checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
-    }, { targets: completeTargets, kind: realm ? 'realm' : 'global', context: selected });
+    }, { targets: completeTargets, kind: realm ? 'realm' : 'global', context: selected, preview: true });
   for (const target of completeTargets) {
     const rating = batch.get(target.work);
-    if (!rating) throw new WorkReadUnavailable('Search rating batch is incomplete');
+    if (!rating) { unavailable.add(target.work); continue; }
     if (rating.sourcePosition.dataEpoch !== session.position.dataEpoch
       || rating.sourcePosition.sequence !== session.position.sequence) throw new SearchSnapshotMoved('Search rating moved');
     if (rating.count) ratings.set(target.work, { context: selected, count: rating.count,
       sum: rating.histogram.reduce((sum, count, i) => sum + count * (rating.scale.min + i), 0),
       mean: rating.mean!, scale: rating.scale as { min: 1; max: 5 | 10 } });
   }
-  return { values: ratings, status: 'selected' as const };
+  return { values: ratings, unavailable, status: 'selected' as const };
 }

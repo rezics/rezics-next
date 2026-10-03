@@ -276,11 +276,12 @@ export async function queryRealmStandingAggregate(env: WorkActivationEnvironment
 /** Search's page adapter preserves the single-Work sealed-inventory verifier.
  * One graph transaction for <=64 targets, <=100 slots per target, one shared
  * 1 MiB graph / 512 KiB manifest budget and one recovery fence. Access still
- * owns each exact inventory; a missing, extra or damaged slot fails the page.
+ * owns each exact inventory; optional previews omit a damaged target while
+ * authoritative callers still require every target's complete evidence.
  * Grouping/verification is O(targets + slots); the shared Context manifest is
  * read and charged once, while each target retains its exact receipt checks. */
 export async function queryWorkStandingRatings(env: WorkActivationEnvironment, access: InventoryAccess,
-  input: { kind: Kind; context: string; targets: readonly Target[] }) {
+  input: { kind: Kind; context: string; targets: readonly Target[]; preview?: boolean }) {
   if (input.targets.length > 64 || !nativeId.test(input.context)
     || input.targets.some(target => !nativeId.test(target.work) || !nativeId.test(target.mainVersion))
     || new Set(input.targets.map(target => target.work)).size !== input.targets.length
@@ -290,25 +291,34 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
   return bounded(async signal => {
     const values = new Map<string, Awaited<ReturnType<typeof queryWorkStandingRating>>>();
     if (!input.targets.length) return values;
-    const inventories: RatingAggregateInventory[] = [];
+    const selected: { target: Target; inventory: RatingAggregateInventory }[] = [];
     for (const target of input.targets) {
-      const inventory = await access.readRatingAggregateInventory(input.context, target.mainVersion, signal);
-      if ((inventory.realm === GLOBAL_RATING_POPULATION_OWNER) !== (input.kind === 'global')) unavailable();
-      if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
-        throw new RatingAggregateBudgetExceeded('standing Rating population exceeds admitted bound');
+      try {
+        const inventory = await access.readRatingAggregateInventory(input.context, target.mainVersion, signal);
+        if ((inventory.realm === GLOBAL_RATING_POPULATION_OWNER) !== (input.kind === 'global')) unavailable();
+        if (inventory.heads.length > MAX_RATING_AGGREGATE_SLOTS) {
+          throw new RatingAggregateBudgetExceeded('standing Rating population exceeds admitted bound');
+        }
+        selected.push({ target, inventory });
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!input.preview || error instanceof RatingAggregateBudgetExceeded
+          || error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge
+          || error instanceof RevisionReadBudgetExceeded) throw error;
       }
-      inventories.push(inventory);
     }
+    if (!selected.length) return values;
+    const inventories = selected.map(item => item.inventory);
     if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
-    const branches = input.targets.map((target,index) => `{ {
-      ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target, [inventories[index]!])}
+    const branches = selected.map(({ target, inventory }) => `{ {
+      ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target, [inventory])}
     } BIND(${iri(target.work)} AS ?targetWork) }`);
     const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT * WHERE { ${branches.join(' UNION ')} } LIMIT ${input.targets.length * 203 + 1}`,
     GLOBAL_AGGREGATE_BUDGET.graphBytes)).results?.bindings ?? [];
     const root = rows[0];
     if (!root?.epoch || !/^\d+$/.test(root.sequence?.value ?? '')) unavailable();
-    const groups = new Map<string, Row[]>(input.targets.map(target => [target.work, []]));
+    const groups = new Map<string, Row[]>(selected.map(({ target }) => [target.work, []]));
     for (const row of rows) {
       const group = groups.get(row.targetWork?.value ?? '');
       if (!group || row.epoch?.value !== root.epoch.value || row.sequence?.value !== root.sequence!.value
@@ -317,14 +327,21 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
     }
     const budget = { bytesLeft: GLOBAL_AGGREGATE_BUDGET.manifestBytes as number, signal };
     const contexts = new Map<string, Record<string, unknown>>();
-    for (const [index, target] of input.targets.entries()) {
-      const own = groups.get(target.work)!;
-      const roots = own.filter(row => row.kind?.value === 'context');
-      if (roots.length !== 1) unavailable();
-      const component = verifyComponent(env, input.kind, input.context, target, inventories[index]!, roots[0]!,
-        own.filter(row => row.kind?.value === 'observation'), budget, undefined, contexts);
-      values.set(target.work, { ...component, sourcePosition: { datasetId: 'product',
-        dataEpoch: root.epoch.value, sequence: root.sequence!.value } });
+    for (const { target, inventory } of selected) {
+      try {
+        const own = groups.get(target.work)!;
+        const roots = own.filter(row => row.kind?.value === 'context');
+        if (roots.length !== 1) unavailable();
+        const component = verifyComponent(env, input.kind, input.context, target, inventory, roots[0]!,
+          own.filter(row => row.kind?.value === 'observation'), budget, undefined, contexts);
+        values.set(target.work, { ...component, sourcePosition: { datasetId: 'product',
+          dataEpoch: root.epoch.value, sequence: root.sequence!.value } });
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!input.preview || error instanceof RatingAggregateBudgetExceeded
+          || error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge
+          || error instanceof RevisionReadBudgetExceeded) throw error;
+      }
     }
     if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal)) unavailable();
     signal.throwIfAborted();

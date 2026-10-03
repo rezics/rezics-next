@@ -2,16 +2,19 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
-import { DISCOVERY_COST, discoveryItem, type DiscoveryCredit, type DiscoveryQuery, type OwnedDiscoveryBasis,
+import { DISCOVERY_COST, discoveryItem, discoveryRating, type DiscoveryCredit, type DiscoveryQuery, type OwnedDiscoveryBasis,
   type DiscoveryPayload, type DiscoveryRow, type PopularTermsQuery } from './contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
-import { readSerialSummaries } from '../work/summary-serial.ts';
+import { EMPTY_SERIAL_SUMMARY, readSerialSummaries } from '../work/summary-serial.ts';
 import { canonicalChapterWorks } from '../structure/chapter-work.ts';
 import { namedDiscoveryCredits } from './credits.ts';
 import { readAuthorNames } from '../source/author-name-read.ts';
 import type { DiscoveryProjection } from './store.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
+import { optionalPreview } from '../query/optional-preview.ts';
+import { Value } from 'typebox/value';
+import { resourceProjectedCard } from '../query/resource-contract.ts';
 
 export async function readDiscovery(session: WorkReadSession, projection: DiscoveryProjection, query: DiscoveryQuery) {
   const basis: OwnedDiscoveryBasis = { scope: query.scope ?? 'global', realm: query.realm ?? null,
@@ -44,7 +47,10 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
   const final = await projection.active(basis, session.position, active.generation_id);
   const stale = active.stale || final.stale;
   const visible = stale ? query.term ? [] : items.map(item => ({ ...item,
-    primaryCredits: [], classifications: [], match: { ...item.match, classification: null } })) : items;
+    primaryCredits: [], rating: null,
+    unavailablePreviews: [...new Set<NonNullable<Static<typeof discoveryItem>['unavailablePreviews']>[number]>([
+      ...(item.unavailablePreviews ?? []), 'credits', ...(basis.context ? ['rating' as const] : [])])],
+    classifications: [], match: { ...item.match, classification: null } })) : items;
   const seen = (after?.seen ?? 0) + visible.length;
   if (!Number.isSafeInteger(seen)) throw new WorkReadLimit('Discovery count exceeds its integer domain');
   const last = page.at(-1);
@@ -72,14 +78,19 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
   // Retained ordering is independent of live title/cover disclosure. Stale
   // classification/credit payloads lack a current protection/erasure proof and
   // are withheld below, including term matches, until a fresh build is active.
-  const summaries = await session.summaries(ids);
-  const serial = await readSerialSummaries(session, ids.filter((id, index) =>
+  const summaries = await session.summaries(ids, true);
+  const serial = await optionalPreview(session, () => readSerialSummaries(session, ids.filter((id, index) =>
     summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
-    && summaries[index]?.type === 'work'));
-  const creditNames = await namedDiscoveryCredits(session,
-    page.flatMap(row => row.payload.primaryCredits ?? []));
-  const sourceNames = await readAuthorNames(session, page.flatMap(row => row.payload.primaryCredits
-    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : [])));
+    && summaries[index]?.type === 'work'), true));
+  const credits = new Map(page.map(row => [row.work, row.payload.primaryCredits]));
+  for (const [work, preview] of credits) {
+    if (!Value.Check(resourceProjectedCard.properties.primaryCredits, preview)
+      || new Set(preview.map(credit => credit.id)).size !== preview.length) credits.delete(work);
+  }
+  const creditNames = await optionalPreview(session, () => namedDiscoveryCredits(session,
+    [...credits.values()].flat(), DISCOVERY_COST.pageSize, true));
+  const sourceNames = await optionalPreview(session, () => readAuthorNames(session, [...credits.values()].flat()
+    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []), true));
   const concepts = [...new Set(page.flatMap(row => [
     ...(row.payload.classifications ?? []).map(tag => tag.concept),
     ...(row.payload.classification ? [row.payload.classification.concept] : []),
@@ -94,25 +105,36 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
     const summary = names.get(tag.concept);
     return summary?.status === 'available' && summary.type === 'concept' ? { ...tag, name: summary.name } : null;
   };
-  const fenced = await session.summaries(ids);
+  const fenced = await session.summaries(ids, true);
   return page.flatMap((row, index): Static<typeof discoveryItem>[] => {
     if (chapterParents.has(row.work)) return [];
     const summary = summaries[index];
+    const current = fenced[index];
     if (summary?.status !== 'available' || summary.type !== 'work' || summary.disclosure !== 'public'
-      || fenced[index]?.status !== 'available' || fenced[index]?.disclosure !== 'public') return [];
+      || current?.status !== 'available' || current.disclosure !== 'public') return [];
     const payload = row.payload;
     if (terms && !terms.has(payload.classification?.sense ?? '')) {
       throw new WorkReadUnavailable('Discovery match basis is unavailable');
     }
     const classification = payload.classification ? named(payload.classification) : null;
     if (terms && !classification) return [];
+    const cardCredits = credits.get(row.work);
+    const ratingAvailable = Value.Check(discoveryRating, payload.rating)
+      && payload.rating.sum >= payload.rating.count && payload.rating.sum <= payload.rating.count * payload.rating.scale.max
+      && payload.rating.mean === payload.rating.sum / payload.rating.count;
+    const serialValue = serial?.get(row.work);
+    const unavailablePreviews: NonNullable<Static<typeof discoveryItem>['unavailablePreviews']> = [...(!serialValue ? ['serial' as const] : serialValue.unavailablePreviews ?? []),
+      ...(!cardCredits || cardCredits.some(credit => credit.agent && !creditNames?.has(credit.agent))
+        || !sourceNames && cardCredits.some(credit => credit.key) ? ['credits' as const] : []),
+      ...(payload.rating !== null && !ratingAvailable ? ['rating' as const] : [])];
     return [{ id: row.work, revision: payload.revision, mainVersion: payload.mainVersion,
-      types: payload.types, title: summary.name, cover: summary.avatar, rating: payload.rating,
-      ...serial.get(row.work)!,
-      primaryCredits: (payload.primaryCredits ?? []).flatMap((credit): DiscoveryCredit[] => {
+      types: payload.types, title: summary.name, cover: current.avatar, rating: ratingAvailable ? payload.rating : null,
+      ...(serialValue ?? EMPTY_SERIAL_SUMMARY),
+      ...(unavailablePreviews.length ? { unavailablePreviews } : {}),
+      primaryCredits: (cardCredits ?? []).flatMap((credit): DiscoveryCredit[] => {
         if (credit.participantKind === 'external-reference') return [{ ...credit,
-          displayName: null, nameSource: undefined, ...sourceNames.get(credit.key) }];
-        const name = creditNames.get(credit.agent);
+          displayName: null, nameSource: undefined, ...sourceNames?.get(credit.key) }];
+        const name = creditNames?.get(credit.agent);
         return name ? [{ ...credit, ...name }] : [];
       }),
       classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
