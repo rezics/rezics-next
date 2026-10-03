@@ -465,7 +465,7 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
     selected.lookahead
       ? encodeReadCursor(binding, session.position, field(selected.last!, 'id'))
       : null,
-  ), discovery: profile.discovery };
+  ), listing: profile.listing, discovery: profile.discovery };
 }
 
 export async function readAgentCollections(session: WorkReadSession, agent: string) {
@@ -526,5 +526,5 @@ export async function readAgentCollections(session: WorkReadSession, agent: stri
     selected.lookahead
       ? encodeReadCursor(binding, session.position, field(selected.last!, 'id'))
       : null,
-  ), discovery: profile.discovery };
+  ), listing: profile.listing, discovery: profile.discovery };
 }

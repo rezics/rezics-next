@@ -11,7 +11,7 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { NATIVE_ID, readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
 import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadSession, WorkReadMoved,
-  WorkReadExpired, WorkReadLimit, WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
+  WorkReadExpired, WorkReadLimit, WorkReadMissing, WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
 import { WORK_READ_COST } from '../work/read-contract.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
@@ -26,6 +26,7 @@ import { ReadingBoundary } from '../reading-position/boundary.ts';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { canonicalAddresses } from '../address/canonical.ts';
+import { readZoneVisibility } from './route-visibility.ts';
 export { ZONE_ROUTE_COST } from './route-cost.ts';
 
 export class ZoneRouteMissing extends Error {}
@@ -40,6 +41,7 @@ export interface ZoneNavigationItem extends ZoneMountBinding {
 interface ResourceBinding { id: string; types: string[]; name: Available['name']; address: CanonicalAddress }
 interface RouteBasis { profile: 'zone-route-v1'; zone: string; path: string;
   name: Publication['name']; language: string; direction: Publication['direction'];
+  listing: Publication['listing']; discovery: Publication['discovery'];
   realm: string | null; revision: string; sourcePosition: ReadPosition; cost: typeof ZONE_ROUTE_COST }
 export type ZoneRoute = RouteBasis & (
   { kind: 'home' }
@@ -101,10 +103,14 @@ class RouteRead {
   readonly boundary: ReadingBoundary;
   readonly summaries = new Map<string, Available | null>();
   readonly requiredSemantics = new Set<string>();
+  readonly privateZones = new Set<string>();
+  readonly scopeSession: WorkReadSession;
   constructor(readonly work: MainWorkDependencies, readonly request: Request,
     readonly viewer: ZoneRouteViewer, readonly position: ReadPosition) {
     const session = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position);
     session.principal = viewer.workPrincipal;
+    this.scopeSession = new WorkReadSession(work, request, { actingSubject: viewer.actingSubject }, position);
+    this.scopeSession.principal = viewer.principal;
     this.boundary = new ReadingBoundary(session);
     this.reader = { ...summaryReader(work, viewer), visibleRecords: records => this.boundary.visible(records) };
   }
@@ -142,8 +148,17 @@ class RouteRead {
     if (rows.length !== 1 || ![RV + 'Public',RV + 'Private'].includes(rows[0]?.spaceDisclosure?.value ?? '')) {
       throw new ZoneRouteMissing('Zone route is unavailable');
     }
-    if (rows[0]!.spaceDisclosure!.value !== RV + 'Public') await this.semantic(state.configuration.space);
-    if (state.storedDisclosure !== 'public') await this.semantic(state.zone);
+    if (rows[0]!.spaceDisclosure!.value !== RV + 'Public' || state.storedDisclosure !== 'public') {
+      await this.privateZone(state.zone);
+      this.privateZones.add(state.zone);
+    }
+  }
+  async privateZone(zone: string) {
+    try { await readZoneVisibility(this.scopeSession, zone); }
+    catch (error) {
+      if (error instanceof WorkReadMissing) throw new ZoneRouteMissing('Zone route is unavailable');
+      throw error;
+    }
   }
   async semantic(resource: string) {
     if (!await this.reader.canReadSemantic?.(resource)) {
@@ -185,6 +200,12 @@ async function boundedRead<T>(work: MainWorkDependencies, request: Request, acti
           throw error;
         }
         for (const resource of read.requiredSemantics) await read.semantic(resource);
+        for (const zone of read.privateZones) await read.privateZone(zone);
+        try { await read.scopeSession.fenceRealms(); }
+        catch (error) {
+          if (error instanceof WorkReadMissing) throw new ZoneRouteMissing('Zone route is unavailable');
+          throw error;
+        }
         await read.boundary.fence();
         const after = await position(work);
         if (before.sequence !== after.sequence) throw new WorkReadMoved('Zone population changed during the read');
@@ -365,6 +386,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     await read.zone(state);
     const basis: RouteBasis = { profile: 'zone-route-v1', zone: input.zone, path: input.path,
       name: state.name, language: state.language, direction: state.direction,
+      listing: state.listing, discovery: state.discovery,
       realm: state.realm, revision: state.revision, sourcePosition: read.position, cost: ZONE_ROUTE_COST };
     if (path.kind === 'home') return { ...basis, kind: 'home' };
     if (path.kind === 'work') {

@@ -7,6 +7,7 @@ import { globalContextPattern, globalRatingDigest, GLOBAL_OBSERVATION_PROFILE } 
 import { standingRatingSlotIri } from '../rating/observation.ts';
 import { field, nextPage, pageBasis, profileAccess, shelfWorks } from './read.ts';
 import { libraryContribution, libraryRating } from './read-contract.ts';
+import { pageDiscoveryPolicy } from '../space/visibility.ts';
 
 async function libraryBasis(session: WorkReadSession, kind: 'contributions' | 'ratings') {
   if (!session.principal || !session.options.actingSubject) throw new AccountAssertionDenied('Library requires authentication');
@@ -19,12 +20,17 @@ async function libraryBasis(session: WorkReadSession, kind: 'contributions' | 'r
   const access = profileAccess(session);
   const action = kind === 'contributions' ? 'contribution.read' : 'rating.observation.read';
   const before = await access.libraryFence(session.principal, session.options.actingSubject, action);
+  const listing = await access.listing.read(session.options.actingSubject);
   const basis = pageBasis(session, kind, [before.principalId, session.options.actingSubject, before.stamp]);
   return { ...basis, access, principal: session.principal, actor: session.options.actingSubject,
     principalId: before.principalId,
+    listing: listing.listing, discovery: pageDiscoveryPolicy('private', listing.listing),
     fence: async () => {
       const after = await access.libraryFence(session.principal!, session.options.actingSubject!, action);
       if (after.stamp !== before.stamp) throw new WorkReadMoved('Library authority changed');
+      if ((await access.listing.read(session.options.actingSubject!)).version !== listing.version) {
+        throw new WorkReadMoved('Agent listing changed');
+      }
     } };
 }
 
@@ -58,7 +64,8 @@ export async function readMyContributions(session: WorkReadSession) {
       publication: disclosure === `${RV}Public` ? 'public' : disclosure === `${RV}Private` ? 'private' : 'draft' });
   }
   await basis.fence();
-  return pageResult(session, items, nextPage(session, basis.binding, rows.map(row => field(row, 'id')), basis.limit));
+  return { ...pageResult(session, items, nextPage(session, basis.binding, rows.map(row => field(row, 'id')), basis.limit)),
+    listing: basis.listing, discovery: basis.discovery };
 }
 
 export async function readMyRatings(session: WorkReadSession) {
@@ -125,5 +132,6 @@ export async function readMyRatings(session: WorkReadSession) {
     throw new WorkReadMoved('Rating inventory changed');
   }
   await basis.fence();
-  return pageResult(session, items, nextPage(session, basis.binding, heads.map(head => head.id), basis.limit));
+  return { ...pageResult(session, items, nextPage(session, basis.binding, heads.map(head => head.id), basis.limit)),
+    listing: basis.listing, discovery: basis.discovery };
 }
