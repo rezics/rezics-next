@@ -91,7 +91,7 @@ export const Unavailable: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Your account is unavailable right now' }))
       .toBeVisible();
-    await expect(canvas.getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', '/');
   },
 };
 
