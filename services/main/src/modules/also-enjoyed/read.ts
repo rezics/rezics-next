@@ -1,20 +1,21 @@
 import { createHash } from 'node:crypto';
 import type { Static } from 'typebox';
-import { readAuthorNames } from '../source/author-name-read.ts';
-import { namedDiscoveryCredits } from '../discovery/credits.ts';
+import { fenceAuthorNames } from '../source/author-name-read.ts';
 import type { OwnedDiscoveryBasis } from '../discovery/contract.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
-import { searchPageCredits, searchPageSerial } from '../search/result-cards.ts';
+import { searchPageAuthors, searchPageCredits, searchPageSerial } from '../search/result-cards.ts';
 import { searchPageRatings } from '../search/ratings.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { canonicalChapterWorks } from '../structure/chapter-work.ts';
-import { displayZoneCredits } from '../zone-modules/read.ts';
+import { optionalPreview } from '../query/optional-preview.ts';
+import { EMPTY_SERIAL_SUMMARY } from '../work/summary-serial.ts';
+import { RatingAggregateBudgetExceeded } from '../rating/aggregate.ts';
 import { GRAPHS, iri, lit, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { readWorkBasis } from '../work/read-header.ts';
 import { readWorkPage } from '../work/read-pages.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid,
-  WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+  WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { alsoEnjoyedItem } from './contract.ts';
 import type { AlsoEnjoyedStore } from './store.ts';
 
@@ -25,9 +26,12 @@ const hash = (items: unknown) => createHash('sha256').update(JSON.stringify(item
 
 /** Nested source collections have their own cursor identity. */
 function sourceSession(session: WorkReadSession) {
-  const nested = new WorkReadSession(session.deps, session.request,
+  // Candidate selection needs the source identity and language, not its serial
+  // preview. Covers remain optional even in nested classification/adoption reads.
+  const nested = new WorkReadSession({ ...session.deps, serialStats: undefined }, session.request,
     { ...session.options, cursor: undefined, limit: 20 }, session.position);
   nested.principal = session.principal;
+  nested.summaries = resources => session.summaries(resources, true);
   return nested;
 }
 
@@ -120,8 +124,16 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
       chapters.add(child);
     }
   }
-  const credits = await searchPageCredits(session, ids);
-  const sourceCredits = await searchPageCredits(session, [source]);
+  // Credits here decide membership (exclude the source's authors), so this
+  // strict identity read must not use the optional display-name boundary.
+  // Source author names do not decide identities; fence the retained bindings
+  // on this nested session without consulting that optional name owner.
+  const identities = new WorkReadSession({ ...session.deps, sourceAuthorNames: undefined },
+    session.request, session.options, session.position);
+  identities.principal = session.principal;
+  const credits = await searchPageCredits(identities, ids);
+  const sourceCredits = await searchPageCredits(identities, [source]);
+  await fenceAuthorNames(identities);
   const sourceAuthors = creditIdentities(sourceCredits, source);
   return candidates.filter(item => visible.has(item.work) && !chapters.has(item.work)
     && ![...creditIdentities(credits, item.work)].some(author => sourceAuthors.has(author)));
@@ -131,7 +143,7 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
  * The source and every card retain current Work disclosure checks. */
 export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
   store: AlsoEnjoyedStore) {
-  const sourceBasis = await readWorkBasis(session, source);
+  const sourceBasis = await readWorkBasis(sourceSession(session), source);
   const sourceTypes = sourceBasis.card.types.filter(type =>
     WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]));
   const binding = ['also-enjoyed-v1', source, session.options.language ?? null,
@@ -185,19 +197,18 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
   if (facts.size !== ids.length) session.stale = true;
   const live = selected.filter(item => facts.has(item.work));
   const liveIds = live.map(item => item.work);
-  const summaries = await session.summaries(liveIds);
-  const serial = await searchPageSerial(session, liveIds);
-  const credits = await searchPageCredits(session, liveIds);
-  const ratings = await searchPageRatings(session, liveIds.map(work => ({ work,
-    mainVersion: facts.get(work)!.main }))).catch(error => {
-    if (!(error instanceof SearchSnapshotMoved)) throw error;
-    session.stale = true;
-    return { values: new Map<string, null>() };
+  const summaries = await session.summaries(liveIds, true);
+  const serial = await optionalPreview(session, () => searchPageSerial(session, liveIds, true));
+  const authors = await optionalPreview(session, () => searchPageAuthors(session, liveIds, true));
+  const ratings = await optionalPreview(session, async () => {
+    try { return await searchPageRatings(session, liveIds.map(work => ({ work,
+      mainVersion: facts.get(work)!.main }))); }
+    catch (error) {
+      if (error instanceof RatingAggregateBudgetExceeded) throw new WorkReadLimit('Recommendation rating budget exceeded');
+      throw error;
+    }
   });
-  const names = await namedDiscoveryCredits(session, [...credits.values()].flat());
-  const sourceNames = await readAuthorNames(session, [...credits.values()].flat()
-    .flatMap(credit => credit.participantKind === 'external-reference' ? [credit.key] : []));
-  const fenced = await session.summaries([source, ...liveIds]);
+  const fenced = await session.summaries([source, ...liveIds], true);
   const sourceFinal = fenced[0];
   if (sourceFinal?.status !== 'available' || sourceFinal.type !== 'work'
     || sourceBasis.disclosure === 'public' && sourceFinal.disclosure !== 'public') {
@@ -210,18 +221,20 @@ export async function readAlsoEnjoyed(session: WorkReadSession, source: string,
   const finalVisible = new Set((await publicCandidates(session, live, source, sourceTypes)).map(item => item.work));
   const items: Static<typeof alsoEnjoyedItem>[] = live.flatMap((item, index) => {
     const summary = summaries[index], final = fenced[index + 1], fact = facts.get(item.work)!,
-      metadata = serial.get(item.work);
+      metadata = serial?.get(item.work) ?? EMPTY_SERIAL_SUMMARY;
     if (summary?.status !== 'available' || summary.type !== 'work'
       || summary.disclosure !== 'public' || !finalVisible.has(item.work)
       || ![...fact.types].some(type => sourceTypes.includes(type))
-      || !final || JSON.stringify(summary) !== JSON.stringify(final) || !metadata) {
+      || !final || JSON.stringify({ ...summary, avatar: undefined })
+        !== JSON.stringify({ ...final, avatar: undefined })) {
       session.stale = true;
       return [];
     }
     return [{ id: item.work, revision: fact.head, mainVersion: fact.main,
-      title: summary.name, cover: summary.avatar, types: [...fact.types].sort(),
-      ...metadata, primaryCredits: displayZoneCredits(credits.get(item.work) ?? [], names, sourceNames),
-      rating: ratings.values.get(item.work) ?? null, basis: item.basis }];
+      title: summary.name, cover: final.status === 'available' ? final.avatar : summary.avatar,
+      types: [...fact.types].sort(),
+      ...metadata, primaryCredits: authors?.get(item.work) ?? [],
+      rating: ratings?.values.get(item.work) ?? null, basis: item.basis }];
   });
   const end = start + selected.length;
   return { profile: 'also-enjoyed-v1' as const, projectionPosition,

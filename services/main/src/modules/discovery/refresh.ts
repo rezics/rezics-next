@@ -7,7 +7,7 @@ import { workRead, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } fr
 import { automaticDiscovery } from './automation.ts';
 import type { OwnedDiscoveryBasis } from './contract.ts';
 import { DISCOVERY_REFRESH_COST, DiscoveryRefreshStore, type RefreshJob } from './refresh-store.ts';
-import { admitDiscoveryBasis, projectDiscoveryBatch } from './source.ts';
+import { admitDiscoveryBasis, discoveryAppendOnly, projectDiscoveryBatch } from './source.ts';
 import { discoveryChanges } from './changes.ts';
 import type { DiscoveryProjection } from './store.ts';
 
@@ -86,17 +86,22 @@ export class DiscoveryRefreshWorker {
           await admitDiscoveryBasis(session, job.basis);
           const operator = automaticDiscovery(job.basis.owner);
           if (state.row && !state.row.complete && state.row.source_sequence !== session.position.sequence) {
-            const changes = await discoveryChanges(session, state.row.source_sequence);
+            const after = state.row.validated_sequence ?? state.row.source_sequence;
+            const changes = this.deps.discoveryRefreshInputs
+              ? await this.deps.discoveryRefreshInputs.read(session.position, after)
+              : await discoveryChanges(session, after);
             // Appending new Works does not change the pinned population. Its
             // enumeration excludes births after the cut; existing-Work writes
             // require a new snapshot because HTTP cannot retain a transaction.
-            if (!changes || changes.works.some(work => !changes.created.includes(work))) {
+            if (!changes || !await discoveryAppendOnly(session, changes, state.row.source_sequence)) {
               await this.projection.cancel(operator, state.row.generation_id);
               generationId = null;
               return 'advanced';
             }
           }
-          const changes = !state.row && state.reuse ? await discoveryChanges(session, state.reuse.source_sequence) : null;
+          const changes = !state.row && state.reuse ? this.deps.discoveryRefreshInputs
+            ? await this.deps.discoveryRefreshInputs.read(session.position, state.reuse.source_sequence)
+            : await discoveryChanges(session, state.reuse.source_sequence) : null;
           const row = state.row ?? await this.projection.register(operator, job.basis, session.position,
             { idempotencyKey: `refresh:${job.scope_key}:${job.lease_epoch}`, requestDigest: digest([job.basis, session.position]) },
             changes && state.reuse ? { generation: state.reuse.generation_id, works: changes.works } : undefined);
@@ -116,6 +121,7 @@ export class DiscoveryRefreshWorker {
         // Only commit after workRead has checked the graph, principal, Realm
         // and source-attribution fences. A moved multi-query snapshot has no rows.
         const operator = automaticDiscovery(job.basis.owner);
+        if (prepared.step) await this.store.validated(job, prepared.row, prepared.position.sequence);
         const row = prepared.step && prepared.projected
           ? await this.projection.commitBatch(operator, prepared.row.generation_id, prepared.step.lease,
             prepared.row.checkpoint, prepared.projected,

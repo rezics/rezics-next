@@ -173,6 +173,7 @@ export interface MainWorkDependencies {
   contentPrivateSearch?: ContentPrivateSearchOwners;
   /** Read-only Main outbox relay checkpoint for the OPS06 broker lane. */
   relayPosition?: Pick<RelayHandoffPositions, 'read'>;
+  discoveryRefreshInputs?: Pick<import('../modules/discovery/source.ts').DiscoveryRefreshInputs, 'read'>;
   /** Deployment-selected lane budgets; defaults to `operations-backpressure-v1`. */
   backpressureProfile?: BackpressureProfile;
   access: Pick<AccessAdmissionRegistry,

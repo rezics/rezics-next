@@ -104,15 +104,18 @@ export class DiscoveryRefreshStore {
           FROM access.principal WHERE id = $1 AND active FOR SHARE`, [job.basis.owner])).rows[0] ?? null;
         if (!principal) return { fresh: false, row: null, principal: null, inactive: true };
       }
-      const pending = (await client.query<{ id: string }>(`SELECT id FROM access.derived_generation
-        WHERE family = 'discovery' AND scope_key = $1 AND
-          (state = 'building' OR (id = $2 AND state = 'ready'))
-        ORDER BY created_at, id LIMIT 1 FOR UPDATE`, [job.scope_key, job.generation_id])).rows[0];
+      const pending = (await client.query<{ id: string; validated_sequence: string | null }>(`SELECT g.id,
+        i.checkpoint_sequence::text AS validated_sequence FROM access.derived_generation g
+        LEFT JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
+        WHERE g.family = 'discovery' AND g.scope_key = $1 AND
+          (g.state = 'building' OR (g.id = $2 AND g.state = 'ready'))
+        ORDER BY g.created_at, g.id LIMIT 1 FOR UPDATE OF g`, [job.scope_key, job.generation_id])).rows[0];
       const reuse = prior?.state === 'ready' && prior.source_epoch === position.dataEpoch
         && prior.access_revision === fence.revision && prior.recovery_generation === fence.generation
         && prior.source_profile === DISCOVERY_SOURCE_PROFILE ? prior : null;
       if (!pending) return { fresh: false, row: null, principal, reuse };
-      const row = await generation(client, pending.id);
+      const row = { ...await generation(client, pending.id),
+        validated_sequence: pending.validated_sequence ?? null };
       if (row.source_epoch === position.dataEpoch && row.recovery_generation === fence.generation
         && row.source_profile === DISCOVERY_SOURCE_PROFILE
         && (row.complete || row.access_revision === fence.revision)) return { fresh: false, row, principal, reuse };
@@ -133,6 +136,27 @@ export class DiscoveryRefreshStore {
         WHERE scope_key = $1 AND lease_epoch = $2 AND due_at > clock_timestamp()`,
       [job.scope_key, job.lease_epoch, generationId]);
       if (!result.rowCount) throw new RecommendationStale('Refresh lease changed');
+    });
+  }
+
+  /** Evidence through this cut is durable only after workRead's final fence.
+   * Keep the immutable population pin, while each tick validates a bounded new
+   * interval instead of eventually exceeding the delta budget from its birth. */
+  async validated(job: RefreshJob, row: DiscoveryGeneration, sequence: string): Promise<void> {
+    await inAccess(this.pool, async client => {
+      const fence = await sourceFence(client);
+      if (row.access_revision !== fence.revision || row.recovery_generation !== fence.generation) {
+        throw new RecommendationStale('Discovery validation source changed');
+      }
+      const held = await client.query(`SELECT scope_key FROM access.discovery_refresh
+        WHERE scope_key=$1 AND lease_epoch=$2 AND generation_id=$3 AND due_at > clock_timestamp() FOR UPDATE`,
+      [job.scope_key, job.lease_epoch, row.generation_id]);
+      if (!held.rowCount) throw new RecommendationStale('Refresh lease changed');
+      const result = await client.query(`UPDATE access.derived_generation_input i SET checkpoint_sequence=$2::numeric
+        FROM access.derived_generation g WHERE i.generation_id=$1 AND i.source='main-graph'
+          AND g.id=i.generation_id AND g.state='building' AND i.checkpoint_sequence <= $2::numeric
+          AND i.pinned_sequence <= $2::numeric`, [row.generation_id, sequence]);
+      if (!result.rowCount) throw new RecommendationStale('Discovery validation checkpoint changed');
     });
   }
 
