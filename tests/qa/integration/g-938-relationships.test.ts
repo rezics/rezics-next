@@ -602,7 +602,7 @@ test('G-938 server Join and Leave commit membership and the sourced Space follow
     const third = await joining.selfJoin(principal,space.realm,{ ...command,
       expectedMembershipGeneration: nextPolicy.membershipGeneration },randomUUID());
     const renewed = await home.deps.follows.state(space.space,{ principal,agent: reader });
-    expect(renewed).toMatchObject({ following: true,source: 'join' });
+    expect(renewed).toMatchObject({ following: true,source: 'explicit',level: 'all' });
     await json(await call('POST','/v1/follows',{ profile: 'follow-command-v1',target: space.space,
       following: false,expectedRevision: renewed.revision,actingSubject: reader },home.reader.token));
     await recoverSpaceFollows(stack.accessPool,stack.fuseki);
