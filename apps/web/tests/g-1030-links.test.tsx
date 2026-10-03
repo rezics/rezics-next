@@ -22,9 +22,9 @@ test('G1030: SSR type links carry their full locale, conditions and destination 
       </Link>
     </ShellProvider>,
   );
-  expect(html).toContain(
-    '<a href="/zh-Hant/discover?tab=works&amp;q=雨#results" aria-current="page">作品</a>',
-  );
+  const anchor = html.match(/<a\b[^>]*>作品<\/a>/)?.[0];
+  expect(anchor).toContain('href="/zh-Hant/discover?tab=works&amp;q=雨#results"');
+  expect(anchor).toContain('aria-current="page"');
   expect(html).not.toContain('prefetch=');
   expect(html).not.toContain('scroll=');
 });
@@ -45,6 +45,8 @@ test('G1030: native navigation retains external links, downloads and the display
   );
   expect(html).toContain('href="https://client.test/callback?state=kept"');
   expect(html).toContain('target="_blank" rel="noreferrer"');
-  expect(html).toContain('href="/export/data.json" download=""');
+  const download = html.match(/<a\b[^>]*>Export<\/a>/)?.[0];
+  expect(download).toContain('href="/export/data.json"');
+  expect(download).toContain('download=""');
   expect(html).toContain('href="/zh-Hant/discover?tab=works"');
 });
