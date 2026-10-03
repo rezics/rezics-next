@@ -203,7 +203,7 @@ export function selectName(labels: Map<string, string>, language: string | null)
   const requested = language && (labels.has(language) ? language
     : tags.find(tag => tag.split('-')[0] === language.split('-')[0]));
   const chosen = requested || (labels.has('en') ? 'en' : tags[0]);
-  if (!chosen) return null;
+  if (chosen === undefined) return null;
   return { value: labels.get(chosen)!, language: chosen, direction: direction(chosen, labels.get(chosen)!),
     basis: requested && language ? 'requested' as const : 'fallback' as const };
 }
@@ -349,7 +349,9 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
       public: binding.public?.value === 'true', labels: new Map() };
     const label = binding.label;
     const tag = (label as { 'xml:lang'?: string } | undefined)?.['xml:lang'];
-    if (label && tag) row.labels.set(tag.toLowerCase(), label.value);
+    // Agent provisioning records a plain display name. Keep its language
+    // unknown rather than discarding the public profile or guessing a tag.
+    if (label && (tag || row.type === 'agent')) row.labels.set(tag?.toLowerCase() ?? '', label.value);
     if (row.type === 'collection') {
       if (label) row.labels.set(tag?.toLowerCase() || 'en', label.value);
       if (binding.nameHead) {
