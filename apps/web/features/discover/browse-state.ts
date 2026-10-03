@@ -1,5 +1,6 @@
 import type { FilterCondition } from '../../../../model/definitions/filter-document-v1.ts';
-import { browseTypes, type ResourceQuery, type SectionId } from './api.ts';
+import { browseCategories } from '../catalogue/registry.ts';
+import { browseTypeCondition, type ResourceQuery, type SectionId } from './api.ts';
 import {
   idOf,
   iriOf,
@@ -12,16 +13,11 @@ import {
   type SearchParams,
 } from './scope.ts';
 
-export const browseTabs = [
+export const browseTabs = (): string[] => [
   'all',
-  'works',
-  'communities',
-  'sites',
-  'people',
-  'lists',
-  'topics',
-] as const;
-export type BrowseTab = (typeof browseTabs)[number];
+  ...browseCategories().map((category) => category.id),
+];
+export type BrowseTab = string;
 export interface BrowseState {
   scope: Exclude<BrowseScope, { kind: 'mine' }>;
   tab: BrowseTab;
@@ -79,12 +75,12 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
   // Refuse legacy selectors rather than silently display a wider catalogue.
   if (
     (params.type !== undefined &&
-      (single(params.type) !== tab || !browseTabs.some((value) => value === params.type))) ||
+      (single(params.type) !== tab || !browseTabs().some((value) => value === params.type))) ||
     params.term !== undefined ||
     params.context !== undefined ||
     !scope ||
     scope.kind === 'mine' ||
-    !browseTabs.some((value) => value === tab) ||
+    !browseTabs().some((value) => value === tab) ||
     q.length > 80 ||
     /[\u0000-\u001f\u007f]/u.test(q) ||
     ![...include, ...exclude].every(isUuid) ||
@@ -128,7 +124,7 @@ export function changeBrowse(state: BrowseState, patch: Partial<BrowseState>): B
 }
 export function browseQuery(state: BrowseState, limit = 20): ResourceQuery {
   const all: FilterCondition[] = [];
-  if (state.tab !== 'all') all.push({ facet: 'type', any: [browseTypes[state.tab]] });
+  if (state.tab !== 'all') all.push(browseTypeCondition(state.tab));
   if (state.conditions.include.length)
     all.push({ facet: 'concept', [state.conditions.match]: state.conditions.include.map(iriOf) });
   if (state.conditions.exclude.length)

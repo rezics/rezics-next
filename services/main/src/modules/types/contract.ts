@@ -14,6 +14,21 @@ import {
 const closed = { additionalProperties: false } as const;
 const label = t.String({ minLength: 1, maxLength: 64 });
 const forms = t.Object({ one: label, other: label }, closed);
+const localizedLabels = t.Object(
+  Object.fromEntries(typeLocales.map((locale) => [locale, label])) as Record<
+    (typeof typeLocales)[number],
+    typeof label
+  >,
+  closed,
+);
+export const typeBrowseCategory = t.Object(
+  {
+    id: t.String({ pattern: '^(?!all$)[a-z][a-z0-9-]{0,63}$' }),
+    order: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    labels: localizedLabels,
+  },
+  closed,
+);
 
 /** Registry metadata never grants a capability or replaces Access authorization. */
 export const typeDefinition = t.Object(
@@ -31,7 +46,10 @@ export const typeDefinition = t.Object(
     cover: t.String({ enum: typeCovers }),
     /** Lower values win when choosing one presentation for a multiply typed Work. */
     priority: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
-    wikiSegment: t.Optional(t.Unsafe<(typeof typeWikiSegments)[number]>({ type: 'string',enum: [...typeWikiSegments] })),
+    wikiSegment: t.Optional(
+      t.Unsafe<(typeof typeWikiSegments)[number]>({ type: 'string', enum: [...typeWikiSegments] }),
+    ),
+    browse: t.Optional(typeBrowseCategory),
     labels: t.Object(
       Object.fromEntries(typeLocales.map((locale) => [locale, forms])) as Record<
         (typeof typeLocales)[number],
@@ -75,6 +93,8 @@ const {
   base: _base,
   default: _default,
   creatable: _creatable,
+  // Browse groups are authored structural metadata, never an unpersisted admission field.
+  browse: _browse,
   ...metadata
 } = typeDefinition.properties;
 /** Descriptive types cannot specify properties, shape closure or executable behavior. */

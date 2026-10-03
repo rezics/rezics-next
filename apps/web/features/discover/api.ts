@@ -1,4 +1,8 @@
-import type { FilterDocument } from '../../../../model/definitions/filter-document-v1.ts';
+import type {
+  FilterCondition,
+  FilterDocument,
+} from '../../../../model/definitions/filter-document-v1.ts';
+import { browseCategories } from '../catalogue/registry.ts';
 import type { DiscoveryPage, WorkCover, WorkName } from './types.ts';
 
 /** Main's shared list envelope for resource browsing and remote pickers. */
@@ -103,6 +107,13 @@ export class BrowseReadError extends Error {
     super('Browse read failed');
   }
 }
+
+/** A selected category must resolve to served types; missing metadata never widens to All. */
+export function browseTypeCondition(category: string): FilterCondition {
+  const entry = browseCategories().find((entry) => entry.id === category);
+  if (!entry) throw new BrowseReadError(503, 'types_unavailable');
+  return { facet: 'type', any: entry.types };
+}
 async function value<T>(read: Promise<Answer<T>>): Promise<T> {
   const { data, error } = await read;
   if (error || data === null) {
@@ -159,7 +170,8 @@ export function discoveryApi(main: unknown, locale: string, actingSubject?: stri
             headers,
           }),
         ),
-        'concept-search-v1', query.cursor,
+        'concept-search-v1',
+        query.cursor,
       );
     },
     async sections(query: ListInput & { section?: SectionId; personalization?: boolean } = {}) {
@@ -186,19 +198,10 @@ export function discoveryApi(main: unknown, locale: string, actingSubject?: stri
             headers,
           }),
         ),
-        'rating-populations-v1', query.cursor,
+        'rating-populations-v1',
+        query.cursor,
       );
     },
   };
 }
 export type DiscoveryApi = ReturnType<typeof discoveryApi>;
-
-/** The browse categories are structural Type Facet values, never descriptive Work subtypes. */
-export const browseTypes = {
-  works: 'https://schema.org/CreativeWork',
-  communities: 'https://rezics.com/vocab/Realm',
-  sites: 'https://rezics.com/vocab/Zone',
-  people: 'https://rezics.com/vocab/Agent',
-  lists: 'https://rezics.com/vocab/Collection',
-  topics: 'http://www.w3.org/2004/02/skos/core#Concept',
-} as const;

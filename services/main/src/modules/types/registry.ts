@@ -47,7 +47,7 @@ export function compiledType(type: string): TypeDefinition | undefined {
 
 function registrySnapshot(rows: readonly RegisteredType[]) {
   // A later compiled definition is authoritative over an older admitted row.
-  rows = rows.filter(row => !compiledType(row.definition.type));
+  rows = rows.filter((row) => !compiledType(row.definition.type));
   if (rows.length + compiledTypes.length > TYPES_READ_COST.maxTypes)
     throw new Error('Type registry exceeds its inventory bound');
   const seen = new Set(compiledTypes.map((entry) => entry.type));
@@ -55,9 +55,11 @@ function registrySnapshot(rows: readonly RegisteredType[]) {
     if (
       !Value.Check(typeDefinition, row.definition) ||
       row.definition.default ||
+      row.definition.browse !== undefined ||
       !['work', 'resource'].includes(row.definition.base) ||
       (row.definition.wikiSegment !== undefined && row.definition.base !== 'resource') ||
-      (row.lifecycle === 'active' && row.definition.creatable !== (row.definition.base === 'work')) ||
+      (row.lifecycle === 'active' &&
+        row.definition.creatable !== (row.definition.base === 'work')) ||
       !['active', 'retired'].includes(row.lifecycle) ||
       !/^[1-9][0-9]*$/.test(row.revision) ||
       seen.has(row.definition.type)
@@ -67,8 +69,9 @@ function registrySnapshot(rows: readonly RegisteredType[]) {
   }
   const listed = [
     ...compiledTypes,
-    ...rows.map((row) => row.lifecycle === 'retired'
-      ? { ...row.definition, creatable: false } : row.definition),
+    ...rows.map((row) =>
+      row.lifecycle === 'retired' ? { ...row.definition, creatable: false } : row.definition,
+    ),
   ].sort((a, b) => a.type.localeCompare(b.type));
   const digest = rows.length
     ? createHash('sha256').update(JSON.stringify(listed)).digest('hex')
@@ -85,8 +88,12 @@ function registrySnapshot(rows: readonly RegisteredType[]) {
 export function assertRegisteredTypeSnapshot(rows: readonly RegisteredType[]): void {
   const { body } = registrySnapshot(rows);
   // Each active Work's eventual true -> false retirement costs one extra byte.
-  const retirementBytes = rows.filter(row => !compiledType(row.definition.type)
-    && row.lifecycle === 'active' && row.definition.base === 'work').length;
+  const retirementBytes = rows.filter(
+    (row) =>
+      !compiledType(row.definition.type) &&
+      row.lifecycle === 'active' &&
+      row.definition.base === 'work',
+  ).length;
   if (Buffer.byteLength(body) + retirementBytes > TYPES_READ_COST.maxBytes)
     throw new Error('Type list exceeds its retirement byte bound');
 }
@@ -94,7 +101,7 @@ export function assertRegisteredTypeSnapshot(rows: readonly RegisteredType[]): v
 /** Build and validate before publishing; every consumer keeps its array identity. */
 export function installRegisteredTypes(rows: readonly RegisteredType[]): void {
   const { listed, digest, body } = registrySnapshot(rows);
-  rows = rows.filter(row => !compiledType(row.definition.type));
+  rows = rows.filter((row) => !compiledType(row.definition.type));
   const snapshot = JSON.stringify(rows);
   if (snapshot === installedSnapshot) return;
   const order = (type: string, baseline: readonly string[]) => {
@@ -136,7 +143,10 @@ export function installRegisteredTypes(rows: readonly RegisteredType[]): void {
   );
   activeWorkTypes.clear();
   activeResourceTypes.clear();
-  const active = [...compiledTypes, ...rows.filter(row => row.lifecycle === 'active').map(row => row.definition)];
+  const active = [
+    ...compiledTypes,
+    ...rows.filter((row) => row.lifecycle === 'active').map((row) => row.definition),
+  ];
   for (const entry of active) {
     if (entry.base === 'work' && !entry.default) activeWorkTypes.add(entry.type);
     if (entry.base === 'resource' && !entry.default) activeResourceTypes.add(entry.type);

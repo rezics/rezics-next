@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { Providers } from '../shell/providers.tsx';
+import { browseCategories } from '../catalogue/registry.ts';
 import {
   browseConcepts,
   browseResources,
@@ -9,7 +10,6 @@ import {
   fixtureTopicLoader,
 } from './browse-fixtures.ts';
 import { emptyBrowse, type BrowseState } from './browse-state.ts';
-import { browseMessages } from './browse-messages.ts';
 import { DiscoverView } from './discover-view.tsx';
 
 function props(locale: UiLocale, state: BrowseState = emptyBrowse) {
@@ -69,10 +69,9 @@ export const OneBrowse: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const tabs = within(canvas.getByRole('navigation', { name: 'Type' }));
-    for (const [tab, label] of Object.entries(browseMessages.en).filter(([key]) =>
-      ['works', 'communities', 'sites', 'people', 'lists', 'topics'].includes(key),
-    )) {
-      await expect(tabs.getByRole('link', { name: label })).toHaveAttribute(
+    await expect(tabs.getAllByRole('link')).toHaveLength(7);
+    for (const { id: tab, labels } of browseCategories()) {
+      await expect(tabs.getByRole('link', { name: labels.en })).toHaveAttribute(
         'href',
         `/en/discover?tab=${tab}`,
       );
