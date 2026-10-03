@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { direction } from '@rezics/main/language';
 import { expect, screen, spyOn, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { Providers } from '../shell/providers.tsx';
@@ -27,8 +28,11 @@ const meta = {
       if (!String(input instanceof Request ? input.url : input).includes('/v1/rating-populations')) return fetch(input, init);
       return Promise.resolve(Response.json({ profile: 'rating-populations-v1', target: browseId(999),
         sourcePosition: { dataEpoch: 'story', sequence: '1' }, stale: false,
-        items: [1, 20].map((count, index) => ({ id: browseId(index + 1), global: false, readerCommunity: false,
-          name: { value: `Community ${index + 1}`, language: 'en', direction: 'ltr', basis: 'requested' }, ratingCount: count })),
+        items: [1, 20].map((count, index) => {
+          const value = `Community ${index + 1}`, language = 'en';
+          return { id: browseId(index + 1), global: false, readerCommunity: false,
+            name: { value, language, direction: direction(language, value), basis: 'requested' }, ratingCount: count };
+        }),
         count: { value: 2, kind: 'exact' }, complete: true, nextCursor: null }));
     });
     return () => mock.mockRestore();

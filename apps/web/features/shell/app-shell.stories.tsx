@@ -12,6 +12,9 @@ import zhHans from './messages/zh-Hans.ts';
 import { NotificationsLink } from './notifications-link.tsx';
 import { PageContainer, PageHeader } from './page.tsx';
 import { setUnread } from './unread.ts';
+import { spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { withZoneAddress } from './communities-relationships.ts';
 
 const zhHansShellMessages = { ...messages, ...zhHans };
 
@@ -31,17 +34,17 @@ const realm = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')
 const communities: CommunityNavigation = { signedIn: true, avatarQuery: '',
   followed: { zones: [], realms: [
     { id: realm(1), kind: 'realm', name: '中文网络小说', language: 'zh-Hans', direction: 'ltr',
-      icon: { kind: 'fallback', key: 'fiction' }, href: `/r/${realm(1).slice(-36)}`, activity: 'new' },
+      icon: { kind: 'fallback', key: 'fiction' }, href: spaceHref(realm(1), 'community'), activity: 'new' },
     { id: realm(2), kind: 'realm', name: 'Classic Literature', language: 'en', icon: { kind: 'fallback', key: 'classics' },
-      href: `/r/${realm(2).slice(-36)}`, activity: 'none' },
+      href: spaceHref(realm(2), 'community'), activity: 'none' },
     // An official Zone's Realm, followed directly: it opens at the Zone's address and is not listed twice.
     { id: realm(4), kind: 'realm', name: 'Books', language: 'en', icon: { kind: 'fallback', key: 'b' },
-      href: '/r/books', activity: 'none' },
+      href: spaceHref('books', 'community'), activity: 'none' },
   ] },
   official: [{ id: realm(3), kind: 'zone', realm: realm(13), name: 'Fiction', language: 'en',
-    icon: { kind: 'fallback', key: 'f' }, href: '/z/fiction', activity: 'unknown' },
+    icon: { kind: 'fallback', key: 'f' }, href: spaceHref('fiction', 'site'), activity: 'unknown' },
   { id: realm(5), kind: 'zone', realm: realm(4), name: 'Books', language: 'en', icon: { kind: 'fallback', key: 'b' },
-    href: '/z/books', activity: 'unknown' }],
+    href: spaceHref('books', 'site'), activity: 'unknown' }],
   moderated: [{ realm: realm(2), open: 8, more: false, href: `/manage/r/${realm(2).slice(-36)}` }] };
 
 function Placeholder() {
@@ -96,13 +99,13 @@ export const SignedOut: Story = {
 export const OfficialSites: Story = {
   args: { communities: <CommunityNav data={{ ...communities, signedIn: false, followed: null,
     moderated: [] }} /> },
-  parameters: { route: { pathname: '/en/z/fiction' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('fiction', 'site'), 'en') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const sites = within(canvas.getByRole('region', { name: 'Official Zones' }));
-    await expect(await sites.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', '/en/z/fiction');
+    await expect(await sites.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'site'), 'en'));
     await expect(sites.getByRole('link', { name: 'Fiction' })).toHaveAttribute('aria-current', 'page');
-    await expect(sites.getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/z/books');
+    await expect(sites.getByRole('link', { name: 'Books' })).toHaveAttribute('href', localizedPath(spaceHref('books', 'site'), 'en'));
     if ('__vitest_browser__' in globalThis) {
       const { page } = await import('vitest/browser');
       await document.fonts.ready;
@@ -110,7 +113,7 @@ export const OfficialSites: Story = {
       await page.viewport(390, 844);
       await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
       const mobile = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
-      await expect(await mobile.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', '/en/z/fiction');
+      await expect(await mobile.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'site'), 'en'));
       await page.screenshot({ path: '../../../../.temp/g-989/official-sites-phone.png' });
       await whenSettled('Menu');
       await userEvent.keyboard('{Escape}');
@@ -270,11 +273,11 @@ export const Communities: Story = {
     const nav = canvas.getByRole('navigation', { name: 'Main navigation' });
     const realms = within(nav).getByRole('region', { name: 'Communities and sites' });
     await expect(await within(realms).findByRole('link', { name: /^中文网络小说\s*, new posts$/ }))
-      .toHaveAttribute('href', `/en/r/${realm(1).slice(-36)}`);
+      .toHaveAttribute('href', localizedPath(spaceHref(realm(1), 'community'), 'en'));
     await expect(within(realms).getByText('中文网络小说')).toHaveAttribute('lang', 'zh-Hans');
     await expect(within(realms).getByRole('link', { name: 'Classic Literature' })).toBeVisible();
     await expect(within(nav).queryByRole('region', { name: 'Official Zones' })).toBeNull();
-    await expect(within(realms).getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/r/books');
+    await expect(within(realms).getByRole('link', { name: 'Books' })).toHaveAttribute('href', localizedPath(spaceHref('books', 'community'), 'en'));
     // Moderation follows the reader's pinned and community sections.
     const manage = within(within(nav).getByRole('region', { name: 'Moderation' })).getByRole('link', { name: /^Manage/ });
     await expect(manage).toHaveTextContent('8 waiting');
@@ -283,6 +286,28 @@ export const Communities: Story = {
     await expect(within(canvasElement.querySelector('header')!).getByRole('link', { name: 'Notifications, 3 unread' }))
       .toHaveAttribute('href', '/en/notifications');
     await expect(within(nav).getByRole('link', { name: /^Notifications/ })).toHaveTextContent('3');
+  },
+};
+
+const localizedOfficialCommunities = withZoneAddress(communities.followed!.realms, [
+  { ...communities.official[1]!, href: localizedPath(spaceHref('图书', 'site'), 'zh-Hant') },
+]);
+
+/** Official site addresses retain the follow's identity and activity on the community surface. */
+export const LocalizedOfficialCommunity: Story = {
+  args: { signedIn: true, communities: <CommunityNav data={{ ...communities,
+    followed: { zones: [], realms: localizedOfficialCommunities } }} /> },
+  async play({ canvasElement }) {
+    const nav = within(canvasElement).getByRole('navigation', { name: 'Main navigation' });
+    const realms = within(nav).getByRole('region', { name: 'Communities and sites' });
+    await expect(await within(realms).findByRole('link', { name: 'Books' })).toHaveAttribute('href',
+      localizedPath(spaceHref('图书', 'community'), 'en'));
+    await expect(localizedOfficialCommunities[2]).toEqual({ ...communities.followed!.realms[2]!,
+      href: spaceHref('图书', 'community') });
+    await expect(localizedOfficialCommunities[0]).toBe(communities.followed!.realms[0]);
+    await expect(withZoneAddress(communities.followed!.realms, [
+      { ...communities.official[1]!, href: '/invalid' },
+    ])).toEqual(communities.followed!.realms);
   },
 };
 

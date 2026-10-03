@@ -352,6 +352,7 @@ export async function seedDirection(
     const names = await Promise.all(
       ['en', 'zh-Hant'].map((language) =>
         api.read<{ name: { value: string } }>(
+          // ast-grep-ignore: web-links-use-address -- Main's Concept API takes a UUID; this is not a web entity link.
           `/concepts/${short(first.concept)}?language=${language}`,
         ),
       ),

@@ -7,6 +7,7 @@ import { settle, uuidOf } from '../feed/types.ts';
 import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { mainRelationships } from '../relationships/api.ts';
+import { spaceHref } from '../address/path.ts';
 import { displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { followedCommunity, pinnedCommunities, spaceCommunities, withZoneAddress } from './communities-relationships.ts';
 import { type Community, type CommunityNavigation, type Managed, type Moderated, realmOf, realmSegment }
@@ -63,7 +64,7 @@ export const readOfficialZones = cache(async (_language: string): Promise<Commun
     const realm = await settle(() => reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get());
     return realm.ok ? { id: zone.zone, kind: 'zone' as const, realm: zone.realm, name: realm.data.name.value,
       language: realm.data.name.language, direction: realm.data.name.direction,
-      icon: realm.data.icon, href: `/z/${zone.routeSegment}`,
+      icon: realm.data.icon, href: spaceHref(zone.routeSegment, 'site'),
       activity: 'unknown' as const } : null;
   }));
   return named.filter(item => item !== null);

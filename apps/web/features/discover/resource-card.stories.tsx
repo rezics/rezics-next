@@ -3,6 +3,7 @@ import { expect, within } from 'storybook/test';
 import { browseResources } from './browse-fixtures.ts';
 import { browseResourceHref, DiscoverResourceCard } from './resource-card.tsx';
 import type { ResourceCard } from './api.ts';
+import { canonicalHref } from '../address/path.ts';
 
 const preview = (names = ['Jane Austen', 'Lin Mei', 'K. Mori']): NonNullable<ResourceCard['work']> => ({
   primaryCredits: names.map((displayName, index) => ({ id: browseResources[index + 1]!.id,
@@ -32,7 +33,8 @@ type Story = StoryObj<typeof meta>;
 export const WorkLatin: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: 'Jane Austen' })).toHaveAttribute('href', '/en/@jane-austen');
+    await expect(canvas.getByRole('link', { name: 'Jane Austen' })).toHaveAttribute('href',
+      canonicalHref({ prefix: '/@', key: 'jane-austen', slugSource: '' }, 'en'));
     await expect(canvas.getByText('At least 3 author credits')).toBeVisible();
     await expect(canvas.getByText('4.25')).toBeVisible();
   },
@@ -62,7 +64,8 @@ const cjk = { globals: { locale: 'zh-Hans' },
     const link = args.item.kind === 'work' ? canvas.getByRole('link', { name: args.item.name.value }) : heading.closest('a');
     await expect(link).toHaveAttribute('href', `/zh-Hans${browseResourceHref(args.item)}`);
     if (args.item.kind === 'work') {
-      await expect(canvas.getByRole('link', { name: '林美玲' })).toHaveAttribute('href', '/zh-Hans/@lin-mei');
+      await expect(canvas.getByRole('link', { name: '林美玲' })).toHaveAttribute('href',
+        canonicalHref({ prefix: '/@', key: 'lin-mei', slugSource: '' }, 'zh-Hans'));
       await expect(canvas.getByText('至少 3 条作者署名')).toBeVisible();
       await expect(canvas.getByText('4.25')).toBeVisible();
     }

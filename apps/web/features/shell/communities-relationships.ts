@@ -1,12 +1,14 @@
 import type { EntityPickerPage } from '@rezics/ui/entity-picker';
 import type { Follow, RelationshipsApi } from '../relationships/types.ts';
+import { addressPath, spaceHref } from '../address/path.ts';
 import { type Community, realmOf } from './communities.ts';
 
 /** A Space follow keeps its identity while using its official Zone's community address. */
 export function withZoneAddress(realms: Community[], official: readonly Community[]): Community[] {
   return realms.map(realm => {
     const zone = official.find(item => item.realm === realmOf(realm));
-    return zone ? { ...realm, href: zone.href.replace(/^\/z\//, '/r/') } : realm;
+    const address = zone && addressPath(zone.href);
+    return address ? { ...realm, href: spaceHref(address.lookup.key, 'community') } : realm;
   });
 }
 

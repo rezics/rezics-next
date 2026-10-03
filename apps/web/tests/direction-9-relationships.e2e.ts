@@ -683,13 +683,21 @@ for (const [localeIndex, locale] of locales.entries())
         await evidence(page, info, 'standalone-canonical');
         const sid = uuidToSid(short(created.space));
         const forms = new Set([
+          // ast-grep-ignore: web-links-use-address -- A bare Space SID independently verifies canonical slug redirection.
           `/${locale}/z/${sid}`,
+          // ast-grep-ignore: web-links-use-address -- A stale display slug must redirect to Main's current canonical site address.
           `/${locale}/z/${sid}-stale-title`,
+          // ast-grep-ignore: web-links-use-address -- The raw Space UUID deliberately exercises the legacy site redirect.
           `/${locale}/z/${short(created.space)}`,
+          // ast-grep-ignore: web-links-use-address -- An uppercase UUID independently verifies legacy case normalization.
           `/${locale}/z/${short(created.space).toUpperCase()}`,
+          // ast-grep-ignore: web-links-use-address -- A legacy Zone capability UUID must resolve to its owning Space's site.
           `/${locale}/z/${short(created.zone)}`,
+          // ast-grep-ignore: web-links-use-address -- A Zone capability SID must resolve to its owning Space's site.
           `/${locale}/z/${uuidToSid(short(created.zone))}`,
+          // ast-grep-ignore: web-links-use-address -- The former community-prefixed Zone UUID must redirect to the site surface.
           `/${locale}/r/${short(created.zone)}`,
+          // ast-grep-ignore: web-links-use-address -- A Realm-free community home remains a legacy alias for the site.
           `/${locale}/r/${sid}`,
         ]);
         for (const form of forms)
@@ -712,7 +720,12 @@ for (const [localeIndex, locale] of locales.entries())
         // A Realm-free /r home is a legacy site alias. Community subroutes still
         // require a Realm capability and cannot become site pages.
         const communityResponses: { path: string; status: number; location: string | null }[] = [];
-        for (const form of [`/${locale}/r/${sid}/members`, `/${locale}/r/${sid}/rules`]) {
+        for (const form of [
+          // ast-grep-ignore: web-links-use-address -- A raw community members route must reject a Space without a Realm capability.
+          `/${locale}/r/${sid}/members`,
+          // ast-grep-ignore: web-links-use-address -- A raw community rules route must reject a Space without a Realm capability.
+          `/${locale}/r/${sid}/rules`,
+        ]) {
           const read = await page.request.get(form, { maxRedirects: 0 });
           communityResponses.push({
             path: form,

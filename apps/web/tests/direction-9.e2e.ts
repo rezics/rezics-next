@@ -11,7 +11,8 @@ import {
 } from '@playwright/test';
 import { entityPickerMessages } from '../../../packages/ui/src/components/entity-picker-messages.ts';
 import { uuidToSid } from '@rezics/model/address';
-import { canonicalHref, type Surface } from '../features/address/path.ts';
+import { canonicalHref, spaceHref, type Surface } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
 import { messages as authMessages } from '../features/auth/messages.ts';
 import { browseMessages } from '../features/discover/browse-messages.ts';
@@ -275,7 +276,9 @@ async function walkAddress(
   );
   await screenshot(page, info, `${name}-canonical`);
   const prefix =
+    // ast-grep-ignore: web-links-use-address -- Select raw legacy route families to verify redirect normalization independently.
     surface === 'community' ? '/r/' : surface === 'site' ? '/z/' : read.canonical.prefix;
+  // ast-grep-ignore: web-links-use-address -- Named Agent routes must also be probed through their legacy identity family.
   const identityPrefix = prefix === '/@' ? '/a/' : prefix;
   const id = short(read.holder),
     sid = uuidToSid(id);
@@ -286,8 +289,11 @@ async function walkAddress(
     `/${locale}${identityPrefix}${sid}-stale-title`,
     `/${locale}${prefix}${encodeURIComponent(read.canonical.key)}`,
   ]);
+  // ast-grep-ignore: web-links-use-address -- Both former Agent handle forms are independent redirect inputs.
   if (prefix === '/@') {
+    // ast-grep-ignore: web-links-use-address -- A UUID in the handle route deliberately exercises the legacy redirect.
     forms.add(`/${locale}/@${id}`);
+    // ast-grep-ignore: web-links-use-address -- The former native Agent handle deliberately exercises the legacy redirect.
     forms.add(`/${locale}/@agent-${id}`);
   }
   const capability = surface && read.capabilities?.[surface === 'community' ? 'realm' : 'zone'];
@@ -477,6 +483,7 @@ for (const locale of locales)
       test('addresses: legacy site and Zone capability links', async ({ page }, info) => {
         // The fixture mounts this Work as the document at /story. Member
         // detail paths belong to Collection mounts, not this Work mount.
+        // ast-grep-ignore: web-links-use-address -- The old community-prefixed site path is the redirect input under test.
         const old = `/${locale}/r/${fixture.named.handle}/story`;
         const expected = new URL(
           (
@@ -503,8 +510,9 @@ for (const locale of locales)
           ).status(),
         ).toBe(200);
         await page.goto(old);
-        await expect(page).toHaveURL(new RegExp(`/${locale}/z/`));
+        await expect(page).toHaveURL(new URL(expected.pathname, page.url()).href);
         await screenshot(page, info, 'legacy-r-site');
+        // ast-grep-ignore: web-links-use-address -- A Zone capability UUID in the community family must redirect to its site.
         const legacyZone = await page.request.get(`/${locale}/r/${short(fixture.zone)}`, {
           maxRedirects: 0,
           timeout: 30_000,
@@ -520,6 +528,7 @@ for (const locale of locales)
             })
           ).status(),
         ).toBe(200);
+        // ast-grep-ignore: web-links-use-address -- Exercise the same legacy Zone capability input in the browser.
         await page.goto(`/${locale}/r/${short(fixture.zone)}`);
         await screenshot(page, info, 'legacy-zone-identity');
       });
@@ -872,7 +881,7 @@ for (const locale of locales)
         const t = accessMessages[locale];
         const privateSpace =
           fixture.privateSpaces[locales.indexOf(locale) * views.length + views.indexOf(view)]!;
-        const path = `/${locale}/r/${privateSpace.handle}/discussions`;
+        const path = localizedPath(spaceHref(privateSpace.handle ?? privateSpace.space, 'community', ['discussions']), locale);
         await selectActor(page, fixture.actor, `/${locale}/settings`);
         const previous = await phase(`reset admission ${locale} ${view.name}`, () =>
           resetAdmission(new PublicCommands(page.request), fixture, privateSpace),
@@ -966,7 +975,7 @@ for (const locale of locales)
         });
         try {
           const directPage = await anonymous.newPage();
-          const direct = await directPage.goto(`/${locale}/r/${fixture.unlisted.handle}`, {
+          const direct = await directPage.goto(localizedPath(spaceHref(fixture.unlisted.handle ?? fixture.unlisted.space, 'community'), locale), {
             timeout: 30_000,
           });
           expect(direct?.status()).toBe(200);
