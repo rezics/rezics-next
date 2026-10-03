@@ -1,4 +1,4 @@
-import { readChapter, readContents } from '../work-contents/read.ts';
+import { readChapterContinuation, readContents } from '../work-contents/read.ts';
 import { nextChapter } from '../structure/reading-order.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadMoved, WorkReadSession, WorkReadUnavailable }
@@ -11,7 +11,7 @@ type Available = Extract<FeedViewerState, { status: 'available' }>;
 type Target = { activity: string; work: string | null; occurrence?: string };
 /** At most eight Works and the first six chapters per Work. A missing composition
  * yields no next-chapter action; incomplete pagination never claims caught up.
- * A Book with volumes resolves its next chapter by one exact chapter read (after
+ * A Book with volumes resolves its next chapter by one exact placement read (after
  * a bounded reading-order walk when the reader has not started it). */
 export const VIEWER_STATE_COST = { activities: 8, chaptersPerWork: 6 } as const;
 
@@ -81,7 +81,7 @@ export class FeedViewerStateReader {
       catch { /* An unreadable composition has no next chapter for this Work. */ }
     }));
     const result = new Map<string, Available>();
-    // A saved position beyond the first page resolves by one exact chapter read per Work.
+    // A saved position beyond the first page resolves without a full chapter body read.
     const distantNext = new Map<string, { occurrence: string; language?: string } | null>();
     await Promise.all(works.map(async work => {
       const read = progress.get(structures.get(work) ?? '');
@@ -95,9 +95,9 @@ export class FeedViewerStateReader {
         try {
           const first = await nextChapter(session.deps.environment, { structure: structures.get(work)!,
             canReadTarget: async () => true });
-          const opened = first ? await readChapter(privateSession, first.record.occurrence,
-            { language: page.language ?? undefined }) : null;
-          distantNext.set(work, opened ? { occurrence: opened.occurrence, language: opened.language } : null);
+          const opened = first && page.language ? await readChapterContinuation(privateSession, work,
+            structures.get(work)!, first.record.occurrence, page.language, false) : null;
+          distantNext.set(work, opened);
         } catch { distantNext.set(work, null); }
         return;
       }
@@ -105,11 +105,9 @@ export class FeedViewerStateReader {
       try {
         const language = read.selectedRevision ? progressLanguages.get(read.selectedRevision)
           : occurrenceLanguages.get(read.occurrence);
-        const current = await readChapter(privateSession, read.occurrence,
-          { language: language ?? page?.language ?? undefined });
-        distantNext.set(work, read.completed
-          ? current.next ? { occurrence: current.next, language: current.language } : null
-          : { occurrence: current.occurrence, language: current.language });
+        const selectedLanguage = language ?? page?.language;
+        distantNext.set(work, selectedLanguage ? await readChapterContinuation(privateSession, work,
+          structures.get(work)!, read.occurrence, selectedLanguage, read.completed) : null);
       } catch { distantNext.set(work, null); }
     }));
     for (const target of targets) {

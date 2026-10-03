@@ -115,7 +115,7 @@ async function count(fuseki: FusekiClient, graph: string): Promise<number> {
 
 export const graphOwner: FixtureOwner = {
   name: 'graph',
-  generator: 'graph-work-public-search-v2',
+  generator: 'graph-work-public-search-v3',
   phase: 'offline-graph',
   compatibilityInputs(root) {
     const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
@@ -128,6 +128,8 @@ export const graphOwner: FixtureOwner = {
   summarize(corpus) {
     const digest = new RecordDigest();
     digest.add('graph:public', `${node(PUBLIC_SEARCH_ANCHOR)} ${node(RDF_TYPE)} ${node(`${RV}SearchGraphAnchor`)} ${node(PUBLIC_SEARCH_GRAPH)} .`);
+    // PublicNameProjection.refresh also commits this policy fence on bootstrap.
+    digest.add('graph:public', `${node('urn:rezics:search:name:policy-state')} ${node(`${RV}complete`)} "true"^^<http://www.w3.org/2001/XMLSchema#boolean> ${node(PUBLIC_SEARCH_GRAPH)} .`);
     for (const work of corpusWorks(corpus)) {
       for (const [graph, quad] of workQuads(corpus, work)) digest.add(`graph:${graph}`, quad);
     }

@@ -34,7 +34,7 @@ interface Read {
     signedIn: boolean;
     age: 'unknown';
     country: null;
-    optIns: { sexual: false; grotesque: false; available: false; reason: string };
+    optIns: { general: true; r15: false; sexual: false; grotesque: false; available: false; reason: 'age_unknown' };
   };
   items: Array<{
     target: { resource: string; work: string | null; base: string };
@@ -295,13 +295,16 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
       age: 'unknown',
       country: null,
       optIns: {
+        general: true,
+        r15: false,
         sexual: false,
         grotesque: false,
         available: false,
-        reason: 'age_evidence_unavailable',
+        reason: 'age_unknown',
       },
     });
-    expect(JSON.stringify(unknown)).not.toContain('general');
+    // General is a viewer preference; unassessed resources retain their own state.
+    expect(unknown.items.every((item) => item.assessment.status === 'unassessed')).toBe(true);
 
     // Characters have no Work edit envelope. A generic semantic edit grant is insufficient.
     expect((await write(character.component, ['r15'], null)).status).toBe(403);

@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium } from '@playwright/test';
+import { chromium, expect as browserExpect } from '@playwright/test';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentModeration } from '../../../services/content/src/moderation.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
@@ -234,7 +234,9 @@ test('G-542: real governance restrict/restore and r18 policy matrix, public API 
         const context = await browser.newContext();
         const page = await context.newPage();
         await page.goto(url, { waitUntil: 'networkidle', timeout: 90_000 });
-        expect(await page.locator('body').innerText()).toContain('Work not found');
+        // Network idleness can precede vinext's streamed not-found boundary.
+        // Wait for the actual user-visible result before inspecting its metadata.
+        await browserExpect(page.getByRole('heading', { name: 'Work not found', exact: true })).toBeVisible();
         expect(await page.content()).not.toContain(title);
         expect(await page.locator('head meta[property="og:title"]').count()).toBe(0);
         expect(await page.locator('head meta[name="description"]').count()).toBe(0);

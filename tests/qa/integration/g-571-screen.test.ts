@@ -81,7 +81,11 @@ test('G571: HTTP image evidence, independent labels and protected occurrence con
   expect(privateBatch.items).toMatchObject([{status:'available'},{status:'unavailable'}]);
   expect((await s.contentPool.query('SELECT count(*)::int AS n FROM media.inference_observation WHERE representation_id = $1',
     [image.representation])).rows[0].n).toBe(2);
-  expect((await s.accessPool.query("SELECT count(*)::int AS n FROM access.admission WHERE action LIKE 'media.%' AND state <> 'sealed'")).rows[0].n).toBe(0);
+  // Access is shared by the shard; earlier fixtures can retain pending tickets.
+  // Every media admission belonging to this journey must still be terminal.
+  expect((await s.accessPool.query(`SELECT id,action,state FROM access.admission
+    WHERE principal_id = ANY($1::uuid[]) AND action LIKE 'media.%' AND state <> 'sealed'`,
+    [[owner.principalId,outsider.principalId,staff.principalId]])).rows).toEqual([]);
 },180_000);
 
  test('G571: NSFW and classifier failure do not block byte surfaces or create a governance decision',async()=>{

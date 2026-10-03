@@ -302,15 +302,19 @@ test('author baseline: exact Content publication and search eligibility use reso
     const avatar = await h.call('PUT', `/v1/resources/${short(work.work)}/avatar`, {
       profile: 'resource-avatar-selection-v1', asset: reserved.asset, expectedSelection: null, actingSubject: h.actor });
     expect(avatar.status, await avatar.clone().text()).toBe(201);
+    const selection = await avatar.json() as { selection: string };
     const own = await h.call('GET', `/v1/resources/${short(work.work)}?actingSubject=${encodeURIComponent(h.actor)}`);
     expect(own.status, await own.clone().text()).toBe(200);
-    expect(await own.json()).toMatchObject({ disclosure: 'restricted', avatar: { kind: 'fallback' } });
+    expect(await own.json()).toMatchObject({ disclosure: 'restricted',
+      avatar: { kind: 'image', selection: selection.selection } });
+    expect((await h.app.handle(new Request(`http://main.test/v1/resources/${short(work.work)}`))).status).toBe(404);
     const stranger = await h.agent();
     expect((await h.call('GET', `/v1/resources/${short(work.work)}?actingSubject=${encodeURIComponent(stranger)}`)).status)
       .toBe(404);
     const batch = await h.call('POST', '/v1/resources/summaries', { profile: 'resource-summary-batch-v1',
       resources: [work.work], actingSubject: h.actor });
     expect(batch.status, await batch.clone().text()).toBe(200);
-    expect(await batch.json()).toMatchObject({ summaries: [{ status: 'available', disclosure: 'restricted', avatar: { kind: 'fallback' } }] });
+    expect(await batch.json()).toMatchObject({ summaries: [{ status: 'available', disclosure: 'restricted',
+      avatar: { kind: 'image', selection: selection.selection } }] });
   } finally { await h.close(); }
 }, 120_000);
