@@ -332,7 +332,10 @@ export const PinATopic: Story = {
     const returnedSearch = dialog.getByRole('combobox', { name: 'Search topics' });
     await userEvent.click(returnedSearch);
     await userEvent.clear(returnedSearch);
-    await userEvent.click(await screen.findByRole('option', { name: 'Cozy games' }));
+    // Returning to search remounts the popup inside the modal's pointer layer.
+    // Wait for that layer to admit the choice, as well as the choice being present.
+    await waitFor(() => expect(getComputedStyle(screen.getByRole('option', { name: 'Cozy games' })).pointerEvents).toBe('auto'));
+    await userEvent.click(screen.getByRole('option', { name: 'Cozy games' }));
     await userEvent.click(await dialog.findByRole('button', { name: 'Pin “Cozy games”' }));
     await waitFor(() => expect(api.calls).toContain(`follow:${topics.cozy.id.slice(-12)}:true`));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pin to Home' })).toBeNull());
