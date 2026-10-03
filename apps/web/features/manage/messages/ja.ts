@@ -251,6 +251,7 @@ export default {
   permMembers: 'メンバーを管理', permMembersHelp: 'メンバーの追加、削除、停止を行います。',
   permRules: 'ルールを公開', permRulesHelp: 'コミュニティのルールを新しい版として公開します。',
   permSettings: '設定を変更', permSettingsHelp: '投稿できる人など、コミュニティの設定を変更します。',
+  permRatings: '評価を設定', permRatingsHelp: '評価の質問を作成し、このコミュニティでの評価の集計方法を選びます。',
   permRoles: '役割を管理', permRolesHelp: '役割の作成や権限の変更、メンバーへの付与を行います。',
   permReview: '投稿を審査', permReviewHelp: 'コミュニティに投稿された作品や章を承認、却下、差し戻しします。',
   permAdopt: 'コミュニティに採用', permAdoptHelp: '承認した作品をコミュニティのコレクションに加え、選定結果を公開します。',

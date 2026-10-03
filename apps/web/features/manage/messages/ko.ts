@@ -261,6 +261,7 @@ export default {
   permMembers: '회원 관리', permMembersHelp: '사용자를 추가, 내보내기, 차단할 수 있습니다.',
   permRules: '규칙 게시', permRulesHelp: '커뮤니티 규칙의 새 개정판을 게시합니다.',
   permSettings: '설정 변경', permSettingsHelp: '제출 권한 대상과 그 밖의 커뮤니티 설정을 변경합니다.',
+  permRatings: '평가 설정', permRatingsHelp: '평가 질문을 만들고 이 커뮤니티의 평가를 집계하는 방법을 선택합니다.',
   permRoles: '역할 관리', permRolesHelp: '역할을 만들고 권한을 변경하며 사용자에게 부여합니다.',
   permReview: '제출 항목 검토', permReviewHelp: '이 커뮤니티에 제출된 작품과 챕터를 승인하거나 거절하거나 수정 요청으로 돌려보냅니다.',
   permAdopt: '커뮤니티에 채택', permAdoptHelp: "승인된 작품을 커뮤니티 컬렉션에 추가하고 선정 결과를 게시합니다.",

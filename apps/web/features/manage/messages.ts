@@ -312,6 +312,7 @@ export const messages = {
   permMembers: 'Manage members', permMembersHelp: 'Add, remove and ban people.',
   permRules: 'Publish rules', permRulesHelp: 'Publish new revisions of the Realm’s rules.',
   permSettings: 'Change settings', permSettingsHelp: 'Change who can submit and other Realm settings.',
+  permRatings: 'Configure ratings', permRatingsHelp: 'Create rating questions and choose how this Realm combines ratings.',
   permRoles: 'Manage roles', permRolesHelp: 'Create roles, change what they allow and give them to people.',
   permReview: 'Review submissions', permReviewHelp: 'Approve, reject or send back works and chapters offered to this Realm.',
   permAdopt: 'Adopt into the Realm', permAdoptHelp: "Add accepted works to the Realm's collection and publish its selection.",
