@@ -2,6 +2,8 @@ import type { CanonicalAddress } from '@rezics/model/address';
 import type { mainApiWithToken } from '../api/main.ts';
 import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
+import { serverRead, serverDeadline } from '../api/server-read.ts';
+import { SERVER_READ_LIMITS } from '../api/server-fetch.ts';
 import { parseAddressSegment, type AddressLookup } from './path.ts';
 
 type MainClient = ReturnType<typeof mainApiWithToken>;
@@ -133,6 +135,7 @@ export async function readAddress(
   origin?: string,
   incoming?: Headers,
 ): Promise<AddressRead> {
+  let cacheKey: string | undefined;
   try {
     const query = new URLSearchParams({
       scope: lookup.scope,
@@ -142,7 +145,7 @@ export async function readAddress(
     const url = `${origin ?? serviceOrigin('MAIN_ORIGIN')}/v1/addresses/resolve?${query}`;
     // Anonymous responses vary only by the lookup and public language request,
     // never by the ingress IP, session cookie or private preferences.
-    const cacheKey = JSON.stringify([url, languages]);
+    cacheKey = JSON.stringify([url, languages]);
     const cached = publicAddresses.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt) {
       publicAddresses.delete(cacheKey);
@@ -155,12 +158,15 @@ export async function readAddress(
     );
     if (cached) headers.set('if-none-match', cached.headers.get('etag')!);
     const startedAt = Date.now();
-    const response = await fetch(url, {
-      headers,
-      cache: 'no-store',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10_000),
-    });
+    const response = await serverRead(
+      url,
+      {
+        headers,
+        cache: 'no-store',
+        redirect: 'manual',
+      },
+      { timeoutMs: SERVER_READ_LIMITS.metadata, deadlineAt: await serverDeadline(incoming) },
+    );
     // Any fresh non-hit invalidates the old hit, including a permission change
     // or outage. Expired data may supply a validator but is never a fallback.
     publicAddresses.delete(cacheKey);
@@ -190,6 +196,7 @@ export async function readAddress(
     if (data.key === lookup.key) rememberAddress(cacheKey, data, response.headers, startedAt);
     return { kind: 'resolved', data };
   } catch {
+    if (cacheKey) publicAddresses.delete(cacheKey);
     return { kind: 'unavailable' };
   }
 }

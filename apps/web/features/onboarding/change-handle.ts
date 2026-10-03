@@ -1,5 +1,6 @@
 import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
+import { serverRead } from '../api/server-read.ts';
 import { normalizedHandle } from './handle.ts';
 
 export type ChangeHandleResult =
@@ -26,13 +27,17 @@ export async function changeHandle(
   try {
     let expectedRevision: string | null = null;
     if (expectedHandle !== null) {
-      const current = await send(
+      const current = await serverRead(
         new URL(
           `/v1/addresses/current?${new URLSearchParams({ scope: 'agent', holder: agent, actingSubject: agent })}`,
           serviceOrigin('MAIN_ORIGIN'),
         ),
-        { method: 'GET', headers: await mainReadHeaders({ authorization: `Bearer ${token}` }),
-          cache: 'no-store', signal: AbortSignal.timeout(10_000) },
+        {
+          method: 'GET',
+          headers: await mainReadHeaders({ authorization: `Bearer ${token}` }),
+          cache: 'no-store',
+        },
+        { fetch: (input, init) => send(new URL(String(input)), init ?? {}) },
       );
       if (!current.ok)
         return current.status === 404
@@ -49,7 +54,7 @@ export async function changeHandle(
         return 'conflict';
       expectedRevision = head.revision;
     }
-    const response = await send(
+    const response = await serverRead(
       new URL(
         `/v1/addresses/${expectedRevision === null ? 'claims' : 'renames'}`,
         serviceOrigin('MAIN_ORIGIN'),
@@ -71,8 +76,8 @@ export async function changeHandle(
           expectedRevision,
         }),
         cache: 'no-store',
-        signal: AbortSignal.timeout(10_000),
       },
+      { fetch: (input, init) => send(new URL(String(input)), init ?? {}) },
     );
     if (response.ok) {
       await response.body?.cancel();

@@ -3,6 +3,13 @@ import { SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from './browser.ts';
 import { sameOriginWrite } from './origins.ts';
+import {
+  serverFetch,
+  deadlineFromHeaders,
+  SERVER_READ_LIMITS,
+  waitForServerRead,
+} from './server-fetch.ts';
+import { mainBodyRead } from './main-read-operation.ts';
 
 // The BFF forwards `/api/main/<Main path>` to Main with the session's bearer
 // token. It keeps Main's path shape, so the browser Eden client uses the same
@@ -18,24 +25,49 @@ const segment = /^[A-Za-z0-9._~-]{1,200}$/;
 const MAX_SEGMENTS = 16;
 
 /** The Main URL for a BFF path, or null when Main could not route it. */
-export function mainTarget(segments: readonly string[], search: string, mainOrigin: string): URL | null {
+export function mainTarget(
+  segments: readonly string[],
+  search: string,
+  mainOrigin: string,
+): URL | null {
   if (segments[0] !== 'v1' || segments.length < 2 || segments.length > MAX_SEGMENTS) return null;
-  if (segments.some(item => !segment.test(item) || item === '.' || item === '..')) return null;
+  if (segments.some((item) => !segment.test(item) || item === '.' || item === '..')) return null;
   return new URL(`/${segments.join('/')}${search}`, mainOrigin);
 }
 
 /** Request headers Main reads; cookies and anything else stay behind. */
-export const FORWARDED_REQUEST_HEADERS = ['accept', 'accept-language', 'content-type',
-  'idempotency-key', 'if-match', 'if-none-match', 'if-range', 'range', 'x-session-key',
-  'x-rezics-display-languages'] as const;
+export const FORWARDED_REQUEST_HEADERS = [
+  'accept',
+  'accept-language',
+  'content-type',
+  'idempotency-key',
+  'if-match',
+  'if-none-match',
+  'if-range',
+  'range',
+  'x-session-key',
+  'x-rezics-display-languages',
+] as const;
 
 /** Response headers a browser caller needs. */
-export const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-language',
-  'content-disposition', 'content-range', 'accept-ranges', 'etag', 'last-modified',
-  'location', 'retry-after', 'www-authenticate'] as const;
+export const FORWARDED_RESPONSE_HEADERS = [
+  'content-type',
+  'content-language',
+  'content-disposition',
+  'content-range',
+  'accept-ranges',
+  'etag',
+  'last-modified',
+  'location',
+  'retry-after',
+  'www-authenticate',
+] as const;
 
-export function mainRequestHeaders(incoming: Headers, accessToken: string | undefined,
-  clientIpHeader = 'cf-connecting-ip'): Headers {
+export function mainRequestHeaders(
+  incoming: Headers,
+  accessToken: string | undefined,
+  clientIpHeader = 'cf-connecting-ip',
+): Headers {
   const headers = new Headers();
   for (const name of FORWARDED_REQUEST_HEADERS) {
     const value = incoming.get(name);
@@ -93,8 +125,14 @@ function rememberReadingLanguages(token: string, languages: string[]) {
 }
 
 /** Main's ordered reading languages for a signed-in browser call. Never the cookie. */
-async function signedInReadingLanguages(mainOrigin: string, accessToken: string, sessionKey: string,
-  fetchImpl: typeof fetch, clientHeaders: Headers): Promise<string[]> {
+async function signedInReadingLanguages(
+  mainOrigin: string,
+  accessToken: string,
+  sessionKey: string,
+  fetchImpl: typeof fetch,
+  clientHeaders: Headers,
+  deadlineAt?: number,
+): Promise<string[]> {
   const cached = cachedReadingLanguages(accessToken);
   if (cached) return cached;
   try {
@@ -103,23 +141,35 @@ async function signedInReadingLanguages(mainOrigin: string, accessToken: string,
     if (clientIp) headers.set('x-rezics-client-ip', clientIp);
     headers.set('authorization', `Bearer ${accessToken}`);
     if (sessionKey) headers.set('x-session-key', sessionKey);
-    const session = await fetchImpl(`${mainOrigin}/v1/me/session-agent`, { headers,
-      cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+    const session = await serverFetch(
+      `${mainOrigin}/v1/me/session-agent`,
+      { headers },
+      { fetch: fetchImpl, deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+    );
     if (!session.ok) return [];
-    const state = await session.json() as { sessionAgent?: { actingSubject?: string; eligible?: boolean } };
+    const state = (await session.json()) as {
+      sessionAgent?: { actingSubject?: string; eligible?: boolean };
+    };
     const actor = state.sessionAgent?.eligible ? state.sessionAgent.actingSubject : null;
     if (!actor) return [];
     headers.delete('x-session-key');
-    const preferences = await fetchImpl(
+    const preferences = await serverFetch(
       `${mainOrigin}/v1/me/person-preferences?actingSubject=${encodeURIComponent(actor)}`,
-      { headers, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+      { headers },
+      { fetch: fetchImpl, deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+    );
     if (!preferences.ok) return [];
-    const value = await preferences.json() as { contentLanguages?: unknown };
+    const value = (await preferences.json()) as { contentLanguages?: unknown };
     const languages = Array.isArray(value.contentLanguages)
-      ? value.contentLanguages.filter((language): language is string => typeof language === 'string') : [];
+      ? value.contentLanguages.filter(
+          (language): language is string => typeof language === 'string',
+        )
+      : [];
     rememberReadingLanguages(accessToken, languages);
     return languages;
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 function forgetReadingLanguages(token: string | undefined) {
@@ -127,29 +177,57 @@ function forgetReadingLanguages(token: string | undefined) {
 }
 
 /** Replaces whatever display-language headers the browser sent. */
-async function applyDisplayLanguages(request: Request, headers: Headers, input: {
-  mainOrigin: string; accessToken: string | undefined; fetch: typeof fetch; segments: readonly string[];
-  /** A preferences write must not cache the list it is about to replace. */
-  writing: boolean;
-}): Promise<void> {
-  const lookup = input.segments[1] === 'me'
-    && (input.segments[2] === 'session-agent' || input.segments[2] === 'person-preferences');
+async function applyDisplayLanguages(
+  request: Request,
+  headers: Headers,
+  input: {
+    mainOrigin: string;
+    accessToken: string | undefined;
+    fetch: typeof fetch;
+    segments: readonly string[];
+    /** A preferences write must not cache the list it is about to replace. */
+    writing: boolean;
+    deadlineAt: number;
+  },
+): Promise<void> {
+  const lookup =
+    input.segments[1] === 'me' &&
+    (input.segments[2] === 'session-agent' || input.segments[2] === 'person-preferences');
   const signedIn = Boolean(input.accessToken);
-  const profile = signedIn && !lookup && !input.writing ? await signedInReadingLanguages(input.mainOrigin,
-    input.accessToken!, cookieValue(request.headers.get('cookie'), SESSION_KEY_COOKIE) ?? '', input.fetch,
-    headers) : [];
-  const languageHeaders = displayLanguageHeaders({ signedIn, profile,
+  const profile =
+    signedIn && !lookup && !input.writing
+      ? await signedInReadingLanguages(
+          input.mainOrigin,
+          input.accessToken!,
+          cookieValue(request.headers.get('cookie'), SESSION_KEY_COOKIE) ?? '',
+          input.fetch,
+          headers,
+          input.deadlineAt,
+        )
+      : [];
+  const languageHeaders = displayLanguageHeaders({
+    signedIn,
+    profile,
     cookie: cookieValue(request.headers.get('cookie'), CONTENT_LANGUAGES_COOKIE),
-    pageUrl: request.headers.get('x-rezics-page-url'), browser: request.headers.get('accept-language') });
+    pageUrl: request.headers.get('x-rezics-page-url'),
+    browser: request.headers.get('accept-language'),
+  });
   headers.delete('accept-language');
   headers.delete('x-rezics-display-languages');
   for (const [name, value] of Object.entries(languageHeaders)) headers.set(name, value);
 }
 
-/** Forwards one browser request to Main and streams both bodies. */
-export async function forwardToMain(request: Request, segments: readonly string[], input: {
-  mainOrigin: string; accessToken: string | undefined; fetch?: typeof fetch; clientIpHeader?: string;
-}): Promise<Response> {
+/** Forwards one browser request; JSON completes within the deadline and media keeps backpressure. */
+export async function forwardToMain(
+  request: Request,
+  segments: readonly string[],
+  input: {
+    mainOrigin: string;
+    accessToken: string | undefined;
+    fetch?: typeof fetch;
+    clientIpHeader?: string;
+  },
+): Promise<Response> {
   const target = mainTarget(segments, new URL(request.url).search, input.mainOrigin);
   if (!target) return Response.json({ error: 'unknown API path' }, { status: 404 });
   if (!(MAIN_METHODS as readonly string[]).includes(request.method)) {
@@ -158,20 +236,58 @@ export async function forwardToMain(request: Request, segments: readonly string[
   if (request.method !== 'GET' && !sameOriginWrite(request)) {
     return Response.json({ error: 'origin mismatch' }, { status: 403 });
   }
+  const bodyRead = mainBodyRead(target.pathname, request.method);
   const body = request.method === 'GET' ? undefined : request.body;
-  const writesLanguages = request.method === 'PUT'
-    && (segments[2] === 'person-preferences' || segments[2] === 'feed-preferences');
+  const writesLanguages =
+    request.method === 'PUT' &&
+    (segments[2] === 'person-preferences' || segments[2] === 'feed-preferences');
   const fetchImpl = input.fetch ?? fetch;
+  const deadlineAt = deadlineFromHeaders(request.headers) ?? Date.now() + SERVER_READ_LIMITS.page;
   const headers = mainRequestHeaders(request.headers, input.accessToken, input.clientIpHeader);
-  await applyDisplayLanguages(request, headers, { ...input, fetch: fetchImpl, segments, writing: writesLanguages });
+  await applyDisplayLanguages(request, headers, {
+    ...input,
+    fetch: fetchImpl,
+    segments,
+    writing: writesLanguages,
+    deadlineAt,
+  });
   let response: Response;
   try {
-    response = await fetchImpl(target, { method: request.method, headers, body,
-      ...(body ? { duplex: 'half' } : {}), redirect: 'manual', cache: 'no-store' } as RequestInit);
+    // Body-bearing reads use a replayable JSON string. Writes retain streaming
+    // upload bodies and are never automatically replayed.
+    response = await serverFetch(
+      target,
+      {
+        method: request.method,
+        headers,
+        body: bodyRead ? await waitForServerRead(request.text(), deadlineAt) : body,
+        signal: request.signal,
+        ...(body ? { duplex: 'half' } : {}),
+        redirect: 'manual',
+        cache: 'no-store',
+      } as RequestInit,
+      {
+        fetch: fetchImpl,
+        deadlineAt,
+        idempotentRead: bodyRead,
+        timeoutMs:
+          segments[1] === 'media' && !bodyRead
+            ? SERVER_READ_LIMITS.transfer
+            : SERVER_READ_LIMITS.read,
+        stream: (upstream) =>
+          Boolean(upstream.headers.get('content-type')) &&
+          !upstream.headers.get('content-type')!.includes('json'),
+      },
+    );
   } catch {
-    return Response.json({ error: 'Main is unavailable' }, { status: 503, headers: { 'retry-after': '5' } });
+    return Response.json(
+      { error: 'Main is unavailable' },
+      { status: 503, headers: { 'retry-after': '5' } },
+    );
   }
   if (writesLanguages && response.ok) forgetReadingLanguages(input.accessToken);
-  return new Response(response.body, { status: response.status,
-    headers: browserResponseHeaders(response.headers, input.mainOrigin) });
+  return new Response(response.body, {
+    status: response.status,
+    headers: browserResponseHeaders(response.headers, input.mainOrigin),
+  });
 }

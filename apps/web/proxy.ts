@@ -29,12 +29,19 @@ import { privateDiscovery, readSpacePage, realmDiscovery } from './features/addr
 import { spaceDiscoveryHeaders } from './features/space-access/discovery.tsx';
 import { serviceOrigin } from './features/api/origins.ts';
 import { mainReadHeaders } from './features/api/main-read.ts';
+import { serverRead } from './features/api/server-read.ts';
+import { SERVER_DEADLINE_HEADER, SERVER_READ_LIMITS } from './features/api/server-fetch.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
 // downstream handles expiry. The rewritten Cookie header carries the new
 // tokens to that code; Set-Cookie carries them to the browser.
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const transfer = request.nextUrl.pathname.startsWith('/api/main/v1/media/');
+  const deadlineAt =
+    Date.now() + (transfer ? SERVER_READ_LIMITS.transfer : SERVER_READ_LIMITS.page);
+  const incoming = new Headers(request.headers);
+  incoming.set(SERVER_DEADLINE_HEADER, String(deadlineAt));
   const pathname = request.nextUrl.pathname;
   const locale =
     pathLocale(pathname) ??
@@ -50,7 +57,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
           lookup,
           displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
           undefined,
-          request.headers,
+          incoming,
         );
         if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
         return read;
@@ -70,14 +77,20 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     let actingSubject: string | undefined;
     if (token && addressed.kind === 'error') {
       try {
-        const response = await fetch(`${serviceOrigin('MAIN_ORIGIN')}/v1/me/session-agent`, {
-          headers: await mainReadHeaders({
-            authorization: `Bearer ${token}`,
-            'x-session-key': request.cookies.get(SESSION_KEY_COOKIE)?.value ?? '',
-          }, request.headers),
-          cache: 'no-store',
-          signal: AbortSignal.timeout(10_000),
-        });
+        const response = await serverRead(
+          `${serviceOrigin('MAIN_ORIGIN')}/v1/me/session-agent`,
+          {
+            headers: await mainReadHeaders(
+              {
+                authorization: `Bearer ${token}`,
+                'x-session-key': request.cookies.get(SESSION_KEY_COOKIE)?.value ?? '',
+              },
+              incoming,
+            ),
+            cache: 'no-store',
+          },
+          { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+        );
         if (response.ok) {
           const session = (await response.json()) as {
             sessionAgent?: { eligible?: boolean; actingSubject?: string };
@@ -91,7 +104,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     const page = await readSpacePage(
       path.lookup.key,
       displayLanguages({ pageUrl: request.url, uiLocale: locale }).join(','),
-      { address: spaceAddress, token, actingSubject, incoming: request.headers },
+      { address: spaceAddress, token, actingSubject, incoming },
     );
     if (page.kind === 'join' || page.kind === 'realm') {
       const discovery =
@@ -128,7 +141,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     destination.pathname = `/${locale}${pathname === '/' ? '' : pathname}`;
     return NextResponse.redirect(destination);
   }
-  const outcome = await refreshSession(request.cookies, accountClient());
+  const client = accountClient();
+  const outcome = await refreshSession(request.cookies, client ? { ...client, deadlineAt } : null);
   const signedIn = Boolean(
     request.cookies.get(ACCESS_COOKIE)?.value || request.cookies.get(REFRESH_COOKIE)?.value,
   );
@@ -160,7 +174,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     });
   if (legacyAgent)
     cookies.push({ name: AGENT_COOKIE, value: '', options: cookieOptions(request.url, 0) });
-  const headers = new Headers(request.headers);
+  const headers = incoming;
   headers.delete(ADDRESS_HEADER);
   // HTTP header values are bytes; native-script names need an ASCII envelope.
   if ('data' in addressed && addressed.data)
