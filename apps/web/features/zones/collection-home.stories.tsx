@@ -1,3 +1,4 @@
+import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
 import { direction } from '@rezics/main/language';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -70,7 +71,7 @@ const meta = {
   title: 'Zones/Collection Home',
   component: Home,
   args: { slug: 'light-novels', state: 'ready', locale: 'en' },
-  parameters: { route: { pathname: '/en/z/light-novels' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('light-novels', 'site'), 'en') } },
 } satisfies Meta<typeof Home>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -81,7 +82,7 @@ export const LightNovels: Story = {
     await expect(canvas.getByRole('heading', { name: 'Sword Art Online' })).toBeVisible();
     await expect(canvas.getByRole('link', { name: /^More$/ })).toHaveAttribute(
       'href',
-      '/en/z/light-novels/catalogue',
+      localizedPath(spaceHref('light-novels', 'site', ['catalogue']), 'en'),
     );
     await expect(canvas.queryByText('Nothing here yet')).toBeNull();
   },

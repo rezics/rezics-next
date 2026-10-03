@@ -1,3 +1,5 @@
+import { localizedPath } from '../../i18n/locale.ts';
+import { spaceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -20,9 +22,9 @@ const meta = {
     title: messages.pageMissingTitle,
     body: messages.pageMissingBody,
     back: messages.pageMissingBack,
-    href: '/z/franchise-wiki',
+    href: spaceHref('franchise-wiki', 'site'),
   },
-  parameters: { route: { pathname: '/en/z/franchise-wiki/missing' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('franchise-wiki', 'site', ['missing']), 'en') } },
   render: (_args, { globals }) => {
     const locale = (globals.locale as UiLocale | undefined) ?? 'en';
     const copy = { ...messages, ...locales[locale] };
@@ -31,7 +33,7 @@ const meta = {
         title={copy.pageMissingTitle}
         body={copy.pageMissingBody}
         back={copy.pageMissingBack}
-        href="/z/franchise-wiki"
+        href={spaceHref('franchise-wiki', 'site')}
       />
     );
   },
@@ -52,14 +54,14 @@ export const Missing: Story = {
     await expect(canvas.queryByRole('heading', { name: 'This community isn’t here' })).toBeNull();
     await expect(canvas.getByRole('link', { name: 'Back to this community' })).toHaveAttribute(
       'href',
-      '/en/z/franchise-wiki',
+      localizedPath(spaceHref('franchise-wiki', 'site'), 'en'),
     );
   },
 };
 
 export const MissingJapanese: Story = {
   globals: { locale: 'ja' },
-  parameters: { route: { pathname: '/ja/z/franchise-wiki/missing' } },
+  parameters: { route: { pathname: localizedPath(spaceHref('franchise-wiki', 'site', ['missing']), 'ja') } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(

@@ -9,7 +9,7 @@ import { CircleAlertIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, type FormEvent } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
+import { realmHref } from '../realm/route.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { LanguageSelect } from '../content-language/language-select.tsx';
 import { useReadingLanguages } from '../content-language/use-reading-languages.ts';
@@ -126,7 +126,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       if (!saved.data) throw new Error('profile-write-failed');
       try { localStorage.setItem(`rezics:community-setup:${actingSubject}:${realm}`,
         JSON.stringify({ topics: topics.length > 0, invite: false })); } catch { /* optional local checklist */ }
-      router.push(localizedPath(`/r/${id}`, locale));
+      router.push(realmHref(locale, id));
     } catch (error) {
       if (error instanceof ImageRefused && error.reason === 'limited') {
         outcome(uploading, { limited: error.retryAfter ?? 60 });

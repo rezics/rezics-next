@@ -2,6 +2,13 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { uuidToSid } from '@rezics/model/address';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { FeedProvider } from '../features/feed/feed-context.tsx';
+import { messages as feedMessages } from '../features/feed/messages.ts';
+import { railData } from '../features/home/fixtures.ts';
+import { messages as homeMessages } from '../features/home/messages.ts';
+import { Rail } from '../features/home/rail.tsx';
 import { NextRequest } from 'next/server';
 import { proxy } from '../proxy.ts';
 import { ADDRESS_HEADER, type AddressRead, readAddress, type ResolvedAddress } from '../features/address/client.ts';
@@ -278,4 +285,23 @@ tasks:
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+});
+
+test('G-1002 Home rail emits short Work and unnamed community identities and keeps a named community', () => {
+  const unnamed = railData.suggestions[0]!;
+  const named = railData.suggestions[1]!;
+  const html = renderToStaticMarkup(createElement(FeedProvider, {
+    locale: 'en', messages: feedMessages, now: 0, signedIn: false, actingSubject: null,
+    signInHref: '/sign-in', avatarQuery: '', tab: 'all', followedRealms: null,
+    children: createElement(Rail, {
+      data: { ...railData, moderated: [], realmSegments: { [named.realm]: 'fiction' } },
+      signedIn: false, locale: 'en', messages: homeMessages,
+    }),
+  }));
+  const work = railData.trending.items[0]!.item.work.slice(-36);
+  expect(html).toContain(`href="/en/w/${uuidToSid(work)}"`);
+  expect(html).toContain(`href="/en/r/${uuidToSid(unnamed.realm.slice(-36))}"`);
+  expect(html).toContain('href="/en/r/fiction"');
+  expect(html).not.toContain(`href="/en/w/${work}"`);
+  expect(html).not.toContain(`href="/en/r/${unnamed.realm.slice(-36)}"`);
 });

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
 import { expect, within } from 'storybook/test';
+import { localizedPath } from '../../i18n/locale.ts';
+import { spaceHref } from '../address/path.ts';
 import { CommunitySetupChecklist } from './setup-checklist.tsx';
 
 const actor = 'https://rezics.com/id/00000000-0000-8000-8000-000000000412';
@@ -13,7 +15,7 @@ function NewCommunityChecklist() {
     setReady(true);
   }, []);
   return ready ? <div className="mx-auto max-w-3xl p-4"><CommunitySetupChecklist realm={realm} actor={actor}
-    path="/en/r/00000000-0000-8000-8000-000000000436" locale="en" rules={false} icon={false} banner={false} />
+    path={localizedPath(spaceHref(realm, 'community'), 'en')} locale="en" rules={false} icon={false} banner={false} />
   </div> : null;
 }
 
@@ -26,5 +28,5 @@ export const FirstMinutes: Story = { play: async ({ canvasElement }) => {
   await expect(canvas.getByRole('heading', { name: 'Set up your community' })).toBeVisible();
   await expect(canvas.getAllByRole('listitem')).toHaveLength(6);
   await expect(canvas.getAllByRole('link', { name: 'Open' }).at(-1)).toHaveAttribute('href',
-    '/en/r/00000000-0000-8000-8000-000000000436/submit');
+    localizedPath(spaceHref(realm, 'community', ['submit']), 'en'));
 } };
