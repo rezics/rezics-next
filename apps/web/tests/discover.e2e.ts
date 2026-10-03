@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
-test('Discover browses every resource type and keeps search in the selected tab', async ({
+test('Discover browses every resource type and starts All searches in the header', async ({
   page,
 }) => {
   await page.goto('/en/discover');
   const main = page.locator('main');
   await expect(main.getByRole('heading', { level: 1, name: 'Discover' })).toBeVisible();
-  await expect(main.getByRole('searchbox', { name: 'Search everything' })).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: 'Search everything' })).toHaveCount(1);
+  await expect(main.getByRole('searchbox')).toHaveCount(0);
   await expect(main.getByRole('combobox', { name: 'Topics', exact: true })).toBeVisible();
   const types = page.getByRole('navigation', { name: 'Type' });
   await expect(types.getByRole('link', { name: 'All', exact: true })).toHaveAttribute(
@@ -33,12 +34,13 @@ test('Discover browses every resource type and keeps search in the selected tab'
     await expect(main).toContainText(/Couldn’t load this list\.|No matches\.|results/);
   }
   await types.getByRole('link', { name: 'Works', exact: true }).click();
-  await main.getByRole('searchbox', { name: 'Search everything' }).fill('stars and stories');
-  await main.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search everything' }).fill('stars and stories');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect
     .poll(() => Object.fromEntries(new URL(page.url()).searchParams))
-    .toEqual({ tab: 'works', q: 'stars and stories' });
-  await expect(types.getByRole('link', { name: 'Works', exact: true })).toHaveAttribute(
+    .toEqual({ q: 'stars and stories' });
+  await expect(page.getByRole('searchbox')).toHaveValue('stars and stories');
+  await expect(types.getByRole('link', { name: 'All', exact: true })).toHaveAttribute(
     'aria-current',
     'page',
   );

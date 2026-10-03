@@ -17,8 +17,8 @@ test('G1001: the shared Work tile receives authors, links, the honest credit tot
   const card = resourceWork(item, { kind: 'realm', realm: browseId(8).slice(-36) }, 'en');
   expect(card.authors).toEqual([{ name: 'Lin Mei',
     href: resourceHref('/a/', { prefix: '/@', key: 'lin-mei', slugSource: '' }) }]);
-  expect(card.creditSummary).toBe('At least 3 author credits');
+  expect(card.creditSummary).toBe('At least 2 more');
   expect(card.rating).toEqual({ mean: 4.5, count: 2, max: 5 });
   expect(card.href).toContain('scope=realm');
-  expect(resourceWork(item, { kind: 'global' }, 'zh-Hans').creditSummary).toBe('至少 3 条作者署名');
+  expect(resourceWork(item, { kind: 'global' }, 'zh-Hans').creditSummary).toBe('至少另有 2 条署名');
 });

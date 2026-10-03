@@ -62,8 +62,8 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
   const unfinished = work.completion === 'ongoing' || work.completion === 'hiatus';
   // Relative, so screen-reader-only text stays inside a scrolling row rather than widening the page.
   return <article className={cn('group/tile relative flex min-w-0 flex-col', className)}>
-    <div className="flex items-end" style={{ aspectRatio: String(slot) }}>
-      <CoverLink work={work} avatarQuery={avatarQuery} className="w-full">
+    <div className="relative w-full" style={{ aspectRatio: String(slot) }}>
+      <CoverLink work={work} avatarQuery={avatarQuery} className="absolute inset-x-0 bottom-0 w-full">
         <ShelfMark work={work.id} title={title} locale={locale} />
       </CoverLink>
     </div>

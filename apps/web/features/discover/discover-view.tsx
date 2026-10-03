@@ -1,8 +1,6 @@
 import { buttonVariants } from '@rezics/ui/button';
-import { Input } from '@rezics/ui/input';
 import type { EntityPickerLoad } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
 import { DiscoverBrowseConditions } from '../query/condition-bar.tsx';
 import { browseCategories } from '../catalogue/registry.ts';
 import Link from '../shell/localized-link.tsx';
@@ -93,27 +91,6 @@ export function DiscoverView({
     <PageContainer className="grid min-w-0 gap-7">
       <header className="grid min-w-0 gap-4">
         <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{copy.title}</h1>
-        <form action={localizedPath('/discover', locale)} className="flex min-w-0 max-w-2xl gap-2">
-          {Object.entries(
-            Object.fromEntries(
-              new URL(browseHref(changeBrowse(state, { q: '' })), 'http://local').searchParams,
-            ),
-          ).map(([name, value]) => (
-            <input key={name} type="hidden" name={name} value={value} />
-          ))}
-          <Input
-            type="search"
-            name="q"
-            aria-label={t.search}
-            placeholder={t.search}
-            defaultValue={state.q}
-            maxLength={80}
-            className="min-w-0 flex-1"
-          />
-          <button type="submit" className={buttonVariants({ variant: 'outline' })}>
-            {t.searchAction}
-          </button>
-        </form>
         <DiscoverBrowseConditions
           state={state}
           locale={locale}

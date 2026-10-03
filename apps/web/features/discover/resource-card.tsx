@@ -27,13 +27,16 @@ export function browseResourceHref(item: Pick<ResourceCard, 'kind' | 'id'>): str
 export function resourceWork(item: ResourceCard, scope: BrowseScope = { kind: 'global' }, locale: UiLocale = 'en'): CatalogueWork {
   const t = materializeData(browseCounts[locale], { locale });
   const details = item.work;
+  const authors = (details?.primaryCredits ?? []).flatMap(credit => credit.displayName
+    ? [{ name: credit.displayName, href: credit.participantKind === 'agent'
+      ? credit.handle ? authorHref({ kind: 'agent', handle: credit.handle }) : null
+      : authorHref({ kind: 'external', key: credit.key }) }] : []);
+  // Unnamed credits still count, but names already displayed need no redundant total.
+  const remaining = Math.max(0, (details?.creditCount.value ?? 0) - authors.length);
   return { id: item.id, href: workHref(item.id, scope), title: item.name, cover: item.icon,
-    kind: coverKindOf(item.types), authors: (details?.primaryCredits ?? []).flatMap(credit => credit.displayName
-      ? [{ name: credit.displayName, href: credit.participantKind === 'agent'
-        ? credit.handle ? authorHref({ kind: 'agent', handle: credit.handle }) : null
-        : authorHref({ kind: 'external', key: credit.key }) }] : []),
-    ...(details?.creditCount.value ? { creditSummary: details.creditCount.kind === 'at-least'
-      ? t.atLeastCredits(details.creditCount.value) : t.credits(details.creditCount.value) } : {}),
+    kind: coverKindOf(item.types), authors,
+    ...(remaining ? { creditSummary: details?.creditCount.kind === 'at-least'
+      ? t.atLeastMoreCredits(remaining) : t.moreCredits(remaining) } : {}),
     rating: details?.rating ? { mean: details.rating.mean, count: details.rating.count,
       max: details.rating.scale.max } : null };
 }
