@@ -139,7 +139,11 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
         actingSubject: member.actor, generation, expectedHeadRevision }, member);
     const build = async (basis: DiscoveryBasis, member = a, expected: string | null = null) => {
       let row = await json<Generation>(await register(basis, member));
-      for (let steps = 0; !row.complete && steps < 10; steps++) row = await json<Generation>(await advance(row, member));
+      while (!row.complete) {
+        const checkpoint = row.checkpoint;
+        row = await json<Generation>(await advance(row, member));
+        expect(row.complete || row.checkpoint !== checkpoint).toBe(true);
+      }
       expect(row.complete).toBe(true);
       expect(row.state).toBe('ready');
       await json(await activate(row.generation, expected, member));
@@ -156,7 +160,11 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     const racers = await Promise.all([advance(pending), advance(pending)]);
     expect(racers.map(response => response.status).sort()).toEqual([200, 409]);
     pending = await json<Generation>(racers.find(response => response.status === 200)!);
-    while (!pending.complete) pending = await json<Generation>(await advance(pending));
+    while (!pending.complete) {
+      const checkpoint = pending.checkpoint;
+      pending = await json<Generation>(await advance(pending));
+      expect(pending.complete || pending.checkpoint !== checkpoint).toBe(true);
+    }
     await json(await activate(pending.generation));
     expect(await json(await call(`/v1/discovery/generations/${pending.generation}?actingSubject=${encodeURIComponent(a.actor)}`)))
       .toMatchObject({ activeHeadRevision: '1' });
@@ -348,7 +356,11 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     const candidates: Generation[] = [];
     for (let i = 0; i < 2; i++) {
       let generation = await json<Generation>(await register(base));
-      while (!generation.complete) generation = await json<Generation>(await advance(generation));
+      while (!generation.complete) {
+        const checkpoint = generation.checkpoint;
+        generation = await json<Generation>(await advance(generation));
+        expect(generation.complete || generation.checkpoint !== checkpoint).toBe(true);
+      }
       candidates.push(generation);
     }
     const activationRace = await Promise.all(candidates.map(row => activate(row.generation, '4')));
