@@ -43,7 +43,6 @@ import { siteHref, zoneNavigationHref } from './route.ts';
 import { surfaceText } from '../address/messages.ts';
 import type { RealmHeader } from './types.ts';
 import { spaceHref } from '../address/path.ts';
-import { SpaceDiscovery } from '../space-access/discovery.tsx';
 import { PrivateSpaceJoinPage } from '../space-access/join-page.tsx';
 import { UnlistedSpaceNotice } from '../space-access/unlisted-notice.tsx';
 import { privateDiscovery, realmDiscovery } from '../address/space-read.ts';
@@ -123,6 +122,7 @@ export async function privateJoinPage(page: JoinPage, locale: UiLocale, here: st
   return (
     <PrivateSpaceJoinPage
       page={{ ...page, discovery: privateDiscovery(page.discovery) }}
+      discoveryMetadata={false}
       locale={locale}
       actingSubject={reader.actingSubject ?? null}
       signInHref={signInPath(localizedPath(here, locale))}
@@ -330,7 +330,6 @@ export async function RealmFrame({
   const discovery = realmDiscovery(realm.header);
   return (
     <>
-      {discovery ? <SpaceDiscovery discovery={discovery} /> : null}
       <ZoneFrame
         zone={zone}
         dataZone={zone.slug ?? realm.realm}
@@ -393,7 +392,7 @@ export async function RealmFrame({
               messages={zoneMessages}
             />
             {realm.header.listing === 'unlisted' && discovery ? (
-              <UnlistedSpaceNotice locale={locale} discovery={discovery} />
+              <UnlistedSpaceNotice locale={locale} discovery={discovery} discoveryMetadata={false} />
             ) : null}
           </>
         }

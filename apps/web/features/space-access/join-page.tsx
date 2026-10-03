@@ -12,14 +12,16 @@ import { SpaceDiscovery } from './discovery.tsx';
 import { emptyRequestJournal, journalAfterStatus, parseRequestJournal, readOwnRequest, requestStorageKey, type RequestJournal, type RequestReceipt } from './request-state.ts';
 
 type Props = { page: JoinPage; actingSubject: string | null; signInHref: string; locale: UiLocale;
-  api?: SpaceAccessApi; persist?: boolean };
+  api?: SpaceAccessApi; persist?: boolean;
+  /** Routed pages use generateMetadata as the single document policy owner. */
+  discoveryMetadata?: boolean };
 
 /** Main's limited join page plus its authenticated requester read. Identity
  * changes remount all request/withdrawal state; browser receipts never supply status. */
 export function PrivateSpaceJoinPage(props: Props) {
   return <JoinFlow key={`${props.page.id}:${props.actingSubject ?? ''}`} {...props} />;
 }
-function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, persist = true }: Props) {
+function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, persist = true, discoveryMetadata = true }: Props) {
   const t = accessMessages[locale];
   const api = useMemo(() => provided ?? browserSpaceAccessApi(page.space, page.id, actingSubject ?? ''),
     [provided, page.space, page.id, actingSubject]);
@@ -124,7 +126,7 @@ function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, pers
     setBusy(false);
   }
   return <section aria-label={page.name.value} className="mx-auto grid w-full max-w-2xl gap-6 px-4 py-8 sm:px-6">
-    <SpaceDiscovery discovery={page.discovery} />
+    {discoveryMetadata ? <SpaceDiscovery discovery={page.discovery} /> : null}
     <header className="grid gap-3"><h1 lang={page.name.language} dir="auto" className="break-words font-semibold text-3xl">{page.name.value}</h1>
       {page.description ? <p lang={page.description.language} dir="auto" className="whitespace-pre-wrap break-words text-muted-foreground">{page.description.value}</p> : null}</header>
     {page.rules.length ? <section aria-labelledby="join-rules" className="grid gap-3"><h2 id="join-rules" className="font-semibold text-xl">{t.rules}</h2>

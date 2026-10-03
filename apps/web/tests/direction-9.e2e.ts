@@ -14,6 +14,7 @@ import { uuidToSid } from '@rezics/model/address';
 import { materializeData } from 'native-i18n';
 import { canonicalHref, type Surface } from '../features/address/path.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
+import { AGENT_COOKIE } from '../features/auth/cookies.ts';
 import { messages as authMessages } from '../features/auth/messages.ts';
 import { browseMessages } from '../features/discover/browse-messages.ts';
 import { accessMessages } from '../features/manage/settings-messages.ts';
@@ -224,8 +225,15 @@ async function setupCommands(
 }
 
 async function address(page: Page, scope: string, holder: string, locale: Locale) {
+  const selectedAgent = (await page.context().cookies()).find(
+    cookie => cookie.name === AGENT_COOKIE,
+  )?.value;
+  const actingSubject = selectedAgent ? decodeURIComponent(selectedAgent) : undefined;
+  expect(actingSubject, 'authenticated address reads carry the selected Agent').toBeTruthy();
   const response = await page.request.get(
-    `/api/main/v1/addresses/resolve?${new URLSearchParams({ scope, key: short(holder) })}`,
+    `/api/main/v1/addresses/resolve?${new URLSearchParams({
+      scope, key: short(holder), actingSubject: actingSubject!,
+    })}`,
     {
       headers: { 'accept-language': locale, 'x-rezics-display-languages': locale },
     },
@@ -531,6 +539,8 @@ for (const locale of locales)
         if (phone) await language.getByRole('button', { name: t.back, exact: true }).click();
         else {
           await page.keyboard.press('Escape');
+          await expect(page.getByRole('menu')).toHaveCount(0);
+          await trigger.click();
         }
         await root
           .getByRole(phone ? 'button' : 'menuitem', {
@@ -547,9 +557,10 @@ for (const locale of locales)
             exact: true,
           }),
         ).toBeChecked();
-        await appearance
-          .getByRole(phone ? 'radio' : 'menuitemradio', { name: shell.themeDark, exact: true })
-          .click();
+        if (phone) {
+          await appearance.getByText(shell.themeDark, { exact: true }).click();
+          await expect(appearance.getByRole('radio', { name: shell.themeDark, exact: true })).toBeChecked();
+        } else await appearance.getByRole('menuitemradio', { name: shell.themeDark, exact: true }).click();
         await expect(page.locator('html')).toHaveClass(/dark/);
         if (phone) await appearance.getByRole('button', { name: t.back, exact: true }).click();
         else await trigger.click();
@@ -567,9 +578,10 @@ for (const locale of locales)
           })
           .click();
         const reset = phone ? page.getByRole('dialog', { name: t.appearance, exact: true }) : page;
-        await reset
-          .getByRole(phone ? 'radio' : 'menuitemradio', { name: shell.themeSystem, exact: true })
-          .click();
+        if (phone) {
+          await reset.getByText(shell.themeSystem, { exact: true }).click();
+          await expect(reset.getByRole('radio', { name: shell.themeSystem, exact: true })).toBeChecked();
+        } else await reset.getByRole('menuitemradio', { name: shell.themeSystem, exact: true }).click();
       });
 
       test.fixme('relationships: follow → bell → pin → one-command join → leave → unfollow; sidebar updates without duplicate Spaces', async () => {
@@ -629,20 +641,21 @@ for (const locale of locales)
           .click();
         await expect.poll(() => new URL(page.url()).searchParams.has('ce')).toBe(false);
         await page.goto(`/${locale}/discover?tab=communities`);
-        const firstNames = await page
+        const communityLinks = page
           .getByRole('main')
           .getByRole('list')
-          .getByRole('link')
-          .allTextContents();
+          .getByRole('link');
+        await expect(communityLinks.first()).toBeVisible();
+        const firstNames = await communityLinks.allTextContents();
         await page.getByRole('link', { name: t.more, exact: true }).click();
         await expect.poll(() => new URL(page.url()).searchParams.get('cursor')).toBeTruthy();
-        const secondNames = await page
-          .getByRole('main')
-          .getByRole('list')
-          .getByRole('link')
-          .allTextContents();
-        expect(secondNames.length).toBeGreaterThan(0);
-        expect(secondNames.some((name) => firstNames.includes(name))).toBe(false);
+        // The address can change before the streamed destination list arrives.
+        await expect(async () => {
+          const secondNames = await communityLinks.allTextContents();
+          expect(secondNames.length).toBeGreaterThan(0);
+          expect(secondNames.some((name) => firstNames.includes(name))).toBe(false);
+        }).toPass({ timeout: 30_000 });
+        await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
         await expect(
           page.getByRole('main').getByRole('link', { name: fixture.unlisted.name, exact: true }),
         ).toHaveCount(0);
@@ -780,6 +793,10 @@ for (const locale of locales)
           await expect(
             outsider.getByRole('heading', { level: 1, name: privateSpace.name }),
           ).toBeVisible();
+          await expect(outsider.locator('meta[name="robots"]')).toHaveCount(1);
+          await expect(outsider.locator('meta[name="robots"]')).toHaveAttribute(
+            'content', /(?:^|[,\s])noindex(?:[,\s]|$)/,
+          );
           await expect(outsider.getByRole('link', { name: t.signIn, exact: true })).toBeVisible();
           await screenshot(outsider, info, 'private-outsider-join-page');
           await page.goto(path);
@@ -827,6 +844,7 @@ for (const locale of locales)
         await expect(
           page.getByRole('heading', { level: 1, name: fixture.unlisted.name }),
         ).toBeVisible();
+        await expect(page.locator('meta[name="robots"]')).toHaveCount(1);
         await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
           'content',
           /(?:^|[,\s])noindex(?:[,\s]|$)/,
