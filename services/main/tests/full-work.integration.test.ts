@@ -1,4 +1,5 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { test, expect } from 'bun:test';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -155,7 +156,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     expect(exchange.status).toBe(200);
     const token = (await exchange.json() as { access_token: string }).access_token;
     const accessMigrations = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await pool.query(readFileSync(join(accessMigrations, file), 'utf8'));
     }
     await pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));

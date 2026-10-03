@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync,
   renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import { migrateOwners } from '../ops/migrate.ts';
+import { copyReleaseTree } from '../ops/release-payload.ts';
 import { parseOptions, type StackOptions } from './config.ts';
 import { installRelease } from './install.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from './release-manifest.ts';
@@ -93,8 +94,7 @@ export function buildReleaseArtifact(): string {
       }
     }
     for (const directory of ['services', 'packages', 'generated', 'node_modules']) {
-      cpSync(join(root, directory), join(stage, directory), { recursive: true,
-        dereference: true, filter: path => !path.includes('/node_modules/.cache/') });
+      copyReleaseTree(join(root, directory), join(stage, directory));
     }
     mkdirSync(join(stage, 'bin'), { recursive: true });
     copyFileSync(process.execPath, join(stage, 'bin/bun'));

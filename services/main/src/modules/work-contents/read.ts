@@ -218,7 +218,7 @@ export async function readContents(session: WorkReadSession, work: string,
     const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
     if (cursor && cursor.order !== header.head) throw new WorkReadMoved('Composition changed');
     const page = await readCompositionPage(session.deps.environment, {
-      structure: header.structure, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
+      structure: header.structure, header, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
       ...(cursor ? { after: cursor.after } : {}), outline: true,
       canReadTarget: target => canReadTarget(session, target),
     });
@@ -319,6 +319,62 @@ async function neighbor(session: WorkReadSession, header: { structure: string; g
   return null;
 }
 
+/** A feed already disclosed the Book. Resolve only its resume link, without
+ * loading chapter bytes, the previous chapter or the Book's display fields.
+ * Exact placements, public publications and live disclosure still gate it;
+ * the enclosing Work read fences the graph position and owns the call budget.
+ * Two exact placements and one navigationCandidates probe cost 14 public
+ * graph calls for the first successor, at most 52 when candidates are denied.
+ * Current private Access proofs share that enclosing budget too. */
+export async function readChapterContinuation(session: WorkReadSession, work: string, structure: string,
+  occurrence: string, language: string, completed: boolean) {
+  try {
+    const header = await readCompositionHeader(session.deps.environment, structure).catch(structureError);
+    if (!header || header.profile !== 'book-composition' || header.work !== work) throw missing();
+    language = contentLanguage(language, null);
+    const read = async (id: string) => {
+      const page = await readCompositionPage(session.deps.environment, { structure, header,
+        occurrence: id, limit: 1, canReadTarget: target => canReadTarget(session, target) });
+      if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
+      const record = page.occurrences[0];
+      if (!record || record.state !== 'active' || record.role !== 'chapter' || !record.target
+        || !record.selection || !record.segmentKey || !record.orderKey) throw missing();
+      const selected = await selectedContent(session, record.target, language,
+        record.selection.mode === 'fixed-revision' ? record.selection.revision : null);
+      if (!selected) throw missing();
+      const decisions = await session.disclosure([
+        { owner: 'graph', resource: record.target, component: 'name', work },
+        { owner: 'content', resource: record.target, component: 'body', revision: selected.revision, work },
+      ], 'read');
+      if (decisions.some(decision => decision !== 'visible')) throw missing();
+      return record;
+    };
+    const current = await read(occurrence);
+    let next: string | null = occurrence;
+    if (completed) {
+      const placed = await session.query(`SELECT ?segment ?key ?groupSegment ?groupKey WHERE {
+        GRAPH ${iri(GRAPHS.current)} {
+          ?placement a rv:OccurrencePlacement ; rv:generation ${iri(header.generation)} ;
+            rv:occurrence ${iri(occurrence)} ; rv:orderSegment ?part ; rv:orderKey ?key .
+          ?part rv:parent ${iri(current.parent)} ; rv:segmentKey ?segment .
+          FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+          ${groupPosition(header.generation)} } } LIMIT 2`, 2);
+      const key = placed[0];
+      if (placed.length !== 1 || !key?.segment || !key.key
+        || current.parent !== structure && (!key.groupSegment || !key.groupKey)) {
+        throw new WorkReadUnavailable('Chapter order is ambiguous');
+      }
+      next = await neighbor(session, header, readingPosition({ segment: key.segment.value, key: key.key.value,
+        ...(key.groupSegment && key.groupKey ? { groupSegment: key.groupSegment.value,
+          groupKey: key.groupKey.value } : {}) }, occurrence), 'next', language);
+      if (next) await read(next);
+    }
+    const after = await readCompositionHeader(session.deps.environment, structure).catch(structureError);
+    if (after?.head !== header.head) throw new WorkReadMoved('Composition changed');
+    return next ? { occurrence: next, language } : null;
+  } catch (error) { structureError(error); }
+}
+
 export async function readChapter(session: WorkReadSession, occurrence: string,
   options: { revision?: string; language?: string }) {
   try {
@@ -335,7 +391,7 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     // A pinned revision that is no longer the head will not come back on a retry.
     if (options.revision && options.revision !== header.head) throw new WorkReadExpired('Composition revision changed');
     const language = contentLanguage(options.language, basis.selectedLanguage);
-    const page = await readCompositionPage(session.deps.environment, { structure: header.structure,
+    const page = await readCompositionPage(session.deps.environment, { structure: header.structure, header,
       occurrence, limit: 1, canReadTarget: target => canReadTarget(session, target) });
     const record = page.occurrences[0];
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');

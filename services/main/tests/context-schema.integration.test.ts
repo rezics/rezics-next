@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { contextSelectionCandidates, contextSelectionScopeKey,
   type ContextSelectionScope } from '../src/modules/context/schema.ts';
 import { PRIVATE_SELECTION_LOOKUP_SQL, privateSelectionLookupKeys,
@@ -104,10 +105,10 @@ test('CTX03: schema foundation Access private Context selections install empty, 
   const admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 1 });
   const pools: Pool[] = [];
   try {
-    const files = [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort();
+    const files = schemaFiles(root, 'access');
     expect(files).toContain(OWN);
-    const head = files.filter(file => file < OWN);
-    const later = files.filter(file => file > OWN);
+    const head = files.filter(file => migrationVersion(file) < migrationVersion(OWN));
+    const later = files.filter(file => migrationVersion(file) > migrationVersion(OWN));
     for (const name of ['context_empty', 'context_upgrade']) await admin.query(`CREATE DATABASE ${name}`);
     const database = (name: string) => {
       const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 4 });
@@ -115,7 +116,7 @@ test('CTX03: schema foundation Access private Context selections install empty, 
       return pool;
     };
 
-    // Empty install: every Access migration in file-name order in one transaction.
+    // Empty install: every Access migration in numeric version order in one transaction.
     const empty = database('context_empty');
     await apply(empty, files);
     const tables = await empty.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables

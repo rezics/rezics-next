@@ -56,7 +56,7 @@ test('WORK09: partial Content exact history requires current Work disclosure and
     const first = await content.saveDraft({ operationId: `save-${randomUUID()}`, variant,
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
       provenance: { editor: 'test' }, serializedJson });
-    const document = fromPlainText('第二版');
+    const document = structuredClone(fromPlainText('第二版'));
     document.doc.content![0]!.content![0]!.marks = [{ type: 'bold' }];
     const structuredBytes = JSON.stringify({ body: '第二版', document });
     const second = await content.saveDraft({ operationId: `save-${randomUUID()}`, variant,

@@ -11,6 +11,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['PUT','/v1/agents/{id}/listing','write'],
   ['GET','/v1/realms/{realm}/join-page','read'],
   ['GET','/v1/realms/{realm}/join-requests/basis','read'],
+  ['GET','/v1/realms/{realm}/join-requests/mine','read'],
   ['GET','/v1/realms/{realm}/join-requests','read'],
   ['POST','/v1/realms/{realm}/join-requests','write'],
   ['POST','/v1/realms/{realm}/join-requests/{request}/withdraw','write'],
@@ -166,6 +167,10 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/corrections/{proposalRevision}', 'read'],
   ['GET', '/v1/deliveries/{delivery}', 'read'],
   ['GET', '/v1/discovery/generations/{generation}', 'read'],
+  // Topic phrase lookup shares anonymous search capacity; verified readers
+  // retain the same exemption as the catalogue search operations.
+  ['GET', '/v1/discovery/concepts', 'search'],
+  ['GET', '/v1/discovery/sections', 'read'],
   ['GET', '/v1/discovery/popular-terms', 'read'],
   ['GET', '/v1/erasures/{erasureId}', 'read'],
   ['GET', '/v1/exports/{export}', 'read'],
@@ -258,6 +263,7 @@ const operations: readonly (readonly [string, string, RateLimitFamily | 'read'])
   ['GET', '/v1/public-previews/{resource}', 'read'],
   ['GET', '/v1/rankings/trending', 'read'],
   ['GET', '/v1/rating-contexts', 'read'],
+  ['GET', '/v1/rating-populations', 'read'],
   ['GET', '/v1/rating-contexts/{id}', 'read'],
   ['GET', '/v1/rating-contexts/{id}/policy-revisions/{revision}', 'read'],
   ['GET', '/v1/rating-observations/{observation}/revisions/{revision}', 'read'],

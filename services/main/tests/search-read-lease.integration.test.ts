@@ -9,6 +9,7 @@ import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionE
 } from '../src/modules/access/admission.ts';
 import { accessStateCoverage } from '../src/modules/work/access-recovery-coverage.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const issuer = 'https://account.search.test';
@@ -267,8 +268,8 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
     // Keep the 009-to-010 upgrade assertions above, then exercise the recovery
     // fence against the current owner schema, including download read leases.
     const migrationDirectory = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrationDirectory })]
-      .filter(file => Number(file.slice(0, 3)) >= 14 && file !== '240_content_search_read.sql').sort()) {
+    for (const file of schemaFiles(root, 'access')
+      .filter(file => migrationVersion(file) >= 14 && file !== '240_content_search_read.sql')) {
       await pool.query(readFileSync(join(migrationDirectory, file), 'utf8'));
     }
     const generation = await engageAccessRecoveryFence(pool);

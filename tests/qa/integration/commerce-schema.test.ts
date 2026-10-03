@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { afterAll, expect, test } from 'bun:test';
 import { Client, Pool, type PoolClient } from 'pg';
 import { readEnv } from '../../../scripts/dev/config.ts';
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import type { OwnerColumns, OwnerRow } from '../../../services/main/src/modules/commerce/owner-columns.ts';
 import { commerceColumns, commerceSchema } from '../../../services/main/src/modules/commerce/schema.ts';
@@ -25,7 +26,6 @@ afterAll(async () => { for (const cleanup of cleanups.reverse()) await cleanup()
 
 const iri = () => `https://rezics.com/id/${randomUUID()}`;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-const sqlFiles = (dir: string) => [...new Bun.Glob('*.sql').scanSync({ cwd: dir })].sort();
 
 function stackEnv() {
   const runId = Bun.env.REZICS_QA_RUN_ID;
@@ -56,9 +56,9 @@ async function freshDatabase(owner: 'access' | 'content'): Promise<Pool> {
   return pool;
 }
 
-/** Apply Access files in name order, as bootstrap and the dev CLI do. */
+/** Apply Access files in numeric version order, as the release runner does. */
 async function applyAccess(pool: Pool, select: (version: number) => boolean): Promise<void> {
-  for (const file of sqlFiles(accessDir).filter(name => select(Number(name.slice(0, 3))))) {
+  for (const file of schemaFiles(root, 'access').filter(name => select(migrationVersion(name)))) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
 }
@@ -145,9 +145,9 @@ test('commerce schema: upgrade from the preceding Access and Content heads keeps
   const content = await freshDatabase('content');
   await content.query(`CREATE SCHEMA IF NOT EXISTS content;
     CREATE TABLE content.schema_migration (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  for (const file of sqlFiles(contentDir).filter(name => Number(name.slice(0, 3)) < contentUpgradeFrom)) {
+  for (const file of schemaFiles(root, 'content').filter(name => migrationVersion(name) < contentUpgradeFrom)) {
     await content.query(readFileSync(join(contentDir, file), 'utf8'));
-    await content.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [Number(file.slice(0, 3))]);
+    await content.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [migrationVersion(file)]);
   }
   const body = seedContent(content);
   const before = await body.revision(`existing-${randomUUID()}`, 'draft.save');

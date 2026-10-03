@@ -5,6 +5,7 @@ import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync } from 'node
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied } from '../src/modules/access/admission.ts';
@@ -85,7 +86,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     accessData = pgData;
     accessPool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
     const accessMigrations = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await accessPool.query(readFileSync(join(accessMigrations, file), 'utf8'));
     }
     const app = createMainApp(fuseki);

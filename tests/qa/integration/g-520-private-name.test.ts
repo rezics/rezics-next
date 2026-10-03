@@ -36,6 +36,9 @@ test('G-520: private Account names never provision or appear in public Person, h
     [Bun.env.ACCOUNT_DATABASE_URL, Bun.env.ACCESS_DATABASE_URL] = original;
     storage = await startMediaStack('g-520');
     const marker = `PRIVATE-MARKER-${randomUUID()}`;
+    // The shard's demo author also uses 林梅; the positive search control must
+    // identify this Person independently of every earlier fixture.
+    const publicName = `林梅 ${randomUUID()}`;
     const email = `${randomUUID()}@example.test`;
     const password = randomBytes(24).toString('base64url');
     const signedUp = await json<{ user: { id: string; name: string } }>(await h.accountApp.handle(
@@ -118,7 +121,7 @@ test('G-520: private Account names never provision or appear in public Person, h
     for (const displayName of ['', 'x'.repeat(201), '\u0000private', null]) {
       expect((await call('POST', '/v1/me/onboarding', { ...unnamed, displayName })).status).toBe(400);
     }
-    expect((await call('POST', '/v1/me/onboarding', { ...unnamed, displayName: '林梅' }, false)).status).toBe(401);
+    expect((await call('POST', '/v1/me/onboarding', { ...unnamed, displayName: publicName }, false)).status).toBe(401);
     expect(await access.activePrincipalId(principal)).toBeNull();
     expect((await h.accessPool.query(`SELECT count(*)::int AS n FROM access.agent_provision a
       JOIN access.principal p ON p.id = a.principal_id
@@ -128,7 +131,7 @@ test('G-520: private Account names never provision or appear in public Person, h
     expect(await graphPosition()).toEqual(beforeGraph);
 
     const first = await json<PersonOnboardingResult>(await call('POST', '/v1/me/onboarding',
-      { ...unnamed, displayName: '林梅' }), 201);
+      { ...unnamed, displayName: publicName }), 201);
     const agent = first.agent;
     expect(first).toMatchObject({ state: 'active', sessionAgent: agent, suggestedHandle: 'reader', replayed: false });
     expect(nameReads).toBe(4); // Successful onboarding has two indexed name reads.
@@ -140,7 +143,7 @@ test('G-520: private Account names never provision or appear in public Person, h
     expect(nameReads).toBe(10);
     const principalId = await access.activePrincipalId(principal);
     expect((await h.accessPool.query(`SELECT display_name FROM access.agent_provision
-      WHERE principal_id = $1 AND agent_kind = 'person'`, [principalId])).rows).toEqual([{ display_name: '林梅' }]);
+      WHERE principal_id = $1 AND agent_kind = 'person'`, [principalId])).rows).toEqual([{ display_name: publicName }]);
 
     const noMarker = async <T>(response: Response): Promise<T> => {
       const value = await json<T>(response);
@@ -148,7 +151,7 @@ test('G-520: private Account names never provision or appear in public Person, h
       return value;
     };
     for (const path of [`/v1/agents/${short(agent)}`, `/v1/handles/agent-${short(agent)}`]) {
-      expect(await noMarker(await call('GET', path, undefined, false))).toMatchObject({ id: agent, displayName: '林梅' });
+      expect(await noMarker(await call('GET', path, undefined, false))).toMatchObject({ id: agent, displayName: publicName });
     }
     // Real public reads must have a positive public-name control, not empty fixtures.
     const work = await storage.publicWork(agent, ['en'], 'A public book');
@@ -164,10 +167,11 @@ test('G-520: private Account names never provision or appear in public Person, h
       profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`, agent,
       role: 'author', expectedWorkHead: workHead, actingSubject: agent }), 201);
     expect(await noMarker(await call('GET', `/v1/works/${short(work.work)}/agent-credits`, undefined, false)))
-      .toMatchObject({ items: [{ agent, displayName: '林梅' }] });
+      .toMatchObject({ items: [{ agent, displayName: publicName }] });
     const search = (phrase: string) => call('POST', '/v1/queries', {
       profile: 'public-main-phrase-v1', phrase, language: null }, false);
-    expect(await noMarker(await search('林梅'))).toMatchObject({ results: [{ work: work.work, matchedField: 'credit', matchedText: '林梅' }] });
+    expect(await noMarker(await search(publicName))).toMatchObject({ total: 1,
+      results: [{ work: work.work, matchedField: 'credit', matchedText: publicName }] });
     expect(await noMarker(await search(marker))).toMatchObject({ results: [], total: 0 });
 
     const realm = await json<{ realm: string }>(await call('POST', '/v1/spaces', {
@@ -185,7 +189,7 @@ test('G-520: private Account names never provision or appear in public Person, h
     await h.accessPool.query(`INSERT INTO access.realm_roster_listing
       (membership_id,membership_generation,realm,member,listed) VALUES ($1,1,$2,$3,true)`, [membership, realm.realm, agent]);
     expect(await noMarker(await call('GET', `/v1/realms/${short(realm.realm)}/roster`, undefined, false)))
-      .toMatchObject({ items: [{ agent, displayName: '林梅' }] });
+      .toMatchObject({ items: [{ agent, displayName: publicName }] });
     expect((await h.fuseki.query(`ASK {
       { ?s ?p ?o . FILTER(CONTAINS(STR(?s), ${lit(marker)}) || CONTAINS(STR(?p), ${lit(marker)}) || CONTAINS(STR(?o), ${lit(marker)})) }
       UNION { GRAPH ?g { ?s ?p ?o } FILTER(CONTAINS(STR(?g), ${lit(marker)}) || CONTAINS(STR(?s), ${lit(marker)})

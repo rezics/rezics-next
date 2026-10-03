@@ -20,13 +20,18 @@ function temporaryRoot() {
   return mkdtempSync(join(root, '.temp/g-940-migrations-'));
 }
 
-test('G-940: numeric migration order preserves every existing owner inventory', () => {
+test('G-940: numeric migration order preserves every existing owner version', () => {
   for (const directory of Object.values(migrationDirectories)) {
     const files = readdirSync(join(root, directory)).filter((name) => name.endsWith('.sql'));
-    expect([...files].sort(compareMigrationPaths)).toEqual([...files].sort());
+    expect([...files].sort(compareMigrationPaths).map(migrationVersion)).toEqual(
+      files.map(migrationVersion).sort((left, right) => left - right),
+    );
+    // Three-digit histories retain their original order; newer heads exceed 999.
+    const legacy = files.filter((name) => migrationVersion(name) < 1000);
+    expect([...legacy].sort(compareMigrationPaths)).toEqual([...legacy].sort());
   }
   for (const inventory of [migrationInventory(root), loadCompatibility(root).files]) {
-    expect(Object.keys(inventory)).toEqual(Object.keys(inventory).sort());
+    expect(Object.keys(inventory)).toEqual(Object.keys(inventory).sort(compareMigrationPaths));
   }
   expect(['1000_next.sql', '999_previous.sql', '986_gap.sql'].sort(compareMigrationPaths)).toEqual([
     '986_gap.sql',
