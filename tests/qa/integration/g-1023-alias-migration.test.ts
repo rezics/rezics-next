@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
+import { Client, Pool } from 'pg';
 import { migrationRecords } from '../../../scripts/ops/migrate.ts';
 import { uuidToSid } from '@rezics/model/address/sid';
+import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
 
 const registryTables = [
   'name_reserved_word',
@@ -17,6 +18,7 @@ const registryTables = [
 test('G1023: 1029 upgrades a restored alias inventory twice without changing holders, history or guards', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated integration QA');
   const client = new Client({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, max: 1 });
   await client.connect();
   const holder = `https://rezics.com/id/${randomUUID()}`;
   const other = `https://rezics.com/id/${randomUUID()}`;
@@ -124,6 +126,17 @@ test('G1023: 1029 upgrades a restored alias inventory twice without changing hol
         .legacy_alias,
     ).toEqual({ key: { value: 'Café Au Lait' } });
     await client.query(migration);
+    const registry = new AliasRegistry(pool);
+    for (const scope of ['agent', 'space'] as const) {
+      expect(await registry.availability(scope, 'FOLLOWING')).toEqual({
+        available: false,
+        reason: 'reserved',
+      });
+    }
+    expect(await registry.availability('work', 'following')).toEqual({
+      available: true,
+      reason: 'available',
+    });
     expect((await client.query(`SELECT * FROM access.alias_registry ORDER BY key`)).rows).toEqual(
       head,
     );
@@ -184,5 +197,6 @@ test('G1023: 1029 upgrades a restored alias inventory twice without changing hol
   } finally {
     await client.query('ROLLBACK');
     await client.end();
+    await pool.end();
   }
 }, 60_000);

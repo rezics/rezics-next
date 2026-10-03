@@ -46,6 +46,10 @@ BEGIN
   END IF;
 END $$;
 
+-- Public route words protect the handle namespace as new routes are added.
+INSERT INTO access.alias_reserved_word(word) VALUES ('following')
+  ON CONFLICT(word) DO UPDATE SET handles = true;
+
 -- DROP COLUMN removes the former combined key/display SID check. Reinstate
 -- the key's half explicitly, without weakening identity-key rejection.
 ALTER TABLE access.alias_registry DROP COLUMN IF EXISTS display;

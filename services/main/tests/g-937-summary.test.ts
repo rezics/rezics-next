@@ -7,10 +7,17 @@ import { uuidToSid } from '@rezics/model/address/sid';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 test('G937: SQL owns every reserved web route and former authority word', () => {
-  const migration = readFileSync('services/main/migrations/access/1010_name_registry.sql', 'utf8');
+  const directory = 'services/main/migrations/access';
+  const reservations = readdirSync(directory)
+    .filter((file) => file.endsWith('.sql'))
+    .flatMap((file) => [
+      ...readFileSync(`${directory}/${file}`, 'utf8').matchAll(
+        /INSERT\s+INTO\s+access\.(?:name|alias)_reserved_word\b[^;]*;/gi,
+      ),
+    ]);
   const words = new Set(
-    [...migration.slice(0, migration.indexOf('-- Same frozen')).matchAll(/'([^']+)'/g)].map(
-      (match) => match[1],
+    reservations.flatMap((insert) =>
+      [...insert[0].matchAll(/'([^']+)'/g)].map((match) => match[1]),
     ),
   );
   for (const root of ['apps/web/app', 'apps/web/app/[locale]']) {
