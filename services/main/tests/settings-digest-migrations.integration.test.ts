@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
@@ -38,7 +39,7 @@ test('settings Access migrations preserve prior notification kinds and create di
     '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socket}`, '-w', 'start'], { cwd: state });
   pool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER,
     database: 'postgres', max: 2 });
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessDir })].sort()) {
+  for (const file of schemaFiles(root, 'access')) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
   const tables = (await pool.query<{ name: string }>(`SELECT table_name AS name

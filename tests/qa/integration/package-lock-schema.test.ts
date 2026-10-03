@@ -1,5 +1,6 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Client, Pool, type PoolClient } from 'pg';
@@ -21,8 +22,8 @@ type Db = Pool | PoolClient;
 const sha = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex');
 
 function localMigrations(): Array<{ version: number; sql: string }> {
-  return readdirSync(migrationDirectory).filter(name => name.endsWith('.sql')).sort()
-    .map(name => ({ version: Number(name.slice(0, 3)),
+  return schemaFiles(root, 'content')
+    .map(name => ({ version: migrationVersion(name),
       sql: readFileSync(join(migrationDirectory, name), 'utf8') }));
 }
 

@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { test, expect } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
@@ -216,7 +217,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/005_recovery_coverage_head.sql'), 'utf8'));
     await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/006_account_subject_deletion.sql'), 'utf8'));
     const accessMigrations = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await pool.query(readFileSync(join(accessMigrations, file), 'utf8'));
     }
     await migrateContent(contentPool);

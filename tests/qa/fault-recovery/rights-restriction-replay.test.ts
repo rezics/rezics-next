@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { claimFixture, fixtureReasons } from '../integration/g-565-decision-support.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -43,7 +44,7 @@ async function freePort(): Promise<number> {
 
 async function migrateAccess(pool: Pool): Promise<void> {
   const directory = join(root, 'services/main/migrations/access');
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: directory })].sort()) {
+  for (const file of schemaFiles(root, 'access')) {
     await pool.query(readFileSync(join(directory, file), 'utf8'));
   }
 }

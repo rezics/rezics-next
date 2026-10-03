@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -38,7 +39,7 @@ async function migrateAccess(url: string): Promise<void> {
   await db.connect();
   try {
     const directory = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: directory })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await db.query(readFileSync(join(directory, file), 'utf8'));
     }
   } finally { await db.end(); }

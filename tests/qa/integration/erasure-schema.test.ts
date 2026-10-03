@@ -1,7 +1,8 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -51,7 +52,7 @@ async function database(name: string): Promise<Pool> {
 }
 
 function relayFiles(filter: (name: string) => boolean): string[] {
-  return readdirSync(relayDirectory).filter(name => name.endsWith('.sql') && filter(name)).sort();
+  return schemaFiles(root, 'relay').filter(filter);
 }
 
 /** Same application as the QA bootstrap: one file per implicit transaction. */
@@ -428,13 +429,13 @@ test('Content erasure tombstone and export owner install empty and upgrade curre
   // Upgrade a Content owner recorded at the current head through the same runner.
   const content = await database('content_head');
   const directory = join(root, 'services/content/migrations');
-  const headFiles = readdirSync(directory).filter(name => name.endsWith('.sql') && !ownContent.test(name)
-    && Number(name.slice(0, 3)) < 120).sort();
+  const headFiles = schemaFiles(root, 'content').filter(name => !ownContent.test(name)
+    && migrationVersion(name) < 120);
   await content.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration (version integer PRIMARY KEY,
     applied_at timestamptz NOT NULL DEFAULT now())`);
   for (const file of headFiles) {
     await content.query(readFileSync(join(directory, file), 'utf8'));
-    await content.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [Number(file.slice(0, 3))]);
+    await content.query('INSERT INTO content.schema_migration (version) VALUES ($1)', [migrationVersion(file)]);
   }
   const revisions = [randomUUID(), randomUUID()];
   await content.query(`INSERT INTO content.variant (id, resource_id, language_kind, direction)

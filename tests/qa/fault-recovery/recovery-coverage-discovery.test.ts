@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -45,7 +46,7 @@ test('OPS03: recovery coverage discovers a new owner schema table and owner-row 
     const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
     pools.push(contentPool, accessPool);
     const accessMigrations = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessMigrations })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await accessPool.query(readFileSync(join(accessMigrations, file), 'utf8'));
     }
     await migrateContent(contentPool);

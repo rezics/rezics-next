@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -43,7 +44,7 @@ test('LIVE04: native subject child and human retirement survive held graph recov
     relay = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
     for (const [owner, pool] of [['access', access], ['relay', relay]] as const) {
       const path = join(root, `services/main/migrations/${owner}`);
-      for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: path })].sort()) {
+      for (const file of schemaFiles(root, owner)) {
         await pool.query(readFileSync(join(path, file), 'utf8'));
       }
     }

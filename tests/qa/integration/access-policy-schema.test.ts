@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -23,9 +24,9 @@ import {
 // IAM33, but proves storage invariants only; the owning APIs close those cases.
 const root = resolve(import.meta.dir, '../../..');
 const migrations = join(root, 'services/main/migrations/access');
-const files = [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort();
-const headFiles = files.filter(file => file < '040');
-const newFiles = files.filter(file => file >= '040');
+const files = schemaFiles(root, 'access');
+const headFiles = files.filter(file => migrationVersion(file) < 40);
+const newFiles = files.filter(file => migrationVersion(file) >= 40);
 // Apply this owner's range separately, then complete the upgrade through the
 // current head before comparing it with an empty install.
 const ownFiles = newFiles.filter(file => /^04\d_/.test(file));

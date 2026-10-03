@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -95,7 +96,7 @@ function stopGraph(runId: string) {
 }
 async function migrate(pool: Pool, owner: 'access' | 'relay') {
   const directory = join(root, `services/main/migrations/${owner}`);
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: directory })].sort()) {
+  for (const file of schemaFiles(root, owner)) {
     await pool.query(readFileSync(join(directory, file), 'utf8'));
   }
 }

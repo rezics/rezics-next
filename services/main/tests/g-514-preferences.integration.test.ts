@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -57,7 +58,7 @@ beforeAll(async () => {
   execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
     '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
   pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 6 });
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessDir })].sort().filter(file => file < migration)) {
+  for (const file of schemaFiles(root, 'access').filter(file => migrationVersion(file) < migrationVersion(migration))) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
   await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',

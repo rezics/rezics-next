@@ -1,7 +1,8 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
@@ -151,8 +152,8 @@ test('FACT01-FACT04 owner schema: Content verification migrations install empty 
     '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
   const admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
   const connect = (database: string) => new Pool({ host: '127.0.0.1', port, user: process.env.USER, database, max: 6 });
-  const local = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
-    .map(name => ({ name, version: Number(name.slice(0, 3)) }));
+  const local = schemaFiles(root, 'content')
+    .map(name => ({ name, version: migrationVersion(name) }));
   const ours = local.filter(item => item.version >= FIRST_VERIFICATION && item.version < 100);
   expect(ours.map(item => item.name)).toEqual(['090_verification_lineage.sql', '091_verification_evidence.sql',
     '092_verification_challenge.sql', '093_verification_summary.sql', '094_verification_freshness.sql',

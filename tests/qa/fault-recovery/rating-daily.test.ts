@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -64,7 +65,7 @@ test('RATE01/RATE02/RATE03/RATE05/OPS03: Rating identities and policy survive re
     relayPool = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
     for (const [owner, pool] of [['access', accessPool], ['relay', relayPool]] as const) {
       const migrations = join(root, `services/main/migrations/${owner}`);
-      for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+      for (const file of schemaFiles(root, owner)) {
         await pool.query(readFileSync(join(migrations, file), 'utf8'));
       }
     }

@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { test, expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -93,7 +94,7 @@ test('OPS03/IAM07/IAM06/IAM21/IAM23/IAM24/IAM25/IAM26: archived Access WAL resto
     primary = new Pool({ host: '127.0.0.1', port: primaryPort, user: process.env.USER,
       database: 'postgres' });
     const migrations = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await primary.query(readFileSync(join(migrations, file), 'utf8'));
     }
     const principalId = Bun.randomUUIDv7();

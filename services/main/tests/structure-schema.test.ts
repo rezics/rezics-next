@@ -1,7 +1,8 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -227,8 +228,8 @@ afterAll(async () => {
 });
 
 test('COMP03 owner schema: Content migrations install 030 empty and upgrade from the current head', async () => {
-  const local = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort();
-  const versions = local.map(name => Number(name.slice(0, 3)));
+  const local = schemaFiles(root, 'content');
+  const versions = local.map(name => migrationVersion(name));
   expect(versions).toContain(STAGE_MIGRATION);
 
   const empty = await database('structure_empty');
@@ -247,10 +248,10 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
   await upgraded.query(`CREATE SCHEMA content;
     CREATE TABLE content.schema_migration (version integer PRIMARY KEY,
       applied_at timestamptz NOT NULL DEFAULT now())`);
-  for (const name of local.filter(name => Number(name.slice(0, 3)) < STAGE_MIGRATION)) {
+  for (const name of local.filter(name => migrationVersion(name) < STAGE_MIGRATION)) {
     await upgraded.query(readFileSync(join(migrations, name), 'utf8'));
     await upgraded.query('INSERT INTO content.schema_migration (version) VALUES ($1)',
-      [Number(name.slice(0, 3))]);
+      [migrationVersion(name)]);
   }
   const variant = `urn:rezics:variant:${randomUUID()}`;
   await upgraded.query(`INSERT INTO content.variant (id, resource_id, language_kind, direction)

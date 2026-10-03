@@ -1,6 +1,7 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -40,8 +41,7 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     await migrateContent(pool);
     const versions = await pool.query<{ version: number }>(
       'SELECT version FROM content.schema_migration ORDER BY version');
-    const local = readdirSync(join(import.meta.dir, '../migrations')).filter(name => name.endsWith('.sql'))
-      .sort().map(name => Number(name.slice(0, 3)));
+    const local = schemaFiles(root, 'content').map(migrationVersion);
     expect(versions.rows.map(row => row.version)).toEqual(local);
 
     // A retained v3 Content owner upgrades through the same runner; it must

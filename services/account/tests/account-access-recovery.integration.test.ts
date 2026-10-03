@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
@@ -257,9 +258,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     await (await getMigrations(accountAuthOptions(config))).runMigrations();
     await installConsentRefreshFence(account.pool);
     await seedCurrentAccountCoverage(account.pool);
-    for (const file of [...new Bun.Glob('*.sql').scanSync({
-      cwd: join(root, 'services/main/migrations/access'),
-    })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await access.pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     app = createAccountApp(createAccountAuth(config), account.pool)

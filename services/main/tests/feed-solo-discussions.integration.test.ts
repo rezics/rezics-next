@@ -1,3 +1,4 @@
+import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
@@ -39,7 +40,7 @@ beforeAll(async () => {
   execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
     '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
   pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: accessDir })].sort().filter(file => file < SOLO)) {
+  for (const file of schemaFiles(root, 'access').filter(file => migrationVersion(file) < migrationVersion(SOLO))) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
 }, 120_000);

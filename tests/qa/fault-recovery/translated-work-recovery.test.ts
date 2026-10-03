@@ -1,3 +1,4 @@
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -42,7 +43,7 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
       liveApps.FUSEKI_MAINTENANCE_TOKEN!, liveApps.FUSEKI_COMMAND_TOKEN!);
     accessPool = new Pool({ connectionString: liveApps.ACCESS_DATABASE_URL, max: 4 });
     const directorySql = join(root, 'services/main/migrations/access');
-    for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: directorySql })].sort()) {
+    for (const file of schemaFiles(root, 'access')) {
       await accessPool.query(await Bun.file(join(directorySql, file)).text());
     }
     const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
