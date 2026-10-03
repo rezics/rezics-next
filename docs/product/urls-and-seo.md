@@ -104,7 +104,12 @@ capability URL, and short tokens have been enumerated in practice
 ([Georgiev and Shmatikov 2016](https://arxiv.org/abs/1604.02734)). If link-only
 access to private material is ever offered, it uses its own revocable, expiring
 token of at least 120 random bits, never a `sid` or a short link. Address
-resolution is rate limited per principal class. Missing or inaccessible,
+resolution is rate limited per principal class and per client, and the budget
+is charged by misses (not found or not visible), which is what enumeration
+produces; a hit on a public address is ordinary page navigation, cacheable by
+the web for a short time and never refused by that budget, so readers behind a
+shared IP and crawlers are not turned away (2026-10-03, after the shared stack
+answered 429 to page views). Missing or inaccessible,
 retired and failed reads keep distinct appropriate HTTP outcomes; unavailable
 infrastructure must not become an indexable empty page.
 
