@@ -5,7 +5,8 @@ import { type CatalogueWork, coverKindOf } from '../catalogue/work.ts';
 import { AlsoEnjoyedRow } from './also-enjoyed-row.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { workHref } from './route.ts';
-import { realmLabel, type ScopeRealm } from './scope-bar.tsx';
+import type { ScopeRealm } from './scope-bar.tsx';
+import { realmLabel } from './scope-labels.ts';
 import type { AlsoEnjoyedItem, AlsoEnjoyedPage, Loaded } from './types.ts';
 
 export type AlsoEnjoyedBasis = AlsoEnjoyedItem['basis'];

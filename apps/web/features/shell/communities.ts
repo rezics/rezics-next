@@ -55,7 +55,7 @@ export function followedRealmIds(followed: { realms: readonly Community[]; zones
 /** A Realm's address segment: its official Zone's (`fiction`) when it has one, as `/r/…` uses, else its UUID. */
 export function realmSegment(realm: string, official: readonly Community[]): string {
   const zone = official.find(item => item.realm === realm);
-  return zone ? zone.href.replace(/^\/r\//, '') : realm.slice(-36);
+  return zone ? zone.href.replace(/^\/[rz]\//, '') : realm.slice(-36);
 }
 
 /** Each official Zone's Realm with its route segment, for links that should read `/r/fiction`. */

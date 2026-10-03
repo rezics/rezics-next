@@ -39,9 +39,9 @@ const communities: CommunityNavigation = { signedIn: true, avatarQuery: '',
       href: '/r/books', activity: 'none' },
   ] },
   official: [{ id: realm(3), kind: 'zone', realm: realm(13), name: 'Fiction', language: 'en',
-    icon: { kind: 'fallback', key: 'f' }, href: '/r/fiction', activity: 'unknown' },
+    icon: { kind: 'fallback', key: 'f' }, href: '/z/fiction', activity: 'unknown' },
   { id: realm(5), kind: 'zone', realm: realm(4), name: 'Books', language: 'en', icon: { kind: 'fallback', key: 'b' },
-    href: '/r/books', activity: 'unknown' }],
+    href: '/z/books', activity: 'unknown' }],
   moderated: [{ realm: realm(2), open: 8, more: false, href: `/manage/r/${realm(2).slice(-36)}` }] };
 
 function Placeholder() {
@@ -90,6 +90,33 @@ export const SignedOut: Story = {
     await expect(within(navigation).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
     await expect(canvas.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English');
     await expect(canvas.getByRole('button', { name: 'Display mode' })).toBeVisible();
+  },
+};
+
+export const OfficialSites: Story = {
+  args: { communities: <CommunityNav data={{ ...communities, signedIn: false, followed: null,
+    moderated: [] }} /> },
+  parameters: { route: { pathname: '/en/z/fiction' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const sites = within(canvas.getByRole('region', { name: 'Official Zones' }));
+    await expect(await sites.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', '/en/z/fiction');
+    await expect(sites.getByRole('link', { name: 'Fiction' })).toHaveAttribute('aria-current', 'page');
+    await expect(sites.getByRole('link', { name: 'Books' })).toHaveAttribute('href', '/en/z/books');
+    if ('__vitest_browser__' in globalThis) {
+      const { page } = await import('vitest/browser');
+      await document.fonts.ready;
+      await page.screenshot({ path: '../../../../.temp/g-989/official-sites-desktop.png' });
+      await page.viewport(390, 844);
+      await userEvent.click(canvas.getByRole('button', { name: 'Open navigation' }));
+      const mobile = within(await within(document.body).findByRole('dialog', { name: 'Menu' }));
+      await expect(await mobile.findByRole('link', { name: 'Fiction' })).toHaveAttribute('href', '/en/z/fiction');
+      await page.screenshot({ path: '../../../../.temp/g-989/official-sites-phone.png' });
+      await whenSettled('Menu');
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(within(document.body).queryByRole('dialog', { name: 'Menu' })).toBeNull());
+      await page.viewport(1280, 860);
+    }
   },
 };
 

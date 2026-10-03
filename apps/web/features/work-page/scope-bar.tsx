@@ -4,7 +4,7 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { EntityPicker, type EntityPickerItem, type EntityPickerLoad } from '@rezics/ui/entity-picker';
 import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezics/ui/sheet';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { discoveryApi } from '../discover/api.ts';
@@ -17,27 +17,15 @@ import Link from '../shell/localized-link.tsx';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WorkPageMessages } from './messages.ts';
-import { neighbourScope, sameScope, shortId, type WorkAt, workHref, type WorkScope, type WorkTab } from './route.ts';
+import { neighbourScope, sameScope, type WorkAt, workHref, type WorkScope, type WorkTab } from './route.ts';
+import { realmLabel, scopeName } from './scope-labels.ts';
 import type { WorkName } from './types.ts';
 
 /** A Realm the scope bar offers, with its public name when Main gave one. */
 export interface ScopeRealm { id: string; name: WorkName | null; ratingCount?: number; readerCommunity?: boolean }
 
-/** A Realm's display name, or "Realm 1a2b3c4d" when Main could not name it. */
-export function realmLabel(realm: ScopeRealm, messages: WorkPageMessages, locale: UiLocale): string {
-  return realm.name?.value ?? materializeData(messages, { locale }).realmFallback({ id: shortId(realm.id) });
-}
-
 /** What a scoped region shows and where: the page's scope and the Realms it can offer. */
 export interface ScopeView { workRef: WorkAt; scope: WorkScope; realms: readonly ScopeRealm[] }
-
-/** The scope in words, for headings and empty states ("No ratings in Fantasy Readers yet"). */
-export function scopeName(view: ScopeView, messages: WorkPageMessages, locale: UiLocale): string {
-  const { scope } = view;
-  if (scope.kind !== 'realm') return scope.kind === 'global' ? messages.global : messages.mine;
-  return realmLabel(view.realms.find(realm => realm.id === scope.realm) ?? { id: scope.realm, name: null },
-    messages, locale);
-}
 
 /** The neighbouring scope an empty state offers, as a link; none when there is nowhere else to look. */
 export function ScopeOffer({ view, locale, messages, tab = 'overview' }: {
@@ -79,6 +67,8 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
   const t = materializeData(messages, { locale });
   const words = browseMessages[locale];
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const [open, setOpen] = useState(false);
   const current = scope?.kind === 'realm' ? realms.find(realm => realm.id === scope.realm) : undefined;
   const realm = scope?.kind === 'realm' ? realmLabel(current ?? { id: scope.realm, name: null }, messages, locale) : '';
@@ -108,7 +98,8 @@ export function ScopeBar({ workRef, scope, realms, locale, messages, tab = 'over
       <li><ScopeLink href={workHref(workRef, tab, { kind: 'mine' })} current={sameScope(scope, { kind: 'mine' })}
         icon={UserRoundIcon}>{t.mine}</ScopeLink></li>
       {target || load ? <li><Sheet open={open} onOpenChange={details => setOpen(details.open)}>
-        <SheetTrigger asChild><Button size="sm" variant="ghost" pill>{words.otherCommunities}</Button></SheetTrigger>
+        <SheetTrigger asChild><Button size="sm" variant="ghost" pill disabled={!hydrated}
+          data-hydrated={hydrated ? 'true' : undefined}>{words.otherCommunities}</Button></SheetTrigger>
         <SheetContent placement="bottom" className="max-h-[85svh] sm:mx-auto sm:max-w-lg">
           <SheetHeader title={words.otherCommunities} />
           <SheetBody><EntityPicker key={`${target}:${locale}:${actingSubject}`} label={words.chooseCommunity}

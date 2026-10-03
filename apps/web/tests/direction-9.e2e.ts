@@ -11,14 +11,12 @@ import {
 } from '@playwright/test';
 import { entityPickerMessages } from '../../../packages/ui/src/components/entity-picker-messages.ts';
 import { uuidToSid } from '@rezics/model/address';
-import { materializeData } from 'native-i18n';
 import { canonicalHref, type Surface } from '../features/address/path.ts';
 import type { ResolvedAddress } from '../features/address/client.ts';
 import { messages as authMessages } from '../features/auth/messages.ts';
 import { browseMessages } from '../features/discover/browse-messages.ts';
 import { accessMessages } from '../features/manage/settings-messages.ts';
-import { messages as realmMessages } from '../features/realm/messages.ts';
-import realmChinese from '../features/realm/messages/zh-Hant.ts';
+import { messages as relationshipMessages } from '../features/relationships/messages.ts';
 import { messages as studioMessages } from '../features/studio/messages.ts';
 import studioChinese from '../features/studio/messages/zh-Hant.ts';
 import { messages as shellEnglish } from '../features/shell/messages.ts';
@@ -40,6 +38,7 @@ import {
   prepareSubmissionReview,
   short,
   selectedSessionAgent,
+  seedWikiPosition,
   type DirectionFixture,
 } from './direction-9-fixture.ts';
 
@@ -204,10 +203,10 @@ async function signInManager(page: Page) {
   await signInAtAccounts(page, '/en/settings', credentials().operator, true);
 }
 
-async function setupCommands(
+async function setupCommands<T>(
   browser: Browser,
   info: TestInfo,
-  action: (api: PublicCommands) => Promise<unknown>,
+  action: (api: PublicCommands) => Promise<T>,
 ) {
   const administrator = setupCredentials() ?? credentials().operator;
   const path = authStatePath(String(info.project.use.baseURL), administrator);
@@ -686,7 +685,10 @@ for (const locale of locales)
         await readyDirection(new PublicCommands(page.request), fixture, 'ratings');
         const t = browseMessages[locale];
         const workAddress = await address(page, 'work', fixture.work.work, locale);
-        await page.goto(canonicalHref(workAddress.canonical, locale));
+        const overview = canonicalHref(workAddress.canonical, locale);
+        await page.goto(overview);
+        await expect(page).toHaveURL(overview);
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(workAddress.canonical.slugSource);
         await page.getByRole('button', { name: t.otherCommunities, exact: true }).first().click();
         await page.getByRole('combobox', { name: t.chooseCommunity, exact: true }).click();
         await expect(page.getByRole('option').first()).toBeVisible();
@@ -742,34 +744,43 @@ for (const locale of locales)
 
       test('wiki position: search for a chapter beyond the initial window', async ({
         page,
+        browser,
       }, info) => {
-        await readyDirection(new PublicCommands(page.request), fixture, 'chapters');
+        const positions = await setupCommands(browser, info, (api) => seedWikiPosition(api, fixture));
+        // Probe as the reader too: administrative setup cannot prove disclosure.
+        await new PublicCommands(page.request).until<{ items: { occurrence: string }[] }>(
+          `/reading-positions/${short(positions.work)}?${new URLSearchParams({
+            q: positions.laterChapter.name, actingSubject: fixture.actor,
+          })}`,
+          (result) => result.items.some((item) => item.occurrence === positions.laterChapter.occurrence),
+        );
         const t = browseMessages[locale],
           wiki = wikiCopy(locale);
-        const read = await address(page, 'space', fixture.named.space, locale);
-        await page.goto(
+        const read = await address(page, 'space', positions.space, locale);
+        const response = await page.goto(
           canonicalHref(read.canonical, locale, read.canonical.slugSource, {
             surface: 'site',
-            tail: ['story', 'w', uuidToSid(short(fixture.story.work))],
+            tail: [positions.mount, uuidToSid(short(positions.work))],
             search: '?position=all',
           }),
         );
+        expect(response?.status(), 'the mounted wiki story opens').toBe(200);
         const trigger = page
           .getByRole('region', { name: wiki.region, exact: true })
           .getByRole('button');
         await expect(trigger).toHaveAttribute('data-hydrated', 'true');
         await trigger.click();
         await expect(
-          page.getByRole('link', { name: fixture.laterChapter.name, exact: true }),
+          page.getByRole('link', { name: positions.laterChapter.name, exact: true }),
         ).toHaveCount(0);
         await page
           .getByRole('combobox', { name: t.searchChapters, exact: true })
-          .fill(fixture.laterChapter.name);
-        await page.getByRole('option', { name: fixture.laterChapter.name, exact: true }).click();
+          .fill(positions.laterChapter.name);
+        await page.getByRole('option', { name: positions.laterChapter.name, exact: true }).click();
         await expect
           .poll(() => new URL(page.url()).searchParams.get('position'))
-          .toBe(short(fixture.laterChapter.occurrence));
-        await expect(trigger).toContainText(fixture.laterChapter.name);
+          .toBe(short(positions.laterChapter.occurrence));
+        await expect(trigger).toContainText(positions.laterChapter.name);
         await screenshot(page, info, 'wiki-later-chapter-selected');
       });
 
@@ -780,7 +791,7 @@ for (const locale of locales)
         const t = accessMessages[locale];
         const privateSpace =
           fixture.privateSpaces[locales.indexOf(locale) * views.length + views.indexOf(view)]!;
-        const path = `/${locale}/r/${privateSpace.handle}`;
+        const path = `/${locale}/r/${privateSpace.handle}/discussions`;
         await selectActor(page, fixture.actor, `/${locale}/settings`);
         const previous = await phase(`reset admission ${locale} ${view.name}`, () =>
           resetAdmission(new PublicCommands(page.request), fixture, privateSpace),
@@ -788,6 +799,8 @@ for (const locale of locales)
         const anonymous = await browser.newContext({
           baseURL: info.project.use.baseURL,
           viewport: view.viewport,
+          // Playwright applies the project's member storageState to new contexts.
+          storageState: { cookies: [], origins: [] },
         });
         const managerContext = await browser.newContext({
           baseURL: info.project.use.baseURL,
@@ -817,27 +830,32 @@ for (const locale of locales)
           await expect(page.getByText(t.pending, { exact: true })).toBeVisible();
           await screenshot(page, info, 'private-request-pending');
           const manager = await managerContext.newPage();
-          await manager.goto(`/${locale}/manage`);
-          await selectActor(
-            manager,
-            fixture.manager,
-            `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
-          );
-          await manager.getByRole('button', { name: t.approve, exact: true }).click();
-          const dialog = manager.getByRole('dialog');
-          await dialog
-            .getByRole('textbox', { name: t.reason, exact: true })
-            .fill('Reviewed for Direction 9 acceptance.');
-          await dialog.getByRole('button', { name: t.approve, exact: true }).click();
-          await expect(manager.getByText(t.approved, { exact: true })).toBeVisible();
-          await screenshot(manager, info, 'private-manager-approved');
+          manager.setDefaultTimeout(30_000);
+          // Select the fixture's manager before loading its scoped requests.
+          await phase(`${locale} ${view.name} manager selection`, () => selectActor(
+            manager, fixture.manager, `/${locale}/manage/r/${short(privateSpace.realm)}/requests`,
+          ));
+          await screenshot(manager, info, 'private-manager-before-decision');
+          await phase(`${locale} ${view.name} manager approval`, async () => {
+            await manager.getByRole('button', { name: t.approve, exact: true }).click();
+            const dialog = manager.getByRole('dialog');
+            await expect(dialog).toBeVisible();
+            await dialog
+              .getByRole('textbox', { name: t.reason, exact: true })
+              .fill('Reviewed for Direction 9 acceptance.');
+            await dialog.getByRole('button', { name: t.approve, exact: true }).click();
+            await expect(manager.getByText(t.approved, { exact: true })).toBeVisible();
+            await screenshot(manager, info, 'private-manager-approved');
+          });
           await page.reload();
           const own = await ownRequests(new PublicCommands(page.request), fixture, privateSpace);
           expect(own.filter((item) => !previous.has(item.id)).map((item) => item.state)).toEqual([
             'accepted',
           ]);
-          const realm = materializeData(locale === 'en' ? realmMessages : realmChinese, { locale });
-          await expect(page.getByRole('button', { name: realm.joined, exact: true })).toBeVisible();
+          const relationship = relationshipMessages[locale];
+          await expect(page.getByRole('button', {
+            name: `${relationship.joined} · ${privateSpace.name} · ${relationship.leave}`, exact: true,
+          })).toBeVisible();
           await expect(page.getByText(t.pending, { exact: true })).toHaveCount(0);
           await screenshot(page, info, 'private-requester-reloaded');
         } finally {

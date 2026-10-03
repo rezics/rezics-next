@@ -25,7 +25,7 @@ import {
   tabOf,
   workHref,
 } from '../features/work-page/route.ts';
-import { scopeName } from '../features/work-page/scope-bar.tsx';
+import { scopeName } from '../features/work-page/scope-labels.ts';
 
 const work = '5f7a2c1e-8d3b-4c6a-9e2f-1b4d6a8c0e3f';
 const realm = '7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';

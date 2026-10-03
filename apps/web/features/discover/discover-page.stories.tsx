@@ -108,7 +108,7 @@ export const Communities: Story = {
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const communities = within(canvas.getByRole('region', { name: 'Communities', exact: true }));
+    const communities = within(canvas.getByRole('region', { name: /^Communities$/ }));
     const page = fixturePage(browseResources.filter((item) => item.kind === 'realm'));
     const links = within(communities.getByRole('list')).getAllByRole('link');
     await expect(links).toHaveLength(page.items.length);

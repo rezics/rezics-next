@@ -6,10 +6,10 @@ import { Textarea } from '@rezics/ui/textarea';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { CommandDialog } from '../manage/command-dialog.tsx';
-import { browserSpaceAccessApi, newKey, type JoinPage, type OwnJoinRequest, type SpaceAccessApi } from '../manage/settings-api.ts';
+import { browserSpaceAccessApi, newKey, type JoinPage, type SpaceAccessApi } from '../manage/settings-api.ts';
 import { accessMessages } from '../manage/settings-messages.ts';
 import { SpaceDiscovery } from './discovery.tsx';
-import { emptyRequestJournal, journalAfterStatus, parseRequestJournal, readOwnRequest, requestStorageKey, type RequestJournal, type RequestReceipt } from './request-state.ts';
+import { emptyRequestJournal, journalAfterStatus, parseRequestJournal, readCurrentRequest, requestStorageKey, type CurrentRequest, type RequestJournal, type RequestReceipt } from './request-state.ts';
 
 type Props = { page: JoinPage; actingSubject: string | null; signInHref: string; locale: UiLocale;
   api?: SpaceAccessApi; persist?: boolean;
@@ -51,7 +51,7 @@ function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, pers
     if (!actingSubject) { setCurrent('available'); setReady(true); setStatusLoading(false); return; }
     let alive = true;
     setReady(false); setStatusLoading(true);
-    void readOwnRequest(api).then(result => {
+    void readCurrentRequest(api).then(result => {
       if (!alive) return;
       if (result.ok) acceptStatus(result.data);
       else { setCurrent(null); setError(result.failure === 'denied' ? t.denied : t.failed); }
@@ -66,19 +66,20 @@ function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, pers
       try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* this session still retains the intent */ }
     }
   }
-  function acceptStatus(entry: OwnJoinRequest | null) {
-    const saved = journalAfterStatus(journal.current, entry);
+  function acceptStatus({ entry, state }: CurrentRequest) {
+    const saved = journalAfterStatus(journal.current, entry, state !== 'available');
     retain(saved);
-    setKnownReceipt(entry ? { requestId: entry.id, requestGeneration: entry.requestGeneration, state: entry.state } : null);
-    setCurrent(entry?.state ?? 'available'); setReady(true);
+    setKnownReceipt(entry && state !== 'available'
+      ? { requestId: entry.id, requestGeneration: entry.requestGeneration, state: entry.state } : null);
+    setCurrent(state); setReady(true);
     setReason(saved.draftReason || saved.requestIntent?.command.reason || '');
     setWithdrawReason(saved.withdrawIntent?.command.reason ?? '');
     setWithdrawing(saved.withdrawIntent !== null);
   }
   async function refreshStatus(requireRequest = knownReceipt !== null) {
     setReady(false); setStatusLoading(true); setError(null);
-    const result = await readOwnRequest(api);
-    if (result.ok && (result.data !== null || !requireRequest)) acceptStatus(result.data);
+    const result = await readCurrentRequest(api);
+    if (result.ok && (result.data.entry !== null || !requireRequest)) acceptStatus(result.data);
     else {
       setCurrent(null); setKnownReceipt(null); setWithdrawing(false);
       setError(!result.ok && result.failure === 'denied' ? t.denied : t.failed);
