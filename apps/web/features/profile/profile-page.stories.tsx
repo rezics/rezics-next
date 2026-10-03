@@ -143,7 +143,8 @@ export const PostsAndComments: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('tab', { name: 'Posts' }));
-    await expect(await canvas.findByRole('link', { name: 'A first post' })).toBeVisible();
+    // Hydration enhances the native anchor; query the current link on each retry.
+    await waitFor(() => expect(canvas.getByRole('link', { name: 'A first post' })).toBeVisible());
     await userEvent.click(canvas.getByRole('tab', { name: 'Comments' }));
     await expect(await canvas.findByText('great')).toHaveProperty('tagName', 'STRONG');
     await userEvent.click(canvas.getByRole('tab', { name: 'Overview' }));

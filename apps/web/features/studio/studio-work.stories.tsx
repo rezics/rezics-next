@@ -17,7 +17,7 @@ import type { ContentsPage, MyText } from './types.ts';
 
 type Props = ComponentProps<typeof StudioWork>;
 
-const base = '/en/studio/@agent-00000000-0000-4000-8000-000000000001/works/00000000-0000-4000-8000-000000000101';
+const base = '/en/studio/@111111114bZ6BZRUqUqZep/works/00000000-0000-4000-8000-000000000101';
 
 /** A Book's chapters as Main's contents read returns them, from a stand-in Main that holds the Book's composition. */
 function chaptersOf(main: ReturnType<typeof storyMain>): ContentsPage {
@@ -137,7 +137,8 @@ export const Chapters: Story = {
     await waitFor(() => expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('第四章 站台'));
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
     // The chapter is written through the story's Main double; under load that round trip exceeds the default wait.
-    await expect(await canvas.findByRole('link', { name: 'Write “第四章 站台”' }, { timeout: 5000 })).toBeInTheDocument();
+    await waitFor(() => expect(canvas.getByRole('link', { name: 'Write “第四章 站台”' })).toBeInTheDocument(),
+      { timeout: 5000 });
     await expect(canvas.getByRole('textbox', { name: 'New chapter' })).toHaveValue('');
     // A chapter just added moves at once: the list was read again with its place.
     await moveBy(canvasElement, '第四章 站台', 'Move “第四章 站台” up');
@@ -174,7 +175,7 @@ export const ChapterWriters: Story = {
     await expect(within(rows[2]!).getByText('Draft')).toBeInTheDocument();
     await expect(rows[2]).toHaveTextContent('Written as 月下书生 · Moonlit Scribe');
     await expect(within(rows[2]!).queryByRole('link', { name: /^Write/ })).toBeNull();
-    const pen = '/studio/@agent-00000000-0000-4000-8000-000000000002/works/00000000-0000-4000-8000-000000000101';
+    const pen = '/studio/@111111114bZ6BZRUqUqZeq/works/00000000-0000-4000-8000-000000000101';
     await expect(canvas.getByRole('link', { name: 'Switch to 月下书生 · Moonlit Scribe to write “第三章 最后一班车”' }))
       .toHaveAttribute('href', expect.stringContaining(`${pen}/chapters/00000000-0000-4000-8000-000000000113?language=zh-Hans`));
     // A private chapter the pen name writes: its title and state come from the pen name's view.
@@ -196,7 +197,7 @@ export const FirstChapter: Story = {
     await expect(canvas.getByText('No chapters yet. Add the first one below.')).toBeInTheDocument();
     await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第一章 雨夜');
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
-    await expect(await canvas.findByRole('link', { name: 'Write “第一章 雨夜”' })).toBeInTheDocument();
+    await waitFor(() => expect(canvas.getByRole('link', { name: 'Write “第一章 雨夜”' })).toBeInTheDocument());
     await expect((args as unknown as { main: ReturnType<typeof storyMain> }).main.calls)
       .toEqual(['composition', 'work', 'insert']);
   },
@@ -233,16 +234,16 @@ export const Volumes: Story = {
     await expect(first).not.toHaveTextContent('Volume 1');
     await expect(second).toHaveAttribute('aria-expanded', 'true');
     await expect(canvas.getByRole('button', { name: /^番外/ })).toHaveTextContent('Extras · 1 chapter');
-    const draft = await canvas.findByRole('link', { name: 'Write “第三章 最后一班车”' });
-    const row = draft.closest('li')!;
-    await expect(row).toHaveTextContent('3');
-    await waitFor(() => expect(row).toHaveTextContent('960 characters'));
-    await expect(row).toHaveTextContent('Draft');
+    // Native links are replaced during hydration; locate their current row on each retry.
+    const row = () => canvas.getByRole('link', { name: 'Write “第三章 最后一班车”' }).closest('li');
+    await waitFor(() => expect(row()).toHaveTextContent('3'));
+    await waitFor(() => expect(row()).toHaveTextContent('960 characters'));
+    await expect(row()).toHaveTextContent('Draft');
     // A closed volume reads its chapters when it opens: numbered through the Book, with where each stands.
     await userEvent.click(first);
-    const changed = (await canvas.findByRole('link', { name: 'Write “第二章 未寄出的信”' })).closest('li')!;
-    await waitFor(() => expect(changed).toHaveTextContent('Unpublished changes'));
-    await expect(changed).toHaveTextContent('1,820 characters');
+    const changed = () => canvas.getByRole('link', { name: 'Write “第二章 未寄出的信”' }).closest('li');
+    await waitFor(() => expect(changed()).toHaveTextContent('Unpublished changes'));
+    await expect(changed()).toHaveTextContent('1,820 characters');
     // Into the other volume from the handle's menu, as the keyboard does it.
     await moveBy(canvasElement, '第二章 未寄出的信', '', '第二卷 雨停之后');
     await waitFor(() => expect(second).toHaveTextContent('3 chapters'), { timeout: 5000 });
@@ -266,7 +267,8 @@ export const Volumes: Story = {
     await userEvent.type(canvas.getByRole('textbox', { name: 'New chapter' }), '第五章 放晴');
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
     await waitFor(() => expect(third).toHaveTextContent('1 chapter'), { timeout: 5000 });
-    await expect(await canvas.findByRole('link', { name: 'Write “第五章 放晴”' }, { timeout: 5000 })).toBeVisible();
+    await waitFor(() => expect(canvas.getByRole('link', { name: 'Write “第五章 放晴”' })).toBeVisible(),
+      { timeout: 5000 });
     // Rename the extras; a volume with chapters offers no delete.
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Actions for “番外”' })).toBeEnabled());
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “番外”' }));
@@ -384,7 +386,7 @@ export const VolumesPhone: Story = {
   args: (() => { const setup = volumes(); return { content: setup.content }; })() as never,
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
-    await expect(await within(canvasElement).findByRole('link', { name: 'Write “第三章 最后一班车”' })).toBeVisible();
+    await waitFor(() => expect(within(canvasElement).getByRole('link', { name: 'Write “第三章 最后一班车”' })).toBeVisible());
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
