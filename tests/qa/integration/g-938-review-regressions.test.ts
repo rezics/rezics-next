@@ -10,7 +10,6 @@ import { followSpace, registerFollowSpace } from '../../../services/main/src/mod
 import { publicTargetRead } from '../../../services/main/src/modules/target/resolve.ts';
 import { relationshipEligible, relationshipRecipients } from '../../../services/main/src/modules/follows/recipients.ts';
 import { recoverLibraryFollows, configureLibraryFollows } from '../../../services/main/src/modules/library/follows.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { NotificationProducer } from '../../../services/main/src/modules/notification-producers/producer.ts';
 import { NotificationStore } from '../../../services/main/src/modules/notification/store.ts';
 import { WatchStore } from '../../../services/main/src/modules/notification/watch.ts';
@@ -58,7 +57,16 @@ test('G-938 Join races an explicit follow, private members keep notifications, a
     await stack.accessPool.query(`INSERT INTO access.follow_space_alias(alias,space,realm) VALUES($1,$2,$3)`,
       [`https://rezics.com/id/${randomUUID()}`,space.space,space.realm]);
     const zone = `https://rezics.com/id/${randomUUID()}`;
-    await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(space.space)} <${RV}zoneCapability> ${iri(zone)} } }`);
+    const scope = `zone:edit:${zone}`;
+    await stack.accessPool.query('INSERT INTO access.scope_gate(id) VALUES($1)',[scope]);
+    await stack.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
+      VALUES($1,$2,$3,'zone.edit',now()+interval '1 hour')`,[randomUUID(),home.author.principalId,owner]);
+    await stack.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+      VALUES($1,$2,$2,$3,'zone.edit',now()+interval '1 hour')`,[randomUUID(),owner,scope]);
+    // Alias recovery needs an admitted Zone with its type, owner link and
+    // reciprocal capability, not just a dangling Space-to-Zone edge.
+    await json(await call('POST','/v1/zones',{
+      zone,space: space.space,disclosure: 'public',actingSubject: owner },home.author.token),201);
     await stack.accessPool.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level)
       VALUES($1,$2,'realm',$4,true,gen_random_uuid(),'off'),($1,$3,'zone',$4,false,gen_random_uuid(),'highlights')`,
       [home.reader.principalId,space.realm,zone,reader]);

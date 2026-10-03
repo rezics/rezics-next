@@ -140,10 +140,10 @@ test('G937: former graph names move once, retain holders and recover after nativ
     expect(
       (
         await f.accessPool.query(
-          `SELECT obj_description('access.agent_handle'::regclass) AS description`,
+          "SELECT to_regclass('access.agent_handle') AS bridge",
         )
-      ).rows[0].description,
-    ).toContain('notification-producers/producer.ts:444');
+      ).rows[0].bridge,
+    ).toBeNull();
   } finally {
     await f.close();
   }
@@ -176,6 +176,12 @@ test('G937: SQL Agent import reports every non-conforming legacy alias without a
     for (const handle of ['_legacy','legacy_','admin','1'.repeat(22)])
       expect(report.find(row => row.source === `${skipped}#${handle}`)?.reason).toContain(`handle ${handle}`);
     expect((await client.query(`SELECT handle FROM ${schema}.agent_handle`)).rows).toEqual([{ handle:'valid-name' }]);
+    // The import still provides its historical bridge, but the completed
+    // migration chain removes it without losing the imported holder or history.
+    await client.query(readFileSync('services/main/migrations/access/1024_drop_agent_handle_bridge.sql','utf8').replaceAll('access.',`${schema}.`));
+    expect((await client.query('SELECT to_regclass($1) AS bridge',[`${schema}.agent_handle`])).rows[0].bridge).toBeNull();
+    expect((await client.query(`SELECT key,holder FROM ${schema}.name_registry`)).rows).toEqual([{ key:'valid-name',holder:valid }]);
+    expect((await client.query(`SELECT key,holder FROM ${schema}.name_history`)).rows).toEqual([{ key:'valid-name',holder:valid }]);
   } finally {
     await client.query('ROLLBACK');client.release();await f.close();
   }
