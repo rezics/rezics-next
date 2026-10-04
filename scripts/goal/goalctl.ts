@@ -721,6 +721,14 @@ function pidAlive(pid: number, program?: string): boolean {
   try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes(program); } catch { return false; }
 }
 
+/** A directory lock is still taken when its pid is alive, or it is new enough that the owner may not have written that pid yet. */
+function dirLockHeld(path: string, alive: (pid: number) => boolean): boolean {
+  if (!existsSync(path)) return false;
+  const owner = existsSync(join(path, 'pid')) ? Number(readFileSync(join(path, 'pid'), 'utf8')) : 0;
+  const young = Date.now() - statSync(path).mtimeMs < 10_000;
+  return alive(owner) || young;
+}
+
 async function acquireDir(path: string, timeoutMs: number, label: string): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let announced = false;
@@ -730,9 +738,8 @@ async function acquireDir(path: string, timeoutMs: number, label: string): Promi
       writeFileSync(join(path, 'pid'), String(process.pid));
       return;
     } catch {
-      const owner = existsSync(join(path, 'pid')) ? Number(readFileSync(join(path, 'pid'), 'utf8')) : 0;
-      const young = existsSync(path) && Date.now() - statSync(path).mtimeMs < 10_000;
-      if (!pidAlive(owner) && !young) { rmSync(path, { recursive: true, force: true }); continue; }
+      // Same staleness rule as the heavy queue: a dead owner loses the directory once it is no longer young.
+      if (!dirLockHeld(path, pidAlive)) { rmSync(path, { recursive: true, force: true }); continue; }
       if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
       if (!announced && timeoutMs > 60_000) { console.error(`waiting for ${label}`); announced = true; }
       await Bun.sleep(label === 'ledger lock' ? 100 : 3000);
@@ -1658,8 +1665,7 @@ async function status(): Promise<void> {
       + `${usage.weekAdvice}`);
   }
   for (const account of codexAccounts()) console.log(describeAccount(account));
-  const heavy = heavyHolder();
-  console.log(heavy ? `heavy QA: ${heavy}` : 'heavy QA: free');
+  console.log(`heavy QA: ${heavyQaStatus()}`);
   for (const slug of activeGoals(ledger)) {
     const own = tasks.filter(task => task.goal === slug);
     console.log(`Goal ${slug}: manager ${managerOf(ledger, slug)}; ${own.filter(running).length} live, `
@@ -1694,37 +1700,159 @@ export function reapStaleQaStacks(now = Date.now(), maxAgeMs = 3 * 3_600_000): s
 }
 
 const heavyLock = join(stateDir, 'qa-slots', 'heavy');
+const HEAVY_POLL_MS = 10_000;
+const HEAVY_DEADLINE_MS = 6 * 3_600_000;
+
+interface HeavyTicket {
+  pid: number;
+  goal?: string;
+  command?: string;
+  arrivedAt: number;
+  /** Zero-padded monotonic time. Wall-clock milliseconds collide; this keeps those tickets in arrival order. */
+  seq?: string;
+}
+
+/** Beside the lock, not inside it: releasing the lock deletes the lock directory, and later waiters must keep their tickets. */
+function heavyQueueDir(lockDir: string): string {
+  return join(dirname(lockDir), `${basename(lockDir)}-queue`);
+}
+
+/** Live tickets, oldest arrival first. Tickets whose pid is gone, and tickets that cannot be ordered, are removed by whoever reads them. */
+function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path: string; ticket: HeavyTicket }[] {
+  let names: string[];
+  try { names = readdirSync(queueDir); } catch { return []; }
+  const live: { path: string; ticket: HeavyTicket }[] = [];
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const path = join(queueDir, name);
+    try {
+      const ticket = JSON.parse(readFileSync(path, 'utf8')) as HeavyTicket;
+      if (typeof ticket?.pid !== 'number' || typeof ticket.arrivedAt !== 'number' || !alive(ticket.pid)) {
+        rmSync(path, { force: true });
+        continue;
+      }
+      live.push({ path, ticket });
+    } catch { rmSync(path, { force: true }); }
+  }
+  live.sort((a, b) => a.ticket.arrivedAt - b.ticket.arrivedAt
+    || (a.ticket.seq ?? '').localeCompare(b.ticket.seq ?? '')
+    || a.ticket.pid - b.ticket.pid
+    || (a.path < b.path ? -1 : 1));
+  return live;
+}
 
 /** Who holds the heavy QA lock, or undefined when it is free (a dead holder's lock is free). */
-function heavyHolder(): string | undefined {
+function heavyHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string | undefined {
   try {
-    const info = JSON.parse(readFileSync(join(heavyLock, 'info.json'), 'utf8')) as
+    const info = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as
       { pid: number; goal?: string; command: string; startedAt: string };
-    return pidAlive(info.pid) ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command}` : undefined;
+    return alive(info.pid) ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command}` : undefined;
   } catch { return undefined; }
+}
+
+/** Holder text as before, plus how many live tickets are waiting. Reading the queue drops tickets of dead pids. */
+export function heavyQaStatus(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string {
+  const waiting = heavyTickets(heavyQueueDir(lockDir), alive).length;
+  return `${heavyHolder(lockDir, alive) ?? 'free'}; ${waiting} waiting`;
+}
+
+/** `process.exit` from a signal still runs the exit hook, which is the one place a waiting ticket is removed without `finally`. */
+function bindHeavyTicketCleanup(remove: () => void): () => void {
+  const onExit = () => remove();
+  const onSignal = (signal: NodeJS.Signals) => {
+    process.off('SIGHUP', onSignal);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+    process.exit(signal === 'SIGINT' ? 130 : signal === 'SIGHUP' ? 129 : 143);
+  };
+  process.on('exit', onExit);
+  process.on('SIGHUP', onSignal);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  return () => {
+    process.off('exit', onExit);
+    process.off('SIGHUP', onSignal);
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  };
+}
+
+export interface HeavyWaitOptions {
+  lockDir?: string;
+  pid?: number;
+  goal?: string;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  alive?: (pid: number) => boolean;
+  pollMs?: number;
+  /** Epoch milliseconds after which a waiter that still does not hold the lock gives up. */
+  deadline?: number;
+  /** Exit and signal hooks remove the ticket. In-process tests pass false so they do not exit the runner. */
+  bindExit?: boolean;
 }
 
 /** Heavy runs (affected sets, whole tiers, wave and browser suites) are host-wide exclusive: two managers' waves
  * together would put four or more QA stacks beside the workers, past what a 62 GB host held on 2026-09-27/28. A heavy
  * run still takes an ordinary slot, so the host carries at most one heavy run and two light ones, as with one manager.
- * The lock belongs to the process and is freed when it exits, so no manager has to remember to release it. */
-async function acquireHeavy(command: string[]): Promise<() => void> {
-  const deadline = Date.now() + 6 * 3_600_000;
-  let announced = false;
-  mkdirSync(dirname(heavyLock), { recursive: true });
-  for (;;) {
-    try {
-      await acquireDir(heavyLock, 0, 'heavy QA');
-      break;
-    } catch {
-      if (Date.now() > deadline) throw new Error('The heavy QA lock stayed held for six hours');
-      if (!announced) { console.error(`waiting for heavy QA held by ${heavyHolder() ?? 'a starting run'}`); announced = true; }
-      await Bun.sleep(10_000);
+ * The lock belongs to the process and is freed when it exits, so no manager has to remember to release it.
+ * Waiters poll, so a run that starts at the moment the lock frees would otherwise cut in front of one that has been
+ * waiting. The ticket is written before the first poll; only the oldest ticket whose pid is still alive may take a free lock. */
+export async function acquireHeavy(command: readonly string[], options: HeavyWaitOptions = {}): Promise<() => void> {
+  const lockDir = options.lockDir ?? heavyLock;
+  const queueDir = heavyQueueDir(lockDir);
+  const pid = options.pid ?? process.pid;
+  const goal = options.goal ?? process.env.GOAL_ID;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const alive = options.alive ?? pidAlive;
+  const pollMs = options.pollMs ?? HEAVY_POLL_MS;
+  const deadline = options.deadline ?? now() + HEAVY_DEADLINE_MS;
+  const commandText = command.join(' ');
+  const arrivedAt = now();
+  const ticketPath = join(queueDir, `${String(arrivedAt).padStart(16, '0')}-${pid}-${randomUUID()}.json`);
+  const removeTicket = () => {
+    rmSync(ticketPath, { force: true });
+    rmSync(`${ticketPath}.tmp`, { force: true });
+  };
+  let unbind = () => {};
+  try {
+    // Bound before the ticket exists, so a signal between the write and the first poll still removes it.
+    if (options.bindExit !== false) unbind = bindHeavyTicketCleanup(removeTicket);
+    mkdirSync(queueDir, { recursive: true });
+    const ticket: HeavyTicket = {
+      pid, goal, command: commandText, arrivedAt, seq: process.hrtime.bigint().toString().padStart(24, '0'),
+    };
+    writeFileSync(`${ticketPath}.tmp`, JSON.stringify(ticket));
+    renameSync(`${ticketPath}.tmp`, ticketPath);
+    let announced = false;
+    for (;;) {
+      const tickets = heavyTickets(queueDir, alive);
+      const ahead = tickets.findIndex(entry => entry.path === ticketPath);
+      if (ahead === 0 && !dirLockHeld(lockDir, alive)) {
+        try {
+          // A negative timeout fails at once when the directory is held, so this loop's poll is the only wait.
+          // The stale-owner reap inside acquireDir still runs before that failure.
+          await acquireDir(lockDir, -1, 'heavy QA');
+          writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
+            pid, goal, command: commandText, startedAt: new Date().toISOString(),
+          }));
+          return () => rmSync(lockDir, { recursive: true, force: true });
+        } catch { /* the lock was taken between the check and the create */ }
+      }
+      if (now() > deadline) throw new Error('The heavy QA lock stayed held for six hours');
+      if (!announced) {
+        const holder = heavyHolder(lockDir, alive);
+        console.error(ahead > 0
+          ? `waiting for heavy QA; ${ahead} earlier waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
+          : `waiting for heavy QA held by ${holder ?? 'a starting run'}`);
+        announced = true;
+      }
+      await sleep(pollMs);
     }
+  } finally {
+    removeTicket();
+    unbind();
   }
-  writeFileSync(join(heavyLock, 'info.json'), JSON.stringify({ pid: process.pid, goal: process.env.GOAL_ID,
-    command: command.join(' '), startedAt: new Date().toISOString() }));
-  return () => rmSync(heavyLock, { recursive: true, force: true });
 }
 
 async function withSlot(command: string[], heavy = false): Promise<number> {

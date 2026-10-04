@@ -1,12 +1,12 @@
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, goalAreas, goalOfBriefPath,
-  historyIntroductions, isHeavyTest, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal, parseBrief, parseCodexUsage,
-  pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL, type Task, treeMentions,
-  usageLevel, validateBrief } from './goalctl.ts';
+import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, compositionSyntaxFailure, goalAreas,
+  goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
+  parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
+  type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -391,7 +391,10 @@ describe('goalctl Goals', () => {
   test('a manager may change only its own Goal\'s tasks', () => {
     expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' }, 'production')).toContain('belongs to Goal discovery');
     expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' }, 'discovery')).toBeUndefined();
-    expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' }, undefined)).toBeUndefined();
+    const goal = process.env.GOAL_ID;
+    delete process.env.GOAL_ID;
+    try { expect(ownerRefusal({ id: 'G-1065', goal: 'discovery' })).toBeUndefined(); }
+    finally { if (goal === undefined) delete process.env.GOAL_ID; else process.env.GOAL_ID = goal; }
     expect(ownerRefusal({ id: 'G-900' }, 'production')).toBeUndefined();
   });
 
@@ -490,3 +493,267 @@ describe('goalctl archive', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
+
+describe('heavy QA lock', () => {
+  const sixHours = 6 * 3_600_000;
+
+  function unusedPid(): number {
+    for (let pid = 2_000_000; pid < 2_001_000; pid++) {
+      try { process.kill(pid, 0); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') return pid;
+      }
+    }
+    throw new Error('no unused pid');
+  }
+
+  function ticketRows(queueDir: string): [number, string | undefined, string | undefined, number][] {
+    return readdirSync(queueDir).filter(name => name.endsWith('.json')).map(name => {
+      const ticket = JSON.parse(readFileSync(join(queueDir, name), 'utf8')) as
+        { pid: number; goal?: string; command?: string; arrivedAt: number };
+      return [ticket.pid, ticket.goal, ticket.command, ticket.arrivedAt] as [number, string | undefined, string | undefined, number];
+    }).sort((a, b) => a[3] - b[3] || a[0] - b[0]);
+  }
+
+  /** Pauses a waiter on each poll so the test can choose who looks at the lock next. */
+  function gatedSleep() {
+    const pending: Array<() => void> = [];
+    let arm = () => {};
+    return {
+      next(): Promise<void> {
+        return new Promise(resolve => { arm = resolve; });
+      },
+      sleep(): Promise<void> {
+        return new Promise(resolve => {
+          pending.push(resolve);
+          arm();
+        });
+      },
+      wake(): void {
+        const resume = pending.shift();
+        if (!resume) throw new Error('waiter is not sleeping');
+        resume();
+      },
+    };
+  }
+
+  test('two heavy waiters are served in arrival order even when the earlier one polls later', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-order-'));
+    const lockDir = join(root, 'heavy');
+    const queueDir = join(root, 'heavy-queue');
+    const earlier = 1_010_101;
+    const later = 2_020_202;
+    const alive = (pid: number) => pid === earlier || pid === later || pid === process.pid;
+    let clock = Date.now();
+    const firstAt = clock;
+    mkdirSync(lockDir);
+    writeFileSync(join(lockDir, 'pid'), String(process.pid));
+    writeFileSync(join(lockDir, 'marker'), 'held');
+    const first = gatedSleep();
+    const second = gatedSleep();
+    const served: string[] = [];
+    const firstSlept = first.next();
+    const firstDone = acquireHeavy(['first'], {
+      lockDir, pid: earlier, goal: 'goal-a', now: () => clock, alive, bindExit: false, sleep: () => first.sleep(),
+    }).then(release => { served.push('first'); return release; });
+    const secondSlept = second.next();
+    let secondDone: Promise<() => void> | undefined;
+    try {
+      expect(await Promise.race([
+        firstSlept.then(() => 'slept' as const),
+        firstDone.then(() => 'acquired' as const),
+      ])).toBe('slept');
+      expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
+      expect(existsSync(join(lockDir, 'info.json'))).toBe(false);
+      clock = firstAt + 5;
+      rmSync(lockDir, { recursive: true, force: true });
+      secondDone = acquireHeavy(['second'], {
+        lockDir, pid: later, goal: 'goal-b', now: () => clock, alive, bindExit: false, sleep: () => second.sleep(),
+      }).then(release => { served.push('second'); return release; });
+      expect(await Promise.race([
+        secondSlept.then(() => 'slept' as const),
+        secondDone.then(() => 'acquired' as const),
+      ])).toBe('slept');
+      expect(existsSync(lockDir)).toBe(false);
+      expect(served).toEqual([]);
+      expect(ticketRows(queueDir)).toEqual([
+        [earlier, 'goal-a', 'first', firstAt],
+        [later, 'goal-b', 'second', firstAt + 5],
+      ]);
+      first.wake();
+      const releaseFirst = await firstDone;
+      expect(served).toEqual(['first']);
+      expect(ticketRows(queueDir)).toEqual([[later, 'goal-b', 'second', firstAt + 5]]);
+      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8'))).toMatchObject({
+        pid: earlier, goal: 'goal-a', command: 'first',
+      });
+      releaseFirst();
+      expect(existsSync(lockDir)).toBe(false);
+      expect(existsSync(queueDir)).toBe(true);
+      second.wake();
+      const releaseSecond = await secondDone;
+      expect(served).toEqual(['first', 'second']);
+      expect(ticketRows(queueDir)).toEqual([]);
+      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).pid).toBe(later);
+      releaseSecond();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a dead heavy waiter\'s ticket does not block', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-dead-'));
+    const lockDir = join(root, 'heavy');
+    const queueDir = join(root, 'heavy-queue');
+    const dead = unusedPid();
+    mkdirSync(queueDir, { recursive: true });
+    mkdirSync(lockDir);
+    writeFileSync(join(lockDir, 'pid'), String(dead));
+    const stale = new Date(Date.now() - 60_000);
+    utimesSync(lockDir, stale, stale);
+    writeFileSync(join(queueDir, 'dead.json'), JSON.stringify({ pid: dead, goal: 'gone', command: 'old run', arrivedAt: 1 }));
+    writeFileSync(join(queueDir, 'broken.json'), '{');
+    writeFileSync(join(queueDir, 'partial.json'), JSON.stringify({ pid: process.pid, command: 'no arrival' }));
+    try {
+      const release = await acquireHeavy(['next'], {
+        lockDir, pid: process.pid, goal: 'scoped-subjects', now: () => 2, bindExit: false,
+        sleep: () => Promise.reject(new Error('waiter slept behind a dead ticket')),
+      });
+      expect(ticketRows(queueDir)).toEqual([]);
+      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8'))).toMatchObject({
+        pid: process.pid, goal: 'scoped-subjects', command: 'next',
+      });
+      expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
+      release();
+      expect(existsSync(lockDir)).toBe(false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a heavy waiter that times out leaves no ticket', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-timeout-'));
+    const lockDir = join(root, 'heavy');
+    const queueDir = join(root, 'heavy-queue');
+    mkdirSync(lockDir);
+    writeFileSync(join(lockDir, 'pid'), String(process.pid));
+    writeFileSync(join(lockDir, 'marker'), 'held');
+    let now = Date.now();
+    const opened = now;
+    let polls = 0;
+    try {
+      await expect(acquireHeavy(['wait'], {
+        lockDir, pid: process.pid, goal: 'scoped-subjects', now: () => now, bindExit: false,
+        sleep: async (ms: number) => {
+          expect(ms).toBe(10_000);
+          polls += 1;
+          if (polls === 1) {
+            expect(ticketRows(queueDir)).toHaveLength(1);
+            now = opened + sixHours - 1;
+            return;
+          }
+          if (polls === 2) {
+            now = opened + sixHours + 1;
+            return;
+          }
+          throw new Error(`polled ${polls} times`);
+        },
+      })).rejects.toThrow('The heavy QA lock stayed held for six hours');
+      expect(polls).toBe(2);
+      expect(readdirSync(queueDir).filter(name => name.endsWith('.json'))).toEqual([]);
+      expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
+      expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
+      expect(existsSync(join(lockDir, 'info.json'))).toBe(false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('status shows the heavy holder and the number of waiting tickets', () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-status-'));
+    const lockDir = join(root, 'heavy');
+    const queueDir = join(root, 'heavy-queue');
+    const dead = unusedPid();
+    try {
+      expect(heavyQaStatus(join(root, 'missing'))).toBe('free; 0 waiting');
+      mkdirSync(lockDir);
+      writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
+        pid: process.pid, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z',
+      }));
+      mkdirSync(queueDir);
+      writeFileSync(join(queueDir, 'a.json'), JSON.stringify({ pid: process.pid, command: 'a', arrivedAt: 2 }));
+      writeFileSync(join(queueDir, 'b.json'), JSON.stringify({ pid: process.pid, command: 'b', arrivedAt: 3 }));
+      writeFileSync(join(queueDir, 'dead.json'), JSON.stringify({ pid: dead, command: 'gone', arrivedAt: 1 }));
+      expect(heavyQaStatus(lockDir)).toBe(
+        `Goal scoped-subjects since 2026-10-04T00:00:00.000Z (pid ${process.pid}): bun test affected; 2 waiting`);
+      expect(existsSync(join(queueDir, 'dead.json'))).toBe(false);
+      writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
+        pid: dead, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z',
+      }));
+      expect(heavyQaStatus(lockDir)).toBe('free; 2 waiting');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a heavy waiter removes its ticket on exit and on signal', async () => {
+    const goalctl = join(import.meta.dir, 'goalctl.ts');
+    const repo = join(import.meta.dir, '../..');
+    for (const mode of ['exit', 'signal'] as const) {
+      const root = mkdtempSync(join(tmpdir(), 'heavy-exit-'));
+      const lockDir = join(root, 'heavy');
+      const queueDir = join(root, 'heavy-queue');
+      mkdirSync(lockDir);
+      writeFileSync(join(lockDir, 'pid'), String(process.pid));
+      writeFileSync(join(lockDir, 'marker'), 'held');
+      const watch = mode === 'exit'
+        ? `let stopping = false;
+setInterval(() => {
+  if (stopping) return;
+  try {
+    if (readdirSync(${JSON.stringify(queueDir)}).some(name => name.endsWith('.json'))) {
+      stopping = true;
+      writeFileSync(join(${JSON.stringify(queueDir)}, 'seen'), '1');
+      setTimeout(() => process.exit(0), 30);
+    }
+  } catch { /* the queue directory is created with the ticket */ }
+}, 15);`
+        : '';
+      writeFileSync(join(root, 'waiter.ts'), `import { readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { acquireHeavy } from ${JSON.stringify(goalctl)};
+${watch}
+await acquireHeavy(['blocked'], { lockDir: ${JSON.stringify(lockDir)}, pollMs: 30_000, deadline: Date.now() + 60_000 });
+`);
+      const child = spawn('bun', [join(root, 'waiter.ts')], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+      let output = '';
+      const collect = (chunk: unknown) => { output += String(chunk); };
+      child.stdout?.on('data', collect);
+      child.stderr?.on('data', collect);
+      let settled = false;
+      const exited = new Promise<number | null>((resolve, reject) => {
+        child.on('error', reject);
+        child.on('exit', code => { settled = true; resolve(code); });
+      });
+      try {
+        await waitForWaiter(child, () => mode === 'exit'
+          ? existsSync(join(queueDir, 'seen'))
+          : existsSync(queueDir) && readdirSync(queueDir).some(name => name.endsWith('.json')), () => output);
+        if (mode === 'signal') child.kill('SIGTERM');
+        expect(await exited).toBe(mode === 'signal' ? 143 : 0);
+        expect(readdirSync(queueDir).filter(name => name.endsWith('.json'))).toEqual([]);
+        expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
+        expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
+      } finally {
+        if (!settled) child.kill('SIGKILL');
+        await exited;
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  }, 30_000);
+});
+
+function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => string): Promise<void> {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      if (ready()) return resolve();
+      if (child.exitCode !== null) return reject(new Error(`waiter exited ${child.exitCode} before queuing\n${output()}`));
+      if (Date.now() - started > 12_000) return reject(new Error(`waiter did not queue\n${output()}`));
+      setTimeout(tick, 20);
+    };
+    tick();
+  });
+}
