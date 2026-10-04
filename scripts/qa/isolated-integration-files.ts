@@ -148,6 +148,8 @@ export const isolatedIntegrationFileList = [
   // These drop the project's owner schemas; G1023 rebuilds only up to 1029.
   'tests/qa/integration/g-1023-alias-migration.test.ts',
   'tests/qa/integration/g-991-owner-migrations.test.ts',
+  // Replays other files in one process; shared, their cached modules register no tests.
+  'tests/qa/integration/discovery-read-isolation.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
