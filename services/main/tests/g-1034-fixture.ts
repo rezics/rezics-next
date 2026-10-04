@@ -27,15 +27,18 @@ export async function growRealmThreads(
   source: string,
   first: number,
   count: number,
+  parent?: { reply: string; chain: boolean },
 ): Promise<ScaledThread[]> {
   const now = Date.now();
+  const replies = Array.from({ length: count }, () => `https://rezics.com/id/${randomUUID()}`);
   const entries = Array.from({ length: count }, (_, offset) => {
     const index = first + offset;
     const age = index === 0 ? 2 * 86_400_000 : index % 20 === 0
       ? (30 + index % 366) * 86_400_000 : (1 + index % 60) * 60_000;
     const at = new Date(now - age - 60_000).toISOString();
     return {
-      reply: `https://rezics.com/id/${randomUUID()}`,
+      reply: replies[offset]!,
+      parent: parent ? parent.chain && offset > 0 ? replies[offset - 1]! : parent.reply : null,
       variant: `urn:rezics:variant:${randomUUID()}`,
       revision: randomUUID(),
       review: randomUUID(),
@@ -62,7 +65,7 @@ export async function growRealmThreads(
     await client.query(
       `CREATE TEMP TABLE g1034_rows ON COMMIT DROP AS SELECT x.*,row_number() OVER () AS ordinal
       FROM jsonb_to_recordset($1::jsonb) AS x(reply text,variant text,revision uuid,
-        review uuid,placement text,operation text,at timestamptz,score int)`,
+        review uuid,placement text,operation text,at timestamptz,score int,parent text)`,
       [JSON.stringify(entries)],
     );
     // jsonb_populate_record preserves schema additions and the source's owner
@@ -101,7 +104,12 @@ export async function growRealmThreads(
     await client.query(
       `INSERT INTO content.reply SELECT (jsonb_populate_record(NULL::content.reply,
       to_jsonb(p)||jsonb_build_object('id',x.reply,'variant_id',x.variant,'operation_id',x.operation||':reply.create',
-        'created_at',x.at))).* FROM g1034_rows x CROSS JOIN content.reply p WHERE p.id=$1`,
+        'created_at',x.at,'parent_reply',x.parent,'parent_variant',above.variant,'parent_revision',above.revision))).*
+      FROM g1034_rows x CROSS JOIN content.reply p LEFT JOIN LATERAL (
+        SELECT v.id AS variant,v.draft_head AS revision FROM content.reply r
+          JOIN content.variant v ON v.id=r.variant_id WHERE r.id=x.parent
+        UNION ALL SELECT r.variant,r.revision FROM g1034_rows r WHERE r.reply=x.parent
+      ) above ON true WHERE p.id=$1`,
       [source],
     );
     await client.query(
@@ -162,6 +170,7 @@ export async function growRealmThreads(
         rv:component ${iri(replySlotIri(realm, row.reply))} ; rv:realm ${iri(realm)} ; rv:reply ${iri(row.reply)} ;
         rv:rootTarget ${iri(sourceRow!.root_target)} ; rv:rootRevision ${lit(sourceRow!.root_revision)} ;
         rv:author ${iri(sourceRow!.author)} ; rv:contentRevision ${iri(`urn:rezics:content:revision:${row.revision}`)} ;
+        ${row.parent ? `rv:parentReply ${iri(row.parent)} ;` : ''}
         rv:reviewDecision ${iri(`urn:rezics:realm-review:${row.review}`)} ; rv:contentPreparation ${lit(`${row.operation}:publication.prepare`)} ;
         rv:placementOutcome rv:Accepted ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence 1 .`,
         )
