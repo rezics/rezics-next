@@ -24,8 +24,55 @@ and actual platform enforcement remain separate delivery concerns.
 The Media owner binds these fields to the existing editorial protection protocol;
 whole-document saves also check protected image occurrences. Reads batch the
 images actually referenced by the consumer and do not recursively classify a
-content reference graph. A semantic graph profile for the Asset is deferred;
-the existing PostgreSQL media identity and object custody remain its owners.
+content reference graph. The Asset never becomes a graph node; the existing
+PostgreSQL media identity and object custody remain its owners, and images
+enter the graph only as [image Works](#images-in-the-semantic-graph).
+
+## Images in the semantic graph
+
+Maintainer decision, 2026-10-04. Images have the same semantic standing as video
+and audio; only their rollout is restricted. The direction is Pixiv and
+Danbooru, as it is YouTube for video and Spotify for audio: hosted artwork and an
+index of images by creator, source Work, depicted characters and Concepts.
+Images are worth indexing, but betting early effort on them would be a major
+waste, and they carry the highest moderation and rights cost per item. So the
+capability ships late, and even then it requires an explicit platform grant, like other
+restricted surfaces, never an ordinary Account default.
+
+A person promotes a chosen image to a Work of type `schema:ImageObject`
+(`schema:Photograph` and `schema:VisualArtwork` describe it further). Its Main
+Version holds a `media-set-v1` publication that pins exact asset revisions and
+Representations, so a gallery is the same Work kind with more items. Credits,
+Concepts, relations, ratings, discussion and lists attach through the type as
+for any Work. The graph holds Work facts and Representation identities; digests,
+alternative text, private uploads, selection history and classifier scores stay
+here, so erasing bytes leaves an explicitly unavailable realization and needs no
+graph rebuild. NSFW and age assessment stay on Representations; Work suitability
+is a separate judgment. Promotion is never automatic: an image without a claimed
+creator or a credited source is not a Work. An index entry for someone else's
+image follows [metadata-only](metadata-only.md) hosting and links its source
+instead of rehosting the bytes.
+
+Language belongs to the version, not the bytes, as it does for
+[text](content-languages.md#language-belongs-to-the-content-version). Names and
+descriptions are localized Work values; alternative text belongs to the
+occurrence and follows its document's language. An image with linguistic
+content, such as a typeset comic page, poster or infographic, has one language
+contribution per language, each pinning its own Representation and its exact
+source. A shared identity keeps ratings, credits, depicted characters, page
+correspondence and translation state together, which separate Assets lose; a
+post that uses an image once may still reference a different Asset per
+language. Comic pages need a stable occurrence each, so a translated page can
+pin its source page. The eventual form is `zxx` artwork with per-language text
+annotations placed by media-fragment selectors, as Danbooru notes translate text
+over an image and subtitles do for video. It needs text-free artwork, which
+official sources rarely supply, so per-language bitmaps remain supported.
+
+When the grant opens, the order is: type admission and promotion, with an
+asset-to-Work index so existing Uses can show credits; image language
+contributions; comic page occurrences; `depicts` region annotations; text
+layers. Hosted video and audio reuse the same Work, contribution and
+Representation path.
 
 ## Universal avatar selection
 

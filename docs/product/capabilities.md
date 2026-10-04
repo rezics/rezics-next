@@ -88,8 +88,9 @@ campaigns for music, recipes, software, mods and AI resources (their Zones stay
 visible and truthful).
 
 Persistent hosting, seller onboarding and payouts, broad verification campaigns,
-full Wikidata/Schema.org indexing and world-spatial experiences beyond the selected
-private-world tools also retain separate rollout gates. Untrusted execution requires
+full Wikidata/Schema.org indexing, [image Works and image indexing](../contracts/media.md#images-in-the-semantic-graph)
+(behind a platform grant even after rollout) and world-spatial experiences
+beyond the selected private-world tools also retain separate rollout gates. Untrusted execution requires
 an admitted executor and authority profile. The reason is to qualify recurring
 reader/creator tasks before taking on another operating model.
 
