@@ -113,12 +113,6 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
         ?main a rv:MainVersion ; rv:head ?mainHead ; rv:work ?work .
         OPTIONAL { ?work rv:disclosure ?disclosure }
         FILTER NOT EXISTS { ?work rv:protectionHead ?protection }
-        FILTER NOT EXISTS { ?work schema:isPartOf ?parentWork }
-        FILTER NOT EXISTS { ?legacyStructure a rv:Structure ;
-          rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?legacyGeneration .
-          ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
-            rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
-          FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } }
         ${view === 'authored' ? `?authorCredit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ${iri(agent)} ;
           schema:roleName "author" ; rv:creditRevision ?creditHead .
         ` : ''}

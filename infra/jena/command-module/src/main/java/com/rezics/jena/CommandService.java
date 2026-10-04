@@ -454,7 +454,12 @@ final class CommandService extends ActionService {
             if (modelInvariant != null) return modelInvariant;
             String releaseInvariant = ReleasePolicy.check(dataset, plan, receipt, releases);
             if (releaseInvariant != null) return invalid(releaseInvariant);
-            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCoverage);
+            Set<String> retiredCurrent = new java.util.HashSet<>(retiredCoverage);
+            for (String subject : ChapterPostMigrationPolicy.retired(dataset, receipt, model)) {
+                if (!dataset.find(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(subject),
+                    Node.ANY, Node.ANY).hasNext()) retiredCurrent.add(subject);
+            }
+            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCurrent);
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
             if (sourceBinding != null) return invalid(sourceBinding);

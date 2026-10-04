@@ -7,7 +7,6 @@ import { DISCOVERY_COST, discoveryItem, discoveryRating, type DiscoveryCredit, t
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
 import { EMPTY_SERIAL_SUMMARY, readSerialSummaries } from '../work/summary-serial.ts';
-import { canonicalChapterWorks } from '../structure/chapter-work.ts';
 import { namedDiscoveryCredits } from './credits.ts';
 import { readAuthorNames } from '../source/author-name-read.ts';
 import type { DiscoveryProjection } from './store.ts';
@@ -66,15 +65,13 @@ export async function readDiscovery(session: WorkReadSession, projection: Discov
 }
 
 /**
- * Cards for projected rows, in their order. Works no longer public, and chapter
- * Works shown through their book, are left out. With `terms`, each row was
+ * Cards for projected rows, in their order. Works no longer public are left out. With `terms`, each row was
  * reached by one of those Senses: its match must carry one, and a Work whose
  * matched Concept can no longer be named is left out.
  */
 export async function discoveryCards(session: WorkReadSession, page: readonly DiscoveryRow[], type: string | null,
   terms: ReadonlySet<string> | null): Promise<Static<typeof discoveryItem>[]> {
   const ids = page.map(row => row.work);
-  const chapterParents = await canonicalChapterWorks(session, ids);
   // Retained ordering is independent of live title/cover disclosure. Stale
   // classification/credit payloads lack a current protection/erasure proof and
   // are withheld below, including term matches, until a fresh build is active.
@@ -107,7 +104,6 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
   };
   const fenced = await session.summaries(ids, true);
   return page.flatMap((row, index): Static<typeof discoveryItem>[] => {
-    if (chapterParents.has(row.work)) return [];
     const summary = summaries[index];
     const current = fenced[index];
     if (summary?.status !== 'available' || summary.type !== 'work' || summary.disclosure !== 'public'

@@ -7,8 +7,6 @@ import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, PUBLIC_SE
   from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, PUBLIC_SEARCH_GRAPH, selectMainDefault }
   from '../../../services/main/src/modules/work/select-main.ts';
-import { backfillChapterSearchIndex }
-  from '../../../services/main/src/modules/work/search-index-backfill.ts';
 import { clearQuarantinedContentUnits, quarantinePublicContentSearch,
   replayQuarantinedContentCut, verifyQuarantinedContentIndex }
   from '../../../services/main/src/modules/content-publication/rebuild.ts';
@@ -21,7 +19,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(body) as T;
 }
 
-test('chapter Book and single-text Work survive Content rebuild verification alongside search and lists', async () => {
+test('Anthology entry Works remain visible in search and Realm/Zone lists through Content rebuild', async () => {
   const stack = await startMediaStack('search-chapter-book');
   try {
     const actor = await stack.member('chapter-owner');
@@ -52,35 +50,20 @@ test('chapter Book and single-text Work survive Content rebuild verification alo
     const structure = await json<{ structure: string; revision: string }>(await actor.send('POST',
       '/v1/compositions', { profile: 'book-composition', work: book.work,
         mainVersion: book.mainVersion, actingSubject: actor.actor }), 201);
-    const first = await json<{ work: string; mainVersion: string; compositionRevision: string }>(await actor.send('POST',
-      `/v1/works/${short(book.work)}/chapters`, { profile: 'book-chapter-create-v1',
-        title: '第一章 雨夜', language: 'zh', direction: 'ltr', parent: structure.structure,
-        position: 'last', expectedCompositionHead: structure.revision,
-        actingSubject: actor.actor }));
+    // Independently maintained anthology entries retain their Work identity.
+    const first = await stack.privateWork(actor.actor, 'First anthology entry');
     const firstSource = await publish(first.work, first.mainVersion, '雨夜 第一章的故事');
     const chapterTitle = '第二章 旧信';
-    const chapter = await json<{ work: string; mainVersion: string }>(await actor.send('POST',
-      `/v1/works/${short(book.work)}/chapters`, { profile: 'book-chapter-create-v1',
-        title: chapterTitle, language: 'zh', direction: 'ltr', parent: structure.structure,
-        position: 'last', expectedCompositionHead: first.compositionRevision,
-        actingSubject: actor.actor }));
+    const chapter = await stack.privateWork(actor.actor, chapterTitle);
     const chapterSource = await publish(chapter.work, chapter.mainVersion, '独有线索藏在第二页');
-    const indexed = await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?unit ?book WHERE {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(chapter.work)} ;
-        rv:searchResultWork ?book . } }`);
-    expect(indexed.results?.bindings.map(row => row.book?.value)).toEqual([book.work]);
-    // Simulate a chapter MatchUnit written before Book identities were stamped.
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:searchResultWork ?book ;
-        rv:searchResultMain ?main ; rv:searchChapterTitle ?title . }
-    } WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(chapter.work)} ;
-      rv:searchResultWork ?book ; rv:searchResultMain ?main ; rv:searchChapterTitle ?title . } }`);
+    for (const target of [first.work, chapter.work]) await actor.grant(`work:read:${target}`, 'work.read');
+    await json(await actor.send('POST', `/v1/compositions/${short(structure.structure)}/changes`, {
+      profile: 'book-composition', expectedHead: structure.revision, actingSubject: actor.actor,
+      operations: [first, chapter].map(entry => ({ op: 'insert', role: 'chapter',
+        parent: structure.structure, position: 'last', target: entry.work })),
+    }));
     const maintenance = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!,
       Bun.env.FUSEKI_COMMAND_TOKEN!);
-    expect(await backfillChapterSearchIndex({ ...stack.env, fuseki: maintenance })).toBe(1);
-    const batches = await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?batch WHERE {
-      GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ; rv:eventCount 0 . } }`);
-    expect(batches.results?.bindings).toHaveLength(1);
     const query = (phrase: string) => stack.call('POST', '/v1/queries', { body: {
       profile: 'public-main-phrase-v1', phrase, language: null } });
     const title = await json<{ results: Array<{ work: string }> }>(await query('雨夜书店'));
@@ -89,12 +72,11 @@ test('chapter Book and single-text Work survive Content rebuild verification alo
     const body = await json<{ total: number; results: Array<{ work: string;
       mainVersion: string; matchedChapter?: { work: string; title: string } }> }>(await query('独有线索'));
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(36);
-    expect(body).toMatchObject({ total: 1, results: [{ work: book.work,
-      mainVersion: book.mainVersion,
-      matchedChapter: { work: chapter.work, title: chapterTitle } }] });
+    expect(body).toMatchObject({ total: 1, results: [{ work: chapter.work,
+      mainVersion: chapter.mainVersion }] });
     const suggest = await json<{ items: Array<{ work: string; matchedText: string }> }>(
       await stack.call('GET', `/v1/search/typeahead?prefix=${encodeURIComponent('第二章')}`));
-    expect(suggest.items).toMatchObject([{ work: book.work, matchedText: chapterTitle }]);
+    expect(suggest.items).toMatchObject([{ work: chapter.work, matchedText: chapterTitle }]);
 
     await actor.grant('space:create:root', 'space.create');
     const realm = await json<{ realm: string }>(await actor.send('POST', '/v1/spaces', {
@@ -112,10 +94,10 @@ test('chapter Book and single-text Work survive Content rebuild verification alo
     await json(await adopt(chapter, chapterSource), 201);
     const works = await json<{ items: Array<{ id: string }> }>(await stack.call('GET',
       `/v1/realms/${short(realm.realm)}/works`));
-    expect(works.items.map(item => item.id)).toEqual([book.work]);
+    expect(works.items.map(item => item.id).sort()).toEqual([book.work, first.work, chapter.work].sort());
     const zone = await json<{ items: Array<{ id: string }> }>(await stack.call('GET',
       `/v1/realms/${short(realm.realm)}/modules/new-adoptions`));
-    expect(zone.items.map(item => item.id)).toEqual([book.work]);
+    expect(zone.items.map(item => item.id).sort()).toEqual([book.work, first.work, chapter.work].sort());
 
     // Rebuild with both the chaptered Book and a separate one-text Work in the
     // same graph. The Book's Content source exercises exact replay checks.
@@ -129,12 +111,9 @@ test('chapter Book and single-text Work survive Content rebuild verification alo
     expect(await replayQuarantinedContentCut(maintenanceEnv, stack.content, cursor, job)).toBeGreaterThan(0);
     const snapshot = await verifyQuarantinedContentIndex(maintenanceEnv, stack.content, cursor, job);
     expect(snapshot.contentUnitCount).toBe(1);
-    const preserved = await maintenance.query(`PREFIX rv: <${RV}> SELECT ?book ?chapter WHERE {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(chapter.work)} ;
-        rv:searchResultWork ?book ; rv:searchChapterTitle ?chapter . } }`);
-    expect(preserved.results?.bindings.length).toBeGreaterThan(0);
-    expect(preserved.results?.bindings.every(row => row.book?.value === book.work
-      && row.chapter?.value === chapterTitle)).toBe(true);
+    const preserved = await maintenance.query(`PREFIX rv: <${RV}> SELECT ?unit WHERE {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(chapter.work)} ; rv:field rv:Body . } }`);
+    expect(preserved.results?.bindings).toHaveLength(2);
     const singleBody = await maintenance.query(`PREFIX rv: <${RV}> SELECT ?unit WHERE {
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:work ${iri(single.work)} ; rv:field rv:Body . } }`);
     expect(singleBody.results?.bindings).toHaveLength(1);

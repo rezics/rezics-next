@@ -5,8 +5,8 @@ import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
-import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
-  metadataWorkRequestDigest, prepareComponent, prepareWorkComponent, workMetadataValidations,
+import { DATASET, GRAPHS, RV, hash, iri, lit,
+  metadataWorkRequestDigest, prepareComponent, prepareWorkComponent,
   IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { BOOK_DIVISIONS, InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
@@ -49,7 +49,9 @@ export type CompositionOperation =
   /** Retitle an occurrence or change how a Book group divides the book; its place is unchanged. */
   | { op: 'update'; occurrence: string; label?: Label; qualifier?: OccurrenceRecord['qualifier'] };
 
-export interface NewChapterWork {
+// The v1 command digest retains its legacy identity slots for same-key retries.
+// Only work (the Post IRI) and workRevision are materialized in the graph.
+export interface NewChapterPost {
   work: string;
   mainVersion: string;
   workRevision: string;
@@ -60,7 +62,7 @@ export interface NewChapterWork {
 }
 
 export function chapterCreateDigest(structure: string, expectedHead: string,
-  operations: readonly CompositionOperation[], newWork: NewChapterWork): string {
+  operations: readonly CompositionOperation[], newWork: NewChapterPost): string {
   metadataWorkRequestDigest(newWork.title, [], newWork.language);
   return hash(JSON.stringify({ family: 'book-chapter-create-v1', structure,
     expectedHead, operations: checkedOperations(operations, 'book-composition'), newWork }));
@@ -95,10 +97,12 @@ export interface CompositionTerminal {
   chapterMainVersion?: string;
   chapterWorkRevision?: string;
   chapterMainRevision?: string;
+  post?: string;
+  postRevision?: string;
 }
 
 type Admission = Pick<RegisteredAdmission, 'id' | 'scope' | 'action' | 'requestDigest'
-  | 'authorityEpoch' | 'expiresAt'>;
+  | 'authorityEpoch' | 'expiresAt'> & { actingSubject?: string };
 
 export function structureObjects(env: WorkActivationEnvironment): ImmutableObjects {
   const objects = (env as WorkActivationEnvironment & { structureObjects?: ImmutableObjects }).structureObjects;
@@ -290,7 +294,7 @@ export async function readCompositionReceipt(env: WorkActivationEnvironment,
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?outcome ?reason ?kind ?action ?digest ?admission ?epoch ?scope ?dataEpoch ?sequence
       ?structure ?main ?owner ?component ?revision ?expected ?seal
-      ?chapterWork ?chapterMain ?chapterWorkRevision ?chapterMainRevision WHERE { GRAPH ${iri(GRAPHS.receipts)} {
+      ?chapterWork ?chapterMain ?chapterWorkRevision ?chapterMainRevision ?post ?postRevision WHERE { GRAPH ${iri(GRAPHS.receipts)} {
       ${iri(receipt)} rv:outcome ?outcome ; rv:requestDigest ?digest ; rv:admissionId ?admission ;
         rv:authorityEpoch ?epoch ; rv:admittedScope ?scope ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
       OPTIONAL { ${iri(receipt)} rv:reason ?reason }
@@ -305,6 +309,7 @@ export async function readCompositionReceipt(env: WorkActivationEnvironment,
       OPTIONAL { ${iri(receipt)} rv:structureSeal ?seal }
       OPTIONAL { ${iri(receipt)} rv:chapterWork ?chapterWork ; rv:chapterMainVersion ?chapterMain ;
         rv:chapterWorkRevision ?chapterWorkRevision ; rv:chapterMainRevision ?chapterMainRevision }
+      OPTIONAL { ${iri(receipt)} rv:post ?post ; rv:postRevision ?postRevision }
     } }`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
@@ -328,6 +333,8 @@ export async function readCompositionReceipt(env: WorkActivationEnvironment,
     ...(get('chapterWork') ? { chapterWork: get('chapterWork'),
       chapterMainVersion: get('chapterMain'), chapterWorkRevision: get('chapterWorkRevision'),
       chapterMainRevision: get('chapterMainRevision') } : {}),
+    ...((get('post') ?? get('chapterWork')) ? { post: get('post') ?? get('chapterWork'),
+      postRevision: get('postRevision') ?? get('chapterWorkRevision') } : {}),
     ...(get('seal') ? { seal: get('seal') } : {}) };
 }
 
@@ -389,7 +396,7 @@ function receiptTriples(env: WorkActivationEnvironment, admission: Admission, re
 
 /** One ordered event makes the graph change visible to the shared relay. */
 function outboxTriples(env: WorkActivationEnvironment, receipt: string,
-  chapter?: NewChapterWork): string {
+  chapter?: NewChapterPost, book?: string): string {
   const event = `urn:rezics:event:${hash(`${receipt}\0structure`)}`;
   const chapterEvent = chapter ? `urn:rezics:event:${hash(`${receipt}\0chapter`)}` : null;
   return `${iri(`urn:rezics:outbox:${hash(receipt)}`)} a rv:OutboxBatch ;
@@ -399,7 +406,7 @@ function outboxTriples(env: WorkActivationEnvironment, receipt: string,
     rv:receipt ${iri(receipt)} .
     ${chapterEvent ? `${iri(chapterEvent)} a rv:StudioChapterCreatedEvent ; rv:ordinal 1 ;
       rv:action "studio.chapter.create" ; rv:receipt ${iri(receipt)} ;
-      rv:work ${iri(chapter!.work)} .` : ''}`;
+      rv:post ${iri(chapter!.work)} ; rv:work ${iri(book!)} .` : ''}`;
 }
 
 /** A typed terminal rejection decided against an exact guarded state. */
@@ -1125,7 +1132,7 @@ export interface ChangeCompositionIntent {
   structure: string;
   expectedHead: string;
   operations: readonly CompositionOperation[];
-  newWork?: NewChapterWork;
+  newWork?: NewChapterPost;
 }
 
 export interface CompositionChangeResult {
@@ -1153,13 +1160,14 @@ export async function changeComposition(env: WorkActivationEnvironment,
   if (prior) return { terminal: prior, committed: false, occurrences };
   if (header.profile !== registration.id) throw new IdempotencyConflict('Structure action targets another profile');
   if (intent.newWork) {
+    native(intent.admission.actingSubject, 'publisher');
     const chapter = intent.newWork;
     if (registration.id !== 'book-composition' || operations.length !== 1
       || operations[0]?.op !== 'insert' || operations[0].role !== 'chapter'
       || operations[0].target !== chapter.work
       || new Set([chapter.work, chapter.mainVersion, chapter.workRevision,
         chapter.mainRevision]).size !== 4) {
-      throw new InvalidCompositionChange('chapter creation requires one new Work occurrence');
+      throw new InvalidCompositionChange('chapter creation requires one new Post occurrence');
     }
     for (const id of [chapter.work, chapter.mainVersion, chapter.workRevision,
       chapter.mainRevision]) iri(id);
@@ -1268,32 +1276,18 @@ export async function changeComposition(env: WorkActivationEnvironment,
   const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
   const chapter = intent.newWork;
+  const postManifestValue = chapter ? { publisher: intent.admission.actingSubject,
+    labels: [{ value: chapter.title, language: chapter.language }] } : null;
   const chapterWorkManifest = chapter ? env.workObjects
-    ? await prepareWorkComponent(env.workObjects, chapter.work, { mainVersion: chapter.mainVersion,
-      continuityProfile: CONTINUITY, title: chapter.title, language: chapter.language,
-      parentWork: header.owner })
-    : prepareComponent(env.objectDirectory, chapter.work, { mainVersion: chapter.mainVersion,
-      continuityProfile: CONTINUITY, title: chapter.title, language: chapter.language,
-      parentWork: header.owner }) : null;
-  const chapterMainManifest = chapter ? env.workObjects
-    ? await prepareWorkComponent(env.workObjects, chapter.mainVersion,
-      { work: chapter.work, hostingPolicy: 'metadata-only' })
-    : prepareComponent(env.objectDirectory, chapter.mainVersion,
-      { work: chapter.work, hostingPolicy: 'metadata-only' }) : null;
-  const chapterCurrent = chapter ? `${iri(chapter.work)} a schema:CreativeWork ;
-    rv:mainVersion ${iri(chapter.mainVersion)} ; rv:continuityProfile ${iri(CONTINUITY)} ;
-    schema:isPartOf ${iri(header.owner)} ; rdfs:label ${lit(chapter.title)}@${chapter.language} ;
-    rv:head ${iri(chapter.workRevision)} .
-    ${iri(chapter.mainVersion)} a rv:MainVersion ; rv:work ${iri(chapter.work)} ;
-    rv:hostingPolicy rv:MetadataOnly ; rv:head ${iri(chapter.mainRevision)} .` : '';
+    ? await prepareWorkComponent(env.workObjects, chapter.work, postManifestValue!, 'https://rezics.com/definition/post-v1')
+    : prepareComponent(env.objectDirectory, chapter.work, postManifestValue!, 'https://rezics.com/definition/post-v1') : null;
+  const chapterCurrent = chapter ? `${iri(chapter.work)} a rv:Post ;
+    rv:publisher ${iri(intent.admission.actingSubject!)} ; rdfs:label ${lit(chapter.title)}@${chapter.language} ;
+    rv:head ${iri(chapter.workRevision)} .` : '';
   const chapterRevisions = chapter ? `${iri(chapter.workRevision)} a rv:RevisionAnchor ;
     rv:component ${iri(chapter.work)} ; rv:operation ${iri(operation)} ;
     rv:manifest ${iri(`urn:rezics:sha256:${chapterWorkManifest}`)} ;
-    rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ;
-    rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
-    ${iri(chapter.mainRevision)} a rv:RevisionAnchor ; rv:component ${iri(chapter.mainVersion)} ;
-    rv:operation ${iri(operation)} ; rv:manifest ${iri(`urn:rezics:sha256:${chapterMainManifest}`)} ;
-    rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ;
+    rv:modelRevision <https://rezics.com/definition/post-v1> ; rv:shapeRevision <https://rezics.com/definition/post-v1> ;
     rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .` : '';
   const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -1321,13 +1315,8 @@ export async function changeComposition(env: WorkActivationEnvironment,
         `rv:operation ${iri(operation)} ; rv:action "composition.change" ;
         rv:structure ${iri(header.structure)} ; rv:structureRevision ${iri(revision)} ;
         rv:expectedHead ${iri(intent.expectedHead)} ;
-        ${chapter ? `rv:work ${iri(chapter.work)} ; rv:mainVersion ${iri(chapter.mainVersion)} ;
-          rv:workRevision ${iri(chapter.workRevision)} ; rv:mainRevision ${iri(chapter.mainRevision)} ;
-          rv:chapterWork ${iri(chapter.work)} ;
-          rv:chapterMainVersion ${iri(chapter.mainVersion)} ;
-          rv:chapterWorkRevision ${iri(chapter.workRevision)} ;
-          rv:chapterMainRevision ${iri(chapter.mainRevision)} ;` : ''}`)} }
-      GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt, chapter)} }
+        ${chapter ? `rv:work ${iri(header.owner)} ; rv:post ${iri(chapter.work)} ; rv:postRevision ${iri(chapter.workRevision)} ;` : ''}`)} }
+      GRAPH ${iri(GRAPHS.outbox)} { ${outboxTriples(env, receipt, chapter, header.owner)} }
     }
     WHERE { ${controlGuard(env)}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -1338,9 +1327,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
         ${iri(target)} ?targetPredicate${index} ?targetObject${index} . } }`).join('\n')}
       ${targetInvariant?.guard ?? ''}
       ${chapter ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(chapter.work)} ?chapterProperty ?chapterValue } }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ${iri(chapter.mainVersion)} ?mainProperty ?mainValue } }` : ''}
+        ${iri(chapter.work)} ?chapterProperty ?chapterValue } }` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?rp ?ro } }
       BIND(?n + 1 AS ?next) }`;
   if (Date.parse(intent.admission.expiresAt) <= Date.now()) throw new PendingActivation('composition admission expired');
@@ -1370,7 +1357,10 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   const committed = await dispatch(env, intent.admission, update, [
     ...await validations(env, focus, profile),
-    ...(chapter ? await workMetadataValidations(env, chapter.work, chapter.mainVersion) : []),
+    ...(chapter ? await profileValidations(env.fuseki, 'post-v1', [{
+      shape: 'https://rezics.com/definition/post-v1/post-shape',
+      focus: [chapter.work], graphs: [GRAPHS.current],
+    }], { post: chapter.work, publisher: intent.admission.actingSubject!, revision: chapter.workRevision }) : []),
     ...qualifierChecks,
   ]);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {

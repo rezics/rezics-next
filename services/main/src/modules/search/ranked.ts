@@ -136,8 +136,6 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
           ${unerased('?sourceWork')}
           FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })`
           : `FILTER EXISTS { ${publicWork('?work', '?main')} }`}
-        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?sourceWork schema:isPartOf ?parentWork } })
       } LIMIT ${candidates.length + 1}`, RANKED_CATALOGUE_COST.responseBytes)).results?.bindings ?? [] : [];
     if (matched.length > page.hits.length || new Set(matched.map(row => row.unit?.value)).size !== matched.length) {
       throw new PublicQueryUnavailable('ranked result identity is ambiguous');

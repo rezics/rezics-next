@@ -1,0 +1,8 @@
+{
+  "sha256": "531cd404aaefe72e62e35aa34fc896e3254eb2052f5bc385fc312f7f84430b33",
+  "binding": {
+    "required": ["post", "publisher", "revision"],
+    "optional": [],
+    "roles": ["post"]
+  }
+}

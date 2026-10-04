@@ -679,13 +679,13 @@ export async function readStudioChapter(
 ): Promise<Loaded<StudioChapter>> {
   const main = await mainApi();
   const [header, listed] = await Promise.all([
-    readWorkHeader(actingSubject, chapter, locale),
+    settle(() => main.v1.posts({ id: chapter }).get({ query: { actingSubject, language: locale } })),
     settle(() =>
       main.v1.works({ id: chapter })['content-variants'].get({ query: { actingSubject } }),
     ),
   ]);
   if (!header.ok) return header;
-  const titled = ownLanguageOf(header.data);
+  const titled = header.data.title.language;
   const written = listed.ok
     ? listed.data.items.map((item) => item.language.tag).filter((tag): tag is string => !!tag)
     : [];

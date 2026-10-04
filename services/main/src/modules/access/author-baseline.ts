@@ -7,8 +7,8 @@ const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 
 /** The sealed Work or chapter creation receipt and live maintainer set must agree. The
  * set lock orders this proof with transfers; a transfer back cannot revive a
- * saved generation. A chapter is itself a Work: referencing somebody else's
- * chapter in a composition never confers editing rights over that chapter.
+ * saved generation. Referencing somebody else's Post in a composition never
+ * confers editing rights over that Post.
  * Cost: three indexed singleton lookups and one 1 KiB ASK, independent of the
  * author's library size. No materialized per-resource permission grants. */
 export async function authorWorkGeneration(client: PoolClient,
@@ -29,14 +29,13 @@ export async function authorWorkGeneration(client: PoolClient,
   if (!row) return null;
   const allowed = await graph.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX schema: <https://schema.org/> ASK {
-      GRAPH ${iri(GRAPHS.current)} {
-        ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ${iri(row.main_version)}
-          ${row.action === 'work.edit' ? `; schema:isPartOf ${iri(row.scope_id.slice('work:edit:'.length))}` : ''} .
-      }
+      { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a rv:Post ; rv:head ?head . } }
+      ${row.action === 'work.create' ? `UNION { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ${iri(row.main_version)} . } }` : ''}
       ${unerased(iri(work))}
       GRAPH ${iri(GRAPHS.receipts)} {
-        ${iri(row.graph_receipt)} ${row.action === 'work.create' ? 'rv:work' : 'rv:chapterWork'} ${iri(work)} ;
-          ${row.action === 'work.create' ? 'rv:mainVersion' : 'rv:chapterMainVersion'} ${iri(row.main_version)} ;
+        ${iri(row.graph_receipt)} ${row.action === 'work.create' ? `rv:work ${iri(work)} ; rv:mainVersion ${iri(row.main_version)} ;`
+          : `(rv:post|rv:chapterWork) ${iri(work)} ;`}
           rv:admissionId ${lit(row.creation_admission)} ; rv:requestDigest ${lit(row.request_digest)} ;
           rv:admittedScope ${lit(row.scope_id)} ; rv:outcome rv:Succeeded .
       }

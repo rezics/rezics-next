@@ -100,8 +100,7 @@ export interface LibraryBackfillOptions {
 /** Background job after listening. Only migration 602's frozen rows carry the empty marker.
  * Each row commits independently, so a crash resumes without reprocessing it.
  * Failed rows retain the marker for repair/retry, but a keyset skips them this run.
- * Keep chapter tombstones and immutable command receipts; an existing nonempty
- * parent status wins, otherwise the newest chapter supplies the parent slot. */
+ */
 export async function prepareLibraryShelves(content: Pool, access: Pool, graph: FusekiClient,
   options: LibraryBackfillOptions = {}) {
   configureLibraryShelves(content, access, graph);
@@ -126,22 +125,7 @@ export async function prepareLibraryShelves(content: Pool, access: Pool, graph: 
         options.signal?.throwIfAborted();
         if (Date.now() >= deadline) throw new WorkReadUnavailable('Library backfill reached its ten-minute budget; restart to resume');
         try {
-          // Resolve one frozen identity so ambiguous parents cannot poison the
-          // entire batch or consume another row's parent result budget.
-          const parents = (await graph.query(`${READ_PREFIX} SELECT DISTINCT ?parent WHERE {
-          VALUES ?child { ${iri(row.work)} }
-          { GRAPH ${iri(GRAPHS.current)} { ?child schema:isPartOf ?parent } }
-          UNION { GRAPH ${iri(GRAPHS.current)} {
-            ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-              rv:structureOf ?main ; rv:selectedGeneration ?generation . ?main rv:work ?parent .
-            ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
-              rv:occurrenceRole rv:ChapterRole ; schema:item ?child .
-            FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-            FILTER NOT EXISTS { ?child schema:isPartOf ?directParent }
-          } } FILTER(?child != ?parent)
-        } LIMIT ${LIBRARY_BACKFILL_COST.parentRows}`, 64 * 1024)).results?.bindings ?? [];
-          if (parents.length > 1) throw new WorkReadUnavailable('Legacy chapter parent is ambiguous');
-          const parent = parents[0]?.parent?.value ?? row.work;
+          const parent = row.work;
           await client.query('BEGIN');
           try {
             await client.query("SET LOCAL lock_timeout = '2s'");
@@ -153,25 +137,9 @@ export async function prepareLibraryShelves(content: Pool, access: Pool, graph: 
                 [JSON.stringify(['library-status-work', row.agent, work])]);
             }
             const keys = await readShelfMetadata(client, access, graph, row.agent, parent, true);
-            if (parent !== row.work) {
-              await client.query(`INSERT INTO reader.library_status
-                (agent, work, status, started_on, finished_on, version, changed_at, title_key, own_rating, last_read_at)
-                SELECT agent, $3, status, started_on, finished_on, 1, changed_at, $4, $5, $6
-                FROM reader.library_status WHERE agent = $1 AND work = $2 AND title_key = '' AND status IS NOT NULL
-                ON CONFLICT (agent,work) DO UPDATE SET status = EXCLUDED.status, started_on = EXCLUDED.started_on,
-                  finished_on = EXCLUDED.finished_on, version = reader.library_status.version + 1,
-                  changed_at = EXCLUDED.changed_at, title_key = EXCLUDED.title_key,
-                  own_rating = EXCLUDED.own_rating, last_read_at = EXCLUDED.last_read_at
-                WHERE reader.library_status.status IS NULL`,
-              [row.agent, row.work, parent, keys.titleKey, keys.ownRating, keys.lastReadAt]);
-              await client.query(`UPDATE reader.library_status SET status = NULL, version = version + 1,
-                title_key = NULL, own_rating = NULL, last_read_at = NULL WHERE agent = $1 AND work = $2 AND title_key = ''`,
-              [row.agent, row.work]);
-            } else {
-              await client.query(`UPDATE reader.library_status SET title_key = $3, own_rating = $4, last_read_at = $5
-                WHERE agent = $1 AND work = $2 AND title_key = ''`,
-              [row.agent, row.work, keys.titleKey, keys.ownRating, keys.lastReadAt]);
-            }
+            await client.query(`UPDATE reader.library_status SET title_key = $3, own_rating = $4, last_read_at = $5
+              WHERE agent = $1 AND work = $2 AND title_key = ''`,
+            [row.agent, row.work, keys.titleKey, keys.ownRating, keys.lastReadAt]);
             await client.query('COMMIT');
           } catch (error) { await client.query('ROLLBACK'); throw error; }
         } catch (error) { onRowError(row, error); }

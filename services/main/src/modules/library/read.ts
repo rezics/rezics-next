@@ -1,7 +1,6 @@
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit,
   WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { canonicalChapterWorks } from '../structure/chapter-work.ts';
 import { readShelfPage, type ShelfOptions } from './shelf-page.ts';
 import type { ReaderLibraryStatusStore, ReadingStatus } from './status.ts';
 
@@ -15,9 +14,6 @@ export async function readReaderStates(session: WorkReadSession, agent: string, 
     || new Set(works).size !== works.length || works.some(work => !id.test(work))) {
     throw new WorkReadInvalid('Invalid reader state batch');
   }
-  const parents = await canonicalChapterWorks(session, works);
-  works = works.map(work => parents.get(work) ?? work);
-  if (new Set(works).size !== works.length) throw new WorkReadInvalid('Duplicate parent Work in reader state batch');
   const before = await session.deps.profiles?.agentFence(agent);
   if (!before) throw new WorkReadMissing('Reader Agent is unavailable');
   const statusFence = await status.fence(agent);

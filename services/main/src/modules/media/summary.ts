@@ -1,3 +1,4 @@
+import { publicPost } from '../post/patterns.ts';
 import { createHash } from 'node:crypto';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { listEligibleNativeVariants } from '../work/native-variants.ts';
@@ -116,7 +117,7 @@ export type SummaryMedia = {
     Promise<Awaited<ReturnType<MediaStore['avatarRows']>> | null>;
 };
 
-interface GraphRow { type: ResourceType; work: string | null; head: string | null;
+interface GraphRow { post?: boolean; type: ResourceType; work: string | null; head: string | null;
   public: boolean; labels: Map<string, string>; localizedName?: LocalizedText;
   profileAvatarSelections?: Set<string>;
   /** The subject and sorted frames a projection names. */
@@ -247,7 +248,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame WHERE {
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold } }
       OPTIONAL {
@@ -290,6 +291,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           UNION { ?r a rv:Projection ; rv:projectionOf ?projectionSubject ; rv:frame ?projectionFrame ;
             rv:projectionHead ?projectionHead . BIND("projection" AS ?type) }
           UNION { ?r rv:semanticHead ?semanticHead . BIND("resource" AS ?type) }
+          UNION { ?r a rv:Post ; rv:head ?head ; rdfs:label ?label .
+            BIND(true AS ?post) BIND("resource" AS ?type) }
         } }
         UNION { GRAPH ${iri(GRAPHS.revisions)} {
           ?r a rv:FixedRelease ; rv:work ?work . BIND("release" AS ?type) } }
@@ -330,14 +333,14 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           || EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:publicationHead ?publication }
             GRAPH ${iri(GRAPHS.revisions)} { ?publication rv:selectedDraft ?erasedDraft .
               ?erasedDraft a rv:ErasedRevision } } AS ?erased)
-        BIND(IF(?type = "realm", EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        BIND(IF(BOUND(?post), EXISTS { ${publicPost('?r')} }, IF(?type = "realm", EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ?r rv:space ?realmSpace . ?realmSpace rv:realmCapability ?r ; rv:disclosure rv:Public } },
           IF(?type = "concept", true,
           IF(?type = "context" || ?type = "collection", EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           IF(?type IN ("space","zone"),
           EXISTS { GRAPH ${iri(GRAPHS.current)} { ?r rv:disclosure rv:Public } },
           IF(?type = "agent", true,
-          IF(${workType} && BOUND(?work), EXISTS { ${publicWork('?work', '?pm')} }, false))))))
+          IF(${workType} && BOUND(?work), EXISTS { ${publicWork('?work', '?pm')} }, false)))))))
           AS ?public)
       }
     }`);
@@ -370,6 +373,7 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
     const row: GraphRow = previous?.type === type ? previous : { type,
       work: binding.work?.value ?? null, head: binding.head?.value ?? null,
       public: binding.public?.value === 'true', labels: new Map() };
+    row.post = row.post || binding.post?.value === 'true';
     const label = binding.label;
     const tag = (label as { 'xml:lang'?: string } | undefined)?.['xml:lang'];
     // Agent provisioning records a plain display name. Keep its language
@@ -479,6 +483,12 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     if (row.type === 'projection') {
       // Its disclosure is wholly its parts': a projection of one nested in another does not exist.
       if (!input.projectionPart && row.projection?.frames.size) projections.set(reference, row);
+      continue;
+    }
+    if (row.post) {
+      if (!selectName(row.labels, null)) continue;
+      if (row.public) readable.set(reference, row);
+      else restricted.set(reference, reference);
       continue;
     }
     if (row.type === 'collection' && !input.includeCollections) continue;

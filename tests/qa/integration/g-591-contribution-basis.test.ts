@@ -100,11 +100,9 @@ test('G-591: text contribution publication requires the source basis, including 
       }
       return result;
     }
-    async function chapter(book: WorkActivationReceipt, actor: string): Promise<WorkActivationReceipt> {
-      const part = await work(actor);
-      await graph.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(part.work)} <https://schema.org/isPartOf> ${iri(book.work)} . } }`);
-      return part;
+    async function anthologyEntry(_book: WorkActivationReceipt, actor: string): Promise<WorkActivationReceipt> {
+      // A separately maintained Work does not inherit the anthology's translation basis.
+      return work(actor);
     }
     async function assessment(workId: string, actor: string) {
       await grant(actor, 'rights:assess', 'rights.assess');
@@ -164,13 +162,17 @@ test('G-591: text contribution publication requires the source basis, including 
     // A translator's authorship of the target does not confer rights to the source.
     for (const withChapter of [false, true]) {
       const book = await work(translator);
-      const target = withChapter ? await chapter(book, translator) : book;
+      const target = withChapter ? await anthologyEntry(book, translator) : book;
       await installLink(book, source);
       const input = await contribution(target, translator);
       const key = randomUUID();
-      await denied(await send('/v1/contribution-publications', input, key));
-      await denied(await send('/v1/contribution-publications', input, key));
-      await remainsPrivate(input.contribution);
+      if (withChapter) {
+        await success(await send('/v1/contribution-publications', input, key));
+      } else {
+        await denied(await send('/v1/contribution-publications', input, key));
+        await denied(await send('/v1/contribution-publications', input, key));
+        await remainsPrivate(input.contribution);
+      }
     }
     // The same author can translate their own work; replay uses the terminal receipt.
     const own = await work(author);
@@ -192,7 +194,7 @@ test('G-591: text contribution publication requires the source basis, including 
     await installLink(pdTarget, pdSource);
     await success(await send('/v1/contribution-publications', await contribution(pdTarget, translator)));
     const pdBook = await work(translator);
-    const pdChapter = await chapter(pdBook, translator);
+    const pdChapter = await anthologyEntry(pdBook, translator);
     await installLink(pdBook, pdSource);
     await success(await send('/v1/contribution-publications', await contribution(pdChapter, translator)));
 

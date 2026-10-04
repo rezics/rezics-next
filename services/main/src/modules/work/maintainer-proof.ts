@@ -28,13 +28,15 @@ export async function maintainerControllerProof(client: PoolClient, principalId:
 export async function recordInitialMaintainer(client: PoolClient, admission: {
   id: string; principal_id: string; acting_subject: string; action: string; scope_id: string;
 }, proof: GraphTerminalProof & { work?: string; mainVersion?: string;
-  chapterWork?: string; chapterMainVersion?: string }): Promise<void> {
+  chapterWork?: string; chapterMainVersion?: string; post?: string }): Promise<void> {
   if (proof.outcome !== 'succeeded') return;
-  const chapter = admission.action === 'work.edit' && proof.chapterWork && proof.chapterMainVersion
-    && admission.scope_id !== `work:edit:${proof.chapterWork}`;
+  const chapter = admission.action === 'work.edit' && (proof.post || proof.chapterWork && proof.chapterMainVersion)
+    && admission.scope_id !== `work:edit:${proof.post ?? proof.chapterWork}`;
   if (admission.action !== 'work.create' && !chapter) return;
-  const work = chapter ? proof.chapterWork! : proof.work;
-  const mainVersion = chapter ? proof.chapterMainVersion! : proof.mainVersion;
+  const work = chapter ? proof.post ?? proof.chapterWork! : proof.work;
+  // The legacy non-null column is a selection fence key; a Post uses its own
+  // resource IRI and never acquires a Main Version in the graph.
+  const mainVersion = chapter ? proof.post ?? proof.chapterMainVersion! : proof.mainVersion;
   if (!work || !mainVersion) return;
   const created = await client.query(`INSERT INTO access.work_maintainer_set
     (work, main_version, creation_admission) VALUES ($1,$2,$3)

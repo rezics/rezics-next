@@ -312,15 +312,7 @@ export async function ensureComposition(
   return found && found !== 'unavailable' ? found : commandOf(created.error);
 }
 
-/**
- * Adds a chapter at the end of a Book: the Book's composition first when it has
- * none, then the chapter's Work, then its place in the composition. The chapter
- * is created as its writer's own Work (`POST /v1/works`) rather than through
- * `POST /v1/works/{id}/chapters`, because Main grants a writer authority over
- * the Works they create and not (yet) over chapters that command creates for
- * them. Each step keeps its key, so a retry replays instead of adding a second
- * chapter; the placement's key names the head it was made on.
- */
+/** Create one Post and its occurrence atomically under the Book's composition head. */
 export async function createChapter(
   input: {
     actingSubject: string;
@@ -346,53 +338,18 @@ export async function createChapter(
   const composition = input.composition ?? (await ensureComposition(input, main));
   if (typeof composition === 'string') return { outcome: composition };
   const { structure } = composition;
-  const work = await settled(() =>
-    main.v1.works.post(
-      {
-        profile: 'metadata-only-v1',
-        title: input.title,
-        language: input.language,
-        authoring: 'own-work',
-        actingSubject: input.actingSubject,
-      },
-      headers('work'),
-    ),
+  const created = await settled(() =>
+    main.v1.works({ id: idOf(input.book) }).chapters.post({
+      profile: 'book-chapter-create-v1', title: input.title, language: input.language,
+      direction: directionOf(input.language), actingSubject: input.actingSubject,
+      parent: input.parent ?? structure, position: 'last',
+      expectedCompositionHead: composition.head,
+    }, headers('post')),
   );
-  if (work.error) return { outcome: commandOf(work.error), structure };
-  if (!work.data || 'operationId' in work.data) return { outcome: 'pending', structure };
-  // A chapter is the author's own Work, so it is always created; any other answer is unavailable.
-  if ('outcome' in work.data) return { outcome: 'failed', structure };
-  const chapter = work.data.work;
-  const placed = await settled(() =>
-    main.v1.compositions({ id: idOf(structure) }).changes.post(
-      {
-        profile: 'book-composition',
-        expectedHead: composition.head,
-        actingSubject: input.actingSubject,
-        operations: [
-          {
-            op: 'insert',
-            parent: input.parent ?? structure,
-            position: 'last',
-            role: 'chapter',
-            target: chapter,
-            label: { value: input.title, language: input.language },
-          },
-        ],
-      },
-      headers(`insert:${idOf(composition.head)}`),
-    ),
-  );
-  if (placed.error) return { outcome: commandOf(placed.error), chapter, structure };
-  if (!placed.data || 'operationId' in placed.data || !placed.data.revision)
-    return { outcome: 'pending', chapter, structure };
-  return {
-    outcome: 'done',
-    head: placed.data.revision,
-    chapter,
-    structure,
-    occurrence: placed.data.occurrences?.[0],
-  };
+  if (created.error) return { outcome: commandOf(created.error), structure };
+  if (!created.data) return { outcome: 'pending', structure };
+  return { outcome: 'done', head: created.data.compositionRevision,
+    chapter: created.data.post, structure, occurrence: created.data.occurrence };
 }
 
 /** One change to a Book's composition as Main takes it (`POST /v1/compositions/{id}/changes`). */

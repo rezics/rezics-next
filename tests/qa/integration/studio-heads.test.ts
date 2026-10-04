@@ -172,15 +172,15 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       `http://main.local/v1/works/${shortId(created.work)}/chapters`, { method: 'POST',
         headers: { authorization: `Bearer ${f.account.tokenA}`, 'content-type': 'application/json',
           'idempotency-key': chapterKey }, body: JSON.stringify(payload) }));
-    const chapter = await f.json<{ work: string; workRevision: string; occurrence: string; compositionRevision: string;
+    const chapter = await f.json<{ post: string; revision: string; occurrence: string; compositionRevision: string;
       variantId: string; replayed: boolean }>(await chapterCall(), 200);
     expect(chapter.replayed).toBe(false);
     const chapterClient = await f.accessPool.connect();
     try {
       expect((await chapterClient.query<{ action: string }>(`SELECT a.action FROM access.work_maintainer_set s
-        JOIN access.admission a ON a.id = s.creation_admission WHERE s.work = $1`, [chapter.work])).rows[0]?.action)
+        JOIN access.admission a ON a.id = s.creation_admission WHERE s.work = $1`, [chapter.post])).rows[0]?.action)
         .toBe('work.edit');
-      expect(await authorWorkGeneration(chapterClient, f.env.fuseki, f.principalId, f.actor, chapter.work)).toBe('0');
+      expect(await authorWorkGeneration(chapterClient, f.env.fuseki, f.principalId, f.actor, chapter.post)).toBe('0');
     } finally { chapterClient.release(); }
     expect(chapter.variantId).toMatch(/^urn:rezics:variant:/);
     const chapterReadPath = `/v1/me/agents/${shortId(f.actor)}/works/${shortId(created.work)}/chapters?language=ja`;
@@ -191,16 +191,16 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const firstChapters = await chapterRead();
     expect(firstChapters.page.items.map(item => item.occurrence)).toEqual([chapter.occurrence]);
     expect(firstChapters.facts).toMatchObject([{ occurrence: chapter.occurrence,
-      writer: f.actor, state: 'empty', target: chapter.work, label: { value: '第一章' } }]);
+      writer: f.actor, state: 'empty', target: chapter.post, label: { value: '第一章' } }]);
     const mapping = await canonicalChapterWorks(new WorkReadSession(
       { environment: f.env } as MainWorkDependencies,
       new Request('http://main.local'), {},
       { dataEpoch: f.env.lineage.dataEpoch, sequence: chapter.compositionRevision }),
-    [chapter.work, created.work]);
-    expect(mapping.get(chapter.work)).toBe(created.work);
+    [chapter.post, created.work]);
+    expect(mapping.get(chapter.post)).toBe(created.work);
     expect(mapping.has(created.work)).toBe(false);
     expect((await f.json<typeof chapter>(await chapterCall(), 200))).toMatchObject({
-      work: chapter.work, occurrence: chapter.occurrence,
+      post: chapter.post, occurrence: chapter.occurrence,
       compositionRevision: chapter.compositionRevision, replayed: true });
     expect((await chapterCall({ ...chapterBody, title: '改題' })).status).toBe(409);
     expect((await chapterCall({ ...chapterBody, direction: 'rtl' })).status).toBe(409);
@@ -218,17 +218,16 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       sequence: chapterResult.sourcePosition.sequence,
       routingEpoch: f.env.lineage.routingEpoch, eventIds };
     const commandEvent = await readMainOutboxEnvelope(f.env.fuseki, batch, eventIds[0]!);
-    expect(commandEvent.data.receipt).toMatchObject({ chapterWork: chapter.work });
+    expect(commandEvent.data.receipt).toMatchObject({ post: chapter.post });
     const chapterEvent = await readMainOutboxEnvelope(f.env.fuseki, batch, eventIds[1]!);
-    expect(chapterEvent.data.receipt).toMatchObject({ chapter: { work: chapter.work,
+    expect(chapterEvent.data.receipt).toMatchObject({ chapter: { post: chapter.post,
       compositionRevision: chapter.compositionRevision } });
     const chapterInventory = await f.json<{ items: Array<{ id: string }> }>(await studioCall(), 200);
     expect(chapterInventory.items.map(item => item.id)).toContain(created.work);
-    expect(chapterInventory.items.map(item => item.id)).not.toContain(chapter.work);
-    const exactChapterPath = `/v1/me/agents/${shortId(f.actor)}/works/${shortId(chapter.work)}`;
-    expect(await f.json<{ item: { id: string; relationship: string; texts: unknown[]; submissions: unknown[] } }>(await studio.handle(
-      new Request(`http://main.local${exactChapterPath}`, { headers: { authorization: `Bearer ${f.account.tokenA}` } })), 200))
-      .toMatchObject({ item: { id: chapter.work, relationship: 'authored', texts: [], submissions: [] } });
+    expect(chapterInventory.items.map(item => item.id)).not.toContain(chapter.post);
+    const exactChapterPath = `/v1/me/agents/${shortId(f.actor)}/works/${shortId(chapter.post)}`;
+    expect((await studio.handle(new Request(`http://main.local${exactChapterPath}`,
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }))).status).toBe(404);
     expect((await studio.handle(new Request(`http://main.local${exactChapterPath}`))).status).toBe(401);
     expect((await studio.handle(new Request(`http://main.local/v1/me/agents/${shortId(f.actor)}/works/${randomUUID()}`,
       { headers: { authorization: `Bearer ${f.account.tokenA}` } }))).status).toBe(404);
@@ -248,18 +247,15 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
       relationship: 'curated' }));
     expect(imports.items).toContainEqual(expect.objectContaining({ id: curated.work,
       relationship: 'curated' }));
-    await f.grant(`work:read:${chapter.work}`, 'work.read');
-    const chapterHead = await f.json<{ title: string; language: string }>(await f.call('GET',
-      `/v1/revisions/${shortId(chapter.workRevision)}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
-    expect(chapterHead).toMatchObject({ title: '第一章', language: 'ja' });
+    await f.grant(`work:read:${chapter.post}`, 'work.read');
     const chapterDraft = await f.json<{ revisionId: string }>(await contentCall('POST',
-      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: chapter.work,
+      '/v1/content-drafts', { profile: 'content-text-v1', resourceId: chapter.post,
         variantId: chapter.variantId, language: { kind: 'tag', tag: 'ja', originalTag: 'ja' },
         direction: 'ltr', expectedHead: null, body: '第一章の本文', actingSubject: f.actor }), 201);
-    const chapterVariants = `/v1/works/${shortId(chapter.work)}/content-variants?actingSubject=${encodeURIComponent(f.actor)}`;
+    const chapterVariants = `/v1/works/${shortId(chapter.post)}/content-variants?actingSubject=${encodeURIComponent(f.actor)}`;
     expect(await f.json<{ items: unknown[] }>(await contentCall('GET', chapterVariants), 200))
       .toMatchObject({ items: [{ variantId: chapter.variantId, draftHead: chapterDraft.revisionId }] });
-    expect((await chapterRead()).facts).toMatchObject([{ state: 'draft', target: chapter.work }]);
+    expect((await chapterRead()).facts).toMatchObject([{ state: 'draft', target: chapter.post }]);
     const writer = async (name: string, principal: string, controlled: boolean) => {
       const agentId = `https://rezics.com/id/${randomUUID()}`;
       await f.accessPool.query("INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')", [agentId]);
@@ -303,13 +299,13 @@ test('STUDIO draft heads and Work title language survive edits and stale retries
     const chapterAccess = new StudioAccess(f.accessPool, f.env.fuseki);
     const principal = await f.account.verifier.verify(new Request('http://main.local',
       { headers: { authorization: `Bearer ${f.account.tokenA}` } }), ['work:read']);
-    expect((await chapterAccess.chapterWriters(principal, f.actor, [penChapter.work])).get(penChapter.work))
+    expect((await chapterAccess.chapterWriters(principal, f.actor, [penChapter.post])).get(penChapter.post))
       .toEqual({ writer: pen, controlled: true });
-    expect(await chapterAccess.canReadContentVariants(principal, pen, penChapter.work)).toBe(true);
+    expect(await chapterAccess.canReadContentVariants(principal, pen, penChapter.post)).toBe(true);
     const disclosed = await chapterRead();
     expect(disclosed.facts).toMatchObject([
-      { writer: f.actor, state: 'draft', target: chapter.work },
-      { writer: pen, otherIdentity: true, state: 'empty', target: penChapter.work,
+      { writer: f.actor, state: 'draft', target: chapter.post },
+      { writer: pen, otherIdentity: true, state: 'empty', target: penChapter.post,
         label: { value: '第二章' } },
       { writer: null, state: null, target: null, label: null },
     ]);

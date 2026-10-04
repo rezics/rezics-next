@@ -42,7 +42,7 @@ async function assertCurrentWork(env: WorkActivationEnvironment, resourceId: str
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} a schema:CreativeWork ; rv:head ?head . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} a ?kind ; rv:head ?head . VALUES ?kind { schema:CreativeWork rv:Post } }
     }`);
   if (result.boolean !== true) throw new ContentCommentWorkUnavailable('current Work is unavailable');
 }

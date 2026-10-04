@@ -28,7 +28,7 @@ export class WorkMaintainers {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const result = await this.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
       PREFIX schema: <https://schema.org/> ASK { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(work)} a schema:CreativeWork ; rv:head ?head }
+        ${iri(work)} a ?kind ; rv:head ?head . VALUES ?kind { schema:CreativeWork rv:Post } }
         ${unerased(iri(work))} }`, 1024);
     if (result.boolean !== true) throw new AdmissionDenied('Work is unavailable');
   }

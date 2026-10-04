@@ -144,7 +144,7 @@ export const Chapters: Story = {
     await moveBy(canvasElement, '第四章 站台', 'Move “第四章 站台” up');
     await waitFor(() => expect(within(list).getAllByRole('listitem')[2]).toHaveTextContent('第四章 站台'),
       { timeout: 5000 });
-    await expect(calls).toEqual(['move', 'work', 'insert', 'move']);
+    await expect(calls).toEqual(['move', 'post', 'move']);
   },
 };
 
@@ -199,7 +199,7 @@ export const FirstChapter: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Add chapter' }));
     await waitFor(() => expect(canvas.getByRole('link', { name: 'Write “第一章 雨夜”' })).toBeInTheDocument());
     await expect((args as unknown as { main: ReturnType<typeof storyMain> }).main.calls)
-      .toEqual(['composition', 'work', 'insert']);
+      .toEqual(['composition', 'post']);
   },
 };
 
@@ -287,7 +287,7 @@ export const Volumes: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Actions for “第三卷 晴”' }));
     await expect(await screen.findByRole('menuitem', { name: 'Delete' })).toHaveAttribute('aria-disabled', 'true');
     await userEvent.keyboard('{Escape}');
-    await expect(calls).toEqual(['move', 'insert', 'work', 'insert', 'update']);
+    await expect(calls).toEqual(['move', 'insert', 'post', 'update']);
   },
 };
 

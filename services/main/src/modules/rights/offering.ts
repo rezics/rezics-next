@@ -270,7 +270,7 @@ async function createGraph(env: WorkActivationEnvironment, admission: Registered
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
       FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.target)} a schema:CreativeWork ; rv:head ?targetHead } }
+        ${iri(input.target)} a ?targetKind ; rv:head ?targetHead . VALUES ?targetKind { schema:CreativeWork rv:Post } } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:openOffering ?open } }

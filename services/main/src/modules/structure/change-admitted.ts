@@ -12,7 +12,7 @@ import { changeComposition, chapterCreateDigest, compositionChangeDigest, compos
   compositionRestoreDigest, compositionStageDigest, restoreComposition, structureCreateDigest,
   sealStructureAdmissionCancellation,
   terminalResult, type CompositionConflict, type CompositionCost, type CompositionOperation,
-  type NewChapterWork,
+  type NewChapterPost,
   type CompositionTerminal } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from './graph.ts';
 import { InvalidCompositionChange } from './change.ts';
@@ -117,7 +117,7 @@ export function createAdmittedComposition(env: WorkActivationEnvironment, accoun
 export async function changeAdmittedComposition(env: WorkActivationEnvironment, account: Account,
   access: Access, request: Request, input: { structure: string; expectedHead: string;
     operations: readonly CompositionOperation[]; actingSubject: string; idempotencyKey: string;
-    newWork?: NewChapterWork }, targetReader?: StructureTargetReader) {
+    newWork?: NewChapterPost }, targetReader?: StructureTargetReader) {
   const { header, profile } = await structureOwner(env, input.structure);
   const digest = input.newWork
     ? chapterCreateDigest(input.structure, input.expectedHead, input.operations, input.newWork)

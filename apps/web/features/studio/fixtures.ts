@@ -281,6 +281,22 @@ export function storyMain(options: StoryMainOptions = {}) {
   } });
   const outlineOf = (work: string) => [...structures.values()].find(value => value.book === `https://rezics.com/id/${work}`);
   const works = Object.assign((params: { id: string }) => ({
+    chapters: { post: async (body: { title: string; language: string; parent: string; expectedCompositionHead: string }) => {
+      await wait();
+      if (options.chapters === 'denied') return fail(403, 'authority_denied');
+      const structure = outlineOf(params.id);
+      if (!structure) return fail(404, 'composition_unavailable');
+      if (structure.head !== body.expectedCompositionHead) return fail(409, 'stale_composition_head');
+      calls.push('post');
+      const post = next(), revision = next(), occurrence = next();
+      place(structure, { occurrence, parent: body.parent, role: 'chapter', target: post,
+        label: { value: body.title, language: body.language } }, 'last');
+      structure.head = next();
+      return ok({ post, revision, occurrence, structure: structure.structure,
+        compositionRevision: structure.head, variantId: `urn:rezics:variant:${next().slice(-36)}`,
+        language: body.language, direction: 'ltr', receipt: 'urn:rezics:receipt:story',
+        replayed: false, sourcePosition: position });
+    } },
     contents: { get: async (request?: { query?: { parent?: string } }) => {
       await wait();
       const found = outlineOf(params.id);

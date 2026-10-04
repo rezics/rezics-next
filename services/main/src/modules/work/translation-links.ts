@@ -1,3 +1,4 @@
+import { postBookPlacement } from '../post/patterns.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import type { RightsStore } from '../rights/store.ts';
@@ -36,8 +37,8 @@ function sourceAuthorPattern(source: string, actor: string): string {
  * A chapter cannot evade its translated book's source rights. */
 export function translationOriginalBasisConflictPattern(work: string, actor: string,
   publicDomain: readonly TranslationSourcePublicDomainBasis[] = []): string {
-  return `GRAPH ${iri(GRAPHS.current)} {
-    ${iri(work)} <https://schema.org/isPartOf>* ?basisTarget . }
+  return `{ BIND(${iri(work)} AS ?basisTarget) }
+    UNION { ${postBookPlacement(iri(work), '?basisTarget', '?basisMain')} }
     GRAPH ${iri(GRAPHS.revisions)} {
       ?basisLink a rv:TranslationLink ; rv:targetWork ?basisTarget ; rv:sourceWork ?basisSource . }
     FILTER NOT EXISTS { ${sourceAuthorPattern('?basisSource', iri(actor))} }

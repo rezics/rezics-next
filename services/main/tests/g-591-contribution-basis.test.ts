@@ -29,7 +29,9 @@ test('G-591: another author’s translation basis is checked before a text publi
     override async query(query: string): Promise<SparqlResult> {
       if (query.includes('ASK') && query.includes('?basisLink')) {
         probes++;
-        expect(query).toContain(`<${work}> <https://schema.org/isPartOf>* ?basisTarget`);
+        expect(query).toContain(`BIND(<${work}> AS ?basisTarget)`);
+        expect(query).toContain('rv:Post');
+        expect(query).toContain('rv:ChapterRole');
         expect(query).toContain(`<${author}>`);
         return { boolean: true };
       }

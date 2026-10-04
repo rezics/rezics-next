@@ -16,7 +16,7 @@ const extra = { title: '番外 书店的猫', body: '书店里有一只橘猫，
 /**
  * 雨夜书店 as its author keeps it: two volumes (第一卷 雨夜 with the first two
  * chapters, 第二卷 末班车 with the third) and its extras (番外) with one
- * published side story. Every step replays: groups by title, chapters by Work,
+ * published side story. Every step replays: groups by title, chapters by Post,
  * and the side story by the identity Studio's chapter command derives.
  */
 export async function arrangeSerial(api: SeedApi, author: { token: string; actingSubject: string },
@@ -35,11 +35,11 @@ export async function arrangeSerial(api: SeedApi, author: { token: string; actin
   const arranged = await readBookOutline(api, serial.work, LANGUAGE, author);
   if (!arranged.items.some(item => item.target === side)) {
     const extras = arranged.items.find(item => item.role === 'group' && item.label?.value === '番外')!;
-    const made = await api.post<{ work: string }>(`/v1/works/${short(serial.work)}/chapters`, {
+    const made = await api.post<{ post: string }>(`/v1/works/${short(serial.work)}/chapters`, {
       profile: 'book-chapter-create-v1', title: extra.title, language: LANGUAGE, direction: 'ltr',
       parent: extras.occurrence, position: 'last', expectedCompositionHead: arranged.head,
       actingSubject: author.actingSubject }, author.token, key);
-    if (made.work !== side) throw new Error('The serial’s side story has another identity');
+    if (made.post !== side) throw new Error('The serial’s side story has another identity');
   }
   const seed = `${serial.work}\0${author.actingSubject}\0${key}\0chapter`;
   await publishChapter(api, { id: 'serial', ...author }, 'serial:extra:cat', side,

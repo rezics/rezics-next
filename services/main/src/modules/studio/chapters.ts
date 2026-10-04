@@ -54,7 +54,7 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
   const writers = await access.chapterWriters(principal, agent, targets);
   const liveRows = targets.length ? await session.query(`SELECT ?target WHERE {
     VALUES ?target { ${targets.map(iri).join(' ')} }
-    GRAPH ${iri(GRAPHS.current)} { ?target a schema:CreativeWork .
+    GRAPH ${iri(GRAPHS.current)} { ?target a ?targetKind . VALUES ?targetKind { schema:CreativeWork rv:Post }
       FILTER NOT EXISTS { ?target rv:protectionHead ?protection } }
     ${unerased('?target')}
   } LIMIT ${targets.length + 1}`, targets.length + 1) : [];

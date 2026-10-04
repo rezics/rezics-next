@@ -442,6 +442,10 @@ export const PollSnapshotV1OpeningShapeSchema = Type.Object({ "@id": Type.String
 
 export type PollSnapshotV1OpeningShape = Static<typeof PollSnapshotV1OpeningShapeSchema>;
 
+export const PostV1PostShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Literal("https://rezics.com/vocab/Post"), { maxItems: 1, minItems: 1 }), "rdfs:label": Type.Array(Type.Object({ "@value": Type.String({"minLength":1,"maxLength":200}), "@language": Type.String({ pattern: "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" }) }, { additionalProperties: false }), { minItems: 1 }), "rv:publisher": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:head": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:protectionHead": Type.Optional(Type.Array(Type.String({}), { maxItems: 1 })), "rv:mainVersion": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "schema:isPartOf": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
+
+export type PostV1PostShape = Static<typeof PostV1PostShapeSchema>;
+
 export const ProjectionV1ProjectionShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Projection") }), "rv:projectionOf": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "rv:frame": Type.Array(Type.String({}), { minItems: 1, maxItems: 8 }), "rv:projectionHead": Type.Array(Type.String({}), { minItems: 1, maxItems: 1 }), "owl:sameAs": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
 
 export type ProjectionV1ProjectionShape = Static<typeof ProjectionV1ProjectionShapeSchema>;
@@ -1389,6 +1393,7 @@ export const shapeSchemas = {
   "https://rezics.com/definition/poll-snapshot-v1/snapshot-shape": PollSnapshotV1SnapshotShapeSchema,
   "https://rezics.com/definition/poll-snapshot-v1/entitlement-shape": PollSnapshotV1EntitlementShapeSchema,
   "https://rezics.com/definition/poll-snapshot-v1/opening-shape": PollSnapshotV1OpeningShapeSchema,
+  "https://rezics.com/definition/post-v1/post-shape": PostV1PostShapeSchema,
   "https://rezics.com/definition/projection-v1/projection-shape": ProjectionV1ProjectionShapeSchema,
   "https://rezics.com/definition/projection-v1/revision-shape": ProjectionV1RevisionShapeSchema,
   "https://rezics.com/definition/proposal-v1/proposal-shape": ProposalV1ProposalShapeSchema,

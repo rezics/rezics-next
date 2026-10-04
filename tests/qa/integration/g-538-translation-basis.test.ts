@@ -1,3 +1,4 @@
+import { fixtureChapter } from './post-composition-fixture.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -79,9 +80,9 @@ test('G-538: translation publication basis guards Works and chapters in both ord
     }
     async function work(actor: string): Promise<WorkActivationReceipt> {
       const title = `G-538 ${randomUUID()}`;
-      const result = await activateMetadataWork(env, { title, admission: {
+      const result = await activateMetadataWork(env, { title, semanticTypes: ['https://schema.org/Book'], admission: {
         id: randomUUID(), actingSubject: actor, scope: 'work:create:root', action: 'work.create',
-        idempotencyKey: randomUUID(), requestDigest: metadataWorkRequestDigest(title),
+        idempotencyKey: randomUUID(), requestDigest: metadataWorkRequestDigest(title, ['https://schema.org/Book']),
         authorityEpoch: '0', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
       // Use the installed NativeAgentCredit representation, never a bare schema:author.
       const credit = id(), revision = id();
@@ -98,11 +99,8 @@ test('G-538: translation publication basis guards Works and chapters in both ord
       }
       return result;
     }
-    async function chapter(book: WorkActivationReceipt, actor: string): Promise<WorkActivationReceipt> {
-      const part = await work(actor);
-      await graph.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(part.work)} <https://schema.org/isPartOf> ${iri(book.work)} . } }`);
-      return part;
+    async function chapter(book: WorkActivationReceipt, actor: string, grouped = false): Promise<WorkActivationReceipt> {
+      return fixtureChapter(env, send, grant, book, actor, grouped);
     }
     async function assessment(workId: string, actor: string) {
       await grant(actor, 'rights:assess', 'rights.assess');
@@ -170,12 +168,11 @@ test('G-538: translation publication basis guards Works and chapters in both ord
       ?link a rv:TranslationLink ; rv:targetWork ${iri(publishedFirst.work)} . } }`);
     expect(state.boolean).toBe(false);
 
-    // Studio publishes per chapter; a book-level link covers nested chapters too.
+    // Studio publishes Posts; a book-level link covers direct and grouped placements.
     for (const first of ['link', 'publication']) {
       for (const depth of [1, 2]) {
         const book = await work(translator);
-        let part = book;
-        for (let level = 0; level < depth; level++) part = await chapter(part, translator);
+        const part = await chapter(book, translator, depth === 2);
         const eligibility = await publication(part, translator);
         if (first === 'link') {
           await installLink(book, source);

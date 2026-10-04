@@ -152,7 +152,7 @@ export function buildPinnedContentPublicationUpdate(env: WorkActivationEnvironme
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0content`)}`;
   const ref = preparation.reference;
-  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : 'schema:CreativeWork';
+  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
   const languageTag = ref.language.kind === 'tag' ? `rv:contentLanguage ${lit(ref.language.tag)} ;` : '';
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     DELETE {
@@ -217,7 +217,7 @@ function rejectedUpdate(env: WorkActivationEnvironment, admission: RegisteredAdm
   const receipt = contentPublicationReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(`${receipt}\0rejected-content`)}`;
   const event = `urn:rezics:event:${hash(`${receipt}\0rejected-content`)}`;
-  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : 'schema:CreativeWork';
+  const targetKind = input.targetProfile === 'catalog-description' ? 'schema:Organization' : '?kind . VALUES ?kind { schema:CreativeWork rv:Post }';
   const guard = reason === 'StaleHead'
     ? `FILTER(COALESCE(?prior, ${iri(NONE)}) != ${expectedHeadTerm(input)})`
     : `FILTER(COALESCE(?prior, ${iri(NONE)}) = ${expectedHeadTerm(input)})

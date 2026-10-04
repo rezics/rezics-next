@@ -35,7 +35,7 @@ test('G1063: ratings affect their Context and Mine slot; unrelated owner command
       mine,
     ),
   ).toBe('work');
-  for (const action of ['relation.change', 'zone.edit', 'theme.activate', 'structure.project']) {
+  for (const action of ['relation.change', 'zone.edit', 'theme.activate', 'structure.project', 'studio.chapter.create']) {
     expect(discoveryEventEffect({ action }, base)).toBe('irrelevant');
   }
   expect(
@@ -46,8 +46,8 @@ test('G1063: ratings affect their Context and Mine slot; unrelated owner command
       { action: 'structure.command', commandAction: 'composition.restore' },
       base,
     ),
-  ).toBe('scope');
-  expect(discoveryEventEffect({ action: 'structure.command' }, base)).toBe('scope');
+  ).toBe('irrelevant');
+  expect(discoveryEventEffect({ action: 'structure.command' }, base)).toBe('irrelevant');
   expect(discoveryEventEffect({ action: 'semantic.change' }, base)).toBe('scope');
   expect(discoveryEventEffect({ action: 'work.edit', outcome: 'cancelled' }, base)).toBe(
     'irrelevant',

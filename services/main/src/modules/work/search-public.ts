@@ -1,3 +1,4 @@
+import { postBookPlacement } from '../post/patterns.ts';
 import { fallbackLanguage, realmLanguage } from './selection-heads.ts';
 import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
   type WorkActivationEnvironment } from './activate.ts';
@@ -16,7 +17,7 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from './search-budget.ts';
 import { querySearchFields, rankedSearchMatches, type SearchFieldOwners } from '../search/fields.ts';
-import { publicWork, publishedWork } from './public-patterns.ts';
+import { publicWork } from './public-patterns.ts';
 import { visibleContentSearchRights } from '../content-publication/search.ts';
 import type { RightsStore } from '../rights/store.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
@@ -97,8 +98,6 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
         FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
-        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
         }
         ${content ? `UNION {
@@ -107,17 +106,15 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
             ?unit a rv:MatchUnit ; rv:disclosure rv:Public ; rv:field rv:Body ;
               rv:resource ?work ; rv:variant ?variant ; rv:revision ?contentRevision ;
               rv:publicationDecision ?contentDecision ; rv:eligibility ?contentEligibility ;
-              rv:projection ?contentProjection ; rv:language ?language ;
-              rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
-              rv:searchChapterTitle ?chapterTitle .
+              rv:projection ?contentProjection ; rv:language ?language .
           }
           GRAPH ${iri(GRAPHS.current)} {
             ?variant a rv:ContentVariant ; rv:resource ?work ;
               rv:contentPublicationHead ?contentDecision ;
               rv:publicSearchEligibilityHead ?contentEligibility .
-            ?work schema:isPartOf ?resultWork ; rv:mainVersion ?chapterMain .
-            ?resultWork a schema:Book ; rv:mainVersion ?resultMain .
+            ?work a rv:Post ; <http://www.w3.org/2000/01/rdf-schema#label> ?chapterTitle .
           }
+          FILTER(LCASE(LANG(?chapterTitle)) = LCASE(?language))
           GRAPH ${iri(GRAPHS.revisions)} {
             ?contentEligibility a rv:ContentSearchEligibilityDecision ;
               rv:variant ?variant ; rv:publicationDecision ?contentDecision ;
@@ -125,15 +122,15 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
             OPTIONAL { ?contentEligibility rv:rightsAssessment ?assessment }
             FILTER NOT EXISTS { ?contentRevision a rv:ErasedRevision }
           }
+          ${postBookPlacement('?work', '?resultWork', '?resultMain')}
           ${publicWork('?resultWork', '?resultMain')}
-          ${publishedWork('?resultWork', '?resultMain')}
-          GRAPH ${iri(GRAPHS.revisions)} { ?publicSelection rv:language ?language . }
           ${input.author ? `GRAPH ${iri(GRAPHS.current)} {
-            ?publicContribution rv:author ${iri(input.author)} . }` : ''}
+            ?bookCredit a rv:NativeAgentCredit ; rv:work ?resultWork ; rv:agent ${iri(input.author)} ;
+              <https://schema.org/roleName> "author" . }` : ''}
           BIND(?resultMain AS ?main)
-          BIND(?publicContribution AS ?contribution)
-          BIND(?publicDraft AS ?revision)
-          BIND(?publicSelection AS ?selection)
+          BIND(?work AS ?contribution)
+          BIND(?contentRevision AS ?revision)
+          BIND(?contentDecision AS ?selection)
           ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
         }` : ''}
       }
@@ -187,10 +184,10 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
       mainVersion: row.resultMain?.value ?? row.main.value,
       contribution: row.contribution.value, revision: row.revision.value,
       selection: row.selection.value, language: row.language.value, score,
-      ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+      ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
         title: row.chapterTitle!.value } } : {}) };
   });
-  const unique = new Set(matches.map(match => match.matchUnit));
+  const unique = new Set(matches.map(match => `${match.matchUnit}\0${match.work}`));
   if (unique.size !== matches.length) throw new PublicQueryUnavailable('public query has duplicate units');
   const fields = input.publicFields ? await querySearchFields(env, input,
     { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence.value }, input.publicFields) : [];
@@ -278,8 +275,6 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
         BIND(IF(BOUND(?local), "realm-adoption", "main-fallback") AS ?reason)
         FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
         FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
-        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -328,7 +323,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
       mainVersion: row.resultMain?.value ?? row.main.value, contribution: row.contribution.value,
       revision: row.revision.value, selection: row.selection.value,
       language: row.language.value, reason: row.reason.value, score,
-      ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+      ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
         title: row.chapterTitle!.value } } : {}) };
   });
   const unique = new Set(matches.map(match => match.matchUnit));

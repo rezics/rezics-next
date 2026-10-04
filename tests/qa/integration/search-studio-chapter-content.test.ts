@@ -1,3 +1,4 @@
+import { postBookPlacement } from '../../../services/main/src/modules/post/patterns.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -63,37 +64,37 @@ test(`Studio ${basis} chapter Content resolves to its public Book on the Main ph
       '/v1/compositions', { profile: 'book-composition', work: created.work,
         mainVersion: created.mainVersion, actingSubject: actor.actor }), 201);
     const makeChapter = async (chapterTitle: string, expectedCompositionHead: string) =>
-      json<{ work: string; compositionRevision: string }>(await actor.send('POST',
+      json<{ post: string; compositionRevision: string }>(await actor.send('POST',
         `/v1/works/${short(created.work)}/chapters`, { profile: 'book-chapter-create-v1',
           title: chapterTitle, language: 'zh-Hans', direction: 'ltr', parent: composition.structure,
           position: 'last', expectedCompositionHead, actingSubject: actor.actor }));
     const first = await makeChapter('第一章 雨夜', composition.revision);
     const second = await makeChapter('第二章 未寄出的信', first.compositionRevision);
     const publishChapter = async (chapter: typeof first, chapterTitle: string, text: string) => {
-      await actor.grant(`work:read:${chapter.work}`, 'work.read');
-      await actor.grant(`content:draft:${chapter.work}`, 'content.draft');
-      await actor.grant(`content:publish:${chapter.work}`, 'content.publish');
-      await actor.grant(`content:search-eligibility:${chapter.work}`, 'content.search-eligibility');
-      const assessment = basis === 'public-domain' ? await assess(chapter.work) : null;
+      await actor.grant(`work:read:${chapter.post}`, 'work.read');
+      await actor.grant(`content:draft:${chapter.post}`, 'content.draft');
+      await actor.grant(`content:publish:${chapter.post}`, 'content.publish');
+      await actor.grant(`content:search-eligibility:${chapter.post}`, 'content.search-eligibility');
+      const assessment = basis === 'public-domain' ? await assess(chapter.post) : null;
       const sourced = assessment ? { assessmentId: assessment.assessmentId, source: {
         provider: 'project-gutenberg', identifier: 'ebook/1342', url: 'https://www.gutenberg.org/ebooks/1342',
         byteDigest: 'a'.repeat(64), retrievedAt: '2026-09-28T00:00:00.000Z' } } : {};
       const variantId = `urn:rezics:variant:${randomUUID()}`;
       const draft = await json<{ revisionId: string; byteDigest: string;
         sourcePosition: { dataEpoch: string } }>(await call('/v1/content-drafts', {
-        profile: assessment ? 'content-public-domain-text-v1' : 'content-text-v1', ...sourced, resourceId: chapter.work, variantId,
+        profile: assessment ? 'content-public-domain-text-v1' : 'content-text-v1', ...sourced, resourceId: chapter.post, variantId,
         language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr',
         expectedHead: null, body: `${chapterTitle}\n${text}`, actingSubject: actor.actor }), 201);
       const published = await json<{ status: string; decision: string }>(await actor.send('POST',
         '/v1/content-publications', { profile: 'content-publication-v1',
           preparationId: `chapter-${randomUUID()}`, revisionId: draft.revisionId,
           expectedDigest: draft.byteDigest, expectedContentEpoch: draft.sourcePosition.dataEpoch,
-          resourceId: chapter.work, variantId, expectedPublicationHead: null,
+          resourceId: chapter.post, variantId, expectedPublicationHead: null,
           actingSubject: actor.actor }), 201);
       expect(published.status).toBe('active');
       await json(await call('/v1/content-search-eligibility', {
         profile: assessment ? 'content-search-eligibility-v2' : 'content-search-eligibility-v1',
-        ...(assessment ? { assessmentId: assessment.assessmentId } : {}), resourceId: chapter.work, variantId,
+        ...(assessment ? { assessmentId: assessment.assessmentId } : {}), resourceId: chapter.post, variantId,
         publicationDecision: published.decision, expectedEligibilityHead: null,
         actingSubject: actor.actor, rightsBasis: basis, disclosure: 'public' }), 201);
       return assessment;
@@ -112,21 +113,25 @@ test(`Studio ${basis} chapter Content resolves to its public Book on the Main ph
         stack.contentCursor, stack.contentConsumer)) throw new Error('Content relay stopped before its source cut');
     }
     expect((await stack.contentCursor.read(stack.contentConsumer)).sequence).toBe(cut.sequence);
-    const unit = await command.query(`PREFIX rv: <${RV}> SELECT ?book ?title WHERE {
-      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:resource ${iri(second.work)} ;
-        rv:searchResultWork ?book ; rv:searchChapterTitle ?title . } }`);
-    expect(unit.results?.bindings).toMatchObject([{ book: { value: created.work },
-      title: { value: '第二章 未寄出的信' } }]);
+    const unit = await command.query(`PREFIX rv: <${RV}> SELECT ?resource WHERE {
+      GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:resource ${iri(second.post)} . BIND(${iri(second.post)} AS ?resource) } }`);
+    expect(unit.results?.bindings).toMatchObject([{ resource: { value: second.post } }]);
+    const placementProof = await command.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?book ?label WHERE {
+      ${postBookPlacement(iri(second.post), '?book', '?bookMain')}
+      GRAPH <urn:rezics:graph:current> { ${iri(second.post)} rdfs:label ?label . }
+    }`);
+    expect(placementProof.results?.bindings).toMatchObject([{ book: { value: created.work } }]);
     const queryStart = stack.fuseki.queries;
     const page = await json<{ total: number; results: Array<{ work: string;
-      matchedChapter?: { work: string; title: string } }> }>(
+      matchedChapter?: { post: string; book: string; title: string } }> }>(
       await call('/v1/queries/page', pageInput));
     expect(stack.fuseki.queries - queryStart).toBeLessThanOrEqual(36);
     expect(page).toMatchObject({ total: 1, results: [{ work: created.work,
-      matchedChapter: { work: second.work, title: '第二章 未寄出的信' } }] });
-    expect((await stack.call('GET', `/v1/works/${short(second.work)}`)).status).toBe(404);
+      matchedChapter: { post: second.post, book: created.work, title: '第二章 未寄出的信' } }] });
+    expect((await stack.call('GET', `/v1/works/${short(second.post)}`)).status).toBe(404);
     if (secondAssessment) {
-      await assess(second.work, secondAssessment.assessmentId);
+      await assess(second.post, secondAssessment.assessmentId);
       expect(await json(await call('/v1/queries/page', pageInput))).toMatchObject({ total: 0, results: [] });
     }
     const job = await quarantinePublicContentSearch(relayEnv, stack.content, randomUUID());

@@ -102,6 +102,7 @@ import { projectionRoutes } from './routes/projections.ts';
 import { workActivityRoutes } from './routes/work-activity.ts';
 import { profileRoutes } from './routes/profiles.ts';
 import { studioRoutes } from './routes/studio.ts';
+import { postRoutes } from './routes/posts.ts';
 import { ratingRollupRoutes } from './routes/rating-rollups.ts';
 import { libraryRoutes } from './routes/library.ts';
 import { libraryImportsRoutes } from './routes/library-imports.ts';
@@ -196,7 +197,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(managedRealmRoutes(work))
     .use(resourceRelationRoutes(fuseki, work))
     .use(membershipsRoutes(work))
-    .use(studioRoutes(work));
+    .use(new Elysia().use(postRoutes(work)).use(studioRoutes(work)));
 }
 
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {

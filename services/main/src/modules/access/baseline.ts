@@ -12,6 +12,7 @@ import { workKinds } from '../work/work-kinds.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { publicInTransaction } from './semantic-disclosure.ts';
+import { publicPost } from '../post/patterns.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -203,12 +204,12 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   const resource = iri(target.id);
   const current = iri(GRAPHS.current);
   let pattern: string;
-  if (target.kind === 'work') pattern = publicWork(resource, '?baselineMain');
+  if (target.kind === 'work') pattern = `{ ${publicWork(resource, '?baselineMain')} } UNION { ${publicPost(resource)} }`;
   else if (target.kind === 'comment') {
     if (!sourceRevision || !/^[0-9a-f-]{36}$/.test(sourceRevision)) return false;
     // A public Work does not expose its private Content drafts. Comment only
     // on the exact currently published and publicly eligible revision.
-    pattern = `${publicWork(resource, '?baselineMain')}
+    pattern = `{ { ${publicWork(resource, '?baselineMain')} } UNION { ${publicPost(resource)} } }
       GRAPH ${current} { ?variant rv:resource ${resource} ;
         rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility }
       GRAPH ${iri(GRAPHS.revisions)} {

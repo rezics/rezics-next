@@ -315,16 +315,14 @@ test('G-395 moderation context: submitter and reporter records, readable Works o
       membership: { banned: true, bannedUntil: expect.any(String) },
       submissions: { open: 1, accepted: 1, rejected: 1, changesRequested: 0, withdrawn: 0, total: 3, capped: false } });
 
-    // Works: those the reader may read, with a mod's compatibility, and a private chapter by its place in a
-    // readable Book; a private Work placed nowhere stays out. Within the graph budget.
+    // A Book placement never discloses another independently maintained Work.
     const before = stack.fuseki.queries;
     const works = await context(moderator.actor, moderator.token,
       { works: `${readable.work},${hidden.work},${chapter.work}` });
     expect(works.status).toBe(200);
     expect(stack.fuseki.queries - before).toBeLessThanOrEqual(MODERATION_CONTEXT_COST.graphCalls);
     expect((await works.json() as Context).works).toEqual([{ work: readable.work, partOf: null, authors: [], hub: null,
-      mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], latestRelease: '2.0.0' } },
-    { work: chapter.work, partOf: { work: readable.work, occurrence }, authors: [], hub: null, mod: null }]);
+      mod: { game: 'Minecraft', gameVersions: ['1.21.1'], loaders: ['Fabric'], latestRelease: '2.0.0' } }]);
 
     await stack.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE scope_id = $1 AND recipient_subject = $2`, [scope, moderator.actor]);

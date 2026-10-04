@@ -59,6 +59,14 @@ final class ModelMutationPolicy {
                 mutationBasis = Map.of("profileHead", heads,
                     "agentKind", values(data, graph, node, NodeFactory.createURI(RV + "agentKind")));
             }
+            if (!revision && selected != null && selected.type().equals("https://schema.org/CreativeWork")) {
+                mutationBasis = Map.of("postHead", values(data, graph, node, NodeFactory.createURI(RV + "head")),
+                    "postMain", values(data, graph, node, NodeFactory.createURI(RV + "mainVersion")),
+                    "postBook", values(data, graph, node, NodeFactory.createURI("https://schema.org/isPartOf")));
+            } else if (!revision && selected != null && selected.type().equals(RV + "MainVersion")) {
+                mutationBasis = Map.of("chapterOwner", values(data, graph, node, NodeFactory.createURI(RV + "work")),
+                    "hostingPolicy", values(data, graph, node, NodeFactory.createURI(RV + "hostingPolicy")));
+            }
             result.put(name, new Subject(graph, selected, Map.copyOf(selectors),
                 values(data, graph, node, RDF.type.asNode()), mutationBasis));
         }
@@ -67,7 +75,15 @@ final class ModelMutationPolicy {
 
     static Map<String, Object> check(ProfileRegistry profiles, DatasetGraph data, CommandPolicy.Plan plan,
                                      String receipt, Snapshot before) {
+        Set<String> chapterPosts = ChapterPostMigrationPolicy.retired(data, receipt, before);
         for (var entry : before.current().entrySet()) {
+            if (chapterPosts.contains(entry.getKey())) {
+                if (data.find(CURRENT, NodeFactory.createURI(entry.getKey()), Node.ANY, Node.ANY).hasNext()) {
+                    Map<String, Object> invalid = CanonicalPolicy.validate(profiles, data, entry.getKey(), false);
+                    if (invalid != null) return invalid;
+                }
+                continue;
+            }
             Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue());
             if (invalid != null) return invalid;
         }
@@ -79,6 +95,9 @@ final class ModelMutationPolicy {
         Set<String> dependentRevisions = new HashSet<>();
         int[] inboundQuads = { 0 };
         for (var entry : before.current().entrySet()) {
+            // Content, Access and immutable anchors keep their exact resource keys.
+            // Re-validating their historical Work shape would rewrite that history.
+            if (chapterPosts.contains(entry.getKey())) continue;
             // Old address revisions are immutable historical records, imported
             // to Access before this maintenance-only projection decommission.
             if (nameProjectionRetired(data, receipt, entry.getKey(), entry.getValue())) continue;

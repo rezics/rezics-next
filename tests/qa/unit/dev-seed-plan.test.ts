@@ -290,7 +290,7 @@ describe('dev seed plan', () => {
             const work = derivedId(`${seed}\0work`);
             items = [...items ?? [], { occurrence: ref(String(items?.length ?? 0)), role: 'chapter',
               label: { value: body.title! }, target: work, selectedRevision: `urn:rezics:content:revision:${work.slice(-36)}` }];
-            return { work, compositionRevision: head };
+            return { post: work, compositionRevision: head };
           }
           if (path.endsWith('/changes')) {
             const moved = body.operations!.map(operation => items!.find(item => item.occurrence === operation.occurrence)!);

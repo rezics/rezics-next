@@ -59,7 +59,7 @@ async function assertCurrentTarget(env: WorkActivationEnvironment,
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
       GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} ${targetProfile === 'catalog-description'
-        ? 'a schema:Organization .' : 'a schema:CreativeWork ; rv:mainVersion ?main ; rv:head ?head .'} }
+        ? 'a schema:Organization .' : 'a ?kind ; rv:head ?head . VALUES ?kind { schema:CreativeWork rv:Post }'} }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(variantId)} rv:resource ?other .
         FILTER(?other != ${iri(resourceId)}) } }

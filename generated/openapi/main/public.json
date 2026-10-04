@@ -306371,6 +306371,454 @@
         ]
       }
     },
+    "/v1/posts/{id}": {
+      "get": {
+        "operationId": "getV1PostsById",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "maxLength": 35,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "disclosure": {
+                      "enum": [
+                        "public",
+                        "restricted"
+                      ],
+                      "type": "string"
+                    },
+                    "id": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "labels": {
+                      "items": {
+                        "properties": {
+                          "language": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "value",
+                          "language"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 24,
+                      "type": "array"
+                    },
+                    "profile": {
+                      "const": "post-read-v1",
+                      "type": "string"
+                    },
+                    "publisher": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "sourcePosition": {
+                      "properties": {
+                        "dataEpoch": {
+                          "type": "string"
+                        },
+                        "sequence": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "dataEpoch",
+                        "sequence"
+                      ],
+                      "type": "object"
+                    },
+                    "title": {
+                      "properties": {
+                        "language": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "language"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "profile",
+                    "id",
+                    "revision",
+                    "publisher",
+                    "title",
+                    "labels",
+                    "disclosure",
+                    "sourcePosition"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 404,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 404"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 422,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 422"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/private-content-queries": {
       "post": {
         "operationId": "postV1Private-content-queries",
@@ -320823,15 +321271,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -322798,15 +323250,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -324782,15 +325238,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -326917,15 +327377,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -329063,15 +329527,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -331236,15 +331704,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -336089,15 +336561,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -336875,15 +337351,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -337673,15 +338153,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -338619,15 +339103,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -339575,15 +340063,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -340558,15 +341050,19 @@
                               },
                               "matchedChapter": {
                                 "properties": {
-                                  "title": {
+                                  "book": {
                                     "type": "string"
                                   },
-                                  "work": {
+                                  "post": {
+                                    "type": "string"
+                                  },
+                                  "title": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
-                                  "work",
+                                  "post",
+                                  "book",
                                   "title"
                                 ],
                                 "type": "object"
@@ -342980,15 +343476,19 @@
                                       },
                                       "matchedChapter": {
                                         "properties": {
-                                          "title": {
+                                          "book": {
                                             "type": "string"
                                           },
-                                          "work": {
+                                          "post": {
+                                            "type": "string"
+                                          },
+                                          "title": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "work",
+                                          "post",
+                                          "book",
                                           "title"
                                         ],
                                         "type": "object"
@@ -343766,15 +344266,19 @@
                                       },
                                       "matchedChapter": {
                                         "properties": {
-                                          "title": {
+                                          "book": {
                                             "type": "string"
                                           },
-                                          "work": {
+                                          "post": {
+                                            "type": "string"
+                                          },
+                                          "title": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "work",
+                                          "post",
+                                          "book",
                                           "title"
                                         ],
                                         "type": "object"
@@ -344564,15 +345068,19 @@
                                       },
                                       "matchedChapter": {
                                         "properties": {
-                                          "title": {
+                                          "book": {
                                             "type": "string"
                                           },
-                                          "work": {
+                                          "post": {
+                                            "type": "string"
+                                          },
+                                          "title": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "work",
+                                          "post",
+                                          "book",
                                           "title"
                                         ],
                                         "type": "object"
@@ -345510,15 +346018,19 @@
                                       },
                                       "matchedChapter": {
                                         "properties": {
-                                          "title": {
+                                          "book": {
                                             "type": "string"
                                           },
-                                          "work": {
+                                          "post": {
+                                            "type": "string"
+                                          },
+                                          "title": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "work",
+                                          "post",
+                                          "book",
                                           "title"
                                         ],
                                         "type": "object"
@@ -346466,15 +346978,19 @@
                                       },
                                       "matchedChapter": {
                                         "properties": {
-                                          "title": {
+                                          "book": {
                                             "type": "string"
                                           },
-                                          "work": {
+                                          "post": {
+                                            "type": "string"
+                                          },
+                                          "title": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "work",
+                                          "post",
+                                          "book",
                                           "title"
                                         ],
                                         "type": "object"
@@ -347449,15 +347965,19 @@
                                       },
                                       "matchedChapter": {
                                         "properties": {
-                                          "title": {
+                                          "book": {
                                             "type": "string"
                                           },
-                                          "work": {
+                                          "post": {
+                                            "type": "string"
+                                          },
+                                          "title": {
                                             "type": "string"
                                           }
                                         },
                                         "required": [
-                                          "work",
+                                          "post",
+                                          "book",
                                           "title"
                                         ],
                                         "type": "object"
@@ -349119,15 +349639,19 @@
                                   },
                                   "matchedChapter": {
                                     "properties": {
-                                      "title": {
+                                      "book": {
                                         "type": "string"
                                       },
-                                      "work": {
+                                      "post": {
+                                        "type": "string"
+                                      },
+                                      "title": {
                                         "type": "string"
                                       }
                                     },
                                     "required": [
-                                      "work",
+                                      "post",
+                                      "book",
                                       "title"
                                     ],
                                     "type": "object"
@@ -457866,15 +458390,19 @@
                           },
                           "matchedChapter": {
                             "properties": {
-                              "title": {
+                              "book": {
                                 "type": "string"
                               },
-                              "work": {
+                              "post": {
+                                "type": "string"
+                              },
+                              "title": {
                                 "type": "string"
                               }
                             },
                             "required": [
-                              "work",
+                              "post",
+                              "book",
                               "title"
                             ],
                             "type": "object"
@@ -533346,15 +533874,11 @@
                     "language": {
                       "type": "string"
                     },
-                    "mainRevision": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "mainVersion": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
                     "occurrence": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "post": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
                     },
@@ -533363,6 +533887,10 @@
                     },
                     "replayed": {
                       "type": "boolean"
+                    },
+                    "revision": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
                     },
                     "sourcePosition": {
                       "properties": {
@@ -533390,21 +533918,11 @@
                     },
                     "variantId": {
                       "type": "string"
-                    },
-                    "work": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "workRevision": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
                     }
                   },
                   "required": [
-                    "work",
-                    "mainVersion",
-                    "workRevision",
-                    "mainRevision",
+                    "post",
+                    "revision",
                     "occurrence",
                     "structure",
                     "compositionRevision",

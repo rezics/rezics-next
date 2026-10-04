@@ -93,7 +93,7 @@ export const outboxEventHandlers = [
           OPTIONAL { ${iri(receipt)} rv:structure ?structure }
           OPTIONAL { ${iri(receipt)} rv:structureRevision ?revision }
           OPTIONAL { ${iri(receipt)} rv:reason ?reason }
-          OPTIONAL { ${iri(receipt)} rv:chapterWork ?chapterWork }
+          OPTIONAL { ${iri(receipt)} (rv:post|rv:chapterWork) ?chapterWork }
         }
       } LIMIT 2`);
       const rows = proof.results?.bindings ?? [];
@@ -124,7 +124,7 @@ export const outboxEventHandlers = [
             ...(rows[0]?.structure ? { structure: rows[0].structure.value } : {}),
             ...(rows[0]?.revision ? { revision: rows[0].revision.value } : {}),
             ...(rows[0]?.reason ? { reason: rows[0].reason.value } : {}),
-            ...(rows[0]?.chapterWork ? { chapterWork: rows[0].chapterWork.value } : {}) } } };
+            ...(rows[0]?.chapterWork ? { post: rows[0].chapterWork.value } : {}) } } };
     } },
   structureStageEvent('StructureProjectionEvent', 'structure.project',
     'com.rezics.structure.projected.v1'),

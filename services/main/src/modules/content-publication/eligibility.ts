@@ -278,7 +278,7 @@ async function currentHead(env: WorkActivationEnvironment,
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a schema:CreativeWork .
+      GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post }
         ${iri(input.variantId)} a rv:ContentVariant ; rv:resource ${iri(input.resourceId)} ;
           rv:contentPublicationHead ${iri(input.publicationDecision)} .
         OPTIONAL { ${iri(input.variantId)} rv:publicSearchEligibilityHead ?head }
@@ -343,7 +343,7 @@ export function buildContentEligibilityUpdate(env: WorkActivationEnvironment,
   } WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-    GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a schema:CreativeWork .
+    GRAPH ${iri(GRAPHS.current)} { ${iri(input.resourceId)} a ?kind . VALUES ?kind { schema:CreativeWork rv:Post }
       ${iri(input.variantId)} a rv:ContentVariant ; rv:resource ${iri(input.resourceId)} ;
         rv:contentPublicationHead ${iri(input.publicationDecision)} .
       OPTIONAL { ${iri(input.variantId)} rv:publicSearchEligibilityHead ?prior }

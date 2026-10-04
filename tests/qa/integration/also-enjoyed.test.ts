@@ -37,7 +37,6 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
         ${iri(unrelated.work)} a <https://schema.org/DigitalDocument> .
         ${iri(modSource.work)} a <https://rezics.com/vocab/ModPackage> .
         ${iri(modCandidate.work)} a <https://rezics.com/vocab/ModPackage> .
-        ${iri(chapter.work)} <https://schema.org/isPartOf> ${iri(source.work)} .
       }
     }`);
     const author = (work: string, id: string) => `
@@ -72,7 +71,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(fallback.items.find(item => item.id === candidate.work)?.basis).toBe('similar');
     expect(fallback.items.map(item => item.id)).not.toContain(source.work);
     expect(fallback.items.map(item => item.id)).not.toContain(hidden.work);
-    expect(fallback.items.map(item => item.id)).not.toContain(chapter.work);
+    expect(fallback.items.map(item => item.id)).toContain(chapter.work);
     expect(fallback.items.map(item => item.id)).not.toContain(unrelated.work);
     expect(fallback.items.map(item => item.id)).not.toContain(sameAuthor.work);
     const mods = await json<CardPage>(await app.handle(new Request(
@@ -98,7 +97,7 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
       expect(moving.stale).toBe(true);
       expect(moving.items.map(item => item.id)).toContain(candidate.work);
       expect(moving.items.map(item => item.id)).not.toContain(hidden.work);
-      expect(moving.items.map(item => item.id)).not.toContain(chapter.work);
+      expect(moving.items.map(item => item.id)).toContain(chapter.work);
       expect(moving.items.map(item => item.id)).not.toContain(sameAuthor.work);
     } finally { stack.fuseki.query = originalQuery; }
     const erasedVariant = `urn:rezics:also-enjoyed-variant:${randomUUID()}`;

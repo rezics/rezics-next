@@ -35,7 +35,7 @@ export interface FieldMatch { work: string; mainVersion: string; matchUnit: stri
   contribution: string; revision: string; selection: string; language: string;
   score: number; matchedField: SearchField; matchedText: string;
   matchedLanguage: string | null; reason?: string;
-  matchedChapter?: { work: string; title: string } }
+  matchedChapter?: { post: string; book: string; title: string } }
 export const normalizedSearchText = (value: string) => value.normalize('NFC').toLowerCase().trim().replace(/\s+/gu, ' ');
 export function matchesSearchText(text: string, term: string, prefix: boolean) {
   const value = normalizedSearchText(text), query = normalizedSearchText(term);
@@ -90,8 +90,6 @@ export async function querySearchFields(env: WorkActivationEnvironment,
     BIND(COALESCE(?resultWork, ?work) AS ?targetWork)
     GRAPH ${iri(GRAPHS.current)} { ?targetWork rv:head ?head }
     FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
-    FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-      ?work schema:isPartOf ?parentWork } })
     GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:publicationDecision ?publication ; rv:selectedDraft ?revision .
       ?publication rv:disclosure rv:Public . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
     ${unerased('?work')}
@@ -158,7 +156,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
         language: row.language.value, score: 1, matchedField: value.field,
         matchedText: value.text, matchedLanguage: value.language,
         ...(row.reason ? { reason: row.reason.value } : {}),
-        ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+        ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
           title: row.chapterTitle!.value } } : {}) };
       const prior = matches.get(match.matchUnit);
       if (!prior || tier[match.matchedField] > tier[prior.matchedField]) matches.set(match.matchUnit, match);

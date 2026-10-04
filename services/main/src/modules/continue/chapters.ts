@@ -123,7 +123,7 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
   const publications = await session.query(`SELECT ?target ?language ?revision ?variant WHERE {
     VALUES (?target ?language) { ${pairs.map(([target, language]) => `(${iri(target)} ${lit(language)})`).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} {
-      ?target a schema:CreativeWork .
+      ?target a ?targetKind . VALUES ?targetKind { schema:CreativeWork rv:Post }
       ?variant a rv:ContentVariant ; rv:resource ?target ; rv:contentPublicationHead ?decision ;
         rv:publicSearchEligibilityHead ?eligibility .
     }

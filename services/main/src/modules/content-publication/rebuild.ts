@@ -348,10 +348,6 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
       OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
         rv:searchChapterTitle ?chapterTitle . }
     }
-    OPTIONAL { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit rv:resource ?resource . }
-      GRAPH ${iri(GRAPHS.current)} {
-      ?resource schema:isPartOf ?book ; rdfs:label ?bookTitle .
-      ?book a schema:Book ; rv:mainVersion ?bookMain . } }
     } LIMIT ${MAX_REBUILD_UNITS + 1}`),
     env.fuseki.query(`PREFIX rv: <${RV}> PREFIX text: <http://jena.apache.org/text#>
       SELECT ?unit ?literal ?graph WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
@@ -460,11 +456,7 @@ export async function verifyQuarantinedContentIndex(env: WorkActivationEnvironme
         || value(unit, 'eligibility') !== value(head, 'eligibility')
         || value(unit, 'body') !== projected?.text
         || unit.body?.['xml:lang'] !== projected?.language
-        || (value(unit, 'book') ? value(unit, 'resultWork') !== value(unit, 'book')
-          || value(unit, 'resultMain') !== value(unit, 'bookMain')
-          || value(unit, 'chapterTitle') !== value(unit, 'bookTitle')
-          || unit.chapterTitle?.['xml:lang'] !== unit.bookTitle?.['xml:lang']
-          : !!unit.resultWork || !!unit.resultMain || !!unit.chapterTitle)) {
+) {
         throw new ContentRebuildUnavailable('Content MatchUnit differs from exact approved source');
       }
     }

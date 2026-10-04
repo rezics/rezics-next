@@ -1,69 +1,42 @@
-import { GRAPHS, iri } from '../work/activate.ts';
+import { postBookPlacement } from '../post/patterns.ts';
+import { iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
-/** A new chapter has an immutable parent; older chapters use their one active
- * Book placement. One bounded graph query resolves a reader batch of ≤24. */
-export async function canonicalChapterWorks(session: WorkReadSession, works: readonly string[]) {
-  if (!works.length) return new Map<string, string>();
-  if (works.length > 24) throw new WorkReadUnavailable('Chapter lookup exceeds batch budget');
+/** A compatibility lookup for callers holding a Post IRI. Independent Works
+ * placed in a Book remain Works. Multiple Books never silently select a parent. */
+export async function canonicalChapterWorks(session: WorkReadSession, resources: readonly string[]) {
+  if (!resources.length) return new Map<string, string>();
+  if (resources.length > 24) throw new WorkReadUnavailable('Post lookup exceeds batch budget');
   const rows = await session.query(`SELECT DISTINCT ?child ?parent WHERE {
-    VALUES ?child { ${works.map(iri).join(' ')} }
-    { GRAPH ${iri(GRAPHS.current)} { ?child schema:isPartOf ?parent . } }
-    UNION
-    { GRAPH ${iri(GRAPHS.current)} {
-        ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-          rv:structureOf ?main ; rv:selectedGeneration ?generation .
-        ?main rv:work ?parent .
-        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
-          rv:occurrenceRole rv:ChapterRole ; schema:item ?child .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-        FILTER NOT EXISTS { ?child schema:isPartOf ?directParent }
-      } }
-    FILTER(?child != ?parent)
+    VALUES ?child { ${resources.map(iri).join(' ')} }
+    ${postBookPlacement('?child', '?parent', '?parentMain')}
   } LIMIT 49`, 48);
   const parents = new Map<string, string>();
   for (const row of rows) {
-    if (!row.child || !row.parent || !works.includes(row.child.value)
+    if (!row.child || !row.parent || !resources.includes(row.child.value)
       || parents.has(row.child.value) && parents.get(row.child.value) !== row.parent.value) {
-      throw new WorkReadUnavailable('Chapter parent is ambiguous');
+      throw new WorkReadUnavailable('Post is placed in multiple Books; select an occurrence');
     }
     parents.set(row.child.value, row.parent.value);
   }
   return parents;
 }
 
-/**
- * Where a chapter Work is read: its Book and its one active chapter occurrence in the Book's current Main
- * Version composition (null when it has none, or several). A chapter made as a part of its Book keeps that
- * Book; an older chapter is the chapter of the one Book that places it. Null for any other Work, including
- * one several Books place. One bounded graph query.
- */
-export async function chapterPlace(session: WorkReadSession, work: string) {
-  return chapterPlaceFromRows(await session.query(chapterPlaceQuery(work), 8));
+/** Legacy Work links redirect only a Post with one unambiguous active Book use. */
+export async function chapterPlace(session: WorkReadSession, resource: string) {
+  return chapterPlaceFromRows(await session.query(chapterPlaceQuery(resource), 8));
 }
 
-/** Also embedded in the Work basis read so the header needs no extra round trip. */
-export function chapterPlaceQuery(work: string): string {
-  return `SELECT DISTINCT ?book ?occurrence ?declared WHERE {
-    { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} schema:isPartOf ?book . } BIND(true AS ?declared) }
-    UNION
-    { GRAPH ${iri(GRAPHS.current)} {
-        ?structure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-          rv:structureOf ?main ; rv:selectedGeneration ?generation .
-        ?main rv:work ?book . ?book rv:mainVersion ?main .
-        ?placement a rv:OccurrencePlacement ; rv:generation ?generation ;
-          rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(work)} ; rv:occurrence ?occurrence .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-      } }
-    FILTER(?book != ${iri(work)})
+export function chapterPlaceQuery(resource: string): string {
+  return `SELECT DISTINCT ?book ?occurrence WHERE {
+    ${postBookPlacement(iri(resource), '?book', '?postMain', '?occurrence')}
   } LIMIT 8`;
 }
 
 export function chapterPlaceFromRows(rows: Awaited<ReturnType<WorkReadSession['query']>>) {
-  const declared = rows.find(row => row.declared)?.book?.value;
   const books = new Set(rows.flatMap(row => row.book ? [row.book.value] : []));
-  const book = declared ?? (books.size === 1 ? [...books][0]! : null);
-  if (!book) return null;
+  if (books.size !== 1) return null;
+  const book = [...books][0]!;
   const places = rows.filter(row => row.book?.value === book && row.occurrence);
   return { work: book, occurrence: places.length === 1 ? places[0]!.occurrence!.value : null };
 }

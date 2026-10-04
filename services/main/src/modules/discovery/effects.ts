@@ -34,7 +34,8 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'structure.command': 'irrelevant',
   'structure.project': 'irrelevant',
   'structure.stage-cancel': 'irrelevant',
-  'studio.chapter.create': 'work',
+  'studio.chapter.create': 'irrelevant',
+  'post.migrate': 'irrelevant',
   'erasure.graph': 'scope',
   'governance.moderation.apply': 'scope',
   'realm.policy.publish': 'scope',
@@ -166,14 +167,6 @@ export function discoveryEventEffect(
     (basis.scope !== 'realm' || event.realm !== basis.realm)
   )
     return 'irrelevant';
-  // Structure edits stage placements. Only book activation changes the public
-  // standalone Work population; other profiles remain display/structure reads.
-  if (event.action === 'structure.command')
-    return ['composition.create', 'composition.seal', 'structure.measures'].includes(
-      event.commandAction ?? '',
-    )
-      ? 'irrelevant'
-      : 'scope';
   return effect;
 }
 export function discoveryEventWorks(event: DiscoveryEventInput): string[] | null {

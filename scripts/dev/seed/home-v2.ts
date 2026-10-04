@@ -108,12 +108,12 @@ export async function prepareHomeV2Chapters(api: SeedApi, author: Session, creat
       throw new Error(`Home chapter ${plan.title} has no public text and was not made by this seed`);
     }
     if (!chapter) {
-      const made = await api.post<{ work: string; compositionRevision: string }>(`/v1/works/${short(serial.work)}/chapters`, {
+      const made = await api.post<{ post: string; compositionRevision: string }>(`/v1/works/${short(serial.work)}/chapters`, {
         profile: 'book-chapter-create-v1', title: plan.title, language: LANGUAGE, direction: 'ltr',
         parent: composition.structure, position: 'last',
         expectedCompositionHead: contents.compositionRevision ?? composition.revision,
         actingSubject: author.actingSubject }, author.token, plan.key);
-      if (made.work !== plan.work) throw new Error(`Home chapter ${plan.title} has another identity`);
+      if (made.post !== plan.work) throw new Error(`Home chapter ${plan.title} has another identity`);
       contents = { ...contents, compositionRevision: made.compositionRevision };
     }
     await publishChapter(api, author, `serial:${plan.index}`, plan.work, plan.variantId,

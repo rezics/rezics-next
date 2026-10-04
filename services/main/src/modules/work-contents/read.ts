@@ -78,13 +78,13 @@ async function canReadTarget(session: WorkReadSession, target: string): Promise<
   if (session.principal && session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, target)) {
     const rows = await session.query(`SELECT ?target WHERE { GRAPH ${iri(GRAPHS.current)} {
-      BIND(${iri(target)} AS ?target) ?target a schema:CreativeWork . }
+      BIND(${iri(target)} AS ?target) ?target a ?targetKind . VALUES ?targetKind { schema:CreativeWork rv:Post } }
       ${unerased('?target')} } LIMIT 2`, 1);
     if (rows.length === 1) return true;
   }
   const rows = await session.query(`SELECT DISTINCT ?target WHERE {
     GRAPH ${iri(GRAPHS.current)} {
-      BIND(${iri(target)} AS ?target) ?target a schema:CreativeWork .
+      BIND(${iri(target)} AS ?target) ?target a ?targetKind . VALUES ?targetKind { schema:CreativeWork rv:Post }
       ?variant a rv:ContentVariant ; rv:resource ?target ; rv:contentPublicationHead ?decision ;
         rv:publicSearchEligibilityHead ?eligibility . }
     GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;

@@ -67,7 +67,7 @@ test('Gutenberg seed: a lost chapter response replays original intents without d
       const index = chapterBodies.length;
       expect(value.expectedCompositionHead).toBe(index === 0 ? 'empty-head' : `chapter-head-${index - 1}`);
       chapterBodies.push(value);
-      result = { work: classicChapterIdentity(target.work, actor, 'pride', index).work,
+      result = { post: classicChapterIdentity(target.work, actor, 'pride', index).work,
         compositionRevision: `chapter-head-${index}` };
     } else if (path === '/v1/rights/use-assessments') {
       assessments.push(value); result = { assessmentId: `assessment-${assessments.length}` };
@@ -117,7 +117,7 @@ test('Gutenberg seed: an inactive publication cannot become search eligible', as
     calls.push(path);
     return ({ '/v1/compositions': { structure: 'composition', revision: 'head' },
       [`/v1/works/${target.work.slice(-36)}/chapters`]: {
-        work: classicChapterIdentity(target.work, actor, 'pride', 0).work, compositionRevision: 'head-2' },
+        post: classicChapterIdentity(target.work, actor, 'pride', 0).work, compositionRevision: 'head-2' },
       '/v1/rights/use-assessments': { assessmentId: 'assessment' },
       '/v1/content-drafts': { revisionId: 'draft', byteDigest: 'digest', sourcePosition: { dataEpoch: 'epoch' } },
       '/v1/content-publications': { status: 'rejected' },

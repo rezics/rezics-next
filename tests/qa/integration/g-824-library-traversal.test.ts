@@ -215,13 +215,13 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
     const parent = await home.stack.publicWork(agent, ['en'], 'Backfill parent');
     const child = id();
     home.fixtureSubjects.add(child);
-    await home.stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(child)} schema:isPartOf ${iri(parent.work)} } }`);
     await home.stack.contentPool.query(`INSERT INTO reader.library_status
       (agent,work,status,version,title_key) VALUES ($1,$2,'reading',3,'')`, [agent, child]);
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, home.stack.fuseki);
+    await home.deps.libraryStatus.write({ agent, work: parent.work, status: 'reading',
+      expectedVersion: 0, idempotencyKey: randomUUID() });
     expect(await home.deps.libraryStatus.batch(agent, [parent.work, child])).toMatchObject([
-      { work: parent.work, status: 'reading', version: 1 }, { work: child, status: null, version: 4 }]);
+      { work: parent.work, status: 'reading', version: 1 }, { work: child, status: 'reading', version: 3 }]);
     const snapshot = await home.deps.libraryStatus.fence(agent);
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, home.stack.fuseki);
     expect(await home.deps.libraryStatus.fence(agent)).toBe(snapshot);
@@ -233,7 +233,7 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
       FROM unnest($2::text[]) fixture(work)`, [agent, unavailable]);
     const ownBase = `/v1/me/shelves/status/reading/works?actingSubject=${encodeURIComponent(agent)}&limit=20`;
     const owned: Page['items'] = [];
-    const recordPage = fixturePages('G-824 owner placeholders', unavailable.length + 1);
+    const recordPage = fixturePages('G-824 owner placeholders', unavailable.length + 2);
     let cursor: string | null = null;
     do {
       const page = await fixtureDeadline(home.call('GET', ownBase
@@ -243,10 +243,10 @@ test('G-824: frozen chapter rows backfill once; owner placeholders match counts 
       owned.push(...page.items);
       cursor = page.nextCursor;
     } while (cursor);
-    expect(owned).toHaveLength(246);
-    expect(new Set(owned.map(item => item.work)).size).toBe(246);
-    expect(owned.filter(item => !item.card).map(item => item.work).sort()).toEqual(unavailable.sort());
-    expect(owned.at(-1)?.card?.id).toBe(parent.work);
+    expect(owned).toHaveLength(247);
+    expect(new Set(owned.map(item => item.work)).size).toBe(247);
+    expect(owned.filter(item => !item.card).map(item => item.work).sort()).toEqual([...unavailable, child].sort());
+    expect(owned.find(item => item.work === parent.work)?.card?.id).toBe(parent.work);
     expect((await home.deps.libraryStatus.shelves(agent)).find(row => row.status === 'reading')?.count).toBe(owned.length);
     await home.json(await home.call('PUT', `/v1/agents/${agent.slice(-36)}/library-visibility`,
       { visibility: 'public', expectedVersion: 0 }, home.reader.token));
@@ -337,7 +337,6 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
     home.fixtureSubjects.add(badMetadata);
     await home.stack.fuseki.update(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
       INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(badParent)} schema:isPartOf ${iri(healthy[0]!)}, ${iri(healthy[1]!)} .
         ${iri(badMetadata)} rv:mainVersion ${iri(retainedMain)}, ${iri(extraMain)} . } }`);
     await home.stack.contentPool.query(`INSERT INTO reader.library_status
       (agent,work,status,version,title_key,changed_at) SELECT $1,work,'reading',1,'','2026-01-01'
@@ -383,31 +382,30 @@ test('G-824: background backfill isolates graph and SQL failures, serves reads, 
       resume();
       try { await fixtureDeadline(pending, 'G-824 resumed backfill'); } finally { paused.mockRestore(); }
     }
-    expect(errors.sort()).toEqual([badWrite, badMetadata, badParent].sort());
+    expect(errors.sort()).toEqual([badWrite, badMetadata].sort());
     expect((await home.stack.contentPool.query<{ count: string }>(`SELECT count(*)::text FROM reader.library_status
-      WHERE agent=$1 AND title_key=''`, [agent])).rows[0]!.count).toBe('3');
+      WHERE agent=$1 AND title_key=''`, [agent])).rows[0]!.count).toBe('2');
     expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(before);
     const snapshot = await home.deps.libraryStatus.fence(agent);
     errors.length = 0;
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
-    expect(errors.sort()).toEqual([badWrite, badMetadata, badParent].sort());
+    expect(errors.sort()).toEqual([badWrite, badMetadata].sort());
     expect(await home.deps.libraryStatus.fence(agent)).toBe(snapshot);
     await home.stack.contentPool.query('DROP TRIGGER g824_reject_backfill ON reader.library_status; DROP FUNCTION reader.g824_reject_backfill()');
     await graph.update(`PREFIX schema: <https://schema.org/> PREFIX rv: <https://rezics.com/vocab/>
       DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(badParent)} schema:isPartOf ${iri(healthy[1]!)} .
         ${iri(badMetadata)} rv:mainVersion ${iri(extraMain)} . } }`);
     errors.length = 0;
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
     expect(errors).toEqual([]);
     expect((await home.stack.contentPool.query<{ count: string }>(`SELECT count(*)::text FROM reader.library_status
       WHERE agent=$1 AND title_key=''`, [agent])).rows[0]!.count).toBe('0');
-    expect((await home.deps.libraryStatus.batch(agent, [badParent]))[0]).toMatchObject({ status: null, version: 2 });
+    expect((await home.deps.libraryStatus.batch(agent, [badParent]))[0]).toMatchObject({ status: 'reading', version: 1 });
     expect([...(await home.deps.libraryStatus.batch(agent, healthy.slice(0, 20))),
       ...(await home.deps.libraryStatus.batch(agent, healthy.slice(20)))]
       .every(row => row.status === 'reading' && row.version === 1)).toBe(true);
-    // Only the recovered chapter's membership change advances the shared fence.
-    expect(BigInt(await alsoEnjoyedFence(home.stack.contentPool))).toBe(BigInt(before) + 1n);
+    // Metadata backfill preserves the private status and its membership fence.
+    expect(await alsoEnjoyedFence(home.stack.contentPool)).toBe(before);
     const final = await home.deps.libraryStatus.fence(agent);
     await prepareLibraryShelves(home.stack.contentPool, home.stack.accessPool, graph, { onRowError });
     expect(await home.deps.libraryStatus.fence(agent)).toBe(final);

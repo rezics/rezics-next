@@ -582,6 +582,16 @@ export const profileRegistry = {
       "opening"
     ]
   },
+  "post-v1": {
+    "sha256": "531cd404aaefe72e62e35aa34fc896e3254eb2052f5bc385fc312f7f84430b33",
+    "file": "shapes/post-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/post-v1/post-shape"
+    ],
+    "focusRoles": [
+      "post"
+    ]
+  },
   "projection-v1": {
     "sha256": "ae5725234cc9a9c3404dd5e17cf3c8da73d00dfa1e7578bcf45fdbe61ba920e0",
     "file": "shapes/projection-v1.ttl",

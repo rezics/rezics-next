@@ -137,7 +137,7 @@ export function studioRoutes(work: MainWorkDependencies) {
           throw new WorkReadMissing('Content variants are unavailable');
         }
         const current = await session.query(`SELECT ?work WHERE { GRAPH ${iri(GRAPHS.current)} {
-          BIND(${iri(resource)} AS ?work) ?work a schema:CreativeWork . } } LIMIT 2`, 2);
+          BIND(${iri(resource)} AS ?work) ?work a ?kind . VALUES ?kind { schema:CreativeWork rv:Post } } } LIMIT 2`, 2);
         if (current.length !== 1) throw new WorkReadMissing('Work is unavailable');
         const content = work.contentAuthoring;
         const listed = await content.listVariantHeads(resource, query.cursor ?? '', query.limit ?? 20);
@@ -179,8 +179,7 @@ export function studioRoutes(work: MainWorkDependencies) {
         t.Object({ after: readId }, { additionalProperties: false })]),
       expectedCompositionHead: readId, actingSubject: readId,
     }, { additionalProperties: false }),
-    response: { 200: t.Object({ work: readId, mainVersion: readId,
-      workRevision: readId, mainRevision: readId, occurrence: readId,
+    response: { 200: t.Object({ post: readId, revision: readId, occurrence: readId,
       structure: readId, compositionRevision: readId, variantId: t.String(),
       language: t.String(), direction: t.String(), receipt: t.String(),
       replayed: t.Boolean(), sourcePosition: t.Object({ datasetId: t.Literal('product'),
@@ -224,16 +223,12 @@ export function studioRoutes(work: MainWorkDependencies) {
         request, { structure, expectedHead: body.expectedCompositionHead,
           operations: [operation], newWork: chapter, actingSubject: body.actingSubject,
           idempotencyKey: key });
-      if (!result.revision || result.chapterWork !== chapter.work
-        || result.chapterMainVersion !== chapter.mainVersion
-        || result.chapterWorkRevision !== chapter.workRevision
-        || result.chapterMainRevision !== chapter.mainRevision) {
+      if (!result.revision || result.post !== chapter.work || result.postRevision !== chapter.workRevision) {
         throw new WorkReadUnavailable('Chapter receipt is incomplete');
       }
       const variantId = `urn:rezics:variant:${derivedId(`${seed}\0variant`).slice(-36)}`;
       const occurrence = result.occurrences?.[0] ?? derivedId(`${result.revision}\0occurrence\0${0}`);
-      return Response.json({ work: chapter.work, mainVersion: chapter.mainVersion,
-        workRevision: chapter.workRevision, mainRevision: chapter.mainRevision,
+      return Response.json({ post: chapter.work, revision: chapter.workRevision,
         occurrence, structure, compositionRevision: result.revision,
         variantId, language: body.language, direction: body.direction,
         receipt: result.receipt, replayed: result.replayed,

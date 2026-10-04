@@ -44,7 +44,7 @@ export function creditedPublicWorks(keys: readonly string[],
     ${reported.length ? `UNION { VALUES (?id ?key) { ${reported.map(([work, key]) => `(${iri(work)} ${lit(key)})`)
     .join(' ')} } }` : ''}
     ${publicWork('?id', '?main')}
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id schema:isPartOf ?parentWork } }`;
+    `;
 }
 
 /**

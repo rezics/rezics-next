@@ -51,7 +51,7 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
       await f.call('POST', `${path}/changes`, { profile: 'book-composition',
         expectedHead: created.revision, actingSubject: f.actor,
         operations: [{ op: 'insert', parent: created.structure, position: 'last', role: 'group' }] }), 200);
-    const chapter = await f.json<{ occurrence: string; work: string;
+    const chapter = await f.json<{ occurrence: string; post: string;
       sourcePosition: { sequence: string } }>(await f.call('POST',
       `/v1/works/${shortId(book.work)}/chapters`, { profile: 'book-chapter-create-v1',
         title: 'Relay chapter', language: 'en', direction: 'ltr', parent: created.structure,
@@ -67,11 +67,11 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
     expect(last).toBe(chapter.sourcePosition.sequence);
     const delivered = await relay.query<{ ordinal: number; type: string; work: string | null }>(
       `SELECT (envelope->'data'->>'ordinal')::int AS ordinal, envelope->>'type' AS type,
-        envelope->'data'->'receipt'->>'chapterWork' AS work
+        envelope->'data'->'receipt'->>'post' AS work
        FROM relay.delivered_event WHERE data_epoch = $1 AND sequence = $2 ORDER BY ordinal`,
       [f.env.lineage.dataEpoch, last]);
     expect(delivered.rows).toEqual([
-      { ordinal: 0, type: 'com.rezics.structure.command.v1', work: chapter.work },
+      { ordinal: 0, type: 'com.rezics.structure.command.v1', work: chapter.post },
       { ordinal: 1, type: 'com.rezics.studio.chapter-created.v1', work: null },
     ]);
     const composition = await relay.query<{ type: string }>(
@@ -83,7 +83,7 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
       { type: 'com.rezics.structure.command.v1' },
     ]);
 
-    await f.grant(`work:read:${chapter.work}`, 'work.read');
+    await f.grant(`work:read:${chapter.post}`, 'work.read');
     const progressResponse = await progressApp.handle(new Request(
       `http://main.local${path}/occurrences/${shortId(chapter.occurrence)}/progress`, {
         method: 'PUT', headers: { authorization: `Bearer ${f.account.tokenA}`,

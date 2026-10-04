@@ -400,8 +400,6 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
           rv:selection ${iri(selection)} ; rv:language ${lit(exact.language)} ;
           rv:field rv:Body ; rv:disclosure rv:Public ;
           rv:searchBody ${lit(exact.body)}@${exact.language} .
-        ${iri(unit)} rv:searchResultWork ?parentWork ; rv:searchResultMain ?parentMain ;
-          rv:searchChapterTitle ?chapterTitle .
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -439,11 +437,6 @@ export async function selectRealmLocal(env: WorkActivationEnvironment,
           rv:publicationHead ${iri(input.publicationDecision)} .
         OPTIONAL { ${iri(slot)} rv:selectionHead ?prior }
       }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(input.work)} schema:isPartOf ?parentWork ;
-          <http://www.w3.org/2000/01/rdf-schema#label> ?chapterTitle .
-        ?parentWork a schema:Book ; rv:mainVersion ?parentMain .
-      } }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(input.publicationDecision)} a rv:PublicationDecision ;
           rv:component ${iri(input.contribution)} ; rv:selectedDraft ${iri(exact.revision)} ;

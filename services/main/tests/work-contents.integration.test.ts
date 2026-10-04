@@ -189,7 +189,7 @@ test('Reader: public and private composition pages, current Content, cursor and 
   } finally { await stack.stop(); }
 }, 180_000);
 
-test('Reader: a chapter Work names its Book and the chapter to open, and no other Work does', async () => {
+test('Reader: chapter Posts and independently maintained anthology Works retain their own identities', async () => {
   const stack = await startMediaStack('chapter-place');
   try {
     const a = await stack.member('chapter-place-owner');
@@ -216,14 +216,14 @@ test('Reader: a chapter Work names its Book and the chapter to open, and no othe
     };
     const book = await composed(`Chapter place book ${randomUUID()}`);
     const other = await composed(`Chapter place anthology ${randomUUID()}`);
-    // A chapter made as a part of its Book, and older chapter Works placed afterwards.
-    const made = await json<{ work: string; occurrence: string; compositionRevision: string }>(await a.send('POST',
+    // A Post is placed beside independent Works; placement does not turn those Works into Posts.
+    const made = await json<{ post: string; occurrence: string; compositionRevision: string }>(await a.send('POST',
       `/v1/works/${short(book.work)}/chapters`, { profile: 'book-chapter-create-v1', title: 'Chapter one',
         language: 'en', direction: 'ltr', parent: book.structure, position: 'last',
         expectedCompositionHead: book.revision, actingSubject: a.actor }), 200);
     const legacy = await stack.privateWork(a.actor, 'Placed chapter');
     const twice = await stack.privateWork(a.actor, 'Chapter in two Books');
-    for (const target of [made.work, legacy.work, twice.work]) await a.grant(`work:read:${target}`, 'work.read');
+    for (const target of [made.post, legacy.work, twice.work]) await a.grant(`work:read:${target}`, 'work.read');
     const placed = await json<{ revision: string; occurrences: string[] }>(await a.send('POST',
       `/v1/compositions/${short(book.structure)}/changes`, { profile: 'book-composition',
         expectedHead: made.compositionRevision, actingSubject: a.actor, operations: [
@@ -235,15 +235,16 @@ test('Reader: a chapter Work names its Book and the chapter to open, and no othe
         target: twice.work }] }), 200);
     const header = async (work: string) => json<{ partOf?: { work: string; occurrence: string | null } }>(
       await a.read(`/v1/works/${short(work)}?actingSubject=${encodeURIComponent(a.actor)}`));
-    expect((await header(made.work)).partOf).toEqual({ work: book.work, occurrence: made.occurrence });
-    expect((await header(legacy.work)).partOf).toEqual({ work: book.work, occurrence: placed.occurrences[0] });
+    expect((await a.read(`/v1/works/${short(made.post)}?actingSubject=${encodeURIComponent(a.actor)}`)).status).toBe(404);
+    expect((await header(legacy.work)).partOf).toBeUndefined();
     expect((await header(twice.work)).partOf).toBeUndefined();
     expect((await header(book.work)).partOf).toBeUndefined();
-    // A removed chapter keeps the Book it was made in, with no place to open.
+    // Removing an occurrence never deletes the Post.
     await json(await a.send('POST', `/v1/compositions/${short(book.structure)}/changes`, {
       profile: 'book-composition', expectedHead: placed.revision, actingSubject: a.actor,
       operations: [{ op: 'remove', occurrence: made.occurrence }] }), 200);
-    expect((await header(made.work)).partOf).toEqual({ work: book.work, occurrence: null });
+    expect(await json(await a.read(`/v1/posts/${short(made.post)}?actingSubject=${encodeURIComponent(a.actor)}`)))
+      .toMatchObject({ id: made.post });
     const publicHeader = await json<{ partOf?: unknown }>(await stack.call('GET', `/v1/works/${short(book.work)}`));
     expect(publicHeader.partOf).toBeUndefined();
   } finally { await stack.stop(); }

@@ -291,12 +291,8 @@ export async function projectDiscoveryBatch(
     .map(
       (work) => `{ BIND(${iri(work)} AS ?work)
       ${publicWork(iri(work), '?main')}
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} schema:isPartOf ?parentWork } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?legacyStructure a rv:Structure ;
-          rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?legacyGeneration .
-          ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
-            rv:occurrenceRole rv:ChapterRole ; schema:item ${iri(work)} .
-          FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } } }
+
+
       ${
         options.sequence && options.sequence !== session.position.sequence
           ? `GRAPH ${iri(GRAPHS.revisions)} { ?birth a rv:RevisionAnchor ; rv:component ${iri(work)} .

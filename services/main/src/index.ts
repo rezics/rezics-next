@@ -60,6 +60,7 @@ import { StudioAccess } from './modules/studio/access.ts';
 import { OccurrenceLabelWorker } from './modules/structure/label-index-worker.ts';
 import { configureNamePreferences } from './modules/search/name-preferences.ts';
 import { configureLibraryShelves, prepareLibraryShelves } from './modules/library/backfill.ts';
+import { prepareChapterPosts } from './modules/post/backfill.ts';
 import { ReaderLibraryStatusStore } from './modules/library/status.ts';
 import { ConsumptionSessionStore } from './modules/session/store.ts';
 import { EditionPreferenceStore } from './modules/session/preference-store.ts';
@@ -573,6 +574,7 @@ const discoveryWorker = relayPool ? new DiscoveryRefreshWorker({ environment, ac
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) },
 new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
+await prepareChapterPosts(environment, pool);
 app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
 telemetryLog('main_listening');
 const libraryBackfillController = new AbortController();

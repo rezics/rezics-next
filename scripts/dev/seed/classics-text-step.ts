@@ -55,18 +55,18 @@ export async function publishClassicChapters(input: {
   let head = composition.revision;
   for (const [index, chapter] of chapters.entries()) {
     const identity = classicChapterIdentity(target.work, actor, book, index);
-    const made = await api.post<{ work: string; compositionRevision: string }>(
+    const made = await api.post<{ post: string; compositionRevision: string }>(
       `/v1/works/${short(target.work)}/chapters`, { profile: 'book-chapter-create-v1',
         title: chapter.title, language: 'en', direction: 'ltr', parent: composition.structure,
         position: 'last', expectedCompositionHead: head, actingSubject: actor }, token, identity.key);
-    if (made.work !== identity.work) throw new Error(`Classic ${book}:${index} has another chapter identity`);
+    if (made.post !== identity.work) throw new Error(`Classic ${book}:${index} has another chapter identity`);
     head = made.compositionRevision;
-    if (input.published?.has(made.work)) continue;
-    await input.grant(made.work);
+    if (input.published?.has(made.post)) continue;
+    await input.grant(made.post);
     const assessmentKey = seedKey('classic-rights', `${book}:${index}`);
     const assessment = await api.post<{ assessmentId: string }>('/v1/rights/use-assessments', {
       profile: 'rights-use-assessment-v1', actingSubject: actor,
-      material: { scopeKind: 'work', workId: made.work, provider: null, namespace: null,
+      material: { scopeKind: 'work', workId: made.post, provider: null, namespace: null,
         sourceRecordId: null, contentVariantId: null, mediaAsset: null, component: 'body' },
       expressionKind: 'expression', family: 'data_rights', useKind: 'redistribution', useScope: 'rezics:public-text',
       basis: 'public_domain', outcome: 'supported', licenseInstrument: null, exceptionKind: null, rationale: null,
@@ -75,18 +75,18 @@ export async function publishClassicChapters(input: {
         license: 'https://www.gutenberg.org/policy/license.html', transformation: 'license-and-trademark-wrapper-removed' },
       obligations: [], expectedAssessment: null, idempotencyKey: assessmentKey }, token, assessmentKey);
     const saved = await api.post<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-      '/v1/content-drafts', { profile: 'content-public-domain-text-v1', resourceId: made.work,
+      '/v1/content-drafts', { profile: 'content-public-domain-text-v1', resourceId: made.post,
         variantId: identity.variantId, language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
         expectedHead: null, body: chapter.body, actingSubject: actor, assessmentId: assessment.assessmentId, source },
     token, seedKey('classic-draft-v2', `${book}:${index}`));
     const publication = await api.post<{ decision: string; status: string }>('/v1/content-publications', {
       profile: 'content-publication-v1', preparationId: seedKey('classic-preparation-v2', `${book}:${index}`),
       revisionId: saved.revisionId, expectedDigest: saved.byteDigest, expectedContentEpoch: saved.sourcePosition.dataEpoch,
-      resourceId: made.work, variantId: identity.variantId, expectedPublicationHead: null, actingSubject: actor },
+      resourceId: made.post, variantId: identity.variantId, expectedPublicationHead: null, actingSubject: actor },
     token, seedKey('classic-publication-v2', `${book}:${index}`));
     if (publication.status !== 'active' || !publication.decision) throw new Error(`Classic ${book}:${index} is not published`);
     await api.post('/v1/content-search-eligibility', { profile: 'content-search-eligibility-v2',
-      resourceId: made.work, variantId: identity.variantId, publicationDecision: publication.decision,
+      resourceId: made.post, variantId: identity.variantId, publicationDecision: publication.decision,
       expectedEligibilityHead: null, actingSubject: actor, rightsBasis: 'public-domain',
       assessmentId: assessment.assessmentId, disclosure: 'public' }, token, seedKey('classic-eligibility-v2', `${book}:${index}`));
   }

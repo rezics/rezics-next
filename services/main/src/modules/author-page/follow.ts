@@ -62,14 +62,9 @@ export async function newestAuthorWorks(session: WorkReadSession,
       GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit ;
         rv:agent ?agent ; rv:work ?id . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
       ${publicWork('?id', '?main')}
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id schema:isPartOf ?parentWork } }
+
       # A chapter placed in a book is the book's, as the profile's Works list reads it.
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-        ?legacyStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-          rv:selectedGeneration ?legacyGeneration .
-        ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
-          rv:occurrenceRole rv:ChapterRole ; schema:item ?id .
-        FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } } }
+
       BIND(STR(?agent) AS ?author) }`] : [],
   ];
   const expected = agents.length + keys.length;

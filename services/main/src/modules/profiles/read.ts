@@ -387,13 +387,8 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
     GRAPH ${iri(GRAPHS.revisions)} { ?creditHead a rv:NativeAgentCreditRevision ; rv:component ?credit ;
       rv:agent ${iri(agent)} ; rv:work ?id . FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }
     ${publicWork('?id', '?main')}
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?id schema:isPartOf ?parentWork } }
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-      ?legacyStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-        rv:selectedGeneration ?legacyGeneration .
-      ?legacyPlacement a rv:OccurrencePlacement ; rv:generation ?legacyGeneration ;
-        rv:occurrenceRole rv:ChapterRole ; schema:item ?id .
-      FILTER NOT EXISTS { ?legacyPlacement rv:removedBy ?legacyRemoval } } }
+
+
     FILTER(STR(?id) > ${lit(seek ? field(seek, 'id') : '')}) } ORDER BY STR(?id) LIMIT ${size}`,
         size,
       ),

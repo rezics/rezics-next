@@ -157,8 +157,7 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
       rv:projection ${iri(anchor)} ;
       rv:language ${lit(language)} ; rv:field rv:Body ; rv:disclosure rv:Public ;
       rv:searchBody ${lit(text)}@${language} .
-      ${iri(unit)} rv:searchResultWork ?parentWork ; rv:searchResultMain ?parentMain ;
-        rv:searchChapterTitle ?chapterTitle . }
+ }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
       rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ;
       rv:ownerDataEpoch ${lit(event.position.dataEpoch)} ;
@@ -182,9 +181,6 @@ function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEv
     GRAPH ${iri(GRAPHS.current)} { ${iri(reference.variantId)} a rv:ContentVariant ;
       rv:resource ${iri(reference.resourceId)} ; rv:contentPublicationHead ${iri(decision)} ;
       rv:publicSearchEligibilityHead ${iri(eligibility)} . }
-    OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(reference.resourceId)} schema:isPartOf ?parentWork ; rdfs:label ?chapterTitle .
-      ?parentWork a schema:Book ; rv:mainVersion ?parentMain . } }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:ContentPublicationDecision ;
       rv:contentRevision ${iri(`${CONTENT_REVISION}${reference.revisionId}`)} ;
       rv:byteDigest ${lit(reference.byteDigest)} ;

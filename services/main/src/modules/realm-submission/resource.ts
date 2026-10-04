@@ -1,3 +1,4 @@
+import { postBookPlacement } from '../post/patterns.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -20,14 +21,18 @@ export function resourceCandidatePattern(realm: string, target: ResourceSubmissi
   return `GRAPH ${iri(GRAPHS.current)} {
     ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
     ?space rv:realmCapability ${iri(realm)} .
-    ${iri(target.work)} a <https://schema.org/CreativeWork> ; rv:head ${iri(target.workRevision)} ;
-      rv:mainVersion ${iri(target.mainVersion)} .
-    ${iri(target.mainVersion)} a rv:MainVersion ; rv:work ${iri(target.work)} .
+    { ${iri(target.work)} a <https://schema.org/CreativeWork> ; rv:head ${iri(target.workRevision)} ;
+        rv:mainVersion ${iri(target.mainVersion)} .
+      ${iri(target.mainVersion)} a rv:MainVersion ; rv:work ${iri(target.work)} . }
+    ${target.kind === 'content-publication' ? `UNION { ${iri(target.work)} a rv:Post ; rv:head ${iri(target.workRevision)} . }` : ''}
     ${target.kind === 'content-publication' ? `${iri(target.variant)} a rv:ContentVariant ;
       rv:resource ${iri(target.work)} ; rv:contentPublicationHead ${iri(target.publicationDecision)} ;
       rv:publicSearchEligibilityHead ?eligibility .` : ''}
   }
-  ${target.kind === 'content-publication' ? `GRAPH ${iri(GRAPHS.revisions)} {
+  ${target.kind === 'content-publication' ? `FILTER(EXISTS { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(target.work)} a <https://schema.org/CreativeWork> ; rv:mainVersion ${iri(target.mainVersion)} . } }
+    || EXISTS { ${postBookPlacement(iri(target.work), '?submissionBook', iri(target.mainVersion))} })
+  GRAPH ${iri(GRAPHS.revisions)} {
     ${iri(target.publicationDecision)} a rv:ContentPublicationDecision ; rv:resource ${iri(target.work)} ;
       rv:component ${iri(target.variant)} ; rv:contentRevision <urn:rezics:content:revision:${target.contentRevision}> .
     ?eligibility a rv:ContentSearchEligibilityDecision ; rv:publicationDecision ${iri(target.publicationDecision)} ;

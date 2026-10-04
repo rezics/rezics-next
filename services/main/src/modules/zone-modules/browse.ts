@@ -185,14 +185,8 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
     GRAPH ${iri(GRAPHS.revisions)} { ?evidence rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
     GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head . OPTIONAL { ?work rv:completionStatus ?status } }
     ${publicWork('?work', '?main')}
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-      ?chapterStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-        rv:selectedGeneration ?chapterGeneration .
-      ?chapterPlacement a rv:OccurrencePlacement ; rv:generation ?chapterGeneration ;
-        rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
-      FILTER NOT EXISTS { ?chapterPlacement rv:removedBy ?chapterRemoval }
-    } }
+
+
   } LIMIT ${ids.length + 1}`, ids.length);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence || !row.revisionEpoch
     || !/^\d+$/.test(row.sequence?.value ?? '')

@@ -332,7 +332,7 @@ test.each(['initial context', 'retained context'])(
           language: 'en', direction: 'ltr', parent: composition.structure, position: 'last',
           expectedCompositionHead: composition.revision, actingSubject: person.agent }) }));
     expect(chapterResponse.status).toBe(200);
-    const chapter = await chapterResponse.json() as { work: string };
+    const chapter = await chapterResponse.json() as { post: string; compositionRevision: string };
     const bookRating = await app.handle(new Request('http://main.local/v1/global-rating-observations', {
       method: 'POST', headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
         'idempotency-key': randomUUID() },
@@ -400,112 +400,67 @@ test.each(['initial context', 'retained context'])(
     expect(olderPage.status).toBe(200);
     expect(await olderPage.json()).toMatchObject({ items: [{ id: olderCollection, disclosure: 'public' }],
       nextCursor: null });
-    const chapterShelf = await app.handle(new Request(
-      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-status`, { method: 'PUT',
-        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
-          'idempotency-key': randomUUID() },
-        body: JSON.stringify({ actingSubject: person.agent, expectedVersion: 2,
-          status: 'want-to-read', startedOn: null, finishedOn: null }) }));
-    expect(chapterShelf.status, await chapterShelf.clone().text()).toBe(200);
-    expect(await chapterShelf.json()).toMatchObject({ work: book.work,
-      status: 'want-to-read', version: 3 });
-    expect((await status.batch(person.agent, [chapter.work, book.work])).map(row => row.status))
-      .toEqual([null, 'want-to-read']);
-    // G924: private imported reviews share the chapter's Book library identity.
-    const privateReviewKey = randomUUID();
-    const reviewChapter = (expectedVersion = 0, key = privateReviewKey) => app.handle(new Request(
-      `http://main.local/v1/me/import-reviews/${chapter.work.slice(-36)}`, { method: 'PUT',
-        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
-          'idempotency-key': key }, body: JSON.stringify({ actingSubject: person.agent,
-          text: 'A private chapter note', language: 'en', spoiler: true, expectedVersion }) }));
-    const privateChapterReview = await reviewChapter();
-    expect(privateChapterReview.status, await privateChapterReview.clone().text()).toBe(200);
-    expect(await privateChapterReview.json()).toMatchObject({ work: book.work, version: 1,
-      text: 'A private chapter note', replayed: false });
-    expect(await (await reviewChapter()).json()).toMatchObject({ work: book.work, version: 1, replayed: true });
-    expect((await reviewChapter(0, randomUUID())).status).toBe(409);
-    expect(await status.privateReviews(person.agent, [chapter.work, book.work]))
-      .toMatchObject([{ work: book.work, version: 1 }]);
-    const reviewRead = await app.handle(new Request(`http://main.local/v1/me/import-reviews`
-      + `?actingSubject=${actingSubject}&works=${encodeURIComponent(chapter.work)}`,
-    { headers: { authorization: `Bearer ${a.token}` } }));
-    expect(reviewRead.status).toBe(200);
-    expect(await reviewRead.json()).toMatchObject({ items: [{ work: book.work, version: 1 }] });
-
-    const chapterState = () => app.handle(new Request(
-      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
-      { headers: { authorization: `Bearer ${a.token}` } }));
-    const chapterStatus = (current: number) => app.handle(new Request(
-      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-status`, { method: 'PUT',
+    const postStatus = await app.handle(new Request(
+      `http://main.local/v1/works/${chapter.post.slice(-36)}/reader-status`, { method: 'PUT',
         headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
           'idempotency-key': randomUUID() }, body: JSON.stringify({ actingSubject: person.agent,
-          expectedVersion: current, status: 'read', startedOn: null, finishedOn: null }) }));
+          expectedVersion: 0, status: 'reading' }) }));
+    expect(postStatus.status).toBeGreaterThanOrEqual(400);
+    const entry = await stack.publicWork(person.agent, ['en'], 'Independent anthology entry');
+    await grant(`work:read:${entry.work}`, 'work.read');
+    const placement = await app.handle(new Request(
+      `http://main.local/v1/compositions/${composition.structure.slice(-36)}/changes`, { method: 'POST',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify({ profile: 'book-composition',
+          expectedHead: chapter.compositionRevision, actingSubject: person.agent,
+          operations: [{ op: 'insert', role: 'chapter', parent: composition.structure, position: 'last',
+            target: entry.work }] }) }));
+    expect(placement.status, await placement.clone().text()).toBe(200);
+    // An independently maintained Work used in an anthology keeps its own private state.
+    const chapterShelf = await app.handle(new Request(
+      `http://main.local/v1/works/${entry.work.slice(-36)}/reader-status`, { method: 'PUT',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() },
+        body: JSON.stringify({ actingSubject: person.agent, expectedVersion: 0,
+          status: 'want-to-read', startedOn: null, finishedOn: null }) }));
+    expect(chapterShelf.status, await chapterShelf.clone().text()).toBe(200);
+    expect(await chapterShelf.json()).toMatchObject({ work: entry.work, status: 'want-to-read', version: 1 });
+    expect((await status.batch(person.agent, [entry.work, book.work])).map(row => row.status))
+      .toEqual(['want-to-read', 'read']);
+    const privateReviewKey = randomUUID();
+    const reviewChapter = (expectedVersion = 0, key = privateReviewKey) => app.handle(new Request(
+      `http://main.local/v1/me/import-reviews/${entry.work.slice(-36)}`, { method: 'PUT',
+        headers: { authorization: `Bearer ${a.token}`, 'content-type': 'application/json',
+          'idempotency-key': key }, body: JSON.stringify({ actingSubject: person.agent,
+          text: 'A private entry note', language: 'en', spoiler: true, expectedVersion }) }));
+    expect(await (await reviewChapter()).json()).toMatchObject({ work: entry.work, version: 1, replayed: false });
+    expect(await (await reviewChapter()).json()).toMatchObject({ work: entry.work, version: 1, replayed: true });
+    expect((await reviewChapter(0, randomUUID())).status).toBe(409);
+    expect(await status.privateReviews(person.agent, [entry.work, book.work]))
+      .toMatchObject([{ work: entry.work, version: 1 }]);
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(book.work)} rv:mergedInto ${iri(publicWork.work)} } }`);
     try {
-      const mergedStatus = await chapterStatus(1);
-      expect(mergedStatus.status, await mergedStatus.clone().text()).toBe(200);
-      expect(await mergedStatus.json()).toMatchObject({ work: publicWork.work, status: 'read', version: 2 });
-      const mergedState = await chapterState();
-      expect(mergedState.status, await mergedState.clone().text()).toBe(200);
-      expect(await mergedState.json()).toMatchObject({ work: publicWork.work,
-        status: { work: publicWork.work, status: 'read', version: 2 } });
-      const mergedReview = await reviewChapter(0, randomUUID());
-      expect(mergedReview.status).toBe(200);
-      expect(await mergedReview.json()).toMatchObject({ work: publicWork.work, version: 1 });
+      expect(await (await reviewChapter(1, randomUUID())).json()).toMatchObject({ work: entry.work, version: 2 });
     } finally {
       await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
         ${iri(book.work)} rv:mergedInto ${iri(publicWork.work)} } }`);
-      await status.write({ agent: person.agent, work: publicWork.work, status: 'reading',
-        expectedVersion: 2, idempotencyKey: randomUUID() });
     }
-
-    // Mapping a chapter does not admit a hidden Book merge destination. Both
-    // write paths discard the result and leave the stored Book state intact.
-    const deniedBook = await stack.privateWork(b.actor, 'Concealed library destination');
-    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(book.work)} rv:mergedInto ${iri(deniedBook.work)} } }`);
-    try {
-      for (const response of [await reviewChapter(1, randomUUID()), await chapterStatus(3)]) {
-        expect(response.status).toBeGreaterThanOrEqual(400);
-        const body = await response.text();
-        expect(body).not.toContain(deniedBook.work);
-        expect(body).not.toContain('Concealed library destination');
-      }
-      expect((await status.batch(person.agent, [book.work, deniedBook.work])).map(row => row.status))
-        .toEqual(['want-to-read', null]);
-      expect(await status.privateReviews(person.agent, [book.work, deniedBook.work]))
-        .toMatchObject([{ work: book.work, version: 1 }]);
-      expect((await chapterState()).status).toBe(404);
-    } finally {
-      await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(book.work)} rv:mergedInto ${iri(deniedBook.work)} } }`);
-    }
-    await status.write({ agent: person.agent, work: chapter.work, status: 'reading',
-      startedOn: null, finishedOn: null, expectedVersion: 0, idempotencyKey: randomUUID() });
+    await status.write({ agent: person.agent, work: entry.work, status: 'reading',
+      startedOn: null, finishedOn: null, expectedVersion: 1, idempotencyKey: randomUUID() });
     await stack.contentPool.query("UPDATE reader.library_status SET title_key = '' WHERE agent = $1 AND work = $2",
-      [person.agent, chapter.work]);
+      [person.agent, entry.work]);
     await prepareLibraryShelves(stack.contentPool, stack.accessPool, stack.fuseki);
-    const parentPrecedence = await app.handle(new Request(
-      `http://main.local/v1/me/shelves?actingSubject=${actingSubject}`,
-      { headers: { authorization: `Bearer ${a.token}` } }));
-    expect(await parentPrecedence.json()).toMatchObject({ statusShelves: expect.arrayContaining([
-      expect.objectContaining({ status: 'want-to-read', count: 1 }),
-      expect.objectContaining({ status: 'reading', count: 1 })]) });
+    expect((await status.batch(person.agent, [entry.work, book.work])).map(row => row.status))
+      .toEqual(['reading', 'read']);
     await status.write({ agent: person.agent, work: book.work, status: null,
-      startedOn: null, finishedOn: null, expectedVersion: 3, idempotencyKey: randomUUID() });
+      startedOn: null, finishedOn: null, expectedVersion: 2, idempotencyKey: randomUUID() });
     const legacyState = await app.handle(new Request(
-      `http://main.local/v1/works/${chapter.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
+      `http://main.local/v1/works/${entry.work.slice(-36)}/reader-state?actingSubject=${actingSubject}`,
       { headers: { authorization: `Bearer ${a.token}` } }));
     expect(legacyState.status).toBe(200);
-    expect(await legacyState.json()).toMatchObject({ work: book.work,
-      status: { work: book.work, status: null, version: 4 } });
-    const legacyShelf = await app.handle(new Request(
-      `http://main.local/v1/me/shelves/status/reading/works?actingSubject=${actingSubject}`,
-      { headers: { authorization: `Bearer ${a.token}` } }));
-    expect(legacyShelf.status).toBe(200);
-    expect(await legacyShelf.json()).toMatchObject({ items: expect.not.arrayContaining([
-      expect.objectContaining({ work: book.work })]) });
+    expect(await legacyState.json()).toMatchObject({ work: entry.work,
+      status: { work: entry.work, status: 'reading', version: 2 } });
     await stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id = true');
     try {
       expect((await visibilityRequest(a.token, { visibility: 'public', expectedVersion: 3 })).status).toBe(503);
@@ -546,10 +501,9 @@ test.each(['initial context', 'retained context'])(
     expect(legacyPublic.status).toBe(200);
     // Clearing the rewritten parent cannot resurrect the frozen chapter row.
     expect(await legacyPublic.json()).toMatchObject({ statusShelves: expect.arrayContaining([
-      expect.objectContaining({ status: 'reading', count: 1 })]) });
+      expect.objectContaining({ status: 'reading', count: 2 })]) });
 
-    // G352: the same rated serial is a public discovery candidate; chapter Works
-    // do not turn into separate cards or poison a first page with a 503.
+    // Independently maintained anthology entries remain discovery candidates.
     const basis = { scope: 'global' as const, realm: null, context: null };
     const operator = automaticDiscovery(null);
     const buildRequest = new Request('http://main.internal/library-discovery-build');
@@ -576,7 +530,7 @@ test.each(['initial context', 'retained context'])(
     const discovered = await discoveryPage.json() as { stale: boolean; items: { id: string }[] };
     expect(discovered.stale).toBe(false);
     expect(discovered.items.map(item => item.id)).toContain(book.work);
-    expect(discovered.items.map(item => item.id)).not.toContain(chapter.work);
+    expect(discovered.items.map(item => item.id)).toContain(entry.work);
     await stack.privateWork(person.agent, 'Unrelated write after discovery');
     const retained = await discover();
     expect(retained.status).toBe(200);

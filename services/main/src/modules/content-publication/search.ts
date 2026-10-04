@@ -1,3 +1,5 @@
+import { publicWork } from '../work/public-patterns.ts';
+import { postBookPlacement } from '../post/patterns.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { ContentProjectionCursor } from '../../../../content/src/projection-cursor.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -209,20 +211,12 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
             rv:resource ?resource ; rv:variant ?variant ; rv:revision ?revision ;
             rv:publicationDecision ?decision ; rv:eligibility ?eligibility ;
             rv:projection ?unitProjection ; rv:language ?language .
-          OPTIONAL { ?unit rv:searchResultWork ?parentWork }
         }
         GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ?resource ; rv:contentPublicationHead ?decision ;
           rv:publicSearchEligibilityHead ?eligibility . }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-          ?parentWork rv:mainVersion ?parentMain .
-          ?structure a rv:Structure ; rv:structureOf ?parentMain ;
-            rv:structureProfile rv:BookComposition ; rv:selectedGeneration ?placementGeneration .
-          ?placementGeneration rv:generationState rv:Active .
-          ?placement a rv:OccurrencePlacement ; rv:generation ?placementGeneration ;
-            rv:occurrenceRole rv:ChapterRole ; schema:item ?resource .
-          FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
-        } }
+        OPTIONAL { ${postBookPlacement('?resource', '?parentWork', '?parentMain')}
+          ${publicWork('?parentWork', '?parentMain')} }
         GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision ;
           rv:variant ?variant ; rv:publicationDecision ?decision ;
           rv:disclosure rv:Public ; rv:rightsBasis ?rightsBasis .
@@ -260,12 +254,12 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
       parentWork: value(row, 'parentWork'),
       rightsBasis: value(row, 'rightsBasis'), assessment: value(row, 'assessment') };
   });
-  if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {
+  if (new Set(matches.map(match => `${match.matchUnit}\0${match.parentWork ?? ''}`)).size !== matches.length) {
     throw new ContentProjectionUnavailable('Content phrase result has duplicate units');
   }
   const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match,
     work: match.parentWork ?? match.resource,
-    ...(match.parentWork ? { matchedChapter: { work: match.resource } } : {}),
+    ...(match.parentWork ? { matchedChapter: { post: match.resource, book: match.parentWork } } : {}),
   })));
   const visible = (await visibleContentSearchRights(disclosed, rights))
     .map(({ rightsBasis: _rightsBasis, assessment: _assessment, work: _work,

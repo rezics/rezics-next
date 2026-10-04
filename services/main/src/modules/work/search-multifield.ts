@@ -79,8 +79,6 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}
         }
         FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })
-        FILTER(BOUND(?resultWork) || NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?work schema:isPartOf ?parentWork } })
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
       }
     }`, MAX_SEARCH_RESPONSE_BYTES);
@@ -123,7 +121,7 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
       contribution: row.contribution.value, revision: row.revision.value,
       selection: row.selection.value, language: row.language.value,
       score: titleScore + bodyScore,
-      ...(row.resultWork ? { matchedChapter: { work: row.work.value,
+      ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
         title: row.chapterTitle!.value } } : {}) };
   });
   if (new Set(matches.map(match => match.matchUnit)).size !== matches.length) {

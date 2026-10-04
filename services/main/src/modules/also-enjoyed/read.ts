@@ -6,7 +6,6 @@ import { RecommendationUnavailable } from '../recommendation/derived-generation.
 import { searchPageAuthors, searchPageCredits, searchPageSerial } from '../search/result-cards.ts';
 import { searchPageRatings } from '../search/ratings.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
-import { canonicalChapterWorks } from '../structure/chapter-work.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 import { EMPTY_SERIAL_SUMMARY } from '../work/summary-serial.ts';
 import { RatingAggregateBudgetExceeded } from '../rating/aggregate.ts';
@@ -118,12 +117,6 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
     } LIMIT 21`, 20);
     for (const row of rows) if (row.work) visible.add(row.work.value);
   }
-  const chapters = new Set<string>();
-  for (let offset = 0; offset < ids.length; offset += 24) {
-    for (const child of (await canonicalChapterWorks(session, ids.slice(offset, offset + 24))).keys()) {
-      chapters.add(child);
-    }
-  }
   // Credits here decide membership (exclude the source's authors), so this
   // strict identity read must not use the optional display-name boundary.
   // Source author names do not decide identities; fence the retained bindings
@@ -135,7 +128,7 @@ async function publicCandidates(session: WorkReadSession, candidates: Candidate[
   const sourceCredits = await searchPageCredits(identities, [source]);
   await fenceAuthorNames(identities);
   const sourceAuthors = creditIdentities(sourceCredits, source);
-  return candidates.filter(item => visible.has(item.work) && !chapters.has(item.work)
+  return candidates.filter(item => visible.has(item.work)
     && ![...creditIdentities(credits, item.work)].some(author => sourceAuthors.has(author)));
 }
 

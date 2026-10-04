@@ -124,7 +124,9 @@ const revisionPatterns = {
     ?structure rv:structureHead ?revision ; rv:selectedGeneration ?generation .
     ?placement a rv:OccurrencePlacement ; rv:generation ?generation ; rv:occurrence ?r .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removedBy } }`,
-  resource: `GRAPH ${iri(GRAPHS.current)} { ?r rv:semanticHead ?revision }`,
+  resource: `{ GRAPH ${iri(GRAPHS.current)} { ?r a rv:Post ; rv:head ?revision } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?r rv:semanticHead ?revision .
+      FILTER NOT EXISTS { ?r a rv:Post } } }`,
   projection: `GRAPH ${iri(GRAPHS.current)} { ?r a rv:Projection ; rv:projectionHead ?revision }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ProjectionRevision ; rv:component ?r }`,
 } satisfies Record<Base, string>;
@@ -400,6 +402,9 @@ async function resolveSummarizedTargets(session: TargetReadSession, summaries: S
       throw new WorkReadUnavailable('Target revision is ambiguous');
     }
     const types = [...new Set(exact.flatMap(row => row.type ? [row.type.value] : []))].sort();
+    if (types.includes('https://rezics.com/vocab/Post') && !['report', 'suitability'].includes(capability)) {
+      throw new TargetNotBound();
+    }
     if (types.length > TARGET_RESOLVE_COST.typesPerTarget) throw new WorkReadUnavailable('Target types exceed their bound');
     targets.set(summary.reference, { resource: summary.reference, base: summary.base!,
       work: summary.work, revision: exact[0]!.revision!.value, types, disclosure: summary.disclosure });

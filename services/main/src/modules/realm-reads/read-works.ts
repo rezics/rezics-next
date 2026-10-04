@@ -48,14 +48,8 @@ export async function readRealmWorks(session: WorkReadSession, realm: string) {
       FILTER NOT EXISTS { ?draft a rv:ErasedRevision } }
     ${history}
     ${publicWork('?work', '?main')}
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work schema:isPartOf ?book } }
-    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-      ?chapterStructure a rv:Structure ; rv:structureProfile rv:BookComposition ;
-        rv:selectedGeneration ?chapterGeneration .
-      ?chapterPlacement a rv:OccurrencePlacement ; rv:generation ?chapterGeneration ;
-        rv:occurrenceRole rv:ChapterRole ; schema:item ?work .
-      FILTER NOT EXISTS { ?chapterPlacement rv:removedBy ?chapterRemoval }
-    } }
+
+
     ${after ? `FILTER(STR(?work) > ${lit(after.work!.value)})` : ''}
   } ORDER BY STR(?work) LIMIT ${size}`,
         size,
