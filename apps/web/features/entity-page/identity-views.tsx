@@ -196,9 +196,9 @@ function IdentitySection({
   const ownHub =
     section.kind === 'family' && section.hub && section.hub.reference !== self.reference;
   const next = section.next;
-  const destination = props.currentHref ?? (next
-    ? summaryHref(hrefFor)(section.kind === 'family' ? self : next.resource)
-    : null);
+  const destination =
+    props.currentHref ??
+    (next ? summaryHref(hrefFor)(section.kind === 'family' ? self : next.resource) : null);
   const cursorKey = section.kind === 'family' && ownHub ? 'family' : 'relations';
   return (
     <Region id={`identity-${section.kind}`} title={titles[section.kind]}>

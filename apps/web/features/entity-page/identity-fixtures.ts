@@ -166,7 +166,7 @@ export function identityData(
       sections: [
         {
           kind,
-        hub: kind === 'family' && state !== 'empty' && state !== 'spoiler-hidden' ? saber : null,
+          hub: kind === 'family' && state !== 'empty' && state !== 'spoiler-hidden' ? saber : null,
           members: state === 'empty' || state === 'spoiler-hidden' ? [] : members,
           next: state === 'populated' ? { resource: saber, cursor: 'next-visible' } : null,
         },
