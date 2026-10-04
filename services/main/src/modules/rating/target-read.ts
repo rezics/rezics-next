@@ -2,17 +2,22 @@ import { parseLanguage } from '../display-language/tag.ts';
 import { t } from 'elysia';
 import { readScope, readId, readPosition, ratingRead } from '../work/read-contract.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
-  WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { readWorkRating, readWorkRatingContexts } from '../work/read-rating.ts';
 import { resolveTargets } from '../target/resolve.ts';
-import { GRAPHS, iri, lit } from '../work/activate.ts';
+import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { RATING_STANDING_CADENCE } from './context.ts';
-import { TARGET_GRAINS, targetContextOwnerPattern, type TargetGrain } from './target.ts';
+import { TARGET_GRAINS, targetContextOwnerPattern, targetRatingSlotIri, assertRatingContextTarget, type TargetGrain } from './target.ts';
 import { contextAcceptanceFilter, ratingAcceptanceTarget, assertRatingTargetAccepted, type AcceptanceTarget } from './acceptance.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from './global.ts';
 import { queryTargetRatingAggregate } from './target-aggregate.ts';
 import { targetGrain, targetAggregateResult, meanDisplay } from './target-api.ts';
 import { presentRatingQuestions } from './question-presentation-read.ts';
+
+/** The caller's own current observation of a target, read with `scope=mine` and a Context. */
+export const ownTargetRating = t.Object({ observation: readId, revisionHead: readId,
+  availability: t.Union([t.Literal('available'), t.Literal('withdrawn')]),
+  value: t.Nullable(t.Integer({ minimum: 1, maximum: 10 })) });
 
 export const targetRatingRead = t.Object({ profile: t.Literal('target-rating-read-v1'), target: readId,
   targetGrain, scope: readScope, context: t.Nullable(readId),
@@ -22,9 +27,31 @@ export const targetRatingRead = t.Object({ profile: t.Literal('target-rating-rea
   count: t.Integer({ minimum: 0 }), mean: t.Nullable(t.Number()),
   displayThreshold: t.Nullable(t.Integer({ minimum: 1 })), meanDisplay: t.Nullable(meanDisplay),
   distribution: t.Array(t.Object({ value: t.Integer(), count: t.Integer({ minimum: 0 }) }), { maxItems: 10 }),
+  /** Only for `scope=mine` with a Context: the caller's own observation, or null before their first rating. */
+  own: t.Optional(t.Nullable(ownTargetRating)),
   sourcePosition: readPosition });
 
 export const resourceRatingRead = t.Union([ratingRead, targetRatingRead]);
+
+/** One slot, one current head: the same slot a write derives, so a read and a write always name the same observation. */
+export async function readOwnTargetObservation(query: (sparql: string, limit: number) => Promise<ReadRow[]>,
+  principalId: string, context: string, target: string) {
+  const rows = await query(`PREFIX rv: <${RV}> SELECT ?observation ?head ?availability ?value WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ?observation a rv:TargetRatingObservation ; rv:ratingContext ${iri(context)} ;
+      rv:target ${iri(target)} ; rv:ratingSlot ${iri(targetRatingSlotIri(principalId, context, target))} ; rv:observationHead ?head }
+    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:TargetRatingObservationRevision ; rv:ratingAvailability ?availability .
+      OPTIONAL { ?head rv:ratingValue ?value }
+      FILTER NOT EXISTS { ?head a rv:ErasedRevision } } } } LIMIT 2`, 2);
+  if (!rows.length) return null;
+  const row = rows[0]!, availability = row.availability?.value === `${RV}Available` ? 'available' as const
+    : row.availability?.value === `${RV}Withdrawn` ? 'withdrawn' as const : null;
+  const value = row.value ? Number(row.value.value) : null;
+  // A head whose revision cannot be read must not look like "no rating": the caller would write with a null head and be refused again.
+  if (rows.length !== 1 || !row.observation || !row.head || !availability
+    || availability === 'available' && !(Number.isInteger(value) && value! >= 1 && value! <= 10)
+    || availability === 'withdrawn' && value !== null) throw new WorkReadUnavailable('Own target rating unavailable');
+  return { observation: row.observation.value, revisionHead: row.head.value, availability, value };
+}
 
 /** Same exact target resolver as writes. Context pages use an IRI seek and P+1. */
 function contextPattern(grain: TargetGrain, scope: { kind: string; realm: string | null }, target: AcceptanceTarget) {
@@ -67,6 +94,20 @@ export async function readResourceRating(session: WorkReadSession, target: strin
   const [resolved] = await resolveTargets(session, [target], 'rating');
   if (resolved!.base === 'work') return readWorkRating(session, target, selectedContext);
   const grain = resolved!.base as TargetGrain, scope = await session.scope();
+  if (scope.kind === 'mine' && selectedContext) {
+    // Mine counts only the caller's own observation: private to the principal, so the figures are theirs alone.
+    await assertRatingContextTarget(session, selectedContext, resolved!);
+    const principalId = await session.deps.access.activePrincipalId(session.principal!);
+    if (!principalId) throw new WorkReadMissing('Reader is unavailable');
+    const own = await readOwnTargetObservation((sparql, limit) => session.query(sparql, limit), principalId, selectedContext, target);
+    const value = own?.value ?? null;
+    return { profile: 'target-rating-read-v1' as const, target, targetGrain: grain, scope, context: selectedContext,
+      status: 'available' as const, aggregationScope: null, scale: { min: 1, max: 10, step: 1 as const },
+      count: value === null ? 0 : 1, mean: value, displayThreshold: null,
+      meanDisplay: value === null ? 'no-data' as const : 'shown' as const,
+      distribution: Array.from({ length: 10 }, (_, index) => ({ value: index + 1, count: value === index + 1 ? 1 : 0 })),
+      own, sourcePosition: session.position };
+  }
   if (selectedContext) await assertRatingTargetAccepted(session, selectedContext, resolved!);
   const acceptance = await ratingAcceptanceTarget(session, resolved!);
   const rows = await session.query(`SELECT ?context WHERE { GRAPH ${iri(GRAPHS.current)} {

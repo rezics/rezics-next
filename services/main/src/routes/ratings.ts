@@ -41,13 +41,14 @@ import { queryReleaseRatingAggregate, RELEASE_AGGREGATE_PROFILE } from '../modul
 import { releaseAggregateInput, releaseAggregateResult, releaseRatingContextInput,
   releaseRatingContextReadResult, releaseRatingContextWriteResult, releaseRatingObservationInput,
   releaseRatingObservationReadResult, releaseRatingObservationWriteResult } from '../modules/rating/release-api.ts';
-import { RatingObservationUnavailable } from '../modules/rating/observation.ts';
+import { RatingObservationUnavailable, StaleRatingObservation } from '../modules/rating/observation.ts';
 import { workRead, WorkReadMissing } from '../modules/work/read-session.ts';
 import { targetRead, TargetNotBound } from '../modules/target/resolve.ts';
 import { readId } from '../modules/work/read-contract.ts';
 import { createAdmittedTargetRatingContext, setAdmittedTargetRating, readTargetRatingContext,
   resolveRatingTarget, readTargetRatingRevision, effectiveDisplayThreshold, TARGET_CONTEXT_ID, SCOPED_TARGET_CONTEXT_ID, ACCEPTED_TARGET_CONTEXT_ID,
   TARGET_OBSERVATION_ID } from '../modules/rating/target.ts';
+import { readOwnTargetObservation } from '../modules/rating/target-read.ts';
 import { queryTargetRatingAggregate, TARGET_AGGREGATE_PROFILE } from '../modules/rating/target-aggregate.ts';
 import { targetAggregateInput, targetAggregateResult, targetRatingContextInput, scopedTargetRatingContextInput, acceptedTargetRatingContextInput,
   targetRatingContextReadResult, targetRatingContextWriteResult, targetRatingObservationInput,
@@ -150,8 +151,9 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
       }
       if (body.profile === TARGET_OBSERVATION_ID) {
+        let principal: Awaited<ReturnType<typeof work.account.verify>> | undefined;
         try {
-          const principal = await work.account.verify(request, ['rating:submit']);
+          principal = await work.account.verify(request, ['rating:submit']);
           const target = await targetRead(work.environment,
             { access: work.access, principal, actingSubject: body.actingSubject, readers: work },
             session => resolveRatingTarget(session, body.context, body.target));
@@ -162,7 +164,21 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             value: receipt.value, availability: receipt.availability, replayed: receipt.replayed,
             sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
           { status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
-        } catch (error) { return ratingError(error); }
+        } catch (error) {
+          if (!(error instanceof StaleRatingObservation) || !principal) return ratingError(error);
+          // The refusal carries the caller's current head so one retry needs no separate read.
+          try {
+            const principalId = await work.access.activePrincipalId(principal);
+            const current = principalId ? await readOwnTargetObservation(async (sparql, limit) => {
+              const rows = (await work.environment.fuseki.query(sparql)).results?.bindings ?? [];
+              if (rows.length > limit) throw new RatingObservationUnavailable('Own target rating is ambiguous');
+              return rows;
+            }, principalId, body.context, body.target) : null;
+            return Response.json({ type: 'https://rezics.com/problems/stale_head', title: 'Expected standing rating revision is stale',
+              status: 409, code: 'stale_head', currentHead: current?.revisionHead ?? null },
+            { status: 409, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+          } catch { return ratingError(error); }
+        }
       }
       if (body.profile === RELEASE_OBSERVATION_ID) {
         try {
